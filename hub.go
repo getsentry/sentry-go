@@ -79,3 +79,23 @@ func (hub *Hub) WithScope(f func()) {
 func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
 	f(hub.Scope())
 }
+
+func (hub *Hub) CaptureEvent(event Event) {
+	panic("Implement CaptureEvent redirect to the Client")
+}
+
+func (hub *Hub) CaptureMessage(message string) {
+	panic("Implement CaptureMessage redirect to the Client")
+}
+
+func (hub *Hub) CaptureException(exception error) {
+	panic("Implement CaptureException redirect to the Client")
+}
+
+func (hub *Hub) AddBreadcrumb(breadcrumb Breadcrumb) {
+	panic("Implement AddBreadcrumb redirect to the Client")
+}
+
+func (hub *Hub) Flush(timeout int) {
+	panic("Implement Flush redirect to the Client")
+}
