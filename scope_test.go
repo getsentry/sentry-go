@@ -172,7 +172,6 @@ func TestBasicInheritance(t *testing.T) {
 	assert.Equal(parentScope.extra, scope.extra)
 }
 
-// TODO: TEST OTHER
 func TestParentChangedInheritance(t *testing.T) {
 	assert := assert.New(t)
 	parentScope := NewScope()
@@ -229,7 +228,7 @@ func TestChildOverrideInheritance(t *testing.T) {
 	assert.Equal(map[string]interface{}{"foo": "bar"}, scope.extra)
 	assert.Equal(LevelDebug, scope.level)
 	assert.Equal([]string{"foo"}, scope.fingerprint)
-	assert.Equal([]Breadcrumb{{message: "foo"}}, scope.breadcrumbs)
+	assert.Equal([]Breadcrumb{{message: "bar"}, {message: "foo"}}, scope.breadcrumbs)
 	assert.Equal(User{id: "foo"}, scope.user)
 
 	assert.Equal(map[string]string{"foo": "baz"}, parentScope.tags)
@@ -256,4 +255,132 @@ func TestClear(t *testing.T) {
 	assert.Equal(map[string]interface{}{}, scope.extra)
 	assert.Equal([]string{}, scope.fingerprint)
 	assert.Equal(LevelInfo, scope.level)
+}
+
+func TestApplyToEvent(t *testing.T) {
+	assert := assert.New(t)
+	scope := &Scope{
+		breadcrumbs: []Breadcrumb{{message: "scopeFoo"}},
+		user:        User{id: "1337"},
+		tags:        map[string]string{"scopeFoo": "scopeBar"},
+		extra:       map[string]interface{}{"scopeFoo": "scopeBar"},
+		fingerprint: []string{"scopeFoo", "scopeBar"},
+		level:       LevelDebug,
+	}
+	event := &Event{
+		breadcrumbs: []Breadcrumb{{message: "eventFoo"}},
+		user:        User{id: "42"},
+		tags:        map[string]string{"eventFoo": "eventBar"},
+		extra:       map[string]interface{}{"eventFoo": "eventBar"},
+		fingerprint: []string{"eventFoo", "eventBar"},
+		level:       LevelInfo,
+	}
+
+	processedEvent := scope.ApplyToEvent(event)
+
+	assert.Len(processedEvent.breadcrumbs, 2, "should merge breadcrumbs")
+	assert.Len(processedEvent.tags, 2, "should merge tags")
+	assert.Len(processedEvent.extra, 2, "should merge extra")
+	assert.Equal(processedEvent.level, scope.level, "should use scope level if its set")
+	assert.NotEqual(processedEvent.user, scope.user, "should use event user if one exist")
+	assert.NotEqual(processedEvent.fingerprint, scope.fingerprint, "should use event fingerprints if they exist")
+}
+
+func TestApplyToEventEmptyScope(t *testing.T) {
+	assert := assert.New(t)
+	scope := &Scope{}
+	event := &Event{
+		breadcrumbs: []Breadcrumb{{message: "eventFoo"}},
+		user:        User{id: "42"},
+		tags:        map[string]string{"eventFoo": "eventBar"},
+		extra:       map[string]interface{}{"eventFoo": "eventBar"},
+		fingerprint: []string{"eventFoo", "eventBar"},
+		level:       LevelInfo,
+	}
+
+	processedEvent := scope.ApplyToEvent(event)
+
+	assert.True(true, "Shoudn't blow up")
+	assert.Len(processedEvent.breadcrumbs, 1, "should use event breadcrumbs")
+	assert.Len(processedEvent.tags, 1, "should use event tags")
+	assert.Len(processedEvent.extra, 1, "should use event extra")
+	assert.NotEqual(processedEvent.user, scope.user, "should use event user")
+	assert.NotEqual(processedEvent.fingerprint, scope.fingerprint, "should use event fingerprint")
+	assert.NotEqual(processedEvent.level, scope.level, "should use event level")
+}
+
+func TestApplyToEventEmptyEvent(t *testing.T) {
+	assert := assert.New(t)
+	scope := &Scope{
+		breadcrumbs: []Breadcrumb{{message: "scopeFoo"}},
+		user:        User{id: "1337"},
+		tags:        map[string]string{"scopeFoo": "scopeBar"},
+		extra:       map[string]interface{}{"scopeFoo": "scopeBar"},
+		fingerprint: []string{"scopeFoo", "scopeBar"},
+		level:       LevelDebug,
+	}
+	event := &Event{}
+
+	processedEvent := scope.ApplyToEvent(event)
+
+	assert.True(true, "Shoudn't blow up")
+	assert.Len(processedEvent.breadcrumbs, 1, "should use scope breadcrumbs")
+	assert.Len(processedEvent.tags, 1, "should use scope tags")
+	assert.Len(processedEvent.extra, 1, "should use scope extra")
+	assert.Equal(processedEvent.user, scope.user, "should use scope user")
+	assert.Equal(processedEvent.fingerprint, scope.fingerprint, "should use scope fingerprint")
+	assert.Equal(processedEvent.level, scope.level, "should use scope level")
+}
+
+func TestEventProcessors(t *testing.T) {
+	assert := assert.New(t)
+	scope := &Scope{
+		eventProcessors: []EventProcessor{
+			func(event *Event) *Event {
+				event.level = LevelFatal
+				return event
+			},
+			func(event *Event) *Event {
+				event.fingerprint = []string{"wat"}
+				return event
+			},
+		},
+	}
+
+	processedEvent := scope.ApplyToEvent(&Event{})
+
+	assert.NotNil(processedEvent)
+	assert.Equal(LevelFatal, processedEvent.level)
+	assert.Equal([]string{"wat"}, processedEvent.fingerprint)
+}
+
+func TestEventProcessorsCanDropEvent(t *testing.T) {
+	assert := assert.New(t)
+	scope := &Scope{
+		tags: map[string]string{"scopeFoo": "scopeBar"},
+		eventProcessors: []EventProcessor{
+			func(event *Event) *Event {
+				return nil
+			},
+		},
+	}
+
+	processedEvent := scope.ApplyToEvent(&Event{})
+
+	assert.Nil(processedEvent)
+}
+
+func TestAddEventProcessor(t *testing.T) {
+	assert := assert.New(t)
+	scope := &Scope{}
+
+	processedEvent := scope.ApplyToEvent(&Event{})
+	assert.NotNil(processedEvent)
+
+	scope.AddEventProcessor(func(event *Event) *Event {
+		return nil
+	})
+
+	processedEvent = scope.ApplyToEvent(&Event{})
+	assert.Nil(processedEvent)
 }
