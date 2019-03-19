@@ -47,12 +47,14 @@ func NewScope() *Scope {
 	}
 }
 
+// TODO: Pull from client.config.maxBreadcrumbs
+const breadcrumbsLimit = 100
+
 func (scope *Scope) AddBreadcrumb(breadcrumb Breadcrumb) {
-	// TODO: Pull from client.config.maxBreadcrumbs
-	const limit = 100
 	breadcrumbs := append(scope.breadcrumbs, breadcrumb)
-	if len(breadcrumbs) > limit {
-		scope.breadcrumbs = breadcrumbs[1 : limit+1]
+	if len(breadcrumbs) > breadcrumbsLimit {
+		// Remove the oldest breadcrumb
+		scope.breadcrumbs = breadcrumbs[1 : breadcrumbsLimit+1]
 	} else {
 		scope.breadcrumbs = breadcrumbs
 	}
@@ -122,6 +124,10 @@ func (scope Scope) ApplyToEvent(event *Event) *Event {
 	// TODO: Limit to maxBreadcrums
 	if len(scope.breadcrumbs) > 0 {
 		event.breadcrumbs = append(event.breadcrumbs, scope.breadcrumbs...)
+	}
+
+	if len(event.breadcrumbs) > breadcrumbsLimit {
+		event.breadcrumbs = event.breadcrumbs[0:breadcrumbsLimit]
 	}
 
 	if scope.extra != nil && len(scope.extra) > 0 {

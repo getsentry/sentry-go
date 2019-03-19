@@ -332,6 +332,21 @@ func TestApplyToEventEmptyEvent(t *testing.T) {
 	assert.Equal(processedEvent.level, scope.level, "should use scope level")
 }
 
+func TestApplyToEventLimitBreadcrumbs(t *testing.T) {
+	assert := assert.New(t)
+	scope := &Scope{}
+	for i := 0; i < 101; i++ {
+		scope.AddBreadcrumb(Breadcrumb{message: "test"})
+	}
+	event := &Event{breadcrumbs: []Breadcrumb{{message: "foo"}, {message: "bar"}}}
+
+	processedEvent := scope.ApplyToEvent(event)
+
+	assert.Len(processedEvent.breadcrumbs, 100)
+	assert.Equal(Breadcrumb{message: "foo"}, processedEvent.breadcrumbs[0])
+	assert.Equal(Breadcrumb{message: "bar"}, processedEvent.breadcrumbs[1])
+}
+
 func TestEventProcessors(t *testing.T) {
 	assert := assert.New(t)
 	scope := &Scope{
