@@ -3,10 +3,10 @@ package sentry
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Scheme string
@@ -31,8 +31,8 @@ type DsnParseError struct {
 	Message string
 }
 
-func (e *DsnParseError) Error() string {
-	return "DsnParseError: " + e.Message
+func (e DsnParseError) Error() string {
+	return "[Sentry] DsnParseError: " + e.Message
 }
 
 type Dsn struct {
@@ -45,7 +45,12 @@ type Dsn struct {
 	projectID int
 }
 
+// TODO: Change it to `FromString` method on `Dsn` struct?
 func NewDsn(rawURL string) (*Dsn, error) {
+	if rawURL == "" {
+		return nil, nil
+	}
+
 	// Parse
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
@@ -149,11 +154,22 @@ func (dsn Dsn) StoreAPIURL() *url.URL {
 		rawURL += fmt.Sprintf(":%d", dsn.Port())
 	}
 	rawURL += fmt.Sprintf("/api/%d/store/", dsn.projectID)
-	parsedURL, err := url.Parse(rawURL)
-	if err != nil {
-		log.Fatalf("DsnParseError: invalid url.\n%s", err)
-	}
+	parsedURL, _ := url.Parse(rawURL)
 	return parsedURL
+}
+
+func (dsn Dsn) RequestHeaders() map[string]string {
+	auth := fmt.Sprintf("Sentry sentry_version=%d, sentry_timestamp=%d, "+
+		"sentry_client=%s, sentry_key=%s", 7, time.Now().Unix(), SdkUserAgent, dsn.publicKey)
+
+	if dsn.secretKey != "" {
+		auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.secretKey)
+	}
+
+	return map[string]string{
+		"Content-Type":  "application/json",
+		"X-Sentry-Auth": auth,
+	}
 }
 
 func (dsn Dsn) MarshalJSON() ([]byte, error) {
@@ -162,13 +178,11 @@ func (dsn Dsn) MarshalJSON() ([]byte, error) {
 
 func (dsn *Dsn) UnmarshalJSON(data []byte) error {
 	var str string
-	if err := json.Unmarshal(data, &str); err != nil {
-		return err
-	}
+	_ = json.Unmarshal(data, &str)
 	newDsn, err := NewDsn(str)
-	*dsn = *newDsn
 	if err != nil {
 		return err
 	}
+	*dsn = *newDsn
 	return nil
 }

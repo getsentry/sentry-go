@@ -6,8 +6,9 @@ import (
 	"github.com/google/uuid"
 )
 
-const Version string = "0.0.0-beta"
-const UserAgent string = "sentry.go/" + Version
+const SdkName string = "sentry.go"
+const SdkVersion string = "0.0.0-beta"
+const SdkUserAgent string = SdkName + "/" + SdkVersion
 
 type ClientSdkInfo struct {
 	name    string
