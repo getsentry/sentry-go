@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sentry"
+	"strconv"
 )
 
 func prettyPrint(v interface{}) string {
@@ -91,25 +92,43 @@ func withScopeAndConfigureScope() {
 	})
 }
 
+type CustomComplexError struct {
+	Message      string
+	AnswerToLife int
+}
+
+func (e CustomComplexError) Error() string {
+	return "CustomComplexError: " + e.Message
+}
+
+func (e CustomComplexError) GimmeMoreData() string {
+	return strconv.Itoa(e.AnswerToLife)
+}
+
+func eventHint() {
+	sentry.CaptureException(CustomComplexError{Message: "Captured", AnswerToLife: 42})
+}
+
 func main() {
-	// Init
-	err := sentry.Init(sentry.ClientOptions{
+	if err := sentry.Init(sentry.ClientOptions{
 		Dsn: "https://14830a963b1e4c20ad90e47289c1fe98@sentry.io/1419836",
-		BeforeSend: func(event *sentry.Event) *sentry.Event {
+		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			if event.Message == "Drop me!" {
 				return nil
 			}
+
+			if ex, ok := hint.OriginalException.(CustomComplexError); ok {
+				event.Message = event.Message + " - " + ex.GimmeMoreData()
+			}
+
 			fmt.Printf("%s\n\n", prettyPrint(event))
+
 			return event
 		},
-		SampleRate: 0.99,
+		SampleRate: 1,
 		Transport:  new(DevNullTransport),
-	})
-
-	if err != nil {
+	}); err != nil {
 		panic(err)
-	} else {
-		fmt.Print("[Sentry] SDK initialized successfully\n\n")
 	}
 
 	beforeSend()
@@ -119,4 +138,5 @@ func main() {
 	addBreadcrumbs()
 	withScopeAndConfigureScope()
 	recoverHandler()
+	eventHint()
 }

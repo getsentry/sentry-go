@@ -33,8 +33,8 @@ func (t *DevNullTransport) SendEvent(event *sentry.Event) (*http.Response, error
 func customHandlerFunc(w http.ResponseWriter, r *http.Request) {
 	if sentry.HasHubOnContext(r.Context()) {
 		hub := sentry.GetHubFromContext(r.Context())
-		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "BreadcrumbFunc #1 - " + strconv.Itoa(int(time.Now().Unix()))})
-		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "BreadcrumbFunc #2 - " + strconv.Itoa(int(time.Now().Unix()))})
+		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "BreadcrumbFunc #1 - " + strconv.Itoa(int(time.Now().Unix()))}, nil)
+		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "BreadcrumbFunc #2 - " + strconv.Itoa(int(time.Now().Unix()))}, nil)
 	}
 
 	panic("customHandlerFunc panicked")
@@ -45,8 +45,8 @@ type customHandler struct{}
 func (th *customHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if sentry.HasHubOnContext(r.Context()) {
 		hub := sentry.GetHubFromContext(r.Context())
-		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "Breadcrumb #1 - " + strconv.Itoa(int(time.Now().Unix()))})
-		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "Breadcrumb #2 - " + strconv.Itoa(int(time.Now().Unix()))})
+		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "Breadcrumb #1 - " + strconv.Itoa(int(time.Now().Unix()))}, nil)
+		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "Breadcrumb #2 - " + strconv.Itoa(int(time.Now().Unix()))}, nil)
 	}
 
 	panic("customHandler panicked")

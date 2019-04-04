@@ -100,27 +100,27 @@ func (hub *Hub) invokeClient(callback func(client Clienter, scope *Scope)) {
 	callback(client, scope)
 }
 
-func (hub *Hub) CaptureEvent(event *Event) {
+func (hub *Hub) CaptureEvent(event *Event, hint *EventHint) {
 	hub.invokeClient(func(client Clienter, scope *Scope) {
-		client.CaptureEvent(event, scope)
+		client.CaptureEvent(event, hint, scope)
 	})
 }
 
-func (hub *Hub) CaptureMessage(message string) {
+func (hub *Hub) CaptureMessage(message string, hint *EventHint) {
 	hub.invokeClient(func(client Clienter, scope *Scope) {
-		client.CaptureMessage(message, scope)
+		client.CaptureMessage(message, hint, scope)
 	})
 }
 
-func (hub *Hub) CaptureException(exception error) {
+func (hub *Hub) CaptureException(exception error, hint *EventHint) {
 	hub.invokeClient(func(client Clienter, scope *Scope) {
-		client.CaptureException(exception, scope)
+		client.CaptureException(exception, hint, scope)
 	})
 }
 
-func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb) {
+func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 	hub.invokeClient(func(client Clienter, scope *Scope) {
-		client.AddBreadcrumb(breadcrumb, scope)
+		client.AddBreadcrumb(breadcrumb, hint, scope)
 	})
 }
 

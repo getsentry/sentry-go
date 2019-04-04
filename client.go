@@ -51,6 +51,12 @@ type Event struct {
 	// Exception   []Exception
 }
 
+type EventHint struct {
+	EventID           uuid.UUID
+	OriginalException error
+	Data              interface{}
+}
+
 type ClientSdkInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
@@ -60,7 +66,7 @@ type ClientOptions struct {
 	Dsn         string
 	Debug       bool
 	SampleRate  float32
-	BeforeSend  func(event *Event) *Event
+	BeforeSend  func(event *Event, hint *EventHint) *Event
 	Transport   Transport
 	ServerName  string
 	Release     string
@@ -69,10 +75,10 @@ type ClientOptions struct {
 }
 
 type Clienter interface {
-	AddBreadcrumb(breadcrumb *Breadcrumb, scope Scoper)
-	CaptureMessage(message string, scope Scoper)
-	CaptureException(exception error, scope Scoper)
-	CaptureEvent(event *Event, scope Scoper)
+	AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint, scope Scoper)
+	CaptureMessage(message string, hint *EventHint, scope Scoper)
+	CaptureException(exception error, hint *EventHint, scope Scoper)
+	CaptureEvent(event *Event, hint *EventHint, scope Scoper)
 	Recover(recoveredErr interface{}, scope *Scope)
 	RecoverWithContext(ctx context.Context, recoveredErr interface{}, scope *Scope)
 }
@@ -112,22 +118,22 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}, nil
 }
 
-func (client *Client) AddBreadcrumb(breadcrumb *Breadcrumb, scope Scoper) {
+func (client *Client) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint, scope Scoper) {
 	scope.AddBreadcrumb(breadcrumb)
 }
 
-func (client *Client) CaptureMessage(message string, scope Scoper) {
+func (client *Client) CaptureMessage(message string, hint *EventHint, scope Scoper) {
 	event := client.eventFromMessage(message)
-	client.CaptureEvent(event, scope)
+	client.CaptureEvent(event, hint, scope)
 }
 
-func (client *Client) CaptureException(exception error, scope Scoper) {
+func (client *Client) CaptureException(exception error, hint *EventHint, scope Scoper) {
 	event := client.eventFromException(exception)
-	client.CaptureEvent(event, scope)
+	client.CaptureEvent(event, hint, scope)
 }
 
-func (client *Client) CaptureEvent(event *Event, scope Scoper) {
-	if _, err := client.processEvent(event, scope); err != nil {
+func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope Scoper) {
+	if _, err := client.processEvent(event, hint, scope); err != nil {
 		debugger.Println(err)
 	}
 	log.Println("TODO[CaptureEvent]: Handle return values")
@@ -169,11 +175,11 @@ func (client *Client) RecoverWithContext(ctx context.Context, recoveredErr inter
 		}
 
 		if err, ok := recoveredErr.(error); ok {
-			currentHub.CaptureException(err)
+			currentHub.CaptureException(err, nil)
 		}
 
 		if err, ok := recoveredErr.(string); ok {
-			currentHub.CaptureMessage(err)
+			currentHub.CaptureMessage(err, nil)
 		}
 	}
 }
@@ -192,7 +198,7 @@ func (client *Client) eventFromException(exception error) *Event {
 }
 
 // TODO: Should return some sort of SentryResponse instead of http.Response
-func (client *Client) processEvent(event *Event, scope Scoper) (*http.Response, error) {
+func (client *Client) processEvent(event *Event, hint *EventHint, scope Scoper) (*http.Response, error) {
 	options := client.Options
 
 	// TODO: Reconsider if its worth going away from default implementation
@@ -206,12 +212,16 @@ func (client *Client) processEvent(event *Event, scope Scoper) (*http.Response, 
 		}
 	}
 
-	if event = client.prepareEvent(event, scope); event == nil {
+	if event = client.prepareEvent(event, hint, scope); event == nil {
 		return nil, fmt.Errorf("event dropped by one of the EventProcessors")
 	}
 
 	if options.BeforeSend != nil {
-		if event = options.BeforeSend(event); event == nil {
+		h := &EventHint{}
+		if hint != nil {
+			h = hint
+		}
+		if event = options.BeforeSend(event, h); event == nil {
 			return nil, fmt.Errorf("event dropped due to BeforeSend callback")
 		}
 	}
@@ -219,7 +229,7 @@ func (client *Client) processEvent(event *Event, scope Scoper) (*http.Response, 
 	return client.Transport.SendEvent(event)
 }
 
-func (client *Client) prepareEvent(event *Event, scope Scoper) *Event {
+func (client *Client) prepareEvent(event *Event, _ *EventHint, scope Scoper) *Event {
 	// TODO: Set all the defaults, clear unnecessary stuff etc. here
 
 	var emptyEventID uuid.UUID

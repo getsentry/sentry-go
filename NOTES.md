@@ -9,3 +9,4 @@
 - https://dave.cheney.net/practical-go/presentations/qcon-china.html
 - Error/Breadcrumb Hints
 - BeforeBreadcrumb callback
+- CaptureException name despite Go not having exceptions? (errors instead)

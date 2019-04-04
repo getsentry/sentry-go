@@ -22,22 +22,22 @@ type FakeClient struct {
 	lastCallArgs []interface{}
 }
 
-func (c *FakeClient) AddBreadcrumb(breadcrumb *Breadcrumb, scope Scoper) {
+func (c *FakeClient) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint, scope Scoper) {
 	c.lastCall = "AddBreadcrumb"
 	c.lastCallArgs = []interface{}{breadcrumb, scope}
 }
 
-func (c *FakeClient) CaptureMessage(message string, scope Scoper) {
+func (c *FakeClient) CaptureMessage(message string, hint *EventHint, scope Scoper) {
 	c.lastCall = "CaptureMessage"
 	c.lastCallArgs = []interface{}{message, scope}
 }
 
-func (c *FakeClient) CaptureException(exception error, scope Scoper) {
+func (c *FakeClient) CaptureException(exception error, hint *EventHint, scope Scoper) {
 	c.lastCall = "CaptureException"
 	c.lastCallArgs = []interface{}{exception, scope}
 }
 
-func (c *FakeClient) CaptureEvent(event *Event, scope Scoper) {
+func (c *FakeClient) CaptureEvent(event *Event, hint *EventHint, scope Scoper) {
 	c.lastCall = "CaptureEvent"
 	c.lastCallArgs = []interface{}{event, scope}
 }
@@ -216,7 +216,7 @@ func (suite *HubSuite) TestInvokeClientFailsSilentlyWHenNoClientOrScopeAvailable
 func (suite *HubSuite) TestCaptureEventCallsTheSameMethodOnClient() {
 	event := &Event{Message: "CaptureEvent"}
 
-	suite.hub.CaptureEvent(event)
+	suite.hub.CaptureEvent(event, nil)
 
 	suite.Equal("CaptureEvent", suite.client.lastCall)
 	suite.Equal(event, suite.client.lastCallArgs[0])
@@ -224,7 +224,7 @@ func (suite *HubSuite) TestCaptureEventCallsTheSameMethodOnClient() {
 }
 
 func (suite *HubSuite) TestCaptureMessageCallsTheSameMethodOnClient() {
-	suite.hub.CaptureMessage("foo")
+	suite.hub.CaptureMessage("foo", nil)
 
 	suite.Equal("CaptureMessage", suite.client.lastCall)
 	suite.Equal("foo", suite.client.lastCallArgs[0])
@@ -234,7 +234,7 @@ func (suite *HubSuite) TestCaptureMessageCallsTheSameMethodOnClient() {
 func (suite *HubSuite) TestCaptureExceptionCallsTheSameMethodOnClient() {
 	err := errors.New("error")
 
-	suite.hub.CaptureException(err)
+	suite.hub.CaptureException(err, nil)
 
 	suite.Equal("CaptureException", suite.client.lastCall)
 	suite.Equal(err, suite.client.lastCallArgs[0])
@@ -244,7 +244,7 @@ func (suite *HubSuite) TestCaptureExceptionCallsTheSameMethodOnClient() {
 func (suite *HubSuite) TestAddBreadcrumbCallsTheSameMethodOnClient() {
 	breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
 
-	suite.hub.AddBreadcrumb(breadcrumb)
+	suite.hub.AddBreadcrumb(breadcrumb, nil)
 
 	suite.Equal("AddBreadcrumb", suite.client.lastCall)
 	suite.Equal(breadcrumb, suite.client.lastCallArgs[0])

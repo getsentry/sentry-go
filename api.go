@@ -44,12 +44,20 @@ func Init(options ClientOptions) error {
 	return nil
 }
 
+func AddBreadcrumb(breadcrumb *Breadcrumb) {
+	hub, err := getCurrentHub()
+	if err != nil {
+		return
+	}
+	hub.AddBreadcrumb(breadcrumb, nil)
+}
+
 func CaptureMessage(message string) {
 	hub, err := getCurrentHub()
 	if err != nil {
 		return
 	}
-	hub.CaptureMessage(message)
+	hub.CaptureMessage(message, nil)
 }
 
 func CaptureException(exception error) {
@@ -57,7 +65,7 @@ func CaptureException(exception error) {
 	if err != nil {
 		return
 	}
-	hub.CaptureException(exception)
+	hub.CaptureException(exception, &EventHint{OriginalException: exception})
 }
 
 func CaptureEvent(event *Event) {
@@ -65,7 +73,7 @@ func CaptureEvent(event *Event) {
 	if err != nil {
 		return
 	}
-	hub.CaptureEvent(event)
+	hub.CaptureEvent(event, nil)
 }
 
 func Recover() {
@@ -95,14 +103,6 @@ func RecoverWithContext(ctx context.Context) {
 // 		panic(err)
 // 	}
 // }
-
-func AddBreadcrumb(breadcrumb *Breadcrumb) {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
-	hub.AddBreadcrumb(breadcrumb)
-}
 
 func WithScope(f func(scope *Scope)) {
 	hub, err := getCurrentHub()

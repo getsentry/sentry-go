@@ -11,6 +11,8 @@ type User struct {
 	ID string `json:"id"`
 }
 
+type BreadcrumbHint map[string]interface{}
+
 // TODO: Correct Breadcrumb struct
 type Breadcrumb struct {
 	Message   string `json:"message"`
