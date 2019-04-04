@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,6 +60,7 @@ type ClientOptions struct {
 	Debug       bool
 	SampleRate  float32
 	BeforeSend  func(event *Event) *Event
+	Transport   Transport
 	ServerName  string
 	Release     string
 	Dist        string
@@ -73,8 +75,9 @@ type Clienter interface {
 }
 
 type Client struct {
-	Options ClientOptions
-	Dsn     *Dsn
+	Options   ClientOptions
+	Dsn       *Dsn
+	Transport Transport
 }
 
 func NewClient(options ClientOptions) (*Client, error) {
@@ -92,9 +95,17 @@ func NewClient(options ClientOptions) (*Client, error) {
 		debugger.Println("Sentry client initialized with an empty DSN")
 	}
 
+	transport := options.Transport
+	if transport == nil {
+		transport = new(HTTPTransport)
+	}
+
+	transport.Configure(options)
+
 	return &Client{
-		Options: options,
-		Dsn:     dsn,
+		Options:   options,
+		Dsn:       dsn,
+		Transport: transport,
 	}, nil
 }
 
@@ -113,7 +124,7 @@ func (client *Client) CaptureException(exception error, scope Scoper) {
 }
 
 func (client *Client) CaptureEvent(event *Event, scope Scoper) {
-	if err := client.processEvent(event, scope); err != nil {
+	if _, err := client.processEvent(event, scope); err != nil {
 		debugger.Println(err)
 	}
 	log.Println("TODO[CaptureEvent]: Handle return values")
@@ -133,7 +144,7 @@ func (client *Client) eventFromException(exception error) *Event {
 }
 
 // TODO: Should return some sort of SentryResponse instead of http.Response
-func (client *Client) processEvent(event *Event, scope Scoper) error {
+func (client *Client) processEvent(event *Event, scope Scoper) (*http.Response, error) {
 	options := client.Options
 
 	// TODO: Reconsider if its worth going away from default implementation
@@ -143,21 +154,21 @@ func (client *Client) processEvent(event *Event, scope Scoper) error {
 	if options.SampleRate != 0.0 {
 		randomFloat := rand.New(rand.NewSource(time.Now().UnixNano())).Float32()
 		if randomFloat > options.SampleRate {
-			return fmt.Errorf("event dropped due to SampleRate hit")
+			return nil, fmt.Errorf("event dropped due to SampleRate hit")
 		}
 	}
 
 	if event = client.prepareEvent(event, scope); event == nil {
-		return fmt.Errorf("event dropped by one of the EventProcessors")
+		return nil, fmt.Errorf("event dropped by one of the EventProcessors")
 	}
 
 	if options.BeforeSend != nil {
 		if event = options.BeforeSend(event); event == nil {
-			return fmt.Errorf("event dropped due to BeforeSend callback")
+			return nil, fmt.Errorf("event dropped due to BeforeSend callback")
 		}
 	}
 
-	return nil
+	return client.Transport.SendEvent(event)
 }
 
 func (client *Client) prepareEvent(event *Event, scope Scoper) *Event {
