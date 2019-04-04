@@ -1,92 +1,151 @@
 package sentry
 
-type NoHubError struct{}
+import (
+	"context"
+)
 
-func (e *NoHubError) Error() string {
-	return "No Hub Available"
+var _globalHub = NewHub(&Client{}, &Scope{})
+
+type HubError struct {
+	Message string
 }
 
-// TODO Implement GetCurrentHub
+func (e HubError) Error() string {
+	return "[Sentry] HubError: " + e.Message
+}
+
+var getCurrentHub = GetCurrentHub
+
 func GetCurrentHub() (*Hub, error) {
+	if _globalHub != nil {
+		return _globalHub, nil
+	}
 	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
+	if client == nil {
+		return nil, HubError{"No Client available"}
+	}
+	if scope == nil {
+		return nil, HubError{"No Scope available"}
+	}
 	return NewHub(client, scope), nil
 }
 
-func CaptureEvent(event *Event) {
-	hub, err := GetCurrentHub()
-	if _, ok := err.(*NoHubError); ok {
-		return
+func Init(options ClientOptions) error {
+	hub, err := getCurrentHub()
+	if err != nil {
+		return err
 	}
-	hub.CaptureEvent(event)
+	client, err := NewClient(options)
+	if err != nil {
+		return err
+	}
+	hub.BindClient(client)
+	return nil
 }
 
 func CaptureMessage(message string) {
-	hub, err := GetCurrentHub()
-	if _, ok := err.(*NoHubError); ok {
+	hub, err := getCurrentHub()
+	if err != nil {
 		return
 	}
 	hub.CaptureMessage(message)
 }
 
 func CaptureException(exception error) {
-	hub, err := GetCurrentHub()
-	if _, ok := err.(*NoHubError); ok {
+	hub, err := getCurrentHub()
+	if err != nil {
 		return
 	}
 	hub.CaptureException(exception)
 }
 
+func CaptureEvent(event *Event) {
+	hub, err := getCurrentHub()
+	if err != nil {
+		return
+	}
+	hub.CaptureEvent(event)
+}
+
+func Recover() {
+	if recoveredErr := recover(); recoveredErr != nil {
+		hub, err := getCurrentHub()
+		if err != nil {
+			return
+		}
+		hub.Recover(recoveredErr)
+	}
+}
+
+func RecoverWithContext(ctx context.Context) {
+	if recoveredErr := recover(); recoveredErr != nil {
+		hub, err := getCurrentHub()
+		if err != nil {
+			return
+		}
+		hub.RecoverWithContext(ctx, recoveredErr)
+	}
+}
+
+// TODO: Or maybe just `Recover(true)`? It may be too generic though
+// func RecoverAndPanic() {
+// 	if err := recover(); err != nil {
+// 		Recover()
+// 		panic(err)
+// 	}
+// }
+
 func AddBreadcrumb(breadcrumb *Breadcrumb) {
-	hub, err := GetCurrentHub()
-	if _, ok := err.(*NoHubError); ok {
+	hub, err := getCurrentHub()
+	if err != nil {
 		return
 	}
 	hub.AddBreadcrumb(breadcrumb)
 }
 
 func WithScope(f func(scope *Scope)) {
-	hub, err := GetCurrentHub()
-	if _, ok := err.(*NoHubError); ok {
+	hub, err := getCurrentHub()
+	if err != nil {
 		return
 	}
 	hub.WithScope(f)
 }
 
 func ConfigureScope(f func(scope *Scope)) {
-	hub, err := GetCurrentHub()
-	if _, ok := err.(*NoHubError); ok {
+	hub, err := getCurrentHub()
+	if err != nil {
 		return
 	}
 	hub.ConfigureScope(f)
 }
 
 func PushScope() {
-	hub, err := GetCurrentHub()
-	if _, ok := err.(*NoHubError); ok {
+	hub, err := getCurrentHub()
+	if err != nil {
 		return
 	}
 	hub.PushScope()
 }
 func PopScope() {
-	hub, err := GetCurrentHub()
-	if _, ok := err.(*NoHubError); ok {
+	hub, err := getCurrentHub()
+	if err != nil {
 		return
 	}
 	hub.PopScope()
 }
 
 func Flush(timeout int) {
-	hub, err := GetCurrentHub()
-	if _, ok := err.(*NoHubError); ok {
+	hub, err := getCurrentHub()
+	if err != nil {
 		return
 	}
 	hub.Flush(timeout)
 }
 
 func LastEventID() {
-	hub, err := GetCurrentHub()
-	if _, ok := err.(*NoHubError); ok {
+	hub, err := getCurrentHub()
+	if err != nil {
 		return
 	}
 	hub.LastEventID()
