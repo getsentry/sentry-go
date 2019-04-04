@@ -1,184 +1,262 @@
 package sentry
 
 import (
+	"context"
+	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/google/uuid"
+
+	"github.com/stretchr/testify/suite"
 )
 
-func TestNewHubPushLayerOnTopOfStack(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-
-	hub := NewHub(client, scope)
-
-	assert.Len(*hub.Stack(), 1)
+type HubSuite struct {
+	suite.Suite
+	client *FakeClient
+	scope  *Scope
+	hub    *Hub
 }
 
-func TestNewHubLayerStoresClientAndScope(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-
-	hub := NewHub(client, scope)
-
-	assert.Equal(&Layer{client: client, scope: scope}, (*hub.Stack())[0])
+type FakeClient struct {
+	lastCall     string
+	lastCallArgs []interface{}
 }
 
-func TestPushScopeAddsScopeOnTopOfStack(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-	hub := NewHub(client, scope)
-
-	hub.PushScope()
-
-	assert.Len(*hub.Stack(), 2)
+func (c *FakeClient) AddBreadcrumb(breadcrumb *Breadcrumb, scope Scoper) {
+	c.lastCall = "AddBreadcrumb"
+	c.lastCallArgs = []interface{}{breadcrumb, scope}
 }
 
-func TestPushScopeInheritsScopeData(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-	hub := NewHub(client, scope)
-
-	scope.SetExtra("foo", "bar")
-	hub.PushScope()
-	scope.SetExtra("baz", "qux")
-
-	assert.False((*hub.Stack())[0].scope == (*hub.Stack())[1].scope, "Scope shouldnt point to the same struct")
-	assert.Equal(map[string]interface{}{"foo": "bar", "baz": "qux"}, (*hub.Stack())[0].scope.extra)
-	assert.Equal(map[string]interface{}{"foo": "bar"}, (*hub.Stack())[1].scope.extra)
+func (c *FakeClient) CaptureMessage(message string, scope Scoper) {
+	c.lastCall = "CaptureMessage"
+	c.lastCallArgs = []interface{}{message, scope}
 }
 
-func TestPushScopeInheritsClient(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-	hub := NewHub(client, scope)
-
-	hub.PushScope()
-
-	assert.True((*hub.Stack())[0].client == (*hub.Stack())[1].client, "Client should be inherited")
+func (c *FakeClient) CaptureException(exception error, scope Scoper) {
+	c.lastCall = "CaptureException"
+	c.lastCallArgs = []interface{}{exception, scope}
 }
 
-func TestPopScopeRemovesLayerFromTheStack(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-
-	hub := NewHub(client, scope)
-	hub.PushScope()
-	hub.PushScope()
-	hub.PopScope()
-
-	assert.Len(*hub.Stack(), 2)
+func (c *FakeClient) CaptureEvent(event *Event, scope Scoper) {
+	c.lastCall = "CaptureEvent"
+	c.lastCallArgs = []interface{}{event, scope}
 }
 
-func TestPopScopeCannotRemoveFromEmptyStack(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-
-	hub := NewHub(client, scope)
-
-	assert.Len(*hub.Stack(), 1)
-	hub.PopScope()
-	assert.Len(*hub.Stack(), 0)
-	hub.PopScope()
-	assert.Len(*hub.Stack(), 0)
+func (c *FakeClient) Recover(recoveredErr interface{}, scope *Scope) {
+	c.lastCall = "Recover"
+	c.lastCallArgs = []interface{}{recoveredErr, scope}
 }
 
-func TestBindClient(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-	hub := NewHub(client, scope)
+func (c *FakeClient) RecoverWithContext(ctx context.Context, recoveredErr interface{}, scope *Scope) {
+	c.lastCall = "RecoverWithContext"
+	c.lastCallArgs = []interface{}{ctx, recoveredErr, scope}
+}
 
-	hub.PushScope()
-	newClient, _ := NewClient(ClientOptions{})
-	hub.BindClient(newClient)
+func TestHubSuite(t *testing.T) {
+	suite.Run(t, new(HubSuite))
+}
 
-	assert.False(
-		(*hub.Stack())[0].client == (*hub.Stack())[1].client,
+func (suite *HubSuite) SetupTest() {
+	suite.client = &FakeClient{}
+	suite.scope = &Scope{}
+	suite.hub = NewHub(suite.client, suite.scope)
+}
+
+func (suite *HubSuite) TestNewHubPushLayerOnTopOfStack() {
+	suite.Len(*suite.hub.stack, 1)
+}
+
+func (suite *HubSuite) TestNewHubLayerStoresClientAndScope() {
+	suite.Equal(&Layer{client: suite.client, scope: suite.scope}, (*suite.hub.stack)[0])
+}
+
+func (suite *HubSuite) TestPushScopeAddsScopeOnTopOfStack() {
+	suite.hub.PushScope()
+
+	suite.Len(*suite.hub.stack, 2)
+}
+
+func (suite *HubSuite) TestPushScopeInheritsScopeData() {
+	suite.scope.SetExtra("foo", "bar")
+	suite.hub.PushScope()
+	suite.scope.SetExtra("baz", "qux")
+
+	suite.False((*suite.hub.stack)[0].scope == (*suite.hub.stack)[1].scope, "Scope shouldnt point to the same struct")
+	suite.Equal(map[string]interface{}{"foo": "bar", "baz": "qux"}, (*suite.hub.stack)[0].scope.extra)
+	suite.Equal(map[string]interface{}{"foo": "bar"}, (*suite.hub.stack)[1].scope.extra)
+}
+
+func (suite *HubSuite) TestPushScopeInheritsClient() {
+	suite.hub.PushScope()
+
+	suite.True((*suite.hub.stack)[0].client == (*suite.hub.stack)[1].client, "Client should be inherited")
+}
+
+func (suite *HubSuite) TestPopScopeRemovesLayerFromTheStack() {
+	suite.hub.PushScope()
+	suite.hub.PushScope()
+	suite.hub.PopScope()
+
+	suite.Len(*suite.hub.stack, 2)
+}
+
+func (suite *HubSuite) TestPopScopeCannotRemoveFromEmptyStack() {
+	suite.Len(*suite.hub.stack, 1)
+	suite.hub.PopScope()
+	suite.Len(*suite.hub.stack, 0)
+	suite.hub.PopScope()
+	suite.Len(*suite.hub.stack, 0)
+}
+
+func (suite *HubSuite) TestBindClient() {
+	suite.hub.PushScope()
+	newClient := &Client{}
+	suite.hub.BindClient(newClient)
+
+	suite.False(
+		(*suite.hub.stack)[0].client == (*suite.hub.stack)[1].client,
 		"Two stack layers should have different clients bound",
 	)
-	assert.True((*hub.Stack())[0].client == client, "Stack's parent layer should have old client bound")
-	assert.True((*hub.Stack())[1].client == newClient, "Stack's top layer should have new client bound")
+	suite.True((*suite.hub.stack)[0].client == suite.client, "Stack's parent layer should have old client bound")
+	suite.True((*suite.hub.stack)[1].client == newClient, "Stack's top layer should have new client bound")
 }
 
-func TestWithScope(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-	hub := NewHub(client, scope)
-
-	hub.WithScope(func() {
-		assert.Len(*hub.Stack(), 2)
+func (suite *HubSuite) TestWithScope() {
+	suite.hub.WithScope(func(scope *Scope) {
+		suite.Len(*suite.hub.stack, 2)
 	})
 
-	assert.Len(*hub.Stack(), 1)
+	suite.Len(*suite.hub.stack, 1)
 }
 
-func TestWithScopeBindClient(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-	hub := NewHub(client, scope)
-
-	hub.WithScope(func() {
-		newClient, _ := NewClient(ClientOptions{})
-		hub.BindClient(newClient)
-		assert.True(hub.StackTop().client == newClient)
+func (suite *HubSuite) TestWithScopeBindClient() {
+	suite.hub.WithScope(func(scope *Scope) {
+		newClient := &Client{}
+		suite.hub.BindClient(newClient)
+		suite.True(suite.hub.stackTop().client == newClient)
 	})
 
-	assert.True(hub.StackTop().client == client)
+	suite.True(suite.hub.stackTop().client == suite.client)
 }
 
-func TestWithScopeDirectChanges(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-	hub := NewHub(client, scope)
-	hub.Scope().SetExtra("foo", "bar")
+func (suite *HubSuite) TestWithScopeDirectChanges() {
+	suite.hub.Scope().SetExtra("foo", "bar")
 
-	hub.WithScope(func() {
-		hub.Scope().SetExtra("foo", "baz")
-		assert.Equal(map[string]interface{}{"foo": "baz"}, hub.StackTop().scope.extra)
+	suite.hub.WithScope(func(scope *Scope) {
+		scope.SetExtra("foo", "baz")
+		suite.Equal(map[string]interface{}{"foo": "baz"}, suite.hub.stackTop().scope.extra)
 	})
 
-	assert.Equal(map[string]interface{}{"foo": "bar"}, hub.StackTop().scope.extra)
+	suite.Equal(map[string]interface{}{"foo": "bar"}, suite.hub.stackTop().scope.extra)
 }
 
-func TestWithScopeChangesThroughConfigureScope(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-	hub := NewHub(client, scope)
-	hub.Scope().SetExtra("foo", "bar")
+func (suite *HubSuite) TestWithScopeChangesThroughConfigureScope() {
+	suite.hub.Scope().SetExtra("foo", "bar")
 
-	hub.WithScope(func() {
-		hub.ConfigureScope(func(scope *Scope) {
+	suite.hub.WithScope(func(scope *Scope) {
+		suite.hub.ConfigureScope(func(scope *Scope) {
 			scope.SetExtra("foo", "baz")
 		})
-		assert.Equal(map[string]interface{}{"foo": "baz"}, hub.StackTop().scope.extra)
+		suite.Equal(map[string]interface{}{"foo": "baz"}, suite.hub.stackTop().scope.extra)
 	})
 
-	assert.Equal(map[string]interface{}{"foo": "bar"}, hub.StackTop().scope.extra)
+	suite.Equal(map[string]interface{}{"foo": "bar"}, suite.hub.stackTop().scope.extra)
 }
 
-func TestConfigureScope(t *testing.T) {
-	assert := assert.New(t)
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-	hub := NewHub(client, scope)
-	hub.Scope().SetExtra("foo", "bar")
+func (suite *HubSuite) TestConfigureScope() {
+	suite.hub.Scope().SetExtra("foo", "bar")
 
-	hub.ConfigureScope(func(scope *Scope) {
+	suite.hub.ConfigureScope(func(scope *Scope) {
 		scope.SetExtra("foo", "baz")
-		assert.Equal(map[string]interface{}{"foo": "baz"}, hub.StackTop().scope.extra)
+		suite.Equal(map[string]interface{}{"foo": "baz"}, suite.hub.stackTop().scope.extra)
 	})
 
-	assert.Equal(map[string]interface{}{"foo": "baz"}, hub.StackTop().scope.extra)
+	suite.Equal(map[string]interface{}{"foo": "baz"}, suite.hub.stackTop().scope.extra)
+}
+
+func (suite *HubSuite) TestLastEventID() {
+	uuid := uuid.New()
+	hub := &Hub{lastEventID: uuid}
+	suite.Equal(uuid, hub.LastEventID())
+}
+
+func (suite *HubSuite) TestAccessingEmptyStack() {
+	hub := &Hub{}
+	suite.Nil(hub.stackTop())
+}
+
+func (suite *HubSuite) TestAccessingScopeReturnsNilIfStackIsEmpty() {
+	hub := &Hub{}
+	suite.Nil(hub.Scope())
+}
+
+func (suite *HubSuite) TestAccessingClientReturnsNilIfStackIsEmpty() {
+	hub := &Hub{}
+	suite.Nil(hub.Client())
+}
+
+func (suite *HubSuite) TestInvokeClientExecutesCallbackWithClientAndScopePassed() {
+	callback := func(client Clienter, scope *Scope) {
+		suite.Equal(suite.client, client)
+		suite.Equal(suite.scope, scope)
+	}
+	suite.hub.invokeClient(callback)
+}
+
+func (suite *HubSuite) TestInvokeClientFailsSilentlyWHenNoClientOrScopeAvailable() {
+	hub := &Hub{}
+	callback := func(_ Clienter, _ *Scope) {
+		suite.Fail("callback shoudnt be executed")
+	}
+	suite.NotPanics(func() {
+		hub.invokeClient(callback)
+	})
+}
+
+func (suite *HubSuite) TestCaptureEventCallsTheSameMethodOnClient() {
+	event := &Event{Message: "CaptureEvent"}
+
+	suite.hub.CaptureEvent(event)
+
+	suite.Equal("CaptureEvent", suite.client.lastCall)
+	suite.Equal(event, suite.client.lastCallArgs[0])
+	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
+}
+
+func (suite *HubSuite) TestCaptureMessageCallsTheSameMethodOnClient() {
+	suite.hub.CaptureMessage("foo")
+
+	suite.Equal("CaptureMessage", suite.client.lastCall)
+	suite.Equal("foo", suite.client.lastCallArgs[0])
+	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
+}
+
+func (suite *HubSuite) TestCaptureExceptionCallsTheSameMethodOnClient() {
+	err := errors.New("error")
+
+	suite.hub.CaptureException(err)
+
+	suite.Equal("CaptureException", suite.client.lastCall)
+	suite.Equal(err, suite.client.lastCallArgs[0])
+	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
+}
+
+func (suite *HubSuite) TestAddBreadcrumbCallsTheSameMethodOnClient() {
+	breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
+
+	suite.hub.AddBreadcrumb(breadcrumb)
+
+	suite.Equal("AddBreadcrumb", suite.client.lastCall)
+	suite.Equal(breadcrumb, suite.client.lastCallArgs[0])
+	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
+}
+
+func (suite *HubSuite) TestRecoverCallsTheSameMethodOnClient() {
+	err := errors.New("error")
+
+	suite.hub.Recover(err)
+
+	suite.Equal("Recover", suite.client.lastCall)
+	suite.Equal(err, suite.client.lastCallArgs[0])
+	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
 }
