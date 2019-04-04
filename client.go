@@ -52,7 +52,7 @@ type Event struct {
 	user        User
 	request     Request
 	contexts    map[string]Context
-	breadcrumbs []Breadcrumb
+	breadcrumbs []*Breadcrumb
 	exception   []Exception
 	tags        map[string]string
 	extra       map[string]interface{}

@@ -9,7 +9,7 @@ func (e *NoHubError) Error() string {
 // TODO Implement GetCurrentHub
 func GetCurrentHub() (*Hub, error) {
 	client := NewClient()
-	scope := NewScope()
+	scope := &Scope{}
 	return NewHub(client, scope), nil
 }
 

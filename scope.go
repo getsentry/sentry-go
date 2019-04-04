@@ -1,17 +1,20 @@
 package sentry
 
-import "fmt"
+import (
+	"time"
+)
 
 // TODO: Test whether we need locks for all the setters
 
 // TODO: Correct User struct
 type User struct {
-	id string
+	ID string `json:"id"`
 }
 
 // TODO: Correct Breadcrumb struct
 type Breadcrumb struct {
-	message string
+	Message   string `json:"message"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 type EventProcessor func(event *Event) *Event
@@ -26,8 +29,13 @@ const (
 	LevelFatal   Level = "fatal"
 )
 
+type Scoper interface {
+	AddBreadcrumb(breadcrumb *Breadcrumb)
+	ApplyToEvent(event *Event) *Event
+}
+
 type Scope struct {
-	breadcrumbs     []Breadcrumb
+	breadcrumbs     []*Breadcrumb
 	user            User
 	tags            map[string]string
 	extra           map[string]interface{}
@@ -36,21 +44,18 @@ type Scope struct {
 	eventProcessors []EventProcessor
 }
 
-func NewScope() *Scope {
-	return &Scope{
-		breadcrumbs: []Breadcrumb{},
-		user:        User{},
-		tags:        make(map[string]string),
-		extra:       make(map[string]interface{}),
-		fingerprint: []string{},
-		level:       LevelInfo,
-	}
-}
-
 // TODO: Pull from client.config.maxBreadcrumbs
 const breadcrumbsLimit = 100
 
-func (scope *Scope) AddBreadcrumb(breadcrumb Breadcrumb) {
+func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb) {
+	if breadcrumb.Timestamp == 0 {
+		breadcrumb.Timestamp = time.Now().Unix()
+	}
+
+	if scope.breadcrumbs == nil {
+		scope.breadcrumbs = []*Breadcrumb{}
+	}
+
 	breadcrumbs := append(scope.breadcrumbs, breadcrumb)
 	if len(breadcrumbs) > breadcrumbsLimit {
 		// Remove the oldest breadcrumb
@@ -65,20 +70,32 @@ func (scope *Scope) SetUser(user User) {
 }
 
 func (scope *Scope) SetTag(key, value string) {
+	if scope.tags == nil {
+		scope.tags = make(map[string]string)
+	}
 	scope.tags[key] = value
 }
 
 func (scope *Scope) SetTags(tags map[string]string) {
+	if scope.tags == nil {
+		scope.tags = make(map[string]string)
+	}
 	for k, v := range tags {
 		scope.tags[k] = v
 	}
 }
 
 func (scope *Scope) SetExtra(key string, value interface{}) {
+	if scope.extra == nil {
+		scope.extra = make(map[string]interface{})
+	}
 	scope.extra[key] = value
 }
 
 func (scope *Scope) SetExtras(extra map[string]interface{}) {
+	if scope.extra == nil {
+		scope.extra = make(map[string]interface{})
+	}
 	for k, v := range extra {
 		scope.extra[k] = v
 	}
@@ -92,10 +109,13 @@ func (scope *Scope) SetLevel(level Level) {
 	scope.level = level
 }
 
-func (scope Scope) Clone() *Scope {
-	clone := NewScope()
+func (scope *Scope) Clone() *Scope {
+	clone := &Scope{
+		extra: make(map[string]interface{}),
+		tags:  make(map[string]string),
+	}
 	clone.user = scope.user
-	clone.breadcrumbs = make([]Breadcrumb, len(scope.breadcrumbs))
+	clone.breadcrumbs = make([]*Breadcrumb, len(scope.breadcrumbs))
 	copy(clone.breadcrumbs, scope.breadcrumbs)
 	for key, value := range scope.extra {
 		clone.extra[key] = value
@@ -110,7 +130,11 @@ func (scope Scope) Clone() *Scope {
 }
 
 func (scope *Scope) Clear() {
-	*scope = *NewScope()
+	*scope = Scope{}
+}
+
+func (scope *Scope) ClearBreadcrumbs() {
+	scope.breadcrumbs = []*Breadcrumb{}
 }
 
 func (scope *Scope) AddEventProcessor(processor EventProcessor) {
@@ -120,9 +144,13 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 	scope.eventProcessors = append(scope.eventProcessors, processor)
 }
 
-func (scope Scope) ApplyToEvent(event *Event) *Event {
+func (scope *Scope) ApplyToEvent(event *Event) *Event {
 	// TODO: Limit to maxBreadcrums
-	if len(scope.breadcrumbs) > 0 {
+	if scope.breadcrumbs != nil && len(scope.breadcrumbs) > 0 {
+		if event.breadcrumbs == nil {
+			event.breadcrumbs = []*Breadcrumb{}
+		}
+
 		event.breadcrumbs = append(event.breadcrumbs, scope.breadcrumbs...)
 	}
 
@@ -154,7 +182,8 @@ func (scope Scope) ApplyToEvent(event *Event) *Event {
 		event.user = scope.user
 	}
 
-	if event.fingerprint == nil && scope.fingerprint != nil {
+	if (event.fingerprint == nil || len(event.fingerprint) == 0) &&
+		(scope.fingerprint != nil && len(scope.fingerprint) > 0) {
 		event.fingerprint = make([]string, len(scope.fingerprint))
 		copy(event.fingerprint, scope.fingerprint)
 	}
@@ -164,11 +193,10 @@ func (scope Scope) ApplyToEvent(event *Event) *Event {
 	}
 
 	for _, processor := range scope.eventProcessors {
-		id := event.eventID
+		// id := event.eventID
 		event = processor(event)
 		if event == nil {
-			// TODO: Add debug
-			fmt.Printf("event processor dropped event %s\n", id)
+			// debugger.Printf("event processor dropped event %s\n", id)
 			return nil
 		}
 	}

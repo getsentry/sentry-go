@@ -2,400 +2,377 @@ package sentry
 
 import (
 	"testing"
+	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestSetUser(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetUser(User{id: "foo"})
-	assert.Equal(User{id: "foo"}, scope.user)
+type ScopeSuite struct {
+	suite.Suite
+	scope *Scope
+	event *Event
 }
 
-func TestSetUserOverrides(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetUser(User{id: "foo"})
-	scope.SetUser(User{id: "bar"})
-	assert.Equal(User{id: "bar"}, scope.user)
+func TestScopeSuite(t *testing.T) {
+	suite.Run(t, new(ScopeSuite))
 }
 
-func TestSetTag(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetTag("a", "foo")
-	assert.Equal(map[string]string{"a": "foo"}, scope.tags)
+func (suite *ScopeSuite) SetupTest() {
+	suite.scope = &Scope{}
+	suite.event = &Event{}
 }
 
-func TestSetTagMerges(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetTag("a", "foo")
-	scope.SetTag("b", "bar")
-	assert.Equal(map[string]string{"a": "foo", "b": "bar"}, scope.tags)
+func (suite *ScopeSuite) FillScopeWithValidData() {
+	suite.scope.breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "scopeBreadcrumbMessage"}}
+	suite.scope.user = User{ID: "1337"}
+	suite.scope.tags = map[string]string{"scopeTagKey": "scopeTagValue"}
+	suite.scope.extra = map[string]interface{}{"scopeExtraKey": "scopeExtraValue"}
+	suite.scope.fingerprint = []string{"scopeFingerprintOne", "scopeFingerprintTwo"}
+	suite.scope.level = LevelDebug
 }
 
-func TestSetTagOverrides(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetTag("a", "foo")
-	scope.SetTag("a", "bar")
-	assert.Equal(map[string]string{"a": "bar"}, scope.tags)
+func (suite *ScopeSuite) FillEventWithValidData() {
+	suite.event.breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "eventBreadcrumbMessage"}}
+	suite.event.user = User{ID: "42"}
+	suite.event.tags = map[string]string{"eventTagKey": "eventTagValue"}
+	suite.event.extra = map[string]interface{}{"eventExtraKey": "eventExtraValue"}
+	suite.event.fingerprint = []string{"eventFingerprintOne", "eventFingerprintTwo"}
+	suite.event.level = LevelInfo
 }
 
-func TestSetTags(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetTags(map[string]string{"a": "foo"})
-	assert.Equal(map[string]string{"a": "foo"}, scope.tags)
-}
-func TestSetTagsMerges(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetTags(map[string]string{"a": "foo"})
-	scope.SetTags(map[string]string{"b": "bar", "c": "baz"})
-	assert.Equal(map[string]string{"a": "foo", "b": "bar", "c": "baz"}, scope.tags)
+func (suite *ScopeSuite) TestSetUser() {
+	suite.scope.SetUser(User{ID: "foo"})
+	suite.Equal(User{ID: "foo"}, suite.scope.user)
 }
 
-func TestSetTagsOverrides(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetTags(map[string]string{"a": "foo"})
-	scope.SetTags(map[string]string{"a": "bar", "b": "baz"})
-	assert.Equal(map[string]string{"a": "bar", "b": "baz"}, scope.tags)
+func (suite *ScopeSuite) TestSetUserOverrides() {
+	suite.scope.SetUser(User{ID: "foo"})
+	suite.scope.SetUser(User{ID: "bar"})
+
+	suite.Equal(User{ID: "bar"}, suite.scope.user)
 }
 
-func TestSetExtra(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetExtra("a", 1)
-	assert.Equal(map[string]interface{}{"a": 1}, scope.extra)
-}
-func TestSetExtraMerges(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetExtra("a", "foo")
-	scope.SetExtra("b", 2)
-	assert.Equal(map[string]interface{}{"a": "foo", "b": 2}, scope.extra)
+func (suite *ScopeSuite) TestSetTag() {
+	suite.scope.SetTag("a", "foo")
+
+	suite.Equal(map[string]string{"a": "foo"}, suite.scope.tags)
 }
 
-func TestSetExtraOverrides(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetExtra("a", "foo")
-	scope.SetExtra("a", 2)
-	assert.Equal(map[string]interface{}{"a": 2}, scope.extra)
+func (suite *ScopeSuite) TestSetTagMerges() {
+	suite.scope.SetTag("a", "foo")
+	suite.scope.SetTag("b", "bar")
+
+	suite.Equal(map[string]string{"a": "foo", "b": "bar"}, suite.scope.tags)
 }
 
-func TestSetExtras(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetExtras(map[string]interface{}{"a": 1})
-	assert.Equal(map[string]interface{}{"a": 1}, scope.extra)
-}
-func TestSetExtrasMerges(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetExtras(map[string]interface{}{"a": "foo"})
-	scope.SetExtras(map[string]interface{}{"b": 2, "c": 3})
-	assert.Equal(map[string]interface{}{"a": "foo", "b": 2, "c": 3}, scope.extra)
+func (suite *ScopeSuite) TestSetTagOverrides() {
+	suite.scope.SetTag("a", "foo")
+	suite.scope.SetTag("a", "bar")
+
+	suite.Equal(map[string]string{"a": "bar"}, suite.scope.tags)
 }
 
-func TestSetExtrasOverrides(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetExtras(map[string]interface{}{"a": "foo"})
-	scope.SetExtras(map[string]interface{}{"a": 2, "b": 3})
-	assert.Equal(map[string]interface{}{"a": 2, "b": 3}, scope.extra)
+func (suite *ScopeSuite) TestSetTags() {
+	suite.scope.SetTags(map[string]string{"a": "foo"})
+
+	suite.Equal(map[string]string{"a": "foo"}, suite.scope.tags)
 }
-func TestSetFingerprint(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetFingerprint([]string{"abcd"})
-	assert.Equal([]string{"abcd"}, scope.fingerprint)
+func (suite *ScopeSuite) TestSetTagsMerges() {
+	suite.scope.SetTags(map[string]string{"a": "foo"})
+	suite.scope.SetTags(map[string]string{"b": "bar", "c": "baz"})
+
+	suite.Equal(map[string]string{"a": "foo", "b": "bar", "c": "baz"}, suite.scope.tags)
 }
 
-func TestSetFingerprintOverrides(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetFingerprint([]string{"abc"})
-	scope.SetFingerprint([]string{"def"})
-	assert.Equal([]string{"def"}, scope.fingerprint)
+func (suite *ScopeSuite) TestSetTagsOverrides() {
+	suite.scope.SetTags(map[string]string{"a": "foo"})
+	suite.scope.SetTags(map[string]string{"a": "bar", "b": "baz"})
+
+	suite.Equal(map[string]string{"a": "bar", "b": "baz"}, suite.scope.tags)
 }
 
-func TestSetLevel(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetLevel(LevelInfo)
-	assert.Equal(LevelInfo, scope.level)
+func (suite *ScopeSuite) TestSetExtra() {
+	suite.scope.SetExtra("a", 1)
+
+	suite.Equal(map[string]interface{}{"a": 1}, suite.scope.extra)
+}
+func (suite *ScopeSuite) TestSetExtraMerges() {
+	suite.scope.SetExtra("a", "foo")
+	suite.scope.SetExtra("b", 2)
+
+	suite.Equal(map[string]interface{}{"a": "foo", "b": 2}, suite.scope.extra)
 }
 
-func TestSetLevelOverrides(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.SetLevel(LevelInfo)
-	scope.SetLevel(LevelFatal)
-	assert.Equal(LevelFatal, scope.level)
+func (suite *ScopeSuite) TestSetExtraOverrides() {
+	suite.scope.SetExtra("a", "foo")
+	suite.scope.SetExtra("a", 2)
+
+	suite.Equal(map[string]interface{}{"a": 2}, suite.scope.extra)
 }
 
-func TestAddBreadcrumb(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.AddBreadcrumb(Breadcrumb{message: "test"})
-	assert.Equal([]Breadcrumb{{message: "test"}}, scope.breadcrumbs)
+func (suite *ScopeSuite) TestSetExtras() {
+	suite.scope.SetExtras(map[string]interface{}{"a": 1})
+
+	suite.Equal(map[string]interface{}{"a": 1}, suite.scope.extra)
+}
+func (suite *ScopeSuite) TestSetExtrasMerges() {
+	suite.scope.SetExtras(map[string]interface{}{"a": "foo"})
+	suite.scope.SetExtras(map[string]interface{}{"b": 2, "c": 3})
+
+	suite.Equal(map[string]interface{}{"a": "foo", "b": 2, "c": 3}, suite.scope.extra)
 }
 
-func TestAddBreadcrumbAppends(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.AddBreadcrumb(Breadcrumb{message: "test1"})
-	scope.AddBreadcrumb(Breadcrumb{message: "test2"})
-	scope.AddBreadcrumb(Breadcrumb{message: "test3"})
-	assert.Equal([]Breadcrumb{{message: "test1"}, {message: "test2"}, {message: "test3"}}, scope.breadcrumbs)
+func (suite *ScopeSuite) TestSetExtrasOverrides() {
+	suite.scope.SetExtras(map[string]interface{}{"a": "foo"})
+	suite.scope.SetExtras(map[string]interface{}{"a": 2, "b": 3})
+
+	suite.Equal(map[string]interface{}{"a": 2, "b": 3}, suite.scope.extra)
+}
+func (suite *ScopeSuite) TestSetFingerprint() {
+	suite.scope.SetFingerprint([]string{"abcd"})
+
+	suite.Equal([]string{"abcd"}, suite.scope.fingerprint)
 }
 
-func TestAddBreadcrumbDefaultLimit(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
+func (suite *ScopeSuite) TestSetFingerprintOverrides() {
+	suite.scope.SetFingerprint([]string{"abc"})
+	suite.scope.SetFingerprint([]string{"def"})
+
+	suite.Equal([]string{"def"}, suite.scope.fingerprint)
+}
+
+func (suite *ScopeSuite) TestSetLevel() {
+	suite.scope.SetLevel(LevelInfo)
+
+	suite.Equal(LevelInfo, suite.scope.level)
+}
+
+func (suite *ScopeSuite) TestSetLevelOverrides() {
+	suite.scope.SetLevel(LevelInfo)
+	suite.scope.SetLevel(LevelFatal)
+
+	suite.Equal(LevelFatal, suite.scope.level)
+}
+
+func (suite *ScopeSuite) TestAddBreadcrumb() {
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"})
+
+	suite.Equal([]*Breadcrumb{{Timestamp: 1337, Message: "test"}}, suite.scope.breadcrumbs)
+}
+
+func (suite *ScopeSuite) TestAddBreadcrumbAppends() {
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test1"})
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test2"})
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test3"})
+
+	suite.Equal([]*Breadcrumb{
+		{Timestamp: 1337, Message: "test1"},
+		{Timestamp: 1337, Message: "test2"},
+		{Timestamp: 1337, Message: "test3"},
+	}, suite.scope.breadcrumbs)
+}
+
+func (suite *ScopeSuite) TestAddBreadcrumbDefaultLimit() {
 	for i := 0; i < 101; i++ {
-		scope.AddBreadcrumb(Breadcrumb{message: "test"})
-	}
-	assert.Len(scope.breadcrumbs, 100)
-}
-
-func TestBasicInheritance(t *testing.T) {
-	assert := assert.New(t)
-	parentScope := NewScope()
-	parentScope.SetExtra("a", 1)
-	scope := parentScope.Clone()
-	assert.Equal(parentScope.extra, scope.extra)
-}
-
-func TestParentChangedInheritance(t *testing.T) {
-	assert := assert.New(t)
-	parentScope := NewScope()
-	scope := parentScope.Clone()
-
-	scope.SetTag("foo", "bar")
-	scope.SetExtra("foo", "bar")
-	scope.SetLevel(LevelDebug)
-	scope.SetFingerprint([]string{"foo"})
-	scope.AddBreadcrumb(Breadcrumb{message: "foo"})
-	scope.SetUser(User{id: "foo"})
-
-	parentScope.SetTag("foo", "baz")
-	parentScope.SetExtra("foo", "baz")
-	parentScope.SetLevel(LevelFatal)
-	parentScope.SetFingerprint([]string{"bar"})
-	parentScope.AddBreadcrumb(Breadcrumb{message: "bar"})
-	parentScope.SetUser(User{id: "bar"})
-
-	assert.Equal(map[string]string{"foo": "bar"}, scope.tags)
-	assert.Equal(map[string]interface{}{"foo": "bar"}, scope.extra)
-	assert.Equal(LevelDebug, scope.level)
-	assert.Equal([]string{"foo"}, scope.fingerprint)
-	assert.Equal([]Breadcrumb{{message: "foo"}}, scope.breadcrumbs)
-	assert.Equal(User{id: "foo"}, scope.user)
-
-	assert.Equal(map[string]string{"foo": "baz"}, parentScope.tags)
-	assert.Equal(map[string]interface{}{"foo": "baz"}, parentScope.extra)
-	assert.Equal(LevelFatal, parentScope.level)
-	assert.Equal([]string{"bar"}, parentScope.fingerprint)
-	assert.Equal([]Breadcrumb{{message: "bar"}}, parentScope.breadcrumbs)
-	assert.Equal(User{id: "bar"}, parentScope.user)
-}
-
-func TestChildOverrideInheritance(t *testing.T) {
-	assert := assert.New(t)
-	parentScope := NewScope()
-	parentScope.SetTag("foo", "baz")
-	parentScope.SetExtra("foo", "baz")
-	parentScope.SetLevel(LevelFatal)
-	parentScope.SetFingerprint([]string{"bar"})
-	parentScope.AddBreadcrumb(Breadcrumb{message: "bar"})
-	parentScope.SetUser(User{id: "bar"})
-
-	scope := parentScope.Clone()
-	scope.SetTag("foo", "bar")
-	scope.SetExtra("foo", "bar")
-	scope.SetLevel(LevelDebug)
-	scope.SetFingerprint([]string{"foo"})
-	scope.AddBreadcrumb(Breadcrumb{message: "foo"})
-	scope.SetUser(User{id: "foo"})
-
-	assert.Equal(map[string]string{"foo": "bar"}, scope.tags)
-	assert.Equal(map[string]interface{}{"foo": "bar"}, scope.extra)
-	assert.Equal(LevelDebug, scope.level)
-	assert.Equal([]string{"foo"}, scope.fingerprint)
-	assert.Equal([]Breadcrumb{{message: "bar"}, {message: "foo"}}, scope.breadcrumbs)
-	assert.Equal(User{id: "foo"}, scope.user)
-
-	assert.Equal(map[string]string{"foo": "baz"}, parentScope.tags)
-	assert.Equal(map[string]interface{}{"foo": "baz"}, parentScope.extra)
-	assert.Equal(LevelFatal, parentScope.level)
-	assert.Equal([]string{"bar"}, parentScope.fingerprint)
-	assert.Equal([]Breadcrumb{{message: "bar"}}, parentScope.breadcrumbs)
-	assert.Equal(User{id: "bar"}, parentScope.user)
-}
-
-func TestClear(t *testing.T) {
-	assert := assert.New(t)
-	scope := NewScope()
-	scope.AddBreadcrumb(Breadcrumb{message: "test"})
-	scope.SetUser(User{id: "1"})
-	scope.SetTag("a", "b")
-	scope.SetExtra("a", 2)
-	scope.SetFingerprint([]string{"abcd"})
-	scope.SetLevel(LevelFatal)
-	scope.Clear()
-	assert.Equal([]Breadcrumb{}, scope.breadcrumbs)
-	assert.Equal(User{}, scope.user)
-	assert.Equal(map[string]string{}, scope.tags)
-	assert.Equal(map[string]interface{}{}, scope.extra)
-	assert.Equal([]string{}, scope.fingerprint)
-	assert.Equal(LevelInfo, scope.level)
-}
-
-func TestApplyToEvent(t *testing.T) {
-	assert := assert.New(t)
-	scope := &Scope{
-		breadcrumbs: []Breadcrumb{{message: "scopeFoo"}},
-		user:        User{id: "1337"},
-		tags:        map[string]string{"scopeFoo": "scopeBar"},
-		extra:       map[string]interface{}{"scopeFoo": "scopeBar"},
-		fingerprint: []string{"scopeFoo", "scopeBar"},
-		level:       LevelDebug,
-	}
-	event := &Event{
-		breadcrumbs: []Breadcrumb{{message: "eventFoo"}},
-		user:        User{id: "42"},
-		tags:        map[string]string{"eventFoo": "eventBar"},
-		extra:       map[string]interface{}{"eventFoo": "eventBar"},
-		fingerprint: []string{"eventFoo", "eventBar"},
-		level:       LevelInfo,
+		suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"})
 	}
 
-	processedEvent := scope.ApplyToEvent(event)
-
-	assert.Len(processedEvent.breadcrumbs, 2, "should merge breadcrumbs")
-	assert.Len(processedEvent.tags, 2, "should merge tags")
-	assert.Len(processedEvent.extra, 2, "should merge extra")
-	assert.Equal(processedEvent.level, scope.level, "should use scope level if its set")
-	assert.NotEqual(processedEvent.user, scope.user, "should use event user if one exist")
-	assert.NotEqual(processedEvent.fingerprint, scope.fingerprint, "should use event fingerprints if they exist")
+	suite.Len(suite.scope.breadcrumbs, 100)
 }
 
-func TestApplyToEventEmptyScope(t *testing.T) {
-	assert := assert.New(t)
-	scope := &Scope{}
-	event := &Event{
-		breadcrumbs: []Breadcrumb{{message: "eventFoo"}},
-		user:        User{id: "42"},
-		tags:        map[string]string{"eventFoo": "eventBar"},
-		extra:       map[string]interface{}{"eventFoo": "eventBar"},
-		fingerprint: []string{"eventFoo", "eventBar"},
-		level:       LevelInfo,
-	}
-
-	processedEvent := scope.ApplyToEvent(event)
-
-	assert.True(true, "Shoudn't blow up")
-	assert.Len(processedEvent.breadcrumbs, 1, "should use event breadcrumbs")
-	assert.Len(processedEvent.tags, 1, "should use event tags")
-	assert.Len(processedEvent.extra, 1, "should use event extra")
-	assert.NotEqual(processedEvent.user, scope.user, "should use event user")
-	assert.NotEqual(processedEvent.fingerprint, scope.fingerprint, "should use event fingerprint")
-	assert.NotEqual(processedEvent.level, scope.level, "should use event level")
+func (suite *ScopeSuite) TestAddBreadcrumbAddsTimestamp() {
+	suite.scope.AddBreadcrumb(&Breadcrumb{Message: "test"})
+	// I know it's not perfect, but mocking time method for one test would be an overkill
+	// And adding new breadcrumb will definitely take less than a second — Kamil
+	suite.InDelta(time.Now().Unix(), suite.scope.breadcrumbs[0].Timestamp, 1)
 }
 
-func TestApplyToEventEmptyEvent(t *testing.T) {
-	assert := assert.New(t)
-	scope := &Scope{
-		breadcrumbs: []Breadcrumb{{message: "scopeFoo"}},
-		user:        User{id: "1337"},
-		tags:        map[string]string{"scopeFoo": "scopeBar"},
-		extra:       map[string]interface{}{"scopeFoo": "scopeBar"},
-		fingerprint: []string{"scopeFoo", "scopeBar"},
-		level:       LevelDebug,
-	}
-	event := &Event{}
+func (suite *ScopeSuite) TestBasicInheritance() {
+	suite.scope.SetExtra("a", 1)
 
-	processedEvent := scope.ApplyToEvent(event)
+	clone := suite.scope.Clone()
 
-	assert.True(true, "Shoudn't blow up")
-	assert.Len(processedEvent.breadcrumbs, 1, "should use scope breadcrumbs")
-	assert.Len(processedEvent.tags, 1, "should use scope tags")
-	assert.Len(processedEvent.extra, 1, "should use scope extra")
-	assert.Equal(processedEvent.user, scope.user, "should use scope user")
-	assert.Equal(processedEvent.fingerprint, scope.fingerprint, "should use scope fingerprint")
-	assert.Equal(processedEvent.level, scope.level, "should use scope level")
+	suite.Equal(suite.scope.extra, clone.extra)
 }
 
-func TestApplyToEventLimitBreadcrumbs(t *testing.T) {
-	assert := assert.New(t)
-	scope := &Scope{}
+func (suite *ScopeSuite) TestParentChangedInheritance() {
+	clone := suite.scope.Clone()
+
+	clone.SetTag("foo", "bar")
+	clone.SetExtra("foo", "bar")
+	clone.SetLevel(LevelDebug)
+	clone.SetFingerprint([]string{"foo"})
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"})
+	clone.SetUser(User{ID: "foo"})
+
+	suite.scope.SetTag("foo", "baz")
+	suite.scope.SetExtra("foo", "baz")
+	suite.scope.SetLevel(LevelFatal)
+	suite.scope.SetFingerprint([]string{"bar"})
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"})
+	suite.scope.SetUser(User{ID: "bar"})
+
+	suite.Equal(map[string]string{"foo": "bar"}, clone.tags)
+	suite.Equal(map[string]interface{}{"foo": "bar"}, clone.extra)
+	suite.Equal(LevelDebug, clone.level)
+	suite.Equal([]string{"foo"}, clone.fingerprint)
+	suite.Equal([]*Breadcrumb{{Timestamp: 1337, Message: "foo"}}, clone.breadcrumbs)
+	suite.Equal(User{ID: "foo"}, clone.user)
+
+	suite.Equal(map[string]string{"foo": "baz"}, suite.scope.tags)
+	suite.Equal(map[string]interface{}{"foo": "baz"}, suite.scope.extra)
+	suite.Equal(LevelFatal, suite.scope.level)
+	suite.Equal([]string{"bar"}, suite.scope.fingerprint)
+	suite.Equal([]*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, suite.scope.breadcrumbs)
+	suite.Equal(User{ID: "bar"}, suite.scope.user)
+}
+
+func (suite *ScopeSuite) TestChildOverrideInheritance() {
+	suite.scope.SetTag("foo", "baz")
+	suite.scope.SetExtra("foo", "baz")
+	suite.scope.SetLevel(LevelFatal)
+	suite.scope.SetFingerprint([]string{"bar"})
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"})
+	suite.scope.SetUser(User{ID: "bar"})
+
+	clone := suite.scope.Clone()
+	clone.SetTag("foo", "bar")
+	clone.SetExtra("foo", "bar")
+	clone.SetLevel(LevelDebug)
+	clone.SetFingerprint([]string{"foo"})
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"})
+	clone.SetUser(User{ID: "foo"})
+
+	suite.Equal(map[string]string{"foo": "bar"}, clone.tags)
+	suite.Equal(map[string]interface{}{"foo": "bar"}, clone.extra)
+	suite.Equal(LevelDebug, clone.level)
+	suite.Equal([]string{"foo"}, clone.fingerprint)
+	suite.Equal([]*Breadcrumb{{Timestamp: 1337, Message: "bar"}, {Timestamp: 1337, Message: "foo"}}, clone.breadcrumbs)
+	suite.Equal(User{ID: "foo"}, clone.user)
+
+	suite.Equal(map[string]string{"foo": "baz"}, suite.scope.tags)
+	suite.Equal(map[string]interface{}{"foo": "baz"}, suite.scope.extra)
+	suite.Equal(LevelFatal, suite.scope.level)
+	suite.Equal([]string{"bar"}, suite.scope.fingerprint)
+	suite.Equal([]*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, suite.scope.breadcrumbs)
+	suite.Equal(User{ID: "bar"}, suite.scope.user)
+}
+
+func (suite *ScopeSuite) TestClear() {
+	suite.FillScopeWithValidData()
+
+	suite.scope.Clear()
+
+	suite.Equal([]*Breadcrumb(nil), suite.scope.breadcrumbs)
+	suite.Equal(User{}, suite.scope.user)
+	suite.Equal(map[string]string(nil), suite.scope.tags)
+	suite.Equal(map[string]interface{}(nil), suite.scope.extra)
+	suite.Equal([]string(nil), suite.scope.fingerprint)
+	suite.Equal(Level(""), suite.scope.level)
+}
+
+func (suite *ScopeSuite) TestClearBreadcrumbs() {
+	suite.FillScopeWithValidData()
+
+	suite.scope.ClearBreadcrumbs()
+
+	suite.Equal([]*Breadcrumb{}, suite.scope.breadcrumbs)
+}
+
+func (suite *ScopeSuite) TestApplyToEvent() {
+	suite.FillScopeWithValidData()
+	suite.FillEventWithValidData()
+
+	processedEvent := suite.scope.ApplyToEvent(suite.event)
+
+	suite.Len(processedEvent.breadcrumbs, 2, "should merge breadcrumbs")
+	suite.Len(processedEvent.tags, 2, "should merge tags")
+	suite.Len(processedEvent.extra, 2, "should merge extra")
+	suite.Equal(processedEvent.level, suite.scope.level, "should use scope level if its set")
+	suite.NotEqual(processedEvent.user, suite.scope.user, "should use event user if one exist")
+	suite.NotEqual(processedEvent.fingerprint, suite.scope.fingerprint, "should use event fingerprints if they exist")
+}
+
+func (suite *ScopeSuite) TestApplyToEventEmptyScope() {
+	suite.FillEventWithValidData()
+
+	processedEvent := suite.scope.ApplyToEvent(suite.event)
+
+	suite.True(true, "Shoudn't blow up")
+	suite.Len(processedEvent.breadcrumbs, 1, "should use event breadcrumbs")
+	suite.Len(processedEvent.tags, 1, "should use event tags")
+	suite.Len(processedEvent.extra, 1, "should use event extra")
+	suite.NotEqual(processedEvent.user, suite.scope.user, "should use event user")
+	suite.NotEqual(processedEvent.fingerprint, suite.scope.fingerprint, "should use event fingerprint")
+	suite.NotEqual(processedEvent.level, suite.scope.level, "should use event level")
+}
+
+func (suite *ScopeSuite) TestApplyToEventEmptyEvent() {
+	suite.FillScopeWithValidData()
+
+	processedEvent := suite.scope.ApplyToEvent(suite.event)
+
+	suite.True(true, "Shoudn't blow up")
+	suite.Len(processedEvent.breadcrumbs, 1, "should use scope breadcrumbs")
+	suite.Len(processedEvent.tags, 1, "should use scope tags")
+	suite.Len(processedEvent.extra, 1, "should use scope extra")
+	suite.Equal(processedEvent.user, suite.scope.user, "should use scope user")
+	suite.Equal(processedEvent.fingerprint, suite.scope.fingerprint, "should use scope fingerprint")
+	suite.Equal(processedEvent.level, suite.scope.level, "should use scope level")
+}
+
+func (suite *ScopeSuite) TestApplyToEventLimitBreadcrumbs() {
 	for i := 0; i < 101; i++ {
-		scope.AddBreadcrumb(Breadcrumb{message: "test"})
+		suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"})
 	}
-	event := &Event{breadcrumbs: []Breadcrumb{{message: "foo"}, {message: "bar"}}}
+	suite.event.breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "foo"}, {Timestamp: 1337, Message: "bar"}}
 
-	processedEvent := scope.ApplyToEvent(event)
+	processedEvent := suite.scope.ApplyToEvent(suite.event)
 
-	assert.Len(processedEvent.breadcrumbs, 100)
-	assert.Equal(Breadcrumb{message: "foo"}, processedEvent.breadcrumbs[0])
-	assert.Equal(Breadcrumb{message: "bar"}, processedEvent.breadcrumbs[1])
+	suite.Len(processedEvent.breadcrumbs, 100)
+	suite.Equal(&Breadcrumb{Timestamp: 1337, Message: "foo"}, processedEvent.breadcrumbs[0])
+	suite.Equal(&Breadcrumb{Timestamp: 1337, Message: "bar"}, processedEvent.breadcrumbs[1])
 }
 
-func TestEventProcessors(t *testing.T) {
-	assert := assert.New(t)
-	scope := &Scope{
-		eventProcessors: []EventProcessor{
-			func(event *Event) *Event {
-				event.level = LevelFatal
-				return event
-			},
-			func(event *Event) *Event {
-				event.fingerprint = []string{"wat"}
-				return event
-			},
+func (suite *ScopeSuite) TestEventProcessors() {
+	suite.scope.eventProcessors = []EventProcessor{
+		func(event *Event) *Event {
+			event.level = LevelFatal
+			return event
+		},
+		func(event *Event) *Event {
+			event.fingerprint = []string{"wat"}
+			return event
 		},
 	}
 
-	processedEvent := scope.ApplyToEvent(&Event{})
+	processedEvent := suite.scope.ApplyToEvent(suite.event)
 
-	assert.NotNil(processedEvent)
-	assert.Equal(LevelFatal, processedEvent.level)
-	assert.Equal([]string{"wat"}, processedEvent.fingerprint)
+	suite.NotNil(processedEvent)
+	suite.Equal(LevelFatal, processedEvent.level)
+	suite.Equal([]string{"wat"}, processedEvent.fingerprint)
 }
 
-func TestEventProcessorsCanDropEvent(t *testing.T) {
-	assert := assert.New(t)
-	scope := &Scope{
-		tags: map[string]string{"scopeFoo": "scopeBar"},
-		eventProcessors: []EventProcessor{
-			func(event *Event) *Event {
-				return nil
-			},
+func (suite *ScopeSuite) TestEventProcessorsCanDropEvent() {
+	suite.scope.eventProcessors = []EventProcessor{
+		func(event *Event) *Event {
+			return nil
 		},
 	}
 
-	processedEvent := scope.ApplyToEvent(&Event{})
+	processedEvent := suite.scope.ApplyToEvent(suite.event)
 
-	assert.Nil(processedEvent)
+	suite.Nil(processedEvent)
 }
 
-func TestAddEventProcessor(t *testing.T) {
-	assert := assert.New(t)
-	scope := &Scope{}
+func (suite *ScopeSuite) TestAddEventProcessor() {
+	processedEvent := suite.scope.ApplyToEvent(suite.event)
+	suite.NotNil(processedEvent)
 
-	processedEvent := scope.ApplyToEvent(&Event{})
-	assert.NotNil(processedEvent)
-
-	scope.AddEventProcessor(func(event *Event) *Event {
+	suite.scope.AddEventProcessor(func(event *Event) *Event {
 		return nil
 	})
 
-	processedEvent = scope.ApplyToEvent(&Event{})
-	assert.Nil(processedEvent)
+	processedEvent = suite.scope.ApplyToEvent(suite.event)
+	suite.Nil(processedEvent)
 }
