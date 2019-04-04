@@ -32,12 +32,12 @@ func (suite *ScopeSuite) FillScopeWithValidData() {
 }
 
 func (suite *ScopeSuite) FillEventWithValidData() {
-	suite.event.breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "eventBreadcrumbMessage"}}
-	suite.event.user = User{ID: "42"}
-	suite.event.tags = map[string]string{"eventTagKey": "eventTagValue"}
-	suite.event.extra = map[string]interface{}{"eventExtraKey": "eventExtraValue"}
-	suite.event.fingerprint = []string{"eventFingerprintOne", "eventFingerprintTwo"}
-	suite.event.level = LevelInfo
+	suite.event.Breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "eventBreadcrumbMessage"}}
+	suite.event.User = User{ID: "42"}
+	suite.event.Tags = map[string]string{"eventTagKey": "eventTagValue"}
+	suite.event.Extra = map[string]interface{}{"eventExtraKey": "eventExtraValue"}
+	suite.event.Fingerprint = []string{"eventFingerprintOne", "eventFingerprintTwo"}
+	suite.event.Level = LevelInfo
 }
 
 func (suite *ScopeSuite) TestSetUser() {
@@ -285,12 +285,12 @@ func (suite *ScopeSuite) TestApplyToEvent() {
 
 	processedEvent := suite.scope.ApplyToEvent(suite.event)
 
-	suite.Len(processedEvent.breadcrumbs, 2, "should merge breadcrumbs")
-	suite.Len(processedEvent.tags, 2, "should merge tags")
-	suite.Len(processedEvent.extra, 2, "should merge extra")
-	suite.Equal(processedEvent.level, suite.scope.level, "should use scope level if its set")
-	suite.NotEqual(processedEvent.user, suite.scope.user, "should use event user if one exist")
-	suite.NotEqual(processedEvent.fingerprint, suite.scope.fingerprint, "should use event fingerprints if they exist")
+	suite.Len(processedEvent.Breadcrumbs, 2, "should merge breadcrumbs")
+	suite.Len(processedEvent.Tags, 2, "should merge tags")
+	suite.Len(processedEvent.Extra, 2, "should merge extra")
+	suite.Equal(processedEvent.Level, suite.scope.level, "should use scope level if its set")
+	suite.NotEqual(processedEvent.User, suite.scope.user, "should use event user if one exist")
+	suite.NotEqual(processedEvent.Fingerprint, suite.scope.fingerprint, "should use event fingerprints if they exist")
 }
 
 func (suite *ScopeSuite) TestApplyToEventEmptyScope() {
@@ -299,12 +299,12 @@ func (suite *ScopeSuite) TestApplyToEventEmptyScope() {
 	processedEvent := suite.scope.ApplyToEvent(suite.event)
 
 	suite.True(true, "Shoudn't blow up")
-	suite.Len(processedEvent.breadcrumbs, 1, "should use event breadcrumbs")
-	suite.Len(processedEvent.tags, 1, "should use event tags")
-	suite.Len(processedEvent.extra, 1, "should use event extra")
-	suite.NotEqual(processedEvent.user, suite.scope.user, "should use event user")
-	suite.NotEqual(processedEvent.fingerprint, suite.scope.fingerprint, "should use event fingerprint")
-	suite.NotEqual(processedEvent.level, suite.scope.level, "should use event level")
+	suite.Len(processedEvent.Breadcrumbs, 1, "should use event breadcrumbs")
+	suite.Len(processedEvent.Tags, 1, "should use event tags")
+	suite.Len(processedEvent.Extra, 1, "should use event extra")
+	suite.NotEqual(processedEvent.User, suite.scope.user, "should use event user")
+	suite.NotEqual(processedEvent.Fingerprint, suite.scope.fingerprint, "should use event fingerprint")
+	suite.NotEqual(processedEvent.Level, suite.scope.level, "should use event level")
 }
 
 func (suite *ScopeSuite) TestApplyToEventEmptyEvent() {
@@ -313,35 +313,35 @@ func (suite *ScopeSuite) TestApplyToEventEmptyEvent() {
 	processedEvent := suite.scope.ApplyToEvent(suite.event)
 
 	suite.True(true, "Shoudn't blow up")
-	suite.Len(processedEvent.breadcrumbs, 1, "should use scope breadcrumbs")
-	suite.Len(processedEvent.tags, 1, "should use scope tags")
-	suite.Len(processedEvent.extra, 1, "should use scope extra")
-	suite.Equal(processedEvent.user, suite.scope.user, "should use scope user")
-	suite.Equal(processedEvent.fingerprint, suite.scope.fingerprint, "should use scope fingerprint")
-	suite.Equal(processedEvent.level, suite.scope.level, "should use scope level")
+	suite.Len(processedEvent.Breadcrumbs, 1, "should use scope breadcrumbs")
+	suite.Len(processedEvent.Tags, 1, "should use scope tags")
+	suite.Len(processedEvent.Extra, 1, "should use scope extra")
+	suite.Equal(processedEvent.User, suite.scope.user, "should use scope user")
+	suite.Equal(processedEvent.Fingerprint, suite.scope.fingerprint, "should use scope fingerprint")
+	suite.Equal(processedEvent.Level, suite.scope.level, "should use scope level")
 }
 
 func (suite *ScopeSuite) TestApplyToEventLimitBreadcrumbs() {
 	for i := 0; i < 101; i++ {
 		suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"})
 	}
-	suite.event.breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "foo"}, {Timestamp: 1337, Message: "bar"}}
+	suite.event.Breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "foo"}, {Timestamp: 1337, Message: "bar"}}
 
 	processedEvent := suite.scope.ApplyToEvent(suite.event)
 
-	suite.Len(processedEvent.breadcrumbs, 100)
-	suite.Equal(&Breadcrumb{Timestamp: 1337, Message: "foo"}, processedEvent.breadcrumbs[0])
-	suite.Equal(&Breadcrumb{Timestamp: 1337, Message: "bar"}, processedEvent.breadcrumbs[1])
+	suite.Len(processedEvent.Breadcrumbs, 100)
+	suite.Equal(&Breadcrumb{Timestamp: 1337, Message: "foo"}, processedEvent.Breadcrumbs[0])
+	suite.Equal(&Breadcrumb{Timestamp: 1337, Message: "bar"}, processedEvent.Breadcrumbs[1])
 }
 
 func (suite *ScopeSuite) TestEventProcessors() {
 	suite.scope.eventProcessors = []EventProcessor{
 		func(event *Event) *Event {
-			event.level = LevelFatal
+			event.Level = LevelFatal
 			return event
 		},
 		func(event *Event) *Event {
-			event.fingerprint = []string{"wat"}
+			event.Fingerprint = []string{"wat"}
 			return event
 		},
 	}
@@ -349,8 +349,8 @@ func (suite *ScopeSuite) TestEventProcessors() {
 	processedEvent := suite.scope.ApplyToEvent(suite.event)
 
 	suite.NotNil(processedEvent)
-	suite.Equal(LevelFatal, processedEvent.level)
-	suite.Equal([]string{"wat"}, processedEvent.fingerprint)
+	suite.Equal(LevelFatal, processedEvent.Level)
+	suite.Equal([]string{"wat"}, processedEvent.Fingerprint)
 }
 
 func (suite *ScopeSuite) TestEventProcessorsCanDropEvent() {

@@ -7,6 +7,8 @@ import (
 	"os"
 )
 
+var debugger = NewDebugger()
+
 const prefix = "[Sentry]"
 
 type Debugger struct {

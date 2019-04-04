@@ -147,56 +147,56 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 func (scope *Scope) ApplyToEvent(event *Event) *Event {
 	// TODO: Limit to maxBreadcrums
 	if scope.breadcrumbs != nil && len(scope.breadcrumbs) > 0 {
-		if event.breadcrumbs == nil {
-			event.breadcrumbs = []*Breadcrumb{}
+		if event.Breadcrumbs == nil {
+			event.Breadcrumbs = []*Breadcrumb{}
 		}
 
-		event.breadcrumbs = append(event.breadcrumbs, scope.breadcrumbs...)
+		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
 	}
 
-	if len(event.breadcrumbs) > breadcrumbsLimit {
-		event.breadcrumbs = event.breadcrumbs[0:breadcrumbsLimit]
+	if len(event.Breadcrumbs) > breadcrumbsLimit {
+		event.Breadcrumbs = event.Breadcrumbs[0:breadcrumbsLimit]
 	}
 
 	if scope.extra != nil && len(scope.extra) > 0 {
-		if event.extra == nil {
-			event.extra = make(map[string]interface{})
+		if event.Extra == nil {
+			event.Extra = make(map[string]interface{})
 		}
 
 		for key, value := range scope.extra {
-			event.extra[key] = value
+			event.Extra[key] = value
 		}
 	}
 
 	if scope.tags != nil && len(scope.tags) > 0 {
-		if event.tags == nil {
-			event.tags = make(map[string]string)
+		if event.Tags == nil {
+			event.Tags = make(map[string]string)
 		}
 
 		for key, value := range scope.tags {
-			event.tags[key] = value
+			event.Tags[key] = value
 		}
 	}
 
-	if (event.user == User{}) {
-		event.user = scope.user
+	if (event.User == User{}) {
+		event.User = scope.user
 	}
 
-	if (event.fingerprint == nil || len(event.fingerprint) == 0) &&
+	if (event.Fingerprint == nil || len(event.Fingerprint) == 0) &&
 		(scope.fingerprint != nil && len(scope.fingerprint) > 0) {
-		event.fingerprint = make([]string, len(scope.fingerprint))
-		copy(event.fingerprint, scope.fingerprint)
+		event.Fingerprint = make([]string, len(scope.fingerprint))
+		copy(event.Fingerprint, scope.fingerprint)
 	}
 
 	if scope.level != "" {
-		event.level = scope.level
+		event.Level = scope.level
 	}
 
 	for _, processor := range scope.eventProcessors {
-		// id := event.eventID
+		id := event.EventID
 		event = processor(event)
 		if event == nil {
-			// debugger.Printf("event processor dropped event %s\n", id)
+			debugger.Printf("event processor dropped event %s\n", id)
 			return nil
 		}
 	}

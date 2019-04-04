@@ -8,7 +8,7 @@ import (
 
 func TestNewHubPushLayerOnTopOfStack(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 
 	hub := NewHub(client, scope)
@@ -18,7 +18,7 @@ func TestNewHubPushLayerOnTopOfStack(t *testing.T) {
 
 func TestNewHubLayerStoresClientAndScope(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 
 	hub := NewHub(client, scope)
@@ -28,7 +28,7 @@ func TestNewHubLayerStoresClientAndScope(t *testing.T) {
 
 func TestPushScopeAddsScopeOnTopOfStack(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 	hub := NewHub(client, scope)
 
@@ -39,7 +39,7 @@ func TestPushScopeAddsScopeOnTopOfStack(t *testing.T) {
 
 func TestPushScopeInheritsScopeData(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 	hub := NewHub(client, scope)
 
@@ -54,7 +54,7 @@ func TestPushScopeInheritsScopeData(t *testing.T) {
 
 func TestPushScopeInheritsClient(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 	hub := NewHub(client, scope)
 
@@ -65,7 +65,7 @@ func TestPushScopeInheritsClient(t *testing.T) {
 
 func TestPopScopeRemovesLayerFromTheStack(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 
 	hub := NewHub(client, scope)
@@ -78,7 +78,7 @@ func TestPopScopeRemovesLayerFromTheStack(t *testing.T) {
 
 func TestPopScopeCannotRemoveFromEmptyStack(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 
 	hub := NewHub(client, scope)
@@ -92,12 +92,12 @@ func TestPopScopeCannotRemoveFromEmptyStack(t *testing.T) {
 
 func TestBindClient(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 	hub := NewHub(client, scope)
 
 	hub.PushScope()
-	newClient := NewClient()
+	newClient, _ := NewClient(ClientOptions{})
 	hub.BindClient(newClient)
 
 	assert.False(
@@ -110,7 +110,7 @@ func TestBindClient(t *testing.T) {
 
 func TestWithScope(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 	hub := NewHub(client, scope)
 
@@ -123,12 +123,12 @@ func TestWithScope(t *testing.T) {
 
 func TestWithScopeBindClient(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 	hub := NewHub(client, scope)
 
 	hub.WithScope(func() {
-		newClient := NewClient()
+		newClient, _ := NewClient(ClientOptions{})
 		hub.BindClient(newClient)
 		assert.True(hub.StackTop().client == newClient)
 	})
@@ -138,7 +138,7 @@ func TestWithScopeBindClient(t *testing.T) {
 
 func TestWithScopeDirectChanges(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 	hub := NewHub(client, scope)
 	hub.Scope().SetExtra("foo", "bar")
@@ -153,7 +153,7 @@ func TestWithScopeDirectChanges(t *testing.T) {
 
 func TestWithScopeChangesThroughConfigureScope(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 	hub := NewHub(client, scope)
 	hub.Scope().SetExtra("foo", "bar")
@@ -170,7 +170,7 @@ func TestWithScopeChangesThroughConfigureScope(t *testing.T) {
 
 func TestConfigureScope(t *testing.T) {
 	assert := assert.New(t)
-	client := NewClient()
+	client, _ := NewClient(ClientOptions{})
 	scope := &Scope{}
 	hub := NewHub(client, scope)
 	hub.Scope().SetExtra("foo", "bar")
