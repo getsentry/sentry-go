@@ -1,7 +1,6 @@
 package sentry
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -40,16 +39,6 @@ func (c *FakeClient) CaptureException(exception error, scope Scoper) {
 func (c *FakeClient) CaptureEvent(event *Event, scope Scoper) {
 	c.lastCall = "CaptureEvent"
 	c.lastCallArgs = []interface{}{event, scope}
-}
-
-func (c *FakeClient) Recover(recoveredErr interface{}, scope *Scope) {
-	c.lastCall = "Recover"
-	c.lastCallArgs = []interface{}{recoveredErr, scope}
-}
-
-func (c *FakeClient) RecoverWithContext(ctx context.Context, recoveredErr interface{}, scope *Scope) {
-	c.lastCall = "RecoverWithContext"
-	c.lastCallArgs = []interface{}{ctx, recoveredErr, scope}
 }
 
 func TestHubSuite(t *testing.T) {
@@ -248,15 +237,5 @@ func (suite *HubSuite) TestAddBreadcrumbCallsTheSameMethodOnClient() {
 
 	suite.Equal("AddBreadcrumb", suite.client.lastCall)
 	suite.Equal(breadcrumb, suite.client.lastCallArgs[0])
-	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
-}
-
-func (suite *HubSuite) TestRecoverCallsTheSameMethodOnClient() {
-	err := errors.New("error")
-
-	suite.hub.Recover(err)
-
-	suite.Equal("Recover", suite.client.lastCall)
-	suite.Equal(err, suite.client.lastCallArgs[0])
 	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
 }

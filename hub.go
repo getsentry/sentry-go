@@ -4,10 +4,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// TODO: Expose only necessary methods
-
 type Layer struct {
-	client *Client
+	client Clienter
 	scope  *Scope
 }
 
@@ -18,7 +16,7 @@ type Hub struct {
 	lastEventID uuid.UUID
 }
 
-func NewHub(client *Client, scope *Scope) *Hub {
+func NewHub(client Clienter, scope *Scope) *Hub {
 	return &Hub{
 		stack: &Stack{{
 			client: client,
@@ -27,30 +25,38 @@ func NewHub(client *Client, scope *Scope) *Hub {
 	}
 }
 
-func (hub Hub) LastEventID() uuid.UUID {
+func (hub *Hub) LastEventID() uuid.UUID {
 	return hub.lastEventID
 }
 
-func (hub Hub) Stack() *Stack {
-	return hub.stack
+func (hub *Hub) stackTop() *Layer {
+	stack := hub.stack
+	if stack == nil || len(*stack) == 0 {
+		return nil
+	}
+	return (*stack)[len(*stack)-1]
 }
 
-func (hub Hub) StackTop() *Layer {
-	return (*hub.stack)[len(*hub.stack)-1]
+func (hub *Hub) Scope() *Scope {
+	top := hub.stackTop()
+	if top == nil {
+		return nil
+	}
+	return top.scope
 }
 
-func (hub Hub) Scope() *Scope {
-	return hub.StackTop().scope
-}
-
-func (hub Hub) Client() *Client {
-	return hub.StackTop().client
+func (hub *Hub) Client() Clienter {
+	top := hub.stackTop()
+	if top == nil {
+		return nil
+	}
+	return top.client
 }
 
 func (hub *Hub) PushScope() *Scope {
 	scope := hub.Scope().Clone()
 
-	*hub.stack = append(*hub.Stack(), &Layer{
+	*hub.stack = append(*hub.stack, &Layer{
 		client: hub.Client(),
 		scope:  scope,
 	})
@@ -59,41 +65,57 @@ func (hub *Hub) PushScope() *Scope {
 }
 
 func (hub *Hub) PopScope() {
-	stack := *hub.Stack()
+	stack := *hub.stack
 	if len(stack) == 0 {
 		return
 	}
 	*hub.stack = stack[0 : len(stack)-1]
 }
 
-func (hub *Hub) BindClient(client *Client) {
-	hub.StackTop().client = client
+func (hub *Hub) BindClient(client Clienter) {
+	hub.stackTop().client = client
 }
 
-func (hub *Hub) WithScope(f func()) {
-	hub.PushScope()
+func (hub *Hub) WithScope(f func(scope *Scope)) {
+	scope := hub.PushScope()
 	defer hub.PopScope()
-	f()
+	f(scope)
 }
 
 func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
 	f(hub.Scope())
 }
 
-func (hub *Hub) CaptureEvent(event Event) {
-	panic("Implement CaptureEvent redirect to the Client")
+func (hub *Hub) invokeClient(callback func(client Clienter, scope *Scope)) {
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil || scope == nil {
+		return
+	}
+	callback(client, scope)
+}
+
+func (hub *Hub) CaptureEvent(event *Event) {
+	hub.invokeClient(func(client Clienter, scope *Scope) {
+		client.CaptureEvent(event, scope)
+	})
 }
 
 func (hub *Hub) CaptureMessage(message string) {
-	panic("Implement CaptureMessage redirect to the Client")
+	hub.invokeClient(func(client Clienter, scope *Scope) {
+		client.CaptureMessage(message, scope)
+	})
 }
 
 func (hub *Hub) CaptureException(exception error) {
-	panic("Implement CaptureException redirect to the Client")
+	hub.invokeClient(func(client Clienter, scope *Scope) {
+		client.CaptureException(exception, scope)
+	})
 }
 
-func (hub *Hub) AddBreadcrumb(breadcrumb Breadcrumb) {
-	panic("Implement AddBreadcrumb redirect to the Client")
+func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb) {
+	hub.invokeClient(func(client Clienter, scope *Scope) {
+		client.AddBreadcrumb(breadcrumb, scope)
+	})
 }
 
 func (hub *Hub) Flush(timeout int) {

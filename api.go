@@ -13,7 +13,7 @@ func GetCurrentHub() (*Hub, error) {
 	return NewHub(client, scope), nil
 }
 
-func CaptureEvent(event Event) {
+func CaptureEvent(event *Event) {
 	hub, err := GetCurrentHub()
 	if _, ok := err.(*NoHubError); ok {
 		return
@@ -37,7 +37,7 @@ func CaptureException(exception error) {
 	hub.CaptureException(exception)
 }
 
-func AddBreadcrumb(breadcrumb Breadcrumb) {
+func AddBreadcrumb(breadcrumb *Breadcrumb) {
 	hub, err := GetCurrentHub()
 	if _, ok := err.(*NoHubError); ok {
 		return
@@ -45,7 +45,7 @@ func AddBreadcrumb(breadcrumb Breadcrumb) {
 	hub.AddBreadcrumb(breadcrumb)
 }
 
-func WithScope(f func()) {
+func WithScope(f func(scope *Scope)) {
 	hub, err := GetCurrentHub()
 	if _, ok := err.(*NoHubError); ok {
 		return
