@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -39,6 +40,16 @@ func (c *FakeClient) CaptureException(exception error, scope Scoper) {
 func (c *FakeClient) CaptureEvent(event *Event, scope Scoper) {
 	c.lastCall = "CaptureEvent"
 	c.lastCallArgs = []interface{}{event, scope}
+}
+
+func (c *FakeClient) Recover(recoveredErr interface{}, scope *Scope) {
+	c.lastCall = "Recover"
+	c.lastCallArgs = []interface{}{recoveredErr, scope}
+}
+
+func (c *FakeClient) RecoverWithContext(ctx context.Context, recoveredErr interface{}, scope *Scope) {
+	c.lastCall = "RecoverWithContext"
+	c.lastCallArgs = []interface{}{ctx, recoveredErr, scope}
 }
 
 func TestHubSuite(t *testing.T) {
@@ -238,4 +249,71 @@ func (suite *HubSuite) TestAddBreadcrumbCallsTheSameMethodOnClient() {
 	suite.Equal("AddBreadcrumb", suite.client.lastCall)
 	suite.Equal(breadcrumb, suite.client.lastCallArgs[0])
 	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
+}
+
+func (suite *HubSuite) TestRecoverCallsTheSameMethodOnClient() {
+	err := errors.New("error")
+
+	suite.hub.Recover(err)
+
+	suite.Equal("Recover", suite.client.lastCall)
+	suite.Equal(err, suite.client.lastCallArgs[0])
+	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
+}
+
+func (suite *HubSuite) TestRecoverWithContextCallsTheSameMethodOnClient() {
+	ctx := context.TODO()
+	err := errors.New("error")
+
+	suite.hub.RecoverWithContext(ctx, err)
+
+	suite.Equal("RecoverWithContext", suite.client.lastCall)
+	suite.Equal(ctx, suite.client.lastCallArgs[0])
+	suite.Equal(err, suite.client.lastCallArgs[1])
+	suite.Equal(suite.scope, suite.client.lastCallArgs[2])
+}
+
+func (suite *HubSuite) TestFlushShouldPanicTillImplemented() {
+	suite.Panics(func() {
+		suite.hub.Flush(0)
+	})
+}
+
+func (suite *HubSuite) TestHasHubOnContextReturnsTrueIfHubIsThere() {
+	ctx := context.Background()
+
+	ctx = SetHubOnContext(ctx, suite.hub)
+
+	suite.True(HasHubOnContext(ctx))
+}
+
+func (suite *HubSuite) TestHasHubOnContextReturnsFalseIfHubIsNotThere() {
+	ctx := context.Background()
+
+	suite.False(HasHubOnContext(ctx))
+}
+
+func (suite *HubSuite) TestGetHubFromContext() {
+	ctx := context.Background()
+
+	ctx = SetHubOnContext(ctx, suite.hub)
+	hub := GetHubFromContext(ctx)
+
+	suite.Equal(hub, suite.hub)
+}
+
+func (suite *HubSuite) TestGetHubFromContextReturnsNilIfHubIsNotThere() {
+	ctx := context.Background()
+
+	hub := GetHubFromContext(ctx)
+
+	suite.Nil(hub)
+}
+
+func (suite *HubSuite) TestSetHubOnContextReturnsNewContext() {
+	ctx := context.Background()
+
+	ctxWithHub := SetHubOnContext(ctx, suite.hub)
+
+	suite.NotEqual(suite.hub, ctxWithHub)
 }

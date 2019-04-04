@@ -1,8 +1,14 @@
 package sentry
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 )
+
+type ctxKey int
+
+const HubCtxKey = ctxKey(42)
 
 type Layer struct {
 	client Clienter
@@ -118,6 +124,34 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb) {
 	})
 }
 
+func (hub *Hub) Recover(recoveredErr interface{}) {
+	hub.invokeClient(func(client Clienter, scope *Scope) {
+		client.Recover(recoveredErr, scope)
+	})
+}
+
+func (hub *Hub) RecoverWithContext(ctx context.Context, recoveredErr interface{}) {
+	hub.invokeClient(func(client Clienter, scope *Scope) {
+		client.RecoverWithContext(ctx, recoveredErr, scope)
+	})
+}
+
 func (hub *Hub) Flush(timeout int) {
 	panic("Implement Flush redirect to the Client")
+}
+
+func HasHubOnContext(ctx context.Context) bool {
+	_, ok := ctx.Value(HubCtxKey).(*Hub)
+	return ok
+}
+
+func GetHubFromContext(ctx context.Context) *Hub {
+	if hub, ok := ctx.Value(HubCtxKey).(*Hub); ok {
+		return hub
+	}
+	return nil
+}
+
+func SetHubOnContext(ctx context.Context, hub *Hub) context.Context {
+	return context.WithValue(ctx, HubCtxKey, hub)
 }
