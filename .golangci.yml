@@ -3,3 +3,4 @@ linters:
   disable:
     - structcheck
     - unused
+    - gochecknoglobals
