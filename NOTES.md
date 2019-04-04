@@ -1,0 +1,11 @@
+- Make sure all zero values are usable and fully functional
+- Test every public method with direct Client/Hub usage
+- Run `go doc` and make sure to export only necessary things
+- Discuss whether to use pointers or values in all the places
+- Ask Daniel about PHP Release Checklist
+- Test everything in goroutines
+- https://medium.com/@cep21/aspects-of-a-good-go-library-7082beabb403
+- https://medium.com/@cep21/go-client-library-best-practices-83d877d604ca
+- https://dave.cheney.net/practical-go/presentations/qcon-china.html
+- Error/Breadcrumb Hints
+- BeforeBreadcrumb callback
