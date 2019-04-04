@@ -125,6 +125,15 @@ func main() {
 
 			return event
 		},
+		BeforeBreadcrumb: func(breadcrumb *sentry.Breadcrumb, _ *sentry.BreadcrumbHint) *sentry.Breadcrumb {
+			if breadcrumb.Message == "Random breadcrumb 3" {
+				breadcrumb.Message = "Not so random breadcrumb 3"
+			}
+
+			fmt.Printf("%s\n\n", prettyPrint(breadcrumb))
+
+			return breadcrumb
+		},
 		SampleRate: 1,
 		Transport:  new(DevNullTransport),
 	}); err != nil {

@@ -6,6 +6,13 @@ import (
 	"github.com/google/uuid"
 )
 
+// Default maximum number of breadcrumbs added to an event. Can be overwritten `maxBreadcrumbs` option.
+const DefaultMaxBreadcrumbs = 30
+
+// Absolute maximum number of breadcrumbs added to an event.
+// The `maxBreadcrumbs` option cannot be higher than this value.
+const MaxBreadcrumbs = 100
+
 type ctxKey int
 
 const HubCtxKey = ctxKey(42)
@@ -119,9 +126,33 @@ func (hub *Hub) CaptureException(exception error, hint *EventHint) {
 }
 
 func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
-	hub.invokeClient(func(client Clienter, scope *Scope) {
-		client.AddBreadcrumb(breadcrumb, hint, scope)
-	})
+	options := hub.Client().Options()
+	maxBreadcrumbs := DefaultMaxBreadcrumbs
+
+	if options.MaxBreadcrumbs != 0 {
+		maxBreadcrumbs = options.MaxBreadcrumbs
+	}
+
+	if maxBreadcrumbs < 0 {
+		return
+	}
+
+	if options.BeforeBreadcrumb != nil {
+		h := &BreadcrumbHint{}
+		if hint != nil {
+			h = hint
+		}
+		if breadcrumb = options.BeforeBreadcrumb(breadcrumb, h); breadcrumb == nil {
+			debugger.Println("breadcrumb dropped due to BeforeBreadcrumb callback")
+			return
+		}
+	}
+
+	max := maxBreadcrumbs
+	if max > MaxBreadcrumbs {
+		max = MaxBreadcrumbs
+	}
+	hub.Scope().AddBreadcrumb(breadcrumb, max)
 }
 
 func (hub *Hub) Recover(recoveredErr interface{}) {

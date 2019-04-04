@@ -20,7 +20,7 @@ type FakeScope struct {
 	shouldDropEvent bool
 }
 
-func (scope *FakeScope) AddBreadcrumb(breadcrumb *Breadcrumb) {
+func (scope *FakeScope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	scope.breadcrumb = breadcrumb
 }
 
@@ -53,12 +53,6 @@ func TestClientSuite(t *testing.T) {
 	suite.Run(t, new(ClientSuite))
 }
 
-func (suite *ClientSuite) TestAddBreadcrumbCallsTheSameMethodOnScope() {
-	breadcrumb := &Breadcrumb{Message: "foo"}
-	suite.client.AddBreadcrumb(breadcrumb, nil, suite.scope)
-	suite.Equal(suite.scope.breadcrumb, breadcrumb)
-}
-
 func (suite *ClientSuite) TestCaptureMessageShouldSendEventWithProvidedMessage() {
 	suite.client.CaptureMessage("foo", nil, suite.scope)
 	suite.Equal(suite.transport.lastEvent.Message, "foo")
@@ -75,7 +69,7 @@ func (suite *ClientSuite) TestCaptureEventShouldSendEventWithProvidedError() {
 }
 
 func (suite *ClientSuite) TestSampleRateCanDropEvent() {
-	suite.client.Options.SampleRate = 0.000000000000001
+	suite.client.options.SampleRate = 0.000000000000001
 	suite.client.CaptureMessage("Foo", nil, suite.scope)
 	suite.Nil(suite.transport.lastEvent)
 }
@@ -87,7 +81,7 @@ func (suite *ClientSuite) TestApplyToScopeCanDropEvent() {
 }
 
 func (suite *ClientSuite) TestBeforeSendCanDropEvent() {
-	suite.client.Options.BeforeSend = func(event *Event, hint *EventHint) *Event {
+	suite.client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
 		return nil
 	}
 	suite.client.CaptureMessage("Foo", nil, suite.scope)
@@ -107,7 +101,7 @@ func (e CustomComplexError) AnswerToLife() string {
 }
 
 func (suite *ClientSuite) TestBeforeSendGetAccessToEventHint() {
-	suite.client.Options.BeforeSend = func(event *Event, hint *EventHint) *Event {
+	suite.client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
 		if ex, ok := hint.OriginalException.(CustomComplexError); ok {
 			event.Message = event.Message + " " + ex.AnswerToLife()
 		}

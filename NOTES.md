@@ -7,6 +7,9 @@
 - https://medium.com/@cep21/aspects-of-a-good-go-library-7082beabb403
 - https://medium.com/@cep21/go-client-library-best-practices-83d877d604ca
 - https://dave.cheney.net/practical-go/presentations/qcon-china.html
-- Error/Breadcrumb Hints
 - BeforeBreadcrumb callback
 - CaptureException name despite Go not having exceptions? (errors instead)
+
+- test: `go test`
+- lint: `golangci-lint run`
+- coverage: `go test -race -coverprofile=coverage.txt -covermode=atomic && go tool cover -html coverage.txt`

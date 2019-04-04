@@ -63,19 +63,21 @@ type ClientSdkInfo struct {
 }
 
 type ClientOptions struct {
-	Dsn         string
-	Debug       bool
-	SampleRate  float32
-	BeforeSend  func(event *Event, hint *EventHint) *Event
-	Transport   Transport
-	ServerName  string
-	Release     string
-	Dist        string
-	Environment string
+	Dsn              string
+	Debug            bool
+	SampleRate       float32
+	BeforeSend       func(event *Event, hint *EventHint) *Event
+	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
+	Transport        Transport
+	ServerName       string
+	Release          string
+	Dist             string
+	Environment      string
+	MaxBreadcrumbs   int
 }
 
 type Clienter interface {
-	AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint, scope Scoper)
+	Options() ClientOptions
 	CaptureMessage(message string, hint *EventHint, scope Scoper)
 	CaptureException(exception error, hint *EventHint, scope Scoper)
 	CaptureEvent(event *Event, hint *EventHint, scope Scoper)
@@ -84,11 +86,12 @@ type Clienter interface {
 }
 
 type Client struct {
-	Options   ClientOptions
-	Dsn       *Dsn
+	options   ClientOptions
+	dsn       *Dsn
 	Transport Transport
 }
 
+// Or client.Configure which would allow us to keep most data on struct private
 func NewClient(options ClientOptions) (*Client, error) {
 	if options.Debug {
 		debugger.Enable()
@@ -112,14 +115,14 @@ func NewClient(options ClientOptions) (*Client, error) {
 	transport.Configure(options)
 
 	return &Client{
-		Options:   options,
-		Dsn:       dsn,
+		options:   options,
+		dsn:       dsn,
 		Transport: transport,
 	}, nil
 }
 
-func (client *Client) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint, scope Scoper) {
-	scope.AddBreadcrumb(breadcrumb)
+func (client Client) Options() ClientOptions {
+	return client.options
 }
 
 func (client *Client) CaptureMessage(message string, hint *EventHint, scope Scoper) {
@@ -199,7 +202,7 @@ func (client *Client) eventFromException(exception error) *Event {
 
 // TODO: Should return some sort of SentryResponse instead of http.Response
 func (client *Client) processEvent(event *Event, hint *EventHint, scope Scoper) (*http.Response, error) {
-	options := client.Options
+	options := client.Options()
 
 	// TODO: Reconsider if its worth going away from default implementation
 	// of other SDKs. In Go zero value (default) for float32 is 0.0,

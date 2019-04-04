@@ -11,6 +11,8 @@ type User struct {
 	ID string `json:"id"`
 }
 
+// TODO: This type could be more useful, as map of interface{} is too generic
+// and requires a lot of type assertions in beforeBreadcrumb calls
 type BreadcrumbHint map[string]interface{}
 
 // TODO: Correct Breadcrumb struct
@@ -32,7 +34,7 @@ const (
 )
 
 type Scoper interface {
-	AddBreadcrumb(breadcrumb *Breadcrumb)
+	AddBreadcrumb(breadcrumb *Breadcrumb, limit int)
 	ApplyToEvent(event *Event) *Event
 }
 
@@ -46,10 +48,7 @@ type Scope struct {
 	eventProcessors []EventProcessor
 }
 
-// TODO: Pull from client.config.maxBreadcrumbs
-const breadcrumbsLimit = 100
-
-func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb) {
+func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	if breadcrumb.Timestamp == 0 {
 		breadcrumb.Timestamp = time.Now().Unix()
 	}
@@ -59,9 +58,9 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb) {
 	}
 
 	breadcrumbs := append(scope.breadcrumbs, breadcrumb)
-	if len(breadcrumbs) > breadcrumbsLimit {
+	if len(breadcrumbs) > limit {
 		// Remove the oldest breadcrumb
-		scope.breadcrumbs = breadcrumbs[1 : breadcrumbsLimit+1]
+		scope.breadcrumbs = breadcrumbs[1 : limit+1]
 	} else {
 		scope.breadcrumbs = breadcrumbs
 	}
@@ -154,10 +153,6 @@ func (scope *Scope) ApplyToEvent(event *Event) *Event {
 		}
 
 		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
-	}
-
-	if len(event.Breadcrumbs) > breadcrumbsLimit {
-		event.Breadcrumbs = event.Breadcrumbs[0:breadcrumbsLimit]
 	}
 
 	if scope.extra != nil && len(scope.extra) > 0 {

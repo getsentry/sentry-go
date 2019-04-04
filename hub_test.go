@@ -18,13 +18,13 @@ type HubSuite struct {
 }
 
 type FakeClient struct {
+	options      ClientOptions
 	lastCall     string
 	lastCallArgs []interface{}
 }
 
-func (c *FakeClient) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint, scope Scoper) {
-	c.lastCall = "AddBreadcrumb"
-	c.lastCallArgs = []interface{}{breadcrumb, scope}
+func (c *FakeClient) Options() ClientOptions {
+	return c.options
 }
 
 func (c *FakeClient) CaptureMessage(message string, hint *EventHint, scope Scoper) {
@@ -195,6 +195,69 @@ func (suite *HubSuite) TestAccessingClientReturnsNilIfStackIsEmpty() {
 	suite.Nil(hub.Client())
 }
 
+func (suite *HubSuite) TestAddBreadcrumbRespectMaxBreadcrumbsOption() {
+	suite.client.options.MaxBreadcrumbs = 2
+
+	breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
+
+	suite.hub.AddBreadcrumb(breadcrumb, nil)
+	suite.hub.AddBreadcrumb(breadcrumb, nil)
+	suite.hub.AddBreadcrumb(breadcrumb, nil)
+
+	suite.Len(suite.scope.breadcrumbs, 2)
+}
+
+func (suite *HubSuite) TestAddBreadcrumbSkipAllBreadcrumbsIfMaxBreadcrumbsIsLessThanZero() {
+	suite.client.options.MaxBreadcrumbs = -1
+
+	breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
+
+	suite.hub.AddBreadcrumb(breadcrumb, nil)
+	suite.hub.AddBreadcrumb(breadcrumb, nil)
+	suite.hub.AddBreadcrumb(breadcrumb, nil)
+
+	suite.Len(suite.scope.breadcrumbs, 0)
+}
+
+func (suite *HubSuite) TestAddBreadcrumbCallsBeforeBreadcrumbCallback() {
+	suite.client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
+		breadcrumb.Message += "_wat"
+		return breadcrumb
+	}
+
+	suite.hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, nil)
+
+	suite.Len(suite.scope.breadcrumbs, 1)
+	suite.Equal("Breadcrumb_wat", suite.scope.breadcrumbs[0].Message)
+}
+
+func (suite *HubSuite) TestBeforeBreadcrumbCallbackCanDropABreadcrumb() {
+	suite.client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
+		return nil
+	}
+
+	suite.hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, nil)
+	suite.hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, nil)
+
+	suite.Len(suite.scope.breadcrumbs, 0)
+}
+
+func (suite *HubSuite) TestBeforeBreadcrumbGetAccessToEventHint() {
+	suite.client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
+		if val, ok := (*hint)["foo"]; ok {
+			if val, ok := val.(string); ok {
+				breadcrumb.Message += val
+			}
+		}
+		return breadcrumb
+	}
+
+	suite.hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, &BreadcrumbHint{"foo": "_oh"})
+
+	suite.Len(suite.scope.breadcrumbs, 1)
+	suite.Equal("Breadcrumb_oh", suite.scope.breadcrumbs[0].Message)
+}
+
 func (suite *HubSuite) TestInvokeClientExecutesCallbackWithClientAndScopePassed() {
 	callback := func(client Clienter, scope *Scope) {
 		suite.Equal(suite.client, client)
@@ -238,16 +301,6 @@ func (suite *HubSuite) TestCaptureExceptionCallsTheSameMethodOnClient() {
 
 	suite.Equal("CaptureException", suite.client.lastCall)
 	suite.Equal(err, suite.client.lastCallArgs[0])
-	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
-}
-
-func (suite *HubSuite) TestAddBreadcrumbCallsTheSameMethodOnClient() {
-	breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
-
-	suite.hub.AddBreadcrumb(breadcrumb, nil)
-
-	suite.Equal("AddBreadcrumb", suite.client.lastCall)
-	suite.Equal(breadcrumb, suite.client.lastCallArgs[0])
 	suite.Equal(suite.scope, suite.client.lastCallArgs[1])
 }
 

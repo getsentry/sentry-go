@@ -9,8 +9,9 @@ import (
 
 type ScopeSuite struct {
 	suite.Suite
-	scope *Scope
-	event *Event
+	scope          *Scope
+	event          *Event
+	maxBreadcrumbs int
 }
 
 func TestScopeSuite(t *testing.T) {
@@ -20,6 +21,7 @@ func TestScopeSuite(t *testing.T) {
 func (suite *ScopeSuite) SetupTest() {
 	suite.scope = &Scope{}
 	suite.event = &Event{}
+	suite.maxBreadcrumbs = 100
 }
 
 func (suite *ScopeSuite) FillScopeWithValidData() {
@@ -155,15 +157,15 @@ func (suite *ScopeSuite) TestSetLevelOverrides() {
 }
 
 func (suite *ScopeSuite) TestAddBreadcrumb() {
-	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"})
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"}, suite.maxBreadcrumbs)
 
 	suite.Equal([]*Breadcrumb{{Timestamp: 1337, Message: "test"}}, suite.scope.breadcrumbs)
 }
 
 func (suite *ScopeSuite) TestAddBreadcrumbAppends() {
-	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test1"})
-	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test2"})
-	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test3"})
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test1"}, suite.maxBreadcrumbs)
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test2"}, suite.maxBreadcrumbs)
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test3"}, suite.maxBreadcrumbs)
 
 	suite.Equal([]*Breadcrumb{
 		{Timestamp: 1337, Message: "test1"},
@@ -174,14 +176,14 @@ func (suite *ScopeSuite) TestAddBreadcrumbAppends() {
 
 func (suite *ScopeSuite) TestAddBreadcrumbDefaultLimit() {
 	for i := 0; i < 101; i++ {
-		suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"})
+		suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"}, suite.maxBreadcrumbs)
 	}
 
 	suite.Len(suite.scope.breadcrumbs, 100)
 }
 
 func (suite *ScopeSuite) TestAddBreadcrumbAddsTimestamp() {
-	suite.scope.AddBreadcrumb(&Breadcrumb{Message: "test"})
+	suite.scope.AddBreadcrumb(&Breadcrumb{Message: "test"}, suite.maxBreadcrumbs)
 	// I know it's not perfect, but mocking time method for one test would be an overkill
 	// And adding new breadcrumb will definitely take less than a second — Kamil
 	suite.InDelta(time.Now().Unix(), suite.scope.breadcrumbs[0].Timestamp, 1)
@@ -202,14 +204,14 @@ func (suite *ScopeSuite) TestParentChangedInheritance() {
 	clone.SetExtra("foo", "bar")
 	clone.SetLevel(LevelDebug)
 	clone.SetFingerprint([]string{"foo"})
-	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"})
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, suite.maxBreadcrumbs)
 	clone.SetUser(User{ID: "foo"})
 
 	suite.scope.SetTag("foo", "baz")
 	suite.scope.SetExtra("foo", "baz")
 	suite.scope.SetLevel(LevelFatal)
 	suite.scope.SetFingerprint([]string{"bar"})
-	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"})
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, suite.maxBreadcrumbs)
 	suite.scope.SetUser(User{ID: "bar"})
 
 	suite.Equal(map[string]string{"foo": "bar"}, clone.tags)
@@ -232,7 +234,7 @@ func (suite *ScopeSuite) TestChildOverrideInheritance() {
 	suite.scope.SetExtra("foo", "baz")
 	suite.scope.SetLevel(LevelFatal)
 	suite.scope.SetFingerprint([]string{"bar"})
-	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"})
+	suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, suite.maxBreadcrumbs)
 	suite.scope.SetUser(User{ID: "bar"})
 
 	clone := suite.scope.Clone()
@@ -240,7 +242,7 @@ func (suite *ScopeSuite) TestChildOverrideInheritance() {
 	clone.SetExtra("foo", "bar")
 	clone.SetLevel(LevelDebug)
 	clone.SetFingerprint([]string{"foo"})
-	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"})
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, suite.maxBreadcrumbs)
 	clone.SetUser(User{ID: "foo"})
 
 	suite.Equal(map[string]string{"foo": "bar"}, clone.tags)
@@ -319,19 +321,6 @@ func (suite *ScopeSuite) TestApplyToEventEmptyEvent() {
 	suite.Equal(processedEvent.User, suite.scope.user, "should use scope user")
 	suite.Equal(processedEvent.Fingerprint, suite.scope.fingerprint, "should use scope fingerprint")
 	suite.Equal(processedEvent.Level, suite.scope.level, "should use scope level")
-}
-
-func (suite *ScopeSuite) TestApplyToEventLimitBreadcrumbs() {
-	for i := 0; i < 101; i++ {
-		suite.scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"})
-	}
-	suite.event.Breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "foo"}, {Timestamp: 1337, Message: "bar"}}
-
-	processedEvent := suite.scope.ApplyToEvent(suite.event)
-
-	suite.Len(processedEvent.Breadcrumbs, 100)
-	suite.Equal(&Breadcrumb{Timestamp: 1337, Message: "foo"}, processedEvent.Breadcrumbs[0])
-	suite.Equal(&Breadcrumb{Timestamp: 1337, Message: "bar"}, processedEvent.Breadcrumbs[1])
 }
 
 func (suite *ScopeSuite) TestEventProcessors() {
