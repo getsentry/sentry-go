@@ -4,39 +4,7 @@ import (
 	"time"
 )
 
-// TODO: Test whether we need locks for all the setters
-
-// TODO: Correct User struct
-type User struct {
-	ID string `json:"id"`
-}
-
-// TODO: This type could be more useful, as map of interface{} is too generic
-// and requires a lot of type assertions in beforeBreadcrumb calls
-type BreadcrumbHint map[string]interface{}
-
-// TODO: Correct Breadcrumb struct
-type Breadcrumb struct {
-	Message   string `json:"message"`
-	Timestamp int64  `json:"timestamp"`
-}
-
 type EventProcessor func(event *Event) *Event
-
-type Level string
-
-const (
-	LevelDebug   Level = "debug"
-	LevelInfo    Level = "info"
-	LevelWarning Level = "warning"
-	LevelError   Level = "error"
-	LevelFatal   Level = "fatal"
-)
-
-type Scoper interface {
-	AddBreadcrumb(breadcrumb *Breadcrumb, limit int)
-	ApplyToEvent(event *Event) *Event
-}
 
 type Scope struct {
 	breadcrumbs     []*Breadcrumb
@@ -46,6 +14,11 @@ type Scope struct {
 	fingerprint     []string
 	level           Level
 	eventProcessors []EventProcessor
+}
+
+type Scoper interface {
+	AddBreadcrumb(breadcrumb *Breadcrumb, limit int)
+	ApplyToEvent(event *Event) *Event
 }
 
 func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
@@ -64,6 +37,10 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	} else {
 		scope.breadcrumbs = breadcrumbs
 	}
+}
+
+func (scope *Scope) ClearBreadcrumbs() {
+	scope.breadcrumbs = []*Breadcrumb{}
 }
 
 func (scope *Scope) SetUser(user User) {
@@ -134,10 +111,6 @@ func (scope *Scope) Clear() {
 	*scope = Scope{}
 }
 
-func (scope *Scope) ClearBreadcrumbs() {
-	scope.breadcrumbs = []*Breadcrumb{}
-}
-
 func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 	if scope.eventProcessors == nil {
 		scope.eventProcessors = []EventProcessor{}
@@ -146,7 +119,6 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 }
 
 func (scope *Scope) ApplyToEvent(event *Event) *Event {
-	// TODO: Limit to maxBreadcrums
 	if scope.breadcrumbs != nil && len(scope.breadcrumbs) > 0 {
 		if event.Breadcrumbs == nil {
 			event.Breadcrumbs = []*Breadcrumb{}

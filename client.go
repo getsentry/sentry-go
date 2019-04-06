@@ -11,57 +11,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const SdkName string = "sentry.go"
-const SdkVersion string = "0.0.0-beta"
-const SdkUserAgent string = SdkName + "/" + SdkVersion
-
-type LogEntry struct {
-	Message string
-	Params  []interface{}
-}
-
-type Request struct{}
-
-type Exception struct{}
-
-type Context string
-
-type Event struct {
-	EventID     uuid.UUID              `json:"event_id"`
-	Level       Level                  `json:"level"`
-	Message     string                 `json:"message"`
-	Fingerprint []string               `json:"fingerprint"`
-	Timestamp   int64                  `json:"timestamp"`
-	User        User                   `json:"user"`
-	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs"`
-	Tags        map[string]string      `json:"tags"`
-	Extra       map[string]interface{} `json:"extra"` // TODO: Should it be more strict?
-	Sdk         ClientSdkInfo          `json:"sdk"`
-	Transaction string                 `json:"transaction"`
-	ServerName  string                 `json:"server_name"`
-	Release     string                 `json:"release"`
-	Dist        string                 `json:"dist"`
-	Environment string                 `json:"environment"`
-	// Logentry    LogEntry
-	// Logger      string
-	// Modules     map[string]string
-	// Platform    string
-	// Request     Request
-	// Contexts    map[string]Context
-	// Exception   []Exception
-}
-
-type EventHint struct {
-	EventID           uuid.UUID
-	OriginalException error
-	Data              interface{}
-}
-
-type ClientSdkInfo struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
 type ClientOptions struct {
 	Dsn              string
 	Debug            bool
@@ -252,6 +201,8 @@ func (client *Client) prepareEvent(event *Event, _ *EventHint, scope Scoper) *Ev
 		Name:    SdkName,
 		Version: SdkVersion,
 	}
+
+	event.Platform = "go"
 
 	event.Transaction = "Don't sneak into my computer please"
 
