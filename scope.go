@@ -16,8 +16,7 @@ type Scope struct {
 	eventProcessors []EventProcessor
 }
 
-type Scoper interface {
-	AddBreadcrumb(breadcrumb *Breadcrumb, limit int)
+type ScopeApplier interface {
 	ApplyToEvent(event *Event) *Event
 }
 
@@ -32,7 +31,6 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 
 	breadcrumbs := append(scope.breadcrumbs, breadcrumb)
 	if len(breadcrumbs) > limit {
-		// Remove the oldest breadcrumb
 		scope.breadcrumbs = breadcrumbs[1 : limit+1]
 	} else {
 		scope.breadcrumbs = breadcrumbs

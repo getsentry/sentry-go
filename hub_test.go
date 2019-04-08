@@ -27,17 +27,17 @@ func (c *FakeClient) Options() ClientOptions {
 	return c.options
 }
 
-func (c *FakeClient) CaptureMessage(message string, hint *EventHint, scope Scoper) {
+func (c *FakeClient) CaptureMessage(message string, hint *EventHint, scope ScopeApplier) {
 	c.lastCall = "CaptureMessage"
 	c.lastCallArgs = []interface{}{message, scope}
 }
 
-func (c *FakeClient) CaptureException(exception error, hint *EventHint, scope Scoper) {
+func (c *FakeClient) CaptureException(exception error, hint *EventHint, scope ScopeApplier) {
 	c.lastCall = "CaptureException"
 	c.lastCallArgs = []interface{}{exception, scope}
 }
 
-func (c *FakeClient) CaptureEvent(event *Event, hint *EventHint, scope Scoper) {
+func (c *FakeClient) CaptureEvent(event *Event, hint *EventHint, scope ScopeApplier) {
 	c.lastCall = "CaptureEvent"
 	c.lastCallArgs = []interface{}{event, scope}
 }
@@ -92,7 +92,7 @@ func (suite *HubSuite) TestPushScopeInheritsClient() {
 	suite.True((*suite.hub.stack)[0].client == (*suite.hub.stack)[1].client, "Client should be inherited")
 }
 
-func (suite *HubSuite) TestPopScopeRemovesLayerFromTheStack() {
+func (suite *HubSuite) TestPopScopeApplieremovesLayerFromTheStack() {
 	suite.hub.PushScope()
 	suite.hub.PushScope()
 	suite.hub.PopScope()
@@ -185,7 +185,7 @@ func (suite *HubSuite) TestAccessingEmptyStack() {
 	suite.Nil(hub.stackTop())
 }
 
-func (suite *HubSuite) TestAccessingScopeReturnsNilIfStackIsEmpty() {
+func (suite *HubSuite) TestAccessingScopeAppliereturnsNilIfStackIsEmpty() {
 	hub := &Hub{}
 	suite.Nil(hub.Scope())
 }
