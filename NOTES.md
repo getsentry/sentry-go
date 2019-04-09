@@ -10,5 +10,6 @@
 - CaptureException name despite Go not having exceptions? (errors instead)
 - https://blog.golang.org/using-go-modules
 - test: `go test`
+- test concurrent: `go test -race`
 - lint: `golangci-lint run`
 - coverage: `go test -race -coverprofile=coverage.txt -covermode=atomic && go tool cover -html coverage.txt`

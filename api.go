@@ -16,6 +16,7 @@ func (e HubError) Error() string {
 
 var getCurrentHub = GetCurrentHub
 
+// TODO: Rewrite this completely
 func GetCurrentHub() (*Hub, error) {
 	if _globalHub != nil {
 		return _globalHub, nil

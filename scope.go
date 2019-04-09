@@ -6,6 +6,10 @@ import (
 
 type EventProcessor func(event *Event) *Event
 
+type EventModifier interface {
+	ApplyToEvent(event *Event) *Event
+}
+
 type Scope struct {
 	breadcrumbs     []*Breadcrumb
 	user            User
@@ -14,10 +18,6 @@ type Scope struct {
 	fingerprint     []string
 	level           Level
 	eventProcessors []EventProcessor
-}
-
-type ScopeApplier interface {
-	ApplyToEvent(event *Event) *Event
 }
 
 func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {

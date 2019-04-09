@@ -27,9 +27,9 @@ type ClientOptions struct {
 
 type Clienter interface {
 	Options() ClientOptions
-	CaptureMessage(message string, hint *EventHint, scope ScopeApplier)
-	CaptureException(exception error, hint *EventHint, scope ScopeApplier)
-	CaptureEvent(event *Event, hint *EventHint, scope ScopeApplier)
+	CaptureMessage(message string, hint *EventHint, scope EventModifier)
+	CaptureException(exception error, hint *EventHint, scope EventModifier)
+	CaptureEvent(event *Event, hint *EventHint, scope EventModifier)
 	Recover(recoveredErr interface{}, scope *Scope)
 	RecoverWithContext(ctx context.Context, recoveredErr interface{}, scope *Scope)
 }
@@ -74,17 +74,17 @@ func (client Client) Options() ClientOptions {
 	return client.options
 }
 
-func (client *Client) CaptureMessage(message string, hint *EventHint, scope ScopeApplier) {
+func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) {
 	event := client.eventFromMessage(message)
 	client.CaptureEvent(event, hint, scope)
 }
 
-func (client *Client) CaptureException(exception error, hint *EventHint, scope ScopeApplier) {
+func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) {
 	event := client.eventFromException(exception)
 	client.CaptureEvent(event, hint, scope)
 }
 
-func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope ScopeApplier) {
+func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) {
 	if _, err := client.processEvent(event, hint, scope); err != nil {
 		debugger.Println(err)
 	}
@@ -150,7 +150,7 @@ func (client *Client) eventFromException(exception error) *Event {
 }
 
 // TODO: Should return some sort of SentryResponse instead of http.Response
-func (client *Client) processEvent(event *Event, hint *EventHint, scope ScopeApplier) (*http.Response, error) {
+func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) (*http.Response, error) {
 	options := client.Options()
 
 	// TODO: Reconsider if its worth going away from default implementation
@@ -181,7 +181,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope ScopeApp
 	return client.Transport.SendEvent(event)
 }
 
-func (client *Client) prepareEvent(event *Event, _ *EventHint, scope ScopeApplier) *Event {
+func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifier) *Event {
 	// TODO: Set all the defaults, clear unnecessary stuff etc. here
 
 	var emptyEventID uuid.UUID
