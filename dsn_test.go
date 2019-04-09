@@ -4,189 +4,224 @@ import (
 	"encoding/json"
 	"regexp"
 	"testing"
-
-	"github.com/stretchr/testify/suite"
 )
 
-type DsnSuite struct {
-	suite.Suite
-}
-
-func TestDsnSuite(t *testing.T) {
-	suite.Run(t, new(DsnSuite))
-}
-
-func (suite *DsnSuite) TestDsnParsing() {
+func TestDsnParsing(t *testing.T) {
 	url := "https://username:password@domain:8888/foo/bar/23"
-
 	dsn, err := NewDsn(url)
 
-	suite.Nil(err)
-	suite.Equal(SchemeHTTPS, dsn.scheme)
-	suite.Equal("username", dsn.publicKey)
-	suite.Equal("password", dsn.secretKey)
-	suite.Equal("domain", dsn.host)
-	suite.Equal(8888, dsn.port)
-	suite.Equal("/foo/bar", dsn.path)
-	suite.Equal(23, dsn.projectID)
-	suite.Equal(url, dsn.ToString())
+	if err != nil {
+		t.Error("expected dsn to be correctly created")
+	}
+	assertEqual(t, dsn.scheme, SchemeHTTPS)
+	assertEqual(t, "username", dsn.publicKey)
+	assertEqual(t, "password", dsn.secretKey)
+	assertEqual(t, "domain", dsn.host)
+	assertEqual(t, "/foo/bar", dsn.path)
+	assertEqual(t, url, dsn.ToString())
+	assertEqual(t, 8888, dsn.port)
+	assertEqual(t, 23, dsn.projectID)
 }
 
-func (suite *DsnSuite) TestDsnDefaultPort() {
-	suite.Equal(1337, Dsn{port: 1337}.Port())
-	suite.Equal(1337, Dsn{scheme: "https", port: 1337}.Port())
-	suite.Equal(443, Dsn{scheme: "https"}.Port())
-	suite.Equal(80, Dsn{scheme: "http"}.Port())
-	suite.Equal(80, Dsn{scheme: "shrug"}.Port())
+func TestDsnDefaultPort(t *testing.T) {
+	assertEqual(t, 1337, Dsn{port: 1337}.Port())
+	assertEqual(t, 1337, Dsn{scheme: "https", port: 1337}.Port())
+	assertEqual(t, 443, Dsn{scheme: "https"}.Port())
+	assertEqual(t, 80, Dsn{scheme: "http"}.Port())
+	assertEqual(t, 80, Dsn{scheme: "shrug"}.Port())
 }
 
-func (suite *DsnSuite) TestDsnSerializeDeserialize() {
+func TestDsnSerializeDeserialize(t *testing.T) {
 	url := "https://username:password@domain:8888/foo/bar/23"
-
 	dsn, dsnErr := NewDsn(url)
 	serialized, _ := json.Marshal(dsn)
 	var deserialized Dsn
 	unmarshalErr := json.Unmarshal(serialized, &deserialized)
 
-	suite.Nil(unmarshalErr)
-	suite.Nil(dsnErr)
-	suite.Equal("\"https://username:password@domain:8888/foo/bar/23\"", string(serialized))
-	suite.Equal(url, deserialized.ToString())
+	if unmarshalErr != nil {
+		t.Error("expected dsn unmarshal to not return error")
+	}
+	if dsnErr != nil {
+		t.Error("expected NewDsn to not return error")
+	}
+	assertEqual(t, "\"https://username:password@domain:8888/foo/bar/23\"", string(serialized))
+	assertEqual(t, url, deserialized.ToString())
 }
 
-func (suite *DsnSuite) TestDsnDeserializeInvalidJSON() {
+func TestDsnDeserializeInvalidJSON(t *testing.T) {
 	var invalidJSON Dsn
 	invalidJSONErr := json.Unmarshal([]byte("\"whoops"), &invalidJSON)
-
 	var invalidDsn Dsn
 	invalidDsnErr := json.Unmarshal([]byte("\"http://wat\""), &invalidDsn)
 
-	suite.Error(invalidJSONErr)
-	suite.Error(invalidDsnErr)
+	if invalidJSONErr == nil {
+		t.Error("expected dsn unmarshal to return error")
+	}
+	if invalidDsnErr == nil {
+		t.Error("expected dsn unmarshal to return error")
+	}
 }
 
-func (suite *DsnSuite) TestDsnNoInput() {
+func TestDsnNoInput(t *testing.T) {
 	dsn, err := NewDsn("")
-	suite.Nil(dsn, "Should return nil pointer to dsn")
-	suite.Nil(err, "Shouldnt throw error")
+
+	if dsn != nil {
+		t.Error("expected to return nil pointer to dsn")
+	}
+	if err != nil {
+		t.Error("expected to not return error")
+	}
 }
 
-func (suite *DsnSuite) TestDsnNoPort() {
-	url := "https://username@domain/42"
+func TestValidDsn(t *testing.T) {
+	t.Run("Insecure", func(t *testing.T) {
+		url := "http://username@domain:8888/42"
+		dsn, err := NewDsn(url)
 
-	dsn, err := NewDsn(url)
+		if err != nil {
+			t.Error("expected dsn to be correctly created")
+		}
+		assertEqual(t, url, dsn.ToString())
+	})
 
-	suite.Nil(err)
-	suite.Equal(443, dsn.Port())
-	suite.Equal(url, dsn.ToString())
-	suite.Equal("https://domain/api/42/store/", dsn.StoreAPIURL().String())
+	t.Run("NoPort", func(t *testing.T) {
+		url := "http://username@domain/42"
+		dsn, err := NewDsn(url)
+
+		if err != nil {
+			t.Error("expected dsn to be correctly created")
+		}
+		assertEqual(t, 80, dsn.Port())
+		assertEqual(t, url, dsn.ToString())
+		assertEqual(t, "http://domain/api/42/store/", dsn.StoreAPIURL().String())
+	})
+
+	t.Run("InsecureNoPort", func(t *testing.T) {
+		url := "https://username@domain/42"
+		dsn, err := NewDsn(url)
+
+		if err != nil {
+			t.Error("expected dsn to be correctly created")
+		}
+		assertEqual(t, 443, dsn.Port())
+		assertEqual(t, url, dsn.ToString())
+		assertEqual(t, "https://domain/api/42/store/", dsn.StoreAPIURL().String())
+	})
+
+	t.Run("NoPassword", func(t *testing.T) {
+		url := "https://username@domain:8888/42"
+		dsn, err := NewDsn(url)
+
+		if err != nil {
+			t.Error("expected dsn to be correctly created")
+		}
+		assertEqual(t, url, dsn.ToString())
+		assertEqual(t, "https://domain:8888/api/42/store/", dsn.StoreAPIURL().String())
+	})
 }
 
-func (suite *DsnSuite) TestInsecureDsnNoPort() {
-	url := "http://username@domain/42"
+func TestInvalidDsn(t *testing.T) {
+	t.Run("InvalidUrl", func(t *testing.T) {
+		_, err := NewDsn("!@#$%^&*()")
+		_, ok := err.(*DsnParseError)
 
-	dsn, err := NewDsn(url)
+		if ok != true {
+			t.Error("expected error to be of type DsnParseError")
+		}
+		assertStringContains(t, err.Error(), "invalid url")
+	})
 
-	suite.Nil(err)
-	suite.Equal(80, dsn.Port())
-	suite.Equal(url, dsn.ToString())
-	suite.Equal("http://domain/api/42/store/", dsn.StoreAPIURL().String())
+	t.Run("InvalidScheme", func(t *testing.T) {
+		_, err := NewDsn("ftp://username:password@domain:8888/1")
+		_, ok := err.(*DsnParseError)
+
+		if ok != true {
+			t.Error("expected error to be of type DsnParseError")
+		}
+		assertStringContains(t, err.Error(), "invalid scheme")
+	})
+
+	t.Run("NoUsername", func(t *testing.T) {
+		_, err := NewDsn("https://:password@domain:8888/23")
+		_, ok := err.(*DsnParseError)
+
+		if ok != true {
+			t.Error("expected error to be of type DsnParseError")
+		}
+		assertStringContains(t, err.Error(), "empty username")
+	})
+
+	t.Run("NoHost", func(t *testing.T) {
+		_, err := NewDsn("https://username:password@:8888/42")
+		_, ok := err.(*DsnParseError)
+
+		if ok != true {
+			t.Error("expected error to be of type DsnParseError")
+		}
+		assertStringContains(t, err.Error(), "empty host")
+	})
+
+	t.Run("InvalidPort", func(t *testing.T) {
+		_, err := NewDsn("https://username:password@domain:wat/42")
+		_, ok := err.(*DsnParseError)
+
+		if ok != true {
+			t.Error("expected error to be of type DsnParseError")
+		}
+		assertStringContains(t, err.Error(), "invalid port")
+	})
+
+	t.Run("NoProjectId", func(t *testing.T) {
+		_, err := NewDsn("https://username:password@domain:8888/")
+		_, ok := err.(*DsnParseError)
+
+		if ok != true {
+			t.Error("expected error to be of type DsnParseError")
+		}
+		assertStringContains(t, err.Error(), "empty project id")
+	})
+
+	t.Run("InvalidProjectId", func(t *testing.T) {
+		_, err := NewDsn("https://username:password@domain:8888/wbvdf7^W#$")
+		_, ok := err.(*DsnParseError)
+
+		if ok != true {
+			t.Error("expected error to be of type DsnParseError")
+		}
+		assertStringContains(t, err.Error(), "invalid project id")
+	})
 }
 
-func (suite *DsnSuite) TestDsnNoPassword() {
-	url := "https://username@domain:8888/42"
+func TestRequestHeaders(t *testing.T) {
+	t.Run("without password", func(t *testing.T) {
+		url := "https://username@domain:8888/23"
+		dsn, _ := NewDsn(url)
+		headers := dsn.RequestHeaders()
+		authRegexp := regexp.MustCompile("^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
+			"sentry_client=sentry.go/.+, sentry_key=username$")
 
-	dsn, err := NewDsn(url)
+		if len(headers) != 2 {
+			t.Error("expected request to have 2 headers")
+		}
+		assertEqual(t, "application/json", headers["Content-Type"])
+		if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
+			t.Error("expected auth header to fulfill provided pattern")
+		}
+	})
 
-	suite.Nil(err)
-	suite.Equal(url, dsn.ToString())
-	suite.Equal("https://domain:8888/api/42/store/", dsn.StoreAPIURL().String())
-}
+	t.Run("with password", func(t *testing.T) {
+		url := "https://username:secret@domain:8888/23"
+		dsn, _ := NewDsn(url)
+		headers := dsn.RequestHeaders()
+		authRegexp := regexp.MustCompile("^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
+			"sentry_client=sentry.go/.+, sentry_key=username, sentry_secret=secret$")
 
-func (suite *DsnSuite) TestDsnHttpUrl() {
-	url := "http://username@domain:8888/42"
-
-	dsn, err := NewDsn(url)
-
-	suite.Nil(err)
-	suite.Equal(url, dsn.ToString())
-}
-
-func (suite *DsnSuite) TestDsnInvalidUrl() {
-	_, err := NewDsn("!@#$%^&*()")
-	_, ok := err.(*DsnParseError)
-
-	suite.True(ok)
-	suite.Contains(err.Error(), "invalid url")
-}
-
-func (suite *DsnSuite) TestDsnInvalidScheme() {
-	_, err := NewDsn("ftp://username:password@domain:8888/1")
-	_, ok := err.(*DsnParseError)
-
-	suite.True(ok)
-	suite.Contains(err.Error(), "invalid scheme")
-}
-func (suite *DsnSuite) TestDsnNoUsername() {
-	_, err := NewDsn("https://:password@domain:8888/23")
-	_, ok := err.(*DsnParseError)
-
-	suite.True(ok)
-	suite.Contains(err.Error(), "empty username")
-}
-
-func (suite *DsnSuite) TestDsnNoHost() {
-	_, err := NewDsn("https://username:password@:8888/42")
-	_, ok := err.(*DsnParseError)
-
-	suite.True(ok)
-	suite.Contains(err.Error(), "empty host")
-}
-
-func (suite *DsnSuite) TestDsnInvalidPort() {
-	_, err := NewDsn("https://username:password@domain:wat/42")
-	_, ok := err.(*DsnParseError)
-
-	suite.True(ok)
-	suite.Contains(err.Error(), "invalid port")
-}
-
-func (suite *DsnSuite) TestDsnNoProjectId() {
-	_, err := NewDsn("https://username:password@domain:8888/")
-	_, ok := err.(*DsnParseError)
-
-	suite.True(ok)
-	suite.Contains(err.Error(), "empty project id")
-}
-
-func (suite *DsnSuite) TestDsnInvalidProjectId() {
-	_, err := NewDsn("https://username:password@domain:8888/wbvdf7^W#$")
-	_, ok := err.(*DsnParseError)
-
-	suite.True(ok)
-	suite.Contains(err.Error(), "invalid project id")
-}
-
-func (suite *DsnSuite) TestRequestHeaders() {
-	url := "https://username@domain:8888/23"
-	dsn, _ := NewDsn(url)
-	headers := dsn.RequestHeaders()
-	authFormat := "^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
-		"sentry_client=sentry.go/.+, sentry_key=username$"
-
-	suite.Len(headers, 2)
-	suite.Equal("application/json", headers["Content-Type"])
-	suite.Regexp(regexp.MustCompile(authFormat), headers["X-Sentry-Auth"])
-}
-
-func (suite *DsnSuite) TestRequestHeadersWithSecret() {
-	url := "https://username:secret@domain:8888/23"
-	dsn, _ := NewDsn(url)
-	headers := dsn.RequestHeaders()
-	authFormat := "^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
-		"sentry_client=sentry.go/.+, sentry_key=username, sentry_secret=secret$"
-
-	suite.Len(headers, 2)
-	suite.Equal("application/json", headers["Content-Type"])
-	suite.Regexp(regexp.MustCompile(authFormat), headers["X-Sentry-Auth"])
+		if len(headers) != 2 {
+			t.Error("expected request to have 2 headers")
+		}
+		assertEqual(t, "application/json", headers["Content-Type"])
+		if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
+			t.Error("expected auth header to fulfill provided pattern")
+		}
+	})
 }

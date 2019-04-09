@@ -1,98 +1,110 @@
 package sentry
 
 import (
-	"io"
 	"io/ioutil"
 	"os"
 	"testing"
-
-	"github.com/stretchr/testify/suite"
 )
 
-var lastMessage string
-
-type CustomWriter struct {
+type customWriter struct {
 	lastMessage string
 }
 
-func (w *CustomWriter) Write(p []byte) (n int, err error) {
-	lastMessage = string(p)
-	return 0, nil
+func (w *customWriter) Write(p []byte) (n int, err error) {
+	w.lastMessage = string(p)
+	return
 }
 
-type DebuggerSuite struct {
-	suite.Suite
-	debugger     *Debugger
-	customWriter io.Writer
-	lastMessage  string
+func TestNewDebugger(t *testing.T) {
+	debugger := NewDebugger()
+
+	if ioutil.Discard != debugger.writer {
+		t.Error("expected ioutil.Discard to be default writer")
+	}
+
+	if debugger.customWriter != nil {
+		t.Error("expected customWriter to be nil by default")
+	}
 }
 
-func (suite *DebuggerSuite) SetupTest() {
-	suite.debugger = NewDebugger()
-	suite.customWriter = &CustomWriter{}
+func TestSetOutput(t *testing.T) {
+	debugger := NewDebugger()
+	customWriter := &customWriter{}
+
+	debugger.SetOutput(customWriter)
+
+	if customWriter != debugger.writer {
+		t.Error("expected customWriter to be set as the new writer")
+	}
+
+	if customWriter != debugger.customWriter {
+		t.Error("expected customWriter to be cached as customWriter")
+	}
 }
 
-func TestDebuggerSuite(t *testing.T) {
-	suite.Run(t, new(DebuggerSuite))
+func TestEnableUsesDefaultWriter(t *testing.T) {
+	debugger := NewDebugger()
+
+	debugger.Enable()
+
+	if os.Stdout != debugger.writer {
+		t.Error("expected os.Stdout to be default writer after enabling")
+	}
 }
 
-func (suite *DebuggerSuite) TestNewDebugger() {
-	suite.Equal(ioutil.Discard, suite.debugger.writer)
-	suite.Nil(suite.debugger.customWriter)
+func TestEnableUsesConfiguredOutputWhenAvailable(t *testing.T) {
+	debugger := NewDebugger()
+	customWriter := &customWriter{}
+
+	debugger.SetOutput(customWriter)
+	debugger.Enable()
+
+	if customWriter != debugger.writer {
+		t.Error("expected customWriter to be used after enabling")
+	}
 }
 
-func (suite *DebuggerSuite) TestSetOutput() {
-	suite.debugger.SetOutput(suite.customWriter)
+func TestEnableRemembersConfiguredOutput(t *testing.T) {
+	debugger := NewDebugger()
+	customWriter := &customWriter{}
 
-	suite.Equal(suite.customWriter, suite.debugger.writer)
-	suite.Equal(suite.customWriter, suite.debugger.customWriter)
+	debugger.SetOutput(customWriter)
+	debugger.Disable()
+	debugger.Enable()
+
+	if customWriter != debugger.writer {
+		t.Error("expected customWriter to be used after disabling and re-enabling")
+	}
 }
 
-func (suite *DebuggerSuite) TestEnableUsesDefaultWriter() {
-	suite.debugger.Enable()
+func TestDisableDiscardsEverything(t *testing.T) {
+	debugger := NewDebugger()
 
-	suite.Equal(os.Stdout, suite.debugger.writer)
+	debugger.Disable()
+
+	if ioutil.Discard != debugger.writer {
+		t.Error("expected disabled debugger to use ioutil.Discard as the writer")
+	}
 }
 
-func (suite *DebuggerSuite) TestEnableUsesConfiguredOutputWhenAvailable() {
-	suite.debugger.SetOutput(suite.customWriter)
-	suite.debugger.Enable()
+func TestPrintMethods(t *testing.T) {
+	debugger := NewDebugger()
+	customWriter := &customWriter{}
 
-	suite.Equal(suite.customWriter, suite.debugger.writer)
-}
+	debugger.SetOutput(customWriter)
 
-func (suite *DebuggerSuite) TestEnableRemembersConfiguredOutput() {
-	suite.debugger.SetOutput(suite.customWriter)
+	t.Run("PrintWritesToConfiguredWriterAndAppendsPrefix", func(t *testing.T) {
+		debugger.Print("random", "message")
+		assertEqual(t, customWriter.lastMessage, "[Sentry] randommessage")
+	})
 
-	suite.debugger.Disable()
-	suite.debugger.Enable()
+	t.Run("PrintlnWritesToConfiguredWriterAndAppendsPrefix", func(t *testing.T) {
+		debugger.Println("random", "message")
+		assertEqual(t, customWriter.lastMessage, "[Sentry] random message\n")
+	})
 
-	suite.Equal(suite.customWriter, suite.debugger.writer)
-}
-
-func (suite *DebuggerSuite) TestDisableDiscardsEverything() {
-	suite.debugger.Disable()
-
-	suite.Equal(ioutil.Discard, suite.debugger.writer)
-}
-
-func (suite *DebuggerSuite) TestPrintWritesToConfiguredWriterAndAppendsPrefix() {
-	suite.debugger.SetOutput(suite.customWriter)
-	suite.debugger.Print("random", "message")
-
-	suite.Equal("[Sentry] randommessage", lastMessage)
-}
-
-func (suite *DebuggerSuite) TestPrintlnWritesToConfiguredWriterAndAppendsPrefix() {
-	suite.debugger.SetOutput(suite.customWriter)
-	suite.debugger.Println("random", "message")
-
-	suite.Equal("[Sentry] random message\n", lastMessage)
-}
-
-func (suite *DebuggerSuite) TestPrintfWritesToConfiguredWriterAndAppendsPrefix() {
-	suite.debugger.SetOutput(suite.customWriter)
-	suite.debugger.Printf("%s %d", "random", 2)
-
-	suite.Equal("[Sentry] random 2", lastMessage)
+	t.Run("PrintfWritesToConfiguredWriterAndAppendsPrefix", func(t *testing.T) {
+		debugger.Printf("%s %d", "random", 42)
+		assertEqual(t, customWriter.lastMessage, "[Sentry] random 42")
+	})
 }

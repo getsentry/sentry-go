@@ -3,7 +3,6 @@ package sentry
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"time"
@@ -83,10 +82,10 @@ func (client *Client) CaptureException(exception error, hint *EventHint, scope E
 }
 
 func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) {
+	// TODO: Handle return values
 	if _, err := client.processEvent(event, hint, scope); err != nil {
 		debugger.Println(err)
 	}
-	log.Println("TODO[CaptureEvent]: Handle return values")
 }
 
 func (client *Client) Recover(recoveredErr interface{}, scope *Scope) {
@@ -141,7 +140,7 @@ func (client *Client) eventFromMessage(message string) *Event {
 }
 
 func (client *Client) eventFromException(exception error) *Event {
-	log.Println("TODO[CaptureException]: Extract stacktrace from the exception")
+	// TODO: Extract stacktrace from the exception
 	return &Event{
 		Message: exception.Error(),
 	}
