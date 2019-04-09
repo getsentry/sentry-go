@@ -2,8 +2,6 @@ package sentry
 
 import (
 	"context"
-
-	"github.com/google/uuid"
 )
 
 // Default maximum number of breadcrumbs added to an event. Can be overwritten `maxBreadcrumbs` option.
@@ -26,7 +24,7 @@ type Stack []*Layer
 
 type Hub struct {
 	stack       *Stack
-	lastEventID uuid.UUID
+	lastEventID string
 }
 
 func NewHub(client Clienter, scope *Scope) *Hub {
@@ -38,7 +36,7 @@ func NewHub(client Clienter, scope *Scope) *Hub {
 	}
 }
 
-func (hub *Hub) LastEventID() uuid.UUID {
+func (hub *Hub) LastEventID() string {
 	return hub.lastEventID
 }
 

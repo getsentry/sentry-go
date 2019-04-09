@@ -1,7 +1,5 @@
 package sentry
 
-import "github.com/google/uuid"
-
 type Level string
 
 const (
@@ -100,7 +98,7 @@ type Event struct {
 	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs"`
 	Dist        string                 `json:"dist"`
 	Environment string                 `json:"environment"`
-	EventID     uuid.UUID              `json:"event_id"`
+	EventID     string                 `json:"event_id"`
 	Extra       map[string]interface{} `json:"extra"`
 	Fingerprint []string               `json:"fingerprint"`
 	Level       Level                  `json:"level"`
@@ -121,6 +119,6 @@ type Event struct {
 
 type EventHint struct {
 	Data              interface{}
-	EventID           uuid.UUID
+	EventID           string
 	OriginalException error
 }

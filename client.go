@@ -7,8 +7,6 @@ import (
 	"math/rand"
 	"net/http"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type ClientOptions struct {
@@ -184,9 +182,8 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifier) *Event {
 	// TODO: Set all the defaults, clear unnecessary stuff etc. here
 
-	var emptyEventID uuid.UUID
-	if event.EventID == emptyEventID {
-		event.EventID = uuid.New()
+	if event.EventID == "" {
+		event.EventID = uuid()
 	}
 
 	if event.Timestamp == 0 {

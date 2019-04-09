@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/google/uuid"
-
 	"github.com/stretchr/testify/suite"
 )
 
@@ -175,7 +173,7 @@ func (suite *HubSuite) TestConfigureScope() {
 }
 
 func (suite *HubSuite) TestLastEventID() {
-	uuid := uuid.New()
+	uuid := uuid()
 	hub := &Hub{lastEventID: uuid}
 	suite.Equal(uuid, hub.LastEventID())
 }
@@ -249,6 +247,7 @@ func (suite *HubSuite) TestBeforeBreadcrumbGetAccessToEventHint() {
 				breadcrumb.Message += val
 			}
 		}
+
 		return breadcrumb
 	}
 
