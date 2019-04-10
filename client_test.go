@@ -26,24 +26,22 @@ func setupClientTest() (*Client, *ScopeMock, *TransportMock) {
 
 	return client, scope, transport
 }
-
-func TestCaptureMethods(t *testing.T) {
+func TestCaptureMessageShouldSendEventWithProvidedMessage(t *testing.T) {
 	client, scope, transport := setupClientTest()
+	client.CaptureMessage("foo", nil, scope)
+	assertEqual(t, transport.lastEvent.Message, "foo")
+}
 
-	t.Run("CaptureMessageShouldSendEventWithProvidedMessage", func(t *testing.T) {
-		client.CaptureMessage("foo", nil, scope)
-		assertEqual(t, transport.lastEvent.Message, "foo")
-	})
+func TestCaptureExceptionShouldSendEventWithProvidedError(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	client.CaptureException(errors.New("custom error"), nil, scope)
+	assertEqual(t, transport.lastEvent.Message, "custom error")
+}
 
-	t.Run("CaptureExceptionShouldSendEventWithProvidedError", func(t *testing.T) {
-		client.CaptureException(errors.New("custom error"), nil, scope)
-		assertEqual(t, transport.lastEvent.Message, "custom error")
-	})
-
-	t.Run("CaptureEventShouldSendEventWithProvidedError", func(t *testing.T) {
-		client.CaptureEvent(&Event{Message: "event message"}, nil, scope)
-		assertEqual(t, transport.lastEvent.Message, "event message")
-	})
+func TestCaptureEventShouldSendEventWithProvidedError(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	client.CaptureEvent(&Event{Message: "event message"}, nil, scope)
+	assertEqual(t, transport.lastEvent.Message, "event message")
 }
 
 func TestSampleRateCanDropEvent(t *testing.T) {
@@ -68,32 +66,30 @@ func TestApplyToScopeCanDropEvent(t *testing.T) {
 	}
 }
 
-func TestBeforeSend(t *testing.T) {
+func TestBeforeSendCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
+	client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
+		return nil
+	}
 
-	t.Run("BeforeSendCanDropEvent", func(t *testing.T) {
-		client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
-			return nil
+	client.CaptureMessage("Foo", nil, scope)
+
+	if transport.lastEvent != nil {
+		t.Error("expected event to be dropped")
+	}
+}
+
+func TestBeforeSendGetAccessToEventHint(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
+		if ex, ok := hint.OriginalException.(customComplexError); ok {
+			event.Message = event.Message + " " + ex.AnswerToLife()
 		}
+		return event
+	}
+	ex := customComplexError{Message: "Foo"}
 
-		client.CaptureMessage("Foo", nil, scope)
+	client.CaptureException(ex, &EventHint{OriginalException: ex}, scope)
 
-		if transport.lastEvent != nil {
-			t.Error("expected event to be dropped")
-		}
-	})
-
-	t.Run("BeforeSendGetAccessToEventHint", func(t *testing.T) {
-		client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
-			if ex, ok := hint.OriginalException.(customComplexError); ok {
-				event.Message = event.Message + " " + ex.AnswerToLife()
-			}
-			return event
-		}
-		ex := customComplexError{Message: "Foo"}
-
-		client.CaptureException(ex, &EventHint{OriginalException: ex}, scope)
-
-		assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
-	})
+	assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
 }

@@ -87,24 +87,26 @@ func TestDisableDiscardsEverything(t *testing.T) {
 	}
 }
 
-func TestPrintMethods(t *testing.T) {
+func TestPrintWritesToConfiguredWriterAndAppendsPrefix(t *testing.T) {
 	debugger := NewDebugger()
 	customWriter := &customWriter{}
-
 	debugger.SetOutput(customWriter)
+	debugger.Print("random", "message")
+	assertEqual(t, customWriter.lastMessage, "[Sentry] randommessage")
+}
 
-	t.Run("PrintWritesToConfiguredWriterAndAppendsPrefix", func(t *testing.T) {
-		debugger.Print("random", "message")
-		assertEqual(t, customWriter.lastMessage, "[Sentry] randommessage")
-	})
+func TestPrintlnWritesToConfiguredWriterAndAppendsPrefix(t *testing.T) {
+	debugger := NewDebugger()
+	customWriter := &customWriter{}
+	debugger.SetOutput(customWriter)
+	debugger.Println("random", "message")
+	assertEqual(t, customWriter.lastMessage, "[Sentry] random message\n")
+}
 
-	t.Run("PrintlnWritesToConfiguredWriterAndAppendsPrefix", func(t *testing.T) {
-		debugger.Println("random", "message")
-		assertEqual(t, customWriter.lastMessage, "[Sentry] random message\n")
-	})
-
-	t.Run("PrintfWritesToConfiguredWriterAndAppendsPrefix", func(t *testing.T) {
-		debugger.Printf("%s %d", "random", 42)
-		assertEqual(t, customWriter.lastMessage, "[Sentry] random 42")
-	})
+func TestPrintfWritesToConfiguredWriterAndAppendsPrefix(t *testing.T) {
+	debugger := NewDebugger()
+	customWriter := &customWriter{}
+	debugger.SetOutput(customWriter)
+	debugger.Printf("%s %d", "random", 42)
+	assertEqual(t, customWriter.lastMessage, "[Sentry] random 42")
 }

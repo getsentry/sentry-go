@@ -73,155 +73,149 @@ func TestDsnNoInput(t *testing.T) {
 	}
 }
 
-func TestValidDsn(t *testing.T) {
-	t.Run("Insecure", func(t *testing.T) {
-		url := "http://username@domain:8888/42"
-		dsn, err := NewDsn(url)
+func TestValidDsnInsecure(t *testing.T) {
+	url := "http://username@domain:8888/42"
+	dsn, err := NewDsn(url)
 
-		if err != nil {
-			t.Error("expected dsn to be correctly created")
-		}
-		assertEqual(t, url, dsn.ToString())
-	})
-
-	t.Run("NoPort", func(t *testing.T) {
-		url := "http://username@domain/42"
-		dsn, err := NewDsn(url)
-
-		if err != nil {
-			t.Error("expected dsn to be correctly created")
-		}
-		assertEqual(t, 80, dsn.Port())
-		assertEqual(t, url, dsn.ToString())
-		assertEqual(t, "http://domain/api/42/store/", dsn.StoreAPIURL().String())
-	})
-
-	t.Run("InsecureNoPort", func(t *testing.T) {
-		url := "https://username@domain/42"
-		dsn, err := NewDsn(url)
-
-		if err != nil {
-			t.Error("expected dsn to be correctly created")
-		}
-		assertEqual(t, 443, dsn.Port())
-		assertEqual(t, url, dsn.ToString())
-		assertEqual(t, "https://domain/api/42/store/", dsn.StoreAPIURL().String())
-	})
-
-	t.Run("NoPassword", func(t *testing.T) {
-		url := "https://username@domain:8888/42"
-		dsn, err := NewDsn(url)
-
-		if err != nil {
-			t.Error("expected dsn to be correctly created")
-		}
-		assertEqual(t, url, dsn.ToString())
-		assertEqual(t, "https://domain:8888/api/42/store/", dsn.StoreAPIURL().String())
-	})
+	if err != nil {
+		t.Error("expected dsn to be correctly created")
+	}
+	assertEqual(t, url, dsn.ToString())
 }
 
-func TestInvalidDsn(t *testing.T) {
-	t.Run("InvalidUrl", func(t *testing.T) {
-		_, err := NewDsn("!@#$%^&*()")
-		_, ok := err.(*DsnParseError)
+func TestValidDsnNoPort(t *testing.T) {
+	url := "http://username@domain/42"
+	dsn, err := NewDsn(url)
 
-		if ok != true {
-			t.Error("expected error to be of type DsnParseError")
-		}
-		assertStringContains(t, err.Error(), "invalid url")
-	})
-
-	t.Run("InvalidScheme", func(t *testing.T) {
-		_, err := NewDsn("ftp://username:password@domain:8888/1")
-		_, ok := err.(*DsnParseError)
-
-		if ok != true {
-			t.Error("expected error to be of type DsnParseError")
-		}
-		assertStringContains(t, err.Error(), "invalid scheme")
-	})
-
-	t.Run("NoUsername", func(t *testing.T) {
-		_, err := NewDsn("https://:password@domain:8888/23")
-		_, ok := err.(*DsnParseError)
-
-		if ok != true {
-			t.Error("expected error to be of type DsnParseError")
-		}
-		assertStringContains(t, err.Error(), "empty username")
-	})
-
-	t.Run("NoHost", func(t *testing.T) {
-		_, err := NewDsn("https://username:password@:8888/42")
-		_, ok := err.(*DsnParseError)
-
-		if ok != true {
-			t.Error("expected error to be of type DsnParseError")
-		}
-		assertStringContains(t, err.Error(), "empty host")
-	})
-
-	t.Run("InvalidPort", func(t *testing.T) {
-		_, err := NewDsn("https://username:password@domain:wat/42")
-		_, ok := err.(*DsnParseError)
-
-		if ok != true {
-			t.Error("expected error to be of type DsnParseError")
-		}
-		assertStringContains(t, err.Error(), "invalid port")
-	})
-
-	t.Run("NoProjectId", func(t *testing.T) {
-		_, err := NewDsn("https://username:password@domain:8888/")
-		_, ok := err.(*DsnParseError)
-
-		if ok != true {
-			t.Error("expected error to be of type DsnParseError")
-		}
-		assertStringContains(t, err.Error(), "empty project id")
-	})
-
-	t.Run("InvalidProjectId", func(t *testing.T) {
-		_, err := NewDsn("https://username:password@domain:8888/wbvdf7^W#$")
-		_, ok := err.(*DsnParseError)
-
-		if ok != true {
-			t.Error("expected error to be of type DsnParseError")
-		}
-		assertStringContains(t, err.Error(), "invalid project id")
-	})
+	if err != nil {
+		t.Error("expected dsn to be correctly created")
+	}
+	assertEqual(t, 80, dsn.Port())
+	assertEqual(t, url, dsn.ToString())
+	assertEqual(t, "http://domain/api/42/store/", dsn.StoreAPIURL().String())
 }
 
-func TestRequestHeaders(t *testing.T) {
-	t.Run("without password", func(t *testing.T) {
-		url := "https://username@domain:8888/23"
-		dsn, _ := NewDsn(url)
-		headers := dsn.RequestHeaders()
-		authRegexp := regexp.MustCompile("^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
-			"sentry_client=sentry.go/.+, sentry_key=username$")
+func TestValidDsnInsecureNoPort(t *testing.T) {
+	url := "https://username@domain/42"
+	dsn, err := NewDsn(url)
 
-		if len(headers) != 2 {
-			t.Error("expected request to have 2 headers")
-		}
-		assertEqual(t, "application/json", headers["Content-Type"])
-		if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
-			t.Error("expected auth header to fulfill provided pattern")
-		}
-	})
+	if err != nil {
+		t.Error("expected dsn to be correctly created")
+	}
+	assertEqual(t, 443, dsn.Port())
+	assertEqual(t, url, dsn.ToString())
+	assertEqual(t, "https://domain/api/42/store/", dsn.StoreAPIURL().String())
+}
 
-	t.Run("with password", func(t *testing.T) {
-		url := "https://username:secret@domain:8888/23"
-		dsn, _ := NewDsn(url)
-		headers := dsn.RequestHeaders()
-		authRegexp := regexp.MustCompile("^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
-			"sentry_client=sentry.go/.+, sentry_key=username, sentry_secret=secret$")
+func TestValidDsnNoPassword(t *testing.T) {
+	url := "https://username@domain:8888/42"
+	dsn, err := NewDsn(url)
 
-		if len(headers) != 2 {
-			t.Error("expected request to have 2 headers")
-		}
-		assertEqual(t, "application/json", headers["Content-Type"])
-		if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
-			t.Error("expected auth header to fulfill provided pattern")
-		}
-	})
+	if err != nil {
+		t.Error("expected dsn to be correctly created")
+	}
+	assertEqual(t, url, dsn.ToString())
+	assertEqual(t, "https://domain:8888/api/42/store/", dsn.StoreAPIURL().String())
+}
+
+func TestInvalidDsnInvalidUrl(t *testing.T) {
+	_, err := NewDsn("!@#$%^&*()")
+	_, ok := err.(*DsnParseError)
+
+	if ok != true {
+		t.Error("expected error to be of type DsnParseError")
+	}
+	assertStringContains(t, err.Error(), "invalid url")
+}
+
+func TestInvalidDsnInvalidScheme(t *testing.T) {
+	_, err := NewDsn("ftp://username:password@domain:8888/1")
+	_, ok := err.(*DsnParseError)
+
+	if ok != true {
+		t.Error("expected error to be of type DsnParseError")
+	}
+	assertStringContains(t, err.Error(), "invalid scheme")
+}
+
+func TestInvalidDsnNoUsername(t *testing.T) {
+	_, err := NewDsn("https://:password@domain:8888/23")
+	_, ok := err.(*DsnParseError)
+
+	if ok != true {
+		t.Error("expected error to be of type DsnParseError")
+	}
+	assertStringContains(t, err.Error(), "empty username")
+}
+
+func TestInvalidDsnNoHost(t *testing.T) {
+	_, err := NewDsn("https://username:password@:8888/42")
+	_, ok := err.(*DsnParseError)
+
+	if ok != true {
+		t.Error("expected error to be of type DsnParseError")
+	}
+	assertStringContains(t, err.Error(), "empty host")
+}
+
+func TestInvalidDsnInvalidPort(t *testing.T) {
+	_, err := NewDsn("https://username:password@domain:wat/42")
+	_, ok := err.(*DsnParseError)
+
+	if ok != true {
+		t.Error("expected error to be of type DsnParseError")
+	}
+	assertStringContains(t, err.Error(), "invalid port")
+}
+
+func TestInvalidDsnNoProjectId(t *testing.T) {
+	_, err := NewDsn("https://username:password@domain:8888/")
+	_, ok := err.(*DsnParseError)
+
+	if ok != true {
+		t.Error("expected error to be of type DsnParseError")
+	}
+	assertStringContains(t, err.Error(), "empty project id")
+}
+
+func TestInvalidDsnInvalidProjectId(t *testing.T) {
+	_, err := NewDsn("https://username:password@domain:8888/wbvdf7^W#$")
+	_, ok := err.(*DsnParseError)
+
+	if ok != true {
+		t.Error("expected error to be of type DsnParseError")
+	}
+	assertStringContains(t, err.Error(), "invalid project id")
+}
+
+func TestRequestHeadersWithoutPassword(t *testing.T) {
+	url := "https://username@domain:8888/23"
+	dsn, _ := NewDsn(url)
+	headers := dsn.RequestHeaders()
+	authRegexp := regexp.MustCompile("^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
+		"sentry_client=sentry.go/.+, sentry_key=username$")
+
+	if len(headers) != 2 {
+		t.Error("expected request to have 2 headers")
+	}
+	assertEqual(t, "application/json", headers["Content-Type"])
+	if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
+		t.Error("expected auth header to fulfill provided pattern")
+	}
+}
+
+func TestRequestHeadersWithPassword(t *testing.T) {
+	url := "https://username:secret@domain:8888/23"
+	dsn, _ := NewDsn(url)
+	headers := dsn.RequestHeaders()
+	authRegexp := regexp.MustCompile("^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
+		"sentry_client=sentry.go/.+, sentry_key=username, sentry_secret=secret$")
+
+	if len(headers) != 2 {
+		t.Error("expected request to have 2 headers")
+	}
+	assertEqual(t, "application/json", headers["Content-Type"])
+	if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
+		t.Error("expected auth header to fulfill provided pattern")
+	}
 }

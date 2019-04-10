@@ -27,265 +27,259 @@ func fillEventWithData(event *Event) *Event {
 	return event
 }
 
-func TestScopeSetters(t *testing.T) {
-	t.Run("SetUser", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetUser(User{ID: "foo"})
-		assertEqual(t, User{ID: "foo"}, scope.user)
-	})
-
-	t.Run("SetUserOverrides", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetUser(User{ID: "foo"})
-		scope.SetUser(User{ID: "bar"})
-
-		assertEqual(t, User{ID: "bar"}, scope.user)
-	})
-
-	t.Run("SetTag", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetTag("a", "foo")
-
-		assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
-	})
-
-	t.Run("SetTagMerges", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetTag("a", "foo")
-		scope.SetTag("b", "bar")
-
-		assertEqual(t, map[string]string{"a": "foo", "b": "bar"}, scope.tags)
-	})
-
-	t.Run("SetTagOverrides", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetTag("a", "foo")
-		scope.SetTag("a", "bar")
-
-		assertEqual(t, map[string]string{"a": "bar"}, scope.tags)
-	})
-
-	t.Run("SetTags", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetTags(map[string]string{"a": "foo"})
-
-		assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
-	})
-
-	t.Run("SetTagsMerges", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetTags(map[string]string{"a": "foo"})
-		scope.SetTags(map[string]string{"b": "bar", "c": "baz"})
-
-		assertEqual(t, map[string]string{"a": "foo", "b": "bar", "c": "baz"}, scope.tags)
-	})
-
-	t.Run("SetTagsOverrides", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetTags(map[string]string{"a": "foo"})
-		scope.SetTags(map[string]string{"a": "bar", "b": "baz"})
-
-		assertEqual(t, map[string]string{"a": "bar", "b": "baz"}, scope.tags)
-	})
-
-	t.Run("SetExtra", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetExtra("a", 1)
-
-		assertEqual(t, map[string]interface{}{"a": 1}, scope.extra)
-	})
-
-	t.Run("SetExtraMerges", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetExtra("a", "foo")
-		scope.SetExtra("b", 2)
-
-		assertEqual(t, map[string]interface{}{"a": "foo", "b": 2}, scope.extra)
-	})
-
-	t.Run("SetExtraOverrides", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetExtra("a", "foo")
-		scope.SetExtra("a", 2)
-
-		assertEqual(t, map[string]interface{}{"a": 2}, scope.extra)
-	})
-
-	t.Run("SetExtras", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetExtras(map[string]interface{}{"a": 1})
-
-		assertEqual(t, map[string]interface{}{"a": 1}, scope.extra)
-	})
-
-	t.Run("SetExtrasMerges", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetExtras(map[string]interface{}{"a": "foo"})
-		scope.SetExtras(map[string]interface{}{"b": 2, "c": 3})
-
-		assertEqual(t, map[string]interface{}{"a": "foo", "b": 2, "c": 3}, scope.extra)
-	})
-
-	t.Run("SetExtrasOverrides", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetExtras(map[string]interface{}{"a": "foo"})
-		scope.SetExtras(map[string]interface{}{"a": 2, "b": 3})
-
-		assertEqual(t, map[string]interface{}{"a": 2, "b": 3}, scope.extra)
-	})
-
-	t.Run("SetFingerprint", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetFingerprint([]string{"abcd"})
-
-		assertEqual(t, []string{"abcd"}, scope.fingerprint)
-	})
-
-	t.Run("SetFingerprintOverrides", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetFingerprint([]string{"abc"})
-		scope.SetFingerprint([]string{"def"})
-
-		assertEqual(t, []string{"def"}, scope.fingerprint)
-	})
-
-	t.Run("SetLevel", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetLevel(LevelInfo)
-
-		assertEqual(t, scope.level, LevelInfo)
-	})
-
-	t.Run("SetLevelOverrides", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetLevel(LevelInfo)
-		scope.SetLevel(LevelFatal)
-
-		assertEqual(t, scope.level, LevelFatal)
-	})
+func TestScopeSetUser(t *testing.T) {
+	scope := &Scope{}
+	scope.SetUser(User{ID: "foo"})
+	assertEqual(t, User{ID: "foo"}, scope.user)
 }
 
-func TestAddBreadcrumb(t *testing.T) {
-	t.Run("AddsBreadcrumb", func(t *testing.T) {
-		scope := &Scope{}
+func TestScopeSetUserOverrides(t *testing.T) {
+	scope := &Scope{}
+	scope.SetUser(User{ID: "foo"})
+	scope.SetUser(User{ID: "bar"})
+
+	assertEqual(t, User{ID: "bar"}, scope.user)
+}
+
+func TestScopeSetTag(t *testing.T) {
+	scope := &Scope{}
+	scope.SetTag("a", "foo")
+
+	assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
+}
+
+func TestScopeSetTagMerges(t *testing.T) {
+	scope := &Scope{}
+	scope.SetTag("a", "foo")
+	scope.SetTag("b", "bar")
+
+	assertEqual(t, map[string]string{"a": "foo", "b": "bar"}, scope.tags)
+}
+
+func TestScopeSetTagOverrides(t *testing.T) {
+	scope := &Scope{}
+	scope.SetTag("a", "foo")
+	scope.SetTag("a", "bar")
+
+	assertEqual(t, map[string]string{"a": "bar"}, scope.tags)
+}
+
+func TestScopeSetTags(t *testing.T) {
+	scope := &Scope{}
+	scope.SetTags(map[string]string{"a": "foo"})
+
+	assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
+}
+
+func TestScopeSetTagsMerges(t *testing.T) {
+	scope := &Scope{}
+	scope.SetTags(map[string]string{"a": "foo"})
+	scope.SetTags(map[string]string{"b": "bar", "c": "baz"})
+
+	assertEqual(t, map[string]string{"a": "foo", "b": "bar", "c": "baz"}, scope.tags)
+}
+
+func TestScopeSetTagsOverrides(t *testing.T) {
+	scope := &Scope{}
+	scope.SetTags(map[string]string{"a": "foo"})
+	scope.SetTags(map[string]string{"a": "bar", "b": "baz"})
+
+	assertEqual(t, map[string]string{"a": "bar", "b": "baz"}, scope.tags)
+}
+
+func TestScopeSetExtra(t *testing.T) {
+	scope := &Scope{}
+	scope.SetExtra("a", 1)
+
+	assertEqual(t, map[string]interface{}{"a": 1}, scope.extra)
+}
+
+func TestScopeSetExtraMerges(t *testing.T) {
+	scope := &Scope{}
+	scope.SetExtra("a", "foo")
+	scope.SetExtra("b", 2)
+
+	assertEqual(t, map[string]interface{}{"a": "foo", "b": 2}, scope.extra)
+}
+
+func TestScopeSetExtraOverrides(t *testing.T) {
+	scope := &Scope{}
+	scope.SetExtra("a", "foo")
+	scope.SetExtra("a", 2)
+
+	assertEqual(t, map[string]interface{}{"a": 2}, scope.extra)
+}
+
+func TestScopeSetExtras(t *testing.T) {
+	scope := &Scope{}
+	scope.SetExtras(map[string]interface{}{"a": 1})
+
+	assertEqual(t, map[string]interface{}{"a": 1}, scope.extra)
+}
+
+func TestScopeSetExtrasMerges(t *testing.T) {
+	scope := &Scope{}
+	scope.SetExtras(map[string]interface{}{"a": "foo"})
+	scope.SetExtras(map[string]interface{}{"b": 2, "c": 3})
+
+	assertEqual(t, map[string]interface{}{"a": "foo", "b": 2, "c": 3}, scope.extra)
+}
+
+func TestScopeSetExtrasOverrides(t *testing.T) {
+	scope := &Scope{}
+	scope.SetExtras(map[string]interface{}{"a": "foo"})
+	scope.SetExtras(map[string]interface{}{"a": 2, "b": 3})
+
+	assertEqual(t, map[string]interface{}{"a": 2, "b": 3}, scope.extra)
+}
+
+func TestScopeSetFingerprint(t *testing.T) {
+	scope := &Scope{}
+	scope.SetFingerprint([]string{"abcd"})
+
+	assertEqual(t, []string{"abcd"}, scope.fingerprint)
+}
+
+func TestScopeSetFingerprintOverrides(t *testing.T) {
+	scope := &Scope{}
+	scope.SetFingerprint([]string{"abc"})
+	scope.SetFingerprint([]string{"def"})
+
+	assertEqual(t, []string{"def"}, scope.fingerprint)
+}
+
+func TestScopeSetLevel(t *testing.T) {
+	scope := &Scope{}
+	scope.SetLevel(LevelInfo)
+
+	assertEqual(t, scope.level, LevelInfo)
+}
+
+func TestScopeSetLevelOverrides(t *testing.T) {
+	scope := &Scope{}
+	scope.SetLevel(LevelInfo)
+	scope.SetLevel(LevelFatal)
+
+	assertEqual(t, scope.level, LevelFatal)
+}
+
+func TestAddBreadcrumbAddsBreadcrumb(t *testing.T) {
+	scope := &Scope{}
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"}, maxBreadcrumbs)
+	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "test"}}, scope.breadcrumbs)
+}
+
+func TestAddBreadcrumbAppendsBreadcrumb(t *testing.T) {
+	scope := &Scope{}
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test1"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test2"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test3"}, maxBreadcrumbs)
+
+	assertEqual(t, []*Breadcrumb{
+		{Timestamp: 1337, Message: "test1"},
+		{Timestamp: 1337, Message: "test2"},
+		{Timestamp: 1337, Message: "test3"},
+	}, scope.breadcrumbs)
+}
+
+func TestAddBreadcrumbDefaultLimit(t *testing.T) {
+	scope := &Scope{}
+	for i := 0; i < 101; i++ {
 		scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"}, maxBreadcrumbs)
-		assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "test"}}, scope.breadcrumbs)
-	})
+	}
 
-	t.Run("AppendsBreadcrumb", func(t *testing.T) {
-		scope := &Scope{}
-		scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test1"}, maxBreadcrumbs)
-		scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test2"}, maxBreadcrumbs)
-		scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test3"}, maxBreadcrumbs)
-
-		assertEqual(t, []*Breadcrumb{
-			{Timestamp: 1337, Message: "test1"},
-			{Timestamp: 1337, Message: "test2"},
-			{Timestamp: 1337, Message: "test3"},
-		}, scope.breadcrumbs)
-	})
-
-	t.Run("DefaultLimit", func(t *testing.T) {
-		scope := &Scope{}
-		for i := 0; i < 101; i++ {
-			scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"}, maxBreadcrumbs)
-		}
-
-		if len(scope.breadcrumbs) != 100 {
-			t.Error("expected to have only 100 breadcrumbs")
-		}
-	})
-
-	t.Run("AddsTimestamp", func(t *testing.T) {
-		scope := &Scope{}
-		before := time.Now().Unix()
-		scope.AddBreadcrumb(&Breadcrumb{Message: "test"}, maxBreadcrumbs)
-		after := time.Now().Unix()
-		ts := scope.breadcrumbs[0].Timestamp
-
-		if ts < before || ts > after {
-			t.Errorf("expected default timestamp to represent current time, was '%d'", ts)
-		}
-	})
+	if len(scope.breadcrumbs) != 100 {
+		t.Error("expected to have only 100 breadcrumbs")
+	}
 }
 
-func TestInheritance(t *testing.T) {
-	t.Run("BasicInheritance", func(t *testing.T) {
-		scope := &Scope{}
-		scope.SetExtra("a", 1)
-		clone := scope.Clone()
+func TestAddBreadcrumbAddsTimestamp(t *testing.T) {
+	scope := &Scope{}
+	before := time.Now().Unix()
+	scope.AddBreadcrumb(&Breadcrumb{Message: "test"}, maxBreadcrumbs)
+	after := time.Now().Unix()
+	ts := scope.breadcrumbs[0].Timestamp
 
-		assertEqual(t, scope.extra, clone.extra)
-	})
+	if ts < before || ts > after {
+		t.Errorf("expected default timestamp to represent current time, was '%d'", ts)
+	}
+}
 
-	t.Run("ParentChangedInheritance", func(t *testing.T) {
-		scope := &Scope{}
-		clone := scope.Clone()
+func TestScopeBasicInheritance(t *testing.T) {
+	scope := &Scope{}
+	scope.SetExtra("a", 1)
+	clone := scope.Clone()
 
-		clone.SetTag("foo", "bar")
-		clone.SetExtra("foo", "bar")
-		clone.SetLevel(LevelDebug)
-		clone.SetFingerprint([]string{"foo"})
-		clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
-		clone.SetUser(User{ID: "foo"})
+	assertEqual(t, scope.extra, clone.extra)
+}
 
-		scope.SetTag("foo", "baz")
-		scope.SetExtra("foo", "baz")
-		scope.SetLevel(LevelFatal)
-		scope.SetFingerprint([]string{"bar"})
-		scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, maxBreadcrumbs)
-		scope.SetUser(User{ID: "bar"})
+func TestScopeParentChangedInheritance(t *testing.T) {
+	scope := &Scope{}
+	clone := scope.Clone()
 
-		assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
-		assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.extra)
-		assertEqual(t, LevelDebug, clone.level)
-		assertEqual(t, []string{"foo"}, clone.fingerprint)
-		assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "foo"}}, clone.breadcrumbs)
-		assertEqual(t, User{ID: "foo"}, clone.user)
+	clone.SetTag("foo", "bar")
+	clone.SetExtra("foo", "bar")
+	clone.SetLevel(LevelDebug)
+	clone.SetFingerprint([]string{"foo"})
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
+	clone.SetUser(User{ID: "foo"})
 
-		assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
-		assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.extra)
-		assertEqual(t, LevelFatal, scope.level)
-		assertEqual(t, []string{"bar"}, scope.fingerprint)
-		assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, scope.breadcrumbs)
-		assertEqual(t, User{ID: "bar"}, scope.user)
-	})
+	scope.SetTag("foo", "baz")
+	scope.SetExtra("foo", "baz")
+	scope.SetLevel(LevelFatal)
+	scope.SetFingerprint([]string{"bar"})
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, maxBreadcrumbs)
+	scope.SetUser(User{ID: "bar"})
 
-	t.Run("ChildOverrideInheritance", func(t *testing.T) {
-		scope := &Scope{}
+	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
+	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.extra)
+	assertEqual(t, LevelDebug, clone.level)
+	assertEqual(t, []string{"foo"}, clone.fingerprint)
+	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "foo"}}, clone.breadcrumbs)
+	assertEqual(t, User{ID: "foo"}, clone.user)
 
-		scope.SetTag("foo", "baz")
-		scope.SetExtra("foo", "baz")
-		scope.SetLevel(LevelFatal)
-		scope.SetFingerprint([]string{"bar"})
-		scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, maxBreadcrumbs)
-		scope.SetUser(User{ID: "bar"})
+	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
+	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.extra)
+	assertEqual(t, LevelFatal, scope.level)
+	assertEqual(t, []string{"bar"}, scope.fingerprint)
+	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, scope.breadcrumbs)
+	assertEqual(t, User{ID: "bar"}, scope.user)
+}
 
-		clone := scope.Clone()
-		clone.SetTag("foo", "bar")
-		clone.SetExtra("foo", "bar")
-		clone.SetLevel(LevelDebug)
-		clone.SetFingerprint([]string{"foo"})
-		clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
-		clone.SetUser(User{ID: "foo"})
+func TestScopeChildOverrideInheritance(t *testing.T) {
+	scope := &Scope{}
 
-		assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
-		assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.extra)
-		assertEqual(t, LevelDebug, clone.level)
-		assertEqual(t, []string{"foo"}, clone.fingerprint)
-		assertEqual(t, []*Breadcrumb{
-			{Timestamp: 1337, Message: "bar"},
-			{Timestamp: 1337, Message: "foo"},
-		}, clone.breadcrumbs)
-		assertEqual(t, User{ID: "foo"}, clone.user)
+	scope.SetTag("foo", "baz")
+	scope.SetExtra("foo", "baz")
+	scope.SetLevel(LevelFatal)
+	scope.SetFingerprint([]string{"bar"})
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, maxBreadcrumbs)
+	scope.SetUser(User{ID: "bar"})
 
-		assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
-		assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.extra)
-		assertEqual(t, LevelFatal, scope.level)
-		assertEqual(t, []string{"bar"}, scope.fingerprint)
-		assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, scope.breadcrumbs)
-		assertEqual(t, User{ID: "bar"}, scope.user)
-	})
+	clone := scope.Clone()
+	clone.SetTag("foo", "bar")
+	clone.SetExtra("foo", "bar")
+	clone.SetLevel(LevelDebug)
+	clone.SetFingerprint([]string{"foo"})
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
+	clone.SetUser(User{ID: "foo"})
+
+	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
+	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.extra)
+	assertEqual(t, LevelDebug, clone.level)
+	assertEqual(t, []string{"foo"}, clone.fingerprint)
+	assertEqual(t, []*Breadcrumb{
+		{Timestamp: 1337, Message: "bar"},
+		{Timestamp: 1337, Message: "foo"},
+	}, clone.breadcrumbs)
+	assertEqual(t, User{ID: "foo"}, clone.user)
+
+	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
+	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.extra)
+	assertEqual(t, LevelFatal, scope.level)
+	assertEqual(t, []string{"bar"}, scope.fingerprint)
+	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, scope.breadcrumbs)
+	assertEqual(t, User{ID: "bar"}, scope.user)
 }
 
 func TestClear(t *testing.T) {
@@ -307,104 +301,100 @@ func TestClearBreadcrumbs(t *testing.T) {
 	assertEqual(t, []*Breadcrumb{}, scope.breadcrumbs)
 }
 
-func TestApplyToEvent(t *testing.T) {
-	t.Run("WithCorrectScopeAndEvent", func(t *testing.T) {
-		scope := fillScopeWithData(&Scope{})
-		event := fillEventWithData(&Event{})
+func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
+	scope := fillScopeWithData(&Scope{})
+	event := fillEventWithData(&Event{})
 
-		processedEvent := scope.ApplyToEvent(event)
+	processedEvent := scope.ApplyToEvent(event)
 
-		assertEqual(t, len(processedEvent.Breadcrumbs), 2, "should merge breadcrumbs")
-		assertEqual(t, len(processedEvent.Tags), 2, "should merge tags")
-		assertEqual(t, len(processedEvent.Extra), 2, "should merge extra")
-		assertEqual(t, processedEvent.Level, scope.level, "should use scope level if its set")
-		assertNotEqual(t, processedEvent.User, scope.user, "should use event user if one exist")
-		assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprints if they exist")
-	})
-
-	t.Run("UsingEmptyScope", func(t *testing.T) {
-		scope := &Scope{}
-		event := fillEventWithData(&Event{})
-
-		processedEvent := scope.ApplyToEvent(event)
-
-		assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
-		assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
-		assertEqual(t, len(processedEvent.Extra), 1, "should use event extra")
-		assertNotEqual(t, processedEvent.User, scope.user, "should use event user")
-		assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprint")
-		assertNotEqual(t, processedEvent.Level, scope.level, "should use event level")
-	})
-
-	t.Run("UsingEmptyEvent", func(t *testing.T) {
-		scope := fillScopeWithData(&Scope{})
-		event := &Event{}
-
-		processedEvent := scope.ApplyToEvent(event)
-
-		assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
-		assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
-		assertEqual(t, len(processedEvent.Extra), 1, "should use scope extra")
-		assertEqual(t, processedEvent.User, scope.user, "should use scope user")
-		assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
-		assertEqual(t, processedEvent.Level, scope.level, "should use scope level")
-	})
+	assertEqual(t, len(processedEvent.Breadcrumbs), 2, "should merge breadcrumbs")
+	assertEqual(t, len(processedEvent.Tags), 2, "should merge tags")
+	assertEqual(t, len(processedEvent.Extra), 2, "should merge extra")
+	assertEqual(t, processedEvent.Level, scope.level, "should use scope level if its set")
+	assertNotEqual(t, processedEvent.User, scope.user, "should use event user if one exist")
+	assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprints if they exist")
 }
 
-func TestEventProcessors(t *testing.T) {
-	t.Run("ModifiesEvent", func(t *testing.T) {
-		scope := &Scope{}
-		event := &Event{}
-		scope.eventProcessors = []EventProcessor{
-			func(event *Event) *Event {
-				event.Level = LevelFatal
-				return event
-			},
-			func(event *Event) *Event {
-				event.Fingerprint = []string{"wat"}
-				return event
-			},
-		}
-		processedEvent := scope.ApplyToEvent(event)
+func TestApplyToEventUsingEmptyScope(t *testing.T) {
+	scope := &Scope{}
+	event := fillEventWithData(&Event{})
 
-		if processedEvent == nil {
-			t.Error("event should not be dropped")
-		}
-		assertEqual(t, LevelFatal, processedEvent.Level)
-		assertEqual(t, []string{"wat"}, processedEvent.Fingerprint)
-	})
+	processedEvent := scope.ApplyToEvent(event)
 
-	t.Run("CanDropEvent", func(t *testing.T) {
-		scope := &Scope{}
-		event := &Event{}
-		scope.eventProcessors = []EventProcessor{
-			func(event *Event) *Event {
-				return nil
-			},
-		}
-		processedEvent := scope.ApplyToEvent(event)
+	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
+	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
+	assertEqual(t, len(processedEvent.Extra), 1, "should use event extra")
+	assertNotEqual(t, processedEvent.User, scope.user, "should use event user")
+	assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprint")
+	assertNotEqual(t, processedEvent.Level, scope.level, "should use event level")
+}
 
-		if processedEvent != nil {
-			t.Error("event should be dropped")
-		}
-	})
+func TestApplyToEventUsingEmptyEvent(t *testing.T) {
+	scope := fillScopeWithData(&Scope{})
+	event := &Event{}
 
-	t.Run("AddEventProcessor", func(t *testing.T) {
-		scope := &Scope{}
-		event := &Event{}
-		processedEvent := scope.ApplyToEvent(event)
+	processedEvent := scope.ApplyToEvent(event)
 
-		if processedEvent == nil {
-			t.Error("event should not be dropped")
-		}
+	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
+	assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
+	assertEqual(t, len(processedEvent.Extra), 1, "should use scope extra")
+	assertEqual(t, processedEvent.User, scope.user, "should use scope user")
+	assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
+	assertEqual(t, processedEvent.Level, scope.level, "should use scope level")
+}
 
-		scope.AddEventProcessor(func(event *Event) *Event {
+func TestEventProcessorsModifiesEvent(t *testing.T) {
+	scope := &Scope{}
+	event := &Event{}
+	scope.eventProcessors = []EventProcessor{
+		func(event *Event) *Event {
+			event.Level = LevelFatal
+			return event
+		},
+		func(event *Event) *Event {
+			event.Fingerprint = []string{"wat"}
+			return event
+		},
+	}
+	processedEvent := scope.ApplyToEvent(event)
+
+	if processedEvent == nil {
+		t.Error("event should not be dropped")
+	}
+	assertEqual(t, LevelFatal, processedEvent.Level)
+	assertEqual(t, []string{"wat"}, processedEvent.Fingerprint)
+}
+
+func TestEventProcessorsCanDropEvent(t *testing.T) {
+	scope := &Scope{}
+	event := &Event{}
+	scope.eventProcessors = []EventProcessor{
+		func(event *Event) *Event {
 			return nil
-		})
-		processedEvent = scope.ApplyToEvent(event)
+		},
+	}
+	processedEvent := scope.ApplyToEvent(event)
 
-		if processedEvent != nil {
-			t.Error("event should be dropped")
-		}
+	if processedEvent != nil {
+		t.Error("event should be dropped")
+	}
+}
+
+func TestEventProcessorsAddEventProcessor(t *testing.T) {
+	scope := &Scope{}
+	event := &Event{}
+	processedEvent := scope.ApplyToEvent(event)
+
+	if processedEvent == nil {
+		t.Error("event should not be dropped")
+	}
+
+	scope.AddEventProcessor(func(event *Event) *Event {
+		return nil
 	})
+	processedEvent = scope.ApplyToEvent(event)
+
+	if processedEvent != nil {
+		t.Error("event should be dropped")
+	}
 }

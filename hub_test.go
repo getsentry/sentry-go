@@ -23,54 +23,50 @@ func TestNewHubLayerStoresClientAndScope(t *testing.T) {
 	assertEqual(t, &Layer{client: client, scope: scope}, (*hub.stack)[0])
 }
 
-func TestPushScope(t *testing.T) {
-	t.Run("AddsScopeOnTopOfStack", func(t *testing.T) {
-		hub, _, _ := setupHubTest()
-		hub.PushScope()
-		assertEqual(t, len(*hub.stack), 2)
-	})
-
-	t.Run("InheritsScopeData", func(t *testing.T) {
-		hub, _, scope := setupHubTest()
-		scope.SetExtra("foo", "bar")
-		hub.PushScope()
-		scope.SetExtra("baz", "qux")
-
-		if (*hub.stack)[0].scope == (*hub.stack)[1].scope {
-			t.Error("Scope shouldnt point to the same struct")
-		}
-		assertEqual(t, map[string]interface{}{"foo": "bar", "baz": "qux"}, (*hub.stack)[0].scope.extra)
-		assertEqual(t, map[string]interface{}{"foo": "bar"}, (*hub.stack)[1].scope.extra)
-	})
-
-	t.Run("InheritsClient", func(t *testing.T) {
-		hub, _, _ := setupHubTest()
-		hub.PushScope()
-
-		if (*hub.stack)[0].client != (*hub.stack)[1].client {
-			t.Error("Client should be inherited")
-		}
-	})
+func TestPushScopeAddsScopeOnTopOfStack(t *testing.T) {
+	hub, _, _ := setupHubTest()
+	hub.PushScope()
+	assertEqual(t, len(*hub.stack), 2)
 }
 
-func TestPopScope(t *testing.T) {
-	t.Run("RemovesLayerFromTheStack", func(t *testing.T) {
-		hub, _, _ := setupHubTest()
-		hub.PushScope()
-		hub.PushScope()
-		hub.PopScope()
+func TestPushScopeInheritsScopeData(t *testing.T) {
+	hub, _, scope := setupHubTest()
+	scope.SetExtra("foo", "bar")
+	hub.PushScope()
+	scope.SetExtra("baz", "qux")
 
-		assertEqual(t, len(*hub.stack), 2)
-	})
+	if (*hub.stack)[0].scope == (*hub.stack)[1].scope {
+		t.Error("Scope shouldnt point to the same struct")
+	}
+	assertEqual(t, map[string]interface{}{"foo": "bar", "baz": "qux"}, (*hub.stack)[0].scope.extra)
+	assertEqual(t, map[string]interface{}{"foo": "bar"}, (*hub.stack)[1].scope.extra)
+}
 
-	t.Run("CannotRemoveFromEmptyStack", func(t *testing.T) {
-		hub, _, _ := setupHubTest()
-		assertEqual(t, len(*hub.stack), 1)
-		hub.PopScope()
-		assertEqual(t, len(*hub.stack), 0)
-		hub.PopScope()
-		assertEqual(t, len(*hub.stack), 0)
-	})
+func TestPushScopeInheritsClient(t *testing.T) {
+	hub, _, _ := setupHubTest()
+	hub.PushScope()
+
+	if (*hub.stack)[0].client != (*hub.stack)[1].client {
+		t.Error("Client should be inherited")
+	}
+}
+
+func TestPopScopeRemovesLayerFromTheStack(t *testing.T) {
+	hub, _, _ := setupHubTest()
+	hub.PushScope()
+	hub.PushScope()
+	hub.PopScope()
+
+	assertEqual(t, len(*hub.stack), 2)
+}
+
+func TestPopScopeCannotRemoveFromEmptyStack(t *testing.T) {
+	hub, _, _ := setupHubTest()
+	assertEqual(t, len(*hub.stack), 1)
+	hub.PopScope()
+	assertEqual(t, len(*hub.stack), 0)
+	hub.PopScope()
+	assertEqual(t, len(*hub.stack), 0)
 }
 
 func TestBindClient(t *testing.T) {
@@ -90,58 +86,56 @@ func TestBindClient(t *testing.T) {
 	}
 }
 
-func TestWithScope(t *testing.T) {
-	t.Run("CreatesIsolatedScope", func(t *testing.T) {
-		hub, _, _ := setupHubTest()
+func TestWithScopeCreatesIsolatedScope(t *testing.T) {
+	hub, _, _ := setupHubTest()
 
-		hub.WithScope(func(scope *Scope) {
-			assertEqual(t, len(*hub.stack), 2)
-		})
-
-		assertEqual(t, len(*hub.stack), 1)
+	hub.WithScope(func(scope *Scope) {
+		assertEqual(t, len(*hub.stack), 2)
 	})
 
-	t.Run("BindClient", func(t *testing.T) {
-		hub, client, _ := setupHubTest()
+	assertEqual(t, len(*hub.stack), 1)
+}
 
-		hub.WithScope(func(scope *Scope) {
-			newClient := &ClientMock{}
-			hub.BindClient(newClient)
-			if hub.stackTop().client != newClient {
-				t.Error("should use newly bound client")
-			}
-		})
+func TestWithScopeBindClient(t *testing.T) {
+	hub, client, _ := setupHubTest()
 
-		if hub.stackTop().client != client {
-			t.Error("should use old client")
+	hub.WithScope(func(scope *Scope) {
+		newClient := &ClientMock{}
+		hub.BindClient(newClient)
+		if hub.stackTop().client != newClient {
+			t.Error("should use newly bound client")
 		}
 	})
 
-	t.Run("DirectChanges", func(t *testing.T) {
-		hub, _, _ := setupHubTest()
-		hub.Scope().SetExtra("foo", "bar")
+	if hub.stackTop().client != client {
+		t.Error("should use old client")
+	}
+}
 
-		hub.WithScope(func(scope *Scope) {
+func TestWithScopeDirectChanges(t *testing.T) {
+	hub, _, _ := setupHubTest()
+	hub.Scope().SetExtra("foo", "bar")
+
+	hub.WithScope(func(scope *Scope) {
+		scope.SetExtra("foo", "baz")
+		assertEqual(t, map[string]interface{}{"foo": "baz"}, hub.stackTop().scope.extra)
+	})
+
+	assertEqual(t, map[string]interface{}{"foo": "bar"}, hub.stackTop().scope.extra)
+}
+
+func TestWithScopeChangesThroughConfigureScope(t *testing.T) {
+	hub, _, _ := setupHubTest()
+	hub.Scope().SetExtra("foo", "bar")
+
+	hub.WithScope(func(scope *Scope) {
+		hub.ConfigureScope(func(scope *Scope) {
 			scope.SetExtra("foo", "baz")
-			assertEqual(t, map[string]interface{}{"foo": "baz"}, hub.stackTop().scope.extra)
 		})
-
-		assertEqual(t, map[string]interface{}{"foo": "bar"}, hub.stackTop().scope.extra)
+		assertEqual(t, map[string]interface{}{"foo": "baz"}, hub.stackTop().scope.extra)
 	})
 
-	t.Run("ChangesThroughConfigureScope", func(t *testing.T) {
-		hub, _, _ := setupHubTest()
-		hub.Scope().SetExtra("foo", "bar")
-
-		hub.WithScope(func(scope *Scope) {
-			hub.ConfigureScope(func(scope *Scope) {
-				scope.SetExtra("foo", "baz")
-			})
-			assertEqual(t, map[string]interface{}{"foo": "baz"}, hub.stackTop().scope.extra)
-		})
-
-		assertEqual(t, map[string]interface{}{"foo": "bar"}, hub.stackTop().scope.extra)
-	})
+	assertEqual(t, map[string]interface{}{"foo": "bar"}, hub.stackTop().scope.extra)
 }
 
 func TestConfigureScope(t *testing.T) {
@@ -162,128 +156,121 @@ func TestLastEventID(t *testing.T) {
 	assertEqual(t, uuid, hub.LastEventID())
 }
 
-func TestLayerAccess(t *testing.T) {
-	t.Run("AccessingEmptyStack", func(t *testing.T) {
-		hub := &Hub{}
-		if hub.stackTop() != nil {
-			t.Error("expected nil to be returned")
-		}
-	})
-
-	t.Run("AccessingScopeReturnsNilIfStackIsEmpty", func(t *testing.T) {
-		hub := &Hub{}
-		if hub.Scope() != nil {
-			t.Error("expected nil to be returned")
-		}
-	})
-
-	t.Run("AccessingClientReturnsNilIfStackIsEmpty", func(t *testing.T) {
-		hub := &Hub{}
-		if hub.Client() != nil {
-			t.Error("expected nil to be returned")
-		}
-	})
+func TestLayerAccessingEmptyStack(t *testing.T) {
+	hub := &Hub{}
+	if hub.stackTop() != nil {
+		t.Error("expected nil to be returned")
+	}
 }
 
-func TestHubsAddBreadcrumb(t *testing.T) {
-	t.Run("RespectMaxBreadcrumbsOption", func(t *testing.T) {
-		hub, client, scope := setupHubTest()
-		client.options.MaxBreadcrumbs = 2
-
-		breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
-
-		hub.AddBreadcrumb(breadcrumb, nil)
-		hub.AddBreadcrumb(breadcrumb, nil)
-		hub.AddBreadcrumb(breadcrumb, nil)
-
-		assertEqual(t, len(scope.breadcrumbs), 2)
-	})
-
-	t.Run("SkipAllBreadcrumbsIfMaxBreadcrumbsIsLessThanZero", func(t *testing.T) {
-		hub, client, scope := setupHubTest()
-		client.options.MaxBreadcrumbs = -1
-
-		breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
-
-		hub.AddBreadcrumb(breadcrumb, nil)
-		hub.AddBreadcrumb(breadcrumb, nil)
-		hub.AddBreadcrumb(breadcrumb, nil)
-
-		assertEqual(t, len(scope.breadcrumbs), 0)
-	})
-
-	t.Run("CallsBeforeBreadcrumbCallback", func(t *testing.T) {
-		hub, client, scope := setupHubTest()
-		client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
-			breadcrumb.Message += "_wat"
-			return breadcrumb
-		}
-
-		hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, nil)
-
-		assertEqual(t, len(scope.breadcrumbs), 1)
-		assertEqual(t, "Breadcrumb_wat", scope.breadcrumbs[0].Message)
-	})
+func TestLayerAccessingScopeReturnsNilIfStackIsEmpty(t *testing.T) {
+	hub := &Hub{}
+	if hub.Scope() != nil {
+		t.Error("expected nil to be returned")
+	}
 }
-func TestBeforeBreadcrumb(t *testing.T) {
-	t.Run("CallbackCanDropABreadcrumb", func(t *testing.T) {
-		hub, client, scope := setupHubTest()
-		client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
-			return nil
-		}
 
-		hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, nil)
-		hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, nil)
+func TestLayerAccessingClientReturnsNilIfStackIsEmpty(t *testing.T) {
+	hub := &Hub{}
+	if hub.Client() != nil {
+		t.Error("expected nil to be returned")
+	}
+}
 
-		assertEqual(t, len(scope.breadcrumbs), 0)
-	})
+func TestAddBreadcrumbRespectMaxBreadcrumbsOption(t *testing.T) {
+	hub, client, scope := setupHubTest()
+	client.options.MaxBreadcrumbs = 2
 
-	t.Run("GetAccessToEventHint", func(t *testing.T) {
-		hub, client, scope := setupHubTest()
-		client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
-			if val, ok := (*hint)["foo"]; ok {
-				if val, ok := val.(string); ok {
-					breadcrumb.Message += val
-				}
+	breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
+
+	hub.AddBreadcrumb(breadcrumb, nil)
+	hub.AddBreadcrumb(breadcrumb, nil)
+	hub.AddBreadcrumb(breadcrumb, nil)
+
+	assertEqual(t, len(scope.breadcrumbs), 2)
+}
+
+func TestAddBreadcrumbSkipAllBreadcrumbsIfMaxBreadcrumbsIsLessThanZero(t *testing.T) {
+	hub, client, scope := setupHubTest()
+	client.options.MaxBreadcrumbs = -1
+
+	breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
+
+	hub.AddBreadcrumb(breadcrumb, nil)
+	hub.AddBreadcrumb(breadcrumb, nil)
+	hub.AddBreadcrumb(breadcrumb, nil)
+
+	assertEqual(t, len(scope.breadcrumbs), 0)
+}
+
+func TestAddBreadcrumbCallsBeforeBreadcrumbCallback(t *testing.T) {
+	hub, client, scope := setupHubTest()
+	client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
+		breadcrumb.Message += "_wat"
+		return breadcrumb
+	}
+
+	hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, nil)
+
+	assertEqual(t, len(scope.breadcrumbs), 1)
+	assertEqual(t, "Breadcrumb_wat", scope.breadcrumbs[0].Message)
+}
+
+func TestBeforeBreadcrumbCallbackCanDropABreadcrumb(t *testing.T) {
+	hub, client, scope := setupHubTest()
+	client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
+		return nil
+	}
+
+	hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, nil)
+	hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, nil)
+
+	assertEqual(t, len(scope.breadcrumbs), 0)
+}
+
+func TestBeforeBreadcrumbGetAccessToEventHint(t *testing.T) {
+	hub, client, scope := setupHubTest()
+	client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
+		if val, ok := (*hint)["foo"]; ok {
+			if val, ok := val.(string); ok {
+				breadcrumb.Message += val
 			}
-
-			return breadcrumb
 		}
 
-		hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, &BreadcrumbHint{"foo": "_oh"})
+		return breadcrumb
+	}
 
-		assertEqual(t, len(scope.breadcrumbs), 1)
-		assertEqual(t, "Breadcrumb_oh", scope.breadcrumbs[0].Message)
-	})
+	hub.AddBreadcrumb(&Breadcrumb{Message: "Breadcrumb"}, &BreadcrumbHint{"foo": "_oh"})
+
+	assertEqual(t, len(scope.breadcrumbs), 1)
+	assertEqual(t, "Breadcrumb_oh", scope.breadcrumbs[0].Message)
 }
 
-func TestInvokeClient(t *testing.T) {
-	t.Run("ExecutesCallbackWithClientAndScopePassed", func(t *testing.T) {
-		hub, _, _ := setupHubTest()
-		callback := func(client Clienter, scope *Scope) {
-			assertEqual(t, client, client)
-			assertEqual(t, scope, scope)
-		}
-		hub.invokeClient(callback)
-	})
+func TestInvokeClientExecutesCallbackWithClientAndScopePassed(t *testing.T) {
+	hub, _, _ := setupHubTest()
+	callback := func(client Clienter, scope *Scope) {
+		assertEqual(t, client, client)
+		assertEqual(t, scope, scope)
+	}
+	hub.invokeClient(callback)
+}
 
-	t.Run("FailsSilentlyWHenNoClientOrScopeAvailable", func(t *testing.T) {
-		hub := &Hub{}
-		callback := func(_ Clienter, _ *Scope) {
-			t.Error("callback shoudnt be executed")
-		}
+func TestInvokeClientFailsSilentlyWHenNoClientOrScopeAvailable(t *testing.T) {
+	hub := &Hub{}
+	callback := func(_ Clienter, _ *Scope) {
+		t.Error("callback shoudnt be executed")
+	}
 
-		func() {
-			defer func() {
-				err := recover()
-				if err != nil {
-					t.Error("invokeClient should not panic")
-				}
-			}()
-
-			hub.invokeClient(callback)
+	func() {
+		defer func() {
+			err := recover()
+			if err != nil {
+				t.Error("invokeClient should not panic")
+			}
 		}()
-	})
+
+		hub.invokeClient(callback)
+	}()
 }
 
 func TestCaptureEventCallsTheSameMethodOnClient(t *testing.T) {
