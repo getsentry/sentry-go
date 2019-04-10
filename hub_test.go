@@ -6,59 +6,21 @@ import (
 	"testing"
 )
 
-type ClientMock struct {
-	options      ClientOptions
-	lastCall     string
-	lastCallArgs []interface{}
-}
-
-func (c *ClientMock) Options() ClientOptions {
-	return c.options
-}
-
-func (c *ClientMock) CaptureMessage(message string, hint *EventHint, scope EventModifier) {
-	c.lastCall = "CaptureMessage"
-	c.lastCallArgs = []interface{}{message, scope}
-}
-
-func (c *ClientMock) CaptureException(exception error, hint *EventHint, scope EventModifier) {
-	c.lastCall = "CaptureException"
-	c.lastCallArgs = []interface{}{exception, scope}
-}
-
-func (c *ClientMock) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) {
-	c.lastCall = "CaptureEvent"
-	c.lastCallArgs = []interface{}{event, scope}
-}
-
-func (c *ClientMock) Recover(recoveredErr interface{}, scope *Scope) {
-	c.lastCall = "Recover"
-	c.lastCallArgs = []interface{}{recoveredErr, scope}
-}
-
-func (c *ClientMock) RecoverWithContext(ctx context.Context, recoveredErr interface{}, scope *Scope) {
-	c.lastCall = "RecoverWithContext"
-	c.lastCallArgs = []interface{}{ctx, recoveredErr, scope}
-}
-
 func setupHubTest() (*Hub, *ClientMock, *Scope) {
 	client := &ClientMock{}
 	scope := &Scope{}
 	hub := NewHub(client, scope)
-
 	return hub, client, scope
 }
 
-func TestNewHub(t *testing.T) {
-	t.Run("PushesLayerOnTopOfStack", func(t *testing.T) {
-		hub, _, _ := setupHubTest()
-		assertEqual(t, len(*hub.stack), 1)
-	})
+func TestNewHubPushesLayerOnTopOfStack(t *testing.T) {
+	hub, _, _ := setupHubTest()
+	assertEqual(t, len(*hub.stack), 1)
+}
 
-	t.Run("LayerStoresClientAndScope", func(t *testing.T) {
-		hub, client, scope := setupHubTest()
-		assertEqual(t, &Layer{client: client, scope: scope}, (*hub.stack)[0])
-	})
+func TestNewHubLayerStoresClientAndScope(t *testing.T) {
+	hub, client, scope := setupHubTest()
+	assertEqual(t, &Layer{client: client, scope: scope}, (*hub.stack)[0])
 }
 
 func TestPushScope(t *testing.T) {

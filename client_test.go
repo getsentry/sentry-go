@@ -2,35 +2,8 @@ package sentry
 
 import (
 	"errors"
-	"net/http"
 	"testing"
 )
-
-type ScopeMock struct {
-	breadcrumb      *Breadcrumb
-	shouldDropEvent bool
-}
-
-func (scope *ScopeMock) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
-	scope.breadcrumb = breadcrumb
-}
-
-func (scope *ScopeMock) ApplyToEvent(event *Event) *Event {
-	if scope.shouldDropEvent {
-		return nil
-	}
-	return event
-}
-
-type TransportMock struct {
-	lastEvent *Event
-}
-
-func (t *TransportMock) Configure(options ClientOptions) {}
-func (t *TransportMock) SendEvent(event *Event) (*http.Response, error) {
-	t.lastEvent = event
-	return nil, nil
-}
 
 type customComplexError struct {
 	Message string
