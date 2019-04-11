@@ -115,12 +115,7 @@ func (client *Client) RecoverWithContext(ctx context.Context, recoveredErr inter
 		if HasHubOnContext(ctx) {
 			currentHub = GetHubFromContext(ctx)
 		} else {
-			hub, err := GetCurrentHub()
-			if err != nil {
-				debugger.Println("Unable to retrieve Hub inside RecoverWithContext method;", err)
-				return
-			}
-			currentHub = hub
+			currentHub = GetGlobalHub()
 		}
 
 		if err, ok := recoveredErr.(error); ok {

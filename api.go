@@ -4,39 +4,14 @@ import (
 	"context"
 )
 
-var _globalHub = NewHub(&Client{}, &Scope{})
+var _globalHub = NewHub(nil, &Scope{})
 
-type HubError struct {
-	Message string
-}
-
-func (e HubError) Error() string {
-	return "[Sentry] HubError: " + e.Message
-}
-
-var getCurrentHub = GetCurrentHub
-
-// TODO: Rewrite this completely
-func GetCurrentHub() (*Hub, error) {
-	if _globalHub != nil {
-		return _globalHub, nil
-	}
-	client, _ := NewClient(ClientOptions{})
-	scope := &Scope{}
-	if client == nil {
-		return nil, HubError{"No Client available"}
-	}
-	if scope == nil {
-		return nil, HubError{"No Scope available"}
-	}
-	return NewHub(client, scope), nil
+func GetGlobalHub() *Hub {
+	return _globalHub
 }
 
 func Init(options ClientOptions) error {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return err
-	}
+	hub := GetGlobalHub()
 	client, err := NewClient(options)
 	if err != nil {
 		return err
@@ -46,53 +21,35 @@ func Init(options ClientOptions) error {
 }
 
 func AddBreadcrumb(breadcrumb *Breadcrumb) {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
+	hub := GetGlobalHub()
 	hub.AddBreadcrumb(breadcrumb, nil)
 }
 
 func CaptureMessage(message string) {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
+	hub := GetGlobalHub()
 	hub.CaptureMessage(message, nil)
 }
 
 func CaptureException(exception error) {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
+	hub := GetGlobalHub()
 	hub.CaptureException(exception, &EventHint{OriginalException: exception})
 }
 
 func CaptureEvent(event *Event) {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
+	hub := GetGlobalHub()
 	hub.CaptureEvent(event, nil)
 }
 
 func Recover() {
 	if recoveredErr := recover(); recoveredErr != nil {
-		hub, err := getCurrentHub()
-		if err != nil {
-			return
-		}
+		hub := GetGlobalHub()
 		hub.Recover(recoveredErr)
 	}
 }
 
 func RecoverWithContext(ctx context.Context) {
 	if recoveredErr := recover(); recoveredErr != nil {
-		hub, err := getCurrentHub()
-		if err != nil {
-			return
-		}
+		hub := GetGlobalHub()
 		hub.RecoverWithContext(ctx, recoveredErr)
 	}
 }
@@ -106,48 +63,30 @@ func RecoverWithContext(ctx context.Context) {
 // }
 
 func WithScope(f func(scope *Scope)) {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
+	hub := GetGlobalHub()
 	hub.WithScope(f)
 }
 
 func ConfigureScope(f func(scope *Scope)) {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
+	hub := GetGlobalHub()
 	hub.ConfigureScope(f)
 }
 
 func PushScope() {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
+	hub := GetGlobalHub()
 	hub.PushScope()
 }
 func PopScope() {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
+	hub := GetGlobalHub()
 	hub.PopScope()
 }
 
 func Flush(timeout int) {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
+	hub := GetGlobalHub()
 	hub.Flush(timeout)
 }
 
 func LastEventID() {
-	hub, err := getCurrentHub()
-	if err != nil {
-		return
-	}
+	hub := GetGlobalHub()
 	hub.LastEventID()
 }

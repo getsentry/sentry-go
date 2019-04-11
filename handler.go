@@ -5,7 +5,7 @@ import (
 )
 
 func Decorate(handler http.Handler) http.Handler {
-	hub, _ := GetCurrentHub()
+	hub := GetGlobalHub()
 
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		ctx := request.Context()
@@ -16,7 +16,7 @@ func Decorate(handler http.Handler) http.Handler {
 }
 
 func DecorateFunc(handler http.HandlerFunc) http.HandlerFunc {
-	hub, _ := GetCurrentHub()
+	hub := GetGlobalHub()
 
 	return func(response http.ResponseWriter, request *http.Request) {
 		ctx := request.Context()
