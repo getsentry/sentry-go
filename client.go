@@ -3,10 +3,16 @@ package sentry
 import (
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"time"
 )
+
+var debugger = log.New(ioutil.Discard, "[Sentry]", log.LstdFlags)
 
 type ClientOptions struct {
 	Dsn              string
@@ -20,6 +26,7 @@ type ClientOptions struct {
 	Dist             string
 	Environment      string
 	MaxBreadcrumbs   int
+	DebugWriter      io.Writer
 }
 
 type Clienter interface {
@@ -40,7 +47,11 @@ type Client struct {
 // Or client.Configure which would allow us to keep most data on struct private
 func NewClient(options ClientOptions) (*Client, error) {
 	if options.Debug {
-		debugger.Enable()
+		debugWriter := options.DebugWriter
+		if debugWriter == nil {
+			debugWriter = os.Stdout
+		}
+		debugger.SetOutput(debugWriter)
 	}
 
 	dsn, err := NewDsn(options.Dsn)
