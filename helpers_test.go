@@ -34,13 +34,17 @@ func assertStringContains(t *testing.T, input, substr string) {
 func logFailedAssertion(t *testing.T, summary string, userMessage ...interface{}) {
 	t.Helper()
 	text := summary
-	if message, ok := userMessage[0].(string); ok {
-		if message != "" && len(userMessage) > 1 {
-			text = fmt.Sprintf(message, userMessage[1:]...) + text
-		} else if message != "" {
-			text = fmt.Sprint(message) + text
+
+	if len(userMessage) > 0 {
+		if message, ok := userMessage[0].(string); ok {
+			if message != "" && len(userMessage) > 1 {
+				text = fmt.Sprintf(message, userMessage[1:]...) + text
+			} else if message != "" {
+				text = fmt.Sprint(message) + text
+			}
 		}
 	}
+
 	t.Error(text)
 }
 

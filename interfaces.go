@@ -62,28 +62,6 @@ type Request struct {
 	Env         map[string]string `json:"env"`
 }
 
-// https://docs.sentry.io/development/sdk-dev/interfaces/stacktrace/
-type Frame struct {
-	Function    string                 `json:"function"`
-	Symbol      string                 `json:"symbol"`
-	Module      string                 `json:"module"`
-	Package     string                 `json:"package"`
-	Filename    string                 `json:"filename"`
-	AbsPath     string                 `json:"abs_path"`
-	Lineno      uint                   `json:"lineno"`
-	Colno       uint                   `json:"colno"`
-	PreContext  []string               `json:"pre_context"`
-	ContextLine string                 `json:"context_line"`
-	PostContext []string               `json:"post_context"`
-	InApp       bool                   `json:"in_app"`
-	Vars        map[string]interface{} `json:"vars"`
-}
-
-type Stacktrace struct {
-	Frames        []Frame `json:"frames"`
-	FramesOmitted [2]uint `json:"frames_omitted"`
-}
-
 // https://docs.sentry.io/development/sdk-dev/interfaces/exception/
 type Exception struct {
 	Type          string     `json:"type"`
