@@ -1,13 +1,16 @@
 package sentry
 
 import (
-	"go/build"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 )
 
 const unknown string = "unknown"
+const contextLines int = 5
+
+var sourceReader = NewSourceReader()
 
 // // The module download is split into two parts: downloading the go.mod and downloading the actual code.
 // // If you have dependencies only needed for tests, then they will show up in your go.mod,
@@ -22,18 +25,52 @@ type Stacktrace struct {
 }
 
 func NewStacktrace() *Stacktrace {
-	callerPcs := make([]uintptr, 100)
-	callersCount := runtime.Callers(0, callerPcs)
+	pcs := make([]uintptr, 100)
+	n := runtime.Callers(1, pcs)
 
-	if callersCount == 0 {
+	if n == 0 {
 		return nil
 	}
 
+	frames := extractFrames(pcs[:n])
+	frames = filterFrames(frames)
+	frames = contextifyFrames(frames)
+
 	stacktrace := Stacktrace{
-		Frames: extractFrames(callerPcs),
+		Frames: frames,
 	}
 
 	return &stacktrace
+}
+
+func ExtractStacktrace(err error) *Stacktrace {
+	// https://github.com/pkg/errors
+	methodStackTrace := reflect.ValueOf(err).MethodByName("StackTrace")
+
+	if methodStackTrace.IsValid() {
+		errStacktrace := methodStackTrace.Call(make([]reflect.Value, 0))[0]
+
+		if errStacktrace.Kind() != reflect.Slice {
+			return nil
+		}
+
+		var pcs []uintptr
+		for i := 0; i < errStacktrace.Len(); i++ {
+			pcs = append(pcs, uintptr(errStacktrace.Index(i).Uint()))
+		}
+
+		frames := extractFrames(pcs)
+		frames = filterFrames(frames)
+		frames = contextifyFrames(frames)
+
+		stacktrace := Stacktrace{
+			Frames: frames,
+		}
+
+		return &stacktrace
+	}
+
+	return nil
 }
 
 // https://docs.sentry.io/development/sdk-dev/interfaces/stacktrace/
@@ -53,21 +90,34 @@ type Frame struct {
 	Vars        map[string]interface{} `json:"vars"`
 }
 
-func NewFrame(pc uintptr, fName, file string, line int) Frame {
-	if file == "" {
-		file = unknown
+func NewFrame(f runtime.Frame) Frame {
+	abspath := f.File
+	filename := f.File
+	function := f.Function
+	var module string
+
+	if filename != "" {
+		filename = extractFilenameFromPath(filename)
+	} else {
+		filename = unknown
 	}
 
-	if fName == "" {
-		fName = unknown
+	if abspath == "" {
+		abspath = unknown
+	}
+
+	if function != "" {
+		module, function = deconstructFunctionName(function)
 	}
 
 	frame := Frame{
-		AbsPath:  file,
-		Filename: extractFilenameFromPath(file),
-		Lineno:   line,
+		AbsPath:  abspath,
+		Filename: filename,
+		Lineno:   f.Line,
+		Module:   module,
+		Function: function,
 	}
-	frame.Module, frame.Function = deconstructFunctionName(fName)
+
 	frame.InApp = isInAppFrame(frame)
 
 	return frame
@@ -79,8 +129,10 @@ func extractFrames(pcs []uintptr) []Frame {
 
 	for {
 		callerFrame, more := callersFrames.Next()
-		frame := NewFrame(callerFrame.PC, callerFrame.Function, callerFrame.File, callerFrame.Line)
-		frames = append([]Frame{frame}, frames...)
+
+		frames = append([]Frame{
+			NewFrame(callerFrame),
+		}, frames...)
 
 		if !more {
 			break
@@ -90,34 +142,49 @@ func extractFrames(pcs []uintptr) []Frame {
 	return frames
 }
 
-var _cachedPossiblePaths []string
+func filterFrames(frames []Frame) []Frame {
+	filteredFrames := make([]Frame, 0, len(frames))
 
-func possiblePaths() []string {
-	if _cachedPossiblePaths != nil {
-		return _cachedPossiblePaths
-	}
-
-	srcDirs := build.Default.SrcDirs()
-	paths := make([]string, len(srcDirs))
-	for _, path := range srcDirs {
-		if path[len(path)-1] != filepath.Separator {
-			path += string(filepath.Separator)
+	for _, frame := range frames {
+		if frame.Module == "runtime" || frame.Module == "testing" {
+			continue
 		}
-		paths = append(paths, path)
+		filteredFrames = append(filteredFrames, frame)
 	}
 
-	_cachedPossiblePaths = paths
-
-	return paths
+	return filteredFrames
 }
 
-func extractFilenameFromPath(filename string) string {
-	for _, path := range possiblePaths() {
-		if trimmed := strings.TrimPrefix(filename, path); len(trimmed) < len(filename) {
-			return trimmed
+func contextifyFrames(frames []Frame) []Frame {
+	contextifiedFrames := make([]Frame, 0, len(frames))
+
+	for _, frame := range frames {
+		lines, initial := sourceReader.ReadContextLines(frame.AbsPath, frame.Lineno, contextLines)
+
+		if lines == nil {
+			continue
 		}
+
+		for i, line := range lines {
+			switch {
+			case i < initial:
+				frame.PreContext = append(frame.PreContext, string(line))
+			case i == initial:
+				frame.ContextLine = string(line)
+			default:
+				frame.PostContext = append(frame.PostContext, string(line))
+			}
+		}
+
+		contextifiedFrames = append(contextifiedFrames, frame)
 	}
-	return filename
+
+	return contextifiedFrames
+}
+
+func extractFilenameFromPath(path string) string {
+	_, file := filepath.Split(path)
+	return file
 }
 
 func isInAppFrame(frame Frame) bool {
@@ -132,13 +199,12 @@ func isInAppFrame(frame Frame) bool {
 	return false
 }
 
-// Transform `runtime/debug.*T·ptrmethod` into `{ pack: runtime/debug, name: *T.ptrmethod }`
-func deconstructFunctionName(name string) (string, string) {
-	var pack string
+// Transform `runtime/debug.*T·ptrmethod` into `{ module: runtime/debug, function: *T.ptrmethod }`
+func deconstructFunctionName(name string) (module string, function string) {
 	if idx := strings.LastIndex(name, "."); idx != -1 {
-		pack = name[:idx]
-		name = name[idx+1:]
+		module = name[:idx]
+		function = name[idx+1:]
 	}
-	name = strings.Replace(name, "·", ".", -1)
-	return pack, name
+	function = strings.Replace(function, "·", ".", -1)
+	return module, function
 }

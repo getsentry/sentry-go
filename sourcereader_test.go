@@ -9,6 +9,8 @@ var input = [][]byte{
 	[]byte("line 1"),
 	[]byte("line 2"),
 	[]byte("line 3"),
+	[]byte("line 4"),
+	[]byte("line 5"),
 }
 
 func assertContextLines(t *testing.T, gotLines, wantLines [][]byte, gotReadLines, wantReadLines int) {
@@ -27,7 +29,7 @@ func TestCalculateContextLinesSingleLine(t *testing.T) {
 	gotLines, gotReadLines := calculateContextLines(input, 2, 0)
 	wantLines, wantReadLines := [][]byte{
 		[]byte("line 2"),
-	}, 1
+	}, 0
 
 	assertContextLines(t, gotLines, wantLines, gotReadLines, wantReadLines)
 }
@@ -49,51 +51,51 @@ func TestCalculateContextLinesOverflowLine(t *testing.T) {
 }
 
 func TestCalculateContextLinesWholeFile(t *testing.T) {
-	gotLines, gotReadLines := calculateContextLines(input, 2, 1)
+	gotLines, gotReadLines := calculateContextLines(input, 3, 2)
 	wantLines, wantReadLines := [][]byte{
 		[]byte("line 1"),
 		[]byte("line 2"),
 		[]byte("line 3"),
-	}, 3
+		[]byte("line 4"),
+		[]byte("line 5"),
+	}, 2
 
 	assertContextLines(t, gotLines, wantLines, gotReadLines, wantReadLines)
 }
 
 func TestCalculateContextLinesOverflowContextAtTheTop(t *testing.T) {
-	gotLines, gotReadLines := calculateContextLines(input, 1, 1)
+	gotLines, gotReadLines := calculateContextLines(input, 2, 3)
 	wantLines, wantReadLines := [][]byte{
 		[]byte("line 1"),
 		[]byte("line 2"),
-	}, 2
+		[]byte("line 3"),
+		[]byte("line 4"),
+		[]byte("line 5"),
+	}, 1
 
 	assertContextLines(t, gotLines, wantLines, gotReadLines, wantReadLines)
 }
 
 func TestCalculateContextLinesOverflowContextAtTheBottom(t *testing.T) {
-	gotLines, gotReadLines := calculateContextLines(input, 3, 1)
+	gotLines, gotReadLines := calculateContextLines(input, 5, 3)
 	wantLines, wantReadLines := [][]byte{
 		[]byte("line 2"),
 		[]byte("line 3"),
-	}, 2
-
-	assertContextLines(t, gotLines, wantLines, gotReadLines, wantReadLines)
-}
-
-func TestCalculateContextLinesOverflowContextBothSides(t *testing.T) {
-	gotLines, gotReadLines := calculateContextLines(input, 2, 2)
-	wantLines, wantReadLines := [][]byte{
-		[]byte("line 1"),
-		[]byte("line 2"),
-		[]byte("line 3"),
+		[]byte("line 4"),
+		[]byte("line 5"),
 	}, 3
 
 	assertContextLines(t, gotLines, wantLines, gotReadLines, wantReadLines)
 }
 
-func TestCalculateContextLinesNegativeContext(t *testing.T) {
-	gotLines, gotReadLines := calculateContextLines(input, 2, -1)
+func TestCalculateContextLinesOverflowContextBothSides(t *testing.T) {
+	gotLines, gotReadLines := calculateContextLines(input, 2, 10)
 	wantLines, wantReadLines := [][]byte{
+		[]byte("line 1"),
 		[]byte("line 2"),
+		[]byte("line 3"),
+		[]byte("line 4"),
+		[]byte("line 5"),
 	}, 1
 
 	assertContextLines(t, gotLines, wantLines, gotReadLines, wantReadLines)

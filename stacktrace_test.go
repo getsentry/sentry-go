@@ -1,14 +1,10 @@
 package sentry
 
 import (
+	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 )
-
-func trace() *Stacktrace {
-	return NewStacktrace()
-}
 
 func TestFunctionName(t *testing.T) {
 	for _, test := range []struct {
@@ -29,30 +25,76 @@ func TestFunctionName(t *testing.T) {
 	}
 }
 
-func TestStacktrace(t *testing.T) {
-	stacktrace := trace()
+func TestNewStacktrace(t *testing.T) {
+	stacktrace := Trace()
 
-	if stacktrace == nil {
-		t.Error("got nil stacktrace")
-	}
-
-	if len(stacktrace.Frames) == 0 {
-		t.Error("got zero frames")
-	}
+	assertEqual(t, len(stacktrace.Frames), 3)
+	assertEqual(t, stacktrace.Frames[0].Function, "TestNewStacktrace")
+	assertEqual(t, stacktrace.Frames[1].Function, "Trace")
+	assertEqual(t, stacktrace.Frames[2].Function, "NewStacktrace")
 }
 
 func TestStacktraceFrame(t *testing.T) {
-	stacktrace := trace()
-	frame := stacktrace.Frames[len(stacktrace.Frames)-3]
 	_, callerFile, _, _ := runtime.Caller(0)
+	dir, _ := filepath.Split(callerFile)
 
-	// TODO: For now when using Go Modules, it doesnt trim anything >_>
-	assertEqual(t, frame.Filename, callerFile)
-	if !strings.HasSuffix(frame.AbsPath, callerFile) {
-		t.Errorf("incorrect AbsPath: %s", frame.AbsPath)
-	}
-	assertEqual(t, frame.Function, "trace")
-	assertEqual(t, frame.Lineno, 10)
+	stacktrace := Trace()
+	frame := stacktrace.Frames[len(stacktrace.Frames)-2]
+
+	assertEqual(t, frame.Filename, "errors_test.go")
+	assertEqual(t, frame.AbsPath, filepath.Join(dir, "errors_test.go"))
+	assertEqual(t, frame.Function, "Trace")
+	assertEqual(t, frame.Lineno, 8)
 	assertEqual(t, frame.InApp, true)
 	assertEqual(t, frame.Module, "sentry")
+}
+
+func TestStacktraceFrameContext(t *testing.T) {
+	stacktrace := Trace()
+
+	frame := stacktrace.Frames[len(stacktrace.Frames)-2]
+
+	assertEqual(t, frame.PreContext, []string{
+		"import pkgErrors \"github.com/pkg/errors\"",
+		"",
+		"// NOTE: if you modify this file, you are also responsible for updating LoC position in Stacktrace tests",
+		"",
+		"func Trace() *Stacktrace {",
+	})
+	assertEqual(t, frame.ContextLine, "\treturn NewStacktrace()")
+	assertEqual(t, frame.PostContext, []string{
+		"}",
+		"",
+		"func RedPowerRanger() error {",
+		"\treturn BluePowerRanger()",
+		"}",
+	})
+
+	frame = stacktrace.Frames[len(stacktrace.Frames)-1]
+
+	assertEqual(t, frame.PreContext, []string{
+		"\tFramesOmitted [2]uint `json:\"frames_omitted\"`",
+		"}",
+		"",
+		"func NewStacktrace() *Stacktrace {",
+		"\tpcs := make([]uintptr, 100)",
+	})
+	assertEqual(t, frame.ContextLine, "\tn := runtime.Callers(1, pcs)")
+	assertEqual(t, frame.PostContext, []string{
+		"",
+		"\tif n == 0 {",
+		"\t\treturn nil",
+		"\t}",
+		"",
+	})
+}
+
+func TestExtractStacktrace(t *testing.T) {
+	err := RedPowerRanger()
+	stacktrace := ExtractStacktrace(err)
+
+	assertEqual(t, len(stacktrace.Frames), 3)
+	assertEqual(t, stacktrace.Frames[0].Function, "TestExtractStacktrace")
+	assertEqual(t, stacktrace.Frames[1].Function, "RedPowerRanger")
+	assertEqual(t, stacktrace.Frames[2].Function, "BluePowerRanger")
 }

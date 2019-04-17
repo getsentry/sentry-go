@@ -13,3 +13,4 @@
 - test concurrent: `go test -race`
 - lint: `golangci-lint run`
 - coverage: `go test -race -coverprofile=coverage.txt -covermode=atomic && go tool cover -html coverage.txt`
+- test:watch https://github.com/cespare/reflex + `reflex -g '*.go' -d "none" -- sh -c 'printf "\n"; go test'`
