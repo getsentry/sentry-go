@@ -12,12 +12,12 @@ const contextLines int = 5
 
 var sourceReader = NewSourceReader()
 
-// // The module download is split into two parts: downloading the go.mod and downloading the actual code.
-// // If you have dependencies only needed for tests, then they will show up in your go.mod,
-// // and go get will download their go.mods, but it will not download their code.
-// // The test-only dependencies get downloaded only when you need it, such as the first time you run go test.
-// //
-// // https://github.com/golang/go/issues/26913#issuecomment-411976222
+// The module download is split into two parts: downloading the go.mod and downloading the actual code.
+// If you have dependencies only needed for tests, then they will show up in your go.mod,
+// and go get will download their go.mods, but it will not download their code.
+// The test-only dependencies get downloaded only when you need it, such as the first time you run go test.
+//
+// https://github.com/golang/go/issues/26913#issuecomment-411976222
 
 type Stacktrace struct {
 	Frames        []Frame `json:"frames"`
@@ -43,34 +43,89 @@ func NewStacktrace() *Stacktrace {
 	return &stacktrace
 }
 
+// TODO: Make it configurable so that anyone can provide their own implementation?
+// Use of reflection allows us to not have a hard dependency on any given package, so we don't have to import it
 func ExtractStacktrace(err error) *Stacktrace {
-	// https://github.com/pkg/errors
-	methodStackTrace := reflect.ValueOf(err).MethodByName("StackTrace")
+	method := extractReflectedStacktraceMethod(err)
 
-	if methodStackTrace.IsValid() {
-		errStacktrace := methodStackTrace.Call(make([]reflect.Value, 0))[0]
-
-		if errStacktrace.Kind() != reflect.Slice {
-			return nil
-		}
-
-		var pcs []uintptr
-		for i := 0; i < errStacktrace.Len(); i++ {
-			pcs = append(pcs, uintptr(errStacktrace.Index(i).Uint()))
-		}
-
-		frames := extractFrames(pcs)
-		frames = filterFrames(frames)
-		frames = contextifyFrames(frames)
-
-		stacktrace := Stacktrace{
-			Frames: frames,
-		}
-
-		return &stacktrace
+	if !method.IsValid() {
+		return nil
 	}
 
-	return nil
+	pcs := extractPcs(method)
+
+	if len(pcs) == 0 {
+		return nil
+	}
+
+	frames := extractFrames(pcs)
+	frames = filterFrames(frames)
+	frames = contextifyFrames(frames)
+
+	stacktrace := Stacktrace{
+		Frames: frames,
+	}
+
+	return &stacktrace
+}
+
+func extractReflectedStacktraceMethod(err error) reflect.Value {
+	var method reflect.Value
+
+	// https://github.com/pingcap/errors
+	methodGetStackTracer := reflect.ValueOf(err).MethodByName("GetStackTracer")
+	// https://github.com/pkg/errors
+	methodStackTrace := reflect.ValueOf(err).MethodByName("StackTrace")
+	// https://github.com/go-errors/errors
+	methodStackFrames := reflect.ValueOf(err).MethodByName("StackFrames")
+
+	if methodGetStackTracer.IsValid() {
+		stacktracer := methodGetStackTracer.Call(make([]reflect.Value, 0))[0]
+		stacktracerStackTrace := reflect.ValueOf(stacktracer).MethodByName("StackTrace")
+
+		if stacktracerStackTrace.IsValid() {
+			method = stacktracerStackTrace
+		}
+	}
+
+	if methodStackTrace.IsValid() {
+		method = methodStackTrace
+	}
+
+	if methodStackFrames.IsValid() {
+		method = methodStackFrames
+	}
+
+	return method
+}
+
+func extractPcs(method reflect.Value) []uintptr {
+	var pcs []uintptr
+
+	stacktrace := method.Call(make([]reflect.Value, 0))[0]
+
+	if stacktrace.Kind() != reflect.Slice {
+		return nil
+	}
+
+	for i := 0; i < stacktrace.Len(); i++ {
+		pc := stacktrace.Index(i)
+
+		if pc.Kind() == reflect.Uintptr {
+			pcs = append(pcs, uintptr(pc.Uint()))
+			continue
+		}
+
+		if pc.Kind() == reflect.Struct {
+			field := pc.FieldByName("ProgramCounter")
+			if field.IsValid() && field.Kind() == reflect.Uintptr {
+				pcs = append(pcs, uintptr(field.Uint()))
+				continue
+			}
+		}
+	}
+
+	return pcs
 }
 
 // https://docs.sentry.io/development/sdk-dev/interfaces/stacktrace/
@@ -97,7 +152,7 @@ func NewFrame(f runtime.Frame) Frame {
 	var module string
 
 	if filename != "" {
-		filename = extractFilenameFromPath(filename)
+		filename = extractFilename(filename)
 	} else {
 		filename = unknown
 	}
@@ -182,7 +237,7 @@ func contextifyFrames(frames []Frame) []Frame {
 	return contextifiedFrames
 }
 
-func extractFilenameFromPath(path string) string {
+func extractFilename(path string) string {
 	_, file := filepath.Split(path)
 	return file
 }

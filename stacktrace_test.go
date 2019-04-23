@@ -44,7 +44,7 @@ func TestStacktraceFrame(t *testing.T) {
 	assertEqual(t, frame.Filename, "errors_test.go")
 	assertEqual(t, frame.AbsPath, filepath.Join(dir, "errors_test.go"))
 	assertEqual(t, frame.Function, "Trace")
-	assertEqual(t, frame.Lineno, 8)
+	assertEqual(t, frame.Lineno, 12)
 	assertEqual(t, frame.InApp, true)
 	assertEqual(t, frame.Module, "sentry")
 }
@@ -55,7 +55,7 @@ func TestStacktraceFrameContext(t *testing.T) {
 	frame := stacktrace.Frames[len(stacktrace.Frames)-2]
 
 	assertEqual(t, frame.PreContext, []string{
-		"import pkgErrors \"github.com/pkg/errors\"",
+		")",
 		"",
 		"// NOTE: if you modify this file, you are also responsible for updating LoC position in Stacktrace tests",
 		"",
@@ -65,8 +65,8 @@ func TestStacktraceFrameContext(t *testing.T) {
 	assertEqual(t, frame.PostContext, []string{
 		"}",
 		"",
-		"func RedPowerRanger() error {",
-		"\treturn BluePowerRanger()",
+		"func RedPkgErrorsRanger() error {",
+		"\treturn BluePkgErrorsRanger()",
 		"}",
 	})
 
@@ -89,12 +89,35 @@ func TestStacktraceFrameContext(t *testing.T) {
 	})
 }
 
-func TestExtractStacktrace(t *testing.T) {
-	err := RedPowerRanger()
+// https://github.com/pkg/errors
+func TestExtractStacktracePkgErrors(t *testing.T) {
+	err := RedPkgErrorsRanger()
 	stacktrace := ExtractStacktrace(err)
 
 	assertEqual(t, len(stacktrace.Frames), 3)
-	assertEqual(t, stacktrace.Frames[0].Function, "TestExtractStacktrace")
-	assertEqual(t, stacktrace.Frames[1].Function, "RedPowerRanger")
-	assertEqual(t, stacktrace.Frames[2].Function, "BluePowerRanger")
+	assertEqual(t, stacktrace.Frames[0].Function, "TestExtractStacktracePkgErrors")
+	assertEqual(t, stacktrace.Frames[1].Function, "RedPkgErrorsRanger")
+	assertEqual(t, stacktrace.Frames[2].Function, "BluePkgErrorsRanger")
+}
+
+// https://github.com/pingcap/errors
+func TestExtractStacktracePingcapErrors(t *testing.T) {
+	err := RedPingcapErrorsRanger()
+	stacktrace := ExtractStacktrace(err)
+
+	assertEqual(t, len(stacktrace.Frames), 3)
+	assertEqual(t, stacktrace.Frames[0].Function, "TestExtractStacktracePingcapErrors")
+	assertEqual(t, stacktrace.Frames[1].Function, "RedPingcapErrorsRanger")
+	assertEqual(t, stacktrace.Frames[2].Function, "BluePingcapErrorsRanger")
+}
+
+// https://github.com/go-errors/errors
+func TestExtractStacktraceGoErrors(t *testing.T) {
+	err := RedGoErrorsRanger()
+	stacktrace := ExtractStacktrace(err)
+
+	assertEqual(t, len(stacktrace.Frames), 3)
+	assertEqual(t, stacktrace.Frames[0].Function, "TestExtractStacktraceGoErrors")
+	assertEqual(t, stacktrace.Frames[1].Function, "RedGoErrorsRanger")
+	assertEqual(t, stacktrace.Frames[2].Function, "BlueGoErrorsRanger")
 }
