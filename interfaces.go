@@ -71,6 +71,7 @@ type Exception struct {
 // https://docs.sentry.io/development/sdk-dev/attributes/
 type Event struct {
 	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs"`
+	Contexts    map[string]interface{} `json:"contexts"`
 	Dist        string                 `json:"dist"`
 	Environment string                 `json:"environment"`
 	EventID     string                 `json:"event_id"`

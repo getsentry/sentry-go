@@ -14,6 +14,7 @@ type Scope struct {
 	breadcrumbs     []*Breadcrumb
 	user            User
 	tags            map[string]string
+	contexts        map[string]interface{}
 	extra           map[string]interface{}
 	fingerprint     []string
 	level           Level
@@ -61,6 +62,22 @@ func (scope *Scope) SetTags(tags map[string]string) {
 	}
 }
 
+func (scope *Scope) SetContext(key string, value interface{}) {
+	if scope.contexts == nil {
+		scope.contexts = make(map[string]interface{})
+	}
+	scope.contexts[key] = value
+}
+
+func (scope *Scope) SetContexts(contexts map[string]interface{}) {
+	if scope.contexts == nil {
+		scope.contexts = make(map[string]interface{})
+	}
+	for k, v := range contexts {
+		scope.contexts[k] = v
+	}
+}
+
 func (scope *Scope) SetExtra(key string, value interface{}) {
 	if scope.extra == nil {
 		scope.extra = make(map[string]interface{})
@@ -87,17 +104,21 @@ func (scope *Scope) SetLevel(level Level) {
 
 func (scope *Scope) Clone() *Scope {
 	clone := &Scope{
-		extra: make(map[string]interface{}),
-		tags:  make(map[string]string),
+		tags:     make(map[string]string),
+		contexts: make(map[string]interface{}),
+		extra:    make(map[string]interface{}),
 	}
 	clone.user = scope.user
 	clone.breadcrumbs = make([]*Breadcrumb, len(scope.breadcrumbs))
 	copy(clone.breadcrumbs, scope.breadcrumbs)
-	for key, value := range scope.extra {
-		clone.extra[key] = value
-	}
 	for key, value := range scope.tags {
 		clone.tags[key] = value
+	}
+	for key, value := range scope.contexts {
+		clone.contexts[key] = value
+	}
+	for key, value := range scope.extra {
+		clone.extra[key] = value
 	}
 	clone.fingerprint = make([]string, len(scope.fingerprint))
 	copy(clone.fingerprint, scope.fingerprint)
@@ -125,16 +146,6 @@ func (scope *Scope) ApplyToEvent(event *Event) *Event {
 		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
 	}
 
-	if scope.extra != nil && len(scope.extra) > 0 {
-		if event.Extra == nil {
-			event.Extra = make(map[string]interface{})
-		}
-
-		for key, value := range scope.extra {
-			event.Extra[key] = value
-		}
-	}
-
 	if scope.tags != nil && len(scope.tags) > 0 {
 		if event.Tags == nil {
 			event.Tags = make(map[string]string)
@@ -142,6 +153,26 @@ func (scope *Scope) ApplyToEvent(event *Event) *Event {
 
 		for key, value := range scope.tags {
 			event.Tags[key] = value
+		}
+	}
+
+	if scope.contexts != nil && len(scope.contexts) > 0 {
+		if event.Contexts == nil {
+			event.Contexts = make(map[string]interface{})
+		}
+
+		for key, value := range scope.contexts {
+			event.Contexts[key] = value
+		}
+	}
+
+	if scope.extra != nil && len(scope.extra) > 0 {
+		if event.Extra == nil {
+			event.Extra = make(map[string]interface{})
+		}
+
+		for key, value := range scope.extra {
+			event.Extra[key] = value
 		}
 	}
 
