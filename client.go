@@ -54,6 +54,18 @@ func NewClient(options ClientOptions) (*Client, error) {
 		debugger.SetOutput(debugWriter)
 	}
 
+	if options.Dsn == "" {
+		options.Dsn = os.Getenv("SENTRY_DSN")
+	}
+
+	if options.Release == "" {
+		options.Release = os.Getenv("SENTRY_RELEASE")
+	}
+
+	if options.Environment == "" {
+		options.Environment = os.Getenv("SENTRY_ENVIRONMENT")
+	}
+
 	dsn, err := NewDsn(options.Dsn)
 
 	if err != nil {
