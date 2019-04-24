@@ -62,6 +62,12 @@ func (scope *Scope) SetTags(tags map[string]string) {
 	}
 }
 
+func (scope *Scope) RemoveTag(key string) {
+	if scope.tags != nil {
+		delete(scope.tags, key)
+	}
+}
+
 func (scope *Scope) SetContext(key string, value interface{}) {
 	if scope.contexts == nil {
 		scope.contexts = make(map[string]interface{})
@@ -78,6 +84,12 @@ func (scope *Scope) SetContexts(contexts map[string]interface{}) {
 	}
 }
 
+func (scope *Scope) RemoveContext(key string) {
+	if scope.contexts != nil {
+		delete(scope.contexts, key)
+	}
+}
+
 func (scope *Scope) SetExtra(key string, value interface{}) {
 	if scope.extra == nil {
 		scope.extra = make(map[string]interface{})
@@ -91,6 +103,12 @@ func (scope *Scope) SetExtras(extra map[string]interface{}) {
 	}
 	for k, v := range extra {
 		scope.extra[k] = v
+	}
+}
+
+func (scope *Scope) RemoveExtra(key string) {
+	if scope.extra != nil {
+		delete(scope.extra, key)
 	}
 }
 

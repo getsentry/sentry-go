@@ -89,6 +89,30 @@ func TestScopeSetTagsOverrides(t *testing.T) {
 	assertEqual(t, map[string]string{"a": "bar", "b": "baz"}, scope.tags)
 }
 
+func TestScopeRemoveTag(t *testing.T) {
+	scope := &Scope{}
+	scope.SetTag("a", "foo")
+	scope.SetTag("b", "bar")
+	scope.RemoveTag("b")
+
+	assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
+}
+
+func TestScopeRemoveTagSkipsEmptyValues(t *testing.T) {
+	scope := &Scope{}
+	scope.SetTag("a", "foo")
+	scope.RemoveTag("b")
+
+	assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
+}
+
+func TestScopeRemoveTagOnEmptyScope(t *testing.T) {
+	scope := &Scope{}
+	scope.RemoveTag("b")
+
+	assertEqual(t, map[string]string(nil), scope.tags)
+}
+
 func TestScopeSetContext(t *testing.T) {
 	scope := &Scope{}
 	scope.SetContext("a", 1)
@@ -135,6 +159,30 @@ func TestScopeSetContextsOverrides(t *testing.T) {
 	assertEqual(t, map[string]interface{}{"a": 2, "b": 3}, scope.contexts)
 }
 
+func TestScopeRemoveContext(t *testing.T) {
+	scope := &Scope{}
+	scope.SetContext("a", "foo")
+	scope.SetContext("b", "bar")
+	scope.RemoveContext("b")
+
+	assertEqual(t, map[string]interface{}{"a": "foo"}, scope.contexts)
+}
+
+func TestScopeRemoveContextSkipsEmptyValues(t *testing.T) {
+	scope := &Scope{}
+	scope.SetContext("a", "foo")
+	scope.RemoveContext("b")
+
+	assertEqual(t, map[string]interface{}{"a": "foo"}, scope.contexts)
+}
+
+func TestScopeRemoveContextOnEmptyScope(t *testing.T) {
+	scope := &Scope{}
+	scope.RemoveContext("b")
+
+	assertEqual(t, map[string]interface{}(nil), scope.contexts)
+}
+
 func TestScopeSetExtra(t *testing.T) {
 	scope := &Scope{}
 	scope.SetExtra("a", 1)
@@ -179,6 +227,30 @@ func TestScopeSetExtrasOverrides(t *testing.T) {
 	scope.SetExtras(map[string]interface{}{"a": 2, "b": 3})
 
 	assertEqual(t, map[string]interface{}{"a": 2, "b": 3}, scope.extra)
+}
+
+func TestScopeRemoveExtra(t *testing.T) {
+	scope := &Scope{}
+	scope.SetExtra("a", "foo")
+	scope.SetExtra("b", "bar")
+	scope.RemoveExtra("b")
+
+	assertEqual(t, map[string]interface{}{"a": "foo"}, scope.extra)
+}
+
+func TestScopeRemoveExtraSkipsEmptyValues(t *testing.T) {
+	scope := &Scope{}
+	scope.SetExtra("a", "foo")
+	scope.RemoveExtra("b")
+
+	assertEqual(t, map[string]interface{}{"a": "foo"}, scope.extra)
+}
+
+func TestScopeRemoveExtraOnEmptyScope(t *testing.T) {
+	scope := &Scope{}
+	scope.RemoveExtra("b")
+
+	assertEqual(t, map[string]interface{}(nil), scope.contexts)
 }
 
 func TestScopeSetFingerprint(t *testing.T) {
