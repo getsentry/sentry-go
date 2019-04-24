@@ -1,5 +1,7 @@
 package sentry
 
+const VERSION string = "0.0.0-beta"
+
 type Level string
 
 const (
@@ -10,20 +12,15 @@ const (
 	LevelFatal   Level = "fatal"
 )
 
-const (
-	SdkName      string = "sentry.go"
-	SdkVersion   string = "0.0.0-beta"
-	SdkUserAgent string = SdkName + "/" + SdkVersion
-)
-
 // https://docs.sentry.io/development/sdk-dev/interfaces/sdk/
-type ClientSdkInfo struct {
-	Name     string             `json:"name"`
-	Version  string             `json:"version"`
-	Packages []ClientSdkPackage `json:"packages"`
+type SdkInfo struct {
+	Name         string       `json:"name"`
+	Version      string       `json:"version"`
+	Integrations []string     `json:"integrations"`
+	Packages     []SdkPackage `json:"packages"`
 }
 
-type ClientSdkPackage struct {
+type SdkPackage struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 }
@@ -83,7 +80,7 @@ type Event struct {
 	Message     string                 `json:"message"`
 	Platform    string                 `json:"platform"`
 	Release     string                 `json:"release"`
-	Sdk         ClientSdkInfo          `json:"sdk"`
+	Sdk         SdkInfo                `json:"sdk"`
 	ServerName  string                 `json:"server_name"`
 	Tags        map[string]string      `json:"tags"`
 	Timestamp   int64                  `json:"timestamp"`

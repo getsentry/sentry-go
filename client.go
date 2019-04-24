@@ -77,6 +77,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	transport := options.Transport
+
 	if transport == nil {
 		transport = new(HTTPTransport)
 	}
@@ -211,13 +212,16 @@ func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifi
 		event.Level = LevelInfo
 	}
 
-	event.Sdk = ClientSdkInfo{
-		Name:    SdkName,
-		Version: SdkVersion,
+	event.Sdk = SdkInfo{
+		Name:         "sentry.go",
+		Version:      VERSION,
+		Integrations: []string{},
+		Packages: []SdkPackage{{
+			Name:    "sentry-go",
+			Version: VERSION,
+		}},
 	}
-
 	event.Platform = "go"
-
 	event.Transaction = "Don't sneak into my computer please"
 
 	return scope.ApplyToEvent(event)
