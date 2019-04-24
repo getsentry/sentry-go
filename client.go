@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -212,6 +213,12 @@ func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifi
 		event.Level = LevelInfo
 	}
 
+	if event.ServerName == "" {
+		if hostname, err := os.Hostname(); err == nil {
+			event.ServerName = hostname
+		}
+	}
+
 	event.Sdk = SdkInfo{
 		Name:         "sentry.go",
 		Version:      VERSION,
@@ -223,6 +230,25 @@ func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifi
 	}
 	event.Platform = "go"
 	event.Transaction = "Don't sneak into my computer please"
+
+	// TODO: Move to an integration once they are available
+	if event.Contexts == nil {
+		event.Contexts = make(map[string]interface{})
+	}
+
+	event.Contexts["device"] = map[string]interface{}{
+		"arch":    runtime.GOARCH,
+		"num_cpu": runtime.NumCPU(),
+	}
+
+	event.Contexts["os"] = map[string]interface{}{
+		"name": runtime.GOOS,
+	}
+
+	event.Contexts["runtime"] = map[string]interface{}{
+		"name":    "go",
+		"version": runtime.Version(),
+	}
 
 	return scope.ApplyToEvent(event)
 }
