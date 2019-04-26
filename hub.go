@@ -175,6 +175,16 @@ func (hub *Hub) Flush(timeout int) {
 	panic("Implement Flush redirect to the Client")
 }
 
+func (hub *Hub) GetIntegration(name string) Integration {
+	client := hub.Client()
+
+	if client == nil || client.integrations == nil {
+		return nil
+	}
+
+	return client.integrations[name]
+}
+
 func HasHubOnContext(ctx context.Context) bool {
 	_, ok := ctx.Value(HubCtxKey).(*Hub)
 	return ok

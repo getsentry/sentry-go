@@ -9,11 +9,16 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"runtime"
+	"sort"
 	"time"
 )
 
 var debugger = log.New(ioutil.Discard, "[Sentry]", log.LstdFlags)
+
+type Integration interface {
+	Name() string
+	SetupOnce()
+}
 
 type ClientOptions struct {
 	Dsn              string
@@ -21,6 +26,7 @@ type ClientOptions struct {
 	SampleRate       float32
 	BeforeSend       func(event *Event, hint *EventHint) *Event
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
+	Integrations     []Integration
 	Transport        Transport
 	ServerName       string
 	Release          string
@@ -31,9 +37,10 @@ type ClientOptions struct {
 }
 
 type Client struct {
-	options   ClientOptions
-	dsn       *Dsn
-	Transport Transport
+	options      ClientOptions
+	dsn          *Dsn
+	integrations map[string]Integration
+	Transport    Transport
 }
 
 // Or client.Configure which would allow us to keep most data on struct private
@@ -68,19 +75,39 @@ func NewClient(options ClientOptions) (*Client, error) {
 		debugger.Println("Sentry client initialized with an empty DSN")
 	}
 
-	transport := options.Transport
+	client := Client{
+		options: options,
+		dsn:     dsn,
+	}
+
+	client.setupTransport()
+	client.setupIntegrations()
+
+	return &client, nil
+}
+
+func (client *Client) setupTransport() {
+	transport := client.options.Transport
 
 	if transport == nil {
 		transport = new(HTTPTransport)
 	}
 
-	transport.Configure(options)
+	transport.Configure(client.options)
+	client.Transport = transport
+}
 
-	return &Client{
-		options:   options,
-		dsn:       dsn,
-		Transport: transport,
-	}, nil
+func (client *Client) setupIntegrations() {
+	if client.options.Integrations == nil {
+		return
+	}
+
+	client.integrations = make(map[string]Integration)
+
+	for _, integration := range client.options.Integrations {
+		client.integrations[integration.Name()] = integration
+		integration.SetupOnce()
+	}
 }
 
 func (client Client) Options() ClientOptions {
@@ -213,7 +240,7 @@ func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifi
 	event.Sdk = SdkInfo{
 		Name:         "sentry.go",
 		Version:      VERSION,
-		Integrations: []string{},
+		Integrations: client.listIntegrations(),
 		Packages: []SdkPackage{{
 			Name:    "sentry-go",
 			Version: VERSION,
@@ -222,24 +249,14 @@ func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifi
 	event.Platform = "go"
 	event.Transaction = "Don't sneak into my computer please"
 
-	// TODO: Move to an integration once they are available
-	if event.Contexts == nil {
-		event.Contexts = make(map[string]interface{})
-	}
-
-	event.Contexts["device"] = map[string]interface{}{
-		"arch":    runtime.GOARCH,
-		"num_cpu": runtime.NumCPU(),
-	}
-
-	event.Contexts["os"] = map[string]interface{}{
-		"name": runtime.GOOS,
-	}
-
-	event.Contexts["runtime"] = map[string]interface{}{
-		"name":    "go",
-		"version": runtime.Version(),
-	}
-
 	return scope.ApplyToEvent(event)
+}
+
+func (client Client) listIntegrations() []string {
+	integrations := make([]string, 0, len(client.integrations))
+	for key := range client.integrations {
+		integrations = append(integrations, key)
+	}
+	sort.Strings(integrations)
+	return integrations
 }

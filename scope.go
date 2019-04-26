@@ -10,6 +10,16 @@ type EventModifier interface {
 	ApplyToEvent(event *Event) *Event
 }
 
+var _globalEventProcessors []EventProcessor
+
+func GlobalEventProcessors() []EventProcessor {
+	return _globalEventProcessors
+}
+
+func AddGlobalEventProcessor(processor EventProcessor) {
+	_globalEventProcessors = append(_globalEventProcessors, processor)
+}
+
 type Scope struct {
 	breadcrumbs     []*Breadcrumb
 	user            User
@@ -206,6 +216,15 @@ func (scope *Scope) ApplyToEvent(event *Event) *Event {
 
 	if scope.level != "" {
 		event.Level = scope.level
+	}
+
+	for _, processor := range GlobalEventProcessors() {
+		id := event.EventID
+		event = processor(event)
+		if event == nil {
+			debugger.Printf("global event processor dropped event %s\n", id)
+			return nil
+		}
 	}
 
 	for _, processor := range scope.eventProcessors {

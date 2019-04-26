@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sentry"
+	sentryIntegrations "sentry/integrations"
 	"strconv"
 )
 
@@ -136,6 +137,9 @@ func main() {
 		},
 		SampleRate: 1,
 		Transport:  new(DevNullTransport),
+		Integrations: []sentry.Integration{
+			new(sentryIntegrations.EnvContext),
+		},
 	}); err != nil {
 		panic(err)
 	}
