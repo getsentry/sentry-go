@@ -163,11 +163,15 @@ func (client *Client) RecoverWithContext(ctx context.Context, recoveredErr inter
 		}
 
 		if err, ok := recoveredErr.(error); ok {
-			currentHub.CaptureException(err, nil)
+			currentHub.CaptureException(err, &EventHint{
+				Context: ctx,
+			})
 		}
 
 		if err, ok := recoveredErr.(string); ok {
-			currentHub.CaptureMessage(err, nil)
+			currentHub.CaptureMessage(err, &EventHint{
+				Context: ctx,
+			})
 		}
 	}
 }

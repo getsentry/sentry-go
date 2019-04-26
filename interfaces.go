@@ -1,5 +1,7 @@
 package sentry
 
+import "context"
+
 const VERSION string = "0.0.0-beta"
 
 type Level string
@@ -97,4 +99,5 @@ type EventHint struct {
 	Data              interface{}
 	EventID           string
 	OriginalException error
+	Context           context.Context
 }
