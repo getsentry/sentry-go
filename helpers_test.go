@@ -1,17 +1,11 @@
 package sentry
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 )
-
-func prettyPrint(v interface{}) {
-	pp, _ := json.MarshalIndent(v, "", "  ")
-	fmt.Println(string(pp))
-}
 
 func assertEqual(t *testing.T, got, want interface{}, userMessage ...interface{}) {
 	t.Helper()

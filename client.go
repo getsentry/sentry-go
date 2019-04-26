@@ -30,15 +30,6 @@ type ClientOptions struct {
 	DebugWriter      io.Writer
 }
 
-type Clienter interface {
-	Options() ClientOptions
-	CaptureMessage(message string, hint *EventHint, scope EventModifier)
-	CaptureException(exception error, hint *EventHint, scope EventModifier)
-	CaptureEvent(event *Event, hint *EventHint, scope EventModifier)
-	Recover(recoveredErr interface{}, scope *Scope)
-	RecoverWithContext(ctx context.Context, recoveredErr interface{}, scope *Scope)
-}
-
 type Client struct {
 	options   ClientOptions
 	dsn       *Dsn

@@ -73,7 +73,7 @@ func TestStacktraceFrameContext(t *testing.T) {
 	frame = stacktrace.Frames[len(stacktrace.Frames)-1]
 
 	assertEqual(t, frame.PreContext, []string{
-		"\tFramesOmitted [2]uint `json:\"frames_omitted\"`",
+		"\tFramesOmitted [2]uint `json:\"frames_omitted,omitempty\"`",
 		"}",
 		"",
 		"func NewStacktrace() *Stacktrace {",
