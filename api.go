@@ -4,14 +4,8 @@ import (
 	"context"
 )
 
-var _globalHub = NewHub(nil, &Scope{})
-
-func GetGlobalHub() *Hub {
-	return _globalHub
-}
-
 func Init(options ClientOptions) error {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	client, err := NewClient(options)
 	if err != nil {
 		return err
@@ -21,35 +15,35 @@ func Init(options ClientOptions) error {
 }
 
 func AddBreadcrumb(breadcrumb *Breadcrumb) {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	hub.AddBreadcrumb(breadcrumb, nil)
 }
 
 func CaptureMessage(message string) {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	hub.CaptureMessage(message, nil)
 }
 
 func CaptureException(exception error) {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	hub.CaptureException(exception, &EventHint{OriginalException: exception})
 }
 
 func CaptureEvent(event *Event) {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	hub.CaptureEvent(event, nil)
 }
 
 func Recover() {
 	if recoveredErr := recover(); recoveredErr != nil {
-		hub := GetGlobalHub()
+		hub := GlobalHub()
 		hub.Recover(recoveredErr)
 	}
 }
 
 func RecoverWithContext(ctx context.Context) {
 	if recoveredErr := recover(); recoveredErr != nil {
-		hub := GetGlobalHub()
+		hub := GlobalHub()
 		hub.RecoverWithContext(ctx, recoveredErr)
 	}
 }
@@ -63,30 +57,30 @@ func RecoverWithContext(ctx context.Context) {
 // }
 
 func WithScope(f func(scope *Scope)) {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	hub.WithScope(f)
 }
 
 func ConfigureScope(f func(scope *Scope)) {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	hub.ConfigureScope(f)
 }
 
 func PushScope() {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	hub.PushScope()
 }
 func PopScope() {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	hub.PopScope()
 }
 
 func Flush(timeout int) {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	hub.Flush(timeout)
 }
 
 func LastEventID() {
-	hub := GetGlobalHub()
+	hub := GlobalHub()
 	hub.LastEventID()
 }

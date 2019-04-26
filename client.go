@@ -131,7 +131,7 @@ func (client *Client) RecoverWithContext(ctx context.Context, recoveredErr inter
 		if HasHubOnContext(ctx) {
 			currentHub = GetHubFromContext(ctx)
 		} else {
-			currentHub = GetGlobalHub()
+			currentHub = GlobalHub()
 		}
 
 		if err, ok := recoveredErr.(error); ok {
