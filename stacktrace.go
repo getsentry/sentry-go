@@ -20,8 +20,8 @@ var sourceReader = NewSourceReader()
 // https://github.com/golang/go/issues/26913#issuecomment-411976222
 
 type Stacktrace struct {
-	Frames        []Frame `json:"frames"`
-	FramesOmitted [2]uint `json:"frames_omitted"`
+	Frames        []Frame `json:"frames,omitempty"`
+	FramesOmitted [2]uint `json:"frames_omitted,omitempty"`
 }
 
 func NewStacktrace() *Stacktrace {
@@ -130,19 +130,19 @@ func extractPcs(method reflect.Value) []uintptr {
 
 // https://docs.sentry.io/development/sdk-dev/interfaces/stacktrace/
 type Frame struct {
-	Function    string                 `json:"function"`
-	Symbol      string                 `json:"symbol"`
-	Module      string                 `json:"module"`
-	Package     string                 `json:"package"`
-	Filename    string                 `json:"filename"`
-	AbsPath     string                 `json:"abs_path"`
-	Lineno      int                    `json:"lineno"`
-	Colno       int                    `json:"colno"`
-	PreContext  []string               `json:"pre_context"`
-	ContextLine string                 `json:"context_line"`
-	PostContext []string               `json:"post_context"`
-	InApp       bool                   `json:"in_app"`
-	Vars        map[string]interface{} `json:"vars"`
+	Function    string                 `json:"function,omitempty"`
+	Symbol      string                 `json:"symbol,omitempty"`
+	Module      string                 `json:"module,omitempty"`
+	Package     string                 `json:"package,omitempty"`
+	Filename    string                 `json:"filename,omitempty"`
+	AbsPath     string                 `json:"abs_path,omitempty"`
+	Lineno      int                    `json:"lineno,omitempty"`
+	Colno       int                    `json:"colno,omitempty"`
+	PreContext  []string               `json:"pre_context,omitempty"`
+	ContextLine string                 `json:"context_line,omitempty"`
+	PostContext []string               `json:"post_context,omitempty"`
+	InApp       bool                   `json:"in_app,omitempty"`
+	Vars        map[string]interface{} `json:"vars,omitempty"`
 }
 
 func NewFrame(f runtime.Frame) Frame {
