@@ -15,7 +15,7 @@ type ctxKey int
 
 const HubCtxKey = ctxKey(42)
 
-var _globalHub = NewHub(nil, &Scope{})
+var _CurrentHub = NewHub(nil, &Scope{})
 
 type Hub struct {
 	stack       *Stack
@@ -38,8 +38,8 @@ func NewHub(client *Client, scope *Scope) *Hub {
 	}
 }
 
-func GlobalHub() *Hub {
-	return _globalHub
+func CurrentHub() *Hub {
+	return _CurrentHub
 }
 
 func (hub *Hub) LastEventID() string {
