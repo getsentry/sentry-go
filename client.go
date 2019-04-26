@@ -107,6 +107,7 @@ func (client *Client) setupIntegrations() {
 	for _, integration := range client.options.Integrations {
 		client.integrations[integration.Name()] = integration
 		integration.SetupOnce()
+		debugger.Printf("Integration installed: %s\n", integration.Name())
 	}
 }
 
