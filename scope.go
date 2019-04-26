@@ -4,10 +4,10 @@ import (
 	"time"
 )
 
-type EventProcessor func(event *Event) *Event
+type EventProcessor func(event *Event, hint *EventHint) *Event
 
 type EventModifier interface {
-	ApplyToEvent(event *Event) *Event
+	ApplyToEvent(event *Event, hint *EventHint) *Event
 }
 
 var _globalEventProcessors []EventProcessor
@@ -165,7 +165,7 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 	scope.eventProcessors = append(scope.eventProcessors, processor)
 }
 
-func (scope *Scope) ApplyToEvent(event *Event) *Event {
+func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 	if scope.breadcrumbs != nil && len(scope.breadcrumbs) > 0 {
 		if event.Breadcrumbs == nil {
 			event.Breadcrumbs = []*Breadcrumb{}
@@ -220,7 +220,7 @@ func (scope *Scope) ApplyToEvent(event *Event) *Event {
 
 	for _, processor := range GlobalEventProcessors() {
 		id := event.EventID
-		event = processor(event)
+		event = processor(event, hint)
 		if event == nil {
 			debugger.Printf("global event processor dropped event %s\n", id)
 			return nil
@@ -229,7 +229,7 @@ func (scope *Scope) ApplyToEvent(event *Event) *Event {
 
 	for _, processor := range scope.eventProcessors {
 		id := event.EventID
-		event = processor(event)
+		event = processor(event, hint)
 		if event == nil {
 			debugger.Printf("event processor dropped event %s\n", id)
 			return nil

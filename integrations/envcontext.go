@@ -7,15 +7,15 @@ import (
 
 type EnvContext struct{}
 
-func (envContext *EnvContext) Name() string {
+func (envContext EnvContext) Name() string {
 	return "EnvContext"
 }
 
-func (envContext *EnvContext) SetupOnce() {
+func (envContext EnvContext) SetupOnce() {
 	sentry.AddGlobalEventProcessor(envContext.processor)
 }
 
-func (envContext *EnvContext) processor(event *sentry.Event) *sentry.Event {
+func (envContext EnvContext) processor(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 	// Run the integration only on the Client that registered it
 	if sentry.CurrentHub().GetIntegration(envContext.Name()) == nil {
 		return event

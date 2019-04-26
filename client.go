@@ -221,7 +221,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	return client.Transport.SendEvent(event)
 }
 
-func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifier) *Event {
+func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
 	// TODO: Set all the defaults, clear unnecessary stuff etc. here
 
 	if event.EventID == "" {
@@ -254,7 +254,7 @@ func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifi
 	event.Platform = "go"
 	event.Transaction = "Don't sneak into my computer please"
 
-	return scope.ApplyToEvent(event)
+	return scope.ApplyToEvent(event, hint)
 }
 
 func (client Client) listIntegrations() []string {
