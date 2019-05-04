@@ -204,6 +204,12 @@ func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifi
 		Version: SdkVersion,
 	}
 
+	if modules, integrationErr := GetModules(); integrationErr != nil {
+		debugger.Println(integrationErr)
+	} else {
+		event.Modules = modules
+	}
+
 	event.Platform = "go"
 
 	event.Transaction = "Don't sneak into my computer please"
