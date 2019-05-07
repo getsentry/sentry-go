@@ -132,46 +132,38 @@ func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventMod
 	}
 }
 
-func (client *Client) Recover(recoveredErr interface{}, scope *Scope) {
+func (client *Client) Recover(recoveredErr interface{}, hint *EventHint, scope EventModifier) {
 	if recoveredErr == nil {
 		recoveredErr = recover()
 	}
 
 	if recoveredErr != nil {
 		if err, ok := recoveredErr.(error); ok {
-			CaptureException(err)
+			client.CaptureException(err, hint, scope)
 		}
 
 		if err, ok := recoveredErr.(string); ok {
-			CaptureMessage(err)
+			client.CaptureMessage(err, hint, scope)
 		}
 	}
 }
 
-func (client *Client) RecoverWithContext(ctx context.Context, recoveredErr interface{}, scope *Scope) {
-	if recoveredErr == nil {
-		recoveredErr = recover()
+func (client *Client) RecoverWithContext(ctx context.Context, err interface{}, hint *EventHint, scope EventModifier) {
+	if err == nil {
+		err = recover()
 	}
 
-	if recoveredErr != nil {
-		var currentHub *Hub
-
-		if HasHubOnContext(ctx) {
-			currentHub = GetHubFromContext(ctx)
-		} else {
-			currentHub = CurrentHub()
+	if err != nil {
+		if hint.Context == nil && ctx != nil {
+			hint.Context = ctx
 		}
 
-		if err, ok := recoveredErr.(error); ok {
-			currentHub.CaptureException(err, &EventHint{
-				Context: ctx,
-			})
+		if err, ok := err.(error); ok {
+			client.CaptureException(err, hint, scope)
 		}
 
-		if err, ok := recoveredErr.(string); ok {
-			currentHub.CaptureMessage(err, &EventHint{
-				Context: ctx,
-			})
+		if err, ok := err.(string); ok {
+			client.CaptureMessage(err, hint, scope)
 		}
 	}
 }

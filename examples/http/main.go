@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"sentry"
+	sentryIntegrations "sentry/integrations"
 	"strconv"
 	"time"
 )
@@ -107,6 +108,7 @@ func main() {
 		Transport: new(DevNullTransport),
 		Integrations: []sentry.Integration{
 			new(ExtractUser),
+			new(sentryIntegrations.RequestIntegration),
 		},
 	})
 

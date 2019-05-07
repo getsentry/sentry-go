@@ -35,16 +35,23 @@ func CaptureEvent(event *Event) {
 }
 
 func Recover() {
-	if recoveredErr := recover(); recoveredErr != nil {
+	if err := recover(); err != nil {
 		hub := CurrentHub()
-		hub.Recover(recoveredErr)
+		hub.Recover(err, &EventHint{RecoveredException: err})
 	}
 }
 
 func RecoverWithContext(ctx context.Context) {
-	if recoveredErr := recover(); recoveredErr != nil {
-		hub := CurrentHub()
-		hub.RecoverWithContext(ctx, recoveredErr)
+	if err := recover(); err != nil {
+		var hub *Hub
+
+		if HasHubOnContext(ctx) {
+			hub = GetHubFromContext(ctx)
+		} else {
+			hub = CurrentHub()
+		}
+
+		hub.RecoverWithContext(ctx, err, &EventHint{RecoveredException: err})
 	}
 }
 

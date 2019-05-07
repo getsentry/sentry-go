@@ -11,9 +11,11 @@ const DefaultMaxBreadcrumbs = 30
 // The `maxBreadcrumbs` option cannot be higher than this value.
 const MaxBreadcrumbs = 100
 
-type ctxKey int
+type contextKey int
 
-const HubCtxKey = ctxKey(42)
+const HubContextKey = contextKey(1)
+const RequestContextKey = contextKey(2)
+const ResponseContextKey = contextKey(3)
 
 var _CurrentHub = NewHub(nil, &Scope{})
 
@@ -159,15 +161,15 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 	hub.Scope().AddBreadcrumb(breadcrumb, max)
 }
 
-func (hub *Hub) Recover(recoveredErr interface{}) {
+func (hub *Hub) Recover(err interface{}, hint *EventHint) {
 	hub.invokeClient(func(client *Client, scope *Scope) {
-		client.Recover(recoveredErr, scope)
+		client.Recover(err, hint, scope)
 	})
 }
 
-func (hub *Hub) RecoverWithContext(ctx context.Context, recoveredErr interface{}) {
+func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}, hint *EventHint) {
 	hub.invokeClient(func(client *Client, scope *Scope) {
-		client.RecoverWithContext(ctx, recoveredErr, scope)
+		client.RecoverWithContext(ctx, err, hint, scope)
 	})
 }
 
@@ -186,17 +188,17 @@ func (hub *Hub) GetIntegration(name string) Integration {
 }
 
 func HasHubOnContext(ctx context.Context) bool {
-	_, ok := ctx.Value(HubCtxKey).(*Hub)
+	_, ok := ctx.Value(HubContextKey).(*Hub)
 	return ok
 }
 
 func GetHubFromContext(ctx context.Context) *Hub {
-	if hub, ok := ctx.Value(HubCtxKey).(*Hub); ok {
+	if hub, ok := ctx.Value(HubContextKey).(*Hub); ok {
 		return hub
 	}
 	return nil
 }
 
 func SetHubOnContext(ctx context.Context, hub *Hub) context.Context {
-	return context.WithValue(ctx, HubCtxKey, hub)
+	return context.WithValue(ctx, HubContextKey, hub)
 }
