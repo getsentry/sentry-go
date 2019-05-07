@@ -31,7 +31,7 @@ func (t *DevNullTransport) Configure(options sentry.ClientOptions) {
 }
 func (t *DevNullTransport) SendEvent(event *sentry.Event) (*http.Response, error) {
 	fmt.Println("Faked Transport")
-	log.Println("Breadcrumbs:", prettyPrint(event))
+	log.Println(prettyPrint(event))
 	return nil, nil
 }
 

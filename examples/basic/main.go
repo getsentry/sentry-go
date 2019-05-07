@@ -138,7 +138,7 @@ func main() {
 		SampleRate: 1,
 		Transport:  new(DevNullTransport),
 		Integrations: []sentry.Integration{
-			new(sentryIntegrations.EnvContext),
+			new(sentryIntegrations.EnvironmentIntegration),
 		},
 	}); err != nil {
 		panic(err)

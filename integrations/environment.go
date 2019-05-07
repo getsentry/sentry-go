@@ -5,19 +5,19 @@ import (
 	"sentry"
 )
 
-type EnvContext struct{}
+type EnvironmentIntegration struct{}
 
-func (envContext EnvContext) Name() string {
-	return "EnvContext"
+func (ei EnvironmentIntegration) Name() string {
+	return "Environment"
 }
 
-func (envContext EnvContext) SetupOnce() {
-	sentry.AddGlobalEventProcessor(envContext.processor)
+func (ei EnvironmentIntegration) SetupOnce() {
+	sentry.AddGlobalEventProcessor(ei.processor)
 }
 
-func (envContext EnvContext) processor(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+func (ei EnvironmentIntegration) processor(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 	// Run the integration only on the Client that registered it
-	if sentry.CurrentHub().GetIntegration(envContext.Name()) == nil {
+	if sentry.CurrentHub().GetIntegration(ei.Name()) == nil {
 		return event
 	}
 
