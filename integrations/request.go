@@ -1,9 +1,10 @@
-package sentry
+package sentryintegrations
 
 import (
 	"io/ioutil"
 	"net/http"
-	"sentry"
+
+	"github.com/getsentry/sentry-go"
 )
 
 type RequestIntegration struct{}

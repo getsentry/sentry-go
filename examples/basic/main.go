@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sentry"
-	sentryIntegrations "sentry/integrations"
 	"strconv"
 	"time"
+
+	"github.com/getsentry/sentry-go"
+	sentryintegrations "github.com/getsentry/sentry-go/integrations"
 )
 
 func prettyPrint(v interface{}) string {
@@ -141,7 +142,7 @@ func main() {
 		SampleRate: 1,
 		Transport:  new(DevNullTransport),
 		Integrations: []sentry.Integration{
-			new(sentryIntegrations.EnvironmentIntegration),
+			new(sentryintegrations.EnvironmentIntegration),
 		},
 	}); err != nil {
 		panic(err)

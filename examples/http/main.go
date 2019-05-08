@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sentry"
-	sentryIntegrations "sentry/integrations"
 	"strconv"
 	"time"
+
+	"github.com/getsentry/sentry-go"
+	sentryintegrations "github.com/getsentry/sentry-go/integrations"
 )
 
 func prettyPrint(v interface{}) string {
@@ -111,7 +112,7 @@ func main() {
 		Transport: new(DevNullTransport),
 		Integrations: []sentry.Integration{
 			new(ExtractUser),
-			new(sentryIntegrations.RequestIntegration),
+			new(sentryintegrations.RequestIntegration),
 		},
 	})
 

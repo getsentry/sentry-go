@@ -1,6 +1,4 @@
-module sentry
-
-go 1.12
+module github.com/getsentry/sentry-go
 
 require (
 	github.com/certifi/gocertifi v0.0.0-20190506164543-d2eda7129713
