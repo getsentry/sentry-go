@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"time"
 )
 
 // Default maximum number of breadcrumbs added to an event. Can be overwritten `maxBreadcrumbs` option.
@@ -173,8 +174,14 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}, hint *E
 	})
 }
 
-func (hub *Hub) Flush(timeout int) {
-	panic("Implement Flush redirect to the Client")
+func (hub *Hub) Flush(timeout time.Duration) bool {
+	client := hub.Client()
+
+	if client == nil {
+		return false
+	}
+
+	return client.Flush(timeout)
 }
 
 func (hub *Hub) GetIntegration(name string) Integration {

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"sentry"
 	sentryIntegrations "sentry/integrations"
 	"strconv"
+	"time"
 )
 
 func prettyPrint(v interface{}) string {
@@ -24,9 +24,12 @@ func (t *DevNullTransport) Configure(options sentry.ClientOptions) {
 	fmt.Println("Headers:", dsn.RequestHeaders())
 	fmt.Println()
 }
-func (t *DevNullTransport) SendEvent(event *sentry.Event) (*http.Response, error) {
+func (t *DevNullTransport) SendEvent(event *sentry.Event) {
 	fmt.Println("Faked Transport")
-	return nil, nil
+}
+
+func (t *DevNullTransport) Flush(timeout time.Duration) bool {
+	return true
 }
 
 func recoverHandler() {

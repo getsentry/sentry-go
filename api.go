@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"time"
 )
 
 func Init(options ClientOptions) error {
@@ -82,12 +83,12 @@ func PopScope() {
 	hub.PopScope()
 }
 
-func Flush(timeout int) {
+func Flush(timeout time.Duration) bool {
 	hub := CurrentHub()
-	hub.Flush(timeout)
+	return hub.Flush(timeout)
 }
 
-func LastEventID() {
+func LastEventID() string {
 	hub := CurrentHub()
-	hub.LastEventID()
+	return hub.LastEventID()
 }
