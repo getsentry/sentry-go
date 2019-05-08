@@ -45,12 +45,7 @@ type Dsn struct {
 	projectID int
 }
 
-// TODO: Change it to `FromString` method on `Dsn` struct?
 func NewDsn(rawURL string) (*Dsn, error) {
-	if rawURL == "" {
-		return nil, nil
-	}
-
 	// Parse
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
