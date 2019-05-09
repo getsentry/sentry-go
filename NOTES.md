@@ -13,3 +13,5 @@
 - test concurrent: `go test -race`
 - lint: `golangci-lint run`
 - coverage: `go test -race -coverprofile=coverage.txt -covermode=atomic && go tool cover -html coverage.txt`
+- test:watch https://github.com/cespare/reflex + `reflex -g '*.go' -d "none" -- sh -c 'printf "\n"; go test'`
+- verify with https://www.notion.so/sentry/Go-SDK-Moving-Forward-9abd0f33eea349e19eec21f61f32be95 and https://www.notion.so/sentry/GO-SDK-Evolution-Plan-83b67c79dc5641e78681a9567f83c068#ef614a3a554a4e86958daf56ee772838

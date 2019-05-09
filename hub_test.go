@@ -2,12 +2,11 @@ package sentry
 
 import (
 	"context"
-	"errors"
 	"testing"
 )
 
-func setupHubTest() (*Hub, *ClientMock, *Scope) {
-	client := &ClientMock{}
+func setupHubTest() (*Hub, *Client, *Scope) {
+	client := &Client{}
 	scope := &Scope{}
 	hub := NewHub(client, scope)
 	return hub, client, scope
@@ -72,7 +71,7 @@ func TestPopScopeCannotRemoveFromEmptyStack(t *testing.T) {
 func TestBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 	hub.PushScope()
-	newClient := &ClientMock{}
+	newClient := &Client{}
 	hub.BindClient(newClient)
 
 	if (*hub.stack)[0].client == (*hub.stack)[1].client {
@@ -100,7 +99,7 @@ func TestWithScopeBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 
 	hub.WithScope(func(scope *Scope) {
-		newClient := &ClientMock{}
+		newClient := &Client{}
 		hub.BindClient(newClient)
 		if hub.stackTop().client != newClient {
 			t.Error("should use newly bound client")
@@ -248,7 +247,7 @@ func TestBeforeBreadcrumbGetAccessToEventHint(t *testing.T) {
 
 func TestInvokeClientExecutesCallbackWithClientAndScopePassed(t *testing.T) {
 	hub, _, _ := setupHubTest()
-	callback := func(client Clienter, scope *Scope) {
+	callback := func(client *Client, scope *Scope) {
 		assertEqual(t, client, client)
 		assertEqual(t, scope, scope)
 	}
@@ -257,7 +256,7 @@ func TestInvokeClientExecutesCallbackWithClientAndScopePassed(t *testing.T) {
 
 func TestInvokeClientFailsSilentlyWHenNoClientOrScopeAvailable(t *testing.T) {
 	hub := &Hub{}
-	callback := func(_ Clienter, _ *Scope) {
+	callback := func(_ *Client, _ *Scope) {
 		t.Error("callback shoudnt be executed")
 	}
 
@@ -271,66 +270,6 @@ func TestInvokeClientFailsSilentlyWHenNoClientOrScopeAvailable(t *testing.T) {
 
 		hub.invokeClient(callback)
 	}()
-}
-
-func TestCaptureEventCallsTheSameMethodOnClient(t *testing.T) {
-	hub, client, scope := setupHubTest()
-
-	event := &Event{Message: "CaptureEvent"}
-
-	hub.CaptureEvent(event, nil)
-
-	assertEqual(t, "CaptureEvent", client.lastCall)
-	assertEqual(t, event, client.lastCallArgs[0])
-	assertEqual(t, scope, client.lastCallArgs[1])
-}
-
-func TestCaptureMessageCallsTheSameMethodOnClient(t *testing.T) {
-	hub, client, scope := setupHubTest()
-
-	hub.CaptureMessage("foo", nil)
-
-	assertEqual(t, "CaptureMessage", client.lastCall)
-	assertEqual(t, "foo", client.lastCallArgs[0])
-	assertEqual(t, scope, client.lastCallArgs[1])
-}
-
-func TestCaptureExceptionCallsTheSameMethodOnClient(t *testing.T) {
-	hub, client, scope := setupHubTest()
-
-	err := errors.New("error")
-
-	hub.CaptureException(err, nil)
-
-	assertEqual(t, "CaptureException", client.lastCall)
-	assertEqual(t, err, client.lastCallArgs[0])
-	assertEqual(t, scope, client.lastCallArgs[1])
-}
-
-func TestRecoverCallsTheSameMethodOnClient(t *testing.T) {
-	hub, client, scope := setupHubTest()
-
-	err := errors.New("error")
-
-	hub.Recover(err)
-
-	assertEqual(t, "Recover", client.lastCall)
-	assertEqual(t, err, client.lastCallArgs[0])
-	assertEqual(t, scope, client.lastCallArgs[1])
-}
-
-func TestRecoverWithContextCallsTheSameMethodOnClient(t *testing.T) {
-	hub, client, scope := setupHubTest()
-
-	ctx := context.TODO()
-	err := errors.New("error")
-
-	hub.RecoverWithContext(ctx, err)
-
-	assertEqual(t, "RecoverWithContext", client.lastCall)
-	assertEqual(t, ctx, client.lastCallArgs[0])
-	assertEqual(t, err, client.lastCallArgs[1])
-	assertEqual(t, scope, client.lastCallArgs[2])
 }
 
 func TestFlushShouldPanicTillImplemented(t *testing.T) {

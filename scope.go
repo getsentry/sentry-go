@@ -4,16 +4,27 @@ import (
 	"time"
 )
 
-type EventProcessor func(event *Event) *Event
+type EventProcessor func(event *Event, hint *EventHint) *Event
 
 type EventModifier interface {
-	ApplyToEvent(event *Event) *Event
+	ApplyToEvent(event *Event, hint *EventHint) *Event
+}
+
+var _globalEventProcessors []EventProcessor
+
+func GlobalEventProcessors() []EventProcessor {
+	return _globalEventProcessors
+}
+
+func AddGlobalEventProcessor(processor EventProcessor) {
+	_globalEventProcessors = append(_globalEventProcessors, processor)
 }
 
 type Scope struct {
 	breadcrumbs     []*Breadcrumb
 	user            User
 	tags            map[string]string
+	contexts        map[string]interface{}
 	extra           map[string]interface{}
 	fingerprint     []string
 	level           Level
@@ -61,6 +72,34 @@ func (scope *Scope) SetTags(tags map[string]string) {
 	}
 }
 
+func (scope *Scope) RemoveTag(key string) {
+	if scope.tags != nil {
+		delete(scope.tags, key)
+	}
+}
+
+func (scope *Scope) SetContext(key string, value interface{}) {
+	if scope.contexts == nil {
+		scope.contexts = make(map[string]interface{})
+	}
+	scope.contexts[key] = value
+}
+
+func (scope *Scope) SetContexts(contexts map[string]interface{}) {
+	if scope.contexts == nil {
+		scope.contexts = make(map[string]interface{})
+	}
+	for k, v := range contexts {
+		scope.contexts[k] = v
+	}
+}
+
+func (scope *Scope) RemoveContext(key string) {
+	if scope.contexts != nil {
+		delete(scope.contexts, key)
+	}
+}
+
 func (scope *Scope) SetExtra(key string, value interface{}) {
 	if scope.extra == nil {
 		scope.extra = make(map[string]interface{})
@@ -77,6 +116,12 @@ func (scope *Scope) SetExtras(extra map[string]interface{}) {
 	}
 }
 
+func (scope *Scope) RemoveExtra(key string) {
+	if scope.extra != nil {
+		delete(scope.extra, key)
+	}
+}
+
 func (scope *Scope) SetFingerprint(fingerprint []string) {
 	scope.fingerprint = fingerprint
 }
@@ -87,17 +132,21 @@ func (scope *Scope) SetLevel(level Level) {
 
 func (scope *Scope) Clone() *Scope {
 	clone := &Scope{
-		extra: make(map[string]interface{}),
-		tags:  make(map[string]string),
+		tags:     make(map[string]string),
+		contexts: make(map[string]interface{}),
+		extra:    make(map[string]interface{}),
 	}
 	clone.user = scope.user
 	clone.breadcrumbs = make([]*Breadcrumb, len(scope.breadcrumbs))
 	copy(clone.breadcrumbs, scope.breadcrumbs)
-	for key, value := range scope.extra {
-		clone.extra[key] = value
-	}
 	for key, value := range scope.tags {
 		clone.tags[key] = value
+	}
+	for key, value := range scope.contexts {
+		clone.contexts[key] = value
+	}
+	for key, value := range scope.extra {
+		clone.extra[key] = value
 	}
 	clone.fingerprint = make([]string, len(scope.fingerprint))
 	copy(clone.fingerprint, scope.fingerprint)
@@ -116,23 +165,13 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 	scope.eventProcessors = append(scope.eventProcessors, processor)
 }
 
-func (scope *Scope) ApplyToEvent(event *Event) *Event {
+func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 	if scope.breadcrumbs != nil && len(scope.breadcrumbs) > 0 {
 		if event.Breadcrumbs == nil {
 			event.Breadcrumbs = []*Breadcrumb{}
 		}
 
 		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
-	}
-
-	if scope.extra != nil && len(scope.extra) > 0 {
-		if event.Extra == nil {
-			event.Extra = make(map[string]interface{})
-		}
-
-		for key, value := range scope.extra {
-			event.Extra[key] = value
-		}
 	}
 
 	if scope.tags != nil && len(scope.tags) > 0 {
@@ -142,6 +181,26 @@ func (scope *Scope) ApplyToEvent(event *Event) *Event {
 
 		for key, value := range scope.tags {
 			event.Tags[key] = value
+		}
+	}
+
+	if scope.contexts != nil && len(scope.contexts) > 0 {
+		if event.Contexts == nil {
+			event.Contexts = make(map[string]interface{})
+		}
+
+		for key, value := range scope.contexts {
+			event.Contexts[key] = value
+		}
+	}
+
+	if scope.extra != nil && len(scope.extra) > 0 {
+		if event.Extra == nil {
+			event.Extra = make(map[string]interface{})
+		}
+
+		for key, value := range scope.extra {
+			event.Extra[key] = value
 		}
 	}
 
@@ -159,9 +218,18 @@ func (scope *Scope) ApplyToEvent(event *Event) *Event {
 		event.Level = scope.level
 	}
 
+	for _, processor := range GlobalEventProcessors() {
+		id := event.EventID
+		event = processor(event, hint)
+		if event == nil {
+			debugger.Printf("global event processor dropped event %s\n", id)
+			return nil
+		}
+	}
+
 	for _, processor := range scope.eventProcessors {
 		id := event.EventID
-		event = processor(event)
+		event = processor(event, hint)
 		if event == nil {
 			debugger.Printf("event processor dropped event %s\n", id)
 			return nil

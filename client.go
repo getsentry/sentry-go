@@ -9,10 +9,16 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"sort"
 	"time"
 )
 
 var debugger = log.New(ioutil.Discard, "[Sentry]", log.LstdFlags)
+
+type Integration interface {
+	Name() string
+	SetupOnce()
+}
 
 type ClientOptions struct {
 	Dsn              string
@@ -20,6 +26,7 @@ type ClientOptions struct {
 	SampleRate       float32
 	BeforeSend       func(event *Event, hint *EventHint) *Event
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
+	Integrations     []Integration
 	Transport        Transport
 	ServerName       string
 	Release          string
@@ -29,19 +36,11 @@ type ClientOptions struct {
 	DebugWriter      io.Writer
 }
 
-type Clienter interface {
-	Options() ClientOptions
-	CaptureMessage(message string, hint *EventHint, scope EventModifier)
-	CaptureException(exception error, hint *EventHint, scope EventModifier)
-	CaptureEvent(event *Event, hint *EventHint, scope EventModifier)
-	Recover(recoveredErr interface{}, scope *Scope)
-	RecoverWithContext(ctx context.Context, recoveredErr interface{}, scope *Scope)
-}
-
 type Client struct {
-	options   ClientOptions
-	dsn       *Dsn
-	Transport Transport
+	options      ClientOptions
+	dsn          *Dsn
+	integrations map[string]Integration
+	Transport    Transport
 }
 
 // Or client.Configure which would allow us to keep most data on struct private
@@ -54,6 +53,18 @@ func NewClient(options ClientOptions) (*Client, error) {
 		debugger.SetOutput(debugWriter)
 	}
 
+	if options.Dsn == "" {
+		options.Dsn = os.Getenv("SENTRY_DSN")
+	}
+
+	if options.Release == "" {
+		options.Release = os.Getenv("SENTRY_RELEASE")
+	}
+
+	if options.Environment == "" {
+		options.Environment = os.Getenv("SENTRY_ENVIRONMENT")
+	}
+
 	dsn, err := NewDsn(options.Dsn)
 
 	if err != nil {
@@ -64,18 +75,40 @@ func NewClient(options ClientOptions) (*Client, error) {
 		debugger.Println("Sentry client initialized with an empty DSN")
 	}
 
-	transport := options.Transport
+	client := Client{
+		options: options,
+		dsn:     dsn,
+	}
+
+	client.setupTransport()
+	client.setupIntegrations()
+
+	return &client, nil
+}
+
+func (client *Client) setupTransport() {
+	transport := client.options.Transport
+
 	if transport == nil {
 		transport = new(HTTPTransport)
 	}
 
-	transport.Configure(options)
+	transport.Configure(client.options)
+	client.Transport = transport
+}
 
-	return &Client{
-		options:   options,
-		dsn:       dsn,
-		Transport: transport,
-	}, nil
+func (client *Client) setupIntegrations() {
+	if client.options.Integrations == nil {
+		return
+	}
+
+	client.integrations = make(map[string]Integration)
+
+	for _, integration := range client.options.Integrations {
+		client.integrations[integration.Name()] = integration
+		integration.SetupOnce()
+		debugger.Printf("Integration installed: %s\n", integration.Name())
+	}
 }
 
 func (client Client) Options() ClientOptions {
@@ -99,42 +132,38 @@ func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventMod
 	}
 }
 
-func (client *Client) Recover(recoveredErr interface{}, scope *Scope) {
+func (client *Client) Recover(recoveredErr interface{}, hint *EventHint, scope EventModifier) {
 	if recoveredErr == nil {
 		recoveredErr = recover()
 	}
 
 	if recoveredErr != nil {
 		if err, ok := recoveredErr.(error); ok {
-			CaptureException(err)
+			client.CaptureException(err, hint, scope)
 		}
 
 		if err, ok := recoveredErr.(string); ok {
-			CaptureMessage(err)
+			client.CaptureMessage(err, hint, scope)
 		}
 	}
 }
 
-func (client *Client) RecoverWithContext(ctx context.Context, recoveredErr interface{}, scope *Scope) {
-	if recoveredErr == nil {
-		recoveredErr = recover()
+func (client *Client) RecoverWithContext(ctx context.Context, err interface{}, hint *EventHint, scope EventModifier) {
+	if err == nil {
+		err = recover()
 	}
 
-	if recoveredErr != nil {
-		var currentHub *Hub
-
-		if HasHubOnContext(ctx) {
-			currentHub = GetHubFromContext(ctx)
-		} else {
-			currentHub = GetGlobalHub()
+	if err != nil {
+		if hint.Context == nil && ctx != nil {
+			hint.Context = ctx
 		}
 
-		if err, ok := recoveredErr.(error); ok {
-			currentHub.CaptureException(err, nil)
+		if err, ok := err.(error); ok {
+			client.CaptureException(err, hint, scope)
 		}
 
-		if err, ok := recoveredErr.(string); ok {
-			currentHub.CaptureMessage(err, nil)
+		if err, ok := err.(string); ok {
+			client.CaptureMessage(err, hint, scope)
 		}
 	}
 }
@@ -184,7 +213,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	return client.Transport.SendEvent(event)
 }
 
-func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifier) *Event {
+func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
 	// TODO: Set all the defaults, clear unnecessary stuff etc. here
 
 	if event.EventID == "" {
@@ -199,20 +228,32 @@ func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifi
 		event.Level = LevelInfo
 	}
 
-	event.Sdk = ClientSdkInfo{
-		Name:    SdkName,
-		Version: SdkVersion,
+	if event.ServerName == "" {
+		if hostname, err := os.Hostname(); err == nil {
+			event.ServerName = hostname
+		}
 	}
 
-	if modules, integrationErr := ExtractModules(); integrationErr != nil {
-		debugger.Println(integrationErr)
-	} else {
-		event.Modules = modules
+	event.Sdk = SdkInfo{
+		Name:         "sentry.go",
+		Version:      VERSION,
+		Integrations: client.listIntegrations(),
+		Packages: []SdkPackage{{
+			Name:    "sentry-go",
+			Version: VERSION,
+		}},
 	}
-
 	event.Platform = "go"
-
 	event.Transaction = "Don't sneak into my computer please"
 
-	return scope.ApplyToEvent(event)
+	return scope.ApplyToEvent(event, hint)
+}
+
+func (client Client) listIntegrations() []string {
+	integrations := make([]string, 0, len(client.integrations))
+	for key := range client.integrations {
+		integrations = append(integrations, key)
+	}
+	sort.Strings(integrations)
+	return integrations
 }

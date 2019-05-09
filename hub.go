@@ -11,29 +11,37 @@ const DefaultMaxBreadcrumbs = 30
 // The `maxBreadcrumbs` option cannot be higher than this value.
 const MaxBreadcrumbs = 100
 
-type ctxKey int
+type contextKey int
 
-const HubCtxKey = ctxKey(42)
+const HubContextKey = contextKey(1)
+const RequestContextKey = contextKey(2)
+const ResponseContextKey = contextKey(3)
 
-type Layer struct {
-	client Clienter
-	scope  *Scope
-}
-
-type Stack []*Layer
+var _CurrentHub = NewHub(nil, &Scope{})
 
 type Hub struct {
 	stack       *Stack
 	lastEventID string
 }
 
-func NewHub(client Clienter, scope *Scope) *Hub {
+type Layer struct {
+	client *Client
+	scope  *Scope
+}
+
+type Stack []*Layer
+
+func NewHub(client *Client, scope *Scope) *Hub {
 	return &Hub{
 		stack: &Stack{{
 			client: client,
 			scope:  scope,
 		}},
 	}
+}
+
+func CurrentHub() *Hub {
+	return _CurrentHub
 }
 
 func (hub *Hub) LastEventID() string {
@@ -56,7 +64,7 @@ func (hub *Hub) Scope() *Scope {
 	return top.scope
 }
 
-func (hub *Hub) Client() Clienter {
+func (hub *Hub) Client() *Client {
 	top := hub.stackTop()
 	if top == nil {
 		return nil
@@ -83,7 +91,7 @@ func (hub *Hub) PopScope() {
 	*hub.stack = stack[0 : len(stack)-1]
 }
 
-func (hub *Hub) BindClient(client Clienter) {
+func (hub *Hub) BindClient(client *Client) {
 	hub.stackTop().client = client
 }
 
@@ -97,7 +105,7 @@ func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
 	f(hub.Scope())
 }
 
-func (hub *Hub) invokeClient(callback func(client Clienter, scope *Scope)) {
+func (hub *Hub) invokeClient(callback func(client *Client, scope *Scope)) {
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return
@@ -106,19 +114,19 @@ func (hub *Hub) invokeClient(callback func(client Clienter, scope *Scope)) {
 }
 
 func (hub *Hub) CaptureEvent(event *Event, hint *EventHint) {
-	hub.invokeClient(func(client Clienter, scope *Scope) {
+	hub.invokeClient(func(client *Client, scope *Scope) {
 		client.CaptureEvent(event, hint, scope)
 	})
 }
 
 func (hub *Hub) CaptureMessage(message string, hint *EventHint) {
-	hub.invokeClient(func(client Clienter, scope *Scope) {
+	hub.invokeClient(func(client *Client, scope *Scope) {
 		client.CaptureMessage(message, hint, scope)
 	})
 }
 
 func (hub *Hub) CaptureException(exception error, hint *EventHint) {
-	hub.invokeClient(func(client Clienter, scope *Scope) {
+	hub.invokeClient(func(client *Client, scope *Scope) {
 		client.CaptureException(exception, hint, scope)
 	})
 }
@@ -153,15 +161,15 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 	hub.Scope().AddBreadcrumb(breadcrumb, max)
 }
 
-func (hub *Hub) Recover(recoveredErr interface{}) {
-	hub.invokeClient(func(client Clienter, scope *Scope) {
-		client.Recover(recoveredErr, scope)
+func (hub *Hub) Recover(err interface{}, hint *EventHint) {
+	hub.invokeClient(func(client *Client, scope *Scope) {
+		client.Recover(err, hint, scope)
 	})
 }
 
-func (hub *Hub) RecoverWithContext(ctx context.Context, recoveredErr interface{}) {
-	hub.invokeClient(func(client Clienter, scope *Scope) {
-		client.RecoverWithContext(ctx, recoveredErr, scope)
+func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}, hint *EventHint) {
+	hub.invokeClient(func(client *Client, scope *Scope) {
+		client.RecoverWithContext(ctx, err, hint, scope)
 	})
 }
 
@@ -169,18 +177,28 @@ func (hub *Hub) Flush(timeout int) {
 	panic("Implement Flush redirect to the Client")
 }
 
+func (hub *Hub) GetIntegration(name string) Integration {
+	client := hub.Client()
+
+	if client == nil || client.integrations == nil {
+		return nil
+	}
+
+	return client.integrations[name]
+}
+
 func HasHubOnContext(ctx context.Context) bool {
-	_, ok := ctx.Value(HubCtxKey).(*Hub)
+	_, ok := ctx.Value(HubContextKey).(*Hub)
 	return ok
 }
 
 func GetHubFromContext(ctx context.Context) *Hub {
-	if hub, ok := ctx.Value(HubCtxKey).(*Hub); ok {
+	if hub, ok := ctx.Value(HubContextKey).(*Hub); ok {
 		return hub
 	}
 	return nil
 }
 
 func SetHubOnContext(ctx context.Context, hub *Hub) context.Context {
-	return context.WithValue(ctx, HubCtxKey, hub)
+	return context.WithValue(ctx, HubContextKey, hub)
 }
