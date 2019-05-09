@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"strings"
 	"sentry"
+	"strings"
 )
 
 type ModulesIntegration struct{}
@@ -19,30 +19,30 @@ func (mi ModulesIntegration) Name() string {
 }
 
 func (mi ModulesIntegration) SetupOnce() {
-  sentry.AddGlobalEventProcessor(mi.processor)
+	sentry.AddGlobalEventProcessor(mi.processor)
 }
 
 func (mi ModulesIntegration) processor(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-  // Run the integration only on the Client that registered it
-  if sentry.CurrentHub().GetIntegration(mi.Name()) == nil {
-    return event
-  }
+	// Run the integration only on the Client that registered it
+	if sentry.CurrentHub().GetIntegration(mi.Name()) == nil {
+		return event
+	}
 
-  if event.Modules == nil {
-    event.Modules = extractModules()
-  }
+	if event.Modules == nil {
+		event.Modules = extractModules()
+	}
 
-  return event
+	return event
 }
 
-func extractModules() (map[string]string) {
+func extractModules() map[string]string {
 	if _modulesCache != nil {
 		return _modulesCache
 	}
 
 	extractedModules, err := getModules()
 	if err != nil {
-    debugger.Printf("ModuleIntegration wasn't able to extract modules: %v\n", err)
+		debugger.Printf("ModuleIntegration wasn't able to extract modules: %v\n", err)
 		return nil
 	}
 

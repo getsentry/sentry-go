@@ -1,9 +1,9 @@
 package sentry
 
 import (
-  "log"
-  "io/ioutil"
-  "os"
+	"io/ioutil"
+	"log"
+	"os"
 )
 
 var debugger = log.New(ioutil.Discard, "[Sentry]", log.LstdFlags)
