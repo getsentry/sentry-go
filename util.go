@@ -17,9 +17,10 @@ func uuid() string {
 	return hex.EncodeToString(id)
 }
 
-func checkFileExist(fileName string) bool {
-  if _, err := os.Stat(fileName); err != nil {
-    return false
-  }
+func fileExists(fileName string) bool {
+	if _, err := os.Stat(fileName); err != nil {
+		return false
+	}
+
 	return true
 }

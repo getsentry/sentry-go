@@ -204,7 +204,7 @@ func (client *Client) prepareEvent(event *Event, _ *EventHint, scope EventModifi
 		Version: SdkVersion,
 	}
 
-	if modules, integrationErr := GetModules(); integrationErr != nil {
+	if modules, integrationErr := ExtractModules(); integrationErr != nil {
 		debugger.Println(integrationErr)
 	} else {
 		event.Modules = modules
