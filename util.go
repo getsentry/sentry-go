@@ -4,8 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
-	"os"
+	"io/ioutil"
+	"log"
 )
+
+var debugger = log.New(ioutil.Discard, "[Sentry]", log.LstdFlags)
 
 func uuid() string {
 	id := make([]byte, 16)
@@ -15,12 +18,4 @@ func uuid() string {
 	id[8] &= 0x3F // clear variant
 	id[8] |= 0x80 // set to IETF variant
 	return hex.EncodeToString(id)
-}
-
-func fileExists(fileName string) bool {
-	if _, err := os.Stat(fileName); err != nil {
-		return false
-	}
-
-	return true
 }

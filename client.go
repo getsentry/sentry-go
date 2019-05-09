@@ -4,16 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"sort"
 	"time"
 )
-
-var debugger = log.New(ioutil.Discard, "[Sentry]", log.LstdFlags)
 
 type Integration interface {
 	Name() string
