@@ -1,8 +1,9 @@
-package sentry
+package sentryintegrations
 
 import (
 	"runtime"
-	"sentry"
+
+	"github.com/getsentry/sentry-go"
 )
 
 type EnvironmentIntegration struct{}

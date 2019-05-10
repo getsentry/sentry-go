@@ -2,7 +2,7 @@ package sentry
 
 import (
 	"context"
-	"fmt"
+	"crypto/x509"
 	"io"
 	"math/rand"
 	"net/http"
@@ -30,6 +30,11 @@ type ClientOptions struct {
 	Environment      string
 	MaxBreadcrumbs   int
 	DebugWriter      io.Writer
+
+	HTTPTransport *http.Transport
+	HTTPProxy     string
+	HTTPSProxy    string
+	CaCerts       *x509.CertPool
 }
 
 type Client struct {
@@ -122,10 +127,7 @@ func (client *Client) CaptureException(exception error, hint *EventHint, scope E
 }
 
 func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) {
-	// TODO: Handle return values
-	if _, err := client.processEvent(event, hint, scope); err != nil {
-		debugger.Println(err)
-	}
+	client.processEvent(event, hint, scope)
 }
 
 func (client *Client) Recover(recoveredErr interface{}, hint *EventHint, scope EventModifier) {
@@ -164,6 +166,10 @@ func (client *Client) RecoverWithContext(ctx context.Context, err interface{}, h
 	}
 }
 
+func (client *Client) Flush(timeout time.Duration) bool {
+	return client.Transport.Flush(timeout)
+}
+
 func (client *Client) eventFromMessage(message string) *Event {
 	return &Event{
 		Message: message,
@@ -178,7 +184,7 @@ func (client *Client) eventFromException(exception error) *Event {
 }
 
 // TODO: Should return some sort of SentryResponse instead of http.Response
-func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) (*http.Response, error) {
+func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) {
 	options := client.Options()
 
 	// TODO: Reconsider if its worth going away from default implementation
@@ -188,12 +194,14 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	if options.SampleRate != 0.0 {
 		randomFloat := rand.New(rand.NewSource(time.Now().UnixNano())).Float32()
 		if randomFloat > options.SampleRate {
-			return nil, fmt.Errorf("event dropped due to SampleRate hit")
+			debugger.Println("event dropped due to SampleRate hit")
+			return
 		}
 	}
 
 	if event = client.prepareEvent(event, hint, scope); event == nil {
-		return nil, fmt.Errorf("event dropped by one of the EventProcessors")
+		debugger.Println("event dropped by one of the EventProcessors")
+		return
 	}
 
 	if options.BeforeSend != nil {
@@ -202,11 +210,12 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 			h = hint
 		}
 		if event = options.BeforeSend(event, h); event == nil {
-			return nil, fmt.Errorf("event dropped due to BeforeSend callback")
+			debugger.Println("event dropped due to BeforeSend callback")
+			return
 		}
 	}
 
-	return client.Transport.SendEvent(event)
+	client.Transport.SendEvent(event)
 }
 
 func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
