@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sentry"
-	sentryIntegrations "sentry/integrations"
 	"strconv"
 	"time"
+
+	"github.com/getsentry/sentry-go"
+	sentryintegrations "github.com/getsentry/sentry-go/integrations"
 )
 
 func prettyPrint(v interface{}) string {
@@ -30,10 +31,13 @@ func (t *DevNullTransport) Configure(options sentry.ClientOptions) {
 	fmt.Println("Headers:", dsn.RequestHeaders())
 	fmt.Println()
 }
-func (t *DevNullTransport) SendEvent(event *sentry.Event) (*http.Response, error) {
+func (t *DevNullTransport) SendEvent(event *sentry.Event) {
 	fmt.Println("Faked Transport")
 	log.Println(prettyPrint(event))
-	return nil, nil
+}
+
+func (t *DevNullTransport) Flush(timeout time.Duration) bool {
+	return true
 }
 
 func customHandlerFunc(w http.ResponseWriter, r *http.Request) {
@@ -108,7 +112,7 @@ func main() {
 		Transport: new(DevNullTransport),
 		Integrations: []sentry.Integration{
 			new(ExtractUser),
-			new(sentryIntegrations.RequestIntegration),
+			new(sentryintegrations.RequestIntegration),
 		},
 	})
 

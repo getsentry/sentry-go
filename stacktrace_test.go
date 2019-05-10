@@ -12,7 +12,7 @@ func TestFunctionName(t *testing.T) {
 		pack string
 		name string
 	}{
-		{0, "sentry", "TestFunctionName"},
+		{0, "github.com/getsentry/sentry-go", "TestFunctionName"},
 		{1, "testing", "tRunner"},
 		{2, "runtime", "goexit"},
 		{100, "", ""},
@@ -46,7 +46,7 @@ func TestStacktraceFrame(t *testing.T) {
 	assertEqual(t, frame.Function, "Trace")
 	assertEqual(t, frame.Lineno, 12)
 	assertEqual(t, frame.InApp, true)
-	assertEqual(t, frame.Module, "sentry")
+	assertEqual(t, frame.Module, "github.com/getsentry/sentry-go")
 }
 
 func TestStacktraceFrameContext(t *testing.T) {

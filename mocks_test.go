@@ -2,7 +2,7 @@ package sentry
 
 import (
 	"context"
-	"net/http"
+	"time"
 )
 
 type ScopeMock struct {
@@ -26,9 +26,11 @@ type TransportMock struct {
 }
 
 func (t *TransportMock) Configure(options ClientOptions) {}
-func (t *TransportMock) SendEvent(event *Event) (*http.Response, error) {
+func (t *TransportMock) SendEvent(event *Event) {
 	t.lastEvent = event
-	return nil, nil
+}
+func (t *TransportMock) Flush(timeout time.Duration) bool {
+	return true
 }
 
 type ClientMock struct {

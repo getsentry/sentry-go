@@ -3,6 +3,8 @@ package sentry
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"io"
 )
 
@@ -14,4 +16,10 @@ func uuid() string {
 	id[8] &= 0x3F // clear variant
 	id[8] |= 0x80 // set to IETF variant
 	return hex.EncodeToString(id)
+}
+
+// nolint: deadcode
+func prettyPrint(data interface{}) {
+	dbg, _ := json.MarshalIndent(data, "", "  ")
+	fmt.Println(string(dbg))
 }

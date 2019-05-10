@@ -62,17 +62,6 @@ func TestDsnDeserializeInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestDsnNoInput(t *testing.T) {
-	dsn, err := NewDsn("")
-
-	if dsn != nil {
-		t.Error("expected to return nil pointer to dsn")
-	}
-	if err != nil {
-		t.Error("expected to not return error")
-	}
-}
-
 func TestValidDsnInsecure(t *testing.T) {
 	url := "http://username@domain:8888/42"
 	dsn, err := NewDsn(url)
