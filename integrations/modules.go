@@ -76,7 +76,7 @@ func getModulesFromMod() (map[string]string, error) {
 
 	file, err := os.Open("go.mod")
 	if err != nil {
-		return nil, fmt.Errorf("Unable to open mod file")
+		return nil, fmt.Errorf("unable to open mod file")
 	}
 
 	defer file.Close()
