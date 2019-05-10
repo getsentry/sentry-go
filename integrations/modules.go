@@ -64,22 +64,22 @@ func getModules() (map[string]string, error) {
 		}
 
 		if fileExists("vendor/vendor.json") {
-			return getModulesFromVendorJson()
+			return getModulesFromVendorJSON()
 		}
 	}
 
-	return nil, fmt.Errorf("Module integration failed")
+	return nil, fmt.Errorf("module integration failed")
 }
 
 func getModulesFromMod() (map[string]string, error) {
 	modules := make(map[string]string)
 
 	file, err := os.Open("go.mod")
-	defer file.Close()
-
 	if err != nil {
 		return nil, fmt.Errorf("Unable to open mod file")
 	}
+
+	defer file.Close()
 
 	areModulesPresent := false
 
@@ -111,11 +111,11 @@ func getModulesFromVendorTxt() (map[string]string, error) {
 	modules := make(map[string]string)
 
 	file, err := os.Open("vendor/modules.txt")
-	defer file.Close()
-
 	if err != nil {
-		return nil, fmt.Errorf("Unable to open vendor/modules.txt")
+		return nil, fmt.Errorf("unable to open vendor/modules.txt")
 	}
+
+	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -133,17 +133,20 @@ func getModulesFromVendorTxt() (map[string]string, error) {
 	return modules, nil
 }
 
-func getModulesFromVendorJson() (map[string]string, error) {
+func getModulesFromVendorJSON() (map[string]string, error) {
 	modules := make(map[string]string)
 
 	file, err := ioutil.ReadFile("vendor/vendor.json")
 
 	if err != nil {
-		return nil, fmt.Errorf("Unable to open vendor/vendor.json")
+		return nil, fmt.Errorf("unable to open vendor/vendor.json")
 	}
 
 	var vendor map[string]interface{}
-	json.Unmarshal(file, &vendor)
+	if unmarshalErr := json.Unmarshal(file, &vendor); unmarshalErr != nil {
+		return nil, unmarshalErr
+	}
+
 	packages := vendor["package"].([]interface{})
 
 	// To avoid iterative dependencies, TODO: Change of default value
