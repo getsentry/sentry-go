@@ -1,4 +1,4 @@
-package sentry
+package sentryintegrations
 
 import (
 	"io/ioutil"

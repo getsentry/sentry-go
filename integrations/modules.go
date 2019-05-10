@@ -1,4 +1,4 @@
-package sentry
+package sentryintegrations
 
 import (
 	"bufio"
@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"sentry"
 	"strings"
+
+	"github.com/getsentry/sentry-go"
 )
 
 type ModulesIntegration struct{}
