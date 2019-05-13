@@ -6,7 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 )
+
+var debugger = log.New(ioutil.Discard, "[Sentry]", log.LstdFlags)
 
 func uuid() string {
 	id := make([]byte, 16)

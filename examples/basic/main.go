@@ -143,6 +143,7 @@ func main() {
 		Transport:  new(DevNullTransport),
 		Integrations: []sentry.Integration{
 			new(sentryintegrations.EnvironmentIntegration),
+			new(sentryintegrations.ModulesIntegration),
 		},
 	}); err != nil {
 		panic(err)
