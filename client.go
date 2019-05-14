@@ -4,12 +4,16 @@ import (
 	"context"
 	"crypto/x509"
 	"io"
+	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"sort"
 	"time"
 )
+
+var Logger = log.New(ioutil.Discard, "[Sentry]", log.LstdFlags)
 
 type Integration interface {
 	Name() string
@@ -51,7 +55,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		if debugWriter == nil {
 			debugWriter = os.Stdout
 		}
-		debugger.SetOutput(debugWriter)
+		Logger.SetOutput(debugWriter)
 	}
 
 	if options.Dsn == "" {
@@ -73,7 +77,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	if dsn == nil {
-		debugger.Println("Sentry client initialized with an empty DSN")
+		Logger.Println("Sentry client initialized with an empty DSN")
 	}
 
 	client := Client{
@@ -108,7 +112,7 @@ func (client *Client) setupIntegrations() {
 	for _, integration := range client.options.Integrations {
 		client.integrations[integration.Name()] = integration
 		integration.SetupOnce()
-		debugger.Printf("Integration installed: %s\n", integration.Name())
+		Logger.Printf("Integration installed: %s\n", integration.Name())
 	}
 }
 
@@ -194,13 +198,13 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	if options.SampleRate != 0.0 {
 		randomFloat := rand.New(rand.NewSource(time.Now().UnixNano())).Float32()
 		if randomFloat > options.SampleRate {
-			debugger.Println("event dropped due to SampleRate hit")
+			Logger.Println("event dropped due to SampleRate hit")
 			return
 		}
 	}
 
 	if event = client.prepareEvent(event, hint, scope); event == nil {
-		debugger.Println("event dropped by one of the EventProcessors")
+		Logger.Println("event dropped by one of the EventProcessors")
 		return
 	}
 
@@ -210,7 +214,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 			h = hint
 		}
 		if event = options.BeforeSend(event, h); event == nil {
-			debugger.Println("event dropped due to BeforeSend callback")
+			Logger.Println("event dropped due to BeforeSend callback")
 			return
 		}
 	}

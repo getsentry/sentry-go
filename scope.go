@@ -222,7 +222,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			debugger.Printf("global event processor dropped event %s\n", id)
+			Logger.Printf("global event processor dropped event %s\n", id)
 			return nil
 		}
 	}
@@ -231,7 +231,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			debugger.Printf("event processor dropped event %s\n", id)
+			Logger.Printf("event processor dropped event %s\n", id)
 			return nil
 		}
 	}

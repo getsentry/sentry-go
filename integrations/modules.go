@@ -43,7 +43,7 @@ func extractModules() map[string]string {
 
 	extractedModules, err := getModules()
 	if err != nil {
-		debugger.Printf("ModuleIntegration wasn't able to extract modules: %v\n", err)
+		sentry.Logger.Printf("ModuleIntegration wasn't able to extract modules: %v\n", err)
 		return nil
 	}
 

@@ -37,7 +37,7 @@ type HTTPTransport struct {
 func (t *HTTPTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
-		debugger.Printf("%v\n", err)
+		Logger.Printf("%v\n", err)
 		return
 	}
 	t.dsn = dsn
@@ -78,7 +78,7 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		request.Header.Set(headerKey, headerValue)
 	}
 
-	debugger.Printf(
+	Logger.Printf(
 		"Sending %s event [%s] to %s project: %d\n",
 		event.Level,
 		event.EventID,
@@ -133,7 +133,7 @@ func (t *HTTPTransport) getTLSConfig(options ClientOptions) *tls.Config {
 
 	rootCAs, err := gocertifi.CACerts()
 	if err != nil {
-		debugger.Printf("Coudnt load CA Certificates: %v\n", err)
+		Logger.Printf("Coudnt load CA Certificates: %v\n", err)
 	}
 	return &tls.Config{
 		RootCAs: rootCAs,
@@ -150,12 +150,12 @@ func (t *HTTPTransport) worker() {
 		response, err := t.client.Do(request)
 
 		if err != nil {
-			debugger.Printf("There was an issue with sending an event: %v", err)
+			Logger.Printf("There was an issue with sending an event: %v", err)
 		}
 
 		if response != nil && response.StatusCode == http.StatusTooManyRequests {
 			t.disabledUntil = time.Now().Add(retryAfter(time.Now(), response))
-			debugger.Printf("Too many requests, backing off till: %s\n", t.disabledUntil)
+			Logger.Printf("Too many requests, backing off till: %s\n", t.disabledUntil)
 		}
 
 		t.wg.Done()
