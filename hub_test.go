@@ -150,7 +150,7 @@ func TestConfigureScope(t *testing.T) {
 }
 
 func TestLastEventID(t *testing.T) {
-	uuid := uuid()
+	uuid := EventID(uuid())
 	hub := &Hub{lastEventID: uuid}
 	assertEqual(t, uuid, hub.LastEventID())
 }
@@ -243,33 +243,6 @@ func TestBeforeBreadcrumbGetAccessToEventHint(t *testing.T) {
 
 	assertEqual(t, len(scope.breadcrumbs), 1)
 	assertEqual(t, "Breadcrumb_oh", scope.breadcrumbs[0].Message)
-}
-
-func TestInvokeClientExecutesCallbackWithClientAndScopePassed(t *testing.T) {
-	hub, _, _ := setupHubTest()
-	callback := func(client *Client, scope *Scope) {
-		assertEqual(t, client, client)
-		assertEqual(t, scope, scope)
-	}
-	hub.invokeClient(callback)
-}
-
-func TestInvokeClientFailsSilentlyWHenNoClientOrScopeAvailable(t *testing.T) {
-	hub := &Hub{}
-	callback := func(_ *Client, _ *Scope) {
-		t.Error("callback shoudnt be executed")
-	}
-
-	func() {
-		defer func() {
-			err := recover()
-			if err != nil {
-				t.Error("invokeClient should not panic")
-			}
-		}()
-
-		hub.invokeClient(callback)
-	}()
 }
 
 func TestFlushShouldPanicTillImplemented(t *testing.T) {

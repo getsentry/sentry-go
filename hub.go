@@ -22,7 +22,7 @@ var _CurrentHub = NewHub(nil, &Scope{})
 
 type Hub struct {
 	stack       *Stack
-	lastEventID string
+	lastEventID EventID
 }
 
 type Layer struct {
@@ -45,7 +45,7 @@ func CurrentHub() *Hub {
 	return _CurrentHub
 }
 
-func (hub *Hub) LastEventID() string {
+func (hub *Hub) LastEventID() EventID {
 	return hub.lastEventID
 }
 
@@ -106,30 +106,28 @@ func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
 	f(hub.Scope())
 }
 
-func (hub *Hub) invokeClient(callback func(client *Client, scope *Scope)) {
+func (hub *Hub) CaptureEvent(event *Event, hint *EventHint) *EventID {
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
-		return
+		return nil
 	}
-	callback(client, scope)
+	return client.CaptureEvent(event, hint, scope)
 }
 
-func (hub *Hub) CaptureEvent(event *Event, hint *EventHint) {
-	hub.invokeClient(func(client *Client, scope *Scope) {
-		client.CaptureEvent(event, hint, scope)
-	})
+func (hub *Hub) CaptureMessage(message string, hint *EventHint) *EventID {
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil || scope == nil {
+		return nil
+	}
+	return client.CaptureMessage(message, hint, scope)
 }
 
-func (hub *Hub) CaptureMessage(message string, hint *EventHint) {
-	hub.invokeClient(func(client *Client, scope *Scope) {
-		client.CaptureMessage(message, hint, scope)
-	})
-}
-
-func (hub *Hub) CaptureException(exception error, hint *EventHint) {
-	hub.invokeClient(func(client *Client, scope *Scope) {
-		client.CaptureException(exception, hint, scope)
-	})
+func (hub *Hub) CaptureException(exception error, hint *EventHint) *EventID {
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil || scope == nil {
+		return nil
+	}
+	return client.CaptureException(exception, hint, scope)
 }
 
 func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
@@ -156,22 +154,26 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 	}
 
 	max := maxBreadcrumbs
-	if max > MaxBreadcrumbs {
-		max = MaxBreadcrumbs
+	if max > maxBreadcrumbs {
+		max = maxBreadcrumbs
 	}
 	hub.Scope().AddBreadcrumb(breadcrumb, max)
 }
 
 func (hub *Hub) Recover(err interface{}, hint *EventHint) {
-	hub.invokeClient(func(client *Client, scope *Scope) {
-		client.Recover(err, hint, scope)
-	})
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil || scope == nil {
+		return
+	}
+	client.Recover(err, hint, scope)
 }
 
 func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}, hint *EventHint) {
-	hub.invokeClient(func(client *Client, scope *Scope) {
-		client.RecoverWithContext(ctx, err, hint, scope)
-	})
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil || scope == nil {
+		return
+	}
+	client.RecoverWithContext(ctx, err, hint, scope)
 }
 
 func (hub *Hub) Flush(timeout time.Duration) bool {

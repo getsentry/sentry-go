@@ -120,18 +120,18 @@ func (client Client) Options() ClientOptions {
 	return client.options
 }
 
-func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) {
+func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
 	event := client.eventFromMessage(message)
-	client.CaptureEvent(event, hint, scope)
+	return client.CaptureEvent(event, hint, scope)
 }
 
-func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) {
+func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
 	event := client.eventFromException(exception)
-	client.CaptureEvent(event, hint, scope)
+	return client.CaptureEvent(event, hint, scope)
 }
 
-func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) {
-	client.processEvent(event, hint, scope)
+func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
+	return client.processEvent(event, hint, scope)
 }
 
 func (client *Client) Recover(recoveredErr interface{}, hint *EventHint, scope EventModifier) {
@@ -188,7 +188,7 @@ func (client *Client) eventFromException(exception error) *Event {
 }
 
 // TODO: Should return some sort of SentryResponse instead of http.Response
-func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) {
+func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
 	options := client.Options()
 
 	// TODO: Reconsider if its worth going away from default implementation
@@ -199,13 +199,13 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		randomFloat := rand.New(rand.NewSource(time.Now().UnixNano())).Float32()
 		if randomFloat > options.SampleRate {
 			Logger.Println("event dropped due to SampleRate hit")
-			return
+			return nil
 		}
 	}
 
 	if event = client.prepareEvent(event, hint, scope); event == nil {
 		Logger.Println("event dropped by one of the EventProcessors")
-		return
+		return nil
 	}
 
 	if options.BeforeSend != nil {
@@ -215,18 +215,20 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		}
 		if event = options.BeforeSend(event, h); event == nil {
 			Logger.Println("event dropped due to BeforeSend callback")
-			return
+			return nil
 		}
 	}
 
 	client.Transport.SendEvent(event)
+
+	return &event.EventID
 }
 
 func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
 	// TODO: Set all the defaults, clear unnecessary stuff etc. here
 
 	if event.EventID == "" {
-		event.EventID = uuid()
+		event.EventID = EventID(uuid())
 	}
 
 	if event.Timestamp == 0 {

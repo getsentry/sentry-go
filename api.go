@@ -20,19 +20,25 @@ func AddBreadcrumb(breadcrumb *Breadcrumb) {
 	hub.AddBreadcrumb(breadcrumb, nil)
 }
 
-func CaptureMessage(message string) {
+// CaptureMessage captures an arbitrary message.
+func CaptureMessage(message string) *EventID {
 	hub := CurrentHub()
-	hub.CaptureMessage(message, nil)
+	return hub.CaptureMessage(message, nil)
 }
 
-func CaptureException(exception error) {
+func CaptureException(exception error) *EventID {
 	hub := CurrentHub()
-	hub.CaptureException(exception, &EventHint{OriginalException: exception})
+	return hub.CaptureException(exception, &EventHint{OriginalException: exception})
 }
 
-func CaptureEvent(event *Event) {
+// CaptureEvent captures an event on the currently active client if any.
+//
+// The event must already be assembled. Typically code would instead use
+// the utility methods like `CaptureException`. The return value is the
+// event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
+func CaptureEvent(event *Event) *EventID {
 	hub := CurrentHub()
-	hub.CaptureEvent(event, nil)
+	return hub.CaptureEvent(event, nil)
 }
 
 func Recover() {
@@ -88,7 +94,7 @@ func Flush(timeout time.Duration) bool {
 	return hub.Flush(timeout)
 }
 
-func LastEventID() string {
+func LastEventID() EventID {
 	hub := CurrentHub()
 	return hub.LastEventID()
 }

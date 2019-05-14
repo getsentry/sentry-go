@@ -12,7 +12,7 @@ func TestFunctionName(t *testing.T) {
 		pack string
 		name string
 	}{
-		{0, "github.com/getsentry/sentry-go", "TestFunctionName"},
+		{0, "sentry-go", "TestFunctionName"},
 		{1, "testing", "tRunner"},
 		{2, "runtime", "goexit"},
 		{100, "", ""},
@@ -20,7 +20,8 @@ func TestFunctionName(t *testing.T) {
 		pc, _, _, _ := runtime.Caller(test.skip)
 		pack, name := deconstructFunctionName(runtime.FuncForPC(pc).Name())
 
-		assertEqual(t, pack, test.pack)
+		// Go1.10 reports different paths than Modules aware versions (>=1.11)
+		assertStringContains(t, pack, test.pack)
 		assertEqual(t, name, test.name)
 	}
 }
@@ -46,7 +47,8 @@ func TestStacktraceFrame(t *testing.T) {
 	assertEqual(t, frame.Function, "Trace")
 	assertEqual(t, frame.Lineno, 12)
 	assertEqual(t, frame.InApp, true)
-	assertEqual(t, frame.Module, "github.com/getsentry/sentry-go")
+	// Go1.10 reports different Module than Modules aware versions (>=1.11)
+	assertStringContains(t, frame.Module, "sentry-go")
 }
 
 func TestStacktraceFrameContext(t *testing.T) {

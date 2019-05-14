@@ -73,13 +73,15 @@ type Exception struct {
 	RawStacktrace Stacktrace `json:"raw_stacktrace,omitempty"`
 }
 
+type EventID string
+
 // https://docs.sentry.io/development/sdk-dev/attributes/
 type Event struct {
 	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs,omitempty"`
 	Contexts    map[string]interface{} `json:"contexts,omitempty"`
 	Dist        string                 `json:"dist,omitempty"`
 	Environment string                 `json:"environment,omitempty"`
-	EventID     string                 `json:"event_id,omitempty"`
+	EventID     EventID                `json:"event_id,omitempty"`
 	Extra       map[string]interface{} `json:"extra,omitempty"`
 	Fingerprint []string               `json:"fingerprint,omitempty"`
 	Level       Level                  `json:"level,omitempty"`
