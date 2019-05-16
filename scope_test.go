@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-var maxBreadcrumbs = 100
-
 func fillScopeWithData(scope *Scope) *Scope {
 	scope.breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "scopeBreadcrumbMessage"}}
 	scope.user = User{ID: "1337"}

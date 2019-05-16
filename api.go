@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// Init initializes whole SDK by creating new `Client` and binding it to the current `Hub`
 func Init(options ClientOptions) error {
 	hub := CurrentHub()
 	client, err := NewClient(options)
@@ -15,6 +16,10 @@ func Init(options ClientOptions) error {
 	return nil
 }
 
+// AddBreadcrumb records a new breadcrumb.
+//
+// The total number of breadcrumbs that can be recorded are limited by the
+// configuration on the client.
 func AddBreadcrumb(breadcrumb *Breadcrumb) {
 	hub := CurrentHub()
 	hub.AddBreadcrumb(breadcrumb, nil)
@@ -26,6 +31,7 @@ func CaptureMessage(message string) *EventID {
 	return hub.CaptureMessage(message, nil)
 }
 
+// CaptureException captures an error.
 func CaptureException(exception error) *EventID {
 	hub := CurrentHub()
 	return hub.CaptureException(exception, &EventHint{OriginalException: exception})
@@ -41,6 +47,7 @@ func CaptureEvent(event *Event) *EventID {
 	return hub.CaptureEvent(event, nil)
 }
 
+// Recover captures a panic.
 func Recover() {
 	if err := recover(); err != nil {
 		hub := CurrentHub()
@@ -48,6 +55,7 @@ func Recover() {
 	}
 }
 
+// Recover captures a panic and passes relevant context object.
 func RecoverWithContext(ctx context.Context) {
 	if err := recover(); err != nil {
 		var hub *Hub
@@ -62,38 +70,47 @@ func RecoverWithContext(ctx context.Context) {
 	}
 }
 
-// TODO: Or maybe just `Recover(true)`? It may be too generic though
-// func RecoverAndPanic() {
-// 	if err := recover(); err != nil {
-// 		Recover()
-// 		panic(err)
-// 	}
-// }
-
+// WithScope temporarily pushes a scope for a single call.
+//
+// This function takes one argument, a callback that executes
+// in the context of that scope.
+//
+// This is useful when extra data should be send with a single capture call
+// for instance a different level or tags
 func WithScope(f func(scope *Scope)) {
 	hub := CurrentHub()
 	hub.WithScope(f)
 }
 
+// ConfigureScope invokes a function that can modify the current scope.
+//
+// The function is passed a mutable reference to the `Scope` so that modifications
+// can be performed.
 func ConfigureScope(f func(scope *Scope)) {
 	hub := CurrentHub()
 	hub.ConfigureScope(f)
 }
 
+// PushScope pushes a new scope.
 func PushScope() {
 	hub := CurrentHub()
 	hub.PushScope()
 }
+
+// PopScope pushes a new scope.
 func PopScope() {
 	hub := CurrentHub()
 	hub.PopScope()
 }
 
+// Flush notifies when all the buffered events have been sent by returning `true`
+// or `false` if timeout was reached.
 func Flush(timeout time.Duration) bool {
 	hub := CurrentHub()
 	return hub.Flush(timeout)
 }
 
+// LastEventID returns an ID of last captured event.
 func LastEventID() EventID {
 	hub := CurrentHub()
 	return hub.LastEventID()

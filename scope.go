@@ -20,6 +20,21 @@ func AddGlobalEventProcessor(processor EventProcessor) {
 	_globalEventProcessors = append(_globalEventProcessors, processor)
 }
 
+// Scope holds contextual data for the current scope.
+//
+// The scope is an object that can cloned efficiently and stores data that
+// is locally relevant to an event.  For instance the scope will hold recorded
+// breadcrumbs and similar information.
+//
+// The scope can be interacted with in two ways:
+//
+// 1. the scope is routinely updated with information by functions such as
+//    `AddBreadcrumb` which will modify the currently top-most scope.
+// 2. the topmost scope can also be configured through the `ConfigureScope`
+//    method.
+//
+// Note that the scope can only be modified but not inspected.
+// Only the client can use the scope to extract information currently.
 type Scope struct {
 	breadcrumbs     []*Breadcrumb
 	user            User
@@ -31,6 +46,8 @@ type Scope struct {
 	eventProcessors []EventProcessor
 }
 
+// AddBreadcrumb adds new breadcrumb to the current scope
+// and optionaly throws the old one if limit is reached.
 func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	if breadcrumb.Timestamp == 0 {
 		breadcrumb.Timestamp = time.Now().Unix()
@@ -48,14 +65,17 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	}
 }
 
+// ClearBreadcrumbs clears all breadcrumbs from the current scope.
 func (scope *Scope) ClearBreadcrumbs() {
 	scope.breadcrumbs = []*Breadcrumb{}
 }
 
+// SetUser sets new user for the current scope.
 func (scope *Scope) SetUser(user User) {
 	scope.user = user
 }
 
+// SetTag adds a tag to the current scope.
 func (scope *Scope) SetTag(key, value string) {
 	if scope.tags == nil {
 		scope.tags = make(map[string]string)
@@ -63,6 +83,7 @@ func (scope *Scope) SetTag(key, value string) {
 	scope.tags[key] = value
 }
 
+// SetTags assigns multiple tags to the current scope.
 func (scope *Scope) SetTags(tags map[string]string) {
 	if scope.tags == nil {
 		scope.tags = make(map[string]string)
@@ -72,12 +93,14 @@ func (scope *Scope) SetTags(tags map[string]string) {
 	}
 }
 
+// RemoveTag removes a tag from the current scope.
 func (scope *Scope) RemoveTag(key string) {
 	if scope.tags != nil {
 		delete(scope.tags, key)
 	}
 }
 
+// SetContext adds a context to the current scope.
 func (scope *Scope) SetContext(key string, value interface{}) {
 	if scope.contexts == nil {
 		scope.contexts = make(map[string]interface{})
@@ -85,6 +108,7 @@ func (scope *Scope) SetContext(key string, value interface{}) {
 	scope.contexts[key] = value
 }
 
+// SetContexts assigns multiple contexts to the current scope.
 func (scope *Scope) SetContexts(contexts map[string]interface{}) {
 	if scope.contexts == nil {
 		scope.contexts = make(map[string]interface{})
@@ -94,12 +118,14 @@ func (scope *Scope) SetContexts(contexts map[string]interface{}) {
 	}
 }
 
+// RemoveContext removes a context from the current scope.
 func (scope *Scope) RemoveContext(key string) {
 	if scope.contexts != nil {
 		delete(scope.contexts, key)
 	}
 }
 
+// SetExtra adds an extra to the current scope.
 func (scope *Scope) SetExtra(key string, value interface{}) {
 	if scope.extra == nil {
 		scope.extra = make(map[string]interface{})
@@ -107,6 +133,7 @@ func (scope *Scope) SetExtra(key string, value interface{}) {
 	scope.extra[key] = value
 }
 
+// SetExtras assigns multiple extras to the current scope.
 func (scope *Scope) SetExtras(extra map[string]interface{}) {
 	if scope.extra == nil {
 		scope.extra = make(map[string]interface{})
@@ -116,20 +143,24 @@ func (scope *Scope) SetExtras(extra map[string]interface{}) {
 	}
 }
 
+// RemoveExtra removes a extra from the current scope.
 func (scope *Scope) RemoveExtra(key string) {
 	if scope.extra != nil {
 		delete(scope.extra, key)
 	}
 }
 
+// SetFingerprint sets new fingerprint for the current scope.
 func (scope *Scope) SetFingerprint(fingerprint []string) {
 	scope.fingerprint = fingerprint
 }
 
+// SetLevel sets new level for the current scope.
 func (scope *Scope) SetLevel(level Level) {
 	scope.level = level
 }
 
+// Clone returns a copy of the current scope with all data copied over.
 func (scope *Scope) Clone() *Scope {
 	clone := &Scope{
 		tags:     make(map[string]string),
@@ -154,10 +185,12 @@ func (scope *Scope) Clone() *Scope {
 	return clone
 }
 
+// Clear removed the data from the current scope.
 func (scope *Scope) Clear() {
 	*scope = Scope{}
 }
 
+// AddEventProcessor adds an event processor to the current scope.
 func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 	if scope.eventProcessors == nil {
 		scope.eventProcessors = []EventProcessor{}
@@ -165,6 +198,7 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 	scope.eventProcessors = append(scope.eventProcessors, processor)
 }
 
+// ApplyToEvent takes the data from the current scope and attaches it to the event.
 func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 	if scope.breadcrumbs != nil && len(scope.breadcrumbs) > 0 {
 		if event.Breadcrumbs == nil {

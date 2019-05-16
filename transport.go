@@ -16,12 +16,14 @@ import (
 const bufferSize = 5
 const defaultRetryAfter = time.Second * 60
 
+// Transport is used by the `Client` to deliver events to remote server.
 type Transport interface {
 	Flush(timeout time.Duration) bool
 	Configure(options ClientOptions)
 	SendEvent(event *Event)
 }
 
+// HTTPTransport is a default implementation of `Transport` interface used by `Client`.
 type HTTPTransport struct {
 	dsn       *Dsn
 	client    *http.Client
@@ -34,6 +36,7 @@ type HTTPTransport struct {
 	start sync.Once
 }
 
+// Configure is called by the `Client` itself, providing it it's own `ClientOptions`.
 func (t *HTTPTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
@@ -61,6 +64,7 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 	})
 }
 
+// SendEvent assembles a new packet out of `Event` and sends it to remote server.
 func (t *HTTPTransport) SendEvent(event *Event) {
 	if t.dsn == nil || time.Now().Before(t.disabledUntil) {
 		return
@@ -94,6 +98,8 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 	}
 }
 
+// Flush notifies when all the buffered events have been sent by returning `true`
+// or `false` if timeout was reached.
 func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 	c := make(chan struct{})
 

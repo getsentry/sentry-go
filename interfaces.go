@@ -5,8 +5,10 @@ import (
 	"net/http"
 )
 
-const VERSION string = "0.0.0-beta"
+// Version Sentry-Go SDK Version
+const Version = "0.0.0-beta"
 
+// Level marks the severity of the event
 type Level string
 
 const (

@@ -10,8 +10,6 @@ import (
 const unknown string = "unknown"
 const contextLines int = 5
 
-var sourceReader = NewSourceReader()
-
 // The module download is split into two parts: downloading the go.mod and downloading the actual code.
 // If you have dependencies only needed for tests, then they will show up in your go.mod,
 // and go get will download their go.mods, but it will not download their code.
@@ -19,11 +17,13 @@ var sourceReader = NewSourceReader()
 //
 // https://github.com/golang/go/issues/26913#issuecomment-411976222
 
+// Stacktrace holds information about the frames of the stack.
 type Stacktrace struct {
 	Frames        []Frame `json:"frames,omitempty"`
 	FramesOmitted [2]uint `json:"frames_omitted,omitempty"`
 }
 
+// NewStacktrace creates a stacktrace using `runtime.Callers`.
 func NewStacktrace() *Stacktrace {
 	pcs := make([]uintptr, 100)
 	n := runtime.Callers(1, pcs)
@@ -43,6 +43,7 @@ func NewStacktrace() *Stacktrace {
 	return &stacktrace
 }
 
+// ExtractStacktrace creates a new `Stacktrace` based on the given `error` object.
 // TODO: Make it configurable so that anyone can provide their own implementation?
 // Use of reflection allows us to not have a hard dependency on any given package, so we don't have to import it
 func ExtractStacktrace(err error) *Stacktrace {
@@ -145,6 +146,7 @@ type Frame struct {
 	Vars        map[string]interface{} `json:"vars,omitempty"`
 }
 
+// NewFrame assembles a stacktrace frame out of `runtime.Frame`.
 func NewFrame(f runtime.Frame) Frame {
 	abspath := f.File
 	filename := f.File
@@ -210,11 +212,13 @@ func filterFrames(frames []Frame) []Frame {
 	return filteredFrames
 }
 
+var sr = newSourceReader()
+
 func contextifyFrames(frames []Frame) []Frame {
 	contextifiedFrames := make([]Frame, 0, len(frames))
 
 	for _, frame := range frames {
-		lines, initial := sourceReader.ReadContextLines(frame.AbsPath, frame.Lineno, contextLines)
+		lines, initial := sr.readContextLines(frame.AbsPath, frame.Lineno, contextLines)
 
 		if lines == nil {
 			continue

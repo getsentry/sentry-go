@@ -9,38 +9,73 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"reflect"
 	"sort"
 	"time"
 )
 
+// Logger is an instance of log.Logger that is use to provide debug information about running Sentry Client
+// can be enabled by either using `Logger.SetOutput` directly or with `Debug` client option
 var Logger = log.New(ioutil.Discard, "[Sentry]", log.LstdFlags)
 
+// Integration allows for registering a functions that modify or discard captured events.
 type Integration interface {
 	Name() string
 	SetupOnce()
 }
 
+// ClientOptions that configures a SDK Client
 type ClientOptions struct {
-	Dsn              string
-	Debug            bool
-	SampleRate       float32
-	BeforeSend       func(event *Event, hint *EventHint) *Event
+	// The DSN to use. If not set the client is effectively disabled.
+	Dsn string
+	// In debug mode debug information is printed to stdput to help you understand what
+	// sentry is doing.
+	Debug bool
+	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0)
+	SampleRate float32
+	// Before send callback.
+	BeforeSend func(event *Event, hint *EventHint) *Event
+	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
-	Integrations     []Integration
-	Transport        Transport
-	ServerName       string
-	Release          string
-	Dist             string
-	Environment      string
-	MaxBreadcrumbs   int
-	DebugWriter      io.Writer
-
+	// Integrations to be installed on the current Client
+	Integrations []Integration
+	// io.Writer implementation that should be used with the `Debug` mode
+	DebugWriter io.Writer
+	// The transport to use.
+	// This is an instance of a struct implementing `Transport` interface.
+	// Defaults to `HTTPTransport` from `transport.go`
+	Transport Transport
+	// The server name to be reported.
+	ServerName string
+	// The release to be sent with events.
+	Release string
+	// The dist to be sent with events.
+	Dist string
+	// The environment to be sent with events.
+	Environment string
+	// Maximum number of breadcrumbs.
+	MaxBreadcrumbs int
+	// An optional pointer to `http.Transport` that will be used with a default HTTPTransport.
 	HTTPTransport *http.Transport
-	HTTPProxy     string
-	HTTPSProxy    string
-	CaCerts       *x509.CertPool
+	// An optional HTTP proxy to use.
+	// This will default to the `http_proxy` environment variable.
+	HTTPProxy string
+	// An optional HTTPS proxy to use.
+	// This will default to the `HTTPS_PROXY` environment variable
+	// or `http_proxy` if that one exists.
+	HTTPSProxy string
+	// An optionsl CaCerts to use.
+	// Defaults to `gocertifi.CACerts()`.
+	CaCerts *x509.CertPool
 }
 
+// NewClient creates and returns an instance of `ClientOptions` with sensible defaults.
+func NewClientOptions(options ClientOptions) ClientOptions {
+	// TODO: Place sensible defaults here.
+	return options
+}
+
+// Client is the underlying processor that's used by the main API and `Hub` instances.
 type Client struct {
 	options      ClientOptions
 	dsn          *Dsn
@@ -48,7 +83,7 @@ type Client struct {
 	Transport    Transport
 }
 
-// Or client.Configure which would allow us to keep most data on struct private
+// NewClient creates and returns an instance of `Client` configured using `ClientOptions`.
 func NewClient(options ClientOptions) (*Client, error) {
 	if options.Debug {
 		debugWriter := options.DebugWriter
@@ -116,24 +151,33 @@ func (client *Client) setupIntegrations() {
 	}
 }
 
+// Options return `ClientOptions` for the current `Client`.
 func (client Client) Options() ClientOptions {
 	return client.options
 }
 
+// CaptureMessage captures an arbitrary message.
 func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
 	event := client.eventFromMessage(message)
 	return client.CaptureEvent(event, hint, scope)
 }
 
+// CaptureException captures an error.
 func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
 	event := client.eventFromException(exception)
 	return client.CaptureEvent(event, hint, scope)
 }
 
+// CaptureEvent captures an event on the currently active client if any.
+//
+// The event must already be assembled. Typically code would instead use
+// the utility methods like `CaptureException`. The return value is the
+// event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
 func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
 	return client.processEvent(event, hint, scope)
 }
 
+// Recover captures a panic.
 func (client *Client) Recover(recoveredErr interface{}, hint *EventHint, scope EventModifier) {
 	if recoveredErr == nil {
 		recoveredErr = recover()
@@ -150,6 +194,7 @@ func (client *Client) Recover(recoveredErr interface{}, hint *EventHint, scope E
 	}
 }
 
+// Recover captures a panic and passes relevant context object.
 func (client *Client) RecoverWithContext(ctx context.Context, err interface{}, hint *EventHint, scope EventModifier) {
 	if err == nil {
 		err = recover()
@@ -170,6 +215,8 @@ func (client *Client) RecoverWithContext(ctx context.Context, err interface{}, h
 	}
 }
 
+// Flush notifies when all the buffered events have been sent by returning `true`
+// or `false` if timeout was reached. It calls `Flush` method of the configured `Transport`.
 func (client *Client) Flush(timeout time.Duration) bool {
 	return client.Transport.Flush(timeout)
 }
@@ -181,13 +228,24 @@ func (client *Client) eventFromMessage(message string) *Event {
 }
 
 func (client *Client) eventFromException(exception error) *Event {
-	// TODO: Extract stacktrace from the exception
+	stacktrace := ExtractStacktrace(exception)
+	exceptionValue := exception.Error()
+	exceptionType := reflect.TypeOf(exception).String()
+
+	eventException := Exception{
+		Value: exceptionValue,
+		Type:  exceptionType,
+	}
+
+	if stacktrace != nil {
+		eventException.Stacktrace = *stacktrace
+	}
+
 	return &Event{
-		Message: exception.Error(),
+		Exception: []Exception{eventException},
 	}
 }
 
-// TODO: Should return some sort of SentryResponse instead of http.Response
 func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
 	options := client.Options()
 
@@ -225,8 +283,6 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 }
 
 func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
-	// TODO: Set all the defaults, clear unnecessary stuff etc. here
-
 	if event.EventID == "" {
 		event.EventID = EventID(uuid())
 	}
@@ -247,11 +303,11 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 
 	event.Sdk = SdkInfo{
 		Name:         "sentry.go",
-		Version:      VERSION,
+		Version:      Version,
 		Integrations: client.listIntegrations(),
 		Packages: []SdkPackage{{
 			Name:    "sentry-go",
-			Version: VERSION,
+			Version: Version,
 		}},
 	}
 	event.Platform = "go"

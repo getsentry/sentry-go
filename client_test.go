@@ -35,7 +35,7 @@ func TestCaptureMessageShouldSendEventWithProvidedMessage(t *testing.T) {
 func TestCaptureExceptionShouldSendEventWithProvidedError(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.CaptureException(errors.New("custom error"), nil, scope)
-	assertEqual(t, transport.lastEvent.Message, "custom error")
+	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
 }
 
 func TestCaptureEventShouldSendEventWithProvidedError(t *testing.T) {
@@ -83,7 +83,7 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
 		if ex, ok := hint.OriginalException.(customComplexError); ok {
-			event.Message = event.Message + " " + ex.AnswerToLife()
+			event.Message = event.Exception[0].Value + " " + ex.AnswerToLife()
 		}
 		return event
 	}

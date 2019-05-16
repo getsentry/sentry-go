@@ -9,26 +9,26 @@ import (
 func TestDsnParsing(t *testing.T) {
 	url := "https://username:password@domain:8888/foo/bar/23"
 	dsn, err := NewDsn(url)
-
 	if err != nil {
 		t.Error("expected dsn to be correctly created")
 	}
-	assertEqual(t, dsn.scheme, SchemeHTTPS)
-	assertEqual(t, "username", dsn.publicKey)
-	assertEqual(t, "password", dsn.secretKey)
-	assertEqual(t, "domain", dsn.host)
-	assertEqual(t, "/foo/bar", dsn.path)
-	assertEqual(t, url, dsn.ToString())
-	assertEqual(t, 8888, dsn.port)
-	assertEqual(t, 23, dsn.projectID)
+	assertEqual(t, schemeHTTPS, dsn.scheme)
+	assertEqual(t, dsn.publicKey, "username")
+	assertEqual(t, dsn.secretKey, "password")
+	assertEqual(t, dsn.host, "domain")
+	assertEqual(t, dsn.path, "/foo/bar")
+	assertEqual(t, dsn.String(), url)
+	assertEqual(t, dsn.port, 8888)
+	assertEqual(t, dsn.projectID, 23)
 }
 
 func TestDsnDefaultPort(t *testing.T) {
-	assertEqual(t, 1337, Dsn{port: 1337}.Port())
-	assertEqual(t, 1337, Dsn{scheme: "https", port: 1337}.Port())
-	assertEqual(t, 443, Dsn{scheme: "https"}.Port())
-	assertEqual(t, 80, Dsn{scheme: "http"}.Port())
-	assertEqual(t, 80, Dsn{scheme: "shrug"}.Port())
+	dsn, _ := NewDsn("https://u@d:1337/23")
+	assertEqual(t, dsn.port, 1337)
+	dsn, _ = NewDsn("https://u@d/23")
+	assertEqual(t, dsn.port, 443)
+	dsn, _ = NewDsn("http://u@d/23")
+	assertEqual(t, dsn.port, 80)
 }
 
 func TestDsnSerializeDeserialize(t *testing.T) {
@@ -45,7 +45,7 @@ func TestDsnSerializeDeserialize(t *testing.T) {
 		t.Error("expected NewDsn to not return error")
 	}
 	assertEqual(t, "\"https://username:password@domain:8888/foo/bar/23\"", string(serialized))
-	assertEqual(t, url, deserialized.ToString())
+	assertEqual(t, url, deserialized.String())
 }
 
 func TestDsnDeserializeInvalidJSON(t *testing.T) {
@@ -69,7 +69,7 @@ func TestValidDsnInsecure(t *testing.T) {
 	if err != nil {
 		t.Error("expected dsn to be correctly created")
 	}
-	assertEqual(t, url, dsn.ToString())
+	assertEqual(t, url, dsn.String())
 }
 
 func TestValidDsnNoPort(t *testing.T) {
@@ -79,8 +79,8 @@ func TestValidDsnNoPort(t *testing.T) {
 	if err != nil {
 		t.Error("expected dsn to be correctly created")
 	}
-	assertEqual(t, 80, dsn.Port())
-	assertEqual(t, url, dsn.ToString())
+	assertEqual(t, 80, dsn.port)
+	assertEqual(t, url, dsn.String())
 	assertEqual(t, "http://domain/api/42/store/", dsn.StoreAPIURL().String())
 }
 
@@ -91,8 +91,8 @@ func TestValidDsnInsecureNoPort(t *testing.T) {
 	if err != nil {
 		t.Error("expected dsn to be correctly created")
 	}
-	assertEqual(t, 443, dsn.Port())
-	assertEqual(t, url, dsn.ToString())
+	assertEqual(t, 443, dsn.port)
+	assertEqual(t, url, dsn.String())
 	assertEqual(t, "https://domain/api/42/store/", dsn.StoreAPIURL().String())
 }
 
@@ -103,7 +103,7 @@ func TestValidDsnNoPassword(t *testing.T) {
 	if err != nil {
 		t.Error("expected dsn to be correctly created")
 	}
-	assertEqual(t, url, dsn.ToString())
+	assertEqual(t, url, dsn.String())
 	assertEqual(t, "https://domain:8888/api/42/store/", dsn.StoreAPIURL().String())
 }
 

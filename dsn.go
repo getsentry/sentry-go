@@ -9,18 +9,18 @@ import (
 	"time"
 )
 
-type Scheme string
+type scheme string
 
 const (
-	SchemeHTTP  Scheme = "http"
-	SchemeHTTPS Scheme = "https"
+	schemeHTTP  scheme = "http"
+	schemeHTTPS scheme = "https"
 )
 
-func (scheme Scheme) DefaultPort() int {
+func (scheme scheme) defaultPort() int {
 	switch scheme {
-	case SchemeHTTPS:
+	case schemeHTTPS:
 		return 443
-	case SchemeHTTP:
+	case schemeHTTP:
 		return 80
 	default:
 		return 80
@@ -35,8 +35,9 @@ func (e DsnParseError) Error() string {
 	return "[Sentry] DsnParseError: " + e.Message
 }
 
+// Dsn is used as the remote address source to client transport.
 type Dsn struct {
-	scheme    Scheme
+	scheme    scheme
 	publicKey string
 	secretKey string
 	host      string
@@ -45,6 +46,8 @@ type Dsn struct {
 	projectID int
 }
 
+// NewDsn creates an instance od `Dsn` by parsing provided url in a `string` format.
+// If Dsn is not set the client is effectively disabled.
 func NewDsn(rawURL string) (*Dsn, error) {
 	// Parse
 	parsedURL, err := url.Parse(rawURL)
@@ -53,12 +56,12 @@ func NewDsn(rawURL string) (*Dsn, error) {
 	}
 
 	// Scheme
-	var scheme Scheme
+	var scheme scheme
 	switch parsedURL.Scheme {
 	case "http":
-		scheme = SchemeHTTP
+		scheme = schemeHTTP
 	case "https":
-		scheme = SchemeHTTPS
+		scheme = schemeHTTPS
 	default:
 		return nil, &DsnParseError{"invalid scheme"}
 	}
@@ -89,6 +92,8 @@ func NewDsn(rawURL string) (*Dsn, error) {
 			return nil, &DsnParseError{"invalid port"}
 		}
 		port = parsedPort
+	} else {
+		port = scheme.defaultPort()
 	}
 
 	// ProjectID
@@ -118,22 +123,16 @@ func NewDsn(rawURL string) (*Dsn, error) {
 	}, nil
 }
 
-func (dsn Dsn) Port() int {
-	if dsn.port == 0 {
-		return dsn.scheme.DefaultPort()
-	}
-	return dsn.port
-}
-
-func (dsn Dsn) ToString() string {
+// String formats Dsn struct into a valid string url
+func (dsn Dsn) String() string {
 	var url string
 	url += fmt.Sprintf("%s://%s", dsn.scheme, dsn.publicKey)
 	if dsn.secretKey != "" {
 		url += fmt.Sprintf(":%s", dsn.secretKey)
 	}
 	url += fmt.Sprintf("@%s", dsn.host)
-	if dsn.Port() != dsn.scheme.DefaultPort() {
-		url += fmt.Sprintf(":%d", dsn.Port())
+	if dsn.port != dsn.scheme.defaultPort() {
+		url += fmt.Sprintf(":%d", dsn.port)
 	}
 	if dsn.path != "" {
 		url += dsn.path
@@ -142,20 +141,23 @@ func (dsn Dsn) ToString() string {
 	return url
 }
 
+// StoreAPIURL returns assembled url to be used in the transport.
+// It points to configures Sentry instance.
 func (dsn Dsn) StoreAPIURL() *url.URL {
 	var rawURL string
 	rawURL += fmt.Sprintf("%s://%s", dsn.scheme, dsn.host)
-	if dsn.Port() != dsn.scheme.DefaultPort() {
-		rawURL += fmt.Sprintf(":%d", dsn.Port())
+	if dsn.port != dsn.scheme.defaultPort() {
+		rawURL += fmt.Sprintf(":%d", dsn.port)
 	}
 	rawURL += fmt.Sprintf("/api/%d/store/", dsn.projectID)
 	parsedURL, _ := url.Parse(rawURL)
 	return parsedURL
 }
 
+// RequestHeaders returns all the necessary headers that have to be used in the transport.
 func (dsn Dsn) RequestHeaders() map[string]string {
 	auth := fmt.Sprintf("Sentry sentry_version=%d, sentry_timestamp=%d, "+
-		"sentry_client=sentry.go/%s, sentry_key=%s", 7, time.Now().Unix(), VERSION, dsn.publicKey)
+		"sentry_client=sentry.go/%s, sentry_key=%s", 7, time.Now().Unix(), Version, dsn.publicKey)
 
 	if dsn.secretKey != "" {
 		auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.secretKey)
@@ -168,7 +170,7 @@ func (dsn Dsn) RequestHeaders() map[string]string {
 }
 
 func (dsn Dsn) MarshalJSON() ([]byte, error) {
-	return json.Marshal(dsn.ToString())
+	return json.Marshal(dsn.String())
 }
 
 func (dsn *Dsn) UnmarshalJSON(data []byte) error {

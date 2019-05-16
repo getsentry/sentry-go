@@ -19,7 +19,7 @@ func TestNewHubPushesLayerOnTopOfStack(t *testing.T) {
 
 func TestNewHubLayerStoresClientAndScope(t *testing.T) {
 	hub, client, scope := setupHubTest()
-	assertEqual(t, &Layer{client: client, scope: scope}, (*hub.stack)[0])
+	assertEqual(t, &layer{client: client, scope: scope}, (*hub.stack)[0])
 }
 
 func TestPushScopeAddsScopeOnTopOfStack(t *testing.T) {

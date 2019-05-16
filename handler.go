@@ -5,6 +5,8 @@ import (
 	"net/http"
 )
 
+// Decorate wraps `http.Handler` and recovers from all the panics, providing necessary `Hub`
+// instance that is bound to the request `Context` object.
 func Decorate(handler http.Handler) http.Handler {
 	hub := CurrentHub()
 
@@ -18,6 +20,8 @@ func Decorate(handler http.Handler) http.Handler {
 	})
 }
 
+// DecorateFunc wraps `http.HandlerFunc` and recovers from all the panics, providing necessary `Hub`
+// instance that is bound to the request `Context` object.
 func DecorateFunc(handler http.HandlerFunc) http.HandlerFunc {
 	hub := CurrentHub()
 

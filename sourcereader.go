@@ -6,18 +6,18 @@ import (
 	"sync"
 )
 
-type SourceReader struct {
+type sourceReader struct {
 	mu    sync.Mutex
 	cache map[string][][]byte
 }
 
-func NewSourceReader() SourceReader {
-	return SourceReader{
+func newSourceReader() sourceReader {
+	return sourceReader{
 		cache: make(map[string][][]byte),
 	}
 }
 
-func (sr *SourceReader) ReadContextLines(filename string, line, context int) ([][]byte, int) {
+func (sr *sourceReader) readContextLines(filename string, line, context int) ([][]byte, int) {
 	sr.mu.Lock()
 	defer sr.mu.Unlock()
 
