@@ -16,7 +16,7 @@ import (
 
 // Logger is an instance of log.Logger that is use to provide debug information about running Sentry Client
 // can be enabled by either using `Logger.SetOutput` directly or with `Debug` client option
-var Logger = log.New(ioutil.Discard, "[Sentry]", log.LstdFlags)
+var Logger = log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags)
 
 // Integration allows for registering a functions that modify or discard captured events.
 type Integration interface {
@@ -43,7 +43,7 @@ type ClientOptions struct {
 	DebugWriter io.Writer
 	// The transport to use.
 	// This is an instance of a struct implementing `Transport` interface.
-	// Defaults to `HTTPTransport` from `transport.go`
+	// Defaults to `httpTransport` from `transport.go`
 	Transport Transport
 	// The server name to be reported.
 	ServerName string
@@ -59,6 +59,7 @@ type ClientOptions struct {
 	HTTPTransport *http.Transport
 	// An optional HTTP proxy to use.
 	// This will default to the `http_proxy` environment variable.
+	// or `https_proxy` if that one exists.
 	HTTPProxy string
 	// An optional HTTPS proxy to use.
 	// This will default to the `HTTPS_PROXY` environment variable
@@ -130,7 +131,7 @@ func (client *Client) setupTransport() {
 	transport := client.options.Transport
 
 	if transport == nil {
-		transport = new(HTTPTransport)
+		transport = new(httpTransport)
 	}
 
 	transport.Configure(client.options)

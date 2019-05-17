@@ -13,7 +13,7 @@ import (
 	"github.com/certifi/gocertifi"
 )
 
-const bufferSize = 5
+const bufferSize = 30
 const defaultRetryAfter = time.Second * 60
 
 // Transport is used by the `Client` to deliver events to remote server.
@@ -23,8 +23,8 @@ type Transport interface {
 	SendEvent(event *Event)
 }
 
-// HTTPTransport is a default implementation of `Transport` interface used by `Client`.
-type HTTPTransport struct {
+// httpTransport is a default implementation of `Transport` interface used by `Client`.
+type httpTransport struct {
 	dsn       *Dsn
 	client    *http.Client
 	transport *http.Transport
@@ -37,7 +37,7 @@ type HTTPTransport struct {
 }
 
 // Configure is called by the `Client` itself, providing it it's own `ClientOptions`.
-func (t *HTTPTransport) Configure(options ClientOptions) {
+func (t *httpTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
 		Logger.Printf("%v\n", err)
@@ -65,7 +65,7 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 }
 
 // SendEvent assembles a new packet out of `Event` and sends it to remote server.
-func (t *HTTPTransport) SendEvent(event *Event) {
+func (t *httpTransport) SendEvent(event *Event) {
 	if t.dsn == nil || time.Now().Before(t.disabledUntil) {
 		return
 	}
@@ -100,7 +100,7 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 
 // Flush notifies when all the buffered events have been sent by returning `true`
 // or `false` if timeout was reached.
-func (t *HTTPTransport) Flush(timeout time.Duration) bool {
+func (t *httpTransport) Flush(timeout time.Duration) bool {
 	c := make(chan struct{})
 
 	go func() {
@@ -116,7 +116,7 @@ func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 	}
 }
 
-func (t *HTTPTransport) getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
+func (t *httpTransport) getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
 	if options.HTTPSProxy != "" {
 		return func(_ *http.Request) (*url.URL, error) {
 			return url.Parse(options.HTTPSProxy)
@@ -130,7 +130,7 @@ func (t *HTTPTransport) getProxyConfig(options ClientOptions) func(*http.Request
 	return http.ProxyFromEnvironment
 }
 
-func (t *HTTPTransport) getTLSConfig(options ClientOptions) *tls.Config {
+func (t *httpTransport) getTLSConfig(options ClientOptions) *tls.Config {
 	if options.CaCerts != nil {
 		return &tls.Config{
 			RootCAs: options.CaCerts,
@@ -146,7 +146,7 @@ func (t *HTTPTransport) getTLSConfig(options ClientOptions) *tls.Config {
 	}
 }
 
-func (t *HTTPTransport) worker() {
+func (t *httpTransport) worker() {
 	for request := range t.buffer {
 		if time.Now().Before(t.disabledUntil) {
 			t.wg.Done()
