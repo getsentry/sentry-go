@@ -28,13 +28,13 @@ func AddBreadcrumb(breadcrumb *Breadcrumb) {
 // CaptureMessage captures an arbitrary message.
 func CaptureMessage(message string) *EventID {
 	hub := CurrentHub()
-	return hub.CaptureMessage(message, nil)
+	return hub.CaptureMessage(message)
 }
 
 // CaptureException captures an error.
 func CaptureException(exception error) *EventID {
 	hub := CurrentHub()
-	return hub.CaptureException(exception, &EventHint{OriginalException: exception})
+	return hub.CaptureException(exception)
 }
 
 // CaptureEvent captures an event on the currently active client if any.
@@ -44,14 +44,14 @@ func CaptureException(exception error) *EventID {
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
 func CaptureEvent(event *Event) *EventID {
 	hub := CurrentHub()
-	return hub.CaptureEvent(event, nil)
+	return hub.CaptureEvent(event)
 }
 
 // Recover captures a panic.
 func Recover() {
 	if err := recover(); err != nil {
 		hub := CurrentHub()
-		hub.Recover(err, &EventHint{RecoveredException: err})
+		hub.Recover(err)
 	}
 }
 
@@ -66,7 +66,7 @@ func RecoverWithContext(ctx context.Context) {
 			hub = CurrentHub()
 		}
 
-		hub.RecoverWithContext(ctx, err, &EventHint{RecoveredException: err})
+		hub.RecoverWithContext(ctx, err)
 	}
 }
 

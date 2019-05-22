@@ -143,34 +143,34 @@ func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
 // CaptureEvent calls the method of a same name on currently bound `Client` instance
 // passing it a top-level `Scope`.
 // Returns `EventID` if successfully, or `nil` if there's no `Scope` or `Client` available.
-func (hub *Hub) CaptureEvent(event *Event, hint *EventHint) *EventID {
+func (hub *Hub) CaptureEvent(event *Event) *EventID {
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return nil
 	}
-	return client.CaptureEvent(event, hint, scope)
+	return client.CaptureEvent(event, nil, scope)
 }
 
 // CaptureMessage calls the method of a same name on currently bound `Client` instance
 // passing it a top-level `Scope`.
 // Returns `EventID` if successfully, or `nil` if there's no `Scope` or `Client` available.
-func (hub *Hub) CaptureMessage(message string, hint *EventHint) *EventID {
+func (hub *Hub) CaptureMessage(message string) *EventID {
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return nil
 	}
-	return client.CaptureMessage(message, hint, scope)
+	return client.CaptureMessage(message, nil, scope)
 }
 
 // CaptureException calls the method of a same name on currently bound `Client` instance
 // passing it a top-level `Scope`.
 // Returns `EventID` if successfully, or `nil` if there's no `Scope` or `Client` available.
-func (hub *Hub) CaptureException(exception error, hint *EventHint) *EventID {
+func (hub *Hub) CaptureException(exception error) *EventID {
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return nil
 	}
-	return client.CaptureException(exception, hint, scope)
+	return client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
 }
 
 // AddBreadcrumb records a new breadcrumb.
@@ -209,22 +209,22 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 
 // Recover calls the method of a same name on currently bound `Client` instance
 // passing it a top-level `Scope`.
-func (hub *Hub) Recover(err interface{}, hint *EventHint) {
+func (hub *Hub) Recover(err interface{}) {
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return
 	}
-	client.Recover(err, hint, scope)
+	client.Recover(err, &EventHint{RecoveredException: err}, scope)
 }
 
 // RecoverWithContext calls the method of a same name on currently bound `Client` instance
 // passing it a top-level `Scope`.
-func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}, hint *EventHint) {
+func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) {
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return
 	}
-	client.RecoverWithContext(ctx, err, hint, scope)
+	client.RecoverWithContext(ctx, err, &EventHint{RecoveredException: err}, scope)
 }
 
 // Flush calls the method of a same name on currently bound `Client` instance.
