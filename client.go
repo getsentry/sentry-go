@@ -236,7 +236,7 @@ func (client *Client) eventFromException(exception error) *Event {
 	}
 
 	return &Event{
-		Exception: []Exception{Exception{
+		Exception: []Exception{{
 			Value:      exception.Error(),
 			Type:       reflect.TypeOf(exception).String(),
 			Stacktrace: stacktrace,
