@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	sentryintegrations "github.com/getsentry/sentry-go/integrations"
 )
 
 func prettyPrint(v interface{}) string {
@@ -16,20 +15,20 @@ func prettyPrint(v interface{}) string {
 	return string(pp)
 }
 
-type DevNullTransport struct{}
+type devNullTransport struct{}
 
-func (t *DevNullTransport) Configure(options sentry.ClientOptions) {
+func (t *devNullTransport) Configure(options sentry.ClientOptions) {
 	dsn, _ := sentry.NewDsn(options.Dsn)
 	fmt.Println()
 	fmt.Println("Store Endpoint:", dsn.StoreAPIURL())
 	fmt.Println("Headers:", dsn.RequestHeaders())
 	fmt.Println()
 }
-func (t *DevNullTransport) SendEvent(event *sentry.Event) {
+func (t *devNullTransport) SendEvent(event *sentry.Event) {
 	fmt.Println("Faked Transport")
 }
 
-func (t *DevNullTransport) Flush(timeout time.Duration) bool {
+func (t *devNullTransport) Flush(timeout time.Duration) bool {
 	return true
 }
 
@@ -116,7 +115,8 @@ func eventHint() {
 
 func main() {
 	if err := sentry.Init(sentry.ClientOptions{
-		Dsn: "https://14830a963b1e4c20ad90e47289c1fe98@sentry.io/1419836",
+		Debug: true,
+		Dsn:   "https://14830a963b1e4c20ad90e47289c1fe98@sentry.io/1419836",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			if event.Message == "Drop me!" {
 				return nil
@@ -141,9 +141,8 @@ func main() {
 		},
 		SampleRate: 1,
 		Transport:  new(DevNullTransport),
-		Integrations: []sentry.Integration{
-			new(sentryintegrations.EnvironmentIntegration),
-			new(sentryintegrations.ModulesIntegration),
+		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
+			return append(integrations, integrations[1])
 		},
 	}); err != nil {
 		panic(err)

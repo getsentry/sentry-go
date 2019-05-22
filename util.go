@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 )
 
 func uuid() string {
@@ -16,6 +17,14 @@ func uuid() string {
 	id[8] &= 0x3F // clear variant
 	id[8] |= 0x80 // set to IETF variant
 	return hex.EncodeToString(id)
+}
+
+func fileExists(fileName string) bool {
+	if _, err := os.Stat(fileName); err != nil {
+		return false
+	}
+
+	return true
 }
 
 // nolint: deadcode

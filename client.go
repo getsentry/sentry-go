@@ -37,8 +37,8 @@ type ClientOptions struct {
 	BeforeSend func(event *Event, hint *EventHint) *Event
 	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
-	// Integrations to be installed on the current Client
-	Integrations []Integration
+	// Integrations to be installed on the current Client, receives default integrations
+	Integrations func([]Integration) []Integration
 	// io.Writer implementation that should be used with the `Debug` mode
 	DebugWriter io.Writer
 	// The transport to use.
@@ -68,12 +68,6 @@ type ClientOptions struct {
 	// An optionsl CaCerts to use.
 	// Defaults to `gocertifi.CACerts()`.
 	CaCerts *x509.CertPool
-}
-
-// NewClient creates and returns an instance of `ClientOptions` with sensible defaults.
-func NewClientOptions(options ClientOptions) ClientOptions {
-	// TODO: Place sensible defaults here.
-	return options
 }
 
 // Client is the underlying processor that's used by the main API and `Hub` instances.
@@ -139,13 +133,23 @@ func (client *Client) setupTransport() {
 }
 
 func (client *Client) setupIntegrations() {
-	if client.options.Integrations == nil {
-		return
+	integrations := []Integration{
+		new(environmentIntegration),
+		new(modulesIntegration),
+		new(requestIntegration),
+	}
+
+	if client.options.Integrations != nil {
+		integrations = client.options.Integrations(integrations)
 	}
 
 	client.integrations = make(map[string]Integration)
 
-	for _, integration := range client.options.Integrations {
+	for _, integration := range integrations {
+		if _, ok := client.integrations[integration.Name()]; ok {
+			Logger.Printf("Integration %s is already installed\n", integration.Name())
+			continue
+		}
 		client.integrations[integration.Name()] = integration
 		integration.SetupOnce()
 		Logger.Printf("Integration installed: %s\n", integration.Name())

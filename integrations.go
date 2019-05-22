@@ -1,31 +1,31 @@
-package sentryintegrations
+package sentry
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
+	"runtime"
 	"strings"
-
-	"github.com/getsentry/sentry-go"
 )
 
-type ModulesIntegration struct{}
+type modulesIntegration struct{}
 
 var _modulesCache map[string]string
 
-func (mi ModulesIntegration) Name() string {
+func (mi modulesIntegration) Name() string {
 	return "Modules"
 }
 
-func (mi ModulesIntegration) SetupOnce() {
-	sentry.AddGlobalEventProcessor(mi.processor)
+func (mi modulesIntegration) SetupOnce() {
+	AddGlobalEventProcessor(mi.processor)
 }
 
-func (mi ModulesIntegration) processor(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+func (mi modulesIntegration) processor(event *Event, hint *EventHint) *Event {
 	// Run the integration only on the Client that registered it
-	if sentry.CurrentHub().GetIntegration(mi.Name()) == nil {
+	if CurrentHub().GetIntegration(mi.Name()) == nil {
 		return event
 	}
 
@@ -43,7 +43,7 @@ func extractModules() map[string]string {
 
 	extractedModules, err := getModules()
 	if err != nil {
-		sentry.Logger.Printf("ModuleIntegration wasn't able to extract modules: %v\n", err)
+		Logger.Printf("ModuleIntegration wasn't able to extract modules: %v\n", err)
 		return nil
 	}
 
@@ -163,4 +163,88 @@ func getModulesFromVendorJSON() (map[string]string, error) {
 	}
 
 	return modules, nil
+}
+
+type environmentIntegration struct{}
+
+func (ei environmentIntegration) Name() string {
+	return "Environment"
+}
+
+func (ei environmentIntegration) SetupOnce() {
+	AddGlobalEventProcessor(ei.processor)
+}
+
+func (ei environmentIntegration) processor(event *Event, hint *EventHint) *Event {
+	// Run the integration only on the Client that registered it
+	if CurrentHub().GetIntegration(ei.Name()) == nil {
+		return event
+	}
+
+	if event.Contexts == nil {
+		event.Contexts = make(map[string]interface{})
+	}
+
+	event.Contexts["device"] = map[string]interface{}{
+		"arch":    runtime.GOARCH,
+		"num_cpu": runtime.NumCPU(),
+	}
+
+	event.Contexts["os"] = map[string]interface{}{
+		"name": runtime.GOOS,
+	}
+
+	event.Contexts["runtime"] = map[string]interface{}{
+		"name":    "go",
+		"version": runtime.Version(),
+	}
+
+	return event
+}
+
+type requestIntegration struct{}
+
+func (ri requestIntegration) Name() string {
+	return "Request"
+}
+
+func (ri requestIntegration) SetupOnce() {
+	AddGlobalEventProcessor(ri.processor)
+}
+
+func (ri requestIntegration) processor(event *Event, hint *EventHint) *Event {
+	// Run the integration only on the Client that registered it
+	if CurrentHub().GetIntegration(ri.Name()) == nil {
+		return event
+	}
+
+	if hint == nil {
+		return event
+	}
+
+	if hint.Request != nil {
+		return ri.fillEvent(event, hint.Request)
+	}
+
+	if hint.Context == nil {
+		return event
+	}
+
+	if request, ok := hint.Context.Value(RequestContextKey).(*http.Request); ok {
+		return ri.fillEvent(event, request)
+	}
+
+	return event
+}
+
+func (ri requestIntegration) fillEvent(event *Event, request *http.Request) *Event {
+	event.Request.Method = request.Method
+	event.Request.Cookies = request.Cookies()
+	event.Request.Headers = request.Header
+	event.Request.URL = request.URL.String()
+	event.Request.QueryString = request.URL.RawQuery
+	if body, err := ioutil.ReadAll(request.Body); err == nil {
+		event.Request.Data = string(body)
+	}
+	return event
 }
