@@ -299,6 +299,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		}
 	}
 
+	event.Platform = "go"
 	event.Sdk = SdkInfo{
 		Name:         "sentry.go",
 		Version:      Version,
@@ -308,8 +309,6 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 			Version: Version,
 		}},
 	}
-	event.Platform = "go"
-	event.Transaction = "Don't sneak into my computer please"
 
 	return scope.ApplyToEvent(event, hint)
 }
