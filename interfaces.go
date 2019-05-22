@@ -68,11 +68,11 @@ type Request struct {
 
 // https://docs.sentry.io/development/sdk-dev/interfaces/exception/
 type Exception struct {
-	Type          string     `json:"type,omitempty"`
-	Value         string     `json:"value,omitempty"`
-	Module        string     `json:"module,omitempty"`
-	Stacktrace    Stacktrace `json:"stacktrace,omitempty"`
-	RawStacktrace Stacktrace `json:"raw_stacktrace,omitempty"`
+	Type          string      `json:"type,omitempty"`
+	Value         string      `json:"value,omitempty"`
+	Module        string      `json:"module,omitempty"`
+	Stacktrace    *Stacktrace `json:"stacktrace,omitempty"`
+	RawStacktrace *Stacktrace `json:"raw_stacktrace,omitempty"`
 }
 
 type EventID string

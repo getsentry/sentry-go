@@ -3,6 +3,7 @@ package sentry
 import (
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 )
@@ -20,7 +21,7 @@ const contextLines int = 5
 // Stacktrace holds information about the frames of the stack.
 type Stacktrace struct {
 	Frames        []Frame `json:"frames,omitempty"`
-	FramesOmitted [2]uint `json:"frames_omitted,omitempty"`
+	FramesOmitted []uint  `json:"frames_omitted,omitempty"`
 }
 
 // NewStacktrace creates a stacktrace using `runtime.Callers`.
@@ -203,7 +204,13 @@ func filterFrames(frames []Frame) []Frame {
 	filteredFrames := make([]Frame, 0, len(frames))
 
 	for _, frame := range frames {
+		// go runtime frames
 		if frame.Module == "runtime" || frame.Module == "testing" {
+			continue
+		}
+		// sentry internal frames
+		isTestFile, _ := regexp.MatchString(`getsentry/sentry-go/.+_test.go`, frame.AbsPath)
+		if strings.Contains(frame.Module, "getsentry/sentry-go") && !isTestFile {
 			continue
 		}
 		filteredFrames = append(filteredFrames, frame)

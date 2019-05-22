@@ -29,10 +29,9 @@ func TestFunctionName(t *testing.T) {
 func TestNewStacktrace(t *testing.T) {
 	stacktrace := Trace()
 
-	assertEqual(t, len(stacktrace.Frames), 3)
+	assertEqual(t, len(stacktrace.Frames), 2)
 	assertEqual(t, stacktrace.Frames[0].Function, "TestNewStacktrace")
 	assertEqual(t, stacktrace.Frames[1].Function, "Trace")
-	assertEqual(t, stacktrace.Frames[2].Function, "NewStacktrace")
 }
 
 func TestStacktraceFrame(t *testing.T) {
@@ -40,7 +39,7 @@ func TestStacktraceFrame(t *testing.T) {
 	dir, _ := filepath.Split(callerFile)
 
 	stacktrace := Trace()
-	frame := stacktrace.Frames[len(stacktrace.Frames)-2]
+	frame := stacktrace.Frames[len(stacktrace.Frames)-1]
 
 	assertEqual(t, frame.Filename, "errors_test.go")
 	assertEqual(t, frame.AbsPath, filepath.Join(dir, "errors_test.go"))
@@ -54,7 +53,7 @@ func TestStacktraceFrame(t *testing.T) {
 func TestStacktraceFrameContext(t *testing.T) {
 	stacktrace := Trace()
 
-	frame := stacktrace.Frames[len(stacktrace.Frames)-2]
+	frame := stacktrace.Frames[len(stacktrace.Frames)-1]
 
 	assertEqual(t, frame.PreContext, []string{
 		")",
@@ -70,24 +69,6 @@ func TestStacktraceFrameContext(t *testing.T) {
 		"func RedPkgErrorsRanger() error {",
 		"\treturn BluePkgErrorsRanger()",
 		"}",
-	})
-
-	frame = stacktrace.Frames[len(stacktrace.Frames)-1]
-
-	assertEqual(t, frame.PreContext, []string{
-		"}",
-		"",
-		"// NewStacktrace creates a stacktrace using `runtime.Callers`.",
-		"func NewStacktrace() *Stacktrace {",
-		"\tpcs := make([]uintptr, 100)",
-	})
-	assertEqual(t, frame.ContextLine, "\tn := runtime.Callers(1, pcs)")
-	assertEqual(t, frame.PostContext, []string{
-		"",
-		"\tif n == 0 {",
-		"\t\treturn nil",
-		"\t}",
-		"",
 	})
 }
 

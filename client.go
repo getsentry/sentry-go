@@ -230,20 +230,17 @@ func (client *Client) eventFromMessage(message string) *Event {
 
 func (client *Client) eventFromException(exception error) *Event {
 	stacktrace := ExtractStacktrace(exception)
-	exceptionValue := exception.Error()
-	exceptionType := reflect.TypeOf(exception).String()
 
-	eventException := Exception{
-		Value: exceptionValue,
-		Type:  exceptionType,
-	}
-
-	if stacktrace != nil {
-		eventException.Stacktrace = *stacktrace
+	if stacktrace == nil {
+		stacktrace = NewStacktrace()
 	}
 
 	return &Event{
-		Exception: []Exception{eventException},
+		Exception: []Exception{Exception{
+			Value:      exception.Error(),
+			Type:       reflect.TypeOf(exception).String(),
+			Stacktrace: stacktrace,
+		}},
 	}
 }
 
