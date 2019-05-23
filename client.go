@@ -163,13 +163,13 @@ func (client Client) Options() ClientOptions {
 
 // CaptureMessage captures an arbitrary message.
 func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
-	event := client.eventFromMessage(message)
+	event := client.eventFromMessage(message, LevelInfo)
 	return client.CaptureEvent(event, hint, scope)
 }
 
 // CaptureException captures an error.
 func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
-	event := client.eventFromException(exception)
+	event := client.eventFromException(exception, LevelError)
 	return client.CaptureEvent(event, hint, scope)
 }
 
@@ -183,18 +183,20 @@ func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventMod
 }
 
 // Recover captures a panic.
-func (client *Client) Recover(recoveredErr interface{}, hint *EventHint, scope EventModifier) {
-	if recoveredErr == nil {
-		recoveredErr = recover()
+func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModifier) {
+	if err == nil {
+		err = recover()
 	}
 
-	if recoveredErr != nil {
-		if err, ok := recoveredErr.(error); ok {
-			client.CaptureException(err, hint, scope)
+	if err != nil {
+		if err, ok := err.(error); ok {
+			event := client.eventFromException(err, LevelFatal)
+			client.CaptureEvent(event, hint, scope)
 		}
 
-		if err, ok := recoveredErr.(string); ok {
-			client.CaptureMessage(err, hint, scope)
+		if err, ok := err.(string); ok {
+			event := client.eventFromMessage(err, LevelFatal)
+			client.CaptureEvent(event, hint, scope)
 		}
 	}
 }
@@ -211,11 +213,13 @@ func (client *Client) RecoverWithContext(ctx context.Context, err interface{}, h
 		}
 
 		if err, ok := err.(error); ok {
-			client.CaptureException(err, hint, scope)
+			event := client.eventFromException(err, LevelFatal)
+			client.CaptureEvent(event, hint, scope)
 		}
 
 		if err, ok := err.(string); ok {
-			client.CaptureMessage(err, hint, scope)
+			event := client.eventFromMessage(err, LevelFatal)
+			client.CaptureEvent(event, hint, scope)
 		}
 	}
 }
@@ -226,13 +230,14 @@ func (client *Client) Flush(timeout time.Duration) bool {
 	return client.Transport.Flush(timeout)
 }
 
-func (client *Client) eventFromMessage(message string) *Event {
+func (client *Client) eventFromMessage(message string, level Level) *Event {
 	return &Event{
+		Level:   level,
 		Message: message,
 	}
 }
 
-func (client *Client) eventFromException(exception error) *Event {
+func (client *Client) eventFromException(exception error, level Level) *Event {
 	stacktrace := ExtractStacktrace(exception)
 
 	if stacktrace == nil {
@@ -240,6 +245,7 @@ func (client *Client) eventFromException(exception error) *Event {
 	}
 
 	return &Event{
+		Level: level,
 		Exception: []Exception{{
 			Value:      exception.Error(),
 			Type:       reflect.TypeOf(exception).String(),
