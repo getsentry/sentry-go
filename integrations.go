@@ -239,7 +239,6 @@ func (ri requestIntegration) processor(event *Event, hint *EventHint) *Event {
 
 func (ri requestIntegration) fillEvent(event *Event, request *http.Request) *Event {
 	event.Request.Method = request.Method
-	event.Request.Cookies = request.Cookies()
 	event.Request.Headers = request.Header
 	event.Request.URL = request.URL.String()
 	event.Request.QueryString = request.URL.RawQuery

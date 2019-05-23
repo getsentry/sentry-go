@@ -61,7 +61,7 @@ type Request struct {
 	Method      string              `json:"method,omitempty"`
 	Data        string              `json:"data,omitempty"`
 	QueryString string              `json:"query_string,omitempty"`
-	Cookies     []*http.Cookie      `json:"cookies,omitempty"`
+	Cookies     string              `json:"cookies,omitempty"`
 	Headers     map[string][]string `json:"headers,omitempty"`
 	Env         map[string]string   `json:"env,omitempty"`
 }
