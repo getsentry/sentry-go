@@ -7,7 +7,7 @@
 
 # Official Sentry SDK for Go
 
-_Coming soon..._
+Migrating from `Raven-go`? See: https://github.com/getsentry/sentry-go/blob/master/MIGRATION.md
 
 #### Want to join our Sentry's `community-golang` channel, get involved and help us build the most useful SDK possible?
 
