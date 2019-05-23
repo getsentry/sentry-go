@@ -1,7 +1,5 @@
 github.com/certifi/gocertifi v0.0.0-20190506164543-d2eda7129713 h1:UNOqI3EKhvbqV8f1Vm3NIwkrhq388sGCeAH2Op7w0rc=
 github.com/certifi/gocertifi v0.0.0-20190506164543-d2eda7129713/go.mod h1:GJKEexRPVJrBSOjoqN5VNOIKJ5Q3RViH6eu3puDRwx4=
-github.com/getsentry/sentry-go v0.0.0-20190513195401-dcd26bffe677 h1:7cFIQ516l1GzC5g79Hycq9w34GJZjegCZyxaq+plI8Y=
-github.com/getsentry/sentry-go v0.0.0-20190513195401-dcd26bffe677/go.mod h1:M0ZDZwnP7uM4qVzACJ6XFG87D8gu005Qm8qpzlWFDwU=
 github.com/go-errors/errors v1.0.1 h1:LUHzmkK3GUKUrL/1gfBUxAHzcev3apQlezX/+O7ma6w=
 github.com/go-errors/errors v1.0.1/go.mod h1:f4zRHt4oKfwPJE5k8C9vpYG+aDHdBFUsgrm6/TyX73Q=
 github.com/pingcap/errors v0.11.1 h1:BXFZ6MdDd2U1uJUa2sRAWTmm+nieEzuyYM0R4aUTcC8=
