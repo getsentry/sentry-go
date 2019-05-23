@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	sentryintegrations "github.com/getsentry/sentry-go/integrations"
 )
 
 func prettyPrint(v interface{}) string {
@@ -22,21 +22,21 @@ type ctxKey int
 
 const UserCtxKey = ctxKey(1337)
 
-type DevNullTransport struct{}
+type devNullTransport struct{}
 
-func (t *DevNullTransport) Configure(options sentry.ClientOptions) {
+func (t *devNullTransport) Configure(options sentry.ClientOptions) {
 	dsn, _ := sentry.NewDsn(options.Dsn)
 	fmt.Println()
 	fmt.Println("Store Endpoint:", dsn.StoreAPIURL())
 	fmt.Println("Headers:", dsn.RequestHeaders())
 	fmt.Println()
 }
-func (t *DevNullTransport) SendEvent(event *sentry.Event) {
+func (t *devNullTransport) SendEvent(event *sentry.Event) {
 	fmt.Println("Faked Transport")
 	log.Println(prettyPrint(event))
 }
 
-func (t *DevNullTransport) Flush(timeout time.Duration) bool {
+func (t *devNullTransport) Flush(timeout time.Duration) bool {
 	return true
 }
 
@@ -47,7 +47,7 @@ func customHandlerFunc(w http.ResponseWriter, r *http.Request) {
 		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "BreadcrumbFunc #2 - " + strconv.Itoa(int(time.Now().Unix()))}, nil)
 	}
 
-	panic("customHandlerFunc panicked")
+	panic(errors.New("HTTPPanicHandler Error"))
 }
 
 type User struct {
@@ -75,20 +75,22 @@ func (th *customHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "Breadcrumb #2 - " + strconv.Itoa(int(time.Now().Unix()))}, nil)
 	}
 
-	panic("customHandler panicked")
+	sentry.CaptureMessage("CaptureMessage")
+	sentry.CaptureException(errors.New("CaptureMessage"))
+	panic("HTTPPanicHandler Message")
 }
 
-type ExtractUser struct{}
+type extractUser struct{}
 
-func (eu ExtractUser) Name() string {
-	return "ExtractUser"
+func (eu extractUser) Name() string {
+	return "extractUser"
 }
 
-func (eu ExtractUser) SetupOnce() {
+func (eu extractUser) SetupOnce() {
 	sentry.AddGlobalEventProcessor(eu.processor)
 }
 
-func (eu ExtractUser) processor(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+func (eu extractUser) processor(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 	// Run the integration only on the Client that registered it
 	if sentry.CurrentHub().GetIntegration(eu.Name()) == nil {
 		return event
@@ -110,9 +112,8 @@ func main() {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:       "https://whatever@sentry.io/1337",
 		Transport: new(DevNullTransport),
-		Integrations: []sentry.Integration{
-			new(ExtractUser),
-			new(sentryintegrations.RequestIntegration),
+		Integrations: func(i []sentry.Integration) []sentry.Integration {
+			return append(i, new(extractUser))
 		},
 	})
 
