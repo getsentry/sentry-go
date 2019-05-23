@@ -89,7 +89,7 @@ type ClientOptions struct {
 	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
 	// Integrations to be installed on the current Client
-	Integrations []Integration
+	Integrations func([]Integration) []Integration
 	// io.Writer implementation that should be used with the `Debug` mode
 	DebugWriter io.Writer
 	// The transport to use.
@@ -262,8 +262,8 @@ sentry-go
 sentry.WithScope(func(scope *sentry.Scope) {
     scope.SetTag("browser", "Firefox")
     scope.SetContext("Request", map[string]string{
-        Method: "GET",
-        URL: "https://example.com/raven-go"
+        "Method": "GET",
+        "URL": "https://example.com/raven-go",
     })
     sentry.CaptureException(err)
 })
@@ -287,8 +287,8 @@ sentry-go
 ```go
 sentry.ConfigureScope(func(scope *sentry.Scope) {
     scope.SetContext("Request", map[string]string{
-        Method: "GET",
-        URL: "https://example.com/raven-go"
+        "Method": "GET",
+        "URL": "https://example.com/raven-go",
     })
 })
 ```
