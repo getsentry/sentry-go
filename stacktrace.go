@@ -275,3 +275,12 @@ func deconstructFunctionName(name string) (module string, function string) {
 	function = strings.Replace(function, "·", ".", -1)
 	return module, function
 }
+
+func callerFunctionName() string {
+	pcs := make([]uintptr, 1)
+	runtime.Callers(3, pcs)
+	callersFrames := runtime.CallersFrames(pcs)
+	callerFrame, _ := callersFrames.Next()
+	_, function := deconstructFunctionName(callerFrame.Function)
+	return function
+}

@@ -38,6 +38,12 @@ func TestCaptureExceptionShouldSendEventWithProvidedError(t *testing.T) {
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
 }
 
+func TestCaptureExceptionShouldNotFailWhenPassedNil(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	client.CaptureException(nil, nil, scope)
+	assertEqual(t, transport.lastEvent.Message, "Called CaptureException with nil value")
+}
+
 func TestCaptureEventShouldSendEventWithProvidedError(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.CaptureEvent(&Event{Message: "event message"}, nil, scope)

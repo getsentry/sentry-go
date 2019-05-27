@@ -3,6 +3,7 @@ package sentry
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -238,6 +239,13 @@ func (client *Client) eventFromMessage(message string, level Level) *Event {
 }
 
 func (client *Client) eventFromException(exception error, level Level) *Event {
+	if exception == nil {
+		return &Event{
+			Level:   level,
+			Message: fmt.Sprintf("Called %s with nil value", callerFunctionName()),
+		}
+	}
+
 	stacktrace := ExtractStacktrace(exception)
 
 	if stacktrace == nil {
