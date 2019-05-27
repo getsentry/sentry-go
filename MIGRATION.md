@@ -327,7 +327,7 @@ sentry-go
 
 ```go
 sentry.ConfigureScope(func(scope *sentry.Scope) {
-    scope.SetUser(scope.User{
+    scope.SetUser(sentry.User{
         ID: "1337",
         Username: "kamilogorek",
         Email: "kamil@sentry.io",
