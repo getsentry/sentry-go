@@ -82,18 +82,18 @@ func (t *httpTransport) SendEvent(event *Event) {
 		request.Header.Set(headerKey, headerValue)
 	}
 
-	Logger.Printf(
-		"Sending %s event [%s] to %s project: %d\n",
-		event.Level,
-		event.EventID,
-		t.dsn.host,
-		t.dsn.projectID,
-	)
-
 	select {
 	case t.buffer <- request:
+		Logger.Printf(
+			"Sending %s event [%s] to %s project: %d\n",
+			event.Level,
+			event.EventID,
+			t.dsn.host,
+			t.dsn.projectID,
+		)
 		t.wg.Add(1)
 	default:
+		Logger.Println("Event dropped due to transport buffer being full")
 		// worker would block, drop the packet
 	}
 }
