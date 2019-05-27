@@ -13,7 +13,7 @@ import (
 	"github.com/certifi/gocertifi"
 )
 
-const bufferSize = 30
+const defaultBufferSize = 30
 const defaultRetryAfter = time.Second * 60
 
 // Transport is used by the `Client` to deliver events to remote server.
@@ -44,6 +44,11 @@ func (t *httpTransport) Configure(options ClientOptions) {
 		return
 	}
 	t.dsn = dsn
+
+	bufferSize := defaultBufferSize
+	if options.BufferSize != 0 {
+		bufferSize = options.BufferSize
+	}
 	t.buffer = make(chan *http.Request, bufferSize)
 
 	if options.HTTPTransport != nil {

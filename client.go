@@ -56,6 +56,8 @@ type ClientOptions struct {
 	Environment string
 	// Maximum number of breadcrumbs.
 	MaxBreadcrumbs int
+	// An optional size of the transport buffer. Defaults to 30.
+	BufferSize int
 	// An optional pointer to `http.Transport` that will be used with a default HTTPTransport.
 	HTTPTransport *http.Transport
 	// An optional HTTP proxy to use.
