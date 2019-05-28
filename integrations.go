@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
-	"net/http"
 	"os"
 	"runtime"
 	"strings"
@@ -198,79 +196,6 @@ func (ei environmentIntegration) processor(event *Event, hint *EventHint) *Event
 	event.Contexts["runtime"] = map[string]interface{}{
 		"name":    "go",
 		"version": runtime.Version(),
-	}
-
-	return event
-}
-
-type requestIntegration struct{}
-
-func (ri requestIntegration) Name() string {
-	return "Request"
-}
-
-func (ri requestIntegration) SetupOnce() {
-	AddGlobalEventProcessor(ri.processor)
-}
-
-func (ri requestIntegration) processor(event *Event, hint *EventHint) *Event {
-	// Run the integration only on the Client that registered it
-	if CurrentHub().GetIntegration(ri.Name()) == nil {
-		return event
-	}
-
-	if hint == nil {
-		return event
-	}
-
-	if hint.Request != nil {
-		return ri.fillEvent(event, hint.Request)
-	}
-
-	if hint.Context == nil {
-		return event
-	}
-
-	if request, ok := hint.Context.Value(RequestContextKey).(*http.Request); ok {
-		return ri.fillEvent(event, request)
-	}
-
-	return event
-}
-
-func (ri requestIntegration) fillEvent(event *Event, request *http.Request) *Event {
-	// Method
-	event.Request.Method = request.Method
-
-	// URL
-	protocol := "http"
-	if request.TLS != nil || request.Header.Get("X-Forwarded-Proto") == "https" {
-		protocol = "https"
-	}
-	event.Request.URL = fmt.Sprintf("%s://%s%s", protocol, request.Host, request.URL.Path)
-
-	// Headers
-	headers := make(map[string]string, len(request.Header))
-	for k, v := range request.Header {
-		headers[k] = strings.Join(v, ",")
-	}
-	headers["Host"] = request.Host
-	event.Request.Headers = headers
-
-	// Cookies
-	event.Request.Cookies = request.Header.Get("Cookie")
-
-	// Env
-	if addr, port, err := net.SplitHostPort(request.RemoteAddr); err == nil {
-		event.Request.Env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
-	}
-
-	// QueryString
-	event.Request.QueryString = request.URL.RawQuery
-
-	// Body
-	if body, err := ioutil.ReadAll(request.Body); err == nil {
-		event.Request.Data = string(body)
 	}
 
 	return event

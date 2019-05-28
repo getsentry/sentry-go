@@ -2,7 +2,11 @@ package sentry
 
 import (
 	"context"
+	"fmt"
+	"io/ioutil"
+	"net"
 	"net/http"
+	"strings"
 )
 
 // Version Sentry-Go SDK Version
@@ -64,6 +68,44 @@ type Request struct {
 	Cookies     string            `json:"cookies,omitempty"`
 	Headers     map[string]string `json:"headers,omitempty"`
 	Env         map[string]string `json:"env,omitempty"`
+}
+
+func (r Request) FromHTTPRequest(request *http.Request) Request {
+	// Method
+	r.Method = request.Method
+
+	// URL
+	protocol := schemeHTTP
+	if request.TLS != nil || request.Header.Get("X-Forwarded-Proto") == "https" {
+		protocol = schemeHTTPS
+	}
+	r.URL = fmt.Sprintf("%s://%s%s", protocol, request.Host, request.URL.Path)
+
+	// Headers
+	headers := make(map[string]string, len(request.Header))
+	for k, v := range request.Header {
+		headers[k] = strings.Join(v, ",")
+	}
+	headers["Host"] = request.Host
+	r.Headers = headers
+
+	// Cookies
+	r.Cookies = request.Header.Get("Cookie")
+
+	// Env
+	if addr, port, err := net.SplitHostPort(request.RemoteAddr); err == nil {
+		r.Env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
+	}
+
+	// QueryString
+	r.QueryString = request.URL.RawQuery
+
+	// Body
+	if body, err := ioutil.ReadAll(request.Body); err == nil {
+		r.Data = string(body)
+	}
+
+	return r
 }
 
 // https://docs.sentry.io/development/sdk-dev/interfaces/exception/

@@ -139,7 +139,6 @@ func (client *Client) setupIntegrations() {
 	integrations := []Integration{
 		new(environmentIntegration),
 		new(modulesIntegration),
-		new(requestIntegration),
 	}
 
 	if client.options.Integrations != nil {
