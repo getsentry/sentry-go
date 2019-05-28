@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -238,12 +239,39 @@ func (ri requestIntegration) processor(event *Event, hint *EventHint) *Event {
 }
 
 func (ri requestIntegration) fillEvent(event *Event, request *http.Request) *Event {
+	// Method
 	event.Request.Method = request.Method
-	event.Request.Headers = request.Header
-	event.Request.URL = request.URL.String()
+
+	// URL
+	protocol := "http"
+	if request.TLS != nil || request.Header.Get("X-Forwarded-Proto") == "https" {
+		protocol = "https"
+	}
+	event.Request.URL = fmt.Sprintf("%s://%s%s", protocol, request.Host, request.URL.Path)
+
+	// Headers
+	headers := make(map[string]string, len(request.Header))
+	for k, v := range request.Header {
+		headers[k] = strings.Join(v, ",")
+	}
+	headers["Host"] = request.Host
+	event.Request.Headers = headers
+
+	// Cookies
+	event.Request.Cookies = request.Header.Get("Cookie")
+
+	// Env
+	if addr, port, err := net.SplitHostPort(request.RemoteAddr); err == nil {
+		event.Request.Env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
+	}
+
+	// QueryString
 	event.Request.QueryString = request.URL.RawQuery
+
+	// Body
 	if body, err := ioutil.ReadAll(request.Body); err == nil {
 		event.Request.Data = string(body)
 	}
+
 	return event
 }
