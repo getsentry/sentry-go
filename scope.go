@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"reflect"
 	"time"
 )
 
@@ -43,6 +44,7 @@ type Scope struct {
 	extra           map[string]interface{}
 	fingerprint     []string
 	level           Level
+	request         Request
 	eventProcessors []EventProcessor
 }
 
@@ -73,6 +75,11 @@ func (scope *Scope) ClearBreadcrumbs() {
 // SetUser sets new user for the current scope.
 func (scope *Scope) SetUser(user User) {
 	scope.user = user
+}
+
+// SetRequest sets new user for the current scope.
+func (scope *Scope) SetRequest(request Request) {
+	scope.request = request
 }
 
 // SetTag adds a tag to the current scope.
@@ -182,6 +189,7 @@ func (scope *Scope) Clone() *Scope {
 	clone.fingerprint = make([]string, len(scope.fingerprint))
 	copy(clone.fingerprint, scope.fingerprint)
 	clone.level = scope.level
+	clone.request = scope.request
 	return clone
 }
 
@@ -238,7 +246,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		}
 	}
 
-	if (event.User == User{}) {
+	if (reflect.DeepEqual(event.User, User{})) {
 		event.User = scope.user
 	}
 
@@ -250,6 +258,10 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 
 	if scope.level != "" {
 		event.Level = scope.level
+	}
+
+	if (reflect.DeepEqual(event.Request, Request{})) {
+		event.Request = scope.request
 	}
 
 	for _, processor := range GlobalEventProcessors() {

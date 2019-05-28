@@ -2,6 +2,7 @@
 
 ## 0.0.1-beta.2
 
+- feat: Introduce `SetRequest` method on a `Scope` and `FromHttpRequest` for `Request` type for easier extraction
 - feat: Allow for configuring transport buffer size throught `BufferSize` client option
 - ref: Extract Request information more accurately
 - fix: Don't log events dropped due to full transport buffer as sent
