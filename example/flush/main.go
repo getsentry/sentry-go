@@ -9,7 +9,7 @@ import (
 
 func main() {
 	_ = sentry.Init(sentry.ClientOptions{
-		Dsn:   "https://definitelyincorrect@oiasaskjd.io/42",
+		Dsn:   "https://hello@world.io/1337",
 		Debug: true,
 	})
 

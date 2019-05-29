@@ -9,6 +9,9 @@ import (
 	"strings"
 )
 
+// Protocol Docs (kinda)
+// https://github.com/getsentry/rust-sentry-types/blob/master/src/protocol/v7.rs
+
 // Version Sentry-Go SDK Version
 const Version = "0.0.0-beta"
 
@@ -134,6 +137,7 @@ type Event struct {
 	Release     string                 `json:"release,omitempty"`
 	Sdk         SdkInfo                `json:"sdk,omitempty"`
 	ServerName  string                 `json:"server_name,omitempty"`
+	Threads     []Thread               `json:"threads,omitempty"`
 	Tags        map[string]string      `json:"tags,omitempty"`
 	Timestamp   int64                  `json:"timestamp,omitempty"`
 	Transaction string                 `json:"transaction,omitempty"`
@@ -142,6 +146,15 @@ type Event struct {
 	Modules     map[string]string      `json:"modules,omitempty"`
 	Request     Request                `json:"request,omitempty"`
 	Exception   []Exception            `json:"exception,omitempty"`
+}
+
+type Thread struct {
+	ID            string      `json:"id,omitempty"`
+	Name          string      `json:"name,omitempty"`
+	Stacktrace    *Stacktrace `json:"stacktrace,omitempty"`
+	RawStacktrace *Stacktrace `json:"raw_stacktrace,omitempty"`
+	Crashed       bool        `json:"crashed,omitempty"`
+	Current       bool        `json:"current,omitempty"`
 }
 
 type EventHint struct {

@@ -110,7 +110,7 @@ func (eu extractUser) processor(event *sentry.Event, hint *sentry.EventHint) *se
 
 func main() {
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn:       "https://whatever@sentry.io/1337",
+		Dsn:       "https://hello@world.io/1337",
 		Transport: new(devNullTransport),
 		Integrations: func(i []sentry.Integration) []sentry.Integration {
 			return append(i, new(extractUser))

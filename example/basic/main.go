@@ -116,7 +116,7 @@ func eventHint() {
 func main() {
 	if err := sentry.Init(sentry.ClientOptions{
 		Debug: true,
-		Dsn:   "https://14830a963b1e4c20ad90e47289c1fe98@sentry.io/1419836",
+		Dsn:   "https://hello@world.io/1337",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			if event.Message == "Drop me!" {
 				return nil

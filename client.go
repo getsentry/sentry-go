@@ -34,6 +34,8 @@ type ClientOptions struct {
 	Debug bool
 	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0)
 	SampleRate float32
+	// Configures whether SDK should generate and attach stacktraces to pure capture message calls
+	AttachStacktrace bool
 	// Before send callback.
 	BeforeSend func(event *Event, hint *EventHint) *Event
 	// Before breadcrumb add callback.
@@ -233,10 +235,20 @@ func (client *Client) Flush(timeout time.Duration) bool {
 }
 
 func (client *Client) eventFromMessage(message string, level Level) *Event {
-	return &Event{
+	event := Event{
 		Level:   level,
 		Message: message,
 	}
+
+	if client.Options().AttachStacktrace == true {
+		event.Threads = []Thread{{
+			Stacktrace: NewStacktrace(),
+			Crashed:    false,
+			Current:    true,
+		}}
+	}
+
+	return &event
 }
 
 func (client *Client) eventFromException(exception error, level Level) *Event {

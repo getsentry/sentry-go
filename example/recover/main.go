@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -39,8 +40,13 @@ func bazMsg() {
 
 func main() {
 	_ = sentry.Init(sentry.ClientOptions{
-		Debug: true,
-		Dsn:   "https://363a337c11a64611be4845ad6e24f3ac@sentry.io/297378",
+		Debug:            true,
+		Dsn:              "https://hello@world.io/1337",
+		AttachStacktrace: true,
+		BeforeSend: func(e *sentry.Event, h *sentry.EventHint) *sentry.Event {
+			fmt.Println(prettyPrint(e))
+			return e
+		},
 	})
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
