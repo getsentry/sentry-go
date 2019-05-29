@@ -325,9 +325,23 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if event.ServerName == "" {
-		if hostname, err := os.Hostname(); err == nil {
+		if client.Options().ServerName != "" {
+			event.ServerName = client.Options().ServerName
+		} else if hostname, err := os.Hostname(); err == nil {
 			event.ServerName = hostname
 		}
+	}
+
+	if event.Release == "" && client.Options().Release != "" {
+		event.Release = client.Options().Release
+	}
+
+	if event.Dist == "" && client.Options().Dist != "" {
+		event.Dist = client.Options().Dist
+	}
+
+	if event.Environment == "" && client.Options().Environment != "" {
+		event.Environment = client.Options().Environment
 	}
 
 	event.Platform = "go"
