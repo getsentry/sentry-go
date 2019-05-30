@@ -72,6 +72,26 @@ func TestStacktraceFrameContext(t *testing.T) {
 	})
 }
 
+func TestStacktraceUnsuccessfulContextifyShouldNotDropFrames(t *testing.T) {
+	frames := []Frame{{
+		Function:    "fnName",
+		Module:      "same",
+		Filename:    "wat.go",
+		AbsPath:     "this/doesnt/exist/wat.go",
+		Lineno:      1,
+		Colno:       2,
+	}, {
+		Function:    "fnNameFoo",
+		Module:      "sameFoo",
+		Filename:    "foo.go",
+		AbsPath:     "this/doesnt/exist/foo.go",
+		Lineno:      3,
+		Colno:       5,
+	}}
+	contextifiedFrames := contextifyFrames(frames)
+	assertEqual(t, len(contextifiedFrames), len(frames))
+}
+
 // https://github.com/pkg/errors
 func TestExtractStacktracePkgErrors(t *testing.T) {
 	err := RedPkgErrorsRanger()

@@ -228,18 +228,16 @@ func contextifyFrames(frames []Frame) []Frame {
 	for _, frame := range frames {
 		lines, initial := sr.readContextLines(frame.AbsPath, frame.Lineno, contextLines)
 
-		if lines == nil {
-			continue
-		}
-
-		for i, line := range lines {
-			switch {
-			case i < initial:
-				frame.PreContext = append(frame.PreContext, string(line))
-			case i == initial:
-				frame.ContextLine = string(line)
-			default:
-				frame.PostContext = append(frame.PostContext, string(line))
+		if lines != nil {
+			for i, line := range lines {
+				switch {
+				case i < initial:
+					frame.PreContext = append(frame.PreContext, string(line))
+				case i == initial:
+					frame.ContextLine = string(line)
+				default:
+					frame.PostContext = append(frame.PostContext, string(line))
+				}
 			}
 		}
 
