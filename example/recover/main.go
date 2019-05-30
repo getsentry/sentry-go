@@ -23,7 +23,7 @@ func barErr() {
 }
 
 func bazErr() {
-	panic(errors.New("Sorry with error :("))
+	panic(errors.New("sorry with error :("))
 }
 
 func fooMsg() {
@@ -35,7 +35,7 @@ func barMsg() {
 }
 
 func bazMsg() {
-	panic("Sorry with message :(")
+	panic("sorry with message :(")
 }
 
 func main() {

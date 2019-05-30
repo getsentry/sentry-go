@@ -32,10 +32,10 @@ type ClientOptions struct {
 	// In debug mode debug information is printed to stdput to help you understand what
 	// sentry is doing.
 	Debug bool
-	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0)
-	SampleRate float32
 	// Configures whether SDK should generate and attach stacktraces to pure capture message calls
 	AttachStacktrace bool
+	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0)
+	SampleRate float32
 	// Before send callback.
 	BeforeSend func(event *Event, hint *EventHint) *Event
 	// Before breadcrumb add callback.
@@ -240,7 +240,7 @@ func (client *Client) eventFromMessage(message string, level Level) *Event {
 		Message: message,
 	}
 
-	if client.Options().AttachStacktrace == true {
+	if client.Options().AttachStacktrace {
 		event.Threads = []Thread{{
 			Stacktrace: NewStacktrace(),
 			Crashed:    false,
