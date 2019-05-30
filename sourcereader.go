@@ -33,11 +33,11 @@ func (sr *sourceReader) readContextLines(filename string, line, context int) ([]
 		sr.cache[filename] = lines
 	}
 
-	return calculateContextLines(lines, line, context)
+	return sr.calculateContextLines(lines, line, context)
 }
 
 // `initial` points to a line that's the `context_line` itself in relation to returned slice
-func calculateContextLines(lines [][]byte, line, context int) ([][]byte, int) {
+func (sr *sourceReader) calculateContextLines(lines [][]byte, line, context int) ([][]byte, int) {
 	// Stacktrace lines are 1-indexed, slices are 0-indexed
 	line--
 
