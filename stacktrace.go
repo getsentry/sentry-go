@@ -226,7 +226,20 @@ func contextifyFrames(frames []Frame) []Frame {
 	contextifiedFrames := make([]Frame, 0, len(frames))
 
 	for _, frame := range frames {
-		lines, initial := sr.readContextLines(frame.AbsPath, frame.Lineno, contextLines)
+		var path string
+
+		// If we are not able to read the source code from either absolute or relative path (root dir only)
+		// Skip this part and return the original frame
+		if fileExists(frame.AbsPath) {
+			path = frame.AbsPath
+		} else if fileExists(frame.Filename) {
+			path = frame.Filename
+		} else {
+			contextifiedFrames = append(contextifiedFrames, frame)
+			continue
+		}
+
+		lines, initial := sr.readContextLines(path, frame.Lineno, contextLines)
 
 		for i, line := range lines {
 			switch {
