@@ -230,11 +230,12 @@ func contextifyFrames(frames []Frame) []Frame {
 
 		// If we are not able to read the source code from either absolute or relative path (root dir only)
 		// Skip this part and return the original frame
-		if fileExists(frame.AbsPath) {
+		switch {
+		case fileExists(frame.AbsPath):
 			path = frame.AbsPath
-		} else if fileExists(frame.Filename) {
+		case fileExists(frame.Filename):
 			path = frame.Filename
-		} else {
+		default:
 			contextifiedFrames = append(contextifiedFrames, frame)
 			continue
 		}

@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/certifi/gocertifi"
 )
 
 const defaultBufferSize = 30
@@ -142,13 +140,7 @@ func (t *httpTransport) getTLSConfig(options ClientOptions) *tls.Config {
 		}
 	}
 
-	rootCAs, err := gocertifi.CACerts()
-	if err != nil {
-		Logger.Printf("Coudnt load CA Certificates: %v\n", err)
-	}
-	return &tls.Config{
-		RootCAs: rootCAs,
-	}
+	return nil
 }
 
 func (t *httpTransport) worker() {

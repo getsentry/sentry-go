@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.0.1-beta.3
+
+- ref: Try to read source files from the root directory, based on the filename as well, to make it work on AWS Lambda
+- ref: Remove `gocertifi` dependence and document how to provide your own certificates
+
 ## 0.0.1-beta.2
 
 - feat: Add `AttachStacktrace` client option to include stacktrace for messages
