@@ -74,6 +74,7 @@ sentry.Init(sentry.ClientOptions{
 ```
 
 Available options:
+
 ```go
 // ClientOptions that configures a SDK Client
 type ClientOptions struct {
@@ -120,6 +121,34 @@ type ClientOptions struct {
 	// Defaults to `gocertifi.CACerts()`.
 	CaCerts *x509.CertPool
 }
+```
+
+### Providing SSL Certificated
+
+By default, TLS uses the host's root CA set. If you don't have `ca-certificates` (which should be your go-to way of fixing missing ceritificates issue) and want to use `gocertifi` instead, you can provide pre-loaded cert files as one of the options to `sentry.Init` call:
+
+```go
+package main
+
+import (
+    "log"
+
+    "github.com/certifi/gocertifi"
+    "github.com/getsentry/sentry-go"
+)
+
+sentryClientOptions := sentry.ClientOptions{
+    Dsn: "https://16427b2f210046b585ee51fd8a1ac54f@sentry.io/1",
+}
+
+rootCAs, err := gocertifi.CACerts()
+if err != nil {
+    log.Println("Coudnt load CA Certificates: %v\n", err)
+} else {
+    sentryClientOptions.CaCerts = rootCAs
+}
+
+sentry.Init(sentryClientOptions)
 ```
 
 ## Usage
