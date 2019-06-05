@@ -11,14 +11,10 @@ type EventModifier interface {
 	ApplyToEvent(event *Event, hint *EventHint) *Event
 }
 
-var _globalEventProcessors []EventProcessor
-
-func GlobalEventProcessors() []EventProcessor {
-	return _globalEventProcessors
-}
+var globalEventProcessors []EventProcessor
 
 func AddGlobalEventProcessor(processor EventProcessor) {
-	_globalEventProcessors = append(_globalEventProcessors, processor)
+	globalEventProcessors = append(globalEventProcessors, processor)
 }
 
 // Scope holds contextual data for the current scope.
@@ -239,7 +235,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		event.Request = scope.request
 	}
 
-	for _, processor := range GlobalEventProcessors() {
+	for _, processor := range globalEventProcessors {
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
