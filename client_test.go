@@ -20,9 +20,9 @@ func (e customComplexError) AnswerToLife() string {
 func setupClientTest() (*Client, *ScopeMock, *TransportMock) {
 	scope := &ScopeMock{}
 	transport := &TransportMock{}
-	client := &Client{
+	client, _ := NewClient(ClientOptions{
 		Transport: transport,
-	}
+	})
 
 	return client, scope, transport
 }
@@ -46,7 +46,9 @@ func TestCaptureExceptionShouldNotFailWhenPassedNil(t *testing.T) {
 
 func TestCaptureEventShouldSendEventWithProvidedError(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	client.CaptureEvent(&Event{Message: "event message"}, nil, scope)
+	event := NewEvent()
+	event.Message = "event message"
+	client.CaptureEvent(event, nil, scope)
 	assertEqual(t, transport.lastEvent.Message, "event message")
 }
 

@@ -6,8 +6,8 @@ import (
 )
 
 func setupHubTest() (*Hub, *Client, *Scope) {
-	client := &Client{}
-	scope := &Scope{}
+	client, _ := NewClient(ClientOptions{})
+	scope := NewScope()
 	hub := NewHub(client, scope)
 	return hub, client, scope
 }
@@ -71,7 +71,7 @@ func TestPopScopeCannotRemoveFromEmptyStack(t *testing.T) {
 func TestBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 	hub.PushScope()
-	newClient := &Client{}
+	newClient, _ := NewClient(ClientOptions{})
 	hub.BindClient(newClient)
 
 	if (*hub.stack)[0].client == (*hub.stack)[1].client {
@@ -99,7 +99,7 @@ func TestWithScopeBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 
 	hub.WithScope(func(scope *Scope) {
-		newClient := &Client{}
+		newClient, _ := NewClient(ClientOptions{})
 		hub.BindClient(newClient)
 		if hub.stackTop().client != newClient {
 			t.Error("should use newly bound client")
@@ -243,21 +243,6 @@ func TestBeforeBreadcrumbGetAccessToEventHint(t *testing.T) {
 
 	assertEqual(t, len(scope.breadcrumbs), 1)
 	assertEqual(t, "Breadcrumb_oh", scope.breadcrumbs[0].Message)
-}
-
-func TestFlushShouldPanicTillImplemented(t *testing.T) {
-	hub, _, _ := setupHubTest()
-
-	func() {
-		defer func() {
-			err := recover()
-			if err == nil {
-				t.Error("flush should panic")
-			}
-		}()
-
-		hub.Flush(0)
-	}()
 }
 
 func TestHasHubOnContextReturnsTrueIfHubIsThere(t *testing.T) {

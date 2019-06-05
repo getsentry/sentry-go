@@ -235,10 +235,9 @@ func (client *Client) Flush(timeout time.Duration) bool {
 }
 
 func (client *Client) eventFromMessage(message string, level Level) *Event {
-	event := Event{
-		Level:   level,
-		Message: message,
-	}
+	event := NewEvent()
+	event.Level = level
+	event.Message = message
 
 	if client.Options().AttachStacktrace {
 		event.Threads = []Thread{{
@@ -248,15 +247,15 @@ func (client *Client) eventFromMessage(message string, level Level) *Event {
 		}}
 	}
 
-	return &event
+	return event
 }
 
 func (client *Client) eventFromException(exception error, level Level) *Event {
 	if exception == nil {
-		return &Event{
-			Level:   level,
-			Message: fmt.Sprintf("Called %s with nil value", callerFunctionName()),
-		}
+		event := NewEvent()
+		event.Level = level
+		event.Message = fmt.Sprintf("Called %s with nil value", callerFunctionName())
+		return event
 	}
 
 	stacktrace := ExtractStacktrace(exception)
@@ -265,14 +264,14 @@ func (client *Client) eventFromException(exception error, level Level) *Event {
 		stacktrace = NewStacktrace()
 	}
 
-	return &Event{
-		Level: level,
-		Exception: []Exception{{
-			Value:      exception.Error(),
-			Type:       reflect.TypeOf(exception).String(),
-			Stacktrace: stacktrace,
-		}},
-	}
+	event := NewEvent()
+	event.Level = level
+	event.Exception = []Exception{{
+		Value:      exception.Error(),
+		Type:       reflect.TypeOf(exception).String(),
+		Stacktrace: stacktrace,
+	}}
+	return event
 }
 
 func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {

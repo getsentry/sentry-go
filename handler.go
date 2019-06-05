@@ -27,8 +27,14 @@ func DecorateFunc(handler http.HandlerFunc) http.HandlerFunc {
 }
 
 func createContextWithHub(response http.ResponseWriter, request *http.Request) context.Context {
-	client := CurrentHub().Client()
-	scope := CurrentHub().Scope().Clone()
+	hub := CurrentHub()
+
+	if hub == nil {
+		return request.Context()
+	}
+
+	client := hub.Client()
+	scope := hub.Scope().Clone()
 	scope.SetRequest(Request{}.FromHTTPRequest(request))
 
 	ctx := request.Context()

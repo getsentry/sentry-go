@@ -50,12 +50,13 @@ type stack []*layer
 
 // NewHub returns an instance of a `Hub` with provided `Client` and `Scope` bound.
 func NewHub(client *Client, scope *Scope) *Hub {
-	return &Hub{
+	hub := Hub{
 		stack: &stack{{
 			client: client,
 			scope:  scope,
 		}},
 	}
+	return &hub
 }
 
 // CurrentHub returns an instance of previously initialized `Hub` stored in the global namespace.

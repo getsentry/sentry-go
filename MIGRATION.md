@@ -224,13 +224,11 @@ raven.Capture(packet)
 sentry-go
 
 ```go
-event := &sentry.Event{
-    Message: "Hand-crafted event",
-    Extra: map[string]interface{}{
-        "runtime.Version": runtime.Version(),
-        "runtime.NumCPU": runtime.NumCPU(),
-    },
-}
+event := &sentry.NewEvent()
+event.Message = "Hand-crafted event"
+event.Extra["runtime.Version"] = runtime.Version()
+event.Extra["runtime.NumCPU"] = runtime.NumCPU()
+
 sentry.CaptureEvent(event)
 ```
 

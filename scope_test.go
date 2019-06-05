@@ -30,13 +30,13 @@ func fillEventWithData(event *Event) *Event {
 }
 
 func TestScopeSetUser(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetUser(User{ID: "foo"})
 	assertEqual(t, User{ID: "foo"}, scope.user)
 }
 
 func TestScopeSetUserOverrides(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetUser(User{ID: "foo"})
 	scope.SetUser(User{ID: "bar"})
 
@@ -44,13 +44,13 @@ func TestScopeSetUserOverrides(t *testing.T) {
 }
 
 func TestScopeSetRequest(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetRequest(Request{URL: "foo"})
 	assertEqual(t, Request{URL: "foo"}, scope.request)
 }
 
 func TestScopeSetRequestOverrides(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetRequest(Request{URL: "foo"})
 	scope.SetRequest(Request{URL: "bar"})
 
@@ -58,14 +58,14 @@ func TestScopeSetRequestOverrides(t *testing.T) {
 }
 
 func TestScopeSetTag(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetTag("a", "foo")
 
 	assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
 }
 
 func TestScopeSetTagMerges(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetTag("a", "foo")
 	scope.SetTag("b", "bar")
 
@@ -73,7 +73,7 @@ func TestScopeSetTagMerges(t *testing.T) {
 }
 
 func TestScopeSetTagOverrides(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetTag("a", "foo")
 	scope.SetTag("a", "bar")
 
@@ -81,14 +81,14 @@ func TestScopeSetTagOverrides(t *testing.T) {
 }
 
 func TestScopeSetTags(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetTags(map[string]string{"a": "foo"})
 
 	assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
 }
 
 func TestScopeSetTagsMerges(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetTags(map[string]string{"a": "foo"})
 	scope.SetTags(map[string]string{"b": "bar", "c": "baz"})
 
@@ -96,7 +96,7 @@ func TestScopeSetTagsMerges(t *testing.T) {
 }
 
 func TestScopeSetTagsOverrides(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetTags(map[string]string{"a": "foo"})
 	scope.SetTags(map[string]string{"a": "bar", "b": "baz"})
 
@@ -104,7 +104,7 @@ func TestScopeSetTagsOverrides(t *testing.T) {
 }
 
 func TestScopeRemoveTag(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetTag("a", "foo")
 	scope.SetTag("b", "bar")
 	scope.RemoveTag("b")
@@ -113,7 +113,7 @@ func TestScopeRemoveTag(t *testing.T) {
 }
 
 func TestScopeRemoveTagSkipsEmptyValues(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetTag("a", "foo")
 	scope.RemoveTag("b")
 
@@ -121,21 +121,21 @@ func TestScopeRemoveTagSkipsEmptyValues(t *testing.T) {
 }
 
 func TestScopeRemoveTagOnEmptyScope(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.RemoveTag("b")
 
-	assertEqual(t, map[string]string(nil), scope.tags)
+	assertEqual(t, make(map[string]string), scope.tags)
 }
 
 func TestScopeSetContext(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetContext("a", 1)
 
 	assertEqual(t, map[string]interface{}{"a": 1}, scope.contexts)
 }
 
 func TestScopeSetContextMerges(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetContext("a", "foo")
 	scope.SetContext("b", 2)
 
@@ -143,7 +143,7 @@ func TestScopeSetContextMerges(t *testing.T) {
 }
 
 func TestScopeSetContextOverrides(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetContext("a", "foo")
 	scope.SetContext("a", 2)
 
@@ -151,14 +151,14 @@ func TestScopeSetContextOverrides(t *testing.T) {
 }
 
 func TestScopeSetContexts(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetContexts(map[string]interface{}{"a": 1})
 
 	assertEqual(t, map[string]interface{}{"a": 1}, scope.contexts)
 }
 
 func TestScopeSetContextsMerges(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetContexts(map[string]interface{}{"a": "foo"})
 	scope.SetContexts(map[string]interface{}{"b": 2, "c": 3})
 
@@ -166,7 +166,7 @@ func TestScopeSetContextsMerges(t *testing.T) {
 }
 
 func TestScopeSetContextsOverrides(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetContexts(map[string]interface{}{"a": "foo"})
 	scope.SetContexts(map[string]interface{}{"a": 2, "b": 3})
 
@@ -174,7 +174,7 @@ func TestScopeSetContextsOverrides(t *testing.T) {
 }
 
 func TestScopeRemoveContext(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetContext("a", "foo")
 	scope.SetContext("b", "bar")
 	scope.RemoveContext("b")
@@ -183,7 +183,7 @@ func TestScopeRemoveContext(t *testing.T) {
 }
 
 func TestScopeRemoveContextSkipsEmptyValues(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetContext("a", "foo")
 	scope.RemoveContext("b")
 
@@ -191,21 +191,21 @@ func TestScopeRemoveContextSkipsEmptyValues(t *testing.T) {
 }
 
 func TestScopeRemoveContextOnEmptyScope(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.RemoveContext("b")
 
-	assertEqual(t, map[string]interface{}(nil), scope.contexts)
+	assertEqual(t, make(map[string]interface{}), scope.contexts)
 }
 
 func TestScopeSetExtra(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetExtra("a", 1)
 
 	assertEqual(t, map[string]interface{}{"a": 1}, scope.extra)
 }
 
 func TestScopeSetExtraMerges(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetExtra("a", "foo")
 	scope.SetExtra("b", 2)
 
@@ -213,7 +213,7 @@ func TestScopeSetExtraMerges(t *testing.T) {
 }
 
 func TestScopeSetExtraOverrides(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetExtra("a", "foo")
 	scope.SetExtra("a", 2)
 
@@ -221,14 +221,14 @@ func TestScopeSetExtraOverrides(t *testing.T) {
 }
 
 func TestScopeSetExtras(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetExtras(map[string]interface{}{"a": 1})
 
 	assertEqual(t, map[string]interface{}{"a": 1}, scope.extra)
 }
 
 func TestScopeSetExtrasMerges(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetExtras(map[string]interface{}{"a": "foo"})
 	scope.SetExtras(map[string]interface{}{"b": 2, "c": 3})
 
@@ -236,7 +236,7 @@ func TestScopeSetExtrasMerges(t *testing.T) {
 }
 
 func TestScopeSetExtrasOverrides(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetExtras(map[string]interface{}{"a": "foo"})
 	scope.SetExtras(map[string]interface{}{"a": 2, "b": 3})
 
@@ -244,7 +244,7 @@ func TestScopeSetExtrasOverrides(t *testing.T) {
 }
 
 func TestScopeRemoveExtra(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetExtra("a", "foo")
 	scope.SetExtra("b", "bar")
 	scope.RemoveExtra("b")
@@ -253,7 +253,7 @@ func TestScopeRemoveExtra(t *testing.T) {
 }
 
 func TestScopeRemoveExtraSkipsEmptyValues(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetExtra("a", "foo")
 	scope.RemoveExtra("b")
 
@@ -261,21 +261,21 @@ func TestScopeRemoveExtraSkipsEmptyValues(t *testing.T) {
 }
 
 func TestScopeRemoveExtraOnEmptyScope(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.RemoveExtra("b")
 
-	assertEqual(t, map[string]interface{}(nil), scope.contexts)
+	assertEqual(t, make(map[string]interface{}), scope.contexts)
 }
 
 func TestScopeSetFingerprint(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetFingerprint([]string{"abcd"})
 
 	assertEqual(t, []string{"abcd"}, scope.fingerprint)
 }
 
 func TestScopeSetFingerprintOverrides(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetFingerprint([]string{"abc"})
 	scope.SetFingerprint([]string{"def"})
 
@@ -283,14 +283,14 @@ func TestScopeSetFingerprintOverrides(t *testing.T) {
 }
 
 func TestScopeSetLevel(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetLevel(LevelInfo)
 
 	assertEqual(t, scope.level, LevelInfo)
 }
 
 func TestScopeSetLevelOverrides(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetLevel(LevelInfo)
 	scope.SetLevel(LevelFatal)
 
@@ -298,13 +298,13 @@ func TestScopeSetLevelOverrides(t *testing.T) {
 }
 
 func TestAddBreadcrumbAddsBreadcrumb(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"}, maxBreadcrumbs)
 	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "test"}}, scope.breadcrumbs)
 }
 
 func TestAddBreadcrumbAppendsBreadcrumb(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test1"}, maxBreadcrumbs)
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test2"}, maxBreadcrumbs)
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test3"}, maxBreadcrumbs)
@@ -317,7 +317,7 @@ func TestAddBreadcrumbAppendsBreadcrumb(t *testing.T) {
 }
 
 func TestAddBreadcrumbDefaultLimit(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	for i := 0; i < 101; i++ {
 		scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"}, maxBreadcrumbs)
 	}
@@ -328,7 +328,7 @@ func TestAddBreadcrumbDefaultLimit(t *testing.T) {
 }
 
 func TestAddBreadcrumbAddsTimestamp(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	before := time.Now().Unix()
 	scope.AddBreadcrumb(&Breadcrumb{Message: "test"}, maxBreadcrumbs)
 	after := time.Now().Unix()
@@ -340,7 +340,7 @@ func TestAddBreadcrumbAddsTimestamp(t *testing.T) {
 }
 
 func TestScopeBasicInheritance(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	scope.SetExtra("a", 1)
 	clone := scope.Clone()
 
@@ -348,7 +348,7 @@ func TestScopeBasicInheritance(t *testing.T) {
 }
 
 func TestScopeParentChangedInheritance(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 	clone := scope.Clone()
 
 	clone.SetTag("foo", "bar")
@@ -389,7 +389,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 }
 
 func TestScopeChildOverrideInheritance(t *testing.T) {
-	scope := &Scope{}
+	scope := NewScope()
 
 	scope.SetTag("foo", "baz")
 	scope.SetContext("foo", "baz")
@@ -433,7 +433,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 }
 
 func TestClear(t *testing.T) {
-	scope := fillScopeWithData(&Scope{})
+	scope := fillScopeWithData(NewScope())
 	scope.Clear()
 
 	assertEqual(t, []*Breadcrumb(nil), scope.breadcrumbs)
@@ -447,15 +447,15 @@ func TestClear(t *testing.T) {
 }
 
 func TestClearBreadcrumbs(t *testing.T) {
-	scope := fillScopeWithData(&Scope{})
+	scope := fillScopeWithData(NewScope())
 	scope.ClearBreadcrumbs()
 
 	assertEqual(t, []*Breadcrumb{}, scope.breadcrumbs)
 }
 
 func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
-	scope := fillScopeWithData(&Scope{})
-	event := fillEventWithData(&Event{})
+	scope := fillScopeWithData(NewScope())
+	event := fillEventWithData(NewEvent())
 
 	processedEvent := scope.ApplyToEvent(event, nil)
 
@@ -470,8 +470,8 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 }
 
 func TestApplyToEventUsingEmptyScope(t *testing.T) {
-	scope := &Scope{}
-	event := fillEventWithData(&Event{})
+	scope := NewScope()
+	event := fillEventWithData(NewEvent())
 
 	processedEvent := scope.ApplyToEvent(event, nil)
 
@@ -486,8 +486,8 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 }
 
 func TestApplyToEventUsingEmptyEvent(t *testing.T) {
-	scope := fillScopeWithData(&Scope{})
-	event := &Event{}
+	scope := fillScopeWithData(NewScope())
+	event := NewEvent()
 
 	processedEvent := scope.ApplyToEvent(event, nil)
 
@@ -502,8 +502,8 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 }
 
 func TestEventProcessorsModifiesEvent(t *testing.T) {
-	scope := &Scope{}
-	event := &Event{}
+	scope := NewScope()
+	event := NewEvent()
 	scope.eventProcessors = []EventProcessor{
 		func(event *Event, hint *EventHint) *Event {
 			event.Level = LevelFatal
@@ -524,8 +524,8 @@ func TestEventProcessorsModifiesEvent(t *testing.T) {
 }
 
 func TestEventProcessorsCanDropEvent(t *testing.T) {
-	scope := &Scope{}
-	event := &Event{}
+	scope := NewScope()
+	event := NewEvent()
 	scope.eventProcessors = []EventProcessor{
 		func(event *Event, hint *EventHint) *Event {
 			return nil
@@ -539,8 +539,8 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 }
 
 func TestEventProcessorsAddEventProcessor(t *testing.T) {
-	scope := &Scope{}
-	event := &Event{}
+	scope := NewScope()
+	event := NewEvent()
 	processedEvent := scope.ApplyToEvent(event, nil)
 
 	if processedEvent == nil {

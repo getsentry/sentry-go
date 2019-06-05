@@ -148,6 +148,16 @@ type Event struct {
 	Exception   []Exception            `json:"exception,omitempty"`
 }
 
+func NewEvent() *Event {
+	event := Event{
+		Contexts: make(map[string]interface{}),
+		Extra:    make(map[string]interface{}),
+		Tags:     make(map[string]string),
+		Modules:  make(map[string]string),
+	}
+	return &event
+}
+
 type Thread struct {
 	ID            string      `json:"id,omitempty"`
 	Name          string      `json:"name,omitempty"`

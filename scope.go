@@ -48,15 +48,21 @@ type Scope struct {
 	eventProcessors []EventProcessor
 }
 
+func NewScope() *Scope {
+	scope := Scope{
+		tags:     make(map[string]string),
+		contexts: make(map[string]interface{}),
+		extra:    make(map[string]interface{}),
+	}
+
+	return &scope
+}
+
 // AddBreadcrumb adds new breadcrumb to the current scope
 // and optionaly throws the old one if limit is reached.
 func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	if breadcrumb.Timestamp == 0 {
 		breadcrumb.Timestamp = time.Now().Unix()
-	}
-
-	if scope.breadcrumbs == nil {
-		scope.breadcrumbs = []*Breadcrumb{}
 	}
 
 	breadcrumbs := append(scope.breadcrumbs, breadcrumb)
@@ -84,17 +90,11 @@ func (scope *Scope) SetRequest(request Request) {
 
 // SetTag adds a tag to the current scope.
 func (scope *Scope) SetTag(key, value string) {
-	if scope.tags == nil {
-		scope.tags = make(map[string]string)
-	}
 	scope.tags[key] = value
 }
 
 // SetTags assigns multiple tags to the current scope.
 func (scope *Scope) SetTags(tags map[string]string) {
-	if scope.tags == nil {
-		scope.tags = make(map[string]string)
-	}
 	for k, v := range tags {
 		scope.tags[k] = v
 	}
@@ -102,24 +102,16 @@ func (scope *Scope) SetTags(tags map[string]string) {
 
 // RemoveTag removes a tag from the current scope.
 func (scope *Scope) RemoveTag(key string) {
-	if scope.tags != nil {
-		delete(scope.tags, key)
-	}
+	delete(scope.tags, key)
 }
 
 // SetContext adds a context to the current scope.
 func (scope *Scope) SetContext(key string, value interface{}) {
-	if scope.contexts == nil {
-		scope.contexts = make(map[string]interface{})
-	}
 	scope.contexts[key] = value
 }
 
 // SetContexts assigns multiple contexts to the current scope.
 func (scope *Scope) SetContexts(contexts map[string]interface{}) {
-	if scope.contexts == nil {
-		scope.contexts = make(map[string]interface{})
-	}
 	for k, v := range contexts {
 		scope.contexts[k] = v
 	}
@@ -127,24 +119,16 @@ func (scope *Scope) SetContexts(contexts map[string]interface{}) {
 
 // RemoveContext removes a context from the current scope.
 func (scope *Scope) RemoveContext(key string) {
-	if scope.contexts != nil {
-		delete(scope.contexts, key)
-	}
+	delete(scope.contexts, key)
 }
 
 // SetExtra adds an extra to the current scope.
 func (scope *Scope) SetExtra(key string, value interface{}) {
-	if scope.extra == nil {
-		scope.extra = make(map[string]interface{})
-	}
 	scope.extra[key] = value
 }
 
 // SetExtras assigns multiple extras to the current scope.
 func (scope *Scope) SetExtras(extra map[string]interface{}) {
-	if scope.extra == nil {
-		scope.extra = make(map[string]interface{})
-	}
 	for k, v := range extra {
 		scope.extra[k] = v
 	}
@@ -152,9 +136,7 @@ func (scope *Scope) SetExtras(extra map[string]interface{}) {
 
 // RemoveExtra removes a extra from the current scope.
 func (scope *Scope) RemoveExtra(key string) {
-	if scope.extra != nil {
-		delete(scope.extra, key)
-	}
+	delete(scope.extra, key)
 }
 
 // SetFingerprint sets new fingerprint for the current scope.
@@ -169,11 +151,7 @@ func (scope *Scope) SetLevel(level Level) {
 
 // Clone returns a copy of the current scope with all data copied over.
 func (scope *Scope) Clone() *Scope {
-	clone := &Scope{
-		tags:     make(map[string]string),
-		contexts: make(map[string]interface{}),
-		extra:    make(map[string]interface{}),
-	}
+	clone := NewScope()
 	clone.user = scope.user
 	clone.breadcrumbs = make([]*Breadcrumb, len(scope.breadcrumbs))
 	copy(clone.breadcrumbs, scope.breadcrumbs)
@@ -200,15 +178,12 @@ func (scope *Scope) Clear() {
 
 // AddEventProcessor adds an event processor to the current scope.
 func (scope *Scope) AddEventProcessor(processor EventProcessor) {
-	if scope.eventProcessors == nil {
-		scope.eventProcessors = []EventProcessor{}
-	}
 	scope.eventProcessors = append(scope.eventProcessors, processor)
 }
 
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
 func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
-	if scope.breadcrumbs != nil && len(scope.breadcrumbs) > 0 {
+	if len(scope.breadcrumbs) > 0 {
 		if event.Breadcrumbs == nil {
 			event.Breadcrumbs = []*Breadcrumb{}
 		}
@@ -216,7 +191,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
 	}
 
-	if scope.tags != nil && len(scope.tags) > 0 {
+	if len(scope.tags) > 0 {
 		if event.Tags == nil {
 			event.Tags = make(map[string]string)
 		}
@@ -226,7 +201,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		}
 	}
 
-	if scope.contexts != nil && len(scope.contexts) > 0 {
+	if len(scope.contexts) > 0 {
 		if event.Contexts == nil {
 			event.Contexts = make(map[string]interface{})
 		}
@@ -236,7 +211,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		}
 	}
 
-	if scope.extra != nil && len(scope.extra) > 0 {
+	if len(scope.extra) > 0 {
 		if event.Extra == nil {
 			event.Extra = make(map[string]interface{})
 		}
@@ -251,7 +226,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 	}
 
 	if (event.Fingerprint == nil || len(event.Fingerprint) == 0) &&
-		(scope.fingerprint != nil && len(scope.fingerprint) > 0) {
+		len(scope.fingerprint) > 0 {
 		event.Fingerprint = make([]string, len(scope.fingerprint))
 		copy(event.Fingerprint, scope.fingerprint)
 	}

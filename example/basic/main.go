@@ -90,9 +90,9 @@ func withScopeAndConfigureScope() {
 			})
 		})
 
-		sentry.CaptureEvent(&sentry.Event{
-			Message: "say what again. SAY WHAT again",
-		})
+		event := sentry.NewEvent()
+		event.Message = "say what again. SAY WHAT again"
+		sentry.CaptureEvent(event)
 	})
 }
 
