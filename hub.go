@@ -13,9 +13,6 @@ const HubContextKey = contextKey(1)
 // RequestContextKey is a context key used to store http.Request on the context passed to RecoverWithContext
 const RequestContextKey = contextKey(2)
 
-// ResponseContextKey is a context key used to store http.Response on the context passed to RecoverWithContext
-const ResponseContextKey = contextKey(3)
-
 // Default maximum number of breadcrumbs added to an event. Can be overwritten `maxBreadcrumbs` option.
 const defaultMaxBreadcrumbs = 30
 
@@ -215,6 +212,9 @@ func (hub *Hub) Recover(err interface{}) {
 	if client == nil || scope == nil {
 		return
 	}
+	if err == nil {
+		err = recover()
+	}
 	client.Recover(err, &EventHint{RecoveredException: err}, scope)
 }
 
@@ -224,6 +224,9 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) {
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return
+	}
+	if err == nil {
+		err = recover()
 	}
 	client.RecoverWithContext(ctx, err, &EventHint{RecoveredException: err}, scope)
 }

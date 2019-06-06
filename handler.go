@@ -8,37 +8,42 @@ import (
 // Decorate wraps `http.Handler` and recovers from all the panics, providing necessary `Hub`
 // instance that is bound to the request `Context` object.
 func Decorate(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		ctx := createContextWithHub(response, request)
-		defer RecoverWithContext(ctx)
-		handler.ServeHTTP(response, request.WithContext(ctx))
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		ctx := createContextWithHub(r)
+		defer func() {
+			if err := recover(); err != nil {
+				GetHubFromContext(ctx).RecoverWithContext(ctx, err)
+				panic(err)
+			}
+		}()
+		handler.ServeHTTP(rw, r.WithContext(ctx))
 	})
 }
 
 // DecorateFunc wraps `http.HandlerFunc` and recovers from all the panics, providing necessary `Hub`
 // instance that is bound to the request `Context` object.
 func DecorateFunc(handler http.HandlerFunc) http.HandlerFunc {
-	return func(response http.ResponseWriter, request *http.Request) {
-		ctx := createContextWithHub(response, request)
-		defer RecoverWithContext(ctx)
-		handler(response, request.WithContext(ctx))
+	return func(rw http.ResponseWriter, r *http.Request) {
+		ctx := createContextWithHub(r)
+		defer func() {
+			if err := recover(); err != nil {
+				GetHubFromContext(ctx).RecoverWithContext(ctx, err)
+				panic(err)
+			}
+		}()
+		handler(rw, r.WithContext(ctx))
 	}
 }
 
-func createContextWithHub(response http.ResponseWriter, request *http.Request) context.Context {
-	hub := CurrentHub()
+func createContextWithHub(r *http.Request) context.Context {
+	parentHub := CurrentHub()
+	client := parentHub.Client()
+	scope := parentHub.Scope().Clone()
+	isolatedHub := NewHub(client, scope)
 
-	if hub == nil {
-		return request.Context()
-	}
+	scope.SetRequest(Request{}.FromHTTPRequest(r))
 
-	client := hub.Client()
-	scope := hub.Scope().Clone()
-	scope.SetRequest(Request{}.FromHTTPRequest(request))
-
-	ctx := request.Context()
-	ctx = context.WithValue(ctx, ResponseContextKey, response)
-	ctx = context.WithValue(ctx, RequestContextKey, request)
-
-	return SetHubOnContext(ctx, NewHub(client, scope))
+	ctx := r.Context()
+	ctx = context.WithValue(ctx, RequestContextKey, r)
+	return SetHubOnContext(ctx, isolatedHub)
 }
