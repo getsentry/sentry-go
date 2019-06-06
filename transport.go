@@ -113,8 +113,10 @@ func (t *httpTransport) Flush(timeout time.Duration) bool {
 
 	select {
 	case <-c:
+		Logger.Println("Buffer flushed successfully")
 		return true
 	case <-time.After(timeout):
+		Logger.Println("Buffer flushing reached the timeout")
 		return false
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 )
 
 func prettyPrint(v interface{}) string {
@@ -118,8 +119,13 @@ func main() {
 		fmt.Print("[Sentry] SDK initialized successfully\n\n")
 	}
 
-	http.Handle("/handle", sentry.Decorate(&customHandler{}))
-	http.HandleFunc("/handlefunc", attachUser(sentry.DecorateFunc(customHandlerFunc)))
+	sentryHandler := sentryhttp.New(sentryhttp.Options{
+		Repanic:         true,
+		WaitForDelivery: true,
+	})
+
+	http.Handle("/handle", sentryHandler.Handle(&customHandler{}))
+	http.HandleFunc("/handlefunc", attachUser(sentryHandler.HandleFunc(customHandlerFunc)))
 
 	log.Println("Please call me at localhost:8080/handle or localhost:8080/handlefunc")
 

@@ -425,11 +425,16 @@ http.HandleFunc("/", raven.RecoveryHandler(root))
 sentry-go
 
 ```go
+sentryHandler := sentryhttp.New(sentryhttp.Options{
+    Repanic: false,
+    WaitForDelivery: true,
+})
+
 mux := http.NewServeMux
-http.Handle("/", sentry.Decorate(mux))
+http.Handle("/", sentryHandler.Handle(mux))
 
 // or
 
 func root(w http.ResponseWriter, r *http.Request) {}
-http.HandleFunc("/", sentry.DecorateFunc(root))
+http.HandleFunc("/", sentryHandler.HandleFunc(root))
 ```
