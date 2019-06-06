@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
 
 	sentrynegroni "github.com/getsentry/sentry-go/negroni"
@@ -12,14 +10,9 @@ import (
 )
 
 func main() {
-	sentry.Init(sentry.ClientOptions{
-		Dsn:   "https://363a337c11a64611be4845ad6e24f3ac@sentry.io/297378",
-		Debug: true,
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			pp, _ := json.MarshalIndent(event, "", "  ")
-			fmt.Println(string(pp))
-			return event
-		},
+	_ = sentry.Init(sentry.ClientOptions{
+		Dsn:              "https://363a337c11a64611be4845ad6e24f3ac@sentry.io/297378",
+		Debug:            true,
 		AttachStacktrace: true,
 	})
 
@@ -29,8 +22,11 @@ func main() {
 	})
 
 	n := negroni.Classic()
-	n.Use(sentrynegroni.New())
+	n.Use(sentrynegroni.New(sentrynegroni.Options{
+		Repanic:         false,
+		WaitForDelivery: true,
+	}))
 	n.UseHandler(mux)
 
-	http.ListenAndServe(":3000", n)
+	_ = http.ListenAndServe(":3000", n)
 }

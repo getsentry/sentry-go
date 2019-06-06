@@ -10,14 +10,14 @@ import (
 
 type Handler struct {
 	repanic         bool
-	timeout         time.Duration
 	waitForDelivery bool
+	timeout         time.Duration
 }
 
 type Options struct {
 	Repanic         bool
-	Timeout         time.Duration
 	WaitForDelivery bool
+	Timeout         time.Duration
 }
 
 func New(options Options) *Handler {

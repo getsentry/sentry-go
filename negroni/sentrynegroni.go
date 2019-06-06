@@ -3,18 +3,53 @@ package sentrynegroni
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 )
 
-type SentryNegroni struct{}
+type Handler struct {
+	repanic         bool
+	waitForDelivery bool
+	timeout         time.Duration
+}
 
-func (sn *SentryNegroni) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+type Options struct {
+	Repanic         bool
+	WaitForDelivery bool
+	Timeout         time.Duration
+}
+
+func New(options Options) *Handler {
+	handler := Handler{
+		repanic:         false,
+		timeout:         time.Second * 2,
+		waitForDelivery: false,
+	}
+
+	if options.Repanic {
+		handler.repanic = true
+	}
+
+	if options.WaitForDelivery {
+		handler.waitForDelivery = true
+	}
+
+	return &handler
+}
+
+func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ctx := createContextWithHub(r)
 	defer func() {
 		if err := recover(); err != nil {
-			sentry.GetHubFromContext(ctx).RecoverWithContext(ctx, err)
-			panic(err)
+			hub := sentry.GetHubFromContext(ctx)
+			hub.RecoverWithContext(ctx, err)
+			if h.waitForDelivery {
+				hub.Flush(h.timeout)
+			}
+			if h.repanic {
+				panic(err)
+			}
 		}
 	}()
 	next(rw, r.WithContext(ctx))
@@ -31,9 +66,4 @@ func createContextWithHub(r *http.Request) context.Context {
 	ctx := r.Context()
 	ctx = context.WithValue(ctx, sentry.RequestContextKey, r)
 	return sentry.SetHubOnContext(ctx, isolatedHub)
-}
-
-func New() *SentryNegroni {
-	handler := SentryNegroni{}
-	return &handler
 }
