@@ -202,6 +202,7 @@ func extractFrames(pcs []uintptr) []Frame {
 
 func filterFrames(frames []Frame) []Frame {
 	isTestFileRegexp := regexp.MustCompile(`getsentry/sentry-go/.+_test.go`)
+	isExampleFileRegexp := regexp.MustCompile(`getsentry/sentry-go/example/`)
 	filteredFrames := make([]Frame, 0, len(frames))
 
 	for _, frame := range frames {
@@ -211,7 +212,10 @@ func filterFrames(frames []Frame) []Frame {
 		}
 		// sentry internal frames
 		isTestFile := isTestFileRegexp.MatchString(frame.AbsPath)
-		if strings.Contains(frame.Module, "getsentry/sentry-go") && !isTestFile {
+		isExampleFile := isExampleFileRegexp.MatchString(frame.AbsPath)
+		if strings.Contains(frame.AbsPath, "github.com/getsentry/sentry-go") &&
+			!isTestFile &&
+			!isExampleFile {
 			continue
 		}
 		filteredFrames = append(filteredFrames, frame)

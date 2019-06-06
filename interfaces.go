@@ -13,7 +13,7 @@ import (
 // https://github.com/getsentry/rust-sentry-types/blob/master/src/protocol/v7.rs
 
 // Version Sentry-Go SDK Version
-const Version = "0.0.0-beta"
+const Version = "0.0.1-beta.3"
 
 // Level marks the severity of the event
 type Level string

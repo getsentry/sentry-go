@@ -2,6 +2,7 @@
 
 ## 0.0.1-beta.3
 
+- feat: Add `Negroni` framework handler
 - feat: Add `NewScope` and `NewEvent` functions and use them in the whole codebase
 - feat: Add `AddEventProcessor` to the `Client`
 - ref: Try to read source files from the root directory, based on the filename as well, to make it work on AWS Lambda
