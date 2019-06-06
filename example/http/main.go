@@ -86,16 +86,11 @@ func (eu extractUser) Name() string {
 	return "extractUser"
 }
 
-func (eu extractUser) SetupOnce() {
-	sentry.AddGlobalEventProcessor(eu.processor)
+func (eu extractUser) SetupOnce(client *sentry.Client) {
+	client.AddEventProcessor(eu.processor)
 }
 
 func (eu extractUser) processor(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-	// Run the integration only on the Client that registered it
-	if sentry.CurrentHub().GetIntegration(eu.Name()) == nil {
-		return event
-	}
-
 	if hint != nil && hint.Context != nil {
 		if u, ok := hint.Context.Value(UserCtxKey).(User); ok {
 			event.User = sentry.User{

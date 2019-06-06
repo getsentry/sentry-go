@@ -19,10 +19,22 @@ import (
 // can be enabled by either using `Logger.SetOutput` directly or with `Debug` client option
 var Logger = log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags)
 
+type EventProcessor func(event *Event, hint *EventHint) *Event
+
+type EventModifier interface {
+	ApplyToEvent(event *Event, hint *EventHint) *Event
+}
+
+var globalEventProcessors []EventProcessor
+
+func AddGlobalEventProcessor(processor EventProcessor) {
+	globalEventProcessors = append(globalEventProcessors, processor)
+}
+
 // Integration allows for registering a functions that modify or discard captured events.
 type Integration interface {
 	Name() string
-	SetupOnce()
+	SetupOnce(client *Client)
 }
 
 // ClientOptions that configures a SDK Client
@@ -77,10 +89,11 @@ type ClientOptions struct {
 
 // Client is the underlying processor that's used by the main API and `Hub` instances.
 type Client struct {
-	options      ClientOptions
-	dsn          *Dsn
-	integrations map[string]Integration
-	Transport    Transport
+	options         ClientOptions
+	dsn             *Dsn
+	eventProcessors []EventProcessor
+	integrations    []Integration
+	Transport       Transport
 }
 
 // NewClient creates and returns an instance of `Client` configured using `ClientOptions`.
@@ -147,17 +160,20 @@ func (client *Client) setupIntegrations() {
 		integrations = client.options.Integrations(integrations)
 	}
 
-	client.integrations = make(map[string]Integration)
-
 	for _, integration := range integrations {
-		if _, ok := client.integrations[integration.Name()]; ok {
+		if client.integrationAlreadyInstalled(integration.Name()) {
 			Logger.Printf("Integration %s is already installed\n", integration.Name())
 			continue
 		}
-		client.integrations[integration.Name()] = integration
-		integration.SetupOnce()
+		client.integrations = append(client.integrations, integration)
+		integration.SetupOnce(client)
 		Logger.Printf("Integration installed: %s\n", integration.Name())
 	}
+}
+
+// AddEventProcessor adds an event processor to the client.
+func (client *Client) AddEventProcessor(processor EventProcessor) {
+	client.eventProcessors = append(client.eventProcessors, processor)
 }
 
 // Options return `ClientOptions` for the current `Client`.
@@ -354,14 +370,43 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		}},
 	}
 
-	return scope.ApplyToEvent(event, hint)
+	event = scope.ApplyToEvent(event, hint)
+
+	for _, processor := range client.eventProcessors {
+		id := event.EventID
+		event = processor(event, hint)
+		if event == nil {
+			Logger.Printf("event dropped by one of the Client EventProcessors: %s\n", id)
+			return nil
+		}
+	}
+
+	for _, processor := range globalEventProcessors {
+		id := event.EventID
+		event = processor(event, hint)
+		if event == nil {
+			Logger.Printf("event dropped by one of the Global EventProcessors: %s\n", id)
+			return nil
+		}
+	}
+
+	return event
 }
 
 func (client Client) listIntegrations() []string {
 	integrations := make([]string, 0, len(client.integrations))
-	for key := range client.integrations {
-		integrations = append(integrations, key)
+	for _, integration := range client.integrations {
+		integrations = append(integrations, integration.Name())
 	}
 	sort.Strings(integrations)
 	return integrations
+}
+
+func (client Client) integrationAlreadyInstalled(name string) bool {
+	for _, integration := range client.integrations {
+		if integration.Name() == name {
+			return true
+		}
+	}
+	return false
 }

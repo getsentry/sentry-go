@@ -14,20 +14,15 @@ type modulesIntegration struct{}
 
 var _modulesCache map[string]string
 
-func (mi modulesIntegration) Name() string {
+func (mi *modulesIntegration) Name() string {
 	return "Modules"
 }
 
-func (mi modulesIntegration) SetupOnce() {
-	AddGlobalEventProcessor(mi.processor)
+func (mi *modulesIntegration) SetupOnce(client *Client) {
+	client.AddEventProcessor(mi.processor)
 }
 
-func (mi modulesIntegration) processor(event *Event, hint *EventHint) *Event {
-	// Run the integration only on the Client that registered it
-	if CurrentHub().GetIntegration(mi.Name()) == nil {
-		return event
-	}
-
+func (mi *modulesIntegration) processor(event *Event, hint *EventHint) *Event {
 	if event.Modules == nil {
 		event.Modules = extractModules()
 	}
@@ -166,20 +161,15 @@ func getModulesFromVendorJSON() (map[string]string, error) {
 
 type environmentIntegration struct{}
 
-func (ei environmentIntegration) Name() string {
+func (ei *environmentIntegration) Name() string {
 	return "Environment"
 }
 
-func (ei environmentIntegration) SetupOnce() {
-	AddGlobalEventProcessor(ei.processor)
+func (ei *environmentIntegration) SetupOnce(client *Client) {
+	client.AddEventProcessor(ei.processor)
 }
 
-func (ei environmentIntegration) processor(event *Event, hint *EventHint) *Event {
-	// Run the integration only on the Client that registered it
-	if CurrentHub().GetIntegration(ei.Name()) == nil {
-		return event
-	}
-
+func (ei *environmentIntegration) processor(event *Event, hint *EventHint) *Event {
 	if event.Contexts == nil {
 		event.Contexts = make(map[string]interface{})
 	}

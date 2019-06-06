@@ -18,7 +18,6 @@ func Decorate(handler http.Handler) http.Handler {
 // DecorateFunc wraps `http.HandlerFunc` and recovers from all the panics, providing necessary `Hub`
 // instance that is bound to the request `Context` object.
 func DecorateFunc(handler http.HandlerFunc) http.HandlerFunc {
-
 	return func(response http.ResponseWriter, request *http.Request) {
 		ctx := createContextWithHub(response, request)
 		defer RecoverWithContext(ctx)

@@ -24,7 +24,7 @@ const defaultMaxBreadcrumbs = 30
 const maxBreadcrumbs = 100
 
 // Initial instance of the Hub that has no `Client` bound and an empty `Scope`
-var currentHub = NewHub(nil, &Scope{})
+var currentHub = NewHub(nil, NewScope())
 
 // Hub is the central object that can manages scopes and clients.
 //
@@ -237,18 +237,6 @@ func (hub *Hub) Flush(timeout time.Duration) bool {
 	}
 
 	return client.Flush(timeout)
-}
-
-// GetIntegration returns an instance of the integration for a given name
-// or `nil` if integration was not found.
-func (hub *Hub) GetIntegration(name string) Integration {
-	client := hub.Client()
-
-	if client == nil || client.integrations == nil {
-		return nil
-	}
-
-	return client.integrations[name]
 }
 
 // HasHubOnContext checks whether `Hub` instance is bound to a given `Context` struct.

@@ -22,6 +22,9 @@ func setupClientTest() (*Client, *ScopeMock, *TransportMock) {
 	transport := &TransportMock{}
 	client, _ := NewClient(ClientOptions{
 		Transport: transport,
+		Integrations: func(i []Integration) []Integration {
+			return []Integration{}
+		},
 	})
 
 	return client, scope, transport

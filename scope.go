@@ -5,18 +5,6 @@ import (
 	"time"
 )
 
-type EventProcessor func(event *Event, hint *EventHint) *Event
-
-type EventModifier interface {
-	ApplyToEvent(event *Event, hint *EventHint) *Event
-}
-
-var globalEventProcessors []EventProcessor
-
-func AddGlobalEventProcessor(processor EventProcessor) {
-	globalEventProcessors = append(globalEventProcessors, processor)
-}
-
 // Scope holds contextual data for the current scope.
 //
 // The scope is an object that can cloned efficiently and stores data that
@@ -235,20 +223,11 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		event.Request = scope.request
 	}
 
-	for _, processor := range globalEventProcessors {
-		id := event.EventID
-		event = processor(event, hint)
-		if event == nil {
-			Logger.Printf("global event processor dropped event %s\n", id)
-			return nil
-		}
-	}
-
 	for _, processor := range scope.eventProcessors {
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			Logger.Printf("event processor dropped event %s\n", id)
+			Logger.Printf("event dropped by one of the Scope EventProcessors: %s\n", id)
 			return nil
 		}
 	}
