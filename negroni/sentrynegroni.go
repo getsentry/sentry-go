@@ -40,19 +40,21 @@ func New(options Options) *Handler {
 
 func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ctx := createContextWithHub(r)
-	defer func() {
-		if err := recover(); err != nil {
-			hub := sentry.GetHubFromContext(ctx)
-			hub.RecoverWithContext(ctx, err)
-			if h.waitForDelivery {
-				hub.Flush(h.timeout)
-			}
-			if h.repanic {
-				panic(err)
-			}
-		}
-	}()
+	defer h.recoverWithSentry(ctx)
 	next(rw, r.WithContext(ctx))
+}
+
+func (h *Handler) recoverWithSentry(ctx context.Context) {
+	if err := recover(); err != nil {
+		hub := sentry.GetHubFromContext(ctx)
+		hub.RecoverWithContext(ctx, err)
+		if h.waitForDelivery {
+			hub.Flush(h.timeout)
+		}
+		if h.repanic {
+			panic(err)
+		}
+	}
 }
 
 func createContextWithHub(r *http.Request) context.Context {

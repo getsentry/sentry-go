@@ -41,18 +41,7 @@ func New(options Options) *Handler {
 func (h *Handler) Handle(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		ctx := createContextWithHub(r)
-		defer func() {
-			if err := recover(); err != nil {
-				hub := sentry.GetHubFromContext(ctx)
-				hub.RecoverWithContext(ctx, err)
-				if h.waitForDelivery {
-					hub.Flush(h.timeout)
-				}
-				if h.repanic {
-					panic(err)
-				}
-			}
-		}()
+		defer h.recoverWithSentry(ctx)
 		handler.ServeHTTP(rw, r.WithContext(ctx))
 	})
 }
@@ -60,20 +49,21 @@ func (h *Handler) Handle(handler http.Handler) http.Handler {
 func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		ctx := createContextWithHub(r)
-		defer func() {
-			if err := recover(); err != nil {
-				sentry.GetHubFromContext(ctx).RecoverWithContext(ctx, err)
-				hub := sentry.GetHubFromContext(ctx)
-				hub.RecoverWithContext(ctx, err)
-				if h.waitForDelivery {
-					hub.Flush(h.timeout)
-				}
-				if h.repanic {
-					panic(err)
-				}
-			}
-		}()
+		defer h.recoverWithSentry(ctx)
 		handler(rw, r.WithContext(ctx))
+	}
+}
+
+func (h *Handler) recoverWithSentry(ctx context.Context) {
+	if err := recover(); err != nil {
+		hub := sentry.GetHubFromContext(ctx)
+		hub.RecoverWithContext(ctx, err)
+		if h.waitForDelivery {
+			hub.Flush(h.timeout)
+		}
+		if h.repanic {
+			panic(err)
+		}
 	}
 }
 
