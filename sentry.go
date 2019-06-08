@@ -51,15 +51,16 @@ func CaptureEvent(event *Event) *EventID {
 }
 
 // Recover captures a panic.
-func Recover() {
+func Recover() (*EventID, interface{}) {
 	if err := recover(); err != nil {
 		hub := CurrentHub()
-		hub.Recover(err)
+		return hub.Recover(err)
 	}
+	return nil, nil
 }
 
 // Recover captures a panic and passes relevant context object.
-func RecoverWithContext(ctx context.Context) {
+func RecoverWithContext(ctx context.Context) (*EventID, interface{}) {
 	if err := recover(); err != nil {
 		var hub *Hub
 
@@ -69,8 +70,9 @@ func RecoverWithContext(ctx context.Context) {
 			hub = CurrentHub()
 		}
 
-		hub.RecoverWithContext(ctx, err)
+		return hub.RecoverWithContext(ctx, err)
 	}
+	return nil, nil
 }
 
 // WithScope temporarily pushes a scope for a single call.
