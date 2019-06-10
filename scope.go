@@ -34,9 +34,11 @@ type Scope struct {
 
 func NewScope() *Scope {
 	scope := Scope{
-		tags:     make(map[string]string),
-		contexts: make(map[string]interface{}),
-		extra:    make(map[string]interface{}),
+		breadcrumbs: make([]*Breadcrumb, 0),
+		tags:        make(map[string]string),
+		contexts:    make(map[string]interface{}),
+		extra:       make(map[string]interface{}),
+		fingerprint: make([]string, 0),
 	}
 
 	return &scope

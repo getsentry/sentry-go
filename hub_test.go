@@ -22,6 +22,25 @@ func TestNewHubLayerStoresClientAndScope(t *testing.T) {
 	assertEqual(t, &layer{client: client, scope: scope}, (*hub.stack)[0])
 }
 
+func TestCloneHubInheritsClientAndScope(t *testing.T) {
+	hub, client, scope := setupHubTest()
+	clone := hub.Clone()
+
+	if hub == clone {
+		t.Error("Cloned hub should be a new instance")
+	}
+
+	if clone.Client() != client {
+		t.Error("Client should be inherited")
+	}
+
+	if clone.Scope() == scope {
+		t.Error("Scope should be cloned, not reused")
+	}
+
+	assertEqual(t, clone.Scope(), scope)
+}
+
 func TestPushScopeAddsScopeOnTopOfStack(t *testing.T) {
 	hub, _, _ := setupHubTest()
 	hub.PushScope()

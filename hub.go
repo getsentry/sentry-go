@@ -74,6 +74,11 @@ func (hub *Hub) stackTop() *layer {
 	return (*stack)[len(*stack)-1]
 }
 
+// Clone returns a copy of the current Hub with top-most scope and client copied over.
+func (hub *Hub) Clone() *Hub {
+	return NewHub(hub.Client(), hub.Scope().Clone())
+}
+
 // Scope returns top-level `Scope` of the current `Hub` or `nil` if no `Scope` is bound.
 func (hub *Hub) Scope() *Scope {
 	top := hub.stackTop()
