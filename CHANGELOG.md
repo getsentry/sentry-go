@@ -2,6 +2,7 @@
 
 ## 0.0.1-beta.3
 
+- feat: `Iris` framework support with `sentryiris` package
 - feat: `Gin` framework support with `sentrygin` package
 - feat: `Martini` framework support with `sentrymartini` package
 - feat: `Negroni` framework support with `sentrynegroni` package
