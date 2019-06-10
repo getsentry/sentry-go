@@ -127,9 +127,9 @@ func main() {
 	http.Handle("/handle", sentryHandler.Handle(&customHandler{}))
 	http.HandleFunc("/handlefunc", attachUser(sentryHandler.HandleFunc(customHandlerFunc)))
 
-	log.Println("Please call me at localhost:8080/handle or localhost:8080/handlefunc")
+	log.Println("Please call me at localhost:3000/handle or localhost:3000/handlefunc")
 
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err := http.ListenAndServe(":3000", nil); err != nil {
 		panic(err)
 	}
 }

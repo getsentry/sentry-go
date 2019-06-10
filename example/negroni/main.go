@@ -23,7 +23,7 @@ func main() {
 
 	n := negroni.Classic()
 	n.Use(sentrynegroni.New(sentrynegroni.Options{
-		Repanic:         false,
+		Repanic:         true,
 		WaitForDelivery: true,
 	}))
 	n.UseHandler(mux)
