@@ -2,7 +2,11 @@
 
 ## 0.0.1-beta.3
 
-- feat: Add `Negroni` framework handler in `sentrynagroni` package
+- feat: `Gin` framework support with `sentrygin` package
+- feat: `Martini` framework support with `sentrymartini` package
+- feat: `Negroni` framework support with `sentrynegroni` package
+- feat: Add `Hub.Clone()` for easier frameworks integration
+- feat: Return `EventID` from `Recovery` methods
 - feat: Add `NewScope` and `NewEvent` functions and use them in the whole codebase
 - feat: Add `AddEventProcessor` to the `Client`
 - ref: Try to read source files from the root directory, based on the filename as well, to make it work on AWS Lambda
@@ -11,6 +15,7 @@
 - ref: **[breaking]** Allow for integrations to live on the client, by passing client instance in `SetupOnce` method
 - ref: **[breaking]** Remove `GetIntegration` from the `Hub`
 - ref: **[breaking]** Remove `GlobalEventProcessors` getter from the public API
+- fix: Operate on requests body copy instead of the original
 
 ## 0.0.1-beta.2
 
