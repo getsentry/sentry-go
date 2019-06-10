@@ -202,9 +202,9 @@ func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventMod
 	return client.processEvent(event, hint, scope)
 }
 
-// Recover captures a panic. The return value is the event ID and recovered panic value.
-// In case Sentry is disabled or event was dropped, the return value will be nil.
-func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModifier) (*EventID, interface{}) {
+// Recover captures a panic.
+// Returns `EventID` if successfully, or `nil` if there's no error to recover from.
+func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModifier) *EventID {
 	if err == nil {
 		err = recover()
 	}
@@ -212,27 +212,26 @@ func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModif
 	if err != nil {
 		if err, ok := err.(error); ok {
 			event := client.eventFromException(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope), err
+			return client.CaptureEvent(event, hint, scope)
 		}
 
 		if err, ok := err.(string); ok {
 			event := client.eventFromMessage(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope), err
+			return client.CaptureEvent(event, hint, scope)
 		}
 	}
 
-	return nil, err
+	return nil
 }
 
 // Recover captures a panic and passes relevant context object.
-// The return value is the event ID and recovered panic value.
-// In case Sentry is disabled or event was dropped, the return value will be nil.
+// Returns `EventID` if successfully, or `nil` if there's no error to recover from.
 func (client *Client) RecoverWithContext(
 	ctx context.Context,
 	err interface{},
 	hint *EventHint,
 	scope EventModifier,
-) (*EventID, interface{}) {
+) *EventID {
 	if err == nil {
 		err = recover()
 	}
@@ -244,16 +243,16 @@ func (client *Client) RecoverWithContext(
 
 		if err, ok := err.(error); ok {
 			event := client.eventFromException(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope), err
+			return client.CaptureEvent(event, hint, scope)
 		}
 
 		if err, ok := err.(string); ok {
 			event := client.eventFromMessage(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope), err
+			return client.CaptureEvent(event, hint, scope)
 		}
 	}
 
-	return nil, err
+	return nil
 }
 
 // Flush notifies when all the buffered events have been sent by returning `true`

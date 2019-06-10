@@ -40,42 +40,38 @@ func New(options Options) *Handler {
 
 func (h *Handler) Handle(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		ctx := createContextWithHub(r)
-		defer h.recoverWithSentry(ctx)
+		ctx := sentry.SetHubOnContext(
+			context.WithValue(r.Context(), sentry.RequestContextKey, r),
+			sentry.CurrentHub().Clone(),
+		)
+		defer h.recoverWithSentry(ctx, r)
 		handler.ServeHTTP(rw, r.WithContext(ctx))
 	})
 }
 
 func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
-		ctx := createContextWithHub(r)
-		defer h.recoverWithSentry(ctx)
+		ctx := sentry.SetHubOnContext(
+			context.WithValue(r.Context(), sentry.RequestContextKey, r),
+			sentry.CurrentHub().Clone(),
+		)
+		defer h.recoverWithSentry(ctx, r)
 		handler(rw, r.WithContext(ctx))
 	}
 }
 
-func (h *Handler) recoverWithSentry(ctx context.Context) {
+func (h *Handler) recoverWithSentry(ctx context.Context, r *http.Request) {
 	if err := recover(); err != nil {
 		hub := sentry.GetHubFromContext(ctx)
-		hub.RecoverWithContext(ctx, err)
-		if h.waitForDelivery {
+		hub.ConfigureScope(func(scope *sentry.Scope) {
+			scope.SetRequest(sentry.Request{}.FromHTTPRequest(r))
+		})
+		eventId := hub.RecoverWithContext(ctx, err)
+		if eventId != nil && h.waitForDelivery {
 			hub.Flush(h.timeout)
 		}
 		if h.repanic {
 			panic(err)
 		}
 	}
-}
-
-func createContextWithHub(r *http.Request) context.Context {
-	parentHub := sentry.CurrentHub()
-	client := parentHub.Client()
-	scope := parentHub.Scope().Clone()
-	isolatedHub := sentry.NewHub(client, scope)
-
-	scope.SetRequest(sentry.Request{}.FromHTTPRequest(r))
-
-	ctx := r.Context()
-	ctx = context.WithValue(ctx, sentry.RequestContextKey, r)
-	return sentry.SetHubOnContext(ctx, isolatedHub)
 }

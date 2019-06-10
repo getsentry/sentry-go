@@ -212,26 +212,28 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 
 // Recover calls the method of a same name on currently bound `Client` instance
 // passing it a top-level `Scope`.
-func (hub *Hub) Recover(err interface{}) (*EventID, interface{}) {
+// Returns `EventID` if successfully, or `nil` if there's no `Scope` or `Client` available.
+func (hub *Hub) Recover(err interface{}) *EventID {
 	if err == nil {
 		err = recover()
 	}
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
-		return nil, err
+		return nil
 	}
 	return client.Recover(err, &EventHint{RecoveredException: err}, scope)
 }
 
 // RecoverWithContext calls the method of a same name on currently bound `Client` instance
 // passing it a top-level `Scope`.
-func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) (*EventID, interface{}) {
+// Returns `EventID` if successfully, or `nil` if there's no `Scope` or `Client` available.
+func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventID {
 	if err == nil {
 		err = recover()
 	}
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
-		return nil, err
+		return nil
 	}
 	return client.RecoverWithContext(ctx, err, &EventHint{RecoveredException: err}, scope)
 }
