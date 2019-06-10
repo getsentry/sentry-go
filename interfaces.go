@@ -101,10 +101,12 @@ func (r Request) FromHTTPRequest(request *http.Request) Request {
 	r.QueryString = request.URL.RawQuery
 
 	// Body
-	if bodyCopy, err := request.GetBody(); err == nil && bodyCopy != nil {
-		body, err := ioutil.ReadAll(bodyCopy)
-		if err == nil {
-			r.Data = string(body)
+	if request.GetBody != nil {
+		if bodyCopy, err := request.GetBody(); err == nil && bodyCopy != nil {
+			body, err := ioutil.ReadAll(bodyCopy)
+			if err == nil {
+				r.Data = string(body)
+			}
 		}
 	}
 
