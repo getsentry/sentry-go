@@ -6,9 +6,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"runtime"
 	"strings"
 )
+
+// ================================
+// Modules Integration
+// ================================
 
 type modulesIntegration struct{}
 
@@ -159,6 +164,10 @@ func getModulesFromVendorJSON() (map[string]string, error) {
 	return modules, nil
 }
 
+// ================================
+// Environment Integration
+// ================================
+
 type environmentIntegration struct{}
 
 func (ei *environmentIntegration) Name() string {
@@ -189,4 +198,65 @@ func (ei *environmentIntegration) processor(event *Event, hint *EventHint) *Even
 	}
 
 	return event
+}
+
+// ================================
+// Ignore Errors Integration
+// ================================
+
+type ignoreErrorsIntegration struct {
+	ignoreErrors []*regexp.Regexp
+}
+
+func (iei *ignoreErrorsIntegration) Name() string {
+	return "IgnoreErrors"
+}
+
+func (iei *ignoreErrorsIntegration) SetupOnce(client *Client) {
+	iei.ignoreErrors = transformStringsIntoRegexps(client.Options().IgnoreErrors)
+	client.AddEventProcessor(iei.processor)
+}
+
+func (iei *ignoreErrorsIntegration) processor(event *Event, hint *EventHint) *Event {
+	suspects := getIgnoreErrorsSuspects(event)
+
+	for _, suspect := range suspects {
+		for _, pattern := range iei.ignoreErrors {
+			if pattern.Match([]byte(suspect)) {
+				Logger.Printf("Event dropped due to being matched by `IgnoreErrors` option."+
+					"| Value matched: %s | Filter used: %s", suspect, pattern)
+				return nil
+			}
+		}
+	}
+
+	return event
+}
+
+func transformStringsIntoRegexps(strings []string) []*regexp.Regexp {
+	var exprs []*regexp.Regexp
+
+	for _, s := range strings {
+		r, err := regexp.Compile(s)
+		if err == nil {
+			exprs = append(exprs, r)
+		}
+	}
+
+	return exprs
+}
+
+func getIgnoreErrorsSuspects(event *Event) []string {
+	suspects := []string{}
+
+	if event.Message != "" {
+		suspects = append(suspects, event.Message)
+	}
+
+	for _, ex := range event.Exception {
+		suspects = append(suspects, ex.Type)
+		suspects = append(suspects, ex.Value)
+	}
+
+	return suspects
 }

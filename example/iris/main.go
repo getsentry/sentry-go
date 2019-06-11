@@ -21,5 +21,5 @@ func main() {
 	app.Get("/", func(ctx iris.Context) {
 		panic("y tho")
 	})
-	app.Run(iris.Addr(":3000"))
+	_ = app.Run(iris.Addr(":3000"))
 }

@@ -57,8 +57,8 @@ func (h *Handler) recoverWithSentry(ctx context.Context, r *http.Request) {
 		hub.ConfigureScope(func(scope *sentry.Scope) {
 			scope.SetRequest(sentry.Request{}.FromHTTPRequest(r))
 		})
-		eventId := hub.RecoverWithContext(ctx, err)
-		if eventId != nil && h.waitForDelivery {
+		eventID := hub.RecoverWithContext(ctx, err)
+		if eventID != nil && h.waitForDelivery {
 			hub.Flush(h.timeout)
 		}
 		if h.repanic {

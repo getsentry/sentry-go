@@ -44,10 +44,14 @@ type ClientOptions struct {
 	// In debug mode debug information is printed to stdput to help you understand what
 	// sentry is doing.
 	Debug bool
-	// Configures whether SDK should generate and attach stacktraces to pure capture message calls
+	// Configures whether SDK should generate and attach stacktraces to pure capture message calls.
 	AttachStacktrace bool
-	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0)
+	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0).
 	SampleRate float32
+	// List of regexp strings that will be used to match against event's message
+	// and if applicable, caught errors type and value.
+	// If the match is found, then a whole event will be dropped.
+	IgnoreErrors []string
 	// Before send callback.
 	BeforeSend func(event *Event, hint *EventHint) *Event
 	// Before breadcrumb add callback.
@@ -154,6 +158,7 @@ func (client *Client) setupIntegrations() {
 	integrations := []Integration{
 		new(environmentIntegration),
 		new(modulesIntegration),
+		new(ignoreErrorsIntegration),
 	}
 
 	if client.options.Integrations != nil {
@@ -311,13 +316,12 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	if options.SampleRate != 0.0 {
 		randomFloat := rand.New(rand.NewSource(time.Now().UnixNano())).Float32()
 		if randomFloat > options.SampleRate {
-			Logger.Println("event dropped due to SampleRate hit")
+			Logger.Println("Event dropped due to SampleRate hit")
 			return nil
 		}
 	}
 
 	if event = client.prepareEvent(event, hint, scope); event == nil {
-		Logger.Println("event dropped by one of the EventProcessors")
 		return nil
 	}
 
@@ -327,7 +331,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 			h = hint
 		}
 		if event = options.BeforeSend(event, h); event == nil {
-			Logger.Println("event dropped due to BeforeSend callback")
+			Logger.Println("Event dropped due to BeforeSend callback")
 			return nil
 		}
 	}
@@ -387,7 +391,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			Logger.Printf("event dropped by one of the Client EventProcessors: %s\n", id)
+			Logger.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
 			return nil
 		}
 	}
@@ -396,7 +400,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			Logger.Printf("event dropped by one of the Global EventProcessors: %s\n", id)
+			Logger.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
 			return nil
 		}
 	}

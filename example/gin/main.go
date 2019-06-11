@@ -21,5 +21,5 @@ func main() {
 	r.GET("/", func(c *gin.Context) {
 		panic("y tho")
 	})
-	r.Run(":3000")
+	_ = r.Run(":3000")
 }
