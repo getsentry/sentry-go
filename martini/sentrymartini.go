@@ -42,22 +42,20 @@ func New(options Options) *Handler {
 
 func (h *Handler) Handle() martini.Handler {
 	return func(rw http.ResponseWriter, r *http.Request, c martini.Context) {
-		ctx := sentry.SetHubOnContext(
-			context.WithValue(r.Context(), sentry.RequestContextKey, r),
-			sentry.CurrentHub().Clone(),
-		)
-		defer h.recoverWithSentry(ctx, r)
+		hub := sentry.CurrentHub().Clone()
+		c.Map(hub)
+		defer h.recoverWithSentry(hub, r)
 		c.Next()
 	}
 }
 
-func (h *Handler) recoverWithSentry(ctx context.Context, r *http.Request) {
+func (h *Handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	if err := recover(); err != nil {
-		hub := sentry.GetHubFromContext(ctx)
-		hub.ConfigureScope(func(scope *sentry.Scope) {
-			scope.SetRequest(sentry.Request{}.FromHTTPRequest(r))
-		})
-		eventID := hub.RecoverWithContext(ctx, err)
+		hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(r))
+		eventID := hub.RecoverWithContext(
+			context.WithValue(r.Context(), sentry.RequestContextKey, r),
+			err,
+		)
 		if eventID != nil && h.waitForDelivery {
 			hub.Flush(h.timeout)
 		}
