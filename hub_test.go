@@ -6,7 +6,7 @@ import (
 )
 
 func setupHubTest() (*Hub, *Client, *Scope) {
-	client, _ := NewClient(ClientOptions{})
+	client, _ := NewClient(ClientOptions{Dsn: "http://whatever@really.com/1337"})
 	scope := NewScope()
 	hub := NewHub(client, scope)
 	return hub, client, scope
@@ -90,7 +90,7 @@ func TestPopScopeCannotRemoveFromEmptyStack(t *testing.T) {
 func TestBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 	hub.PushScope()
-	newClient, _ := NewClient(ClientOptions{})
+	newClient, _ := NewClient(ClientOptions{Dsn: "http://whatever@really.com/1337"})
 	hub.BindClient(newClient)
 
 	if (*hub.stack)[0].client == (*hub.stack)[1].client {
@@ -118,7 +118,7 @@ func TestWithScopeBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 
 	hub.WithScope(func(scope *Scope) {
-		newClient, _ := NewClient(ClientOptions{})
+		newClient, _ := NewClient(ClientOptions{Dsn: "http://whatever@really.com/1337"})
 		hub.BindClient(newClient)
 		if hub.stackTop().client != newClient {
 			t.Error("should use newly bound client")
