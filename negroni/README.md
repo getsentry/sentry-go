@@ -17,9 +17,9 @@ go get github.com/getsentry/sentry-go/negroni
 import (
     "fmt"
     "net/http"
-	sentrynegroni "github.com/getsentry/sentry-go/negroni"
-	"github.com/getsentry/sentry-go"
-	"github.com/urfave/negroni"
+    sentrynegroni "github.com/getsentry/sentry-go/negroni"
+    "github.com/getsentry/sentry-go"
+    "github.com/urfave/negroni"
 )
 
 // In order to initialize Sentry's handler, you need to initialize Sentry itself beforehand
@@ -115,7 +115,7 @@ http.ListenAndServe(":3000", app)
 sentry.Init(sentry.ClientOptions{
     Dsn: "your-public-dsn",
     BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-        if h.Context != nil {
+        if hint.Context != nil {
             if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
                 // You have access to the original Request here
             }

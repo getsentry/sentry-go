@@ -13,15 +13,15 @@ import (
 func main() {
 	_ = sentry.Init(sentry.ClientOptions{
 		Dsn: "https://363a337c11a64611be4845ad6e24f3ac@sentry.io/297378",
-		BeforeSend: func(e *sentry.Event, h *sentry.EventHint) *sentry.Event {
-			if h.Context != nil {
-				if req, ok := h.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
+		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			if hint.Context != nil {
+				if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
 					// You have access to the original Request
 					fmt.Println(req)
 				}
 			}
-			fmt.Println(e)
-			return e
+			fmt.Println(event)
+			return event
 		},
 		Debug:            true,
 		AttachStacktrace: true,

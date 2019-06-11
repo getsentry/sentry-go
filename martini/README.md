@@ -15,9 +15,10 @@ go get github.com/getsentry/sentry-go/martini
 
 ```go
 import (
-	sentrymartini "github.com/getsentry/sentry-go/martini"
-	"github.com/getsentry/sentry-go"
-	"github.com/go-martini/martini"
+    "fmt"
+    sentrymartini "github.com/getsentry/sentry-go/martini"
+    "github.com/getsentry/sentry-go"
+    "github.com/go-martini/martini"
 )
 
 // In order to initialize Sentry's handler, you need to initialize Sentry itself beforehand
@@ -104,7 +105,7 @@ app.Run()
 sentry.Init(sentry.ClientOptions{
     Dsn: "your-public-dsn",
     BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-        if h.Context != nil {
+        if hint.Context != nil {
             if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
                 // You have access to the original Request here
             }
