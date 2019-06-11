@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/urfave/negroni"
 )
 
 type Handler struct {
@@ -61,4 +62,15 @@ func (h *Handler) recoverWithSentry(ctx context.Context, r *http.Request) {
 			panic(err)
 		}
 	}
+}
+
+func PanicHandlerFunc(info *negroni.PanicInformation) {
+	hub := sentry.CurrentHub().Clone()
+	hub.WithScope(func(scope *sentry.Scope) {
+		scope.SetRequest(sentry.Request{}.FromHTTPRequest(info.Request))
+		hub.RecoverWithContext(
+			context.WithValue(context.Background(), sentry.RequestContextKey, info.Request),
+			info.RecoveredPanic,
+		)
+	})
 }

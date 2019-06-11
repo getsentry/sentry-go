@@ -62,7 +62,7 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentrymartini` maps an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) as one of the services available throughtout the rest of request lifetime.
+`sentrymartini` maps an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) as one of the services available throughout the rest of request's lifetime.
 You can access it through providing a `hub *sentry.Hub` parameter in any of your proceeding middlewares and routes.
 And it should be used instead of global `sentry.CaptureMessage`, `sentry.CaptureException` or any other calls, as it keeps the separation of data between the requests.
 

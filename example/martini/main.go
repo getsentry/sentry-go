@@ -15,14 +15,12 @@ func main() {
 		Dsn: "https://363a337c11a64611be4845ad6e24f3ac@sentry.io/297378",
 		BeforeSend: func(e *sentry.Event, h *sentry.EventHint) *sentry.Event {
 			if h.Context != nil {
-				if _, ok := h.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
+				if req, ok := h.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
 					// You have access to the original Request
-					// fmt.Println(req)
+					fmt.Println(req)
 				}
 			}
-
 			fmt.Println(e)
-
 			return e
 		},
 		Debug:            true,
