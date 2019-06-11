@@ -22,7 +22,7 @@ type Options struct {
 	Timeout         time.Duration
 }
 
-func New(options Options) *Handler {
+func New(options Options) martini.Handler {
 	handler := Handler{
 		repanic:         false,
 		timeout:         time.Second * 2,
@@ -37,10 +37,10 @@ func New(options Options) *Handler {
 		handler.waitForDelivery = true
 	}
 
-	return &handler
+	return handler.handle()
 }
 
-func (h *Handler) Handle() martini.Handler {
+func (h *Handler) handle() martini.Handler {
 	return func(rw http.ResponseWriter, r *http.Request, c martini.Context) {
 		hub := sentry.CurrentHub().Clone()
 		c.Map(hub)

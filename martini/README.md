@@ -30,11 +30,8 @@ if err := sentry.Init(sentry.ClientOptions{
 // Then create your app
 app := martini.Classic()
 
-// And create an instance of Sentry Martini handler
-sentryHandler := sentrymartini.New(sentrymartini.Options{})
-
 // Once it's done, you can attach the handler as one of your middlewares
-app.Use(sentryHandler.Handle())
+app.Use(sentrymartini.New(sentrymartini.Options{}))
 
 // Setup routes
 app.Get("/", func() string {
@@ -76,7 +73,7 @@ app := martini.Classic()
 
 app.Use(sentrymartini.New(sentrymartini.Options{
     Repanic: true,
-}).Handle())
+}))
 
 app.Use(func(rw http.ResponseWriter, r *http.Request, c martini.Context, hub *sentry.Hub) {
     hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")

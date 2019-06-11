@@ -21,7 +21,7 @@ type Options struct {
 	Timeout         time.Duration
 }
 
-func New(options Options) *Handler {
+func New(options Options) gin.HandlerFunc {
 	handler := Handler{
 		repanic:         false,
 		timeout:         time.Second * 2,
@@ -36,10 +36,10 @@ func New(options Options) *Handler {
 		handler.waitForDelivery = true
 	}
 
-	return &handler
+	return handler.handle()
 }
 
-func (h *Handler) Handle() gin.HandlerFunc {
+func (h *Handler) handle() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		r := c.Copy().Request
 		ctx := sentry.SetHubOnContext(

@@ -17,7 +17,7 @@ func main() {
 	app.Use(sentryiris.New(sentryiris.Options{
 		Repanic:         true,
 		WaitForDelivery: true,
-	}).Handle())
+	}))
 	app.Get("/", func(ctx iris.Context) {
 		panic("y tho")
 	})

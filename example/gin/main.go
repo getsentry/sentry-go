@@ -17,7 +17,7 @@ func main() {
 	r.Use(sentrygin.New(sentrygin.Options{
 		Repanic:         true,
 		WaitForDelivery: true,
-	}).Handle())
+	}))
 	r.GET("/", func(c *gin.Context) {
 		panic("y tho")
 	})

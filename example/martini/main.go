@@ -33,7 +33,7 @@ func main() {
 
 	app.Use(sentrymartini.New(sentrymartini.Options{
 		Repanic: true,
-	}).Handle())
+	}))
 
 	app.Use(func(rw http.ResponseWriter, r *http.Request, c martini.Context, hub *sentry.Hub) {
 		hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
