@@ -10,20 +10,28 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-type Handler struct {
+type handler struct {
 	repanic         bool
 	waitForDelivery bool
 	timeout         time.Duration
 }
 
 type Options struct {
-	Repanic         bool
+	// Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to true,
+	// as martini.Classic includes it's own Recovery middleware what handles http responses.
+	Repanic bool
+	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
+	// Because Martini's default `Recovery` handler doesn't restart the application,
+	// it's safe to either skip this option or set it to `false`.
 	WaitForDelivery bool
-	Timeout         time.Duration
+	// Timeout for the event delivery requests.
+	Timeout time.Duration
 }
 
+// New returns a function that satisfies martini.Handler interface
+// It can be used with New(), Use() or Handlers() methods.
 func New(options Options) martini.Handler {
-	handler := Handler{
+	handler := handler{
 		repanic:         false,
 		timeout:         time.Second * 2,
 		waitForDelivery: false,
@@ -40,7 +48,7 @@ func New(options Options) martini.Handler {
 	return handler.handle()
 }
 
-func (h *Handler) handle() martini.Handler {
+func (h *handler) handle() martini.Handler {
 	return func(rw http.ResponseWriter, r *http.Request, c martini.Context) {
 		hub := sentry.CurrentHub().Clone()
 		c.Map(hub)
@@ -49,7 +57,7 @@ func (h *Handler) handle() martini.Handler {
 	}
 }
 
-func (h *Handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
+func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	if err := recover(); err != nil {
 		hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(r))
 		eventID := hub.RecoverWithContext(

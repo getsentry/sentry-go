@@ -9,20 +9,28 @@ import (
 	"github.com/urfave/negroni"
 )
 
-type Handler struct {
+type handler struct {
 	repanic         bool
 	waitForDelivery bool
 	timeout         time.Duration
 }
 
 type Options struct {
-	Repanic         bool
+	// Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to true,
+	// as negroni.Classic includes it's own Recovery middleware what handles http responses.
+	Repanic bool
+	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
+	// Because Negroni's default `Recovery` handler doesn't restart the application,
+	// it's safe to either skip this option or set it to `false`.
 	WaitForDelivery bool
-	Timeout         time.Duration
+	// Timeout for the event delivery requests.
+	Timeout time.Duration
 }
 
-func New(options Options) *Handler {
-	handler := Handler{
+// New returns a handler struct which satisfies Negroni's middleware interface
+// It can be used with New(), Use() or With() methods.
+func New(options Options) *handler {
+	handler := handler{
 		repanic:         false,
 		timeout:         time.Second * 2,
 		waitForDelivery: false,
@@ -39,7 +47,7 @@ func New(options Options) *Handler {
 	return &handler
 }
 
-func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ctx := sentry.SetHubOnContext(
 		context.WithValue(r.Context(), sentry.RequestContextKey, r),
 		sentry.CurrentHub().Clone(),
@@ -48,7 +56,7 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.H
 	next(rw, r.WithContext(ctx))
 }
 
-func (h *Handler) recoverWithSentry(ctx context.Context, r *http.Request) {
+func (h *handler) recoverWithSentry(ctx context.Context, r *http.Request) {
 	if err := recover(); err != nil {
 		hub := sentry.GetHubFromContext(ctx)
 		hub.ConfigureScope(func(scope *sentry.Scope) {
@@ -64,6 +72,8 @@ func (h *Handler) recoverWithSentry(ctx context.Context, r *http.Request) {
 	}
 }
 
+// PanicHandlerFunc can be used for Negroni's default Recovery middleware option called `PanicHandlerFunc`,
+// which let you "plug-in" to it's own handler.
 func PanicHandlerFunc(info *negroni.PanicInformation) {
 	hub := sentry.CurrentHub().Clone()
 	hub.WithScope(func(scope *sentry.Scope) {
