@@ -7,8 +7,9 @@
 
 # Official Sentry Martini Handler for Sentry-go SDK
 
-Godoc: https://godoc.org/github.com/getsentry/sentry-go/martini
-Example: https://github.com/getsentry/sentry-go/tree/master/example/martini
+**Godoc:** https://godoc.org/github.com/getsentry/sentry-go/martini
+
+**Example:** https://github.com/getsentry/sentry-go/tree/master/example/martini
 
 ## Installation
 

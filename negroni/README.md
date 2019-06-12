@@ -7,8 +7,9 @@
 
 # Official Sentry Negroni Handler for Sentry-go SDK
 
-Godoc: https://godoc.org/github.com/getsentry/sentry-go/negroni
-Example: https://github.com/getsentry/sentry-go/tree/master/example/negroni
+**Godoc:** https://godoc.org/github.com/getsentry/sentry-go/negroni
+
+**Example:** https://github.com/getsentry/sentry-go/tree/master/example/negroni
 
 ## Installation
 

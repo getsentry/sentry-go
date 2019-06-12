@@ -29,7 +29,7 @@ type Options struct {
 
 // New returns a handler struct which satisfies Negroni's middleware interface
 // It can be used with New(), Use() or With() methods.
-func New(options Options) *handler {
+func New(options Options) negroni.Handler {
 	handler := handler{
 		repanic:         false,
 		timeout:         time.Second * 2,
