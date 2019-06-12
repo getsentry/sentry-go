@@ -5,9 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-martini/martini"
-
 	"github.com/getsentry/sentry-go"
+	"github.com/go-martini/martini"
 )
 
 type handler struct {
@@ -29,7 +28,7 @@ type Options struct {
 }
 
 // New returns a function that satisfies martini.Handler interface
-// It can be used with New(), Use() or Handlers() methods.
+// It can be used with Use() or Handlers() methods.
 func New(options Options) martini.Handler {
 	handler := handler{
 		repanic:         false,
@@ -45,16 +44,14 @@ func New(options Options) martini.Handler {
 		handler.waitForDelivery = true
 	}
 
-	return handler.handle()
+	return handler.handle
 }
 
-func (h *handler) handle() martini.Handler {
-	return func(rw http.ResponseWriter, r *http.Request, c martini.Context) {
-		hub := sentry.CurrentHub().Clone()
-		c.Map(hub)
-		defer h.recoverWithSentry(hub, r)
-		c.Next()
-	}
+func (h *handler) handle(rw http.ResponseWriter, r *http.Request, ctx martini.Context) {
+	hub := sentry.CurrentHub().Clone()
+	ctx.Map(hub)
+	defer h.recoverWithSentry(hub, r)
+	ctx.Next()
 }
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {

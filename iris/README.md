@@ -20,8 +20,9 @@ go get github.com/getsentry/sentry-go/iris
 ```go
 import (
     "fmt"
-    sentryiris "github.com/getsentry/sentry-go/iris"
+
     "github.com/getsentry/sentry-go"
+    sentryiris "github.com/getsentry/sentry-go/iris"
     "github.com/kataras/iris"
 )
 
@@ -94,7 +95,7 @@ app.Get("/", func(ctx iris.Context) {
             hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
         })
     }
-    ctx.StatusCode(200)
+    ctx.StatusCode(http.StatusOK)
 })
 
 app.Get("/foo", func(ctx iris.Context) {

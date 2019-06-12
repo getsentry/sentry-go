@@ -5,25 +5,26 @@
   <br />
 </p>
 
-# Official Sentry Martini Handler for Sentry-go SDK
+# Official Sentry Gin Handler for Sentry-go SDK
 
-**Godoc:** https://godoc.org/github.com/getsentry/sentry-go/martini
+**Godoc:** https://godoc.org/github.com/getsentry/sentry-go/gin
 
-**Example:** https://github.com/getsentry/sentry-go/tree/master/example/martini
+**Example:** https://github.com/getsentry/sentry-go/tree/master/example/gin
 
 ## Installation
 
 ```sh
-go get github.com/getsentry/sentry-go/martini
+go get github.com/getsentry/sentry-go/gin
 ```
 
 ```go
 import (
     "fmt"
+    "net/http"
 
     "github.com/getsentry/sentry-go"
-    sentrymartini "github.com/getsentry/sentry-go/martini"
-    "github.com/go-martini/martini"
+    sentrygin "github.com/getsentry/sentry-go/gin"
+    "github.com/gin-gonic/gin"
 )
 
 // In order to initialize Sentry's handler, you need to initialize Sentry itself beforehand
@@ -34,32 +35,32 @@ if err := sentry.Init(sentry.ClientOptions{
 }
 
 // Then create your app
-app := martini.Classic()
+app := gin.Default()
 
 // Once it's done, you can attach the handler as one of your middlewares
-app.Use(sentrymartini.New(sentrymartini.Options{}))
+app.Use(sentrygin.New(sentrygin.Options{}))
 
 // Setup routes
-app.Get("/", func() string {
-    return "Hello world!"
+app.GET("/", func(ctx gin.Context) {
+    ctx.String(http.StatusOK, "Hello world!")
 })
 
 // And run it
-app.Run()
+app.Run(":3000")
 ```
 
 ## Configuration
 
-`sentrymartini` accepts a struct of `Options` that allows you to configure how the handler will behave.
+`sentrygin` accepts a struct of `Options` that allows you to configure how the handler will behave.
 
 Currently it respects 3 options:
 
 ```go
 // Whether Sentry should repanic after recovery, in most cases it should be set to true,
-// as martini.Classic includes it's own Recovery middleware what handles http responses.
+// as gin.Default includes it's own Recovery middleware what handles http responses.
 Repanic         bool
 // Whether you want to block the request before moving forward with the response.
-// Because Martini's default `Recovery` handler doesn't restart the application,
+// Because Gin's default `Recovery` handler doesn't restart the application,
 // it's safe to either skip this option or set it to `false`.
 WaitForDelivery bool
 // Timeout for the event delivery requests.
@@ -68,40 +69,43 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentrymartini` maps an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) as one of the services available throughout the rest of request's lifetime.
-You can access it through providing a `hub *sentry.Hub` parameter in any of your proceeding middlewares and routes.
+`sentrygin` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the `*gin.Context`, which makes it available throughout the rest of request's lifetime.
+You can access it by using `sentrygin.GetHubFromContext()` method on the context itself in any of your proceeding middlewares and routes.
 And it should be used instead of global `sentry.CaptureMessage`, `sentry.CaptureException` or any other calls, as it keeps the separation of data between the requests.
 
-**Keep in mind that `*sentry.Hub` won't be available in middlewares attached prior to `sentrymartini`!**
+**Keep in mind that `*sentry.Hub` won't be available in middlewares attached prior to `sentrygin`!**
 
 ```go
-app := martini.Classic()
+app := gin.Default()
 
-app.Use(sentrymartini.New(sentrymartini.Options{
+app.Use(sentrygin.New(sentrygin.Options{
     Repanic: true,
 }))
 
-app.Use(func(rw http.ResponseWriter, r *http.Request, c martini.Context, hub *sentry.Hub) {
-    hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
+app.Use(func(ctx *gin.Context) {
+    if hub := sentrygin.GetHubFromContext(ctx); hub != nil {
+        hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
+    }
+    ctx.Next()
 })
 
-app.Get("/", func(rw http.ResponseWriter, r *http.Request, hub *sentry.Hub) {
-    if someCondition {
-        hub.WithScope(func (scope *sentry.Scope) {
-            scope.SetExtra("unwantedQuery", rw.URL.RawQuery)
+app.GET("/", func(ctx *gin.Context) {
+    if hub := sentrygin.GetHubFromContext(ctx); hub != nil {
+        hub.WithScope(func(scope *sentry.Scope) {
+            scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
             hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
         })
     }
-    rw.WriteHeader(http.StatusOK)
+    ctx.Status(http.StatusOK)
 })
 
-app.Get("/foo", func() string {
-    // sentrymartini handler will catch it just fine, and because we attached "someRandomTag"
+app.GET("/foo", func(ctx *gin.Context) {
+    // sentrygin handler will catch it just fine, and because we attached "someRandomTag"
     // in the middleware before, it will be sent through as well
     panic("y tho")
 })
 
-app.Run()
+app.Run(":3000")
 ```
 
 ### Accessing Request in `BeforeSend` callback

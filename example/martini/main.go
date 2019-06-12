@@ -37,12 +37,12 @@ func main() {
 		hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
 	})
 
-	app.Get("/", func(res http.ResponseWriter, req *http.Request, hub *sentry.Hub) {
+	app.Get("/", func(rw http.ResponseWriter, r *http.Request, hub *sentry.Hub) {
 		hub.WithScope(func(scope *sentry.Scope) {
 			scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
 			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 		})
-		res.WriteHeader(200)
+		rw.WriteHeader(http.StatusOK)
 	})
 
 	app.Get("/foo", func() string {

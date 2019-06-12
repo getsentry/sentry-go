@@ -47,7 +47,7 @@ func main() {
 			scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
 			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 		})
-		rw.WriteHeader(200)
+		rw.WriteHeader(http.StatusOK)
 	})
 
 	mux.HandleFunc("/foo", func(rw http.ResponseWriter, r *http.Request) {

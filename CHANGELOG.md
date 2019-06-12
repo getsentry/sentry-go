@@ -3,6 +3,8 @@
 ## 0.0.1-beta.4
 
 - feat: `IgnoreErrors` client option and corresponding integration
+- ref: Reworked `Gin` integration, wrote better example and complete readme
+- ref: Reworked `Iris` integration, wrote better example and complete readme
 - ref: Reworked `Negroni` integration, wrote better example and complete readme
 - ref: Reworked `Martini` integration, wrote better example and complete readme
 - ref: Remove `Handle()` from frameworks handlers and return it directly from New

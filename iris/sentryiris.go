@@ -5,9 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/kataras/iris"
-
 	"github.com/getsentry/sentry-go"
+	"github.com/kataras/iris"
 )
 
 const valuesKey = "sentry"
@@ -31,7 +30,7 @@ type Options struct {
 }
 
 // New returns a function that satisfies iris.Handler interface
-// It can be used with New() or Use() methods.
+// It can be used with Use() method.
 func New(options Options) iris.Handler {
 	handler := handler{
 		repanic:         false,
@@ -47,16 +46,14 @@ func New(options Options) iris.Handler {
 		handler.waitForDelivery = true
 	}
 
-	return handler.handle()
+	return handler.handle
 }
 
-func (h *handler) handle() iris.Handler {
-	return func(ctx iris.Context) {
-		hub := sentry.CurrentHub().Clone()
-		ctx.Values().Set(valuesKey, hub)
-		defer h.recoverWithSentry(hub, ctx.Request())
-		ctx.Next()
-	}
+func (h *handler) handle(ctx iris.Context) {
+	hub := sentry.CurrentHub().Clone()
+	ctx.Values().Set(valuesKey, hub)
+	defer h.recoverWithSentry(hub, ctx.Request())
+	ctx.Next()
 }
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {

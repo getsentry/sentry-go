@@ -46,7 +46,7 @@ func main() {
 				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 			})
 		}
-		ctx.StatusCode(200)
+		ctx.StatusCode(http.StatusOK)
 	})
 
 	app.Get("/foo", func(ctx iris.Context) {
@@ -55,5 +55,5 @@ func main() {
 		panic("y tho")
 	})
 
-	app.Run(iris.Addr(":3000"))
+	_ = app.Run(iris.Addr(":3000"))
 }

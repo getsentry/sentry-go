@@ -21,8 +21,9 @@ go get github.com/getsentry/sentry-go/negroni
 import (
     "fmt"
     "net/http"
-    sentrynegroni "github.com/getsentry/sentry-go/negroni"
+
     "github.com/getsentry/sentry-go"
+    sentrynegroni "github.com/getsentry/sentry-go/negroni"
     "github.com/urfave/negroni"
 )
 
@@ -99,7 +100,7 @@ mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
         scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
         hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
     })
-    rw.WriteHeader(200)
+    rw.WriteHeader(http.StatusOK)
 })
 
 mux.HandleFunc("/foo", func(rw http.ResponseWriter, r *http.Request) {
