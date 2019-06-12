@@ -10,20 +10,30 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-type Handler struct {
+const valuesKey = "sentry"
+
+type handler struct {
 	repanic         bool
 	waitForDelivery bool
 	timeout         time.Duration
 }
 
 type Options struct {
-	Repanic         bool
+	// Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to true,
+	// as iris.Default includes it's own Recovery middleware what handles http responses.
+	Repanic bool
+	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
+	// Because Iris's default `Recovery` handler doesn't restart the application,
+	// it's safe to either skip this option or set it to `false`.
 	WaitForDelivery bool
-	Timeout         time.Duration
+	// Timeout for the event delivery requests.
+	Timeout time.Duration
 }
 
-func New(options Options) func(ctx iris.Context) {
-	handler := Handler{
+// New returns a function that satisfies iris.Handler interface
+// It can be used with New() or Use() methods.
+func New(options Options) iris.Handler {
+	handler := handler{
 		repanic:         false,
 		timeout:         time.Second * 2,
 		waitForDelivery: false,
@@ -40,25 +50,22 @@ func New(options Options) func(ctx iris.Context) {
 	return handler.handle()
 }
 
-func (h *Handler) handle() func(ctx iris.Context) {
+func (h *handler) handle() iris.Handler {
 	return func(ctx iris.Context) {
-		r := ctx.Request()
-		c := sentry.SetHubOnContext(
-			context.WithValue(r.Context(), sentry.RequestContextKey, r),
-			sentry.CurrentHub().Clone(),
-		)
-		defer h.recoverWithSentry(c, r)
+		hub := sentry.CurrentHub().Clone()
+		ctx.Values().Set(valuesKey, hub)
+		defer h.recoverWithSentry(hub, ctx.Request())
 		ctx.Next()
 	}
 }
 
-func (h *Handler) recoverWithSentry(ctx context.Context, r *http.Request) {
+func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	if err := recover(); err != nil {
-		hub := sentry.GetHubFromContext(ctx)
-		hub.ConfigureScope(func(scope *sentry.Scope) {
-			scope.SetRequest(sentry.Request{}.FromHTTPRequest(r))
-		})
-		eventID := hub.RecoverWithContext(ctx, err)
+		hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(r))
+		eventID := hub.RecoverWithContext(
+			context.WithValue(r.Context(), sentry.RequestContextKey, r),
+			err,
+		)
 		if eventID != nil && h.waitForDelivery {
 			hub.Flush(h.timeout)
 		}
@@ -66,4 +73,12 @@ func (h *Handler) recoverWithSentry(ctx context.Context, r *http.Request) {
 			panic(err)
 		}
 	}
+}
+
+// GetHubFromContext retrieves attached *sentry.Hub instance from iris.Context
+func GetHubFromContext(ctx iris.Context) *sentry.Hub {
+	if hub, ok := ctx.Values().Get(valuesKey).(*sentry.Hub); ok {
+		return hub
+	}
+	return nil
 }
