@@ -72,7 +72,7 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	}
 }
 
-// GetHubFromContext retrieves attached *sentry.Hub instance from iris.Context
+// GetHubFromContext retrieves attached *sentry.Hub instance from iris.Context.
 func GetHubFromContext(ctx iris.Context) *sentry.Hub {
 	if hub, ok := ctx.Values().Get(valuesKey).(*sentry.Hub); ok {
 		return hub

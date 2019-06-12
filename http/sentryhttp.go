@@ -8,20 +8,28 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-type Handler struct {
+type handler struct {
 	repanic         bool
 	waitForDelivery bool
 	timeout         time.Duration
 }
 
 type Options struct {
-	Repanic         bool
+	// Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to true,
+	// as iris.Default includes it's own Recovery middleware what handles http responses.
+	Repanic bool
+	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
+	// Because Iris's default `Recovery` handler doesn't restart the application,
+	// it's safe to either skip this option or set it to `false`.
 	WaitForDelivery bool
-	Timeout         time.Duration
+	// Timeout for the event delivery requests.
+	Timeout time.Duration
 }
 
-func New(options Options) *Handler {
-	handler := Handler{
+// New returns a struct that provides Handle and HandleFunc methods
+// that satisfy http.Handler and http.HandlerFunc interfaces.
+func New(options Options) *handler {
+	handler := handler{
 		repanic:         false,
 		timeout:         time.Second * 2,
 		waitForDelivery: false,
@@ -38,35 +46,39 @@ func New(options Options) *Handler {
 	return &handler
 }
 
-func (h *Handler) Handle(handler http.Handler) http.Handler {
+// Handle wraps http.Handler and recovers from caught panics.
+func (h *handler) Handle(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		hub := sentry.CurrentHub().Clone()
 		ctx := sentry.SetHubOnContext(
-			context.WithValue(r.Context(), sentry.RequestContextKey, r),
-			sentry.CurrentHub().Clone(),
+			r.Context(),
+			hub,
 		)
-		defer h.recoverWithSentry(ctx, r)
+		defer h.recoverWithSentry(hub, r)
 		handler.ServeHTTP(rw, r.WithContext(ctx))
 	})
 }
 
-func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
+// HandleFunc wraps http.HandleFunc and recovers from caught panics.
+func (h *handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
+		hub := sentry.CurrentHub().Clone()
 		ctx := sentry.SetHubOnContext(
-			context.WithValue(r.Context(), sentry.RequestContextKey, r),
-			sentry.CurrentHub().Clone(),
+			r.Context(),
+			hub,
 		)
-		defer h.recoverWithSentry(ctx, r)
+		defer h.recoverWithSentry(hub, r)
 		handler(rw, r.WithContext(ctx))
 	}
 }
 
-func (h *Handler) recoverWithSentry(ctx context.Context, r *http.Request) {
+func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	if err := recover(); err != nil {
-		hub := sentry.GetHubFromContext(ctx)
-		hub.ConfigureScope(func(scope *sentry.Scope) {
-			scope.SetRequest(sentry.Request{}.FromHTTPRequest(r))
-		})
-		eventID := hub.RecoverWithContext(ctx, err)
+		hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(r))
+		eventID := hub.RecoverWithContext(
+			context.WithValue(r.Context(), sentry.RequestContextKey, r),
+			err,
+		)
 		if eventID != nil && h.waitForDelivery {
 			hub.Flush(h.timeout)
 		}

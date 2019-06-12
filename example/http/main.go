@@ -1,133 +1,63 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"log"
 	"net/http"
-	"strconv"
-	"time"
 
 	"github.com/getsentry/sentry-go"
 	sentryhttp "github.com/getsentry/sentry-go/http"
 )
 
-func prettyPrint(v interface{}) string {
-	pp, _ := json.MarshalIndent(v, "", "  ")
-	return string(pp)
-}
+type handler struct{}
 
-type ctxKey int
-
-const UserCtxKey = ctxKey(1337)
-
-type devNullTransport struct{}
-
-func (t *devNullTransport) Configure(options sentry.ClientOptions) {
-	dsn, _ := sentry.NewDsn(options.Dsn)
-	fmt.Println()
-	fmt.Println("Store Endpoint:", dsn.StoreAPIURL())
-	fmt.Println("Headers:", dsn.RequestHeaders())
-	fmt.Println()
-}
-func (t *devNullTransport) SendEvent(event *sentry.Event) {
-	fmt.Println("Faked Transport")
-	log.Println(prettyPrint(event))
-}
-
-func (t *devNullTransport) Flush(timeout time.Duration) bool {
-	return true
-}
-
-func customHandlerFunc(w http.ResponseWriter, r *http.Request) {
-	if sentry.HasHubOnContext(r.Context()) {
-		hub := sentry.GetHubFromContext(r.Context())
-		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "BreadcrumbFunc #1 - " + strconv.Itoa(int(time.Now().Unix()))}, nil)
-		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "BreadcrumbFunc #2 - " + strconv.Itoa(int(time.Now().Unix()))}, nil)
-	}
-
-	panic(errors.New("HTTPPanicHandler Error"))
-}
-
-type User struct {
-	id   int
-	name string
-}
-
-func attachUser(handler http.HandlerFunc) http.HandlerFunc {
-	return func(response http.ResponseWriter, request *http.Request) {
-		ctx := request.Context()
-		ctx = context.WithValue(ctx, UserCtxKey, User{
-			id:   42,
-			name: "PickleRick",
+func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	if hub := sentry.GetHubFromContext(r.Context()); hub != nil {
+		hub.WithScope(func(scope *sentry.Scope) {
+			scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
+			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 		})
-		handler(response, request.WithContext(ctx))
 	}
+	rw.WriteHeader(http.StatusOK)
 }
 
-type customHandler struct{}
-
-func (th *customHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if sentry.HasHubOnContext(r.Context()) {
-		hub := sentry.GetHubFromContext(r.Context())
-		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "Breadcrumb #1 - " + strconv.Itoa(int(time.Now().Unix()))}, nil)
-		hub.AddBreadcrumb(&sentry.Breadcrumb{Message: "Breadcrumb #2 - " + strconv.Itoa(int(time.Now().Unix()))}, nil)
-	}
-
-	sentry.CaptureMessage("CaptureMessage")
-	sentry.CaptureException(errors.New("CaptureMessage"))
-	panic("HTTPPanicHandler Message")
-}
-
-type extractUser struct{}
-
-func (eu extractUser) Name() string {
-	return "extractUser"
-}
-
-func (eu extractUser) SetupOnce(client *sentry.Client) {
-	client.AddEventProcessor(eu.processor)
-}
-
-func (eu extractUser) processor(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-	if hint != nil && hint.Context != nil {
-		if u, ok := hint.Context.Value(UserCtxKey).(User); ok {
-			event.User = sentry.User{
-				ID:       strconv.Itoa(u.id),
-				Username: u.name,
-			}
+func enhanceSentryEvent(handler http.HandlerFunc) http.HandlerFunc {
+	return func(rw http.ResponseWriter, r *http.Request) {
+		if hub := sentry.GetHubFromContext(r.Context()); hub != nil {
+			hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
 		}
+		handler(rw, r)
 	}
-
-	return event
 }
 
 func main() {
-	err := sentry.Init(sentry.ClientOptions{
-		Dsn:       "https://hello@world.io/1337",
-		Transport: new(devNullTransport),
-		Integrations: func(i []sentry.Integration) []sentry.Integration {
-			return append(i, new(extractUser))
+	_ = sentry.Init(sentry.ClientOptions{
+		Dsn: "https://363a337c11a64611be4845ad6e24f3ac@sentry.io/297378",
+		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			if hint.Context != nil {
+				if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
+					// You have access to the original Request
+					fmt.Println(req)
+				}
+			}
+			fmt.Println(event)
+			return event
 		},
+		Debug:            true,
+		AttachStacktrace: true,
 	})
-
-	if err != nil {
-		panic(err)
-	} else {
-		fmt.Print("[Sentry] SDK initialized successfully\n\n")
-	}
 
 	sentryHandler := sentryhttp.New(sentryhttp.Options{
-		Repanic:         true,
-		WaitForDelivery: true,
+		Repanic: true,
 	})
 
-	http.Handle("/handle", sentryHandler.Handle(&customHandler{}))
-	http.HandleFunc("/handlefunc", attachUser(sentryHandler.HandleFunc(customHandlerFunc)))
+	http.Handle("/", sentryHandler.Handle(&handler{}))
+	http.HandleFunc("/foo", sentryHandler.HandleFunc(
+		enhanceSentryEvent(func(rw http.ResponseWriter, r *http.Request) {
+			panic("y tho")
+		}),
+	))
 
-	log.Println("Please call me at localhost:3000/handle or localhost:3000/handlefunc")
+	fmt.Println("Listening and serving HTTP on :3000")
 
 	if err := http.ListenAndServe(":3000", nil); err != nil {
 		panic(err)

@@ -3,6 +3,7 @@
 ## 0.0.1-beta.4
 
 - feat: `IgnoreErrors` client option and corresponding integration
+- ref: Reworked `net/http` integration, wrote better example and complete readme
 - ref: Reworked `Gin` integration, wrote better example and complete readme
 - ref: Reworked `Iris` integration, wrote better example and complete readme
 - ref: Reworked `Negroni` integration, wrote better example and complete readme
