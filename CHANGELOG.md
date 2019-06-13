@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.1-beta.5
+
+- feat: New `Echo` integration
+
 ## 0.0.1-beta.4
 
 - feat: `IgnoreErrors` client option and corresponding integration
