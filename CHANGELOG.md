@@ -2,7 +2,7 @@
 
 ## v0.1.0
 
-- First stable release \o/
+- First stable release! \o/
 
 ## v0.0.1-beta.5
 
