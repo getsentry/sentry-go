@@ -224,7 +224,7 @@ func filterFrames(frames []Frame) []Frame {
 	return filteredFrames
 }
 
-var sr = newSourceReader()
+var sr = newSourceReader() // nolint: gochecknoglobals
 
 func contextifyFrames(frames []Frame) []Frame {
 	contextifiedFrames := make([]Frame, 0, len(frames))

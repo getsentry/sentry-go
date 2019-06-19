@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// nolint: gochecknoglobals
 var input = [][]byte{
 	[]byte("line 1"),
 	[]byte("line 2"),

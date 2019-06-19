@@ -1,6 +1,2 @@
 linters:
   enable-all: true
-  disable:
-    - structcheck
-    - unused
-    - gochecknoglobals

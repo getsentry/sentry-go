@@ -17,7 +17,7 @@ import (
 
 type modulesIntegration struct{}
 
-var _modulesCache map[string]string
+var _modulesCache map[string]string // nolint: gochecknoglobals
 
 func (mi *modulesIntegration) Name() string {
 	return "Modules"
