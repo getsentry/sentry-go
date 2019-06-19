@@ -27,7 +27,7 @@ import (
     "github.com/gin-gonic/gin"
 )
 
-// In order to initialize Sentry's handler, you need to initialize Sentry itself beforehand
+// To initialize Sentry's handler, you need to initialize Sentry itself beforehand
 if err := sentry.Init(sentry.ClientOptions{
     Dsn: "your-public-dsn",
 }); err != nil {
@@ -37,10 +37,10 @@ if err := sentry.Init(sentry.ClientOptions{
 // Then create your app
 app := gin.Default()
 
-// Once it's done, you can attach the handler as one of your middlewares
+// Once it's done, you can attach the handler as one of your middleware
 app.Use(sentrygin.New(sentrygin.Options{}))
 
-// Setup routes
+// Set up routes
 app.GET("/", func(ctx gin.Context) {
     ctx.String(http.StatusOK, "Hello world!")
 })
@@ -57,7 +57,7 @@ Currently it respects 3 options:
 
 ```go
 // Whether Sentry should repanic after recovery, in most cases it should be set to true,
-// as gin.Default includes it's own Recovery middleware what handles http responses.
+// as gin.Default includes its own Recovery middleware that handles http responses.
 Repanic         bool
 // Whether you want to block the request before moving forward with the response.
 // Because Gin's default `Recovery` handler doesn't restart the application,
@@ -69,11 +69,11 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentrygin` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the `*gin.Context`, which makes it available throughout the rest of request's lifetime.
-You can access it by using `sentrygin.GetHubFromContext()` method on the context itself in any of your proceeding middlewares and routes.
-And it should be used instead of global `sentry.CaptureMessage`, `sentry.CaptureException` or any other calls, as it keeps the separation of data between the requests.
+`sentrygin` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the `*gin.Context`, which makes it available throughout the rest of the request's lifetime.
+You can access it by using the `sentrygin.GetHubFromContext()` method on the context itself in any of your proceeding middleware and routes.
+And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
 
-**Keep in mind that `*sentry.Hub` won't be available in middlewares attached prior to `sentrygin`!**
+**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentrygin`!**
 
 ```go
 app := gin.Default()
@@ -100,7 +100,7 @@ app.GET("/", func(ctx *gin.Context) {
 })
 
 app.GET("/foo", func(ctx *gin.Context) {
-    // sentrygin handler will catch it just fine, and because we attached "someRandomTag"
+    // sentrygin handler will catch it just fine. Also, because we attached "someRandomTag"
     // in the middleware before, it will be sent through as well
     panic("y tho")
 })

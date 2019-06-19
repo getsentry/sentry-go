@@ -26,7 +26,7 @@ import (
     sentryhttp "github.com/getsentry/sentry-go/http"
 )
 
-// In order to initialize Sentry's handler, you need to initialize Sentry itself beforehand
+// To initialize Sentry's handler, you need to initialize Sentry itself beforehand
 if err := sentry.Init(sentry.ClientOptions{
     Dsn: "your-public-dsn",
 }); err != nil {
@@ -36,7 +36,7 @@ if err := sentry.Init(sentry.ClientOptions{
 // Create an instance of sentryhttp
 sentryHandler := sentryhttp.New(sentryhttp.Options{})
 
-// Once it's done, you can setup routes and attach the handler as one of your middlewares
+// Once it's done, you can setup routes and attach the handler as one of your middleware
 http.Handle("/", sentryHandler.Handle(&handler{}))
 http.HandleFunc("/foo", sentryHandler.HandleFunc(func(rw http.ResponseWriter, r *http.Request) {
     panic("y tho")
@@ -69,11 +69,11 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentryhttp` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the request's context, which makes it available throughout the rest of request's lifetime.
-You can access it by using `sentry.GetHubFromContext()` method on the request itself in any of your proceeding middlewares and routes.
-And it should be used instead of global `sentry.CaptureMessage`, `sentry.CaptureException` or any other calls, as it keeps the separation of data between the requests.
+`sentryhttp` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the request's context, which makes it available throughout the rest of the request's lifetime.
+You can access it by using the `sentry.GetHubFromContext()` method on the request itself in any of your proceeding middleware and routes.
+And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
 
-**Keep in mind that `*sentry.Hub` won't be available in middlewares attached prior to `sentryhttp`!**
+**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentryhttp`!**
 
 ```go
 type handler struct{}
@@ -125,7 +125,7 @@ sentry.Init(sentry.ClientOptions{
     BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
         if hint.Context != nil {
             if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
-                // You have access to the orihttpal Request here
+                // You have access to the original Request here
             }
         }
 

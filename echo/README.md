@@ -28,7 +28,7 @@ import (
 	"github.com/labstack/echo/middleware"
 )
 
-// In order to initialize Sentry's handler, you need to initialize Sentry itself beforehand
+// To initialize Sentry's handler, you need to initialize Sentry itself beforehand
 if err := sentry.Init(sentry.ClientOptions{
     Dsn: "your-public-dsn",
 }); err != nil {
@@ -41,10 +41,10 @@ app := echo.New()
 app.Use(middleware.Logger())
 app.Use(middleware.Recover())
 
-// Once it's done, you can attach the handler as one of your middlewares
+// Once it's done, you can attach the handler as one of your middleware
 app.Use(sentryecho.New(sentryecho.Options{}))
 
-// Setup routes
+// Set up routes
 app.GET("/", func(ctx echo.Context) error {
     return ctx.String(http.StatusOK, "Hello, World!")
 })
@@ -61,7 +61,7 @@ Currently it respects 3 options:
 
 ```go
 // Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to true,
-// as echo includes it's own Recover middleware what handles http responses.
+// as echo includes its own Recover middleware that handles http responses.
 Repanic bool
 // WaitForDelivery configures whether you want to block the request before moving forward with the response.
 // Because Echo's `Recover` handler doesn't restart the application,
@@ -73,11 +73,11 @@ Timeout time.Duration
 
 ## Usage
 
-`sentryecho` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the `echo.Context`, which makes it available throughout the rest of request's lifetime.
-You can access it by using `sentryecho.GetHubFromContext()` method on the context itself in any of your proceeding middlewares and routes.
-And it should be used instead of global `sentry.CaptureMessage`, `sentry.CaptureException` or any other calls, as it keeps the separation of data between the requests.
+`sentryecho` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the `echo.Context`, which makes it available throughout the rest of the request's lifetime.
+You can access it by using the `sentryecho.GetHubFromContext()` method on the context itself in any of your proceeding middleware and routes.
+And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
 
-**Keep in mind that `*sentry.Hub` won't be available in middlewares attached prior to `sentryecho`!**
+**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentryecho`!**
 
 ```go
 app := echo.New()
@@ -109,7 +109,7 @@ app.GET("/", func(ctx echo.Context) error {
 })
 
 app.GET("/foo", func(ctx echo.Context) error {
-	// sentryecho handler will catch it just fine, and because we attached "someRandomTag"
+	// sentryecho handler will catch it just fine. Also, because we attached "someRandomTag"
 	// in the middleware before, it will be sent through as well
 	panic("y tho")
 })
@@ -125,7 +125,7 @@ sentry.Init(sentry.ClientOptions{
     BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
         if hint.Context != nil {
             if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
-                // You have access to the oriechoal Request here
+                // You have access to the original Request here
             }
         }
 

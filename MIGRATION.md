@@ -123,9 +123,9 @@ type ClientOptions struct {
 }
 ```
 
-### Providing SSL Certificated
+### Providing SSL Certificates
 
-By default, TLS uses the host's root CA set. If you don't have `ca-certificates` (which should be your go-to way of fixing missing ceritificates issue) and want to use `gocertifi` instead, you can provide pre-loaded cert files as one of the options to `sentry.Init` call:
+By default, TLS uses the host's root CA set. If you don't have `ca-certificates` (which should be your go-to way of fixing the issue of missing ceritificates) and want to use `gocertifi` instead, you can provide pre-loaded cert files as one of the options to the `sentry.Init` call:
 
 ```go
 package main
@@ -252,7 +252,7 @@ sentry.Init(sentry.ClientOptions{
 })
 ```
 
-### Awaiting for the response (not recommended)
+### Awaiting the response (not recommended)
 
 ```go
 raven.CaptureMessageAndWait("Something bad happened and I would like to know about that")

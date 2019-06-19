@@ -26,7 +26,7 @@ import (
     "github.com/go-martini/martini"
 )
 
-// In order to initialize Sentry's handler, you need to initialize Sentry itself beforehand
+// To initialize Sentry's handler, you need to initialize Sentry itself beforehand
 if err := sentry.Init(sentry.ClientOptions{
     Dsn: "your-public-dsn",
 }); err != nil {
@@ -36,10 +36,10 @@ if err := sentry.Init(sentry.ClientOptions{
 // Then create your app
 app := martini.Classic()
 
-// Once it's done, you can attach the handler as one of your middlewares
+// Once it's done, you can attach the handler as one of your middleware
 app.Use(sentrymartini.New(sentrymartini.Options{}))
 
-// Setup routes
+// Set up routes
 app.Get("/", func() string {
     return "Hello world!"
 })
@@ -56,7 +56,7 @@ Currently it respects 3 options:
 
 ```go
 // Whether Sentry should repanic after recovery, in most cases it should be set to true,
-// as martini.Classic includes it's own Recovery middleware what handles http responses.
+// as martini.Classic includes its own Recovery middleware that handles http responses.
 Repanic         bool
 // Whether you want to block the request before moving forward with the response.
 // Because Martini's default `Recovery` handler doesn't restart the application,
@@ -68,11 +68,11 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentrymartini` maps an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) as one of the services available throughout the rest of request's lifetime.
-You can access it through providing a `hub *sentry.Hub` parameter in any of your proceeding middlewares and routes.
-And it should be used instead of global `sentry.CaptureMessage`, `sentry.CaptureException` or any other calls, as it keeps the separation of data between the requests.
+`sentrymartini` maps an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) as one of the services available throughout the rest of the request's lifetime.
+You can access it through providing a `hub *sentry.Hub` parameter in any of your proceeding middleware and routes.
+And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
 
-**Keep in mind that `*sentry.Hub` won't be available in middlewares attached prior to `sentrymartini`!**
+**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentrymartini`!**
 
 ```go
 app := martini.Classic()
@@ -96,7 +96,7 @@ app.Get("/", func(rw http.ResponseWriter, r *http.Request, hub *sentry.Hub) {
 })
 
 app.Get("/foo", func() string {
-    // sentrymartini handler will catch it just fine, and because we attached "someRandomTag"
+    // sentrymartini handler will catch it just fine. Also, because we attached "someRandomTag"
     // in the middleware before, it will be sent through as well
     panic("y tho")
 })

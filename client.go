@@ -39,9 +39,9 @@ type Integration interface {
 
 // ClientOptions that configures a SDK Client
 type ClientOptions struct {
-	// The DSN to use. If not set the client is effectively disabled.
+	// The DSN to use. If the DSN is not set, the client is effectively disabled.
 	Dsn string
-	// In debug mode debug information is printed to stdput to help you understand what
+	// In debug mode, the debug information is printed to stdout to help you understand what
 	// sentry is doing.
 	Debug bool
 	// Configures whether SDK should generate and attach stacktraces to pure capture message calls.

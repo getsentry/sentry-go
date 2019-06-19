@@ -26,7 +26,7 @@ import (
     "github.com/kataras/iris"
 )
 
-// In order to initialize Sentry's handler, you need to initialize Sentry itself beforehand
+// To initialize Sentry's handler, you need to initialize Sentry itself beforehand
 if err := sentry.Init(sentry.ClientOptions{
     Dsn: "your-public-dsn",
 }); err != nil {
@@ -36,10 +36,10 @@ if err := sentry.Init(sentry.ClientOptions{
 // Then create your app
 app := iris.Default()
 
-// Once it's done, you can attach the handler as one of your middlewares
+// Once it's done, you can attach the handler as one of your middleware
 app.Use(sentryiris.New(sentryiris.Options{}))
 
-// Setup routes
+// Set up routes
 app.Get("/", func(ctx iris.Context) {
     ctx.Writef"Hello world!")
 })
@@ -56,7 +56,7 @@ Currently it respects 3 options:
 
 ```go
 // Whether Sentry should repanic after recovery, in most cases it should be set to true,
-// as iris.Default includes it's own Recovery middleware what handles http responses.
+// as iris.Default includes its own Recovery middleware that handles http responses.
 Repanic         bool
 // Whether you want to block the request before moving forward with the response.
 // Because Iris's default `Recovery` handler doesn't restart the application,
@@ -68,11 +68,11 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentryiris` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the `iris.Context`, which makes it available throughout the rest of request's lifetime.
-You can access it by using `sentryiris.GetHubFromContext()` method on the context itself in any of your proceeding middlewares and routes.
-And it should be used instead of global `sentry.CaptureMessage`, `sentry.CaptureException` or any other calls, as it keeps the separation of data between the requests.
+`sentryiris` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the `iris.Context`, which makes it available throughout the rest of the request's lifetime.
+You can access it by using the `sentryiris.GetHubFromContext()` method on the context itself in any of your proceeding middleware and routes.
+And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
 
-**Keep in mind that `*sentry.Hub` won't be available in middlewares attached prior to `sentryiris`!**
+**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentryiris`!**
 
 ```go
 app := iris.Default()
@@ -99,7 +99,7 @@ app.Get("/", func(ctx iris.Context) {
 })
 
 app.Get("/foo", func(ctx iris.Context) {
-    // sentryiris handler will catch it just fine, and because we attached "someRandomTag"
+    // sentryiris handler will catch it just fine. Also, because we attached "someRandomTag"
     // in the middleware before, it will be sent through as well
     panic("y tho")
 })
