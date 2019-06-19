@@ -4,6 +4,7 @@
 
 - feat: New `Echo` integration
 - ref: Export `net/http` integration handler
+- ref: Set `Request` instantly in the package handlers, not in `recoverWithSentry` so it can be accessed later on
 - ci: Add craft config
 
 ## 0.0.1-beta.4

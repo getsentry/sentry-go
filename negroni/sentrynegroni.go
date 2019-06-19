@@ -48,21 +48,22 @@ func New(options Options) negroni.Handler {
 }
 
 func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	hub := sentry.CurrentHub().Clone()
+	hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(r))
 	ctx := sentry.SetHubOnContext(
 		context.WithValue(r.Context(), sentry.RequestContextKey, r),
-		sentry.CurrentHub().Clone(),
+		hub,
 	)
-	defer h.recoverWithSentry(ctx, r)
+	defer h.recoverWithSentry(hub, r)
 	next(rw, r.WithContext(ctx))
 }
 
-func (h *handler) recoverWithSentry(ctx context.Context, r *http.Request) {
+func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	if err := recover(); err != nil {
-		hub := sentry.GetHubFromContext(ctx)
-		hub.ConfigureScope(func(scope *sentry.Scope) {
-			scope.SetRequest(sentry.Request{}.FromHTTPRequest(r))
-		})
-		eventID := hub.RecoverWithContext(ctx, err)
+		eventID := hub.RecoverWithContext(
+			context.WithValue(r.Context(), sentry.RequestContextKey, r),
+			err,
+		)
 		if eventID != nil && h.waitForDelivery {
 			hub.Flush(h.timeout)
 		}

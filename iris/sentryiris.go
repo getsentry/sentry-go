@@ -51,6 +51,7 @@ func New(options Options) iris.Handler {
 
 func (h *handler) handle(ctx iris.Context) {
 	hub := sentry.CurrentHub().Clone()
+	hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(ctx.Request()))
 	ctx.Values().Set(valuesKey, hub)
 	defer h.recoverWithSentry(hub, ctx.Request())
 	ctx.Next()
@@ -58,7 +59,6 @@ func (h *handler) handle(ctx iris.Context) {
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	if err := recover(); err != nil {
-		hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(r))
 		eventID := hub.RecoverWithContext(
 			context.WithValue(r.Context(), sentry.RequestContextKey, r),
 			err,
