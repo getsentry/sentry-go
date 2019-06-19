@@ -34,7 +34,7 @@ $ go get github.com/getsentry/sentry-go
 Or, if you are already using Go Modules, specify a version number as well:
 
 ```bash
-$ go get github.com/getsentry/sentry-go@0.1
+$ go get github.com/getsentry/sentry-go@v0.1.0
 ```
 
 ## Configuration
@@ -74,6 +74,7 @@ For more detailed information about how to get the most out of `sentry-go` there
 - [Configuration](https://docs.sentry.io/platforms/go/config.md)
 - [Error Reporting](https://docs.sentry.io/error-reporting/quickstart.md?platform=go)
 - [Enriching Error Data](https://docs.sentry.io/enriching-error-data/context.md?platform=go)
+- [Transports](https://docs.sentry.io/platforms/go/transports.md)
 - [Integrations](https://docs.sentry.io/platforms/go/integrations.md)
   - [net/http](https://docs.sentry.io/platforms/go/http.md)
   - [echo](https://docs.sentry.io/platforms/go/echo.md)

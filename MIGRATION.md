@@ -11,7 +11,7 @@ go get github.com/getsentry/raven-go
 sentry-go
 
 ```go
-go get github.com/getsentry/sentry-go@0.0.1
+go get github.com/getsentry/sentry-go@v0.0.1
 ```
 
 ## Configuration
