@@ -1,4 +1,5 @@
 sudo: false
+
 language: go
 go:
   - 1.10.x
@@ -15,3 +16,13 @@ script:
   - golangci-lint run
   - go build
   - go test
+
+notifications:
+  webhooks:
+    urls:
+      - https://zeus.ci/hooks/befe9810-9285-11e9-b01a-0a580a281808/public/provider/travis/webhook
+    on_success: always
+    on_failure: always
+    on_start: always
+    on_cancel: always
+    on_error: always
