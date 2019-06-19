@@ -24,8 +24,8 @@ import (
 
     "github.com/getsentry/sentry-go"
     sentryecho "github.com/getsentry/sentry-go/echo"
-    "github.com/labstack/echo"
-	"github.com/labstack/echo/middleware"
+    "github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 // To initialize Sentry's handler, you need to initialize Sentry itself beforehand

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 )
 
 const valuesKey = "sentry"
