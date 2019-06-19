@@ -13,6 +13,7 @@ import (
 
 const defaultBufferSize = 30
 const defaultRetryAfter = time.Second * 60
+const defaultTimeout = time.Second * 30
 
 // Transport is used by the `Client` to deliver events to remote server.
 type Transport interface {
@@ -21,8 +22,54 @@ type Transport interface {
 	SendEvent(event *Event)
 }
 
-// httpTransport is a default implementation of `Transport` interface used by `Client`.
-type httpTransport struct {
+func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
+	if options.HTTPSProxy != "" {
+		return func(_ *http.Request) (*url.URL, error) {
+			return url.Parse(options.HTTPSProxy)
+		}
+	} else if options.HTTPProxy != "" {
+		return func(_ *http.Request) (*url.URL, error) {
+			return url.Parse(options.HTTPProxy)
+		}
+	}
+
+	return http.ProxyFromEnvironment
+}
+
+func getTLSConfig(options ClientOptions) *tls.Config {
+	if options.CaCerts != nil {
+		return &tls.Config{
+			RootCAs: options.CaCerts,
+		}
+	}
+
+	return nil
+}
+
+func retryAfter(now time.Time, r *http.Response) time.Duration {
+	retryAfterHeader := r.Header["Retry-After"]
+
+	if retryAfterHeader == nil {
+		return defaultRetryAfter
+	}
+
+	if date, err := time.Parse(time.RFC1123, retryAfterHeader[0]); err == nil {
+		return date.Sub(now)
+	}
+
+	if seconds, err := strconv.Atoi(retryAfterHeader[0]); err == nil {
+		return time.Second * time.Duration(seconds)
+	}
+
+	return defaultRetryAfter
+}
+
+// ================================
+// HTTPTransport
+// ================================
+
+// HTTPTransport is a default implementation of `Transport` interface used by `Client`.
+type HTTPTransport struct {
 	dsn       *Dsn
 	client    *http.Client
 	transport *http.Transport
@@ -32,34 +79,45 @@ type httpTransport struct {
 
 	wg    sync.WaitGroup
 	start sync.Once
+
+	// Size of the transport buffer. Defaults to 30.
+	BufferSize int
+	// HTTP Client request timeout. Defaults to 30 seconds.
+	Timeout time.Duration
+}
+
+// NewHTTPTransport returns a new pre-configured instance of HTTPTransport
+func NewHTTPTransport() *HTTPTransport {
+	transport := HTTPTransport{
+		BufferSize: defaultBufferSize,
+		Timeout:    defaultTimeout,
+	}
+	return &transport
 }
 
 // Configure is called by the `Client` itself, providing it it's own `ClientOptions`.
-func (t *httpTransport) Configure(options ClientOptions) {
+func (t *HTTPTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
 		Logger.Printf("%v\n", err)
 		return
 	}
-	t.dsn = dsn
 
-	bufferSize := defaultBufferSize
-	if options.BufferSize != 0 {
-		bufferSize = options.BufferSize
-	}
-	t.buffer = make(chan *http.Request, bufferSize)
+	t.dsn = dsn
+	t.buffer = make(chan *http.Request, t.BufferSize)
 
 	if options.HTTPTransport != nil {
 		t.transport = options.HTTPTransport
 	} else {
 		t.transport = &http.Transport{
-			Proxy:           t.getProxyConfig(options),
-			TLSClientConfig: t.getTLSConfig(options),
+			Proxy:           getProxyConfig(options),
+			TLSClientConfig: getTLSConfig(options),
 		}
 	}
 
 	t.client = &http.Client{
 		Transport: t.transport,
+		Timeout:   t.Timeout,
 	}
 
 	t.start.Do(func() {
@@ -68,7 +126,7 @@ func (t *httpTransport) Configure(options ClientOptions) {
 }
 
 // SendEvent assembles a new packet out of `Event` and sends it to remote server.
-func (t *httpTransport) SendEvent(event *Event) {
+func (t *HTTPTransport) SendEvent(event *Event) {
 	if t.dsn == nil || time.Now().Before(t.disabledUntil) {
 		return
 	}
@@ -103,7 +161,7 @@ func (t *httpTransport) SendEvent(event *Event) {
 
 // Flush notifies when all the buffered events have been sent by returning `true`
 // or `false` if timeout was reached.
-func (t *httpTransport) Flush(timeout time.Duration) bool {
+func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 	c := make(chan struct{})
 
 	go func() {
@@ -121,31 +179,7 @@ func (t *httpTransport) Flush(timeout time.Duration) bool {
 	}
 }
 
-func (t *httpTransport) getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
-	if options.HTTPSProxy != "" {
-		return func(_ *http.Request) (*url.URL, error) {
-			return url.Parse(options.HTTPSProxy)
-		}
-	} else if options.HTTPProxy != "" {
-		return func(_ *http.Request) (*url.URL, error) {
-			return url.Parse(options.HTTPProxy)
-		}
-	}
-
-	return http.ProxyFromEnvironment
-}
-
-func (t *httpTransport) getTLSConfig(options ClientOptions) *tls.Config {
-	if options.CaCerts != nil {
-		return &tls.Config{
-			RootCAs: options.CaCerts,
-		}
-	}
-
-	return nil
-}
-
-func (t *httpTransport) worker() {
+func (t *HTTPTransport) worker() {
 	for request := range t.buffer {
 		if time.Now().Before(t.disabledUntil) {
 			t.wg.Done()
@@ -167,20 +201,94 @@ func (t *httpTransport) worker() {
 	}
 }
 
-func retryAfter(now time.Time, r *http.Response) time.Duration {
-	retryAfterHeader := r.Header["Retry-After"]
+// ================================
+// HTTPSyncTransport
+// ================================
 
-	if retryAfterHeader == nil {
-		return defaultRetryAfter
+// HTTPSyncTransport is an implementation of `Transport` interface which blocks after each captured event.
+type HTTPSyncTransport struct {
+	dsn           *Dsn
+	client        *http.Client
+	transport     *http.Transport
+	disabledUntil time.Time
+
+	// HTTP Client request timeout. Defaults to 30 seconds.
+	Timeout time.Duration
+}
+
+// NewHTTPSyncTransport returns a new pre-configured instance of HTTPSyncTransport
+func NewHTTPSyncTransport() *HTTPSyncTransport {
+	transport := HTTPSyncTransport{
+		Timeout: defaultTimeout,
 	}
 
-	if date, err := time.Parse(time.RFC1123, retryAfterHeader[0]); err == nil {
-		return date.Sub(now)
+	return &transport
+}
+
+// Configure is called by the `Client` itself, providing it it's own `ClientOptions`.
+func (t *HTTPSyncTransport) Configure(options ClientOptions) {
+	dsn, err := NewDsn(options.Dsn)
+	if err != nil {
+		Logger.Printf("%v\n", err)
+		return
+	}
+	t.dsn = dsn
+
+	if options.HTTPTransport != nil {
+		t.transport = options.HTTPTransport
+	} else {
+		t.transport = &http.Transport{
+			Proxy:           getProxyConfig(options),
+			TLSClientConfig: getTLSConfig(options),
+		}
 	}
 
-	if seconds, err := strconv.Atoi(retryAfterHeader[0]); err == nil {
-		return time.Second * time.Duration(seconds)
+	t.client = &http.Client{
+		Transport: t.transport,
+		Timeout:   t.Timeout,
+	}
+}
+
+// SendEvent assembles a new packet out of `Event` and sends it to remote server.
+func (t *HTTPSyncTransport) SendEvent(event *Event) {
+	if t.dsn == nil || time.Now().Before(t.disabledUntil) {
+		return
 	}
 
-	return defaultRetryAfter
+	body, _ := json.Marshal(event)
+
+	request, _ := http.NewRequest(
+		http.MethodPost,
+		t.dsn.StoreAPIURL().String(),
+		bytes.NewBuffer(body),
+	)
+
+	for headerKey, headerValue := range t.dsn.RequestHeaders() {
+		request.Header.Set(headerKey, headerValue)
+	}
+
+	Logger.Printf(
+		"Sending %s event [%s] to %s project: %d\n",
+		event.Level,
+		event.EventID,
+		t.dsn.host,
+		t.dsn.projectID,
+	)
+
+	response, err := t.client.Do(request)
+
+	if err != nil {
+		Logger.Printf("There was an issue with sending an event: %v", err)
+	}
+
+	if response != nil && response.StatusCode == http.StatusTooManyRequests {
+		t.disabledUntil = time.Now().Add(retryAfter(time.Now(), response))
+		Logger.Printf("Too many requests, backing off till: %s\n", t.disabledUntil)
+	}
+}
+
+// Flush notifies when all the buffered events have been sent by returning `true`
+// or `false` if timeout was reached. No-op for HTTPSyncTransport.
+func (t *HTTPSyncTransport) Flush(_ time.Duration) bool {
+	return true
 }

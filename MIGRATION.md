@@ -73,55 +73,7 @@ sentry.Init(sentry.ClientOptions{
 })
 ```
 
-Available options:
-
-```go
-// ClientOptions that configures a SDK Client
-type ClientOptions struct {
-	// The DSN to use. If not set the client is effectively disabled.
-	Dsn string
-	// In debug mode debug information is printed to stdput to help you understand what
-	// sentry is doing.
-	Debug bool
-	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0)
-	SampleRate float32
-	// Before send callback.
-	BeforeSend func(event *Event, hint *EventHint) *Event
-	// Before breadcrumb add callback.
-	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
-	// Integrations to be installed on the current Client
-	Integrations func([]Integration) []Integration
-	// io.Writer implementation that should be used with the `Debug` mode
-	DebugWriter io.Writer
-	// The transport to use.
-	// This is an instance of a struct implementing `Transport` interface.
-	// Defaults to `httpTransport` from `transport.go`
-	Transport Transport
-	// The server name to be reported.
-	ServerName string
-	// The release to be sent with events.
-	Release string
-	// The dist to be sent with events.
-	Dist string
-	// The environment to be sent with events.
-	Environment string
-	// Maximum number of breadcrumbs.
-	MaxBreadcrumbs int
-	// An optional pointer to `http.Transport` that will be used with a default HTTPTransport.
-	HTTPTransport *http.Transport
-	// An optional HTTP proxy to use.
-	// This will default to the `http_proxy` environment variable.
-	// or `https_proxy` if that one exists.
-	HTTPProxy string
-	// An optional HTTPS proxy to use.
-	// This will default to the `HTTPS_PROXY` environment variable
-	// or `http_proxy` if that one exists.
-	HTTPSProxy string
-	// An optionsl CaCerts to use.
-	// Defaults to `gocertifi.CACerts()`.
-	CaCerts *x509.CertPool
-}
-```
+Available options: see [Configuration](https://docs.sentry.io/platforms/go/config/) section.
 
 ### Providing SSL Certificates
 

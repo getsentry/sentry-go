@@ -31,7 +31,7 @@ func main() {
 			return nil
 		},
 		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
-			return append(integrations, new(pickleIntegration))
+			return append(integrations, &pickleIntegration{})
 		},
 	})
 	hub1 := sentry.NewHub(client1, scope1)

@@ -137,7 +137,7 @@ func main() {
 			return breadcrumb
 		},
 		SampleRate: 1,
-		Transport:  new(devNullTransport),
+		Transport:  &devNullTransport{},
 		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
 			return append(integrations, integrations[1])
 		},
