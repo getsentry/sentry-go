@@ -1,10 +1,10 @@
 # Changelog
 
-## 0.1.0
+## v0.1.0
 
 - First stable release \o/
 
-## 0.0.1-beta.5
+## v0.0.1-beta.5
 
 - feat: **[breaking]** Add `NewHTTPTransport` and `NewHTTPSyncTransport` which accepts all transport options
 - feat: New `HTTPSyncTransport` that blocks after each call
@@ -15,7 +15,7 @@
 - ref: Set `Request` instantly in the package handlers, not in `recoverWithSentry` so it can be accessed later on
 - ci: Add craft config
 
-## 0.0.1-beta.4
+## v0.0.1-beta.4
 
 - feat: `IgnoreErrors` client option and corresponding integration
 - ref: Reworked `net/http` integration, wrote better example and complete readme
@@ -25,7 +25,7 @@
 - ref: Reworked `Martini` integration, wrote better example and complete readme
 - ref: Remove `Handle()` from frameworks handlers and return it directly from New
 
-## 0.0.1-beta.3
+## v0.0.1-beta.3
 
 - feat: `Iris` framework support with `sentryiris` package
 - feat: `Gin` framework support with `sentrygin` package
@@ -43,7 +43,7 @@
 - ref: **[breaking]** Remove `GetIntegration` from the `Hub`
 - ref: **[breaking]** Remove `GlobalEventProcessors` getter from the public API
 
-## 0.0.1-beta.2
+## v0.0.1-beta.2
 
 - feat: Add `AttachStacktrace` client option to include stacktrace for messages
 - feat: Add `BufferSize` client option to configure transport buffer size
@@ -54,6 +54,6 @@
 - fix: Don't log events dropped due to full transport buffer as sent
 - fix: Don't panic and create an appropriate event when called `CaptureException` or `Recover` with `nil` value
 
-## 0.0.1-beta
+## v0.0.1-beta
 
 - Initial release
