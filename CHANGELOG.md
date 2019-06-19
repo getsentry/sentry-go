@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0
+
+- First stable release \o/
+
 ## 0.0.1-beta.5
 
 - feat: **[breaking]** Add `NewHTTPTransport` and `NewHTTPSyncTransport` which accepts all transport options
