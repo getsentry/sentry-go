@@ -8,7 +8,7 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-type handler struct {
+type Handler struct {
 	repanic         bool
 	waitForDelivery bool
 	timeout         time.Duration
@@ -28,8 +28,8 @@ type Options struct {
 
 // New returns a struct that provides Handle and HandleFunc methods
 // that satisfy http.Handler and http.HandlerFunc interfaces.
-func New(options Options) *handler {
-	handler := handler{
+func New(options Options) *Handler {
+	handler := Handler{
 		repanic:         false,
 		timeout:         time.Second * 2,
 		waitForDelivery: false,
@@ -47,7 +47,7 @@ func New(options Options) *handler {
 }
 
 // Handle wraps http.Handler and recovers from caught panics.
-func (h *handler) Handle(handler http.Handler) http.Handler {
+func (h *Handler) Handle(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		hub := sentry.CurrentHub().Clone()
 		ctx := sentry.SetHubOnContext(
@@ -60,7 +60,7 @@ func (h *handler) Handle(handler http.Handler) http.Handler {
 }
 
 // HandleFunc wraps http.HandleFunc and recovers from caught panics.
-func (h *handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
+func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		hub := sentry.CurrentHub().Clone()
 		ctx := sentry.SetHubOnContext(
@@ -72,7 +72,7 @@ func (h *handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
+func (h *Handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	if err := recover(); err != nil {
 		hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(r))
 		eventID := hub.RecoverWithContext(

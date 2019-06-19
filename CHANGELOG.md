@@ -3,6 +3,8 @@
 ## 0.0.1-beta.5
 
 - feat: New `Echo` integration
+- ref: Export `net/http` integration handler
+- ci: Add craft config
 
 ## 0.0.1-beta.4
 
