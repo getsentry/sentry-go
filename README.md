@@ -71,17 +71,17 @@ func main() {
 
 For more detailed information about how to get the most out of `sentry-go` there is additional documentation available:
 
-- [Configuration](https://docs.sentry.io/platforms/go/config.md)
-- [Error Reporting](https://docs.sentry.io/error-reporting/quickstart.md?platform=go)
-- [Enriching Error Data](https://docs.sentry.io/enriching-error-data/context.md?platform=go)
-- [Transports](https://docs.sentry.io/platforms/go/transports.md)
-- [Integrations](https://docs.sentry.io/platforms/go/integrations.md)
-  - [net/http](https://docs.sentry.io/platforms/go/http.md)
-  - [echo](https://docs.sentry.io/platforms/go/echo.md)
-  - [gin](https://docs.sentry.io/platforms/go/gin.md)
-  - [iris](https://docs.sentry.io/platforms/go/iris.md)
-  - [martini](https://docs.sentry.io/platforms/go/martini.md)
-  - [negroni](https://docs.sentry.io/platforms/go/negroni.md)
+- [Configuration](https://docs.sentry.io/platforms/go/config)
+- [Error Reporting](https://docs.sentry.io/error-reporting/quickstart?platform=go)
+- [Enriching Error Data](https://docs.sentry.io/enriching-error-data/context?platform=go)
+- [Transports](https://docs.sentry.io/platforms/go/transports)
+- [Integrations](https://docs.sentry.io/platforms/go/integrations)
+  - [net/http](https://docs.sentry.io/platforms/go/http)
+  - [echo](https://docs.sentry.io/platforms/go/echo)
+  - [gin](https://docs.sentry.io/platforms/go/gin)
+  - [iris](https://docs.sentry.io/platforms/go/iris)
+  - [martini](https://docs.sentry.io/platforms/go/martini)
+  - [negroni](https://docs.sentry.io/platforms/go/negroni)
 
 ## Resources:
 
