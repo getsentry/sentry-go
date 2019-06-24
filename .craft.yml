@@ -1,7 +1,7 @@
 github:
   owner: getsentry
   repo: sentry-go
-preReleaseCommand: ""
+preReleaseCommand: bash scripts/craft-pre-release.sh
 changelogPolicy: simple
 targets:
   - name: github
