@@ -6,7 +6,7 @@ import (
 )
 
 // Version Sentry-Go SDK Version
-const Version = "0.0.1"
+const Version = "0.1.0"
 
 // Init initializes whole SDK by creating new `Client` and binding it to the current `Hub`
 func Init(options ClientOptions) error {
