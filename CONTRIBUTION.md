@@ -32,7 +32,7 @@ $ golangci-lint run
 ## Release
 
 1. Update changelog with new version in `vX.X.X` format title and list of changes
-2. Commit with `release: X.X.X` commit message and push to `master`
+2. Commit with `misc: vX.X.X changelog` commit message and push to `master`
 3. Let `craft` do the rest
 
 ```bash
