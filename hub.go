@@ -181,14 +181,22 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 // The total number of breadcrumbs that can be recorded are limited by the
 // configuration on the client.
 func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
-	options := hub.Client().Options()
-	maxBreadcrumbs := defaultMaxBreadcrumbs
+	client := hub.Client()
 
-	if options.MaxBreadcrumbs != 0 {
-		maxBreadcrumbs = options.MaxBreadcrumbs
+	// If there's no client, just store it on the scope straight away
+	if client == nil {
+		hub.Scope().AddBreadcrumb(breadcrumb, maxBreadcrumbs)
+		return
 	}
 
-	if maxBreadcrumbs < 0 {
+	options := client.Options()
+	max := defaultMaxBreadcrumbs
+
+	if options.MaxBreadcrumbs != 0 {
+		max = options.MaxBreadcrumbs
+	}
+
+	if max < 0 {
 		return
 	}
 
@@ -203,7 +211,6 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 		}
 	}
 
-	max := maxBreadcrumbs
 	if max > maxBreadcrumbs {
 		max = maxBreadcrumbs
 	}

@@ -221,6 +221,31 @@ func TestAddBreadcrumbSkipAllBreadcrumbsIfMaxBreadcrumbsIsLessThanZero(t *testin
 	assertEqual(t, len(scope.breadcrumbs), 0)
 }
 
+func TestAddBreadcrumbShouldNeverExceedMaxBreadcrumbsConst(t *testing.T) {
+	hub, client, scope := setupHubTest()
+	client.options.MaxBreadcrumbs = 1000
+
+	breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
+
+	for i := 0; i < 111; i++ {
+		hub.AddBreadcrumb(breadcrumb, nil)
+	}
+
+	assertEqual(t, len(scope.breadcrumbs), 100)
+}
+
+func TestAddBreadcrumbShouldWorkWithoutClient(t *testing.T) {
+	scope := NewScope()
+	hub := NewHub(nil, scope)
+
+	breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
+	for i := 0; i < 111; i++ {
+		hub.AddBreadcrumb(breadcrumb, nil)
+	}
+
+	assertEqual(t, len(scope.breadcrumbs), 100)
+}
+
 func TestAddBreadcrumbCallsBeforeBreadcrumbCallback(t *testing.T) {
 	hub, client, scope := setupHubTest()
 	client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
