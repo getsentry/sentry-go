@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.1
+
+- fix: Check for initialized Client in AddBreadcrumbs (#20)
+- build: Bump version when releasing with Craft (#19)
+
 ## v0.1.0
 
 - First stable release! \o/
