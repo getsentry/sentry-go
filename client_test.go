@@ -5,6 +5,19 @@ import (
 	"testing"
 )
 
+func TestNewClientAllowsEmptyDSN(t *testing.T) {
+	transport := &TransportMock{}
+	client, err := NewClient(ClientOptions{
+		Transport: transport,
+	})
+	if err != nil {
+		t.Fatalf("expected no error when creating client without a DNS but got %v", err)
+	}
+
+	client.CaptureException(errors.New("custom error"), nil, &ScopeMock{})
+	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
+}
+
 type customComplexError struct {
 	Message string
 }
