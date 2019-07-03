@@ -120,13 +120,14 @@ func NewClient(options ClientOptions) (*Client, error) {
 		options.Environment = os.Getenv("SENTRY_ENVIRONMENT")
 	}
 
-	dsn, err := NewDsn(options.Dsn)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if dsn == nil {
+	var dsn *Dsn
+	if options.Dsn != "" {
+		var err error
+		dsn, err = NewDsn(options.Dsn)
+		if err != nil {
+			return nil, err
+		}
+	} else {
 		Logger.Println("Sentry client initialized with an empty DSN")
 	}
 
