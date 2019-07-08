@@ -8,8 +8,8 @@ import (
 func fillScopeWithData(scope *Scope) *Scope {
 	scope.breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "scopeBreadcrumbMessage"}}
 	scope.user = User{ID: "1337"}
-	scope.contexts = map[string]interface{}{"scopeContextsKey": "scopeContextsValue"}
 	scope.tags = map[string]string{"scopeTagKey": "scopeTagValue"}
+	scope.contexts = map[string]interface{}{"scopeContextsKey": "scopeContextsValue"}
 	scope.extra = map[string]interface{}{"scopeExtraKey": "scopeExtraValue"}
 	scope.fingerprint = []string{"scopeFingerprintOne", "scopeFingerprintTwo"}
 	scope.level = LevelDebug
@@ -20,8 +20,8 @@ func fillScopeWithData(scope *Scope) *Scope {
 func fillEventWithData(event *Event) *Event {
 	event.Breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "eventBreadcrumbMessage"}}
 	event.User = User{ID: "42"}
-	event.Contexts = map[string]interface{}{"eventContextsKey": "eventContextsValue"}
 	event.Tags = map[string]string{"eventTagKey": "eventTagValue"}
+	event.Contexts = map[string]interface{}{"eventContextsKey": "eventContextsValue"}
 	event.Extra = map[string]interface{}{"eventExtraKey": "eventExtraValue"}
 	event.Fingerprint = []string{"eventFingerprintOne", "eventFingerprintTwo"}
 	event.Level = LevelInfo
@@ -436,14 +436,37 @@ func TestClear(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	scope.Clear()
 
-	assertEqual(t, []*Breadcrumb(nil), scope.breadcrumbs)
+	assertEqual(t, []*Breadcrumb{}, scope.breadcrumbs)
 	assertEqual(t, User{}, scope.user)
-	assertEqual(t, map[string]string(nil), scope.tags)
-	assertEqual(t, map[string]interface{}(nil), scope.contexts)
-	assertEqual(t, map[string]interface{}(nil), scope.extra)
-	assertEqual(t, []string(nil), scope.fingerprint)
+	assertEqual(t, map[string]string{}, scope.tags)
+	assertEqual(t, map[string]interface{}{}, scope.contexts)
+	assertEqual(t, map[string]interface{}{}, scope.extra)
+	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, Request{}, scope.request)
+}
+
+func TestClearAndReconfigure(t *testing.T) {
+	scope := fillScopeWithData(NewScope())
+	scope.Clear()
+
+	scope.SetTag("foo", "bar")
+	scope.SetContext("foo", "bar")
+	scope.SetExtra("foo", "bar")
+	scope.SetLevel(LevelDebug)
+	scope.SetFingerprint([]string{"foo"})
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
+	scope.SetUser(User{ID: "foo"})
+	scope.SetRequest(Request{URL: "foo"})
+
+	assertEqual(t, map[string]string{"foo": "bar"}, scope.tags)
+	assertEqual(t, map[string]interface{}{"foo": "bar"}, scope.contexts)
+	assertEqual(t, map[string]interface{}{"foo": "bar"}, scope.extra)
+	assertEqual(t, LevelDebug, scope.level)
+	assertEqual(t, []string{"foo"}, scope.fingerprint)
+	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "foo"}}, scope.breadcrumbs)
+	assertEqual(t, User{ID: "foo"}, scope.user)
+	assertEqual(t, Request{URL: "foo"}, scope.request)
 }
 
 func TestClearBreadcrumbs(t *testing.T) {

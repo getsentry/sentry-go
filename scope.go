@@ -159,7 +159,7 @@ func (scope *Scope) Clone() *Scope {
 
 // Clear removed the data from the current scope.
 func (scope *Scope) Clear() {
-	*scope = Scope{}
+	*scope = *NewScope()
 }
 
 // AddEventProcessor adds an event processor to the current scope.
