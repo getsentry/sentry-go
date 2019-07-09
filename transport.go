@@ -143,6 +143,8 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		request.Header.Set(headerKey, headerValue)
 	}
 
+	t.wg.Add(1)
+
 	select {
 	case t.buffer <- request:
 		Logger.Printf(
@@ -152,8 +154,8 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 			t.dsn.host,
 			t.dsn.projectID,
 		)
-		t.wg.Add(1)
 	default:
+		t.wg.Done()
 		Logger.Println("Event dropped due to transport buffer being full")
 		// worker would block, drop the packet
 	}
