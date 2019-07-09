@@ -1,8 +1,12 @@
 # Changelog
 
+## v0.1.2
+
+- fix: Use `NewScope` instead of literal struct inside a `scope.Clear` call
+
 ## v0.1.1
 
-- fix: Check for initialized Client in AddBreadcrumbs (#20)
+- fix: Check for initialized `Client` in `AddBreadcrumbs` (#20)
 - build: Bump version when releasing with Craft (#19)
 
 ## v0.1.0
