@@ -2,7 +2,11 @@
 
 ## v0.1.2
 
-- fix: Use `NewScope` instead of literal struct inside a `scope.Clear` call
+- feat: Better source code location resolution and more useful inapp frames (#26)
+- feat: Use `noopTransport` when no `Dsn` provided (#27)
+- ref: Allow empty `Dsn` instead of returning an error (#22)
+- fix: Use `NewScope` instead of literal struct inside a `scope.Clear` call (#24)
+- fix: Add to `WaitGroup` before the request is put inside a buffer (#25)
 
 ## v0.1.1
 
