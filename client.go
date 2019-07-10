@@ -127,8 +127,6 @@ func NewClient(options ClientOptions) (*Client, error) {
 		if err != nil {
 			return nil, err
 		}
-	} else {
-		Logger.Println("Sentry client initialized with an empty DSN")
 	}
 
 	client := Client{
@@ -146,7 +144,11 @@ func (client *Client) setupTransport() {
 	transport := client.options.Transport
 
 	if transport == nil {
-		transport = NewHTTPTransport()
+		if client.options.Dsn == "" {
+			transport = new(noopTransport)
+		} else {
+			transport = NewHTTPTransport()
+		}
 	}
 
 	transport.Configure(client.options)
@@ -315,7 +317,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	if options.SampleRate != 0.0 {
 		randomFloat := rand.New(rand.NewSource(time.Now().UnixNano())).Float32()
 		if randomFloat > options.SampleRate {
-			Logger.Println("Event dropped due to SampleRate hit")
+			Logger.Println("Event dropped due to SampleRate hit.")
 			return nil
 		}
 	}
@@ -330,7 +332,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 			h = hint
 		}
 		if event = options.BeforeSend(event, h); event == nil {
-			Logger.Println("Event dropped due to BeforeSend callback")
+			Logger.Println("Event dropped due to BeforeSend callback.")
 			return nil
 		}
 	}

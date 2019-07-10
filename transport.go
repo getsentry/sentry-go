@@ -156,7 +156,7 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		)
 	default:
 		t.wg.Done()
-		Logger.Println("Event dropped due to transport buffer being full")
+		Logger.Println("Event dropped due to transport buffer being full.")
 		// worker would block, drop the packet
 	}
 }
@@ -173,10 +173,10 @@ func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 
 	select {
 	case <-c:
-		Logger.Println("Buffer flushed successfully")
+		Logger.Println("Buffer flushed successfully.")
 		return true
 	case <-time.After(timeout):
-		Logger.Println("Buffer flushing reached the timeout")
+		Logger.Println("Buffer flushing reached the timeout.")
 		return false
 	}
 }
@@ -292,5 +292,25 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 // Flush notifies when all the buffered events have been sent by returning `true`
 // or `false` if timeout was reached. No-op for HTTPSyncTransport.
 func (t *HTTPSyncTransport) Flush(_ time.Duration) bool {
+	return true
+}
+
+// ================================
+// noopTransport
+// ================================
+
+// noopTransport is an implementation of `Transport` interface which drops all the events.
+// Only used internally when an empty DSN is provided, which effectively disables the SDK.
+type noopTransport struct{}
+
+func (t *noopTransport) Configure(options ClientOptions) {
+	Logger.Println("Sentry client initialized with an empty DSN. Using noopTransport. No events will be delivered.")
+}
+
+func (t *noopTransport) SendEvent(event *Event) {
+	Logger.Println("Event dropped due to noopTransport usage.")
+}
+
+func (t *noopTransport) Flush(_ time.Duration) bool {
 	return true
 }
