@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"go/build"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -228,6 +229,7 @@ var sr = newSourceReader() // nolint: gochecknoglobals
 
 func contextifyFrames(frames []Frame) []Frame {
 	contextifiedFrames := make([]Frame, 0, len(frames))
+	sourceCodeLocationPrefix := findSourceCodeLocationPrefix(frames)
 
 	for _, frame := range frames {
 		var path string
@@ -237,8 +239,8 @@ func contextifyFrames(frames []Frame) []Frame {
 		switch {
 		case fileExists(frame.AbsPath):
 			path = frame.AbsPath
-		case fileExists(frame.Filename):
-			path = frame.Filename
+		case fileExists(strings.TrimPrefix(frame.AbsPath, sourceCodeLocationPrefix)):
+			path = strings.TrimPrefix(frame.AbsPath, sourceCodeLocationPrefix)
 		default:
 			contextifiedFrames = append(contextifiedFrames, frame)
 			continue
@@ -263,21 +265,32 @@ func contextifyFrames(frames []Frame) []Frame {
 	return contextifiedFrames
 }
 
+func findSourceCodeLocationPrefix(frames []Frame) string {
+	mainModulePattern := regexp.MustCompile(`^main\.?`)
+
+	for _, frame := range frames {
+		if mainModulePattern.MatchString(frame.Module) {
+			dir, _ := filepath.Split(frame.AbsPath)
+			return dir
+		}
+	}
+
+	return ""
+}
+
 func extractFilename(path string) string {
 	_, file := filepath.Split(path)
 	return file
 }
 
 func isInAppFrame(frame Frame) bool {
-	if frame.Module == "main" {
-		return true
+	if strings.HasPrefix(frame.AbsPath, build.Default.GOROOT) ||
+		strings.Contains(frame.Module, "vendor") ||
+		strings.Contains(frame.Module, "third_party") {
+		return false
 	}
 
-	if !strings.Contains(frame.Module, "vendor") && !strings.Contains(frame.Module, "third_party") {
-		return true
-	}
-
-	return false
+	return true
 }
 
 // Transform `runtime/debug.*T·ptrmethod` into `{ module: runtime/debug, function: *T.ptrmethod }`
