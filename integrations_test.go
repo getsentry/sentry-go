@@ -167,3 +167,60 @@ func TestIgnoreErrorsIntegration(t *testing.T) {
 		t.Error("Event should not be dropped")
 	}
 }
+
+func TestContextifyFrames(t *testing.T) {
+	cfi := contextifyFramesIntegration{
+		sr:              newSourceReader(),
+		contextLines:    5,
+		cachedLocations: make(map[string]string),
+	}
+
+	stacktrace := Trace()
+
+	frame := cfi.contextify(stacktrace.Frames)[len(stacktrace.Frames)-1]
+
+	assertEqual(t, frame.PreContext, []string{
+		")",
+		"",
+		"// NOTE: if you modify this file, you are also responsible for updating LoC position in Stacktrace tests",
+		"",
+		"func Trace() *Stacktrace {",
+	})
+	assertEqual(t, frame.ContextLine, "\treturn NewStacktrace()")
+	assertEqual(t, frame.PostContext, []string{
+		"}",
+		"",
+		"func RedPkgErrorsRanger() error {",
+		"\treturn BluePkgErrorsRanger()",
+		"}",
+	})
+}
+
+func TestContextifyFramesNonexistingFilesShouldNotDropFrames(t *testing.T) {
+	cfi := contextifyFramesIntegration{
+		sr:              newSourceReader(),
+		contextLines:    5,
+		cachedLocations: make(map[string]string),
+	}
+
+	frames := []Frame{{
+		InApp:    true,
+		Function: "fnName",
+		Module:   "same",
+		Filename: "wat.go",
+		AbsPath:  "this/doesnt/exist/wat.go",
+		Lineno:   1,
+		Colno:    2,
+	}, {
+		InApp:    false,
+		Function: "fnNameFoo",
+		Module:   "sameFoo",
+		Filename: "foo.go",
+		AbsPath:  "this/doesnt/exist/foo.go",
+		Lineno:   3,
+		Colno:    5,
+	}}
+
+	contextifiedFrames := cfi.contextify(frames)
+	assertEqual(t, len(contextifiedFrames), len(frames))
+}

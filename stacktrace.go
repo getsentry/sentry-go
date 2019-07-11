@@ -10,7 +10,6 @@ import (
 )
 
 const unknown string = "unknown"
-const contextLines int = 5
 
 // The module download is split into two parts: downloading the go.mod and downloading the actual code.
 // If you have dependencies only needed for tests, then they will show up in your go.mod,
@@ -36,7 +35,6 @@ func NewStacktrace() *Stacktrace {
 
 	frames := extractFrames(pcs[:n])
 	frames = filterFrames(frames)
-	frames = contextifyFrames(frames)
 
 	stacktrace := Stacktrace{
 		Frames: frames,
@@ -63,7 +61,6 @@ func ExtractStacktrace(err error) *Stacktrace {
 
 	frames := extractFrames(pcs)
 	frames = filterFrames(frames)
-	frames = contextifyFrames(frames)
 
 	stacktrace := Stacktrace{
 		Frames: frames,
@@ -223,59 +220,6 @@ func filterFrames(frames []Frame) []Frame {
 	}
 
 	return filteredFrames
-}
-
-var sr = newSourceReader() // nolint: gochecknoglobals
-
-func contextifyFrames(frames []Frame) []Frame {
-	contextifiedFrames := make([]Frame, 0, len(frames))
-	sourceCodeLocationPrefix := findSourceCodeLocationPrefix(frames)
-
-	for _, frame := range frames {
-		var path string
-
-		// If we are not able to read the source code from either absolute or relative path (root dir only)
-		// Skip this part and return the original frame
-		switch {
-		case fileExists(frame.AbsPath):
-			path = frame.AbsPath
-		case fileExists(strings.TrimPrefix(frame.AbsPath, sourceCodeLocationPrefix)):
-			path = strings.TrimPrefix(frame.AbsPath, sourceCodeLocationPrefix)
-		default:
-			contextifiedFrames = append(contextifiedFrames, frame)
-			continue
-		}
-
-		lines, initial := sr.readContextLines(path, frame.Lineno, contextLines)
-
-		for i, line := range lines {
-			switch {
-			case i < initial:
-				frame.PreContext = append(frame.PreContext, string(line))
-			case i == initial:
-				frame.ContextLine = string(line)
-			default:
-				frame.PostContext = append(frame.PostContext, string(line))
-			}
-		}
-
-		contextifiedFrames = append(contextifiedFrames, frame)
-	}
-
-	return contextifiedFrames
-}
-
-func findSourceCodeLocationPrefix(frames []Frame) string {
-	mainModulePattern := regexp.MustCompile(`^main\.?`)
-
-	for _, frame := range frames {
-		if mainModulePattern.MatchString(frame.Module) {
-			dir, _ := filepath.Split(frame.AbsPath)
-			return dir
-		}
-	}
-
-	return ""
 }
 
 func extractFilename(path string) string {

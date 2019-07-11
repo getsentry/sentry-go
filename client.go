@@ -157,6 +157,7 @@ func (client *Client) setupTransport() {
 
 func (client *Client) setupIntegrations() {
 	integrations := []Integration{
+		new(contextifyFramesIntegration),
 		new(environmentIntegration),
 		new(modulesIntegration),
 		new(ignoreErrorsIntegration),
