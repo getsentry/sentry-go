@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.1.3
+
+- feat: Move frames context reading into `contextifyFramesIntegration` (#28)
+
+_NOTE:_
+In case of any performance isues due to source contexts IO, you can let us know and turn off the integration in the meantime with:
+
+```go
+sentry.Init(sentry.ClientOptions{
+	Integrations: func(integrations []sentry.Integration) []sentry.Integration {
+		var filteredIntegrations []sentry.Integration
+		for _, integration := range integrations {
+			if integration.Name() == "ContextifyFrames" {
+				continue
+			}
+			filteredIntegrations = append(filteredIntegrations, integration)
+		}
+		return filteredIntegrations
+	},
+})
+```
+
 ## v0.1.2
 
 - feat: Better source code location resolution and more useful inapp frames (#26)
