@@ -50,49 +50,6 @@ func TestStacktraceFrame(t *testing.T) {
 	assertStringContains(t, frame.Module, "sentry-go")
 }
 
-func TestStacktraceFrameContext(t *testing.T) {
-	stacktrace := Trace()
-
-	frame := stacktrace.Frames[len(stacktrace.Frames)-1]
-
-	assertEqual(t, frame.PreContext, []string{
-		")",
-		"",
-		"// NOTE: if you modify this file, you are also responsible for updating LoC position in Stacktrace tests",
-		"",
-		"func Trace() *Stacktrace {",
-	})
-	assertEqual(t, frame.ContextLine, "\treturn NewStacktrace()")
-	assertEqual(t, frame.PostContext, []string{
-		"}",
-		"",
-		"func RedPkgErrorsRanger() error {",
-		"\treturn BluePkgErrorsRanger()",
-		"}",
-	})
-}
-
-func TestStacktraceUnsuccessfulContextifyShouldNotDropFrames(t *testing.T) {
-	frames := []Frame{{
-		Function: "fnName",
-		Module:   "same",
-		Filename: "wat.go",
-		AbsPath:  "this/doesnt/exist/wat.go",
-		Lineno:   1,
-		Colno:    2,
-	}, {
-		Function: "fnNameFoo",
-		Module:   "sameFoo",
-		Filename: "foo.go",
-		AbsPath:  "this/doesnt/exist/foo.go",
-		Lineno:   3,
-		Colno:    5,
-	}}
-
-	contextifiedFrames := contextifyFrames(frames)
-	assertEqual(t, len(contextifiedFrames), len(frames))
-}
-
 // https://github.com/pkg/errors
 func TestExtractStacktracePkgErrors(t *testing.T) {
 	err := RedPkgErrorsRanger()
