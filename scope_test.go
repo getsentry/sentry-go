@@ -297,6 +297,21 @@ func TestScopeSetLevelOverrides(t *testing.T) {
 	assertEqual(t, scope.level, LevelFatal)
 }
 
+func TestScopeSetTransaction(t *testing.T) {
+	scope := NewScope()
+	scope.SetTransaction("abc")
+
+	assertEqual(t, scope.transaction, "abc")
+}
+
+func TestScopeSetTransactionOverrides(t *testing.T) {
+	scope := NewScope()
+	scope.SetTransaction("abc")
+	scope.SetTransaction("def")
+
+	assertEqual(t, scope.transaction, "def")
+}
+
 func TestAddBreadcrumbAddsBreadcrumb(t *testing.T) {
 	scope := NewScope()
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"}, maxBreadcrumbs)

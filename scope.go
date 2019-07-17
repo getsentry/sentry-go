@@ -28,6 +28,7 @@ type Scope struct {
 	extra           map[string]interface{}
 	fingerprint     []string
 	level           Level
+	transaction     string
 	request         Request
 	eventProcessors []EventProcessor
 }
@@ -135,6 +136,11 @@ func (scope *Scope) SetLevel(level Level) {
 	scope.level = level
 }
 
+// SetTransaction sets new transaction name for the current transaction.
+func (scope *Scope) SetTransaction(transactionName string) {
+	scope.transaction = transactionName
+}
+
 // Clone returns a copy of the current scope with all data copied over.
 func (scope *Scope) Clone() *Scope {
 	clone := NewScope()
@@ -219,6 +225,10 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 
 	if scope.level != "" {
 		event.Level = scope.level
+	}
+
+	if scope.transaction != "" {
+		event.Transaction = scope.transaction
 	}
 
 	if (reflect.DeepEqual(event.Request, Request{})) {
