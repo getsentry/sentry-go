@@ -54,7 +54,9 @@ func CaptureEvent(event *Event) *EventID {
 func Recover() *EventID {
 	if err := recover(); err != nil {
 		hub := CurrentHub()
-		return hub.Recover(err)
+		eventID := hub.Recover(err)
+		Flush(time.Second * 5)
+		return eventID
 	}
 	return nil
 }
