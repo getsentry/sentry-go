@@ -13,6 +13,7 @@ func fillScopeWithData(scope *Scope) *Scope {
 	scope.extra = map[string]interface{}{"scopeExtraKey": "scopeExtraValue"}
 	scope.fingerprint = []string{"scopeFingerprintOne", "scopeFingerprintTwo"}
 	scope.level = LevelDebug
+	scope.transaction = "wat"
 	scope.request = Request{URL: "wat"}
 	return scope
 }
@@ -25,6 +26,7 @@ func fillEventWithData(event *Event) *Event {
 	event.Extra = map[string]interface{}{"eventExtraKey": "eventExtraValue"}
 	event.Fingerprint = []string{"eventFingerprintOne", "eventFingerprintTwo"}
 	event.Level = LevelInfo
+	event.Transaction = "aye"
 	event.Request = Request{URL: "aye"}
 	return event
 }
@@ -370,6 +372,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone.SetContext("foo", "bar")
 	clone.SetExtra("foo", "bar")
 	clone.SetLevel(LevelDebug)
+	clone.SetTransaction("foo")
 	clone.SetFingerprint([]string{"foo"})
 	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
 	clone.SetUser(User{ID: "foo"})
@@ -379,6 +382,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	scope.SetContext("foo", "baz")
 	scope.SetExtra("foo", "baz")
 	scope.SetLevel(LevelFatal)
+	scope.SetTransaction("bar")
 	scope.SetFingerprint([]string{"bar"})
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, maxBreadcrumbs)
 	scope.SetUser(User{ID: "bar"})
@@ -388,6 +392,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.contexts)
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.extra)
 	assertEqual(t, LevelDebug, clone.level)
+	assertEqual(t, "foo", clone.transaction)
 	assertEqual(t, []string{"foo"}, clone.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "foo"}}, clone.breadcrumbs)
 	assertEqual(t, User{ID: "foo"}, clone.user)
@@ -397,6 +402,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.contexts)
 	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.extra)
 	assertEqual(t, LevelFatal, scope.level)
+	assertEqual(t, "bar", scope.transaction)
 	assertEqual(t, []string{"bar"}, scope.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, scope.breadcrumbs)
 	assertEqual(t, User{ID: "bar"}, scope.user)
@@ -410,6 +416,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.SetContext("foo", "baz")
 	scope.SetExtra("foo", "baz")
 	scope.SetLevel(LevelFatal)
+	scope.SetTransaction("bar")
 	scope.SetFingerprint([]string{"bar"})
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, maxBreadcrumbs)
 	scope.SetUser(User{ID: "bar"})
@@ -420,6 +427,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.SetContext("foo", "bar")
 	clone.SetExtra("foo", "bar")
 	clone.SetLevel(LevelDebug)
+	clone.SetTransaction("foo")
 	clone.SetFingerprint([]string{"foo"})
 	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
 	clone.SetUser(User{ID: "foo"})
@@ -429,6 +437,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.contexts)
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.extra)
 	assertEqual(t, LevelDebug, clone.level)
+	assertEqual(t, "foo", clone.transaction)
 	assertEqual(t, []string{"foo"}, clone.fingerprint)
 	assertEqual(t, []*Breadcrumb{
 		{Timestamp: 1337, Message: "bar"},
@@ -441,6 +450,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.contexts)
 	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.extra)
 	assertEqual(t, LevelFatal, scope.level)
+	assertEqual(t, "bar", scope.transaction)
 	assertEqual(t, []string{"bar"}, scope.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, scope.breadcrumbs)
 	assertEqual(t, User{ID: "bar"}, scope.user)
@@ -458,6 +468,7 @@ func TestClear(t *testing.T) {
 	assertEqual(t, map[string]interface{}{}, scope.extra)
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
+	assertEqual(t, "", scope.transaction)
 	assertEqual(t, Request{}, scope.request)
 }
 
@@ -469,6 +480,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetContext("foo", "bar")
 	scope.SetExtra("foo", "bar")
 	scope.SetLevel(LevelDebug)
+	scope.SetTransaction("foo")
 	scope.SetFingerprint([]string{"foo"})
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
 	scope.SetUser(User{ID: "foo"})
@@ -478,6 +490,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, scope.contexts)
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, scope.extra)
 	assertEqual(t, LevelDebug, scope.level)
+	assertEqual(t, "foo", scope.transaction)
 	assertEqual(t, []string{"foo"}, scope.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "foo"}}, scope.breadcrumbs)
 	assertEqual(t, User{ID: "foo"}, scope.user)
@@ -502,6 +515,7 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	assertEqual(t, len(processedEvent.Contexts), 2, "should merge contexts")
 	assertEqual(t, len(processedEvent.Extra), 2, "should merge extra")
 	assertEqual(t, processedEvent.Level, scope.level, "should use scope level if its set")
+	assertEqual(t, processedEvent.Transaction, scope.transaction, "should use scope transaction if its set")
 	assertNotEqual(t, processedEvent.User, scope.user, "should use event user if one exist")
 	assertNotEqual(t, processedEvent.Request, scope.request, "should use event request if one exist")
 	assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprints if they exist")
@@ -520,6 +534,7 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 	assertNotEqual(t, processedEvent.User, scope.user, "should use event user")
 	assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprint")
 	assertNotEqual(t, processedEvent.Level, scope.level, "should use event level")
+	assertNotEqual(t, processedEvent.Transaction, scope.transaction, "should use event transaction")
 	assertNotEqual(t, processedEvent.Request, scope.request, "should use event request")
 }
 
@@ -536,6 +551,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	assertEqual(t, processedEvent.User, scope.user, "should use scope user")
 	assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
 	assertEqual(t, processedEvent.Level, scope.level, "should use scope level")
+	assertEqual(t, processedEvent.Transaction, scope.transaction, "should use scope transaction")
 	assertEqual(t, processedEvent.Request, scope.request, "should use scope request")
 }
 

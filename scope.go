@@ -159,6 +159,7 @@ func (scope *Scope) Clone() *Scope {
 	clone.fingerprint = make([]string, len(scope.fingerprint))
 	copy(clone.fingerprint, scope.fingerprint)
 	clone.level = scope.level
+	clone.transaction = scope.transaction
 	clone.request = scope.request
 	return clone
 }
