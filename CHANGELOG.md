@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.0
+
+- feat: Add `SetTransaction()` method
+
 ## v0.1.3
 
 - feat: Move frames context reading into `contextifyFramesIntegration` (#28)
