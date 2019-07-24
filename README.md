@@ -84,6 +84,7 @@ For more detailed information about how to get the most out of `sentry-go` there
 - [Integrations](https://docs.sentry.io/platforms/go/integrations)
   - [net/http](https://docs.sentry.io/platforms/go/http)
   - [echo](https://docs.sentry.io/platforms/go/echo)
+  - [fasthttp](https://docs.sentry.io/platforms/go/fasthttp)
   - [gin](https://docs.sentry.io/platforms/go/gin)
   - [iris](https://docs.sentry.io/platforms/go/iris)
   - [martini](https://docs.sentry.io/platforms/go/martini)
