@@ -132,40 +132,40 @@ func TestWithScopeBindClient(t *testing.T) {
 
 func TestWithScopeDirectChanges(t *testing.T) {
 	hub, _, _ := setupHubTest()
-	hub.Scope().SetExtra("foo", "bar")
+	hub.Scope().SetExtra("extra", "foo")
 
 	hub.WithScope(func(scope *Scope) {
-		scope.SetExtra("foo", "baz")
-		assertEqual(t, map[string]interface{}{"foo": "baz"}, hub.stackTop().scope.extra)
+		scope.SetExtra("extra", "bar")
+		assertEqual(t, map[string]interface{}{"extra": "bar"}, hub.stackTop().scope.extra)
 	})
 
-	assertEqual(t, map[string]interface{}{"foo": "bar"}, hub.stackTop().scope.extra)
+	assertEqual(t, map[string]interface{}{"extra": "foo"}, hub.stackTop().scope.extra)
 }
 
 func TestWithScopeChangesThroughConfigureScope(t *testing.T) {
 	hub, _, _ := setupHubTest()
-	hub.Scope().SetExtra("foo", "bar")
+	hub.Scope().SetExtra("extra", "foo")
 
 	hub.WithScope(func(scope *Scope) {
 		hub.ConfigureScope(func(scope *Scope) {
-			scope.SetExtra("foo", "baz")
+			scope.SetExtra("extra", "bar")
 		})
-		assertEqual(t, map[string]interface{}{"foo": "baz"}, hub.stackTop().scope.extra)
+		assertEqual(t, map[string]interface{}{"extra": "bar"}, hub.stackTop().scope.extra)
 	})
 
-	assertEqual(t, map[string]interface{}{"foo": "bar"}, hub.stackTop().scope.extra)
+	assertEqual(t, map[string]interface{}{"extra": "foo"}, hub.stackTop().scope.extra)
 }
 
 func TestConfigureScope(t *testing.T) {
 	hub, _, _ := setupHubTest()
-	hub.Scope().SetExtra("foo", "bar")
+	hub.Scope().SetExtra("extra", "foo")
 
 	hub.ConfigureScope(func(scope *Scope) {
-		scope.SetExtra("foo", "baz")
-		assertEqual(t, map[string]interface{}{"foo": "baz"}, hub.stackTop().scope.extra)
+		scope.SetExtra("extra", "bar")
+		assertEqual(t, map[string]interface{}{"extra": "bar"}, hub.stackTop().scope.extra)
 	})
 
-	assertEqual(t, map[string]interface{}{"foo": "baz"}, hub.stackTop().scope.extra)
+	assertEqual(t, map[string]interface{}{"extra": "bar"}, hub.stackTop().scope.extra)
 }
 
 func TestLastEventID(t *testing.T) {
