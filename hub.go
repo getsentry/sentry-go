@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -34,6 +35,7 @@ var currentHub = NewHub(nil, NewScope()) // nolint: gochecknoglobals
 // possible in which case it might become necessary to manually work with the
 // hub. This is for instance the case when working with async code.
 type Hub struct {
+	sync.RWMutex
 	stack       *stack
 	lastEventID EventID
 }
@@ -67,16 +69,34 @@ func (hub *Hub) LastEventID() EventID {
 }
 
 func (hub *Hub) stackTop() *layer {
+	hub.RLock()
+	defer hub.RUnlock()
+
 	stack := hub.stack
-	if stack == nil || len(*stack) == 0 {
+	if stack == nil {
 		return nil
 	}
-	return (*stack)[len(*stack)-1]
+
+	stackLen := len(*stack)
+	if stackLen == 0 {
+		return nil
+	}
+	top := (*stack)[stackLen-1]
+
+	return top
 }
 
 // Clone returns a copy of the current Hub with top-most scope and client copied over.
 func (hub *Hub) Clone() *Hub {
-	return NewHub(hub.Client(), hub.Scope().Clone())
+	top := hub.stackTop()
+	if top == nil {
+		return nil
+	}
+	scope := top.scope
+	if scope != nil {
+		scope = scope.Clone()
+	}
+	return NewHub(top.client, scope)
 }
 
 // Scope returns top-level `Scope` of the current `Hub` or `nil` if no `Scope` is bound.
@@ -99,10 +119,25 @@ func (hub *Hub) Client() *Client {
 
 // PushScope pushes a new scope for the current `Hub` and reuses previously bound `Client`.
 func (hub *Hub) PushScope() *Scope {
-	scope := hub.Scope().Clone()
+	top := hub.stackTop()
+
+	var client *Client
+	if top != nil {
+		client = top.client
+	}
+
+	var scope *Scope
+	if top != nil && top.scope != nil {
+		scope = top.scope.Clone()
+	} else {
+		scope = NewScope()
+	}
+
+	hub.Lock()
+	defer hub.Unlock()
 
 	*hub.stack = append(*hub.stack, &layer{
-		client: hub.Client(),
+		client: client,
 		scope:  scope,
 	})
 
@@ -111,16 +146,22 @@ func (hub *Hub) PushScope() *Scope {
 
 // PushScope pops the most recent scope for the current `Hub`.
 func (hub *Hub) PopScope() {
+	hub.Lock()
+	defer hub.Unlock()
+
 	stack := *hub.stack
-	if len(stack) == 0 {
-		return
+	stackLen := len(stack)
+	if stackLen > 0 {
+		*hub.stack = stack[0 : stackLen-1]
 	}
-	*hub.stack = stack[0 : len(stack)-1]
 }
 
 // BindClient binds a new `Client` for the current `Hub`.
 func (hub *Hub) BindClient(client *Client) {
-	hub.stackTop().client = client
+	top := hub.stackTop()
+	if top != nil {
+		top.client = client
+	}
 }
 
 // WithScope temporarily pushes a scope for a single call.
@@ -140,7 +181,8 @@ func (hub *Hub) WithScope(f func(scope *Scope)) {
 // The function is passed a mutable reference to the `Scope` so that modifications
 // can be performed.
 func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
-	f(hub.Scope())
+	scope := hub.Scope()
+	f(scope)
 }
 
 // CaptureEvent calls the method of a same name on currently bound `Client` instance

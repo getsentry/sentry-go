@@ -4,6 +4,7 @@
 
 - feat: Add `SetTransaction()` method
 - feat: `fasthttp` framework support with `sentryfasthttp` package
+- fix: Add `RWMutex` locks to internal `Hub` and `Scope` changes
 
 ## v0.1.3
 
