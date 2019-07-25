@@ -40,6 +40,10 @@ func New(options Options) martini.Handler {
 		handler.repanic = true
 	}
 
+	if options.Timeout != 0 {
+		handler.timeout = options.Timeout
+	}
+
 	if options.WaitForDelivery {
 		handler.waitForDelivery = true
 	}
