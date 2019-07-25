@@ -42,6 +42,10 @@ func New(options Options) iris.Handler {
 		handler.repanic = true
 	}
 
+	if options.Timeout != 0 {
+		handler.timeout = options.Timeout
+	}
+
 	if options.WaitForDelivery {
 		handler.waitForDelivery = true
 	}

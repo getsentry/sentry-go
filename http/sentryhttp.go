@@ -15,12 +15,9 @@ type Handler struct {
 }
 
 type Options struct {
-	// Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to true,
-	// as iris.Default includes it's own Recovery middleware what handles http responses.
+	// Repanic configures whether Sentry should repanic after recovery
 	Repanic bool
 	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
-	// Because Iris's default `Recovery` handler doesn't restart the application,
-	// it's safe to either skip this option or set it to `false`.
 	WaitForDelivery bool
 	// Timeout for the event delivery requests.
 	Timeout time.Duration
@@ -37,6 +34,10 @@ func New(options Options) *Handler {
 
 	if options.Repanic {
 		handler.repanic = true
+	}
+
+	if options.Timeout != 0 {
+		handler.timeout = options.Timeout
 	}
 
 	if options.WaitForDelivery {

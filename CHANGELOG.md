@@ -3,6 +3,7 @@
 ## v0.2.0
 
 - feat: Add `SetTransaction()` method
+- feat: `fasthttp` framework support with `sentryfasthttp` package
 
 ## v0.1.3
 
