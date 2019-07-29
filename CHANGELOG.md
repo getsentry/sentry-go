@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.1
+
+- fix: Run `Contextify` integration on `Threads` as well
+
 ## v0.2.0
 
 - feat: Add `SetTransaction()` method on the `Scope`

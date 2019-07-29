@@ -295,6 +295,17 @@ func (cfi *contextifyFramesIntegration) processor(event *Event, hint *EventHint)
 		ex.Stacktrace.Frames = cfi.contextify(ex.Stacktrace.Frames)
 	}
 
+	// Range over all threads
+	for _, th := range event.Threads {
+		// If it has no stacktrace, just bail out
+		if th.Stacktrace == nil {
+			continue
+		}
+
+		// If it does, it should have frames, so try to contextify them
+		th.Stacktrace.Frames = cfi.contextify(th.Stacktrace.Frames)
+	}
+
 	return event
 }
 
