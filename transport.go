@@ -64,6 +64,34 @@ func retryAfter(now time.Time, r *http.Response) time.Duration {
 	return defaultRetryAfter
 }
 
+func getRequestBodyFromEvent(event *Event) []byte {
+	body, err := json.Marshal(event)
+	if err == nil {
+		return body
+	}
+
+	partialMarshallMessage := "Original event couldn't be marshalled. Succeeded by stripping the data " +
+		"that uses interface{} type. Please verify that the data you attach to the scope is serializable."
+	// Try to serialize the event, with all the contextudal data that allows for interface{} stripped.
+	event.Breadcrumbs = nil
+	event.Contexts = nil
+	event.Extra = map[string]interface{}{
+		"info": partialMarshallMessage,
+	}
+	body, err = json.Marshal(event)
+	if err == nil {
+		Logger.Println(partialMarshallMessage)
+		return body
+	}
+
+	// This should _only_ happen when Event.Exception[0].Stacktrace.Frames[0].Vars is unserializable
+	// Which won't ever happen, as we don't use it now (although it's the part of public interface accepted by Sentry)
+	// Juuust in case something, somehow goes uterly wrong.
+	Logger.Println("Event couldn't be marshalled, even with stripped contextual data. Skipping delivery. " +
+		"Please notify the SDK owners with possibly broken payload.")
+	return nil
+}
+
 // ================================
 // HTTPTransport
 // ================================
@@ -131,7 +159,10 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		return
 	}
 
-	body, _ := json.Marshal(event)
+	body := getRequestBodyFromEvent(event)
+	if body == nil {
+		return
+	}
 
 	request, _ := http.NewRequest(
 		http.MethodPost,
@@ -257,7 +288,10 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		return
 	}
 
-	body, _ := json.Marshal(event)
+	body := getRequestBodyFromEvent(event)
+	if body == nil {
+		return
+	}
 
 	request, _ := http.NewRequest(
 		http.MethodPost,
