@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- fix: Retry event marshalling without contextual data if the first pass fails
+
 ## v0.2.1
 
 - fix: Run `Contextify` integration on `Threads` as well
