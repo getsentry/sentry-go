@@ -47,7 +47,7 @@ type ClientOptions struct {
 	// Configures whether SDK should generate and attach stacktraces to pure capture message calls.
 	AttachStacktrace bool
 	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0).
-	SampleRate float32
+	SampleRate float64
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
 	// If the match is found, then a whole event will be dropped.
@@ -316,7 +316,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	// which means that if someone uses ClientOptions{} struct directly
 	// and we would not check for 0 here, we'd skip all events by default
 	if options.SampleRate != 0.0 {
-		randomFloat := rand.New(rand.NewSource(time.Now().UnixNano())).Float32()
+		randomFloat := rand.New(rand.NewSource(time.Now().UnixNano())).Float64()
 		if randomFloat > options.SampleRate {
 			Logger.Println("Event dropped due to SampleRate hit.")
 			return nil
