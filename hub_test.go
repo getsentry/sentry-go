@@ -2,6 +2,9 @@ package sentry
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"sync"
 	"testing"
 )
 
@@ -324,4 +327,64 @@ func TestSetHubOnContextReturnsNewContext(t *testing.T) {
 	if ctx == ctxWithHub {
 		t.Error("contexts should be different")
 	}
+}
+
+func TestConcurrentHubClone(t *testing.T) {
+	const goroutineCount = 3
+
+	hub, client, _ := setupHubTest()
+	transport := &TransportMock{}
+	client.Transport = transport
+
+	var wg sync.WaitGroup
+	wg.Add(goroutineCount)
+	for i := 1; i <= goroutineCount; i++ {
+		// Mutate hub in the main goroutine.
+		hub.PushScope()
+		hub.PopScope()
+		// Clone scope in a new Goroutine as documented in
+		// https://docs.sentry.io/platforms/go/goroutines/.
+		go func(i int) {
+			defer wg.Done()
+			localHub := hub.Clone()
+			localHub.ConfigureScope(func(scope *Scope) {
+				scope.SetTag("secretTag", fmt.Sprintf("go#%d", i))
+			})
+			localHub.CaptureMessage(fmt.Sprintf("Hello from goroutine! #%d", i))
+		}(i)
+	}
+	wg.Wait()
+
+	type TestEvent struct {
+		Message string
+		Tags    map[string]string
+	}
+
+	want := []TestEvent{
+		{
+			Message: "Hello from goroutine! #1",
+			Tags:    map[string]string{"secretTag": "go#1"},
+		},
+		{
+			Message: "Hello from goroutine! #2",
+			Tags:    map[string]string{"secretTag": "go#2"},
+		},
+		{
+			Message: "Hello from goroutine! #3",
+			Tags:    map[string]string{"secretTag": "go#3"},
+		},
+	}
+
+	got := make([]TestEvent, len(transport.Events()))
+	for i, event := range transport.Events() {
+		got[i] = TestEvent{
+			Message: event.Message,
+			Tags:    event.Tags,
+		}
+	}
+	sort.Slice(got, func(i int, j int) bool {
+		return got[i].Message < got[j].Message
+	})
+
+	assertEqual(t, got, want)
 }
