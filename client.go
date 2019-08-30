@@ -84,7 +84,7 @@ type ClientOptions struct {
 	// This will default to the `HTTPS_PROXY` environment variable
 	// or `http_proxy` if that one exists.
 	HTTPSProxy string
-	// An optionsl CaCerts to use.
+	// An optional CaCerts to use.
 	// Defaults to `gocertifi.CACerts()`.
 	CaCerts *x509.CertPool
 }
