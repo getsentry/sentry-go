@@ -67,6 +67,9 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 
 // ClearBreadcrumbs clears all breadcrumbs from the current scope.
 func (scope *Scope) ClearBreadcrumbs() {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
 	scope.breadcrumbs = []*Breadcrumb{}
 }
 
@@ -166,6 +169,9 @@ func (scope *Scope) RemoveExtra(key string) {
 
 // SetFingerprint sets new fingerprint for the current scope.
 func (scope *Scope) SetFingerprint(fingerprint []string) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
 	scope.fingerprint = fingerprint
 }
 

@@ -58,4 +58,7 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.SetRequest(sentry.Request{URL: "foo"})
 
 	sentry.CaptureException(errors.New(string(x)))
+
+	scope.ClearBreadcrumbs()
+	scope.Clone()
 }
