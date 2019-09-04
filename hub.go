@@ -35,7 +35,7 @@ var currentHub = NewHub(nil, NewScope()) // nolint: gochecknoglobals
 // possible in which case it might become necessary to manually work with the
 // hub. This is for instance the case when working with async code.
 type Hub struct {
-	sync.RWMutex
+	mu          sync.RWMutex
 	stack       *stack
 	lastEventID EventID
 }
@@ -69,8 +69,8 @@ func (hub *Hub) LastEventID() EventID {
 }
 
 func (hub *Hub) stackTop() *layer {
-	hub.RLock()
-	defer hub.RUnlock()
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
 
 	stack := hub.stack
 	if stack == nil {
@@ -133,8 +133,8 @@ func (hub *Hub) PushScope() *Scope {
 		scope = NewScope()
 	}
 
-	hub.Lock()
-	defer hub.Unlock()
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
 
 	*hub.stack = append(*hub.stack, &layer{
 		client: client,
@@ -146,8 +146,8 @@ func (hub *Hub) PushScope() *Scope {
 
 // PushScope pops the most recent scope for the current `Hub`.
 func (hub *Hub) PopScope() {
-	hub.Lock()
-	defer hub.Unlock()
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
 
 	stack := *hub.stack
 	stackLen := len(stack)
