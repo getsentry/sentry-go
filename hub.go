@@ -41,8 +41,25 @@ type Hub struct {
 }
 
 type layer struct {
+	// mu protects concurrent reads and writes to client.
+	mu     sync.RWMutex
 	client *Client
-	scope  *Scope
+	// scope is read-only, not protected by mu.
+	scope *Scope
+}
+
+// Client returns the layer's client. Safe for concurrent use.
+func (l *layer) Client() *Client {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return l.client
+}
+
+// SetClient sets the layer's client. Safe for concurrent use.
+func (l *layer) SetClient(c *Client) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.client = c
 }
 
 type stack []*layer
@@ -96,7 +113,7 @@ func (hub *Hub) Clone() *Hub {
 	if scope != nil {
 		scope = scope.Clone()
 	}
-	return NewHub(top.client, scope)
+	return NewHub(top.Client(), scope)
 }
 
 // Scope returns top-level `Scope` of the current `Hub` or `nil` if no `Scope` is bound.
@@ -114,7 +131,7 @@ func (hub *Hub) Client() *Client {
 	if top == nil {
 		return nil
 	}
-	return top.client
+	return top.Client()
 }
 
 // PushScope pushes a new scope for the current `Hub` and reuses previously bound `Client`.
@@ -123,7 +140,7 @@ func (hub *Hub) PushScope() *Scope {
 
 	var client *Client
 	if top != nil {
-		client = top.client
+		client = top.Client()
 	}
 
 	var scope *Scope
@@ -160,7 +177,7 @@ func (hub *Hub) PopScope() {
 func (hub *Hub) BindClient(client *Client) {
 	top := hub.stackTop()
 	if top != nil {
-		top.client = client
+		top.SetClient(client)
 	}
 }
 
