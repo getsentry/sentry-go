@@ -17,11 +17,11 @@
 
 ## Requirements
 
-We verify this package against N-2 recent versions of Go compiler. As of June 2019, those versions are:
+We verify this package against N-2 recent versions of Go compiler. As of September 2019, those versions are:
 
-* 1.10
 * 1.11
 * 1.12
+* 1.13
 
 ## Installation
 
