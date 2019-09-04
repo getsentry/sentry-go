@@ -34,6 +34,12 @@ func TestNewStacktrace(t *testing.T) {
 	assertEqual(t, stacktrace.Frames[1].Function, "Trace")
 }
 
+func BenchmarkNewStacktrace(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		Trace()
+	}
+}
+
 func TestStacktraceFrame(t *testing.T) {
 	_, callerFile, _, _ := runtime.Caller(0)
 	dir, _ := filepath.Split(callerFile)
