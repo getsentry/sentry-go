@@ -22,7 +22,7 @@ import (
 // Note that the scope can only be modified but not inspected.
 // Only the client can use the scope to extract information currently.
 type Scope struct {
-	sync.RWMutex
+	mu              sync.RWMutex
 	breadcrumbs     []*Breadcrumb
 	user            User
 	tags            map[string]string
@@ -54,8 +54,8 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 		breadcrumb.Timestamp = time.Now().Unix()
 	}
 
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	breadcrumbs := append(scope.breadcrumbs, breadcrumb)
 	if len(breadcrumbs) > limit {
@@ -82,16 +82,16 @@ func (scope *Scope) SetRequest(request Request) {
 
 // SetTag adds a tag to the current scope.
 func (scope *Scope) SetTag(key, value string) {
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	scope.tags[key] = value
 }
 
 // SetTags assigns multiple tags to the current scope.
 func (scope *Scope) SetTags(tags map[string]string) {
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	for k, v := range tags {
 		scope.tags[k] = v
@@ -100,24 +100,24 @@ func (scope *Scope) SetTags(tags map[string]string) {
 
 // RemoveTag removes a tag from the current scope.
 func (scope *Scope) RemoveTag(key string) {
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	delete(scope.tags, key)
 }
 
 // SetContext adds a context to the current scope.
 func (scope *Scope) SetContext(key string, value interface{}) {
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	scope.contexts[key] = value
 }
 
 // SetContexts assigns multiple contexts to the current scope.
 func (scope *Scope) SetContexts(contexts map[string]interface{}) {
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	for k, v := range contexts {
 		scope.contexts[k] = v
@@ -126,24 +126,24 @@ func (scope *Scope) SetContexts(contexts map[string]interface{}) {
 
 // RemoveContext removes a context from the current scope.
 func (scope *Scope) RemoveContext(key string) {
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	delete(scope.contexts, key)
 }
 
 // SetExtra adds an extra to the current scope.
 func (scope *Scope) SetExtra(key string, value interface{}) {
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	scope.extra[key] = value
 }
 
 // SetExtras assigns multiple extras to the current scope.
 func (scope *Scope) SetExtras(extra map[string]interface{}) {
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	for k, v := range extra {
 		scope.extra[k] = v
@@ -152,8 +152,8 @@ func (scope *Scope) SetExtras(extra map[string]interface{}) {
 
 // RemoveExtra removes a extra from the current scope.
 func (scope *Scope) RemoveExtra(key string) {
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	delete(scope.extra, key)
 }
@@ -175,8 +175,8 @@ func (scope *Scope) SetTransaction(transactionName string) {
 
 // Clone returns a copy of the current scope with all data copied over.
 func (scope *Scope) Clone() *Scope {
-	scope.RLock()
-	defer scope.RUnlock()
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
 
 	clone := NewScope()
 	clone.user = scope.user
@@ -207,16 +207,16 @@ func (scope *Scope) Clear() {
 
 // AddEventProcessor adds an event processor to the current scope.
 func (scope *Scope) AddEventProcessor(processor EventProcessor) {
-	scope.Lock()
-	defer scope.Unlock()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
 
 	scope.eventProcessors = append(scope.eventProcessors, processor)
 }
 
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
 func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
-	scope.RLock()
-	defer scope.RUnlock()
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
 
 	if len(scope.breadcrumbs) > 0 {
 		if event.Breadcrumbs == nil {
