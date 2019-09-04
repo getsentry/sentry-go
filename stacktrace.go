@@ -11,6 +11,11 @@ import (
 
 const unknown string = "unknown"
 
+var (
+	isTestFileRegexp    = regexp.MustCompile(`getsentry/sentry-go/.+_test.go`)
+	isExampleFileRegexp = regexp.MustCompile(`getsentry/sentry-go/example/`)
+)
+
 // The module download is split into two parts: downloading the go.mod and downloading the actual code.
 // If you have dependencies only needed for tests, then they will show up in your go.mod,
 // and go get will download their go.mods, but it will not download their code.
@@ -199,8 +204,6 @@ func extractFrames(pcs []uintptr) []Frame {
 }
 
 func filterFrames(frames []Frame) []Frame {
-	isTestFileRegexp := regexp.MustCompile(`getsentry/sentry-go/.+_test.go`)
-	isExampleFileRegexp := regexp.MustCompile(`getsentry/sentry-go/example/`)
 	filteredFrames := make([]Frame, 0, len(frames))
 
 	for _, frame := range frames {
