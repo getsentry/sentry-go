@@ -105,4 +105,4 @@ Licensed under the BSD license, see `LICENSE`
 
 Want to join our Sentry's `community-golang` channel, get involved and help us improve the SDK?
 
-Do not hesistate to shoot me up an email at [kamil@sentry.io](mailto:kamil@sentry.io) for Slack invite!
+Do not hesitate to shoot me up an email at [kamil@sentry.io](mailto:kamil@sentry.io) for Slack invite!
