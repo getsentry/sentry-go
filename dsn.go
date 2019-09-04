@@ -52,7 +52,7 @@ func NewDsn(rawURL string) (*Dsn, error) {
 	// Parse
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, &DsnParseError{"invalid url"}
+		return nil, &DsnParseError{fmt.Sprintf("invalid url: %v", err)}
 	}
 
 	// Scheme
