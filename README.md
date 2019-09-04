@@ -34,7 +34,7 @@ $ go get github.com/getsentry/sentry-go
 Or, if you are already using Go Modules, specify a version number as well:
 
 ```bash
-$ go get github.com/getsentry/sentry-go@v0.1.0
+$ go get github.com/getsentry/sentry-go@v0.3.0
 ```
 
 ## Configuration
