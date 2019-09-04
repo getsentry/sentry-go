@@ -218,7 +218,7 @@ func (scope *Scope) Clone() *Scope {
 	return clone
 }
 
-// Clear removed the data from the current scope.
+// Clear removes the data from the current scope.
 func (scope *Scope) Clear() {
 	*scope = *NewScope()
 }
