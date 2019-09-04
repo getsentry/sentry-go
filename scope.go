@@ -72,11 +72,17 @@ func (scope *Scope) ClearBreadcrumbs() {
 
 // SetUser sets new user for the current scope.
 func (scope *Scope) SetUser(user User) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
 	scope.user = user
 }
 
 // SetRequest sets new user for the current scope.
 func (scope *Scope) SetRequest(request Request) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
 	scope.request = request
 }
 
@@ -165,11 +171,17 @@ func (scope *Scope) SetFingerprint(fingerprint []string) {
 
 // SetLevel sets new level for the current scope.
 func (scope *Scope) SetLevel(level Level) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
 	scope.level = level
 }
 
 // SetTransaction sets new transaction name for the current transaction.
 func (scope *Scope) SetTransaction(transactionName string) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
 	scope.transaction = transactionName
 }
 
