@@ -2,7 +2,24 @@
 
 ## Unreleased
 
-- fix: Retry event marshalling without contextual data if the first pass fails
+- "I am running away from my responsibilities. And it feels good." – Michael Scott, Season 4, "Money"
+
+## v0.3.0
+
+- feat: Retry event marshalling without contextual data if the first pass fails
+- fix: Include `url.Parse` error in `DsnParseError`
+- fix: Make more `Scope` methods safe for concurrency
+- fix: Synchronize concurrent access to `Hub.client`
+- ref: Remove mutex from `Scope` exported API
+- ref: Remove mutex from `Hub` exported API
+- ref: Compile regexps for `filterFrames` only once
+- ref: Change `SampleRate` type to `float64`
+- doc: `Scope.Clear` not safe for concurrent use
+- ci: Test sentry-go with `go1.13`, drop `go1.10`
+
+_NOTE:_
+This version removes some of the internal APIs that landed publicly (namely `Hub/Scope` mutex structs) and may require (but shouldn't) some changes to your code.
+It's not done through major version update, as we are still in `0.x` stage.
 
 ## v0.2.1
 
