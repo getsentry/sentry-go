@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 )
 
 // ================================
@@ -268,7 +269,7 @@ func getIgnoreErrorsSuspects(event *Event) []string {
 type contextifyFramesIntegration struct {
 	sr              sourceReader
 	contextLines    int
-	cachedLocations map[string]string
+	cachedLocations sync.Map
 }
 
 func (cfi *contextifyFramesIntegration) Name() string {
@@ -278,7 +279,6 @@ func (cfi *contextifyFramesIntegration) Name() string {
 func (cfi *contextifyFramesIntegration) SetupOnce(client *Client) {
 	cfi.sr = newSourceReader()
 	cfi.contextLines = 5
-	cfi.cachedLocations = make(map[string]string)
 
 	client.AddEventProcessor(cfi.processor)
 }
@@ -320,8 +320,10 @@ func (cfi *contextifyFramesIntegration) contextify(frames []Frame) []Frame {
 
 		var path string
 
-		if cachedPath, ok := cfi.cachedLocations[frame.AbsPath]; ok {
-			path = cachedPath
+		if cachedPath, ok := cfi.cachedLocations.Load(frame.AbsPath); ok {
+			if p, ok := cachedPath.(string); ok {
+				path = p
+			}
 		} else {
 			// Optimize for happy path here
 			if fileExists(frame.AbsPath) {
@@ -352,12 +354,12 @@ func (cfi *contextifyFramesIntegration) findNearbySourceCodeLocation(originalPat
 		possibleLocation := strings.Join(components, "/")
 
 		if fileExists(possibleLocation) {
-			cfi.cachedLocations[originalPath] = possibleLocation
+			cfi.cachedLocations.Store(originalPath, possibleLocation)
 			return possibleLocation
 		}
 	}
 
-	cfi.cachedLocations[originalPath] = ""
+	cfi.cachedLocations.Store(originalPath, "")
 	return ""
 }
 

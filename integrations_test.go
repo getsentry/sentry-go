@@ -170,9 +170,8 @@ func TestIgnoreErrorsIntegration(t *testing.T) {
 
 func TestContextifyFrames(t *testing.T) {
 	cfi := contextifyFramesIntegration{
-		sr:              newSourceReader(),
-		contextLines:    5,
-		cachedLocations: make(map[string]string),
+		sr:           newSourceReader(),
+		contextLines: 5,
 	}
 
 	stacktrace := Trace()
@@ -198,9 +197,8 @@ func TestContextifyFrames(t *testing.T) {
 
 func TestContextifyFramesNonexistingFilesShouldNotDropFrames(t *testing.T) {
 	cfi := contextifyFramesIntegration{
-		sr:              newSourceReader(),
-		contextLines:    5,
-		cachedLocations: make(map[string]string),
+		sr:           newSourceReader(),
+		contextLines: 5,
 	}
 
 	frames := []Frame{{
