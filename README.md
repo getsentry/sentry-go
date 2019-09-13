@@ -9,6 +9,7 @@
 
 [![Build Status](https://travis-ci.com/getsentry/sentry-go.svg?branch=master)](https://travis-ci.com/getsentry/sentry-go)
 [![Go Report Card](https://goreportcard.com/badge/github.com/getsentry/sentry-go)](https://goreportcard.com/report/github.com/getsentry/sentry-go)
+[![Discord](https://img.shields.io/discord/621778831602221064)](https://discord.gg/Ww9hbqr)
 
 `sentry-go` provides a Sentry client implementation for the Go programming language. This is the next line of the Go SDK for [Sentry](https://sentry.io/), intended to replace the `raven-go` package.
 

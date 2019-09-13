@@ -1,3 +1,7 @@
+## Community
+
+The public-facing channels for support and development of Sentry SDKs can be found on [Discord](https://discord.gg/Ww9hbqr).
+
 ## Testing
 
 ```bash
