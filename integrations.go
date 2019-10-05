@@ -95,7 +95,7 @@ func getModulesFromMod() (map[string]string, error) {
 				modules[strings.TrimSpace(splits[1])] = splits[2]
 				return modules, nil
 			}
-		} else if areModulesPresent && splits[0] != ")" {
+		} else if areModulesPresent && splits[0] != ")" && splits[0] != "" {
 			modules[strings.TrimSpace(splits[0])] = splits[1]
 		}
 	}
