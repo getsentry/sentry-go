@@ -36,7 +36,7 @@ It's not done through major version update, as we are still in `0.x` stage.
 - feat: Move frames context reading into `contextifyFramesIntegration` (#28)
 
 _NOTE:_
-In case of any performance isues due to source contexts IO, you can let us know and turn off the integration in the meantime with:
+In case of any performance issues due to source contexts IO, you can let us know and turn off the integration in the meantime with:
 
 ```go
 sentry.Init(sentry.ClientOptions{
