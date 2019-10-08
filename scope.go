@@ -48,7 +48,7 @@ func NewScope() *Scope {
 }
 
 // AddBreadcrumb adds new breadcrumb to the current scope
-// and optionaly throws the old one if limit is reached.
+// and optionally throws the old one if limit is reached.
 func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	if breadcrumb.Timestamp == 0 {
 		breadcrumb.Timestamp = time.Now().Unix()
@@ -81,7 +81,7 @@ func (scope *Scope) SetUser(user User) {
 	scope.user = user
 }
 
-// SetRequest sets new user for the current scope.
+// SetRequest sets new request for the current scope.
 func (scope *Scope) SetRequest(request Request) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()

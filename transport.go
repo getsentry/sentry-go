@@ -72,7 +72,7 @@ func getRequestBodyFromEvent(event *Event) []byte {
 
 	partialMarshallMessage := "Original event couldn't be marshalled. Succeeded by stripping the data " +
 		"that uses interface{} type. Please verify that the data you attach to the scope is serializable."
-	// Try to serialize the event, with all the contextudal data that allows for interface{} stripped.
+	// Try to serialize the event, with all the contextual data that allows for interface{} stripped.
 	event.Breadcrumbs = nil
 	event.Contexts = nil
 	event.Extra = map[string]interface{}{
@@ -86,7 +86,7 @@ func getRequestBodyFromEvent(event *Event) []byte {
 
 	// This should _only_ happen when Event.Exception[0].Stacktrace.Frames[0].Vars is unserializable
 	// Which won't ever happen, as we don't use it now (although it's the part of public interface accepted by Sentry)
-	// Juuust in case something, somehow goes uterly wrong.
+	// Juuust in case something, somehow goes utterly wrong.
 	Logger.Println("Event couldn't be marshalled, even with stripped contextual data. Skipping delivery. " +
 		"Please notify the SDK owners with possibly broken payload.")
 	return nil
