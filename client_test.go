@@ -49,6 +49,12 @@ func TestCaptureMessageShouldSendEventWithProvidedMessage(t *testing.T) {
 	assertEqual(t, transport.lastEvent.Message, "foo")
 }
 
+func TestCaptureMessageShouldSucceedWithoutNilScope(t *testing.T) {
+	client, _, transport := setupClientTest()
+	client.CaptureMessage("foo", nil, nil)
+	assertEqual(t, transport.lastEvent.Message, "foo")
+}
+
 func TestCaptureExceptionShouldSendEventWithProvidedError(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.CaptureException(errors.New("custom error"), nil, scope)

@@ -387,7 +387,9 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		}},
 	}
 
-	event = scope.ApplyToEvent(event, hint)
+	if scope != nil {
+		event = scope.ApplyToEvent(event, hint)
+	}
 
 	for _, processor := range client.eventProcessors {
 		id := event.EventID
