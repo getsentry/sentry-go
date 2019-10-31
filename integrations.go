@@ -196,8 +196,11 @@ func (ei *environmentIntegration) processor(event *Event, hint *EventHint) *Even
 	}
 
 	event.Contexts["runtime"] = map[string]interface{}{
-		"name":    "go",
-		"version": runtime.Version(),
+		"name":           "go",
+		"version":        runtime.Version(),
+		"go_numroutines": runtime.NumGoroutine(),
+		"go_maxprocs":    runtime.GOMAXPROCS(0),
+		"go_numcgocalls": runtime.NumCgoCall(),
 	}
 
 	return event
