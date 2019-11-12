@@ -5,7 +5,7 @@
   <br />
 </p>
 
-# Official Sentry Iris Handler for Sentry-go SDK
+# Official Sentry [Iris](https://github.com/kataras/iris) Handler for Sentry-go SDK
 
 **Godoc:** https://godoc.org/github.com/getsentry/sentry-go/iris
 
@@ -23,7 +23,7 @@ import (
 
     "github.com/getsentry/sentry-go"
     sentryiris "github.com/getsentry/sentry-go/iris"
-    "github.com/kataras/iris"
+    "github.com/kataras/iris/v12"
 )
 
 // To initialize Sentry's handler, you need to initialize Sentry itself beforehand
@@ -41,7 +41,7 @@ app.Use(sentryiris.New(sentryiris.Options{}))
 
 // Set up routes
 app.Get("/", func(ctx iris.Context) {
-    ctx.Writef"Hello world!")
+    ctx.Writef("Hello world!")
 })
 
 // And run it
@@ -95,7 +95,6 @@ app.Get("/", func(ctx iris.Context) {
             hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
         })
     }
-    ctx.StatusCode(http.StatusOK)
 })
 
 app.Get("/foo", func(ctx iris.Context) {

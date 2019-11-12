@@ -1,3 +1,5 @@
+// +build go1.13
+
 package sentryiris
 
 import (
@@ -6,7 +8,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/kataras/iris"
+	"github.com/kataras/iris/v12"
 )
 
 const valuesKey = "sentry"
