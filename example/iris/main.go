@@ -6,7 +6,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryiris "github.com/getsentry/sentry-go/iris"
-	"github.com/kataras/iris"
+	"github.com/kataras/iris/v12"
 )
 
 func main() {
@@ -46,7 +46,6 @@ func main() {
 				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 			})
 		}
-		ctx.StatusCode(http.StatusOK)
 	})
 
 	app.Get("/foo", func(ctx iris.Context) {
