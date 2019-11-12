@@ -2,7 +2,10 @@ package sentrygin
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -63,17 +66,32 @@ func (h *handler) handle(ctx *gin.Context) {
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	if err := recover(); err != nil {
-		eventID := hub.RecoverWithContext(
-			context.WithValue(r.Context(), sentry.RequestContextKey, r),
-			err,
-		)
-		if eventID != nil && h.waitForDelivery {
-			hub.Flush(h.timeout)
+		if !isBrokenPipeError(err) {
+			eventID := hub.RecoverWithContext(
+				context.WithValue(r.Context(), sentry.RequestContextKey, r),
+				err,
+			)
+			if eventID != nil && h.waitForDelivery {
+				hub.Flush(h.timeout)
+			}
 		}
 		if h.repanic {
 			panic(err)
 		}
 	}
+}
+
+// Check for a broken connection, as this is what Gin does already
+func isBrokenPipeError(err interface{}) bool {
+	if netErr, ok := err.(*net.OpError); ok {
+		if sysErr, ok := netErr.Err.(*os.SyscallError); ok {
+			if strings.Contains(strings.ToLower(sysErr.Error()), "broken pipe") ||
+				strings.Contains(strings.ToLower(sysErr.Error()), "connection reset by peer") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // GetHubFromContext retrieves attached *sentry.Hub instance from gin.Context.
