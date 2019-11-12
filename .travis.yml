@@ -8,6 +8,7 @@ go:
 
 env:
   - GO111MODULE=on
+  - GOFLAGS=-mod=readonly
 
 before_install:
   - curl -sfL https://install.goreleaser.com/github.com/golangci/golangci-lint.sh | sh -s -- -b $(go env GOPATH)/bin v1.15.0
