@@ -4,6 +4,14 @@
 
 - "I am running away from my responsibilities. And it feels good." – Michael Scott, Season 4, "Money"
 
+## v0.3.1
+
+- feat: Send extra information exposed by the Go runtime (#76)
+- fix: Handle new lines in module integration (#65)
+- fix: Make sure that cache is locked when updating for contextifyFramesIntegration
+- ref: Update Iris integration and example to version 12
+- misc: Remove indirect dependencies in order to move them to separate go.mod files
+
 ## v0.3.0
 
 - feat: Retry event marshalling without contextual data if the first pass fails
