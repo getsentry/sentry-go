@@ -74,7 +74,11 @@ type ClientOptions struct {
 	Environment string
 	// Maximum number of breadcrumbs.
 	MaxBreadcrumbs int
+	// An optional pointer to `http.Client` that will be used with a default HTTPTransport.
+	// Using your own client will make HTTPTransport, HTTPProxy, HTTPSProxy and CaCerts options ignored.
+	HTTPClient *http.Client
 	// An optional pointer to `http.Transport` that will be used with a default HTTPTransport.
+	// Using your own transport will make HTTPProxy, HTTPSProxy and CaCerts options ignored.
 	HTTPTransport *http.Transport
 	// An optional HTTP proxy to use.
 	// This will default to the `http_proxy` environment variable.

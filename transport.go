@@ -143,9 +143,13 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		}
 	}
 
-	t.client = &http.Client{
-		Transport: t.transport,
-		Timeout:   t.Timeout,
+	if options.HTTPClient != nil {
+		t.client = options.HTTPClient
+	} else {
+		t.client = &http.Client{
+			Transport: t.transport,
+			Timeout:   t.Timeout,
+		}
 	}
 
 	t.start.Do(func() {
@@ -276,9 +280,13 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 		}
 	}
 
-	t.client = &http.Client{
-		Transport: t.transport,
-		Timeout:   t.Timeout,
+	if options.HTTPClient != nil {
+		t.client = options.HTTPClient
+	} else {
+		t.client = &http.Client{
+			Transport: t.transport,
+			Timeout:   t.Timeout,
+		}
 	}
 }
 
