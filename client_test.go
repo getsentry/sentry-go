@@ -3,6 +3,8 @@ package sentry
 import (
 	"errors"
 	"testing"
+
+	pkgErrors "github.com/pkg/errors"
 )
 
 func TestNewClientAllowsEmptyDSN(t *testing.T) {
@@ -58,6 +60,7 @@ func TestCaptureMessageShouldSucceedWithoutNilScope(t *testing.T) {
 func TestCaptureExceptionShouldSendEventWithProvidedError(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.CaptureException(errors.New("custom error"), nil, scope)
+	assertEqual(t, transport.lastEvent.Exception[0].Type, "*errors.errorString")
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
 }
 
@@ -65,6 +68,21 @@ func TestCaptureExceptionShouldNotFailWhenPassedNil(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.CaptureException(nil, nil, scope)
 	assertEqual(t, transport.lastEvent.Message, "Called CaptureException with nil value")
+}
+
+type customErr struct{}
+
+func (e *customErr) Error() string {
+	return "wat"
+}
+
+func TestCaptureExceptionShouldExtractCorrectTypeAndValueForWrappedErrors(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	cause := &customErr{}
+	err := pkgErrors.WithStack(cause)
+	client.CaptureException(err, nil, scope)
+	assertEqual(t, transport.lastEvent.Exception[0].Type, "*sentry.customErr")
+	assertEqual(t, transport.lastEvent.Exception[0].Value, "wat")
 }
 
 func TestCaptureEventShouldSendEventWithProvidedError(t *testing.T) {

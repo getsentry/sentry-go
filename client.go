@@ -298,11 +298,17 @@ func (client *Client) eventFromException(exception error, level Level) *Event {
 		stacktrace = NewStacktrace()
 	}
 
+	cause := exception
+	// Handle wrapped errors for github.com/pingcap/errors and github.com/pkg/errors
+	if ex, ok := exception.(interface{ Cause() error }); ok {
+		cause = ex.Cause()
+	}
+
 	event := NewEvent()
 	event.Level = level
 	event.Exception = []Exception{{
-		Value:      exception.Error(),
-		Type:       reflect.TypeOf(exception).String(),
+		Value:      cause.Error(),
+		Type:       reflect.TypeOf(cause).String(),
 		Stacktrace: stacktrace,
 	}}
 	return event
