@@ -134,7 +134,7 @@ func extractPcs(method reflect.Value) []uintptr {
 	return pcs
 }
 
-// https://docs.sentry.io/development/sdk-dev/interfaces/stacktrace/
+// https://docs.sentry.io/development/sdk-dev/event-payloads/stacktrace/
 type Frame struct {
 	Function    string                 `json:"function,omitempty"`
 	Symbol      string                 `json:"symbol,omitempty"`
