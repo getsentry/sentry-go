@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -101,15 +102,15 @@ func (r Request) FromHTTPRequest(request *http.Request) Request {
 	r.QueryString = request.URL.RawQuery
 
 	// Body
-	if request.GetBody != nil {
-		if bodyCopy, err := request.GetBody(); err == nil && bodyCopy != nil {
-			body, err := ioutil.ReadAll(bodyCopy)
-			if err == nil {
-				r.Data = string(body)
-			}
+	if request.Body != nil {
+		bodyBytes, err := ioutil.ReadAll(request.Body)
+		_ = request.Body.Close()
+		if err == nil {
+			// We have to restore original state of *request.Body
+			request.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+			r.Data = string(bodyBytes)
 		}
 	}
-
 	return r
 }
 
