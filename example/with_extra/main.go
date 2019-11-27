@@ -66,7 +66,8 @@ func main() {
 		Debug: true,
 		Dsn:   "https://hello@world.io/1337",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			// Solution 1 (use beforeSend, which will be applied to all events and is usually application specific):
+			// Solution 1 (use beforeSend, which will be applied to
+			// all events and is usually application specific):
 			if ex, ok := hint.OriginalException.(CustomComplexError); ok {
 				for key, val := range ex.GimmeMoreData() {
 					event.Extra[key] = val
@@ -79,7 +80,9 @@ func main() {
 		},
 		Transport: &devNullTransport{},
 
-		//Solution 2 (use custom integration, which will also be applied to all events, but can be easily extracted even as a separate utility and reused across all your projects):
+		// Solution 2 (use custom integration, which will also be
+		// applied to all events, but can be easily extracted even as a
+		// separate utility and reused across all your projects):
 		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
 			return append(integrations, new(ExtractExtra))
 		},
@@ -87,7 +90,9 @@ func main() {
 		panic(err)
 	}
 
-	// Solution 3 and 4 (use scope event processors, which can be either applied to all events - if used with ConfigureScope or per event/block if used with WithScope):
+	// Solution 3 and 4 (use scope event processors, which can be either
+	// applied to all events - if used with ConfigureScope or per
+	// event/block if used with WithScope):
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			if ex, ok := hint.OriginalException.(CustomComplexError); ok {
