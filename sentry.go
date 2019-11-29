@@ -116,7 +116,7 @@ func Flush(timeout time.Duration) bool {
 }
 
 // LastEventID returns an ID of last captured event.
-func LastEventID() EventID {
+func LastEventID() *EventID {
 	hub := CurrentHub()
 	return hub.LastEventID()
 }

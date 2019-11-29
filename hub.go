@@ -37,7 +37,7 @@ var currentHub = NewHub(nil, NewScope()) // nolint: gochecknoglobals
 type Hub struct {
 	mu          sync.RWMutex
 	stack       *stack
-	lastEventID EventID
+	lastEventID *EventID
 }
 
 type layer struct {
@@ -81,7 +81,7 @@ func CurrentHub() *Hub {
 }
 
 // LastEventID returns an ID of last captured event for the current `Hub`.
-func (hub *Hub) LastEventID() EventID {
+func (hub *Hub) LastEventID() *EventID {
 	return hub.lastEventID
 }
 
@@ -210,7 +210,9 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 	if client == nil || scope == nil {
 		return nil
 	}
-	return client.CaptureEvent(event, nil, scope)
+	eventID := client.CaptureEvent(event, nil, scope)
+	hub.lastEventID = eventID
+	return eventID
 }
 
 // CaptureMessage calls the method of a same name on currently bound `Client` instance
@@ -221,7 +223,9 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 	if client == nil || scope == nil {
 		return nil
 	}
-	return client.CaptureMessage(message, nil, scope)
+	eventID := client.CaptureMessage(message, nil, scope)
+	hub.lastEventID = eventID
+	return eventID
 }
 
 // CaptureException calls the method of a same name on currently bound `Client` instance
@@ -232,7 +236,9 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 	if client == nil || scope == nil {
 		return nil
 	}
-	return client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
+	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
+	hub.lastEventID = eventID
+	return eventID
 }
 
 // AddBreadcrumb records a new breadcrumb.

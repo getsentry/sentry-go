@@ -173,8 +173,21 @@ func TestConfigureScope(t *testing.T) {
 
 func TestLastEventID(t *testing.T) {
 	uuid := EventID(uuid())
-	hub := &Hub{lastEventID: uuid}
-	assertEqual(t, uuid, hub.LastEventID())
+	hub := &Hub{lastEventID: &uuid}
+	assertEqual(t, &uuid, hub.LastEventID())
+}
+
+func TestLastEventIDUpdatesAfterCaptures(t *testing.T) {
+	hub, _, _ := setupHubTest()
+
+	messageID := hub.CaptureMessage("wat")
+	assertEqual(t, messageID, hub.LastEventID())
+
+	errorID := hub.CaptureException(fmt.Errorf("wat"))
+	assertEqual(t, errorID, hub.LastEventID())
+
+	eventID := hub.CaptureEvent(&Event{Message: "wat"})
+	assertEqual(t, eventID, hub.LastEventID())
 }
 
 func TestLayerAccessingEmptyStack(t *testing.T) {
