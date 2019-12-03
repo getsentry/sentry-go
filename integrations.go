@@ -16,10 +16,10 @@ import (
 // Modules Integration
 // ================================
 
-type modulesIntegration struct{}
-
-var _modulesCache map[string]string // nolint: gochecknoglobals
-var _modulesCached bool             // nolint: gochecknoglobals
+type modulesIntegration struct {
+	once    sync.Once
+	modules map[string]string
+}
 
 func (mi *modulesIntegration) Name() string {
 	return "Modules"
@@ -31,26 +31,20 @@ func (mi *modulesIntegration) SetupOnce(client *Client) {
 
 func (mi *modulesIntegration) processor(event *Event, hint *EventHint) *Event {
 	if len(event.Modules) == 0 {
-		event.Modules = extractModules()
+		mi.once.Do(func() {
+			mi.modules = extractModules()
+		})
 	}
-
+	event.Modules = mi.modules
 	return event
 }
 
 func extractModules() map[string]string {
-	if _modulesCached {
-		return _modulesCache
-	}
-
-	_modulesCached = true
 	extractedModules, err := getModules()
 	if err != nil {
 		Logger.Printf("ModuleIntegration wasn't able to extract modules: %v\n", err)
 		return nil
 	}
-
-	_modulesCache = extractedModules
-
 	return extractedModules
 }
 
