@@ -84,6 +84,16 @@ func TestValidDsnNoPort(t *testing.T) {
 	assertEqual(t, "http://domain/api/42/store/", dsn.StoreAPIURL().String())
 }
 
+func TestValidDsnPrefixed(t *testing.T) {
+	url := "http://username@domain/prefixed/42"
+	dsn, err := NewDsn(url)
+
+	if err != nil {
+		t.Error("expected dsn to be correctly created")
+	}
+	assertEqual(t, "http://domain/prefixed/api/42/store/", dsn.StoreAPIURL().String())
+}
+
 func TestValidDsnInsecureNoPort(t *testing.T) {
 	url := "https://username@domain/42"
 	dsn, err := NewDsn(url)
