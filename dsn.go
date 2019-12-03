@@ -149,6 +149,9 @@ func (dsn Dsn) StoreAPIURL() *url.URL {
 	if dsn.port != dsn.scheme.defaultPort() {
 		rawURL += fmt.Sprintf(":%d", dsn.port)
 	}
+	if dsn.path != "" {
+		rawURL += dsn.path
+	}
 	rawURL += fmt.Sprintf("/api/%d/store/", dsn.projectID)
 	parsedURL, _ := url.Parse(rawURL)
 	return parsedURL
