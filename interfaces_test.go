@@ -7,20 +7,11 @@ import (
 	"testing"
 )
 
-const testPayload = `{"test_data": true}`
+func TestRequestFromHTTPRequest(t *testing.T) {
 
-func TestRequest_FromHTTPRequest(t *testing.T) {
+	var testPayload = `{"test_data": true}`
+
 	t.Run("reading_body", func(t *testing.T) {
-		payload := bytes.NewBufferString(testPayload)
-		req, err := http.NewRequest("POST", "/test/", payload)
-		assertEqual(t, err, nil)
-		assertNotEqual(t, req, nil)
-		sentryRequest := Request{}
-		sentryRequest = sentryRequest.FromHTTPRequest(req)
-		assertEqual(t, sentryRequest.Data, testPayload)
-	})
-
-	t.Run("reading_body_twice", func(t *testing.T) {
 		payload := bytes.NewBufferString(testPayload)
 		req, err := http.NewRequest("POST", "/test/", payload)
 		assertEqual(t, err, nil)
