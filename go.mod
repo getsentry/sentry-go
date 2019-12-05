@@ -21,6 +21,7 @@ require (
 	github.com/pkg/errors v0.8.1
 	github.com/sergi/go-diff v1.0.0 // indirect
 	github.com/smartystreets/goconvey v1.6.4 // indirect
+	github.com/ugorji/go v1.1.7 // indirect
 	github.com/urfave/negroni v1.0.0
 	github.com/valyala/fasthttp v1.6.0
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
