@@ -82,14 +82,20 @@ type invalidDsnTest struct {
 
 //nolint: gochecknoglobals
 var invalidDsnTests = map[string]invalidDsnTest{
-	"NoScheme":     {"public:secret@:8888/42", "invalid scheme"},
-	"NoPublicKey":  {"https://:secret@domain:8888/42", "empty username"},
-	"NoHost":       {"https://public:secret@:8888/42", "empty host"},
-	"NoProjectID":  {"https://public:secret@domain:8888/", "empty project id"},
-	"BadURL":       {"!@#$%^&*()", "invalid url"},
-	"BadScheme":    {"ftp://public:secret@domain:8888/1", "invalid scheme"},
-	"BadProjectID": {"https://public:secret@domain:8888/wbvdf7^W#$", "invalid project id"},
-	"BadPort":      {"https://public:secret@domain:wat/42", "invalid port"},
+	"Empty":     {"", "invalid scheme"},
+	"NoScheme1": {"public:secret@:8888/42", "invalid scheme"},
+	// FIXME: NoScheme2's error message is inconsistent with NoScheme1; consider
+	// avoiding leaking errors from url.Parse.
+	"NoScheme2":     {"://public:secret@:8888/42", "missing protocol scheme"},
+	"NoPublicKey":   {"https://:secret@domain:8888/42", "empty username"},
+	"NoHost":        {"https://public:secret@:8888/42", "empty host"},
+	"NoProjectID1":  {"https://public:secret@domain:8888/", "empty project id"},
+	"NoProjectID2":  {"https://public:secret@domain:8888", "empty project id"},
+	"BadURL":        {"!@#$%^&*()", "invalid url"},
+	"BadScheme":     {"ftp://public:secret@domain:8888/1", "invalid scheme"},
+	"BadProjectID":  {"https://public:secret@domain:8888/wbvdf7^W#$", "invalid project id"},
+	"BadPort":       {"https://public:secret@domain:wat/42", "invalid port"},
+	"TrailingSlash": {"https://public:secret@domain:8888/42/", "invalid project id"},
 }
 
 //nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
