@@ -11,7 +11,7 @@ import (
 
 const unknown string = "unknown"
 
-// nolint: gochecknoglobals
+//nolint: gochecknoglobals
 var (
 	isTestFileRegexp    = regexp.MustCompile(`getsentry/sentry-go/.+_test.go`)
 	isExampleFileRegexp = regexp.MustCompile(`getsentry/sentry-go/example/`)

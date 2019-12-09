@@ -17,7 +17,7 @@ import (
 
 // Logger is an instance of log.Logger that is use to provide debug information about running Sentry Client
 // can be enabled by either using `Logger.SetOutput` directly or with `Debug` client option
-var Logger = log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags) // nolint: gochecknoglobals
+var Logger = log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags) //nolint: gochecknoglobals
 
 type EventProcessor func(event *Event, hint *EventHint) *Event
 
@@ -25,7 +25,7 @@ type EventModifier interface {
 	ApplyToEvent(event *Event, hint *EventHint) *Event
 }
 
-var globalEventProcessors []EventProcessor // nolint: gochecknoglobals
+var globalEventProcessors []EventProcessor //nolint: gochecknoglobals
 
 func AddGlobalEventProcessor(processor EventProcessor) {
 	globalEventProcessors = append(globalEventProcessors, processor)
