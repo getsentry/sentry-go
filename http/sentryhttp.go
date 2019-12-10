@@ -17,7 +17,8 @@ type Handler struct {
 type Options struct {
 	// Repanic configures whether Sentry should repanic after recovery
 	Repanic bool
-	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
+	// WaitForDelivery indicates whether to wait until panic details have been
+	// sent to Sentry before panicking or proceeding with a request.
 	WaitForDelivery bool
 	// Timeout for the event delivery requests.
 	Timeout time.Duration
