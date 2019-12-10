@@ -37,7 +37,7 @@ var currentHub = NewHub(nil, NewScope()) // nolint: gochecknoglobals
 type Hub struct {
 	mu          sync.RWMutex
 	stack       *stack
-	lastEventID *EventID
+	lastEventID EventID
 }
 
 type layer struct {
@@ -81,7 +81,7 @@ func CurrentHub() *Hub {
 }
 
 // LastEventID returns an ID of last captured event for the current `Hub`.
-func (hub *Hub) LastEventID() *EventID {
+func (hub *Hub) LastEventID() EventID {
 	return hub.lastEventID
 }
 
@@ -211,7 +211,11 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 		return nil
 	}
 	eventID := client.CaptureEvent(event, nil, scope)
-	hub.lastEventID = eventID
+	if eventID != nil {
+		hub.lastEventID = *eventID
+	} else {
+		hub.lastEventID = ""
+	}
 	return eventID
 }
 
@@ -224,7 +228,11 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 		return nil
 	}
 	eventID := client.CaptureMessage(message, nil, scope)
-	hub.lastEventID = eventID
+	if eventID != nil {
+		hub.lastEventID = *eventID
+	} else {
+		hub.lastEventID = ""
+	}
 	return eventID
 }
 
@@ -237,7 +245,11 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 		return nil
 	}
 	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
-	hub.lastEventID = eventID
+	if eventID != nil {
+		hub.lastEventID = *eventID
+	} else {
+		hub.lastEventID = ""
+	}
 	return eventID
 }
 
