@@ -159,8 +159,8 @@ func (dsn Dsn) StoreAPIURL() *url.URL {
 
 // RequestHeaders returns all the necessary headers that have to be used in the transport.
 func (dsn Dsn) RequestHeaders() map[string]string {
-	auth := fmt.Sprintf("Sentry sentry_version=%d, sentry_timestamp=%d, "+
-		"sentry_client=sentry.go/%s, sentry_key=%s", 7, time.Now().Unix(), Version, dsn.publicKey)
+	auth := fmt.Sprintf("Sentry sentry_version=%s, sentry_timestamp=%d, "+
+		"sentry_client=sentry.go/%s, sentry_key=%s", apiVersion, time.Now().Unix(), Version, dsn.publicKey)
 
 	if dsn.secretKey != "" {
 		auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.secretKey)
