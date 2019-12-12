@@ -3,6 +3,7 @@ linters:
   disable:
     - megacheck
     - stylecheck
+    - funlen
 run:
   skip-dirs:
     - echo

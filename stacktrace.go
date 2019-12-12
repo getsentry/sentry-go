@@ -4,18 +4,11 @@ import (
 	"go/build"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"runtime"
 	"strings"
 )
 
 const unknown string = "unknown"
-
-//nolint: gochecknoglobals
-var (
-	isTestFileRegexp    = regexp.MustCompile(`getsentry/sentry-go/.+_test.go`)
-	isExampleFileRegexp = regexp.MustCompile(`getsentry/sentry-go/example/`)
-)
 
 // The module download is split into two parts: downloading the go.mod and downloading the actual code.
 // If you have dependencies only needed for tests, then they will show up in your go.mod,
@@ -213,11 +206,7 @@ func filterFrames(frames []Frame) []Frame {
 			continue
 		}
 		// sentry internal frames
-		isTestFile := isTestFileRegexp.MatchString(frame.AbsPath)
-		isExampleFile := isExampleFileRegexp.MatchString(frame.AbsPath)
-		if strings.Contains(frame.AbsPath, "github.com/getsentry/sentry-go") &&
-			!isTestFile &&
-			!isExampleFile {
+		if frame.Module == "github.com/getsentry/sentry-go" {
 			continue
 		}
 		filteredFrames = append(filteredFrames, frame)
