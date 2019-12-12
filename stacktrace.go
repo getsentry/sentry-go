@@ -159,7 +159,7 @@ func NewFrame(f runtime.Frame) Frame {
 	var module string
 
 	if filename != "" {
-		filename = extractFilename(filename)
+		filename = filepath.Base(filename)
 	} else {
 		filename = unknown
 	}
@@ -224,11 +224,6 @@ func filterFrames(frames []Frame) []Frame {
 	}
 
 	return filteredFrames
-}
-
-func extractFilename(path string) string {
-	_, file := filepath.Split(path)
-	return file
 }
 
 func isInAppFrame(frame Frame) bool {

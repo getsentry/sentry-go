@@ -31,7 +31,9 @@ func TestNewStacktrace(t *testing.T) {
 
 	assertEqual(t, len(stacktrace.Frames), 2)
 	assertEqual(t, stacktrace.Frames[0].Function, "TestNewStacktrace")
+	assertEqual(t, stacktrace.Frames[0].Filename, "stacktrace_test.go")
 	assertEqual(t, stacktrace.Frames[1].Function, "Trace")
+	assertEqual(t, stacktrace.Frames[1].Filename, "errors_test.go")
 }
 
 func BenchmarkNewStacktrace(b *testing.B) {
