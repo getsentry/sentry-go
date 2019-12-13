@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"path/filepath"
 	"regexp"
 	"testing"
 )
@@ -174,9 +175,24 @@ func TestContextifyFrames(t *testing.T) {
 		contextLines: 5,
 	}
 
-	stacktrace := Trace()
+	filename := "errors_test.go"
+	abspath, err := filepath.Abs("errors_test.go")
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	frame := cfi.contextify(stacktrace.Frames)[len(stacktrace.Frames)-1]
+	frames := cfi.contextify([]Frame{{
+		Function: "Trace",
+		Module:   "github.com/getsentry/sentry-go",
+		Filename: filename,
+		AbsPath:  abspath,
+		Lineno:   12,
+		InApp:    true,
+	}})
+	if len(frames) != 1 {
+		t.Fatalf("got %d frames, want 1", len(frames))
+	}
+	frame := frames[0]
 
 	assertEqual(t, frame.PreContext, []string{
 		")",
