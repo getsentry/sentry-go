@@ -26,7 +26,6 @@ jobs:
         go test -race
   allow_failures:
     - go: master
-    - name: "Module support outside of GOPATH"
   fast_finish: true
 
 before_install:
