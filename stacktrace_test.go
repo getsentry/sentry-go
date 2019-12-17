@@ -9,6 +9,12 @@ func NewStacktraceForTest() *Stacktrace {
 	return NewStacktrace()
 }
 
+type StacktraceTestHelper struct{}
+
+func (StacktraceTestHelper) NewStacktrace() *Stacktrace {
+	return NewStacktrace()
+}
+
 func TestFunctionName(t *testing.T) {
 	for _, test := range []struct {
 		skip int

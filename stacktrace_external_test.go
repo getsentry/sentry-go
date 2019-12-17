@@ -104,6 +104,9 @@ func TestNewStacktrace(t *testing.T) {
 				},
 			},
 		}},
+		"StacktraceTestHelper": {sentry.StacktraceTestHelper{}.NewStacktrace, &sentry.Stacktrace{
+			Frames: []sentry.Frame{},
+		}},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
