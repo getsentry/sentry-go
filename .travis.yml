@@ -1,13 +1,33 @@
 sudo: false
 
 language: go
+
 go:
   - 1.11.x
   - 1.12.x
   - 1.13.x
+  - master
 
 env:
   - GO111MODULE=on GOFLAGS=-mod=readonly
+  - GO111MODULE=off
+
+jobs:
+  include:
+    - name: "Module support outside of GOPATH"
+      go: 1.13.x
+      before_script: >-
+        mv $GOPATH/src/github.com/getsentry/sentry-go ~/sentry-go &&
+        cd ~/sentry-go &&
+        export GOPATH= &&
+        go env GOPATH
+      script: >-
+        go test &&
+        go test -race
+  allow_failures:
+    - go: master
+    - name: "Module support outside of GOPATH"
+  fast_finish: true
 
 before_install:
   - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v1.19.1/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.19.1
