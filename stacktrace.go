@@ -206,7 +206,8 @@ func filterFrames(frames []Frame) []Frame {
 			continue
 		}
 		// sentry internal frames
-		if frame.Module == "github.com/getsentry/sentry-go" {
+		if frame.Module == "github.com/getsentry/sentry-go" ||
+			strings.HasPrefix(frame.Module, "github.com/getsentry/sentry-go.") {
 			continue
 		}
 		filteredFrames = append(filteredFrames, frame)
