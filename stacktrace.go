@@ -149,7 +149,7 @@ func NewFrame(f runtime.Frame) Frame {
 	abspath := f.File
 	filename := f.File
 	function := f.Function
-	var module string
+	var pkg string
 
 	if filename != "" {
 		filename = filepath.Base(filename)
@@ -162,20 +162,29 @@ func NewFrame(f runtime.Frame) Frame {
 	}
 
 	if function != "" {
-		module, function = deconstructFunctionName(function)
+		pkg, function = splitQualifiedFunctionName(function)
 	}
 
 	frame := Frame{
 		AbsPath:  abspath,
 		Filename: filename,
 		Lineno:   f.Line,
-		Module:   module,
+		Module:   pkg,
 		Function: function,
 	}
 
 	frame.InApp = isInAppFrame(frame)
 
 	return frame
+}
+
+// splitQualifiedFunctionName splits a package path-qualified function name into
+// package name and function name. Such qualified names are found in
+// runtime.Frame.Function values.
+func splitQualifiedFunctionName(name string) (pkg string, fun string) {
+	pkg = packageName(name)
+	fun = strings.TrimPrefix(name, pkg+".")
+	return
 }
 
 func extractFrames(pcs []uintptr) []Frame {
@@ -226,21 +235,42 @@ func isInAppFrame(frame Frame) bool {
 	return true
 }
 
-// Transform `runtime/debug.*T·ptrmethod` into `{ module: runtime/debug, function: *T.ptrmethod }`
-func deconstructFunctionName(name string) (module string, function string) {
-	if idx := strings.LastIndex(name, "."); idx != -1 {
-		module = name[:idx]
-		function = name[idx+1:]
-	}
-	function = strings.Replace(function, "·", ".", -1)
-	return module, function
-}
-
 func callerFunctionName() string {
 	pcs := make([]uintptr, 1)
 	runtime.Callers(3, pcs)
 	callersFrames := runtime.CallersFrames(pcs)
 	callerFrame, _ := callersFrames.Next()
-	_, function := deconstructFunctionName(callerFrame.Function)
-	return function
+	return baseName(callerFrame.Function)
+}
+
+// packageName returns the package part of the symbol name, or the empty string
+// if there is none.
+// It replicates https://golang.org/pkg/debug/gosym/#Sym.PackageName, avoiding a
+// dependency on debug/gosym.
+func packageName(name string) string {
+	// A prefix of "type." and "go." is a compiler-generated symbol that doesn't belong to any package.
+	// See variable reservedimports in cmd/compile/internal/gc/subr.go
+	if strings.HasPrefix(name, "go.") || strings.HasPrefix(name, "type.") {
+		return ""
+	}
+
+	pathend := strings.LastIndex(name, "/")
+	if pathend < 0 {
+		pathend = 0
+	}
+
+	if i := strings.Index(name[pathend:], "."); i != -1 {
+		return name[:pathend+i]
+	}
+	return ""
+}
+
+// baseName returns the symbol name without the package or receiver name.
+// It replicates https://golang.org/pkg/debug/gosym/#Sym.BaseName, avoiding a
+// dependency on debug/gosym.
+func baseName(name string) string {
+	if i := strings.LastIndex(name, "."); i != -1 {
+		return name[i+1:]
+	}
+	return name
 }
