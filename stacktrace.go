@@ -206,17 +206,24 @@ func extractFrames(pcs []uintptr) []Frame {
 	return frames
 }
 
+// filterFrames filters out stack frames that are not meant to be reported to
+// Sentry. Those are frames internal to the SDK or Go.
 func filterFrames(frames []Frame) []Frame {
+	if len(frames) == 0 {
+		return nil
+	}
+
 	filteredFrames := make([]Frame, 0, len(frames))
 
 	for _, frame := range frames {
-		// go runtime frames
+		// Skip Go internal frames.
 		if frame.Module == "runtime" || frame.Module == "testing" {
 			continue
 		}
-		// sentry internal frames
-		if frame.Module == "github.com/getsentry/sentry-go" ||
-			strings.HasPrefix(frame.Module, "github.com/getsentry/sentry-go.") {
+		// Skip Sentry internal frames, except for frames in _test packages (for
+		// testing).
+		if strings.HasPrefix(frame.Module, "github.com/getsentry/sentry-go") &&
+			!strings.HasSuffix(frame.Module, "_test") {
 			continue
 		}
 		filteredFrames = append(filteredFrames, frame)
