@@ -4,6 +4,21 @@
 
 - "I am running away from my responsibilities. And it feels good." – Michael Scott, Season 4, "Money"
 
+## v0.4.0
+
+- fix(stacktrace): Correctly report package names (#127)
+- fix(stacktrace): Do not rely on AbsPath of files (#123)
+- build: Require github.com/ugorji/go@v1.1.7 (#110)
+- fix: Correctly store last event id (#99)
+- fix: Include request body in event payload (#94)
+- build: Reset go.mod version to 1.11 (#109)
+- fix: Eliminate data race in modules integration (#105)
+- feat: Add support for path prefixes in the DSN (#102)
+- feat: Add HTTPClient option (#86)
+- feat: Extract correct type and value from top-most error (#85)
+- feat: Check for broken pipe errors in Gin integration (#82)
+- fix: Client.CaptureMessage accept nil EventModifier (#72)
+
 ## v0.3.1
 
 - feat: Send extra information exposed by the Go runtime (#76)
