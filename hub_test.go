@@ -355,7 +355,6 @@ func TestConcurrentHubClone(t *testing.T) {
 		// Mutate hub in the main goroutine.
 		hub.PushScope()
 		hub.PopScope()
-		hub.BindClient(nil)
 		hub.BindClient(client)
 		// Clone scope in a new Goroutine as documented in
 		// https://docs.sentry.io/platforms/go/goroutines/.
