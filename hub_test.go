@@ -3,9 +3,11 @@ package sentry
 import (
 	"context"
 	"fmt"
-	"sort"
 	"sync"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func setupHubTest() (*Hub, *Client, *Scope) {
@@ -389,16 +391,17 @@ func TestConcurrentHubClone(t *testing.T) {
 		},
 	}
 
-	got := make([]TestEvent, len(transport.Events()))
-	for i, event := range transport.Events() {
-		got[i] = TestEvent{
+	var got []TestEvent
+	for _, event := range transport.Events() {
+		got = append(got, TestEvent{
 			Message: event.Message,
 			Tags:    event.Tags,
-		}
+		})
 	}
-	sort.Slice(got, func(i int, j int) bool {
-		return got[i].Message < got[j].Message
-	})
 
-	assertEqual(t, got, want)
+	if diff := cmp.Diff(want, got, cmpopts.SortSlices(func(x, y TestEvent) bool {
+		return x.Message < y.Message
+	})); diff != "" {
+		t.Errorf("Events mismatch (-want +got):\n%s", diff)
+	}
 }
