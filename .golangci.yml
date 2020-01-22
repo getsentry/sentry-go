@@ -1,9 +1,38 @@
 linters:
-  enable-all: true
-  disable:
-    - megacheck
-    - stylecheck
-    - funlen
+  disable-all: true
+  enable:
+    - deadcode
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - structcheck
+    - typecheck
+    - unused
+    - varcheck
+    - bodyclose
+    - depguard
+    - dogsled
+    - dupl
+    - gochecknoglobals
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - gofmt
+    - goimports
+    - golint
+    - gosec
+    - interfacer
+    - lll
+    - maligned
+    - misspell
+    - nakedret
+    - prealloc
+    - scopelint
+    - unconvert
+    - unparam
 run:
   skip-dirs:
     - echo
@@ -16,3 +45,6 @@ issues:
     - path: _test\.go
       linters:
         - prealloc
+    - path: errors_test\.go
+      linters:
+        - unused
