@@ -1,20 +1,12 @@
 linters:
   disable-all: true
   enable:
-    - deadcode
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - structcheck
-    - typecheck
-    - unused
-    - varcheck
     - bodyclose
+    - deadcode
     - depguard
     - dogsled
     - dupl
+    - errcheck
     - gochecknoglobals
     - gochecknoinits
     - goconst
@@ -24,6 +16,9 @@ linters:
     - goimports
     - golint
     - gosec
+    - gosimple
+    - govet
+    - ineffassign
     - interfacer
     - lll
     - maligned
@@ -31,8 +26,13 @@ linters:
     - nakedret
     - prealloc
     - scopelint
+    - staticcheck
+    - structcheck
+    - typecheck
     - unconvert
     - unparam
+    - unused
+    - varcheck
 run:
   skip-dirs:
     - echo
