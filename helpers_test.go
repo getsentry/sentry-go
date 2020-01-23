@@ -3,7 +3,6 @@ package sentry
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -20,14 +19,6 @@ func assertNotEqual(t *testing.T, got, want interface{}, userMessage ...interfac
 
 	if reflect.DeepEqual(got, want) {
 		logFailedAssertion(t, formatUnequalValues(got, want), userMessage...)
-	}
-}
-
-func assertStringContains(t *testing.T, input, substr string) {
-	t.Helper()
-
-	if !strings.Contains(input, substr) {
-		logFailedAssertion(t, fmt.Sprintf("expected '%s' to contain '%s'", input, substr))
 	}
 }
 
