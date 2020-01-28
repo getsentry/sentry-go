@@ -1,156 +1,57 @@
+// This is an example program that makes an HTTP request and prints response
+// headers. Whenever a request fails, the error is reported to Sentry.
+//
+// Try it by running:
+//
+// 	go run main.go
+// 	go run main.go https://sentry.io
+// 	go run main.go bad-url
+//
+// To actually report events to Sentry, set the DSN either by editing the
+// appropriate line below or setting the environment variable SENTRY_DSN to
+// match the DSN of your Sentry project.
 package main
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"strconv"
+	"log"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 )
 
-func prettyPrint(v interface{}) string {
-	pp, _ := json.MarshalIndent(v, "", "  ")
-	return string(pp)
-}
-
-type devNullTransport struct{}
-
-func (t *devNullTransport) Configure(options sentry.ClientOptions) {
-	dsn, _ := sentry.NewDsn(options.Dsn)
-	fmt.Println()
-	fmt.Println("Store Endpoint:", dsn.StoreAPIURL())
-	fmt.Println("Headers:", dsn.RequestHeaders())
-	fmt.Println()
-}
-func (t *devNullTransport) SendEvent(event *sentry.Event) {
-	fmt.Println("Faked Transport")
-}
-
-func (t *devNullTransport) Flush(timeout time.Duration) bool {
-	return true
-}
-
-func recoverHandler() {
-	defer sentry.Recover()
-	panic("ups")
-}
-
-func beforeSend() {
-	sentry.CaptureMessage("Drop me!")
-}
-
-func captureMessage() {
-	sentry.CaptureMessage("say what again. SAY WHAT again")
-}
-
-func configureScope() {
-	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetExtra("oristhis", "justfantasy")
-		scope.SetTag("isthis", "reallife")
-		scope.SetLevel(sentry.LevelFatal)
-		scope.SetUser(sentry.User{
-			ID: "1337",
-		})
-	})
-}
-
-func withScope() {
-	sentry.WithScope(func(scope *sentry.Scope) {
-		scope.SetLevel(sentry.LevelFatal)
-		sentry.CaptureException(errors.New("say what again. SAY WHAT again"))
-	})
-}
-
-func addBreadcrumbs() {
-	sentry.AddBreadcrumb(&sentry.Breadcrumb{
-		Message: "Random breadcrumb 1",
-	})
-
-	sentry.AddBreadcrumb(&sentry.Breadcrumb{
-		Message: "Random breadcrumb 2",
-	})
-
-	sentry.AddBreadcrumb(&sentry.Breadcrumb{
-		Message: "Random breadcrumb 3",
-	})
-}
-
-func withScopeAndConfigureScope() {
-	sentry.WithScope(func(scope *sentry.Scope) {
-		sentry.ConfigureScope(func(scope *sentry.Scope) {
-			scope.SetExtras(map[string]interface{}{
-				"istillcant": 42,
-				"believe":    "that",
-			})
-			scope.SetTags(map[string]string{
-				"italready": "works",
-				"just":      "likethat",
-			})
-		})
-
-		event := sentry.NewEvent()
-		event.Message = "say what again. SAY WHAT again"
-		sentry.CaptureEvent(event)
-	})
-}
-
-type CustomComplexError struct {
-	Message      string
-	AnswerToLife int
-}
-
-func (e CustomComplexError) Error() string {
-	return "CustomComplexError: " + e.Message
-}
-
-func (e CustomComplexError) GimmeMoreData() string {
-	return strconv.Itoa(e.AnswerToLife)
-}
-
-func eventHint() {
-	sentry.CaptureException(CustomComplexError{Message: "Captured", AnswerToLife: 42})
-}
-
 func main() {
-	if err := sentry.Init(sentry.ClientOptions{
-		Debug:        true,
-		Dsn:          "https://hello@world.io/1337",
-		IgnoreErrors: []string{"^(?i)drop me"},
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			if ex, ok := hint.OriginalException.(CustomComplexError); ok {
-				event.Message = event.Message + " - " + ex.GimmeMoreData()
-			}
-
-			fmt.Printf("%s\n\n", prettyPrint(event))
-
-			return event
-		},
-		BeforeBreadcrumb: func(breadcrumb *sentry.Breadcrumb, _ *sentry.BreadcrumbHint) *sentry.Breadcrumb {
-			if breadcrumb.Message == "Random breadcrumb 3" {
-				breadcrumb.Message = "Not so random breadcrumb 3"
-			}
-
-			fmt.Printf("%s\n\n", prettyPrint(breadcrumb))
-
-			return breadcrumb
-		},
-		SampleRate: 1,
-		Transport:  &devNullTransport{},
-		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
-			return append(integrations, integrations[1])
-		},
-	}); err != nil {
-		panic(err)
+	if len(os.Args) < 2 {
+		log.Fatalf("usage: %s URL", os.Args[0])
 	}
 
-	beforeSend()
-	configureScope()
-	withScope()
-	captureMessage()
-	addBreadcrumbs()
-	withScopeAndConfigureScope()
-	recoverHandler()
-	eventHint()
+	err := sentry.Init(sentry.ClientOptions{
+		// Either set your DSN here or set the SENTRY_DSN environment variable.
+		Dsn: "",
+		// Enable printing of SDK debug messages.
+		// Useful when getting started or trying to figure something out.
+		Debug: true,
+	})
+	if err != nil {
+		log.Fatalf("sentry.Init: %s", err)
+	}
+	// Flush buffered events before the program terminates.
+	// Set the timeout to the maximum duration the program can afford to wait.
+	defer sentry.Flush(2 * time.Second)
+
+	resp, err := http.Get(os.Args[1])
+	if err != nil {
+		sentry.CaptureException(err)
+		log.Printf("reported to Sentry: %s", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	for header, values := range resp.Header {
+		for _, value := range values {
+			fmt.Printf("%s=%s\n", header, value)
+		}
+	}
 }
