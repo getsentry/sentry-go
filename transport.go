@@ -224,8 +224,16 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 	t.buffer <- b
 }
 
-// Flush notifies when all the buffered events have been sent by returning `true`
-// or `false` if timeout was reached.
+// Flush waits until any buffered events are sent to the Sentry server, blocking
+// for at most the given timeout. It returns false if the timeout was reached.
+// In that case, some events may not have been sent.
+//
+// Flush should be called before terminating the program to avoid
+// unintentionally dropping events.
+//
+// Do not call Flush indiscriminately after every call to SendEvent. Instead, to
+// have the SDK send events over the network synchronously, configure it to use
+// the HTTPSyncTransport in the call to Init.
 func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 	toolate := time.After(timeout)
 
@@ -400,8 +408,7 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 	}
 }
 
-// Flush notifies when all the buffered events have been sent by returning `true`
-// or `false` if timeout was reached. No-op for HTTPSyncTransport.
+// Flush is a no-op for HTTPSyncTransport. It always returns true immediately.
 func (t *HTTPSyncTransport) Flush(_ time.Duration) bool {
 	return true
 }

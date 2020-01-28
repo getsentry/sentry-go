@@ -266,8 +266,17 @@ func (client *Client) RecoverWithContext(
 	return nil
 }
 
-// Flush notifies when all the buffered events have been sent by returning `true`
-// or `false` if timeout was reached. It calls `Flush` method of the configured `Transport`.
+// Flush waits until the underlying Transport sends any buffered events to the
+// Sentry server, blocking for at most the given timeout. It returns false if
+// the timeout was reached. In that case, some events may not have been sent.
+//
+// Flush should be called before terminating the program to avoid
+// unintentionally dropping events.
+//
+// Do not call Flush indiscriminately after every call to CaptureEvent,
+// CaptureException or CaptureMessage. Instead, to have the SDK send events over
+// the network synchronously, configure it to use the HTTPSyncTransport in the
+// call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
 	return client.Transport.Flush(timeout)
 }
