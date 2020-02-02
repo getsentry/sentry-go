@@ -113,14 +113,15 @@ type HTTPTransport struct {
 	// current in-flight items and starts a new batch for subsequent events.
 	buffer chan batch
 
-	disabledUntil time.Time
-
 	start sync.Once
 
 	// Size of the transport buffer. Defaults to 30.
 	BufferSize int
 	// HTTP Client request timeout. Defaults to 30 seconds.
 	Timeout time.Duration
+
+	mu            sync.RWMutex
+	disabledUntil time.Time
 }
 
 // NewHTTPTransport returns a new pre-configured instance of HTTPTransport
@@ -176,7 +177,13 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 
 // SendEvent assembles a new packet out of `Event` and sends it to remote server.
 func (t *HTTPTransport) SendEvent(event *Event) {
-	if t.dsn == nil || time.Now().Before(t.disabledUntil) {
+	if t.dsn == nil {
+		return
+	}
+	t.mu.RLock()
+	disabled := time.Now().Before(t.disabledUntil)
+	t.mu.RUnlock()
+	if disabled {
 		return
 	}
 
@@ -294,7 +301,10 @@ func (t *HTTPTransport) worker() {
 
 		// Process all batch items.
 		for request := range b.items {
-			if time.Now().Before(t.disabledUntil) {
+			t.mu.RLock()
+			disabled := time.Now().Before(t.disabledUntil)
+			t.mu.RUnlock()
+			if disabled {
 				continue
 			}
 
@@ -305,8 +315,11 @@ func (t *HTTPTransport) worker() {
 			}
 
 			if response != nil && response.StatusCode == http.StatusTooManyRequests {
-				t.disabledUntil = time.Now().Add(retryAfter(time.Now(), response))
-				Logger.Printf("Too many requests, backing off till: %s\n", t.disabledUntil)
+				deadline := time.Now().Add(retryAfter(time.Now(), response))
+				t.mu.Lock()
+				t.disabledUntil = deadline
+				t.mu.Unlock()
+				Logger.Printf("Too many requests, backing off till: %s\n", deadline)
 			}
 		}
 
