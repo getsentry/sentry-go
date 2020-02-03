@@ -35,11 +35,19 @@ $ golangci-lint run
 
 ## Release
 
-1. Update changelog with new version in `vX.X.X` format title and list of changes
-2. Commit with `misc: vX.X.X changelog` commit message and push to `master`
-3. Let `craft` do the rest
+1. Update `CHANGELOG.md` with new version in `vX.X.X` format title and list of changes.
 
-```console
-$ craft prepare X.X.X
-$ craft publish X.X.X --skip-status-check
-```
+    The command below can be used to get a list of changes since the last tag, with the format used in `CHANGELOG.md`:
+
+    ```console
+    $ git log --no-merges --format=%s $(git describe --abbrev=0).. | sed 's/^/- /'
+    ```
+
+2. Commit with `misc: vX.X.X changelog` commit message and push to `master`.
+
+3. Let `craft` do the rest:
+
+    ```console
+    $ craft prepare X.X.X
+    $ craft publish X.X.X --skip-status-check
+    ```
