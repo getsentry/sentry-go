@@ -4,7 +4,7 @@ The public-facing channels for support and development of Sentry SDKs can be fou
 
 ## Testing
 
-```bash
+```console
 $ go test
 ```
 
@@ -12,24 +12,24 @@ $ go test
 
 Use: https://github.com/cespare/reflex
 
-```bash
+```console
 $ reflex -g '*.go' -d "none" -- sh -c 'printf "\n"; go test'
 ```
 
 ### With data race detection
 
-```bash
+```console
 $ go test -race
 ```
 
 ### Coverage
-```bash
+```console
 $ go test -race -coverprofile=coverage.txt -covermode=atomic && go tool cover -html coverage.txt
 ```
 
 ## Linting
 
-```bash
+```console
 $ golangci-lint run
 ```
 
@@ -39,7 +39,7 @@ $ golangci-lint run
 2. Commit with `misc: vX.X.X changelog` commit message and push to `master`
 3. Let `craft` do the rest
 
-```bash
+```console
 $ craft prepare X.X.X
 $ craft publish X.X.X --skip-status-check
 ```
