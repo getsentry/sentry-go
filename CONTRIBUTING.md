@@ -49,5 +49,5 @@ $ golangci-lint run
 
     ```console
     $ craft prepare X.X.X
-    $ craft publish X.X.X --skip-status-check
+    $ craft publish X.X.X
     ```
