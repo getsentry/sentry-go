@@ -35,7 +35,7 @@ though support for this configuration is best-effort.
 
 `sentry-go` can be installed like any other Go library through `go get`:
 
-```bash
+```console
 $ go get github.com/getsentry/sentry-go
 ```
 
@@ -43,7 +43,7 @@ Or, if you are already using
 [Go Modules](https://github.com/golang/go/wiki/Modules), you may specify a
 version number as well:
 
-```bash
+```console
 $ go get github.com/getsentry/sentry-go@latest
 ```
 
