@@ -4,6 +4,27 @@
 
 - "I am running away from my responsibilities. And it feels good." – Michael Scott, Season 4, "Money"
 
+## v0.5.0
+
+- fix: Synchronize access to HTTPTransport.disabledUntil (#158)
+- docs: Update Flush documentation (#153)
+- fix: HTTPTransport.Flush panic and data race (#140)
+
+_NOTE:_
+This version changes the implementation of the default transport, modifying the
+behavior of `sentry.Flush`. The previous behavior was to wait until there were
+no buffered events; new concurrent events kept `Flush` from returning. The new
+behavior is to wait until the last event prior to the call to `Flush` has been
+sent or the timeout; new concurrent events have no effect. The new behavior is
+inline with the [Unified API
+Guidelines](https://docs.sentry.io/development/sdk-dev/unified-api/).
+
+We have updated the documentation and examples to clarify that `Flush` is meant
+to be called typically only once before program termination, to wait for
+in-flight events to be sent to Sentry. Calling `Flush` after every event is not
+recommended, as it introduces unnecessary latency to the surrounding function.
+Please verify the usage of `sentry.Flush` in your code base.
+
 ## v0.4.0
 
 - fix(stacktrace): Correctly report package names (#127)
