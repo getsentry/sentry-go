@@ -314,7 +314,9 @@ func (client *Client) eventFromException(exception error, level Level) *Event {
 	cause := exception
 	// Handle wrapped errors for github.com/pingcap/errors and github.com/pkg/errors
 	if ex, ok := exception.(interface{ Cause() error }); ok {
-		cause = ex.Cause()
+		if c := ex.Cause(); c != nil {
+			cause = c
+		}
 	}
 
 	event := NewEvent()
