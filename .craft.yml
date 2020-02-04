@@ -5,7 +5,10 @@ github:
 preReleaseCommand: bash scripts/craft-pre-release.sh
 changelogPolicy: simple
 statusProvider:
-    name: github
+  name: github
+  config:
+    contexts:
+      - Travis CI - Branch
 targets:
   - name: github
     includeNames: /none/
