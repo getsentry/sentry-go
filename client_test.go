@@ -85,6 +85,32 @@ func TestCaptureExceptionShouldExtractCorrectTypeAndValueForWrappedErrors(t *tes
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "wat")
 }
 
+type customErrWithCause struct{ cause error }
+
+func (e *customErrWithCause) Error() string {
+	return "err"
+}
+
+func (e *customErrWithCause) Cause() error {
+	return e.cause
+}
+
+func TestCaptureExceptionShouldNotUseCauseIfCauseIsNil(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	err := &customErrWithCause{cause: nil}
+	client.CaptureException(err, nil, scope)
+	assertEqual(t, transport.lastEvent.Exception[0].Type, "*sentry.customErrWithCause")
+	assertEqual(t, transport.lastEvent.Exception[0].Value, "err")
+}
+
+func TestCaptureExceptionShouldUseCauseIfCauseIsNotNil(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	err := &customErrWithCause{cause: &customErr{}}
+	client.CaptureException(err, nil, scope)
+	assertEqual(t, transport.lastEvent.Exception[0].Type, "*sentry.customErr")
+	assertEqual(t, transport.lastEvent.Exception[0].Value, "wat")
+}
+
 func TestCaptureEventShouldSendEventWithProvidedError(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	event := NewEvent()
