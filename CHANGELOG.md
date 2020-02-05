@@ -4,6 +4,10 @@
 
 - "I am running away from my responsibilities. And it feels good." – Michael Scott, Season 4, "Money"
 
+## v0.5.1
+
+- fix: Ignore err.Cause() when it is nil (#160)
+
 ## v0.5.0
 
 - fix: Synchronize access to HTTPTransport.disabledUntil (#158)
