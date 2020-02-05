@@ -45,7 +45,7 @@ $ golangci-lint run
 
 2. Commit with `misc: vX.X.X changelog` commit message and push to `master`.
 
-3. Let `craft` do the rest:
+3. Let [`craft`](https://github.com/getsentry/craft) do the rest:
 
     ```console
     $ craft prepare X.X.X
