@@ -14,11 +14,11 @@ func (scope *ScopeMock) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	scope.breadcrumb = breadcrumb
 }
 
-func (scope *ScopeMock) ApplyToEvent(event *Event, hint *EventHint) *Event {
+func (scope *ScopeMock) ApplyToEvent(event *Event, hint *EventHint) (*Event, error) {
 	if scope.shouldDropEvent {
-		return nil
+		return nil, nil
 	}
-	return event
+	return event, nil
 }
 
 type TransportMock struct {

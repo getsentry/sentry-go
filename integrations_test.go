@@ -148,23 +148,23 @@ func TestIgnoreErrorsIntegration(t *testing.T) {
 		}},
 	}
 
-	if iei.processor(dropped, &EventHint{}) != nil {
+	if event, _ := iei.processor(dropped, &EventHint{}); event != nil {
 		t.Error("Event should be dropped")
 	}
 
-	if iei.processor(alsoDropped, &EventHint{}) != nil {
+	if event, _ := iei.processor(alsoDropped, &EventHint{}); event != nil {
 		t.Error("Event should be dropped")
 	}
 
-	if iei.processor(thisDroppedAsWell, &EventHint{}) != nil {
+	if event, _ := iei.processor(thisDroppedAsWell, &EventHint{}); event != nil {
 		t.Error("Event should be dropped")
 	}
 
-	if iei.processor(notDropped, &EventHint{}) == nil {
+	if event, _ := iei.processor(notDropped, &EventHint{}); event == nil {
 		t.Error("Event should not be dropped")
 	}
 
-	if iei.processor(alsoNotDropped, &EventHint{}) == nil {
+	if event, _ := iei.processor(alsoNotDropped, &EventHint{}); event == nil {
 		t.Error("Event should not be dropped")
 	}
 }

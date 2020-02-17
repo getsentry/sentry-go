@@ -3,6 +3,8 @@ package sentry
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -21,7 +23,7 @@ const enhancedEvent = "{\"extra\":{\"info\":\"Original event couldn't be marshal
 	"\"message\":\"mkey\",\"sdk\":{},\"user\":{},\"request\":{}}"
 
 func TestGetRequestBodyFromEventValid(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
+	body, _ := getRequestBodyFromEvent(&Event{
 		Message: "mkey",
 	})
 
@@ -34,7 +36,7 @@ func TestGetRequestBodyFromEventValid(t *testing.T) {
 }
 
 func TestGetRequestBodyFromEventInvalidBreadcrumbsField(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
+	body, _ := getRequestBodyFromEvent(&Event{
 		Message: "mkey",
 		Breadcrumbs: []*Breadcrumb{{
 			Data: map[string]interface{}{
@@ -52,7 +54,7 @@ func TestGetRequestBodyFromEventInvalidBreadcrumbsField(t *testing.T) {
 }
 
 func TestGetRequestBodyFromEventInvalidExtraField(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
+	body, _ := getRequestBodyFromEvent(&Event{
 		Message: "mkey",
 		Extra: map[string]interface{}{
 			"wat": unserializableType{},
@@ -68,7 +70,7 @@ func TestGetRequestBodyFromEventInvalidExtraField(t *testing.T) {
 }
 
 func TestGetRequestBodyFromEventInvalidContextField(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
+	body, _ := getRequestBodyFromEvent(&Event{
 		Message: "mkey",
 		Contexts: map[string]interface{}{
 			"wat": unserializableType{},
@@ -84,7 +86,7 @@ func TestGetRequestBodyFromEventInvalidContextField(t *testing.T) {
 }
 
 func TestGetRequestBodyFromEventMultipleInvalidFields(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
+	body, _ := getRequestBodyFromEvent(&Event{
 		Message: "mkey",
 		Breadcrumbs: []*Breadcrumb{{
 			Data: map[string]interface{}{
@@ -108,7 +110,7 @@ func TestGetRequestBodyFromEventMultipleInvalidFields(t *testing.T) {
 }
 
 func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
+	body, _ := getRequestBodyFromEvent(&Event{
 		Exception: []Exception{{
 			Stacktrace: &Stacktrace{
 				Frames: []Frame{{
@@ -205,7 +207,7 @@ func TestHTTPTransport(t *testing.T) {
 	server := newTestHTTPServer(t)
 	defer server.Close()
 
-	transport := NewHTTPTransport()
+	transport := NewHTTPTransport(log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags))
 	transport.Configure(ClientOptions{
 		Dsn:        fmt.Sprintf("https://test@%s/1", server.Listener.Addr()),
 		HTTPClient: server.Client(),

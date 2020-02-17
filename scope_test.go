@@ -508,7 +508,7 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := fillEventWithData(NewEvent())
 
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent, _ := scope.ApplyToEvent(event, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 2, "should merge breadcrumbs")
 	assertEqual(t, len(processedEvent.Tags), 2, "should merge tags")
@@ -525,7 +525,7 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 	scope := NewScope()
 	event := fillEventWithData(NewEvent())
 
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent, _ := scope.ApplyToEvent(event, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
@@ -542,7 +542,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := NewEvent()
 
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent, _ := scope.ApplyToEvent(event, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
@@ -559,16 +559,16 @@ func TestEventProcessorsModifiesEvent(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
 	scope.eventProcessors = []EventProcessor{
-		func(event *Event, hint *EventHint) *Event {
+		func(event *Event, hint *EventHint) (*Event, error) {
 			event.Level = LevelFatal
-			return event
+			return event, nil
 		},
-		func(event *Event, hint *EventHint) *Event {
+		func(event *Event, hint *EventHint) (*Event, error) {
 			event.Fingerprint = []string{"wat"}
-			return event
+			return event, nil
 		},
 	}
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent, _ := scope.ApplyToEvent(event, nil)
 
 	if processedEvent == nil {
 		t.Error("event should not be dropped")
@@ -581,11 +581,11 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
 	scope.eventProcessors = []EventProcessor{
-		func(event *Event, hint *EventHint) *Event {
-			return nil
+		func(event *Event, hint *EventHint) (*Event, error) {
+			return nil, nil
 		},
 	}
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent, _ := scope.ApplyToEvent(event, nil)
 
 	if processedEvent != nil {
 		t.Error("event should be dropped")
@@ -595,16 +595,16 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 func TestEventProcessorsAddEventProcessor(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent, _ := scope.ApplyToEvent(event, nil)
 
 	if processedEvent == nil {
 		t.Error("event should not be dropped")
 	}
 
-	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
-		return nil
+	scope.AddEventProcessor(func(event *Event, hint *EventHint) (*Event, error) {
+		return nil, nil
 	})
-	processedEvent = scope.ApplyToEvent(event, nil)
+	processedEvent, _ = scope.ApplyToEvent(event, nil)
 
 	if processedEvent != nil {
 		t.Error("event should be dropped")
