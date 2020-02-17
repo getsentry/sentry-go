@@ -170,7 +170,7 @@ checkout the official documentation:
 - [Bug Tracker](https://github.com/getsentry/sentry-go/issues)
 - [GitHub Project](https://github.com/getsentry/sentry-go)
 +[![GoDoc](https://godoc.org/github.com/getsentry/sentry-go?status.svg)](https://godoc.org/github.com/getsentry/sentry-go)
-- [go.dev](https://pkg.go.dev/github.com/getsentry/sentry-go)
+- [![go.dev](https://img.shields.io/badge/go.dev-pkg-007d9c.svg?style=flat)](https://pkg.go.dev/github.com/getsentry/sentry-go)
 * [![Documentation](https://img.shields.io/badge/documentation-sentry.io-green.svg)](https://docs.sentry.io/platforms/go/)
 * [![Forum](https://img.shields.io/badge/forum-sentry-green.svg)](https://forum.sentry.io/c/sdks)
 * [![Discord](https://img.shields.io/discord/621778831602221064)](https://discord.gg/Ww9hbqr)
