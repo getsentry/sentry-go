@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// Logger is in instance of log.Logger and can be used directly to log anything manually
+// Logger is an instance of log.Logger and can be used directly to log using Sentry.Logger
 var Logger = log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags) //nolint: gochecknoglobals
 
 type EventProcessor func(event *Event, hint *EventHint) (*Event, error)
