@@ -24,7 +24,7 @@ const maxBreadcrumbs = 100
 // Initial instance of the Hub that has no `Client` bound and an empty `Scope`
 var currentHub = NewHub(nil, NewScope()) //nolint: gochecknoglobals
 
-// Hub is the central object that can manages scopes and clients.
+// Hub is the central object that manages scopes and clients.
 //
 // This can be used to capture events and manage the scope.
 // The default hub that is available automatically.
