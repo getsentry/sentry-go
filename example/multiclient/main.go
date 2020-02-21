@@ -17,7 +17,7 @@ func (pi *pickleIntegration) SetupOnce(client *sentry.Client) {
 	client.AddEventProcessor(pi.processor)
 }
 
-func (pi *pickleIntegration) processor(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+func (pi *pickleIntegration) processor(event *sentry.Event, hint *sentry.EventHint, logger *log.Logger) *sentry.Event {
 	event.Message = fmt.Sprintf("PickleRick Says: %s", event.Message)
 	return event
 }

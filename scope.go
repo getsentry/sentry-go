@@ -1,7 +1,7 @@
 package sentry
 
 import (
-	"fmt"
+	"log"
 	"reflect"
 	"sync"
 	"time"
@@ -233,7 +233,7 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 }
 
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
-func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) (*Event, error) {
+func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, logger *log.Logger) *Event {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
@@ -299,15 +299,11 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) (*Event, error) 
 
 	for _, processor := range scope.eventProcessors {
 		id := event.EventID
-		var err error
-		event, err = processor(event, hint)
-		if err != nil {
-			return nil, err
-		}
+		event = processor(event, hint, logger)
 		if event == nil {
-			return nil, fmt.Errorf("event dropped by one of the Scope EventProcessors: %s", id)
+			logger.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
 		}
 	}
 
-	return event, nil
+	return event
 }

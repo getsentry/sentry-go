@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -66,10 +66,10 @@ func retryAfter(now time.Time, r *http.Response) time.Duration {
 	return defaultRetryAfter
 }
 
-func getRequestBodyFromEvent(event *Event) ([]byte, error) {
+func getRequestBodyFromEvent(event *Event, logger *log.Logger) []byte {
 	body, err := json.Marshal(event)
 	if err == nil {
-		return body, nil
+		return body
 	}
 
 	partialMarshallMessage := "Original event couldn't be marshalled. Succeeded by stripping the data " +
@@ -82,16 +82,17 @@ func getRequestBodyFromEvent(event *Event) ([]byte, error) {
 	}
 	body, err = json.Marshal(event)
 	if err == nil {
-		return body, fmt.Errorf(partialMarshallMessage)
+		logger.Println(partialMarshallMessage)
+		return body
 	}
 
 	// This should _only_ happen when Event.Exception[0].Stacktrace.Frames[0].Vars is unserializable
 	// Which won't ever happen, as we don't use it now (although it's the part of public interface accepted by Sentry)
 	// Juuust in case something, somehow goes utterly wrong.
-	marshallErrorMessage := "Event couldn't be marshalled, even with stripped contextual data. Skipping delivery. " +
-		"Please notify the SDK owners with possibly broken payload."
+	logger.Println("Event couldn't be marshalled, even with stripped contextual data. Skipping delivery. " +
+		"Please notify the SDK owners with possibly broken payload.")
 
-	return nil, fmt.Errorf(marshallErrorMessage)
+	return nil
 }
 
 // ================================
@@ -128,11 +129,11 @@ type HTTPTransport struct {
 }
 
 // NewHTTPTransport returns a new pre-configured instance of HTTPTransport
-func NewHTTPTransport(logger *log.Logger) *HTTPTransport {
+func NewHTTPTransport() *HTTPTransport {
 	transport := HTTPTransport{
 		BufferSize: defaultBufferSize,
 		Timeout:    defaultTimeout,
-		Logger:     logger,
+		Logger:     log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags),
 	}
 	return &transport
 }
@@ -191,10 +192,7 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		return
 	}
 
-	body, err := getRequestBodyFromEvent(event)
-	if err != nil {
-		t.Logger.Printf("Error from getRequestBodyFromEvent: %v\n", err)
-	}
+	body := getRequestBodyFromEvent(event, t.Logger)
 	if body == nil {
 		return
 	}
@@ -352,10 +350,10 @@ type HTTPSyncTransport struct {
 }
 
 // NewHTTPSyncTransport returns a new pre-configured instance of HTTPSyncTransport
-func NewHTTPSyncTransport(logger *log.Logger) *HTTPSyncTransport {
+func NewHTTPSyncTransport() *HTTPSyncTransport {
 	transport := HTTPSyncTransport{
 		Timeout: defaultTimeout,
-		Logger:  logger,
+		Logger:  log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags),
 	}
 
 	return &transport
@@ -395,10 +393,7 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		return
 	}
 
-	body, err := getRequestBodyFromEvent(event)
-	if err != nil {
-		t.Logger.Printf("Error from getRequestBodyFromEvent: %v\n", err)
-	}
+	body := getRequestBodyFromEvent(event, t.Logger)
 	if body == nil {
 		return
 	}
@@ -446,15 +441,6 @@ func (t *HTTPSyncTransport) Flush(_ time.Duration) bool {
 // Only used internally when an empty DSN is provided, which effectively disables the SDK.
 type noopTransport struct {
 	Logger *log.Logger
-}
-
-// NewNoopTransport returns a new pre-configured instance of NewNoopTransport
-func NewNoopTransport(logger *log.Logger) *noopTransport {
-	transport := noopTransport{
-		Logger: logger,
-	}
-
-	return &transport
 }
 
 func (t *noopTransport) Configure(options ClientOptions) {

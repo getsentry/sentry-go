@@ -18,10 +18,10 @@ import (
 // Logger is an instance of log.Logger and can be used directly to log using Sentry.Logger
 var Logger = log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags) //nolint: gochecknoglobals
 
-type EventProcessor func(event *Event, hint *EventHint) (*Event, error)
+type EventProcessor func(event *Event, hint *EventHint, logger *log.Logger) *Event
 
 type EventModifier interface {
-	ApplyToEvent(event *Event, hint *EventHint) (*Event, error)
+	ApplyToEvent(event *Event, hint *EventHint, logger *log.Logger) *Event
 }
 
 var globalEventProcessors []EventProcessor //nolint: gochecknoglobals
@@ -156,9 +156,9 @@ func (client *Client) setupTransport() {
 
 	if transport == nil {
 		if client.options.Dsn == "" {
-			transport = NewNoopTransport(client.Logger)
+			transport = &noopTransport{Logger: client.Logger}
 		} else {
-			transport = NewHTTPTransport(client.Logger)
+			transport = &HTTPTransport{Logger: client.Logger}
 		}
 	}
 
@@ -416,36 +416,22 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if scope != nil {
-		var err error
-		event, err = scope.ApplyToEvent(event, hint)
-		if err != nil {
-			client.Logger.Printf("Failed to apply scope: %v\n", err)
-		}
+		event = scope.ApplyToEvent(event, hint, client.Logger)
 	}
 
 	for _, processor := range client.eventProcessors {
 		id := event.EventID
-		var err error
-		event, err = processor(event, hint)
-		if err != nil {
-			client.Logger.Printf("Error from one of the Client EventProcessors: %v\n", err)
-		}
+		event = processor(event, hint, client.Logger)
 		if event == nil {
 			client.Logger.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
-			return nil
 		}
 	}
 
 	for _, processor := range globalEventProcessors {
 		id := event.EventID
-		var err error
-		event, err = processor(event, hint)
-		if err != nil {
-			client.Logger.Printf("Error from one of the Global EventProcessors: %v\n", err)
-		}
+		event = processor(event, hint, client.Logger)
 		if event == nil {
 			client.Logger.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
-			return nil
 		}
 	}
 

@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -14,11 +15,11 @@ func (scope *ScopeMock) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	scope.breadcrumb = breadcrumb
 }
 
-func (scope *ScopeMock) ApplyToEvent(event *Event, hint *EventHint) (*Event, error) {
+func (scope *ScopeMock) ApplyToEvent(event *Event, hint *EventHint, logger *log.Logger) *Event {
 	if scope.shouldDropEvent {
-		return nil, nil
+		return nil
 	}
-	return event, nil
+	return event
 }
 
 type TransportMock struct {

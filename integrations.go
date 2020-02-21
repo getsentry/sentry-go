@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"regexp"
 	"runtime"
@@ -29,23 +30,23 @@ func (mi *modulesIntegration) SetupOnce(client *Client) {
 	client.AddEventProcessor(mi.processor)
 }
 
-func (mi *modulesIntegration) processor(event *Event, hint *EventHint) (*Event, error) {
-	var err error
+func (mi *modulesIntegration) processor(event *Event, hint *EventHint, logger *log.Logger) *Event {
 	if len(event.Modules) == 0 {
 		mi.once.Do(func() {
-			mi.modules, err = extractModules()
+			mi.modules = extractModules(logger)
 		})
 	}
 	event.Modules = mi.modules
-	return event, err
+	return event
 }
 
-func extractModules() (map[string]string, error) {
+func extractModules(logger *log.Logger) map[string]string {
 	extractedModules, err := getModules()
 	if err != nil {
-		return nil, fmt.Errorf("ModuleIntegration wasn't able to extract modules: %v", err)
+		logger.Printf("ModuleIntegration wasn't able to extract modules: %v\n", err)
+		return nil
 	}
-	return extractedModules, nil
+	return extractedModules
 }
 
 func getModules() (map[string]string, error) {
@@ -175,7 +176,7 @@ func (ei *environmentIntegration) SetupOnce(client *Client) {
 	client.AddEventProcessor(ei.processor)
 }
 
-func (ei *environmentIntegration) processor(event *Event, hint *EventHint) (*Event, error) {
+func (ei *environmentIntegration) processor(event *Event, hint *EventHint, logger *log.Logger) *Event {
 	if event.Contexts == nil {
 		event.Contexts = make(map[string]interface{})
 	}
@@ -197,7 +198,7 @@ func (ei *environmentIntegration) processor(event *Event, hint *EventHint) (*Eve
 		"go_numcgocalls": runtime.NumCgoCall(),
 	}
 
-	return event, nil
+	return event
 }
 
 // ================================
@@ -217,19 +218,20 @@ func (iei *ignoreErrorsIntegration) SetupOnce(client *Client) {
 	client.AddEventProcessor(iei.processor)
 }
 
-func (iei *ignoreErrorsIntegration) processor(event *Event, hint *EventHint) (*Event, error) {
+func (iei *ignoreErrorsIntegration) processor(event *Event, hint *EventHint, logger *log.Logger) *Event {
 	suspects := getIgnoreErrorsSuspects(event)
 
 	for _, suspect := range suspects {
 		for _, pattern := range iei.ignoreErrors {
 			if pattern.Match([]byte(suspect)) {
-				return nil, fmt.Errorf("Event dropped due to being matched by `IgnoreErrors` option."+
+				logger.Printf("Event dropped due to being matched by `IgnoreErrors` option."+
 					"| Value matched: %s | Filter used: %s", suspect, pattern)
+				return nil
 			}
 		}
 	}
 
-	return event, nil
+	return event
 }
 
 func transformStringsIntoRegexps(strings []string) []*regexp.Regexp {
@@ -281,7 +283,7 @@ func (cfi *contextifyFramesIntegration) SetupOnce(client *Client) {
 	client.AddEventProcessor(cfi.processor)
 }
 
-func (cfi *contextifyFramesIntegration) processor(event *Event, hint *EventHint) (*Event, error) {
+func (cfi *contextifyFramesIntegration) processor(event *Event, hint *EventHint, logger *log.Logger) *Event {
 	// Range over all exceptions
 	for _, ex := range event.Exception {
 		// If it has no stacktrace, just bail out
@@ -304,7 +306,7 @@ func (cfi *contextifyFramesIntegration) processor(event *Event, hint *EventHint)
 		th.Stacktrace.Frames = cfi.contextify(th.Stacktrace.Frames)
 	}
 
-	return event, nil
+	return event
 }
 
 func (cfi *contextifyFramesIntegration) contextify(frames []Frame) []Frame {
