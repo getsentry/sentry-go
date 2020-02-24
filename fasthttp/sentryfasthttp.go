@@ -1,4 +1,4 @@
-package sentryhttp
+package sentryfasthttp
 
 import (
 	"context"
