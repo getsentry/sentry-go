@@ -1,0 +1,166 @@
+package sentryhttp_test
+
+import (
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+)
+
+func TestIntegration(t *testing.T) {
+	tests := []struct {
+		Path    string
+		Method  string
+		Body    string
+		Handler http.Handler
+
+		WantEvent *sentry.Event
+	}{
+		{
+			Path: "/panic",
+			Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+				panic("test")
+			}),
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelFatal,
+				Message: "test",
+				Request: sentry.Request{
+					URL:    "/panic",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+			},
+		},
+		{
+			Path:   "/post",
+			Method: "POST",
+			Body:   "payload",
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hub := sentry.GetHubFromContext(r.Context())
+				body, err := ioutil.ReadAll(r.Body)
+				if err != nil {
+					t.Error(err)
+				}
+				hub.CaptureMessage("post: " + string(body))
+			}),
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "post: payload",
+				Request: sentry.Request{
+					URL:    "/post",
+					Method: "POST",
+					Data:   "payload",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"Content-Length":  "7",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+			},
+		},
+		{
+			Path: "/get",
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hub := sentry.GetHubFromContext(r.Context())
+				hub.CaptureMessage("get")
+			}),
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "get",
+				Request: sentry.Request{
+					URL:    "/get",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+			},
+		},
+	}
+
+	eventsCh := make(chan *sentry.Event, len(tests))
+	err := sentry.Init(sentry.ClientOptions{
+		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			eventsCh <- event
+			return event
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sentryHandler := sentryhttp.New(sentryhttp.Options{})
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		for _, tt := range tests {
+			if r.URL.Path == tt.Path {
+				tt.Handler.ServeHTTP(w, r)
+				return
+			}
+		}
+		t.Errorf("Unhandled request: %#v", r)
+	}
+	srv := httptest.NewServer(sentryHandler.HandleFunc(handler))
+	defer srv.Close()
+
+	c := srv.Client()
+	c.Timeout = time.Second
+
+	var want []*sentry.Event
+	for _, tt := range tests {
+		wantRequest := tt.WantEvent.Request
+		wantRequest.URL = srv.URL + wantRequest.URL
+		wantRequest.Headers["Host"] = srv.Listener.Addr().String()
+		tt.WantEvent.Request = wantRequest
+		want = append(want, tt.WantEvent)
+
+		req, err := http.NewRequest(tt.Method, srv.URL+tt.Path, strings.NewReader(tt.Body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.StatusCode != http.StatusOK {
+			t.Errorf("Status code = %d", res.StatusCode)
+		}
+		res.Body.Close()
+	}
+
+	if ok := sentry.Flush(time.Second); !ok {
+		t.Fatal("sentry.Flush timed out")
+	}
+	close(eventsCh)
+	var got []*sentry.Event
+	for e := range eventsCh {
+		got = append(got, e)
+	}
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(
+			sentry.Event{},
+			"Contexts", "EventID", "Extra", "Platform",
+			"Sdk", "ServerName", "Tags", "Timestamp",
+		),
+		cmpopts.IgnoreFields(
+			sentry.Request{},
+			"Env",
+		),
+	}
+	if diff := cmp.Diff(want, got, opts); diff != "" {
+		t.Fatalf("Events mismatch (-want +got):\n%s", diff)
+	}
+}
