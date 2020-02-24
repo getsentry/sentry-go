@@ -1,6 +1,8 @@
 package sentry
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -14,7 +16,7 @@ func fillScopeWithData(scope *Scope) *Scope {
 	scope.fingerprint = []string{"scopeFingerprintOne", "scopeFingerprintTwo"}
 	scope.level = LevelDebug
 	scope.transaction = "wat"
-	scope.request = Request{URL: "wat"}
+	scope.request = httptest.NewRequest("GET", "/wat", nil)
 	return scope
 }
 
@@ -27,7 +29,7 @@ func fillEventWithData(event *Event) *Event {
 	event.Fingerprint = []string{"eventFingerprintOne", "eventFingerprintTwo"}
 	event.Level = LevelInfo
 	event.Transaction = "aye"
-	event.Request = Request{URL: "aye"}
+	event.Request = &Request{URL: "aye"}
 	return event
 }
 
@@ -46,17 +48,21 @@ func TestScopeSetUserOverrides(t *testing.T) {
 }
 
 func TestScopeSetRequest(t *testing.T) {
+	r := httptest.NewRequest("GET", "/foo", nil)
 	scope := NewScope()
-	scope.SetRequest(Request{URL: "foo"})
-	assertEqual(t, Request{URL: "foo"}, scope.request)
+	scope.SetRequest(r)
+
+	assertEqual(t, r, scope.request)
 }
 
 func TestScopeSetRequestOverrides(t *testing.T) {
+	r1 := httptest.NewRequest("GET", "/foo", nil)
+	r2 := httptest.NewRequest("GET", "/bar", nil)
 	scope := NewScope()
-	scope.SetRequest(Request{URL: "foo"})
-	scope.SetRequest(Request{URL: "bar"})
+	scope.SetRequest(r1)
+	scope.SetRequest(r2)
 
-	assertEqual(t, Request{URL: "bar"}, scope.request)
+	assertEqual(t, r2, scope.request)
 }
 
 func TestScopeSetTag(t *testing.T) {
@@ -376,7 +382,8 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone.SetFingerprint([]string{"foo"})
 	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
 	clone.SetUser(User{ID: "foo"})
-	clone.SetRequest(Request{URL: "foo"})
+	r1 := httptest.NewRequest("GET", "/foo", nil)
+	clone.SetRequest(r1)
 
 	scope.SetTag("foo", "baz")
 	scope.SetContext("foo", "baz")
@@ -386,7 +393,8 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	scope.SetFingerprint([]string{"bar"})
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, maxBreadcrumbs)
 	scope.SetUser(User{ID: "bar"})
-	scope.SetRequest(Request{URL: "bar"})
+	r2 := httptest.NewRequest("GET", "/bar", nil)
+	scope.SetRequest(r2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.contexts)
@@ -396,7 +404,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, []string{"foo"}, clone.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "foo"}}, clone.breadcrumbs)
 	assertEqual(t, User{ID: "foo"}, clone.user)
-	assertEqual(t, Request{URL: "foo"}, clone.request)
+	assertEqual(t, r1, clone.request)
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.contexts)
@@ -406,7 +414,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, []string{"bar"}, scope.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, scope.breadcrumbs)
 	assertEqual(t, User{ID: "bar"}, scope.user)
-	assertEqual(t, Request{URL: "bar"}, scope.request)
+	assertEqual(t, r2, scope.request)
 }
 
 func TestScopeChildOverrideInheritance(t *testing.T) {
@@ -420,7 +428,8 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.SetFingerprint([]string{"bar"})
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, maxBreadcrumbs)
 	scope.SetUser(User{ID: "bar"})
-	scope.SetRequest(Request{URL: "bar"})
+	r1 := httptest.NewRequest("GET", "/bar", nil)
+	scope.SetRequest(r1)
 
 	clone := scope.Clone()
 	clone.SetTag("foo", "bar")
@@ -431,7 +440,8 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.SetFingerprint([]string{"foo"})
 	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
 	clone.SetUser(User{ID: "foo"})
-	clone.SetRequest(Request{URL: "foo"})
+	r2 := httptest.NewRequest("GET", "/foo", nil)
+	clone.SetRequest(r2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.contexts)
@@ -444,7 +454,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 		{Timestamp: 1337, Message: "foo"},
 	}, clone.breadcrumbs)
 	assertEqual(t, User{ID: "foo"}, clone.user)
-	assertEqual(t, Request{URL: "foo"}, clone.request)
+	assertEqual(t, r2, clone.request)
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.contexts)
@@ -454,7 +464,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, []string{"bar"}, scope.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, scope.breadcrumbs)
 	assertEqual(t, User{ID: "bar"}, scope.user)
-	assertEqual(t, Request{URL: "bar"}, scope.request)
+	assertEqual(t, r1, scope.request)
 }
 
 func TestClear(t *testing.T) {
@@ -469,7 +479,7 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, "", scope.transaction)
-	assertEqual(t, Request{}, scope.request)
+	assertEqual(t, (*http.Request)(nil), scope.request)
 }
 
 func TestClearAndReconfigure(t *testing.T) {
@@ -484,7 +494,8 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetFingerprint([]string{"foo"})
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
 	scope.SetUser(User{ID: "foo"})
-	scope.SetRequest(Request{URL: "foo"})
+	r := httptest.NewRequest("GET", "/foo", nil)
+	scope.SetRequest(r)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, scope.tags)
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, scope.contexts)
@@ -494,7 +505,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, []string{"foo"}, scope.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "foo"}}, scope.breadcrumbs)
 	assertEqual(t, User{ID: "foo"}, scope.user)
-	assertEqual(t, Request{URL: "foo"}, scope.request)
+	assertEqual(t, r, scope.request)
 }
 
 func TestClearBreadcrumbs(t *testing.T) {
@@ -552,7 +563,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
 	assertEqual(t, processedEvent.Level, scope.level, "should use scope level")
 	assertEqual(t, processedEvent.Transaction, scope.transaction, "should use scope transaction")
-	assertEqual(t, processedEvent.Request, scope.request, "should use scope request")
+	assertEqual(t, processedEvent.Request, NewRequest(scope.request), "should use scope request")
 }
 
 func TestEventProcessorsModifiesEvent(t *testing.T) {

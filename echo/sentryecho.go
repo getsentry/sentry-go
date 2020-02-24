@@ -56,7 +56,7 @@ func New(options Options) echo.MiddlewareFunc {
 func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		hub := sentry.CurrentHub().Clone()
-		hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(ctx.Request()))
+		hub.Scope().SetRequest(ctx.Request())
 		ctx.Set(valuesKey, hub)
 		defer h.recoverWithSentry(hub, ctx.Request())
 		return next(ctx)

@@ -1,6 +1,7 @@
 package sentryhttp_test
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,8 @@ import (
 )
 
 func TestIntegration(t *testing.T) {
+	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
+
 	tests := []struct {
 		Path    string
 		Method  string
@@ -32,7 +35,7 @@ func TestIntegration(t *testing.T) {
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
 				Message: "test",
-				Request: sentry.Request{
+				Request: &sentry.Request{
 					URL:    "/panic",
 					Method: "GET",
 					Headers: map[string]string{
@@ -58,7 +61,7 @@ func TestIntegration(t *testing.T) {
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "post: payload",
-				Request: sentry.Request{
+				Request: &sentry.Request{
 					URL:    "/post",
 					Method: "POST",
 					Data:   "payload",
@@ -80,11 +83,65 @@ func TestIntegration(t *testing.T) {
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "get",
-				Request: sentry.Request{
+				Request: &sentry.Request{
 					URL:    "/get",
 					Method: "GET",
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+			},
+		},
+		{
+			Path:   "/post/large",
+			Method: "POST",
+			Body:   largePayload,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hub := sentry.GetHubFromContext(r.Context())
+				body, err := ioutil.ReadAll(r.Body)
+				if err != nil {
+					t.Error(err)
+				}
+				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(body)/1024))
+			}),
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "post: 15 KB",
+				Request: &sentry.Request{
+					URL:    "/post/large",
+					Method: "POST",
+					// Actual request body omitted because too large.
+					Data: "",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"Content-Length":  "15360",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+			},
+		},
+		{
+			Path:   "/post/body-ignored",
+			Method: "POST",
+			Body:   "client sends, server ignores, SDK doesn't read",
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hub := sentry.GetHubFromContext(r.Context())
+				hub.CaptureMessage("body ignored")
+			}),
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "body ignored",
+				Request: &sentry.Request{
+					URL:    "/post/body-ignored",
+					Method: "POST",
+					// Actual request body omitted because not read.
+					Data: "",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"Content-Length":  "46",
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
@@ -124,7 +181,6 @@ func TestIntegration(t *testing.T) {
 		wantRequest := tt.WantEvent.Request
 		wantRequest.URL = srv.URL + wantRequest.URL
 		wantRequest.Headers["Host"] = srv.Listener.Addr().String()
-		tt.WantEvent.Request = wantRequest
 		want = append(want, tt.WantEvent)
 
 		req, err := http.NewRequest(tt.Method, srv.URL+tt.Path, strings.NewReader(tt.Body))

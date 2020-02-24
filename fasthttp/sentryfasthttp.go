@@ -1,10 +1,12 @@
 package sentryfasthttp
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"net"
-	"strings"
+	"io/ioutil"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -62,7 +64,9 @@ func New(options Options) *Handler {
 func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
 		hub := sentry.CurrentHub().Clone()
-		hub.Scope().SetRequest(extractRequestData(ctx))
+		scope := hub.Scope()
+		scope.SetRequest(convert(ctx))
+		scope.SetRequestBody(ctx.Request.Body())
 		ctx.SetUserValue(valuesKey, hub)
 		defer h.recoverWithSentry(hub, ctx)
 		handler(ctx)
@@ -93,44 +97,41 @@ func GetHubFromContext(ctx *fasthttp.RequestCtx) *sentry.Hub {
 	return nil
 }
 
-func extractRequestData(ctx *fasthttp.RequestCtx) sentry.Request {
+func convert(ctx *fasthttp.RequestCtx) *http.Request {
 	defer func() {
 		if err := recover(); err != nil {
 			sentry.Logger.Printf("%v", err)
 		}
 	}()
 
-	r := sentry.Request{}
+	r := new(http.Request)
 
 	r.Method = string(ctx.Method())
 	uri := ctx.URI()
-	r.URL = fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path())
+	// Ignore error.
+	r.URL, _ = url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
 
 	// Headers
-	headers := make(map[string]string)
+	r.Header = make(http.Header)
+	r.Header.Add("Host", string(ctx.Host()))
 	ctx.Request.Header.VisitAll(func(key, value []byte) {
-		headers[string(key)] = string(value)
+		r.Header.Add(string(key), string(value))
 	})
-	headers["Host"] = string(ctx.Host())
-	r.Headers = headers
+	r.Host = string(ctx.Host())
 
 	// Cookies
-	cookies := []string{}
 	ctx.Request.Header.VisitAllCookie(func(key, value []byte) {
-		cookies = append(cookies, fmt.Sprintf("%s=%s", key, value))
+		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
 	})
-	r.Cookies = strings.Join(cookies, "; ")
 
 	// Env
-	if addr, port, err := net.SplitHostPort(ctx.RemoteAddr().String()); err == nil {
-		r.Env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
-	}
+	r.RemoteAddr = ctx.RemoteAddr().String()
 
 	// QueryString
-	r.QueryString = string(ctx.URI().QueryString())
+	r.URL.RawQuery = string(ctx.URI().QueryString())
 
 	// Body
-	r.Data = string(ctx.Request.Body())
+	r.Body = ioutil.NopCloser(bytes.NewReader(ctx.Request.Body()))
 
 	return r
 }

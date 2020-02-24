@@ -15,10 +15,10 @@ type unserializableType struct {
 	UnsupportedField func()
 }
 
-const basicEvent = "{\"message\":\"mkey\",\"sdk\":{},\"user\":{},\"request\":{}}"
+const basicEvent = "{\"message\":\"mkey\",\"sdk\":{},\"user\":{}}"
 const enhancedEvent = "{\"extra\":{\"info\":\"Original event couldn't be marshalled. Succeeded by stripping " +
 	"the data that uses interface{} type. Please verify that the data you attach to the scope is serializable.\"}," +
-	"\"message\":\"mkey\",\"sdk\":{},\"user\":{},\"request\":{}}"
+	"\"message\":\"mkey\",\"sdk\":{},\"user\":{}}"
 
 func TestGetRequestBodyFromEventValid(t *testing.T) {
 	body := getRequestBodyFromEvent(&Event{

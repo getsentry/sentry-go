@@ -1,10 +1,8 @@
 package sentry
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"strings"
@@ -71,47 +69,42 @@ type Request struct {
 	Env         map[string]string `json:"env,omitempty"`
 }
 
-func (r Request) FromHTTPRequest(request *http.Request) Request {
-	// Method
-	r.Method = request.Method
-
-	// URL
+// NewRequest returns a new Sentry Request from the given http.Request.
+//
+// NewRequest avoids operations that depend on network access. In particular, it
+// does not read r.Body.
+func NewRequest(r *http.Request) *Request {
 	protocol := schemeHTTP
-	if request.TLS != nil || request.Header.Get("X-Forwarded-Proto") == "https" {
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		protocol = schemeHTTPS
 	}
-	r.URL = fmt.Sprintf("%s://%s%s", protocol, request.Host, request.URL.Path)
+	url := fmt.Sprintf("%s://%s%s", protocol, r.Host, r.URL.Path)
 
-	// Headers
-	headers := make(map[string]string, len(request.Header))
-	for k, v := range request.Header {
+	// We read only the first Cookie header because of the specification:
+	// https://tools.ietf.org/html/rfc6265#section-5.4
+	// When the user agent generates an HTTP request, the user agent MUST NOT
+	// attach more than one Cookie header field.
+	cookies := r.Header.Get("Cookie")
+
+	headers := make(map[string]string, len(r.Header))
+	for k, v := range r.Header {
 		headers[k] = strings.Join(v, ",")
 	}
-	headers["Host"] = request.Host
-	r.Headers = headers
+	headers["Host"] = r.Host
 
-	// Cookies
-	r.Cookies = request.Header.Get("Cookie")
-
-	// Env
-	if addr, port, err := net.SplitHostPort(request.RemoteAddr); err == nil {
-		r.Env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
+	var env map[string]string
+	if addr, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
 	}
 
-	// QueryString
-	r.QueryString = request.URL.RawQuery
-
-	// Body
-	if request.Body != nil {
-		bodyBytes, err := ioutil.ReadAll(request.Body)
-		_ = request.Body.Close()
-		if err == nil {
-			// We have to restore original state of *request.Body
-			request.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
-			r.Data = string(bodyBytes)
-		}
+	return &Request{
+		URL:         url,
+		Method:      r.Method,
+		QueryString: r.URL.RawQuery,
+		Cookies:     cookies,
+		Headers:     headers,
+		Env:         env,
 	}
-	return r
 }
 
 // https://docs.sentry.io/development/sdk-dev/event-payloads/exception/
@@ -147,7 +140,7 @@ type Event struct {
 	User        User                   `json:"user,omitempty"`
 	Logger      string                 `json:"logger,omitempty"`
 	Modules     map[string]string      `json:"modules,omitempty"`
-	Request     Request                `json:"request,omitempty"`
+	Request     *Request               `json:"request,omitempty"`
 	Exception   []Exception            `json:"exception,omitempty"`
 }
 
