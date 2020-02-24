@@ -20,8 +20,8 @@ jobs:
         export GOPATH= &&
         go env GOPATH
       script: >-
-        go test &&
-        go test -race
+        go test ./... &&
+        go test ./... -race
   allow_failures:
     - go: master
   fast_finish: true
@@ -34,9 +34,9 @@ before_install:
 
 script:
   - golangci-lint run --new-from-rev=$(git merge-base origin/master HEAD)
-  - go build
-  - go test
-  - go test -race
+  - go build ./...
+  - go test ./...
+  - go test ./... -race
 
 notifications:
   webhooks:
