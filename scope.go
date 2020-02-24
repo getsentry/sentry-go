@@ -73,7 +73,7 @@ func (scope *Scope) ClearBreadcrumbs() {
 	scope.breadcrumbs = []*Breadcrumb{}
 }
 
-// SetUser sets new user for the current scope.
+// SetUser sets the user for the current scope.
 func (scope *Scope) SetUser(user User) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
@@ -81,7 +81,7 @@ func (scope *Scope) SetUser(user User) {
 	scope.user = user
 }
 
-// SetRequest sets new request for the current scope.
+// SetRequest sets the request for the current scope.
 func (scope *Scope) SetRequest(request Request) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
