@@ -1,0 +1,167 @@
+package sentryfasthttp_test
+
+import (
+	"net"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/getsentry/sentry-go"
+	sentryfasthttp "github.com/getsentry/sentry-go/fasthttp"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttputil"
+)
+
+func TestIntegration(t *testing.T) {
+	tests := []struct {
+		Path    string
+		Method  string
+		Body    string
+		Handler fasthttp.RequestHandler
+
+		WantEvent *sentry.Event
+	}{
+		{
+			Path: "/panic",
+			Handler: func(*fasthttp.RequestCtx) {
+				panic("test")
+			},
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelFatal,
+				Message: "test",
+				Request: sentry.Request{
+					URL:    "http://example.com/panic",
+					Method: "GET",
+					Headers: map[string]string{
+						"Content-Length": "0",
+						"Host":           "example.com",
+						"User-Agent":     "fasthttp",
+					},
+				},
+			},
+		},
+		{
+			Path:   "/post",
+			Method: "POST",
+			Body:   "payload",
+			Handler: func(ctx *fasthttp.RequestCtx) {
+				hub := sentryfasthttp.GetHubFromContext(ctx)
+				hub.CaptureMessage("post: " + string(ctx.Request.Body()))
+			},
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "post: payload",
+				Request: sentry.Request{
+					URL:    "http://example.com/post",
+					Method: "POST",
+					Data:   "payload",
+					Headers: map[string]string{
+						"Content-Length": "7",
+						"Content-Type":   "application/x-www-form-urlencoded",
+						"Host":           "example.com",
+						"User-Agent":     "fasthttp",
+					},
+				},
+			},
+		},
+		{
+			Path: "/get",
+			Handler: func(ctx *fasthttp.RequestCtx) {
+				hub := sentryfasthttp.GetHubFromContext(ctx)
+				hub.CaptureMessage("get")
+			},
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "get",
+				Request: sentry.Request{
+					URL:    "http://example.com/get",
+					Method: "GET",
+					Headers: map[string]string{
+						"Content-Length": "0",
+						"Host":           "example.com",
+						"User-Agent":     "fasthttp",
+					},
+				},
+			},
+		},
+	}
+
+	eventsCh := make(chan *sentry.Event, len(tests))
+	err := sentry.Init(sentry.ClientOptions{
+		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			eventsCh <- event
+			return event
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sentryHandler := sentryfasthttp.New(sentryfasthttp.Options{})
+	ln := fasthttputil.NewInmemoryListener()
+	handler := func(ctx *fasthttp.RequestCtx) {
+		for _, tt := range tests {
+			if string(ctx.Path()) == tt.Path {
+				tt.Handler(ctx)
+				return
+			}
+		}
+		t.Errorf("Unhandled request: %#v", ctx)
+	}
+	done := make(chan struct{})
+	go func() {
+		if err := fasthttp.Serve(ln, sentryHandler.Handle(handler)); err != nil {
+			t.Errorf("error in Serve: %s", err)
+		}
+		close(done)
+	}()
+
+	c := &fasthttp.Client{
+		Dial: func(addr string) (net.Conn, error) {
+			return ln.Dial()
+		},
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+	}
+
+	var want []*sentry.Event
+	for _, tt := range tests {
+		want = append(want, tt.WantEvent)
+		req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
+		req.SetHost("example.com")
+		req.URI().SetPath(tt.Path)
+		req.Header.SetMethod(tt.Method)
+		req.SetBodyString(tt.Body)
+		if err := c.Do(req, res); err != nil {
+			t.Fatalf("Request %q failed: %s", tt.Path, err)
+		}
+		if res.StatusCode() != http.StatusOK {
+			t.Errorf("Status code = %d", res.StatusCode())
+		}
+	}
+
+	if ok := sentry.Flush(time.Second); !ok {
+		t.Fatal("sentry.Flush timed out")
+	}
+	close(eventsCh)
+	var got []*sentry.Event
+	for e := range eventsCh {
+		got = append(got, e)
+	}
+	opt := cmpopts.IgnoreFields(
+		sentry.Event{},
+		"Contexts", "EventID", "Extra", "Platform",
+		"Sdk", "ServerName", "Tags", "Timestamp",
+	)
+	if diff := cmp.Diff(want, got, opt); diff != "" {
+		t.Fatalf("Events mismatch (-want +got):\n%s", diff)
+	}
+
+	ln.Close()
+	<-done
+}
