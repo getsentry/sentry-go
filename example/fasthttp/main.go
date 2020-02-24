@@ -19,7 +19,7 @@ func enhanceSentryEvent(handler fasthttp.RequestHandler) fasthttp.RequestHandler
 
 func main() {
 	_ = sentry.Init(sentry.ClientOptions{
-		Dsn: "https://363a337c11a64611be4845ad6e24f3ac@sentry.io/297378",
+		Dsn: "",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			if hint.Context != nil {
 				if ctx, ok := hint.Context.Value(sentry.RequestContextKey).(*fasthttp.RequestCtx); ok {
