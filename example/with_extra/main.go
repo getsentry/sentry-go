@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -50,7 +51,7 @@ func (ee ExtractExtra) Name() string {
 }
 
 func (ee ExtractExtra) SetupOnce(client *sentry.Client) {
-	client.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+	client.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint, logger *log.Logger) *sentry.Event {
 		if ex, ok := hint.OriginalException.(CustomComplexError); ok {
 			for key, val := range ex.GimmeMoreData() {
 				event.Extra[key] = val
@@ -94,7 +95,7 @@ func main() {
 	// applied to all events - if used with ConfigureScope or per
 	// event/block if used with WithScope):
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		scope.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint, logger *log.Logger) *sentry.Event {
 			if ex, ok := hint.OriginalException.(CustomComplexError); ok {
 				for key, val := range ex.GimmeMoreData() {
 					event.Extra[key] = val

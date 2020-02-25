@@ -23,7 +23,7 @@ const enhancedEvent = "{\"extra\":{\"info\":\"Original event couldn't be marshal
 func TestGetRequestBodyFromEventValid(t *testing.T) {
 	body := getRequestBodyFromEvent(&Event{
 		Message: "mkey",
-	})
+	}, Logger)
 
 	got := string(body)
 	want := basicEvent
@@ -41,7 +41,7 @@ func TestGetRequestBodyFromEventInvalidBreadcrumbsField(t *testing.T) {
 				"wat": unserializableType{},
 			},
 		}},
-	})
+	}, Logger)
 
 	got := string(body)
 	want := enhancedEvent
@@ -57,7 +57,7 @@ func TestGetRequestBodyFromEventInvalidExtraField(t *testing.T) {
 		Extra: map[string]interface{}{
 			"wat": unserializableType{},
 		},
-	})
+	}, Logger)
 
 	got := string(body)
 	want := enhancedEvent
@@ -73,7 +73,7 @@ func TestGetRequestBodyFromEventInvalidContextField(t *testing.T) {
 		Contexts: map[string]interface{}{
 			"wat": unserializableType{},
 		},
-	})
+	}, Logger)
 
 	got := string(body)
 	want := enhancedEvent
@@ -97,7 +97,7 @@ func TestGetRequestBodyFromEventMultipleInvalidFields(t *testing.T) {
 		Contexts: map[string]interface{}{
 			"wat": unserializableType{},
 		},
-	})
+	}, Logger)
 
 	got := string(body)
 	want := enhancedEvent
@@ -118,7 +118,7 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 				}},
 			},
 		}},
-	})
+	}, Logger)
 
 	if body != nil {
 		t.Error("expected body to be nil")
