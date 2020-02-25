@@ -1,8 +1,10 @@
 package sentryfasthttp_test
 
 import (
+	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +17,8 @@ import (
 )
 
 func TestIntegration(t *testing.T) {
+	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
+
 	tests := []struct {
 		Path    string
 		Method  string
@@ -32,7 +36,7 @@ func TestIntegration(t *testing.T) {
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
 				Message: "test",
-				Request: sentry.Request{
+				Request: &sentry.Request{
 					URL:    "http://example.com/panic",
 					Method: "GET",
 					Headers: map[string]string{
@@ -55,7 +59,7 @@ func TestIntegration(t *testing.T) {
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "post: payload",
-				Request: sentry.Request{
+				Request: &sentry.Request{
 					URL:    "http://example.com/post",
 					Method: "POST",
 					Data:   "payload",
@@ -78,11 +82,64 @@ func TestIntegration(t *testing.T) {
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "get",
-				Request: sentry.Request{
+				Request: &sentry.Request{
 					URL:    "http://example.com/get",
 					Method: "GET",
 					Headers: map[string]string{
 						"Content-Length": "0",
+						"Host":           "example.com",
+						"User-Agent":     "fasthttp",
+					},
+				},
+			},
+		},
+		{
+			Path:   "/post/large",
+			Method: "POST",
+			Body:   largePayload,
+			Handler: func(ctx *fasthttp.RequestCtx) {
+				hub := sentryfasthttp.GetHubFromContext(ctx)
+				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(ctx.Request.Body())/1024))
+			},
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "post: 15 KB",
+				Request: &sentry.Request{
+					URL:    "http://example.com/post/large",
+					Method: "POST",
+					// Actual request body omitted because too large.
+					Data: "",
+					Headers: map[string]string{
+						"Content-Length": "15360",
+						"Content-Type":   "application/x-www-form-urlencoded",
+						"Host":           "example.com",
+						"User-Agent":     "fasthttp",
+					},
+				},
+			},
+		},
+		{
+			Path:   "/post/body-ignored",
+			Method: "POST",
+			Body:   "client sends, fasthttp always reads, SDK reports",
+			Handler: func(ctx *fasthttp.RequestCtx) {
+				hub := sentryfasthttp.GetHubFromContext(ctx)
+				hub.CaptureMessage("body ignored")
+			},
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "body ignored",
+				Request: &sentry.Request{
+					URL:    "http://example.com/post/body-ignored",
+					Method: "POST",
+					// Actual request body included because fasthttp always
+					// reads full request body.
+					Data: "client sends, fasthttp always reads, SDK reports",
+					Headers: map[string]string{
+						"Content-Length": "48",
+						"Content-Type":   "application/x-www-form-urlencoded",
 						"Host":           "example.com",
 						"User-Agent":     "fasthttp",
 					},

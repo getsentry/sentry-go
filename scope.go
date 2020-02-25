@@ -1,6 +1,9 @@
 package sentry
 
 import (
+	"bytes"
+	"io"
+	"net/http"
 	"reflect"
 	"sync"
 	"time"
@@ -22,16 +25,25 @@ import (
 // Note that the scope can only be modified but not inspected.
 // Only the client can use the scope to extract information currently.
 type Scope struct {
-	mu              sync.RWMutex
-	breadcrumbs     []*Breadcrumb
-	user            User
-	tags            map[string]string
-	contexts        map[string]interface{}
-	extra           map[string]interface{}
-	fingerprint     []string
-	level           Level
-	transaction     string
-	request         Request
+	mu          sync.RWMutex
+	breadcrumbs []*Breadcrumb
+	user        User
+	tags        map[string]string
+	contexts    map[string]interface{}
+	extra       map[string]interface{}
+	fingerprint []string
+	level       Level
+	transaction string
+	request     *http.Request
+	// requestBody holds a reference to the original request.Body.
+	requestBody interface {
+		// Bytes returns bytes from the original body, lazily buffered as the
+		// original body is read.
+		Bytes() []byte
+		// Overflow returns true if the body is larger than the maximum buffer
+		// size.
+		Overflow() bool
+	}
 	eventProcessors []EventProcessor
 }
 
@@ -82,11 +94,94 @@ func (scope *Scope) SetUser(user User) {
 }
 
 // SetRequest sets the request for the current scope.
-func (scope *Scope) SetRequest(request Request) {
+func (scope *Scope) SetRequest(r *http.Request) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	scope.request = request
+	scope.request = r
+
+	if r == nil {
+		return
+	}
+
+	// Don't buffer request body if we know it is oversized.
+	if r.ContentLength > maxRequestBodyBytes {
+		return
+	}
+	// Don't buffer if there is no body.
+	if r.Body == nil || r.Body == http.NoBody {
+		return
+	}
+	buf := &limitedBuffer{Capacity: maxRequestBodyBytes}
+	r.Body = readCloser{
+		Reader: io.TeeReader(r.Body, buf),
+		Closer: r.Body,
+	}
+	scope.requestBody = buf
+}
+
+// SetRequestBody sets the request body for the current scope.
+//
+// This method should only be called when the body bytes are already available
+// in memory. Typically, the request body is buffered lazily from the
+// Request.Body from SetRequest.
+func (scope *Scope) SetRequestBody(b []byte) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
+	capacity := maxRequestBodyBytes
+	overflow := false
+	if len(b) > capacity {
+		overflow = true
+		b = b[:capacity]
+	}
+	scope.requestBody = &limitedBuffer{
+		Capacity: capacity,
+		Buffer:   *bytes.NewBuffer(b),
+		overflow: overflow,
+	}
+}
+
+// maxRequestBodyBytes is the default maximum request body size to send to
+// Sentry.
+const maxRequestBodyBytes = 10 * 1024
+
+// A limitedBuffer is like a bytes.Buffer, but limited to store at most Capacity
+// bytes. Any writes past the capacity are silently discarded, similar to
+// ioutil.Discard.
+type limitedBuffer struct {
+	Capacity int
+
+	bytes.Buffer
+	overflow bool
+}
+
+// Write implements io.Writer.
+func (b *limitedBuffer) Write(p []byte) (n int, err error) {
+	// Silently ignore writes after overflow.
+	if b.overflow {
+		return len(p), nil
+	}
+	left := b.Capacity - b.Len()
+	if left < 0 {
+		left = 0
+	}
+	if len(p) > left {
+		b.overflow = true
+		p = p[:left]
+	}
+	return b.Buffer.Write(p)
+}
+
+// Overflow returns true if the limitedBuffer discarded bytes written to it.
+func (b *limitedBuffer) Overflow() bool {
+	return b.overflow
+}
+
+// readCloser combines an io.Reader and an io.Closer to implement io.ReadCloser.
+type readCloser struct {
+	io.Reader
+	io.Closer
 }
 
 // SetTag adds a tag to the current scope.
@@ -292,8 +387,20 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		event.Transaction = scope.transaction
 	}
 
-	if (reflect.DeepEqual(event.Request, Request{})) {
-		event.Request = scope.request
+	if event.Request == nil && scope.request != nil {
+		event.Request = NewRequest(scope.request)
+		// NOTE: The SDK does not attempt to send partial request body data.
+		//
+		// The reason being that Sentry's ingest pipeline and UI are optimized
+		// to show structured data. Additionally, tooling around PII scrubbing
+		// relies on structured data; truncated request bodies would create
+		// invalid payloads that are more prone to leaking PII data.
+		//
+		// Users can still send more data along their events if they want to,
+		// for example using Event.Extra.
+		if scope.requestBody != nil && !scope.requestBody.Overflow() {
+			event.Request.Data = string(scope.requestBody.Bytes())
+		}
 	}
 
 	for _, processor := range scope.eventProcessors {

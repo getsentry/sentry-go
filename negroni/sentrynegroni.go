@@ -53,7 +53,7 @@ func New(options Options) negroni.Handler {
 
 func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	hub := sentry.CurrentHub().Clone()
-	hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(r))
+	hub.Scope().SetRequest(r)
 	ctx := sentry.SetHubOnContext(
 		context.WithValue(r.Context(), sentry.RequestContextKey, r),
 		hub,
@@ -82,7 +82,7 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 func PanicHandlerFunc(info *negroni.PanicInformation) {
 	hub := sentry.CurrentHub().Clone()
 	hub.WithScope(func(scope *sentry.Scope) {
-		scope.SetRequest(sentry.Request{}.FromHTTPRequest(info.Request))
+		scope.SetRequest(info.Request)
 		hub.RecoverWithContext(
 			context.WithValue(context.Background(), sentry.RequestContextKey, info.Request),
 			info.RecoveredPanic,

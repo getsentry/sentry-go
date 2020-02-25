@@ -52,7 +52,7 @@ func New(options Options) *Handler {
 func (h *Handler) Handle(handler http.Handler) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		hub := sentry.CurrentHub().Clone()
-		hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(r))
+		hub.Scope().SetRequest(r)
 		ctx := sentry.SetHubOnContext(
 			r.Context(),
 			hub,
@@ -66,7 +66,7 @@ func (h *Handler) Handle(handler http.Handler) http.Handler {
 func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 	return func(rw http.ResponseWriter, r *http.Request) {
 		hub := sentry.CurrentHub().Clone()
-		hub.Scope().SetRequest(sentry.Request{}.FromHTTPRequest(r))
+		hub.Scope().SetRequest(r)
 		ctx := sentry.SetHubOnContext(
 			r.Context(),
 			hub,

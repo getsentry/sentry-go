@@ -2,6 +2,7 @@ package sentry_test
 
 import (
 	"errors"
+	"net/http/httptest"
 	"sync"
 	"testing"
 
@@ -55,7 +56,7 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.SetFingerprint([]string{"foo"})
 	scope.AddBreadcrumb(&sentry.Breadcrumb{Timestamp: 1337, Message: "foo"}, 100)
 	scope.SetUser(sentry.User{ID: "foo"})
-	scope.SetRequest(sentry.Request{URL: "foo"})
+	scope.SetRequest(httptest.NewRequest("GET", "/foo", nil))
 
 	sentry.CaptureException(errors.New(string(x)))
 
