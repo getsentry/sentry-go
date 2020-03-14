@@ -112,6 +112,7 @@ type Exception struct {
 	Type          string      `json:"type,omitempty"`
 	Value         string      `json:"value,omitempty"`
 	Module        string      `json:"module,omitempty"`
+	ThreadID      string      `json:"thread_id,omitempty"`
 	Stacktrace    *Stacktrace `json:"stacktrace,omitempty"`
 	RawStacktrace *Stacktrace `json:"raw_stacktrace,omitempty"`
 }
