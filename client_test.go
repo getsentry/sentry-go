@@ -3,9 +3,9 @@ package sentry
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
 )
 
@@ -59,52 +59,10 @@ func TestCaptureMessageShouldSucceedWithoutNilScope(t *testing.T) {
 	assertEqual(t, transport.lastEvent.Message, "foo")
 }
 
-func TestCaptureExceptionShouldSendEventWithProvidedError(t *testing.T) {
-	client, scope, transport := setupClientTest()
-	client.CaptureException(errors.New("custom error"), nil, scope)
-	assertEqual(t, transport.lastEvent.Exception[0].Type, "*errors.errorString")
-	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
-}
-
-func TestCaptureExceptionShouldNotFailWhenPassedNil(t *testing.T) {
-	client, scope, transport := setupClientTest()
-	client.CaptureException(nil, nil, scope)
-	want := &Event{
-		Level:    "error",
-		Platform: "go",
-		Exception: []Exception{
-			{
-				Type:  "sentry.usageError",
-				Value: "CaptureException called with nil error",
-			},
-		},
-	}
-	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "EventID", "Sdk", "ServerName", "Timestamp"),
-		cmpopts.IgnoreTypes(&Stacktrace{}),
-		cmpopts.EquateEmpty(),
-	}
-	if diff := cmp.Diff(want, transport.lastEvent, opts); diff != "" {
-		t.Errorf("event mismatch (-want +got):\n%s", diff)
-	}
-	if transport.lastEvent.Exception[0].Stacktrace == nil {
-		t.Errorf("missing stacktrace")
-	}
-}
-
 type customErr struct{}
 
 func (e *customErr) Error() string {
 	return "wat"
-}
-
-func TestCaptureExceptionShouldExtractCorrectTypeAndValueForWrappedErrors(t *testing.T) {
-	client, scope, transport := setupClientTest()
-	cause := &customErr{}
-	err := pkgErrors.WithStack(cause)
-	client.CaptureException(err, nil, scope)
-	assertEqual(t, transport.lastEvent.Exception[0].Type, "*sentry.customErr")
-	assertEqual(t, transport.lastEvent.Exception[0].Value, "wat")
 }
 
 type customErrWithCause struct{ cause error }
@@ -117,20 +75,161 @@ func (e *customErrWithCause) Cause() error {
 	return e.cause
 }
 
-func TestCaptureExceptionShouldNotUseCauseIfCauseIsNil(t *testing.T) {
-	client, scope, transport := setupClientTest()
-	err := &customErrWithCause{cause: nil}
-	client.CaptureException(err, nil, scope)
-	assertEqual(t, transport.lastEvent.Exception[0].Type, "*sentry.customErrWithCause")
-	assertEqual(t, transport.lastEvent.Exception[0].Value, "err")
+type captureExceptionTestGroup struct {
+	name  string
+	tests []captureExceptionTest
 }
 
-func TestCaptureExceptionShouldUseCauseIfCauseIsNotNil(t *testing.T) {
-	client, scope, transport := setupClientTest()
-	err := &customErrWithCause{cause: &customErr{}}
-	client.CaptureException(err, nil, scope)
-	assertEqual(t, transport.lastEvent.Exception[0].Type, "*sentry.customErr")
-	assertEqual(t, transport.lastEvent.Exception[0].Value, "wat")
+type captureExceptionTest struct {
+	name string
+	err  error
+	want []Exception
+}
+
+func TestCaptureException(t *testing.T) {
+	basicTests := []captureExceptionTest{
+		{
+			name: "NilError",
+			err:  nil,
+			want: []Exception{
+				{
+					Type:       "sentry.usageError",
+					Value:      "CaptureException called with nil error",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+				},
+			},
+		},
+		{
+			name: "SimpleError",
+			err:  errors.New("custom error"),
+			want: []Exception{
+				{
+					Type:       "*errors.errorString",
+					Value:      "custom error",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+				},
+			},
+		},
+	}
+
+	errorChainTests := []captureExceptionTest{
+		{
+			name: "MostRecentErrorHasStack",
+			err:  pkgErrors.WithStack(&customErr{}),
+			want: []Exception{
+				{
+					Type:  "*sentry.customErr",
+					Value: "wat",
+					// No Stacktrace, because we can't tell where the error came
+					// from and because we have a stack trace in the most recent
+					// error in the chain.
+				},
+				{
+					Type:       "*errors.withStack",
+					Value:      "wat",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+				},
+			},
+		},
+		{
+			name: "ChainWithNilCause",
+			err:  &customErrWithCause{cause: nil},
+			want: []Exception{
+				{
+					Type:       "*sentry.customErrWithCause",
+					Value:      "err",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+				},
+			},
+		},
+		{
+			name: "ChainWithoutStacktrace",
+			err:  &customErrWithCause{cause: &customErr{}},
+			want: []Exception{
+				{
+					Type:  "*sentry.customErr",
+					Value: "wat",
+				},
+				{
+					Type:       "*sentry.customErrWithCause",
+					Value:      "err",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+				},
+			},
+		},
+	}
+
+	tests := []captureExceptionTestGroup{
+		{
+			name:  "Basic",
+			tests: basicTests,
+		},
+		{
+			name:  "ErrorChain",
+			tests: errorChainTests,
+		},
+	}
+
+	for _, grp := range tests {
+		for _, tt := range grp.tests {
+			tt := tt
+			t.Run(grp.name+"/"+tt.name, func(t *testing.T) {
+				client, _, transport := setupClientTest()
+				client.CaptureException(tt.err, nil, nil)
+				if transport.lastEvent == nil {
+					t.Fatal("missing event")
+				}
+				got := transport.lastEvent.Exception
+				if diff := cmp.Diff(tt.want, got); diff != "" {
+					t.Errorf("Event mismatch (-want +got):\n%s", diff)
+				}
+			})
+		}
+	}
+}
+
+func TestCaptureEvent(t *testing.T) {
+	client, _, transport := setupClientTest()
+
+	eventID := EventID("0123456789abcdef")
+	timestamp := time.Now().UTC()
+	serverName := "testServer"
+
+	client.CaptureEvent(&Event{
+		EventID:    eventID,
+		Timestamp:  timestamp,
+		ServerName: serverName,
+	}, nil, nil)
+
+	if transport.lastEvent == nil {
+		t.Fatal("missing event")
+	}
+	want := &Event{
+		EventID:    eventID,
+		Timestamp:  timestamp,
+		ServerName: serverName,
+		Level:      LevelInfo,
+		Platform:   "go",
+		Sdk: SdkInfo{
+			Name:         "sentry.go",
+			Version:      Version,
+			Integrations: []string{},
+			Packages: []SdkPackage{
+				{
+					// FIXME: name format doesn't follow spec in
+					// https://docs.sentry.io/development/sdk-dev/event-payloads/sdk/
+					Name:    "sentry-go",
+					Version: Version,
+				},
+				// TODO: perhaps the list of packages is incomplete or there
+				// should not be any package at all.
+			},
+		},
+	}
+	got := transport.lastEvent
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Event mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestCaptureEventShouldSendEventWithProvidedError(t *testing.T) {
