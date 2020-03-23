@@ -75,6 +75,16 @@ func (e *customErrWithCause) Cause() error {
 	return e.cause
 }
 
+type wrappedError struct{ original error }
+
+func (e wrappedError) Error() string {
+	return "wrapped: " + e.original.Error()
+}
+
+func (e wrappedError) Unwrap() error {
+	return e.original
+}
+
 type captureExceptionTestGroup struct {
 	name  string
 	tests []captureExceptionTest
@@ -157,6 +167,21 @@ func TestCaptureException(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Go113Unwrap",
+			err:  wrappedError{original: errors.New("original")},
+			want: []Exception{
+				{
+					Type:  "*errors.errorString",
+					Value: "original",
+				},
+				{
+					Type:       "sentry.wrappedError",
+					Value:      "wrapped: original",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+				},
+			},
+		},
 	}
 
 	tests := []captureExceptionTestGroup{
@@ -222,7 +247,8 @@ func TestCaptureEvent(t *testing.T) {
 					Version: Version,
 				},
 				// TODO: perhaps the list of packages is incomplete or there
-				// should not be any package at all.
+				// should not be any package at all. We may include references
+				// to used integrations like http, echo, gin, etc.
 			},
 		},
 	}
