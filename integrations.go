@@ -180,22 +180,32 @@ func (ei *environmentIntegration) processor(event *Event, hint *EventHint) *Even
 		event.Contexts = make(map[string]interface{})
 	}
 
-	event.Contexts["device"] = map[string]interface{}{
-		"arch":    runtime.GOARCH,
-		"num_cpu": runtime.NumCPU(),
+	if _, ok := event.Contexts["device"]; !ok {
+		event.Contexts["device"] = make(map[string]interface{})
 	}
 
-	event.Contexts["os"] = map[string]interface{}{
-		"name": runtime.GOOS,
+	if _, ok := event.Contexts["os"]; !ok {
+		event.Contexts["os"] = make(map[string]interface{})
 	}
 
-	event.Contexts["runtime"] = map[string]interface{}{
-		"name":           "go",
-		"version":        runtime.Version(),
-		"go_numroutines": runtime.NumGoroutine(),
-		"go_maxprocs":    runtime.GOMAXPROCS(0),
-		"go_numcgocalls": runtime.NumCgoCall(),
+	if _, ok := event.Contexts["runtime"]; !ok {
+		event.Contexts["runtime"] = make(map[string]interface{})
 	}
+
+	contextsDevice := event.Contexts["device"].(map[string]interface{})
+	contextsOS := event.Contexts["os"].(map[string]interface{})
+	contextsRuntime := event.Contexts["runtime"].(map[string]interface{})
+
+	contextsDevice["arch"] = runtime.GOARCH
+	contextsDevice["num_cpu"] = runtime.NumCPU()
+
+	contextsOS["name"] = runtime.GOOS
+
+	contextsRuntime["go_maxprocs"] = runtime.GOMAXPROCS(0)
+	contextsRuntime["go_numcgocalls"] = runtime.NumCgoCall()
+	contextsRuntime["go_numroutines"] = runtime.NumGoroutine()
+	contextsRuntime["name"] = "go"
+	contextsRuntime["version"] = runtime.Version()
 
 	return event
 }
