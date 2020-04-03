@@ -15,6 +15,14 @@ import (
 	"time"
 )
 
+// usageError is used to report to Sentry an SDK usage error.
+//
+// It is not exported because it is never returned by any function or method in
+// the exported API.
+type usageError struct {
+	error
+}
+
 // Logger is an instance of log.Logger that is use to provide debug information about running Sentry Client
 // can be enabled by either using `Logger.SetOutput` directly or with `Debug` client option
 var Logger = log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags) //nolint: gochecknoglobals
@@ -299,10 +307,7 @@ func (client *Client) eventFromMessage(message string, level Level) *Event {
 
 func (client *Client) eventFromException(exception error, level Level) *Event {
 	if exception == nil {
-		event := NewEvent()
-		event.Level = level
-		event.Message = fmt.Sprintf("Called %s with nil value", callerFunctionName())
-		return event
+		exception = usageError{fmt.Errorf("%s called with nil error", callerFunctionName())}
 	}
 
 	stacktrace := ExtractStacktrace(exception)

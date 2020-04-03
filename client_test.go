@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
 )
 
@@ -67,7 +69,27 @@ func TestCaptureExceptionShouldSendEventWithProvidedError(t *testing.T) {
 func TestCaptureExceptionShouldNotFailWhenPassedNil(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.CaptureException(nil, nil, scope)
-	assertEqual(t, transport.lastEvent.Message, "Called CaptureException with nil value")
+	want := &Event{
+		Level:    "error",
+		Platform: "go",
+		Exception: []Exception{
+			{
+				Type:  "sentry.usageError",
+				Value: "CaptureException called with nil error",
+			},
+		},
+	}
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(Event{}, "EventID", "Sdk", "ServerName", "Timestamp"),
+		cmpopts.IgnoreTypes(&Stacktrace{}),
+		cmpopts.EquateEmpty(),
+	}
+	if diff := cmp.Diff(want, transport.lastEvent, opts); diff != "" {
+		t.Errorf("event mismatch (-want +got):\n%s", diff)
+	}
+	if transport.lastEvent.Exception[0].Stacktrace == nil {
+		t.Errorf("missing stacktrace")
+	}
 }
 
 type customErr struct{}
