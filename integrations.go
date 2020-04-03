@@ -185,10 +185,7 @@ func (ei *environmentIntegration) processor(event *Event, hint *EventHint) *Even
 		"num_cpu": runtime.NumCPU(),
 	}
 
-	event.Contexts["os"] = map[string]interface{}{
-		"name": runtime.GOOS,
-	}
-
+	event.Contexts["os"] = osContext()
 	event.Contexts["runtime"] = map[string]interface{}{
 		"name":           "go",
 		"version":        runtime.Version(),
