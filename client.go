@@ -415,6 +415,9 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 
 	if scope != nil {
 		event = scope.ApplyToEvent(event, hint)
+		if event == nil {
+			return nil
+		}
 	}
 
 	for _, processor := range client.eventProcessors {
