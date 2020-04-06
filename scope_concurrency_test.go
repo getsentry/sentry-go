@@ -54,7 +54,7 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.SetLevel(sentry.LevelDebug)
 	scope.SetTransaction("foo")
 	scope.SetFingerprint([]string{"foo"})
-	scope.AddBreadcrumb(&sentry.Breadcrumb{Timestamp: 1337, Message: "foo"}, 100)
+	scope.AddBreadcrumb(&sentry.Breadcrumb{Message: "foo"}, 100)
 	scope.SetUser(sentry.User{ID: "foo"})
 	scope.SetRequest(httptest.NewRequest("GET", "/foo", nil))
 

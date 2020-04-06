@@ -2,10 +2,12 @@ package sentry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // Protocol Docs (kinda)
@@ -46,8 +48,30 @@ type Breadcrumb struct {
 	Data      map[string]interface{} `json:"data,omitempty"`
 	Level     Level                  `json:"level,omitempty"`
 	Message   string                 `json:"message,omitempty"`
-	Timestamp int64                  `json:"timestamp,omitempty"`
+	Timestamp time.Time              `json:"timestamp"`
 	Type      string                 `json:"type,omitempty"`
+}
+
+func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
+	type alias Breadcrumb
+	// encoding/json doesn't support the "omitempty" option for struct types.
+	// See https://golang.org/issues/11939.
+	// This implementation of MarshalJSON shadows the original Timestamp field
+	// forcing it to be omitted when the Timestamp is the zero value of
+	// time.Time.
+	if b.Timestamp.IsZero() {
+		return json.Marshal(&struct {
+			*alias
+			Timestamp json.RawMessage `json:"timestamp,omitempty"`
+		}{
+			alias: (*alias)(b),
+		})
+	}
+	return json.Marshal(&struct {
+		*alias
+	}{
+		alias: (*alias)(b),
+	})
 }
 
 // https://docs.sentry.io/development/sdk-dev/event-payloads/user/
@@ -136,13 +160,35 @@ type Event struct {
 	ServerName  string                 `json:"server_name,omitempty"`
 	Threads     []Thread               `json:"threads,omitempty"`
 	Tags        map[string]string      `json:"tags,omitempty"`
-	Timestamp   int64                  `json:"timestamp,omitempty"`
+	Timestamp   time.Time              `json:"timestamp"`
 	Transaction string                 `json:"transaction,omitempty"`
 	User        User                   `json:"user,omitempty"`
 	Logger      string                 `json:"logger,omitempty"`
 	Modules     map[string]string      `json:"modules,omitempty"`
 	Request     *Request               `json:"request,omitempty"`
 	Exception   []Exception            `json:"exception,omitempty"`
+}
+
+func (e *Event) MarshalJSON() ([]byte, error) {
+	type alias Event
+	// encoding/json doesn't support the "omitempty" option for struct types.
+	// See https://golang.org/issues/11939.
+	// This implementation of MarshalJSON shadows the original Timestamp field
+	// forcing it to be omitted when the Timestamp is the zero value of
+	// time.Time.
+	if e.Timestamp.IsZero() {
+		return json.Marshal(&struct {
+			*alias
+			Timestamp json.RawMessage `json:"timestamp,omitempty"`
+		}{
+			alias: (*alias)(e),
+		})
+	}
+	return json.Marshal(&struct {
+		*alias
+	}{
+		alias: (*alias)(e),
+	})
 }
 
 func NewEvent() *Event {
