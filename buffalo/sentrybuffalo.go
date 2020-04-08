@@ -71,7 +71,7 @@ func (h *handler) handle(next buffalo.Handler) buffalo.Handler {
 		c.Set(sentryHubKey, hub)
 		defer h.recoverWithSentry(hub, r)
 		err := next(c)
-		if h.captureError {
+		if err != nil && h.captureError {
 			hub.CaptureException(err)
 		}
 		return err
