@@ -62,8 +62,8 @@ func NewScope() *Scope {
 // AddBreadcrumb adds new breadcrumb to the current scope
 // and optionally throws the old one if limit is reached.
 func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
-	if breadcrumb.Timestamp == 0 {
-		breadcrumb.Timestamp = time.Now().Unix()
+	if breadcrumb.Timestamp.IsZero() {
+		breadcrumb.Timestamp = time.Now().UTC()
 	}
 
 	scope.mu.Lock()

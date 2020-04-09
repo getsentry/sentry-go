@@ -7,8 +7,11 @@ import (
 	"time"
 )
 
+//nolint: gochecknoglobals
+var testNow = time.Now().UTC()
+
 func fillScopeWithData(scope *Scope) *Scope {
-	scope.breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "scopeBreadcrumbMessage"}}
+	scope.breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "scopeBreadcrumbMessage"}}
 	scope.user = User{ID: "1337"}
 	scope.tags = map[string]string{"scopeTagKey": "scopeTagValue"}
 	scope.contexts = map[string]interface{}{"scopeContextsKey": "scopeContextsValue"}
@@ -21,7 +24,7 @@ func fillScopeWithData(scope *Scope) *Scope {
 }
 
 func fillEventWithData(event *Event) *Event {
-	event.Breadcrumbs = []*Breadcrumb{{Timestamp: 1337, Message: "eventBreadcrumbMessage"}}
+	event.Breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "eventBreadcrumbMessage"}}
 	event.User = User{ID: "42"}
 	event.Tags = map[string]string{"eventTagKey": "eventTagValue"}
 	event.Contexts = map[string]interface{}{"eventContextsKey": "eventContextsValue"}
@@ -322,27 +325,27 @@ func TestScopeSetTransactionOverrides(t *testing.T) {
 
 func TestAddBreadcrumbAddsBreadcrumb(t *testing.T) {
 	scope := NewScope()
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"}, maxBreadcrumbs)
-	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "test"}}, scope.breadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"}, maxBreadcrumbs)
+	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "test"}}, scope.breadcrumbs)
 }
 
 func TestAddBreadcrumbAppendsBreadcrumb(t *testing.T) {
 	scope := NewScope()
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test1"}, maxBreadcrumbs)
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test2"}, maxBreadcrumbs)
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test3"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test1"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test2"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test3"}, maxBreadcrumbs)
 
 	assertEqual(t, []*Breadcrumb{
-		{Timestamp: 1337, Message: "test1"},
-		{Timestamp: 1337, Message: "test2"},
-		{Timestamp: 1337, Message: "test3"},
+		{Timestamp: testNow, Message: "test1"},
+		{Timestamp: testNow, Message: "test2"},
+		{Timestamp: testNow, Message: "test3"},
 	}, scope.breadcrumbs)
 }
 
 func TestAddBreadcrumbDefaultLimit(t *testing.T) {
 	scope := NewScope()
 	for i := 0; i < 101; i++ {
-		scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "test"}, maxBreadcrumbs)
+		scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"}, maxBreadcrumbs)
 	}
 
 	if len(scope.breadcrumbs) != 100 {
@@ -352,13 +355,13 @@ func TestAddBreadcrumbDefaultLimit(t *testing.T) {
 
 func TestAddBreadcrumbAddsTimestamp(t *testing.T) {
 	scope := NewScope()
-	before := time.Now().Unix()
+	before := time.Now()
 	scope.AddBreadcrumb(&Breadcrumb{Message: "test"}, maxBreadcrumbs)
-	after := time.Now().Unix()
+	after := time.Now()
 	ts := scope.breadcrumbs[0].Timestamp
 
-	if ts < before || ts > after {
-		t.Errorf("expected default timestamp to represent current time, was '%d'", ts)
+	if ts.Before(before) || ts.After(after) {
+		t.Errorf("expected default timestamp to represent current time, was '%v'", ts)
 	}
 }
 
@@ -380,7 +383,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone.SetLevel(LevelDebug)
 	clone.SetTransaction("foo")
 	clone.SetFingerprint([]string{"foo"})
-	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, maxBreadcrumbs)
 	clone.SetUser(User{ID: "foo"})
 	r1 := httptest.NewRequest("GET", "/foo", nil)
 	clone.SetRequest(r1)
@@ -391,7 +394,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	scope.SetLevel(LevelFatal)
 	scope.SetTransaction("bar")
 	scope.SetFingerprint([]string{"bar"})
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"}, maxBreadcrumbs)
 	scope.SetUser(User{ID: "bar"})
 	r2 := httptest.NewRequest("GET", "/bar", nil)
 	scope.SetRequest(r2)
@@ -402,7 +405,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, LevelDebug, clone.level)
 	assertEqual(t, "foo", clone.transaction)
 	assertEqual(t, []string{"foo"}, clone.fingerprint)
-	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "foo"}}, clone.breadcrumbs)
+	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "foo"}}, clone.breadcrumbs)
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r1, clone.request)
 
@@ -412,7 +415,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, LevelFatal, scope.level)
 	assertEqual(t, "bar", scope.transaction)
 	assertEqual(t, []string{"bar"}, scope.fingerprint)
-	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, scope.breadcrumbs)
+	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "bar"}}, scope.breadcrumbs)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r2, scope.request)
 }
@@ -426,7 +429,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.SetLevel(LevelFatal)
 	scope.SetTransaction("bar")
 	scope.SetFingerprint([]string{"bar"})
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "bar"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"}, maxBreadcrumbs)
 	scope.SetUser(User{ID: "bar"})
 	r1 := httptest.NewRequest("GET", "/bar", nil)
 	scope.SetRequest(r1)
@@ -438,7 +441,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.SetLevel(LevelDebug)
 	clone.SetTransaction("foo")
 	clone.SetFingerprint([]string{"foo"})
-	clone.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, maxBreadcrumbs)
 	clone.SetUser(User{ID: "foo"})
 	r2 := httptest.NewRequest("GET", "/foo", nil)
 	clone.SetRequest(r2)
@@ -450,8 +453,8 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, "foo", clone.transaction)
 	assertEqual(t, []string{"foo"}, clone.fingerprint)
 	assertEqual(t, []*Breadcrumb{
-		{Timestamp: 1337, Message: "bar"},
-		{Timestamp: 1337, Message: "foo"},
+		{Timestamp: testNow, Message: "bar"},
+		{Timestamp: testNow, Message: "foo"},
 	}, clone.breadcrumbs)
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r2, clone.request)
@@ -462,7 +465,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, LevelFatal, scope.level)
 	assertEqual(t, "bar", scope.transaction)
 	assertEqual(t, []string{"bar"}, scope.fingerprint)
-	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "bar"}}, scope.breadcrumbs)
+	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "bar"}}, scope.breadcrumbs)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r1, scope.request)
 }
@@ -492,7 +495,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetLevel(LevelDebug)
 	scope.SetTransaction("foo")
 	scope.SetFingerprint([]string{"foo"})
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: 1337, Message: "foo"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, maxBreadcrumbs)
 	scope.SetUser(User{ID: "foo"})
 	r := httptest.NewRequest("GET", "/foo", nil)
 	scope.SetRequest(r)
@@ -503,7 +506,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, LevelDebug, scope.level)
 	assertEqual(t, "foo", scope.transaction)
 	assertEqual(t, []string{"foo"}, scope.fingerprint)
-	assertEqual(t, []*Breadcrumb{{Timestamp: 1337, Message: "foo"}}, scope.breadcrumbs)
+	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "foo"}}, scope.breadcrumbs)
 	assertEqual(t, User{ID: "foo"}, scope.user)
 	assertEqual(t, r, scope.request)
 }

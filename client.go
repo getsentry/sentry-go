@@ -374,8 +374,8 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		event.EventID = EventID(uuid())
 	}
 
-	if event.Timestamp == 0 {
-		event.Timestamp = time.Now().Unix()
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now().UTC()
 	}
 
 	if event.Level == "" {
