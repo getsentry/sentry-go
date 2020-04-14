@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 )
@@ -49,16 +50,11 @@ func extractModules() map[string]string {
 }
 
 func getModules() (map[string]string, error) {
-	if fileExists("go.mod") {
-		return getModulesFromMod()
+	if info, err := getModulesFromBuildInfo(); err == nil {
+		return info, nil
 	}
 
 	if fileExists("vendor") {
-		// Priority given to vendor created by modules
-		if fileExists("vendor/modules.txt") {
-			return getModulesFromVendorTxt()
-		}
-
 		if fileExists("vendor/vendor.json") {
 			return getModulesFromVendorJSON()
 		}
@@ -67,39 +63,15 @@ func getModules() (map[string]string, error) {
 	return nil, fmt.Errorf("module integration failed")
 }
 
-func getModulesFromMod() (map[string]string, error) {
+func getModulesFromBuildInfo() (map[string]string, error) {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return nil, fmt.Errorf("cannot dependencies from debug.BuildInfo")
+	}
 	modules := make(map[string]string)
-
-	file, err := os.Open("go.mod")
-	if err != nil {
-		return nil, fmt.Errorf("unable to open mod file")
+	for _, dep := range info.Deps {
+		modules[dep.Path] = dep.Version
 	}
-
-	defer file.Close()
-
-	areModulesPresent := false
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		splits := strings.Split(scanner.Text(), " ")
-
-		if splits[0] == "require" {
-			areModulesPresent = true
-
-			// Mod file has only 1 dependency
-			if len(splits) > 2 {
-				modules[strings.TrimSpace(splits[1])] = splits[2]
-				return modules, nil
-			}
-		} else if areModulesPresent && splits[0] != ")" && splits[0] != "" {
-			modules[strings.TrimSpace(splits[0])] = splits[1]
-		}
-	}
-
-	if scannerErr := scanner.Err(); scannerErr != nil {
-		return nil, scannerErr
-	}
-
 	return modules, nil
 }
 
