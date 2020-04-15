@@ -39,7 +39,7 @@ func (mi *modulesIntegration) processor(event *Event, hint *EventHint) *Event {
 func extractModules() map[string]string {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		Logger.Printf("ModuleIntegration wasn't able to extract modules because this binary doesn't use go module mode.")
+		Logger.Printf("The Modules integration is not available in binaries built without module support.")
 		return nil
 	}
 	modules := map[string]string{
