@@ -241,21 +241,87 @@ func TestContextifyFramesNonexistingFilesShouldNotDropFrames(t *testing.T) {
 }
 
 func TestExtractModules(t *testing.T) {
-	expected := map[string]string{
-		"my/module":                      "(devel)",
-		"github.com/getsentry/sentry-go": "v0.5.1",
-	}
-	modules := extractModules(&debug.BuildInfo{
-		Main: debug.Module{
-			Path:    "my/module",
-			Version: "(devel)",
-		},
-		Deps: []*debug.Module{
-			{
-				Path:    "github.com/getsentry/sentry-go",
-				Version: "v0.5.1",
+	tests := []struct {
+		info     *debug.BuildInfo
+		expected map[string]string
+	}{
+		{
+			info: &debug.BuildInfo{
+				Main: debug.Module{
+					Path:    "my/module",
+					Version: "(devel)",
+				},
+				Deps: []*debug.Module{},
+			},
+			expected: map[string]string{
+				"my/module": "(devel)",
 			},
 		},
-	})
-	assertEqual(t, expected, modules)
+		{
+			info: &debug.BuildInfo{
+				Main: debug.Module{
+					Path:    "my/module",
+					Version: "(devel)",
+				},
+				Deps: []*debug.Module{
+					{
+						Path:    "github.com/getsentry/sentry-go",
+						Version: "v0.5.1",
+					},
+				},
+			},
+			expected: map[string]string{
+				"my/module":                      "(devel)",
+				"github.com/getsentry/sentry-go": "v0.5.1",
+			},
+		},
+		{
+			info: &debug.BuildInfo{
+				Main: debug.Module{
+					Path:    "my/module",
+					Version: "(devel)",
+				},
+				Deps: []*debug.Module{
+					{
+						Path:    "github.com/getsentry/sentry-go",
+						Version: "v0.5.1",
+						Replace: &debug.Module{
+							Path: "pkg/sentry",
+						},
+					},
+				},
+			},
+			expected: map[string]string{
+				"my/module":                      "(devel)",
+				"github.com/getsentry/sentry-go": "v0.5.1 => pkg/sentry",
+			},
+		},
+		{
+			info: &debug.BuildInfo{
+				Main: debug.Module{
+					Path:    "my/module",
+					Version: "(devel)",
+				},
+				Deps: []*debug.Module{
+					{
+						Path:    "github.com/ugorji/go",
+						Version: "v1.1.4",
+						Replace: &debug.Module{
+							Path:    "github.com/ugorji/go/codec",
+							Version: "v0.0.0-20190204201341-e444a5086c43",
+						},
+					},
+				},
+			},
+			expected: map[string]string{
+				"my/module":            "(devel)",
+				"github.com/ugorji/go": "v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		assertEqual(t, tt.expected, extractModules(tt.info))
+	}
 }

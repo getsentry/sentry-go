@@ -48,9 +48,9 @@ func extractModules(info *debug.BuildInfo) map[string]string {
 	for _, dep := range info.Deps {
 		ver := dep.Version
 		if dep.Replace != nil {
-			ver += fmt.Sprintf(" => %s %s", dep.Replace.Path, dep.Version)
+			ver += fmt.Sprintf(" => %s %s", dep.Replace.Path, dep.Replace.Version)
 		}
-		modules[dep.Path] = ver
+		modules[dep.Path] = strings.TrimSuffix(ver, " ")
 	}
 	return modules
 }
