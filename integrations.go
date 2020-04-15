@@ -1,11 +1,7 @@
 package sentry
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"regexp"
 	"runtime"
 	"runtime/debug"
@@ -41,96 +37,20 @@ func (mi *modulesIntegration) processor(event *Event, hint *EventHint) *Event {
 }
 
 func extractModules() map[string]string {
-	extractedModules, err := getModules()
-	if err != nil {
-		Logger.Printf("ModuleIntegration wasn't able to extract modules: %v\n", err)
-		return nil
-	}
-	return extractedModules
-}
-
-func getModules() (map[string]string, error) {
-	if info, err := getModulesFromBuildInfo(); err == nil {
-		return info, nil
-	}
-
-	if fileExists("vendor") {
-		if fileExists("vendor/vendor.json") {
-			return getModulesFromVendorJSON()
-		}
-	}
-
-	return nil, fmt.Errorf("module integration failed")
-}
-
-func getModulesFromBuildInfo() (map[string]string, error) {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
-		return nil, fmt.Errorf("cannot dependencies from debug.BuildInfo")
+		Logger.Printf("ModuleIntegration wasn't able to extract modules because this binary doesn't use go module mode.")
+		return nil
 	}
 	modules := make(map[string]string)
 	for _, dep := range info.Deps {
-		modules[dep.Path] = dep.Version
-	}
-	return modules, nil
-}
-
-func getModulesFromVendorTxt() (map[string]string, error) {
-	modules := make(map[string]string)
-
-	file, err := os.Open("vendor/modules.txt")
-	if err != nil {
-		return nil, fmt.Errorf("unable to open vendor/modules.txt")
-	}
-
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		splits := strings.Split(scanner.Text(), " ")
-
-		if splits[0] == "#" {
-			modules[splits[1]] = splits[2]
+		ver := dep.Version
+		if dep.Replace != nil {
+			ver += fmt.Sprintf(" => %s %s", dep.Replace.Path, dep.Version)
 		}
+		modules[dep.Path] = ver
 	}
-
-	if scannerErr := scanner.Err(); scannerErr != nil {
-		return nil, scannerErr
-	}
-
-	return modules, nil
-}
-
-func getModulesFromVendorJSON() (map[string]string, error) {
-	modules := make(map[string]string)
-
-	file, err := ioutil.ReadFile("vendor/vendor.json")
-
-	if err != nil {
-		return nil, fmt.Errorf("unable to open vendor/vendor.json")
-	}
-
-	var vendor map[string]interface{}
-	if unmarshalErr := json.Unmarshal(file, &vendor); unmarshalErr != nil {
-		return nil, unmarshalErr
-	}
-
-	packages := vendor["package"].([]interface{})
-
-	// To avoid iterative dependencies, TODO: Change of default value
-	lastPath := "\n"
-
-	for _, value := range packages {
-		path := value.(map[string]interface{})["path"].(string)
-
-		if !strings.Contains(path, lastPath) {
-			// No versions are available through vendor.json
-			modules[path] = ""
-			lastPath = path
-		}
-	}
-
-	return modules, nil
+	return modules
 }
 
 // ================================
