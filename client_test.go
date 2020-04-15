@@ -156,6 +156,13 @@ func TestApplyToScopeCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	scope.shouldDropEvent = true
 
+	client.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+		if event == nil {
+			t.Errorf("EventProcessor received nil Event")
+		}
+		return event
+	})
+
 	client.CaptureMessage("Foo", nil, scope)
 
 	if transport.lastEvent != nil {
