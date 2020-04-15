@@ -29,19 +29,19 @@ func (mi *modulesIntegration) SetupOnce(client *Client) {
 func (mi *modulesIntegration) processor(event *Event, hint *EventHint) *Event {
 	if len(event.Modules) == 0 {
 		mi.once.Do(func() {
-			mi.modules = extractModules()
+			info, ok := debug.ReadBuildInfo()
+			if !ok {
+				Logger.Printf("The Modules integration is not available in binaries built without module support.")
+				return
+			}
+			mi.modules = extractModules(info)
 		})
 	}
 	event.Modules = mi.modules
 	return event
 }
 
-func extractModules() map[string]string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		Logger.Printf("The Modules integration is not available in binaries built without module support.")
-		return nil
-	}
+func extractModules(info *debug.BuildInfo) map[string]string {
 	modules := map[string]string{
 		info.Main.Path: info.Main.Version,
 	}

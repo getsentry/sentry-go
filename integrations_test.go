@@ -3,6 +3,7 @@ package sentry
 import (
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"testing"
 )
 
@@ -237,4 +238,24 @@ func TestContextifyFramesNonexistingFilesShouldNotDropFrames(t *testing.T) {
 
 	contextifiedFrames := cfi.contextify(frames)
 	assertEqual(t, len(contextifiedFrames), len(frames))
+}
+
+func TestExtractModules(t *testing.T) {
+	expected := map[string]string{
+		"my/module":                      "(devel)",
+		"github.com/getsentry/sentry-go": "v0.5.1",
+	}
+	modules := extractModules(&debug.BuildInfo{
+		Main: debug.Module{
+			Path:    "my/module",
+			Version: "(devel)",
+		},
+		Deps: []*debug.Module{
+			{
+				Path:    "github.com/getsentry/sentry-go",
+				Version: "v0.5.1",
+			},
+		},
+	})
+	assertEqual(t, expected, modules)
 }
