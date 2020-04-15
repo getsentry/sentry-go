@@ -242,10 +242,12 @@ func TestContextifyFramesNonexistingFilesShouldNotDropFrames(t *testing.T) {
 
 func TestExtractModules(t *testing.T) {
 	tests := []struct {
+		name     string
 		info     *debug.BuildInfo
 		expected map[string]string
 	}{
 		{
+			name: "no require modules",
 			info: &debug.BuildInfo{
 				Main: debug.Module{
 					Path:    "my/module",
@@ -258,6 +260,7 @@ func TestExtractModules(t *testing.T) {
 			},
 		},
 		{
+			name: "have require modules",
 			info: &debug.BuildInfo{
 				Main: debug.Module{
 					Path:    "my/module",
@@ -268,14 +271,20 @@ func TestExtractModules(t *testing.T) {
 						Path:    "github.com/getsentry/sentry-go",
 						Version: "v0.5.1",
 					},
+					{
+						Path:    "github.com/gin-gonic/gin",
+						Version: "v1.4.0",
+					},
 				},
 			},
 			expected: map[string]string{
 				"my/module":                      "(devel)",
 				"github.com/getsentry/sentry-go": "v0.5.1",
+				"github.com/gin-gonic/gin":       "v1.4.0",
 			},
 		},
 		{
+			name: "replace module with local module",
 			info: &debug.BuildInfo{
 				Main: debug.Module{
 					Path:    "my/module",
@@ -297,6 +306,7 @@ func TestExtractModules(t *testing.T) {
 			},
 		},
 		{
+			name: "replace module with another remote module",
 			info: &debug.BuildInfo{
 				Main: debug.Module{
 					Path:    "my/module",
@@ -322,6 +332,8 @@ func TestExtractModules(t *testing.T) {
 
 	for _, tt := range tests {
 		tt := tt
-		assertEqual(t, tt.expected, extractModules(tt.info))
+		t.Run(tt.name, func(t *testing.T) {
+			assertEqual(t, tt.expected, extractModules(tt.info))
+		})
 	}
 }
