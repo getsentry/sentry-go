@@ -42,7 +42,9 @@ func extractModules() map[string]string {
 		Logger.Printf("ModuleIntegration wasn't able to extract modules because this binary doesn't use go module mode.")
 		return nil
 	}
-	modules := make(map[string]string)
+	modules := map[string]string{
+		info.Main.Path: info.Main.Version,
+	}
 	for _, dep := range info.Deps {
 		ver := dep.Version
 		if dep.Replace != nil {
