@@ -107,7 +107,7 @@ type batch struct {
 type HTTPTransport struct {
 	dsn       *Dsn
 	client    *http.Client
-	transport *http.Transport
+	transport http.RoundTripper
 
 	// buffer is a channel of batches. Calling Flush terminates work on the
 	// current in-flight items and starts a new batch for subsequent events.
@@ -336,7 +336,7 @@ func (t *HTTPTransport) worker() {
 type HTTPSyncTransport struct {
 	dsn           *Dsn
 	client        *http.Client
-	transport     *http.Transport
+	transport     http.RoundTripper
 	disabledUntil time.Time
 
 	// HTTP Client request timeout. Defaults to 30 seconds.
