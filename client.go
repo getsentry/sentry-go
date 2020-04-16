@@ -87,7 +87,7 @@ type ClientOptions struct {
 	HTTPClient *http.Client
 	// An optional pointer to `http.Transport` that will be used with a default HTTPTransport.
 	// Using your own transport will make HTTPProxy, HTTPSProxy and CaCerts options ignored.
-	HTTPTransport *http.Transport
+	HTTPTransport http.RoundTripper
 	// An optional HTTP proxy to use.
 	// This will default to the `http_proxy` environment variable.
 	// or `https_proxy` if that one exists.
