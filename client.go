@@ -15,6 +15,15 @@ import (
 	"time"
 )
 
+// maxErrorDepth is the maximum number of errors reported in a chain of errors.
+// This protects the SDK from an arbitrarily long chain of wrapped errors.
+//
+// An additional consideration is that arguably reporting a long chain of errors
+// is of little use when debugging production errors with Sentry. The Sentry UI
+// is not optimized for long chains either. The top-level error together with a
+// stack trace is often the most useful information.
+const maxErrorDepth = 10
+
 // usageError is used to report to Sentry an SDK usage error.
 //
 // It is not exported because it is never returned by any function or method in
@@ -306,32 +315,46 @@ func (client *Client) eventFromMessage(message string, level Level) *Event {
 }
 
 func (client *Client) eventFromException(exception error, level Level) *Event {
-	if exception == nil {
-		exception = usageError{fmt.Errorf("%s called with nil error", callerFunctionName())}
+	err := exception
+	if err == nil {
+		err = usageError{fmt.Errorf("%s called with nil error", callerFunctionName())}
 	}
 
-	stacktrace := ExtractStacktrace(exception)
+	event := &Event{Level: level}
 
-	if stacktrace == nil {
-		stacktrace = NewStacktrace()
-	}
-
-	cause := exception
-	// Handle wrapped errors for github.com/pingcap/errors and github.com/pkg/errors
-	if ex, ok := exception.(interface{ Cause() error }); ok {
-		if c := ex.Cause(); c != nil {
-			cause = c
+	for i := 0; i < maxErrorDepth && err != nil; i++ {
+		event.Exception = append(event.Exception, Exception{
+			Value:      err.Error(),
+			Type:       reflect.TypeOf(err).String(),
+			Stacktrace: ExtractStacktrace(err),
+		})
+		if previous, ok := err.(interface{ Cause() error }); ok {
+			err = previous.Cause()
+		} else {
+			err = nil
 		}
 	}
 
-	event := NewEvent()
-	event.Level = level
-	event.Exception = []Exception{{
-		Value:      cause.Error(),
-		Type:       reflect.TypeOf(cause).String(),
-		Stacktrace: stacktrace,
-	}}
+	// Add a trace of the current stack to the most recent error in a chain if
+	// it doesn't have a stack trace yet.
+	// We only add to the most recent error to avoid duplication and because the
+	// current stack is most likely unrelated to errors deeper in the chain.
+	if event.Exception[0].Stacktrace == nil {
+		event.Exception[0].Stacktrace = NewStacktrace()
+	}
+
+	// event.Exception should be sorted such that the most recent error is last.
+	reverse(event.Exception)
+
 	return event
+}
+
+// reverse reverses the slice a in place.
+func reverse(a []Exception) {
+	for i := len(a)/2 - 1; i >= 0; i-- {
+		opp := len(a) - 1 - i
+		a[i], a[opp] = a[opp], a[i]
+	}
 }
 
 func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
