@@ -314,7 +314,9 @@ func (client *Client) eventFromMessage(message string, level Level) *Event {
 	return event
 }
 
-func (client *Client) eventFromException(exception error, level Level) *Event {
+// NewEventFromException creates a new Sentry event from a given error.
+// It will automatically populate the stack trace and unwrap supported error types.
+func NewEventFromException(exception error, level Level) *Event {
 	err := exception
 	if err == nil {
 		err = usageError{fmt.Errorf("%s called with nil error", callerFunctionName())}
@@ -350,6 +352,10 @@ func (client *Client) eventFromException(exception error, level Level) *Event {
 	reverse(event.Exception)
 
 	return event
+}
+
+func (client *Client) eventFromException(exception error, level Level) *Event {
+	return NewEventFromException(exception, level)
 }
 
 // reverse reverses the slice a in place.
