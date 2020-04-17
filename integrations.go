@@ -31,7 +31,7 @@ func (mi *modulesIntegration) processor(event *Event, hint *EventHint) *Event {
 		mi.once.Do(func() {
 			info, ok := debug.ReadBuildInfo()
 			if !ok {
-				Logger.Printf("The Modules integration is not available in binaries built without module support.")
+				Logger.Print("The Modules integration is not available in binaries built without module support.")
 				return
 			}
 			mi.modules = extractModules(info)
