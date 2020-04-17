@@ -4,6 +4,48 @@
 
 - "I am running away from my responsibilities. And it feels good." – Michael Scott, Season 4, "Money"
 
+## v0.6.0
+
+- feat: Read module dependencies from runtime/debug (#199)
+- feat: Support chained errors using Unwrap (#206)
+- feat: Report chain of errors when available (#185)
+- **[breaking]** fix: Accept http.RoundTripper to customize transport (#205)
+  Before the SDK accepted a concrete value of type `*http.Transport` in
+  `ClientOptions`, now it accepts any value implementing the `http.RoundTripper`
+  interface. Note that `*http.Transport` implements `http.RoundTripper`, so most
+  code bases will continue to work unchanged.  
+  Users of custom transport gain the ability to pass in other implementations of
+  `http.RoundTripper` and may be able to simplify their code bases.
+- fix: Do not panic when scope event processor drops event (#192)
+- **[breaking]** fix: Use time.Time for timestamps (#191)  
+  Users of sentry-go typically do not need to manipulate timestamps manually.
+  For those who do, the field type changed from `int64` to `time.Time`, which
+  should be more convenient to use. The recommended way to get the current time
+  is `time.Now().UTC()`.
+- fix: Report usage error including stack trace (#189)
+- feat: Add Exception.ThreadID field (#183)
+- ci: Test against Go 1.14, drop 1.11 (#170)
+- feat: Limit reading bytes from request bodies (#168)
+- **[breaking]** fix: Rename fasthttp integration package sentryhttp => sentryfasthttp  
+  The current recommendation is to use a named import, in which case existing
+  code should not require any change:
+  ```go
+  package main
+
+  import (
+  	"fmt"
+
+  	"github.com/getsentry/sentry-go"
+  	sentryfasthttp "github.com/getsentry/sentry-go/fasthttp"
+  	"github.com/valyala/fasthttp"
+  )
+  ```
+
+_NOTE:_
+This version includes some new features and a few breaking changes, none of
+which should pose troubles with upgrading. Most code bases should be able to
+upgrade without any changes.
+
 ## v0.5.1
 
 - fix: Ignore err.Cause() when it is nil (#160)
