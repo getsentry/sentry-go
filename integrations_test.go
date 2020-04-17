@@ -333,7 +333,7 @@ func TestExtractModules(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			assertEqual(t, tt.expected, extractModules(tt.info))
+			assertEqual(t, extractModules(tt.info), tt.expected)
 		})
 	}
 }
