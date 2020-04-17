@@ -3,7 +3,10 @@ package sentry
 import (
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestTransformStringsIntoRegexps(t *testing.T) {
@@ -237,4 +240,105 @@ func TestContextifyFramesNonexistingFilesShouldNotDropFrames(t *testing.T) {
 
 	contextifiedFrames := cfi.contextify(frames)
 	assertEqual(t, len(contextifiedFrames), len(frames))
+}
+
+func TestExtractModules(t *testing.T) {
+	tests := []struct {
+		name string
+		info *debug.BuildInfo
+		want map[string]string
+	}{
+		{
+			name: "no require modules",
+			info: &debug.BuildInfo{
+				Main: debug.Module{
+					Path:    "my/module",
+					Version: "(devel)",
+				},
+				Deps: []*debug.Module{},
+			},
+			want: map[string]string{
+				"my/module": "(devel)",
+			},
+		},
+		{
+			name: "have require modules",
+			info: &debug.BuildInfo{
+				Main: debug.Module{
+					Path:    "my/module",
+					Version: "(devel)",
+				},
+				Deps: []*debug.Module{
+					{
+						Path:    "github.com/getsentry/sentry-go",
+						Version: "v0.5.1",
+					},
+					{
+						Path:    "github.com/gin-gonic/gin",
+						Version: "v1.4.0",
+					},
+				},
+			},
+			want: map[string]string{
+				"my/module":                      "(devel)",
+				"github.com/getsentry/sentry-go": "v0.5.1",
+				"github.com/gin-gonic/gin":       "v1.4.0",
+			},
+		},
+		{
+			name: "replace module with local module",
+			info: &debug.BuildInfo{
+				Main: debug.Module{
+					Path:    "my/module",
+					Version: "(devel)",
+				},
+				Deps: []*debug.Module{
+					{
+						Path:    "github.com/getsentry/sentry-go",
+						Version: "v0.5.1",
+						Replace: &debug.Module{
+							Path: "pkg/sentry",
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"my/module":                      "(devel)",
+				"github.com/getsentry/sentry-go": "v0.5.1 => pkg/sentry",
+			},
+		},
+		{
+			name: "replace module with another remote module",
+			info: &debug.BuildInfo{
+				Main: debug.Module{
+					Path:    "my/module",
+					Version: "(devel)",
+				},
+				Deps: []*debug.Module{
+					{
+						Path:    "github.com/ugorji/go",
+						Version: "v1.1.4",
+						Replace: &debug.Module{
+							Path:    "github.com/ugorji/go/codec",
+							Version: "v0.0.0-20190204201341-e444a5086c43",
+						},
+					},
+				},
+			},
+			want: map[string]string{
+				"my/module":            "(devel)",
+				"github.com/ugorji/go": "v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractModules(tt.info)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("modules info mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
 }
