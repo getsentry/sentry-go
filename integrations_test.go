@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"runtime/debug"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestTransformStringsIntoRegexps(t *testing.T) {
@@ -242,9 +244,9 @@ func TestContextifyFramesNonexistingFilesShouldNotDropFrames(t *testing.T) {
 
 func TestExtractModules(t *testing.T) {
 	tests := []struct {
-		name     string
-		info     *debug.BuildInfo
-		expected map[string]string
+		name string
+		info *debug.BuildInfo
+		want map[string]string
 	}{
 		{
 			name: "no require modules",
@@ -255,7 +257,7 @@ func TestExtractModules(t *testing.T) {
 				},
 				Deps: []*debug.Module{},
 			},
-			expected: map[string]string{
+			want: map[string]string{
 				"my/module": "(devel)",
 			},
 		},
@@ -277,7 +279,7 @@ func TestExtractModules(t *testing.T) {
 					},
 				},
 			},
-			expected: map[string]string{
+			want: map[string]string{
 				"my/module":                      "(devel)",
 				"github.com/getsentry/sentry-go": "v0.5.1",
 				"github.com/gin-gonic/gin":       "v1.4.0",
@@ -300,7 +302,7 @@ func TestExtractModules(t *testing.T) {
 					},
 				},
 			},
-			expected: map[string]string{
+			want: map[string]string{
 				"my/module":                      "(devel)",
 				"github.com/getsentry/sentry-go": "v0.5.1 => pkg/sentry",
 			},
@@ -323,7 +325,7 @@ func TestExtractModules(t *testing.T) {
 					},
 				},
 			},
-			expected: map[string]string{
+			want: map[string]string{
 				"my/module":            "(devel)",
 				"github.com/ugorji/go": "v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43",
 			},
@@ -333,7 +335,10 @@ func TestExtractModules(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			assertEqual(t, extractModules(tt.info), tt.expected)
+			got := extractModules(tt.info)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("modules info mismatch (-want +got):\n%s", diff)
+			}
 		})
 	}
 }
