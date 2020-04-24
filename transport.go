@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -70,8 +71,8 @@ func getRequestBodyFromEvent(event *Event) []byte {
 		return body
 	}
 
-	partialMarshallMessage := "Original event couldn't be marshalled. Succeeded by stripping the data " +
-		"that uses interface{} type. Please verify that the data you attach to the scope is serializable."
+	partialMarshallMessage := fmt.Sprintf("Original event couldn't be marshalled: %s. Succeeded by stripping the data "+
+		"that uses interface{} type. Please verify that the data you attach to the scope is serializable.", err)
 	// Try to serialize the event, with all the contextual data that allows for interface{} stripped.
 	event.Breadcrumbs = nil
 	event.Contexts = nil
