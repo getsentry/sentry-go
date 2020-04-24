@@ -16,9 +16,6 @@ type unserializableType struct {
 }
 
 const basicEvent = "{\"message\":\"mkey\",\"sdk\":{},\"user\":{}}"
-const enhancedEvent = "{\"extra\":{\"info\":\"Original event couldn't be marshalled. Succeeded by stripping " +
-	"the data that uses interface{} type. Please verify that the data you attach to the scope is serializable.\"}," +
-	"\"message\":\"mkey\",\"sdk\":{},\"user\":{}}"
 
 func TestGetRequestBodyFromEventValid(t *testing.T) {
 	body := getRequestBodyFromEvent(&Event{
@@ -44,7 +41,8 @@ func TestGetRequestBodyFromEventInvalidBreadcrumbsField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEvent
+	want := `{"breadcrumbs":[{"data":{"wat":"\u003c\u003cUnmarshalable: json: ` +
+		`unsupported type: func()\u003e\u003e"}}],"message":"mkey","sdk":{},"user":{}}`
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -60,7 +58,8 @@ func TestGetRequestBodyFromEventInvalidExtraField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEvent
+	want := `{"extra":{"wat":"\u003c\u003cUnmarshalable: json: unsupported type: func()` +
+		`\u003e\u003e"},"message":"mkey","sdk":{},"user":{}}`
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -76,7 +75,8 @@ func TestGetRequestBodyFromEventInvalidContextField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEvent
+	want := `{"contexts":{"wat":"\u003c\u003cUnmarshalable: json: unsupported type:` +
+		` func()\u003e\u003e"},"message":"mkey","sdk":{},"user":{}}`
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -100,7 +100,11 @@ func TestGetRequestBodyFromEventMultipleInvalidFields(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEvent
+	want := `{"breadcrumbs":[{"data":{"wat":"\u003c\u003cUnmarshalable: json: ` +
+		`unsupported type: func()\u003e\u003e"}}],"contexts":` +
+		`{"wat":"\u003c\u003cUnmarshalable: json: unsupported type: func()\u003e\u003e"},` +
+		`"extra":{"wat":"\u003c\u003cUnmarshalable: json: unsupported type: func()` +
+		`\u003e\u003e"},"message":"mkey","sdk":{},"user":{}}`
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)

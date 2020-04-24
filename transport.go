@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -70,17 +71,15 @@ func getRequestBodyFromEvent(event *Event) []byte {
 		return body
 	}
 
-	partialMarshallMessage := "Original event couldn't be marshalled. Succeeded by stripping the data " +
-		"that uses interface{} type. Please verify that the data you attach to the scope is serializable."
-	// Try to serialize the event, with all the contextual data that allows for interface{} stripped.
-	event.Breadcrumbs = nil
-	event.Contexts = nil
-	event.Extra = map[string]interface{}{
-		"info": partialMarshallMessage,
+	// Try to serialize the event, with all unmarshalable data stripped
+	for i, crumb := range event.Breadcrumbs {
+		safeMarshal(fmt.Sprintf("Breadcrumb[%d].Data", i), crumb.Data)
 	}
+	safeMarshal("Contexts", event.Contexts)
+	safeMarshal("Extra", event.Extra)
+
 	body, err = json.Marshal(event)
 	if err == nil {
-		Logger.Println(partialMarshallMessage)
 		return body
 	}
 
@@ -90,6 +89,22 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	Logger.Println("Event couldn't be marshalled, even with stripped contextual data. Skipping delivery. " +
 		"Please notify the SDK owners with possibly broken payload.")
 	return nil
+}
+
+// safeMarshal
+func safeMarshal(label string, m map[string]interface{}) {
+	var err error
+	for key, value := range m {
+		var rawJSON json.RawMessage
+		rawJSON, err = json.Marshal(value)
+		if err != nil {
+			value = fmt.Sprintf("<<Unmarshalable: %s>>", err)
+			Logger.Printf("%s field %q unmarshalable: %s", label, key, err)
+		} else {
+			value = rawJSON
+		}
+		m[key] = value
+	}
 }
 
 // ================================
