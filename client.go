@@ -63,6 +63,10 @@ type ClientOptions struct {
 	Debug bool
 	// Configures whether SDK should generate and attach stacktraces to pure capture message calls.
 	AttachStacktrace bool
+	// StacktraceExtractor is a function to allow a custom implementation
+	// to extract a stack trace from a function. If not provided,
+	// ExtractStacktrace will be used.
+	StacktraceExtractor func(error) *Stacktrace
 	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0).
 	SampleRate float64
 	// List of regexp strings that will be used to match against event's message
@@ -139,6 +143,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	if options.Environment == "" {
 		options.Environment = os.Getenv("SENTRY_ENVIRONMENT")
+	}
+
+	if options.StacktraceExtractor == nil {
+		options.StacktraceExtractor = ExtractStacktrace
 	}
 
 	var dsn *Dsn
@@ -326,7 +334,7 @@ func (client *Client) eventFromException(exception error, level Level) *Event {
 		event.Exception = append(event.Exception, Exception{
 			Value:      err.Error(),
 			Type:       reflect.TypeOf(err).String(),
-			Stacktrace: ExtractStacktrace(err),
+			Stacktrace: client.options.StacktraceExtractor(err),
 		})
 		switch previous := err.(type) {
 		case interface{ Unwrap() error }:
