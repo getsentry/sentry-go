@@ -624,3 +624,35 @@ func TestEventProcessorsAddEventProcessor(t *testing.T) {
 		t.Error("event should be dropped")
 	}
 }
+
+func TestNilScope(t *testing.T) {
+	var scope *Scope
+
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: time.Now(), Message: "test"}, maxBreadcrumbs)
+	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+		return nil
+	})
+	if event := scope.ApplyToEvent(fillEventWithData(NewEvent()), nil); event != nil {
+		t.Error(event)
+	}
+	scope.Clear()
+	scope.ClearBreadcrumbs()
+	if s := scope.Clone(); s != nil {
+		t.Error(s)
+	}
+	scope.RemoveContext("key")
+	scope.RemoveExtra("key")
+	scope.RemoveTag("key")
+	scope.SetContext("zip", "zap")
+	scope.SetContexts(map[string]interface{}{"zip": "zap"})
+	scope.SetExtra("zip", "zap")
+	scope.SetExtras(map[string]interface{}{"zip": "zap"})
+	scope.SetFingerprint([]string{"fingerprint"})
+	scope.SetLevel(LevelInfo)
+	scope.SetRequest(httptest.NewRequest("GET", "/foo", nil))
+	scope.SetRequestBody([]byte("this is the body"))
+	scope.SetTag("zip", "zap")
+	scope.SetTags(map[string]string{"zip": "zap"})
+	scope.SetTransaction("transactionName")
+	scope.SetUser(User{ID: "foo"})
+}

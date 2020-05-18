@@ -2,9 +2,11 @@ package sentry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -404,4 +406,51 @@ func TestConcurrentHubClone(t *testing.T) {
 	})); diff != "" {
 		t.Errorf("Events mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func TestNilHub(t *testing.T) {
+	var hub *Hub
+
+	breadcrumb := &Breadcrumb{Message: "Breadcrumb"}
+	hub.AddBreadcrumb(breadcrumb, nil)
+	hub.BindClient(nil)
+	if id := hub.CaptureEvent(&Event{Message: "zip"}); id != nil {
+		t.Error(id)
+	}
+	if id := hub.CaptureException(errors.New("zip")); id != nil {
+		t.Error(id)
+	}
+	if id := hub.CaptureMessage("zip"); id != nil {
+		t.Error(id)
+	}
+	if client := hub.Client(); client != nil {
+		t.Error(client)
+	}
+	if h := hub.Clone(); h != nil {
+		t.Error(h)
+	}
+	hub.ConfigureScope(func(scope *Scope) {
+		scope.SetExtra("zip", "zap")
+	})
+	hub.Flush(10 * time.Second)
+	if id := hub.LastEventID(); id != "" {
+		t.Error(id)
+	}
+	hub.PopScope()
+	if scope := hub.PushScope(); scope != nil {
+		t.Error(scope)
+	}
+	if id := hub.Recover("zip"); id != nil {
+		t.Error(id)
+	}
+	if id := hub.RecoverWithContext(context.Background(), "zip"); id != nil {
+		t.Error(id)
+	}
+	if scope := hub.Scope(); scope != nil {
+		t.Error(scope)
+	}
+	hub.WithScope(func(scope *Scope) {
+		scope.SetExtra("zip", "zap")
+		hub.CaptureException(errors.New("problem"))
+	})
 }

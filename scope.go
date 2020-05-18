@@ -62,6 +62,9 @@ func NewScope() *Scope {
 // AddBreadcrumb adds new breadcrumb to the current scope
 // and optionally throws the old one if limit is reached.
 func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
+	if scope == nil {
+		return
+	}
 	if breadcrumb.Timestamp.IsZero() {
 		breadcrumb.Timestamp = time.Now().UTC()
 	}
@@ -79,6 +82,9 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 
 // ClearBreadcrumbs clears all breadcrumbs from the current scope.
 func (scope *Scope) ClearBreadcrumbs() {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -87,6 +93,9 @@ func (scope *Scope) ClearBreadcrumbs() {
 
 // SetUser sets the user for the current scope.
 func (scope *Scope) SetUser(user User) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -95,6 +104,9 @@ func (scope *Scope) SetUser(user User) {
 
 // SetRequest sets the request for the current scope.
 func (scope *Scope) SetRequest(r *http.Request) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -126,6 +138,9 @@ func (scope *Scope) SetRequest(r *http.Request) {
 // in memory. Typically, the request body is buffered lazily from the
 // Request.Body from SetRequest.
 func (scope *Scope) SetRequestBody(b []byte) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -186,6 +201,9 @@ type readCloser struct {
 
 // SetTag adds a tag to the current scope.
 func (scope *Scope) SetTag(key, value string) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -194,6 +212,9 @@ func (scope *Scope) SetTag(key, value string) {
 
 // SetTags assigns multiple tags to the current scope.
 func (scope *Scope) SetTags(tags map[string]string) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -204,6 +225,9 @@ func (scope *Scope) SetTags(tags map[string]string) {
 
 // RemoveTag removes a tag from the current scope.
 func (scope *Scope) RemoveTag(key string) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -212,6 +236,9 @@ func (scope *Scope) RemoveTag(key string) {
 
 // SetContext adds a context to the current scope.
 func (scope *Scope) SetContext(key string, value interface{}) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -220,6 +247,9 @@ func (scope *Scope) SetContext(key string, value interface{}) {
 
 // SetContexts assigns multiple contexts to the current scope.
 func (scope *Scope) SetContexts(contexts map[string]interface{}) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -230,6 +260,9 @@ func (scope *Scope) SetContexts(contexts map[string]interface{}) {
 
 // RemoveContext removes a context from the current scope.
 func (scope *Scope) RemoveContext(key string) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -238,6 +271,9 @@ func (scope *Scope) RemoveContext(key string) {
 
 // SetExtra adds an extra to the current scope.
 func (scope *Scope) SetExtra(key string, value interface{}) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -246,6 +282,9 @@ func (scope *Scope) SetExtra(key string, value interface{}) {
 
 // SetExtras assigns multiple extras to the current scope.
 func (scope *Scope) SetExtras(extra map[string]interface{}) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -256,6 +295,9 @@ func (scope *Scope) SetExtras(extra map[string]interface{}) {
 
 // RemoveExtra removes a extra from the current scope.
 func (scope *Scope) RemoveExtra(key string) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -264,6 +306,9 @@ func (scope *Scope) RemoveExtra(key string) {
 
 // SetFingerprint sets new fingerprint for the current scope.
 func (scope *Scope) SetFingerprint(fingerprint []string) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -272,6 +317,9 @@ func (scope *Scope) SetFingerprint(fingerprint []string) {
 
 // SetLevel sets new level for the current scope.
 func (scope *Scope) SetLevel(level Level) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -280,6 +328,9 @@ func (scope *Scope) SetLevel(level Level) {
 
 // SetTransaction sets new transaction name for the current transaction.
 func (scope *Scope) SetTransaction(transactionName string) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -288,6 +339,9 @@ func (scope *Scope) SetTransaction(transactionName string) {
 
 // Clone returns a copy of the current scope with all data copied over.
 func (scope *Scope) Clone() *Scope {
+	if scope == nil {
+		return nil
+	}
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
@@ -315,11 +369,17 @@ func (scope *Scope) Clone() *Scope {
 
 // Clear removes the data from the current scope. Not safe for concurrent use.
 func (scope *Scope) Clear() {
+	if scope == nil {
+		return
+	}
 	*scope = *NewScope()
 }
 
 // AddEventProcessor adds an event processor to the current scope.
 func (scope *Scope) AddEventProcessor(processor EventProcessor) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -328,6 +388,9 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
 func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
+	if scope == nil {
+		return nil
+	}
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 

@@ -82,6 +82,9 @@ func CurrentHub() *Hub {
 
 // LastEventID returns an ID of last captured event for the current `Hub`.
 func (hub *Hub) LastEventID() EventID {
+	if hub == nil {
+		return ""
+	}
 	return hub.lastEventID
 }
 
@@ -105,6 +108,9 @@ func (hub *Hub) stackTop() *layer {
 
 // Clone returns a copy of the current Hub with top-most scope and client copied over.
 func (hub *Hub) Clone() *Hub {
+	if hub == nil {
+		return nil
+	}
 	top := hub.stackTop()
 	if top == nil {
 		return nil
@@ -118,6 +124,9 @@ func (hub *Hub) Clone() *Hub {
 
 // Scope returns top-level `Scope` of the current `Hub` or `nil` if no `Scope` is bound.
 func (hub *Hub) Scope() *Scope {
+	if hub == nil {
+		return nil
+	}
 	top := hub.stackTop()
 	if top == nil {
 		return nil
@@ -127,6 +136,9 @@ func (hub *Hub) Scope() *Scope {
 
 // Scope returns top-level `Client` of the current `Hub` or `nil` if no `Client` is bound.
 func (hub *Hub) Client() *Client {
+	if hub == nil {
+		return nil
+	}
 	top := hub.stackTop()
 	if top == nil {
 		return nil
@@ -136,6 +148,9 @@ func (hub *Hub) Client() *Client {
 
 // PushScope pushes a new scope for the current `Hub` and reuses previously bound `Client`.
 func (hub *Hub) PushScope() *Scope {
+	if hub == nil {
+		return nil
+	}
 	top := hub.stackTop()
 
 	var client *Client
@@ -163,6 +178,9 @@ func (hub *Hub) PushScope() *Scope {
 
 // PushScope pops the most recent scope for the current `Hub`.
 func (hub *Hub) PopScope() {
+	if hub == nil {
+		return
+	}
 	hub.mu.Lock()
 	defer hub.mu.Unlock()
 
@@ -175,6 +193,9 @@ func (hub *Hub) PopScope() {
 
 // BindClient binds a new `Client` for the current `Hub`.
 func (hub *Hub) BindClient(client *Client) {
+	if hub == nil {
+		return
+	}
 	top := hub.stackTop()
 	if top != nil {
 		top.SetClient(client)
@@ -206,6 +227,9 @@ func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
 // passing it a top-level `Scope`.
 // Returns `EventID` if successfully, or `nil` if there's no `Scope` or `Client` available.
 func (hub *Hub) CaptureEvent(event *Event) *EventID {
+	if hub == nil {
+		return nil
+	}
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return nil
@@ -223,6 +247,9 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 // passing it a top-level `Scope`.
 // Returns `EventID` if successfully, or `nil` if there's no `Scope` or `Client` available.
 func (hub *Hub) CaptureMessage(message string) *EventID {
+	if hub == nil {
+		return nil
+	}
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return nil
@@ -240,6 +267,9 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 // passing it a top-level `Scope`.
 // Returns `EventID` if successfully, or `nil` if there's no `Scope` or `Client` available.
 func (hub *Hub) CaptureException(exception error) *EventID {
+	if hub == nil {
+		return nil
+	}
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return nil
@@ -258,6 +288,9 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 // The total number of breadcrumbs that can be recorded are limited by the
 // configuration on the client.
 func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
+	if hub == nil {
+		return
+	}
 	client := hub.Client()
 
 	// If there's no client, just store it on the scope straight away
