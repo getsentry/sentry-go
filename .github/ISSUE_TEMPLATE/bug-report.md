@@ -1,5 +1,5 @@
 ---
-name: Bug Report
+name: 🐞 Bug Report
 about: Something wrong with the Go SDK? Help us improve!
 title: ''
 labels: 'Type: Bug'
