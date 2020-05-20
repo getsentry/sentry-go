@@ -585,11 +585,10 @@ func TestEventProcessorsModifiesEvent(t *testing.T) {
 	processedEvent := scope.ApplyToEvent(event, nil)
 
 	if processedEvent == nil {
-		t.Error("event should not be dropped")
-	} else {
-		assertEqual(t, LevelFatal, processedEvent.Level)
-		assertEqual(t, []string{"wat"}, processedEvent.Fingerprint)
+		t.Fatal("event should not be dropped")
 	}
+	assertEqual(t, LevelFatal, processedEvent.Level)
+	assertEqual(t, []string{"wat"}, processedEvent.Fingerprint)
 }
 
 func TestEventProcessorsCanDropEvent(t *testing.T) {

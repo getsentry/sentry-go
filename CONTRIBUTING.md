@@ -1,3 +1,41 @@
+# Contributing to sentry-go
+
+Hey, thank you if you're reading this, we welcome your contribution!
+
+## Sending a Pull Request
+
+Please help us save time when reviewing your PR by following this simple
+process:
+
+1. Is your PR a simple typo fix? Read no further, __click that green "Create
+   pull request" button__!
+
+2. For more complex PRs that involve behavior changes or new APIs, please
+   consider [opening an __issue__][new-issue] describing the problem you're
+   trying to solve if there's not one already.
+
+   A PR is often one specific solution to a problem and sometimes talking about
+   the problem unfolds new possible solutions. Remember we will be responsible
+   for maintaining the changes later.
+
+3. Fixing a bug and changing a behavior? Please add automated tests to prevent
+   future regression.
+
+4. Practice writing good commit messages. We have [commit
+   guidelines][commit-guide].
+
+5. We have [guidelines for PR submitters][pr-guide]. A short summary:
+
+   - Good PR descriptions are very helpful and most of the time they include
+     __why__ something is done and why done in this particular way. Also list
+     other possible solutions that were considered and discarded.
+   - Be your own first reviewer. Make sure your code compiles and passes the
+     existing tests.
+
+[new-issue]: https://github.com/getsentry/sentry-go/issues/new/choose
+[commit-guide]: https://develop.sentry.dev/code-review/#commit-guidelines
+[pr-guide]: https://develop.sentry.dev/code-review/#guidelines-for-submitters
+
 ## Community
 
 The public-facing channels for support and development of Sentry SDKs can be found on [Discord](https://discord.gg/Ww9hbqr).
