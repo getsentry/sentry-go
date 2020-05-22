@@ -3,6 +3,7 @@
 ## Unreleased
 
 - "I am running away from my responsibilities. And it feels good." – Michael Scott, Season 4, "Money"
+- feat: Add option to compress requests with gzip (#231)
 
 ## v0.6.1
 
