@@ -48,6 +48,15 @@ func AddGlobalEventProcessor(processor EventProcessor) {
 	globalEventProcessors = append(globalEventProcessors, processor)
 }
 
+// Encoding represents encoding types for a request body
+type Encoding string
+
+// Enum representing possible encoding types
+const (
+	JSON Encoding = "json"
+	GZIP Encoding = "gzip"
+)
+
 // Integration allows for registering a functions that modify or discard captured events.
 type Integration interface {
 	Name() string
@@ -91,6 +100,10 @@ type ClientOptions struct {
 	Environment string
 	// Maximum number of breadcrumbs.
 	MaxBreadcrumbs int
+	// Decides how request body is encoded
+	// Current options are json and gzip
+	// Defaults to json
+	Encoding Encoding
 	// An optional pointer to `http.Client` that will be used with a default HTTPTransport.
 	// Using your own client will make HTTPTransport, HTTPProxy, HTTPSProxy and CaCerts options ignored.
 	HTTPClient *http.Client
@@ -139,6 +152,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	if options.Environment == "" {
 		options.Environment = os.Getenv("SENTRY_ENVIRONMENT")
+	}
+
+	if options.Encoding == "" {
+		options.Encoding = JSON
 	}
 
 	var dsn *Dsn

@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/tls"
 	"encoding/json"
 	"net/http"
@@ -92,6 +93,32 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
+func encodeBody(body []byte, encoding Encoding) (*bytes.Buffer, error) {
+	switch encoding {
+	case GZIP:
+		var b bytes.Buffer
+		w := gzip.NewWriter(&b)
+
+		_, err := w.Write(body)
+		if err != nil {
+			Logger.Printf("Event could not be compressed. Encoding with: %v", encoding)
+			return nil, err
+		}
+
+		err = w.Close()
+		if err != nil {
+			Logger.Printf("Event could not be compressed. Encoding with: %v", encoding)
+			return nil, err
+		}
+
+		return &b, nil
+	case JSON:
+		return bytes.NewBuffer(body), nil
+	default:
+		return bytes.NewBuffer(body), nil
+	}
+}
+
 // ================================
 // HTTPTransport
 // ================================
@@ -119,6 +146,8 @@ type HTTPTransport struct {
 	BufferSize int
 	// HTTP Client request timeout. Defaults to 30 seconds.
 	Timeout time.Duration
+	// How request bodies are encoded
+	Encoding Encoding
 
 	mu            sync.RWMutex
 	disabledUntil time.Time
@@ -170,6 +199,8 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		}
 	}
 
+	t.Encoding = options.Encoding
+
 	t.start.Do(func() {
 		go t.worker()
 	})
@@ -192,10 +223,15 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		return
 	}
 
+	encodedBody, err := encodeBody(body, t.Encoding)
+	if err != nil {
+		return
+	}
+
 	request, _ := http.NewRequest(
 		http.MethodPost,
 		t.dsn.StoreAPIURL().String(),
-		bytes.NewBuffer(body),
+		encodedBody,
 	)
 
 	for headerKey, headerValue := range t.dsn.RequestHeaders() {
@@ -341,6 +377,8 @@ type HTTPSyncTransport struct {
 
 	// HTTP Client request timeout. Defaults to 30 seconds.
 	Timeout time.Duration
+	// How request bodies are encoded
+	Encoding Encoding
 }
 
 // NewHTTPSyncTransport returns a new pre-configured instance of HTTPSyncTransport
@@ -370,6 +408,8 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 		}
 	}
 
+	t.Encoding = options.Encoding
+
 	if options.HTTPClient != nil {
 		t.client = options.HTTPClient
 	} else {
@@ -391,10 +431,15 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		return
 	}
 
+	encodedBody, err := encodeBody(body, t.Encoding)
+	if err != nil {
+		return
+	}
+
 	request, _ := http.NewRequest(
 		http.MethodPost,
 		t.dsn.StoreAPIURL().String(),
-		bytes.NewBuffer(body),
+		encodedBody,
 	)
 
 	for headerKey, headerValue := range t.dsn.RequestHeaders() {

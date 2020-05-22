@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 type unserializableType struct {
@@ -288,5 +290,32 @@ func TestHTTPTransport(t *testing.T) {
 			wg.Done()
 		}()
 		wg.Wait()
+	})
+}
+
+func TestEncodeBody(t *testing.T) {
+	t.Run("json", func(t *testing.T) {
+		body := getRequestBodyFromEvent(&Event{
+			Message: "test",
+		})
+
+		buffer, _ := encodeBody(body, JSON)
+		if diff := cmp.Diff(string(body), buffer.String()); diff != "" {
+			t.Errorf("Encoding mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("gzip", func(t *testing.T) {
+		body := getRequestBodyFromEvent(&Event{
+			Message: "test",
+		})
+
+		buffer, _ := encodeBody(body, GZIP)
+
+		bufferBytes := buffer.Bytes()
+		// Check first two bytes to see if it's valid gzip
+		if bufferBytes[0] != 31 || bufferBytes[1] != 139 {
+			t.Error("Request not compressed with gzip")
+		}
 	})
 }
