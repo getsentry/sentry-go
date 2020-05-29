@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -20,6 +22,7 @@ type Transport interface {
 	Flush(timeout time.Duration) bool
 	Configure(options ClientOptions)
 	SendEvent(event *Event)
+	SendTransaction(transaction *Transaction)
 }
 
 func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
@@ -90,6 +93,16 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	Logger.Println("Event couldn't be marshalled, even with stripped contextual data. Skipping delivery. " +
 		"Please notify the SDK owners with possibly broken payload.")
 	return nil
+}
+
+func getRequestBodyFromTransaction(t *Transaction) (envelope *bytes.Buffer, err error) {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+
+	fmt.Fprintf(&b, `{"sent_at":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano))
+	fmt.Fprint(&b, "\n", `{"type":"transaction"}`, "\n")
+	err = enc.Encode(t)
+	return &b, err
 }
 
 // ================================
@@ -173,6 +186,53 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 	t.start.Do(func() {
 		go t.worker()
 	})
+}
+
+// SendTransaction send a transaction to a remote server
+func (t *HTTPTransport) SendTransaction(transaction *Transaction) error {
+	if t.dsn == nil {
+		return errors.New("Invalid DSN. Not sending Transaction")
+	}
+
+	t.mu.RLock()
+	disabled := time.Now().Before(t.disabledUntil)
+	t.mu.RUnlock()
+	if disabled {
+		return errors.New("Transport is disabled, cannot send transaction")
+	}
+
+	body, err := getRequestBodyFromTransaction(transaction)
+	if err != nil {
+		return err
+	}
+
+	request, _ := http.NewRequest(
+		http.MethodPost,
+		t.dsn.EnvelopeAPIURL().String(),
+		body,
+	)
+
+	for headerKey, headerValue := range t.dsn.RequestHeaders() {
+		request.Header.Set(headerKey, headerValue)
+	}
+
+	b := <-t.buffer
+
+	select {
+	case b.items <- request:
+		Logger.Printf(
+			"Sending %s transaction [%s] to %s project: %d\n",
+			transaction.Level,
+			transaction.EventID,
+			t.dsn.host,
+			t.dsn.projectID,
+		)
+	default:
+		Logger.Println("Event dropped due to transport buffer being full.")
+	}
+
+	t.buffer <- b
+	return nil
 }
 
 // SendEvent assembles a new packet out of `Event` and sends it to remote server.

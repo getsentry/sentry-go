@@ -1,0 +1,34 @@
+{
+    "contexts": {
+        "trace": {
+            "trace_id": "d6c4f03650bd47699ec65c84352b6208",
+            "span_id": "442bd97bbe564317",
+            "op": "http.server",
+            "description": "/api/users/{user_id}"
+        }
+    },
+    "sdk": {},
+    "tags": {
+        "organization": "12345"
+    },
+    "timestamp": "1969-12-31T19:00:05-05:00",
+    "user": {},
+    "start_timestamp": "1969-12-31T19:00:00-05:00",
+    "spans": [
+        {
+            "trace_id": "d6c4f03650bd47699ec65c84352b6208",
+            "span_id": "1cc4b26ab9094ef0",
+            "parent_span_id": "442bd97bbe564317",
+            "description": "SELECT * FROM user WHERE \"user\".\"id\" = {id}",
+            "op": "db.sql",
+            "tags": {
+                "function_name": "get_users",
+                "status_message": "MYSQL OK"
+            },
+            "start_timestamp": "1969-12-31T19:00:00-05:00",
+            "timestamp": "1969-12-31T19:00:05-05:00",
+            "status": "ok"
+        }
+    ],
+    "type": "transaction"
+}

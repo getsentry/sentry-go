@@ -1,12 +1,21 @@
 package sentry
 
 import (
+	"bytes"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io/ioutil"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 )
+
+var update = flag.Bool("update", false, "update .golden files")
 
 func TestNewRequest(t *testing.T) {
 	const payload = `{"test_data": true}`
@@ -27,5 +36,82 @@ func TestNewRequest(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Request mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestMarshalStruct(t *testing.T) {
+	testSpan := &Span{
+		TraceID:      "d6c4f03650bd47699ec65c84352b6208",
+		SpanID:       "1cc4b26ab9094ef0",
+		ParentSpanID: "442bd97bbe564317",
+		Description:  `SELECT * FROM user WHERE "user"."id" = {id}`,
+		Op:           "db.sql",
+		Tags: map[string]string{
+			"function_name":  "get_users",
+			"status_message": "MYSQL OK",
+		},
+		StartTimestamp: time.Unix(0, 0),
+		EndTimestamp:   time.Unix(5, 0),
+		Status:         "ok",
+	}
+
+	testCases := []struct {
+		testName     string
+		sentryStruct interface{}
+	}{
+		{
+			testName:     "span",
+			sentryStruct: testSpan,
+		},
+		{
+			testName: "transaction",
+			sentryStruct: func() *Transaction {
+				event := NewEvent()
+
+				event.Contexts["trace"] = TraceContext{
+					TraceID:     "d6c4f03650bd47699ec65c84352b6208",
+					SpanID:      "442bd97bbe564317",
+					Op:          "http.server",
+					Description: "/api/users/{user_id}",
+				}
+
+				event.Tags["organization"] = "12345"
+				event.Timestamp = time.Unix(5, 0)
+
+				t := &Transaction{
+					sentryEvent:    (*sentryEvent)(event),
+					StartTimestamp: time.Unix(0, 0),
+					Spans:          []*Span{testSpan},
+				}
+
+				return t
+			}(),
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.testName, func(t *testing.T) {
+			got, err := json.MarshalIndent(test.sentryStruct, "", "    ")
+			if err != nil {
+				t.Error(err)
+			}
+
+			golden := filepath.Join(".", "testdata", fmt.Sprintf("%s.golden", test.testName))
+			if *update {
+				err := ioutil.WriteFile(golden, got, 0644)
+				if err != nil {
+					t.Error(err)
+				}
+			}
+
+			want, err := ioutil.ReadFile(golden)
+			if err != nil {
+				t.Error(err)
+			}
+
+			if !bytes.Equal(got, want) {
+				t.Errorf("struct %s\n\tgot:\n%s\n\twant:\n%s", test.testName, got, want)
+			}
+		})
 	}
 }

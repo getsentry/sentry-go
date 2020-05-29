@@ -10,9 +10,10 @@ import (
 )
 
 type DsnTest struct {
-	in  string
-	dsn *Dsn   // expected value after parsing
-	url string // expected Store API URL
+	in     string
+	dsn    *Dsn   // expected value after parsing
+	url    string // expected Store API URL
+	envURL string // expected Envelope API URL
 }
 
 //nolint: gochecknoglobals
@@ -28,7 +29,8 @@ var dsnTests = map[string]DsnTest{
 			path:      "/foo/bar",
 			projectID: 42,
 		},
-		url: "https://domain:8888/foo/bar/api/42/store/",
+		url:    "https://domain:8888/foo/bar/api/42/store/",
+		envURL: "https://domain:8888/foo/bar/api/42/envelope/",
 	},
 	"MinimalSecure": {
 		in: "https://public@domain/42",
@@ -39,7 +41,8 @@ var dsnTests = map[string]DsnTest{
 			port:      443,
 			projectID: 42,
 		},
-		url: "https://domain/api/42/store/",
+		url:    "https://domain/api/42/store/",
+		envURL: "https://domain/api/42/envelope/",
 	},
 	"MinimalInsecure": {
 		in: "http://public@domain/42",
@@ -50,7 +53,8 @@ var dsnTests = map[string]DsnTest{
 			port:      80,
 			projectID: 42,
 		},
-		url: "http://domain/api/42/store/",
+		url:    "http://domain/api/42/store/",
+		envURL: "http://domain/api/42/envelope/",
 	},
 }
 
@@ -70,6 +74,11 @@ func TestNewDsn(t *testing.T) {
 			url := dsn.StoreAPIURL().String()
 			if diff := cmp.Diff(tt.url, url); diff != "" {
 				t.Errorf("dsn.StoreAPIURL() mismatch (-want +got):\n%s", diff)
+			}
+			// Envelope API URL
+			url = dsn.EnvelopeAPIURL().String()
+			if diff := cmp.Diff(tt.envURL, url); diff != "" {
+				t.Errorf("dsn.EnvelopeAPIURL() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
