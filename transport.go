@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -22,7 +20,6 @@ type Transport interface {
 	Flush(timeout time.Duration) bool
 	Configure(options ClientOptions)
 	SendEvent(event *Event)
-	SendTransaction(transaction *Transaction)
 }
 
 func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
@@ -95,15 +92,15 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
-func getRequestBodyFromTransaction(t *Transaction) (envelope *bytes.Buffer, err error) {
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
+// func getRequestBodyFromTransaction(t *Transaction) (envelope *bytes.Buffer, err error) {
+// 	var b bytes.Buffer
+// 	enc := json.NewEncoder(&b)
 
-	fmt.Fprintf(&b, `{"sent_at":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano))
-	fmt.Fprint(&b, "\n", `{"type":"transaction"}`, "\n")
-	err = enc.Encode(t)
-	return &b, err
-}
+// 	fmt.Fprintf(&b, `{"sent_at":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano))
+// 	fmt.Fprint(&b, "\n", `{"type":"transaction"}`, "\n")
+// 	err = enc.Encode(t)
+// 	return &b, err
+// }
 
 // ================================
 // HTTPTransport
@@ -188,53 +185,6 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 	})
 }
 
-// SendTransaction send a transaction to a remote server
-func (t *HTTPTransport) SendTransaction(transaction *Transaction) error {
-	if t.dsn == nil {
-		return errors.New("Invalid DSN. Not sending Transaction")
-	}
-
-	t.mu.RLock()
-	disabled := time.Now().Before(t.disabledUntil)
-	t.mu.RUnlock()
-	if disabled {
-		return errors.New("Transport is disabled, cannot send transaction")
-	}
-
-	body, err := getRequestBodyFromTransaction(transaction)
-	if err != nil {
-		return err
-	}
-
-	request, _ := http.NewRequest(
-		http.MethodPost,
-		t.dsn.EnvelopeAPIURL().String(),
-		body,
-	)
-
-	for headerKey, headerValue := range t.dsn.RequestHeaders() {
-		request.Header.Set(headerKey, headerValue)
-	}
-
-	b := <-t.buffer
-
-	select {
-	case b.items <- request:
-		Logger.Printf(
-			"Sending %s transaction [%s] to %s project: %d\n",
-			transaction.Level,
-			transaction.EventID,
-			t.dsn.host,
-			t.dsn.projectID,
-		)
-	default:
-		Logger.Println("Event dropped due to transport buffer being full.")
-	}
-
-	t.buffer <- b
-	return nil
-}
-
 // SendEvent assembles a new packet out of `Event` and sends it to remote server.
 func (t *HTTPTransport) SendEvent(event *Event) {
 	if t.dsn == nil {
@@ -254,6 +204,8 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 
 	request, _ := http.NewRequest(
 		http.MethodPost,
+		// Need to skip before send
+		// TODO: Change based on event.type
 		t.dsn.StoreAPIURL().String(),
 		bytes.NewBuffer(body),
 	)

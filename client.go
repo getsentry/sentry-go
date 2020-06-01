@@ -380,7 +380,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		return nil
 	}
 
-	if options.BeforeSend != nil {
+	if event.Type != "transaction" && options.BeforeSend != nil {
 		h := &EventHint{}
 		if hint != nil {
 			h = hint

@@ -143,7 +143,40 @@ type Exception struct {
 
 type EventID string
 
-// Events are the fundamental data structure that are send to Sentry
+// TraceContext describes the context of the trace.
+type TraceContext struct {
+	TraceID     string `json:"trace_id"`
+	SpanID      string `json:"span_id"`
+	Op          string `json:"op,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// Span describes a AM Span following the Sentry format.
+// Experimental: This is part of a beta feature of the SDK
+type Span struct {
+	TraceID        string            `json:"trace_id"`
+	SpanID         string            `json:"span_id"`
+	ParentSpanID   string            `json:"parent_span_id,omitempty"`
+	Description    string            `json:"description,omitempty"`
+	Op             string            `json:"op,omitempty"`
+	Tags           map[string]string `json:"tags,omitempty"`
+	StartTimestamp time.Time         `json:"start_timestamp"`
+	EndTimestamp   time.Time         `json:"timestamp"`
+	Status         string            `json:"status"`
+}
+
+// MarshalJSON converts the Span struct to JSON.
+func (s *Span) MarshalJSON() ([]byte, error) {
+	type alias Span
+
+	return json.Marshal(&struct {
+		*alias
+	}{
+		alias: (*alias)(s),
+	})
+}
+
+// Event is the fundamental data structure that is sent to Sentry
 type Event struct {
 	Type        string                 `json:"type,omitempty"`
 	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs,omitempty"`
@@ -168,8 +201,13 @@ type Event struct {
 	Modules     map[string]string      `json:"modules,omitempty"`
 	Request     *Request               `json:"request,omitempty"`
 	Exception   []Exception            `json:"exception,omitempty"`
+	// Experimental: This is part of a beta feature of the SDK
+	StartTimestamp time.Time `json:"start_timestamp"`
+	// Experimental: This is part of a beta feature of the SDK
+	Spans []*Span `json:"spans,omitempty"`
 }
 
+// MarshalJSON converts the Event struct to JSON.
 func (e *Event) MarshalJSON() ([]byte, error) {
 	type alias Event
 	// encoding/json doesn't support the "omitempty" option for struct types.
@@ -177,10 +215,25 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 	// This implementation of MarshalJSON shadows the original Timestamp field
 	// forcing it to be omitted when the Timestamp is the zero value of
 	// time.Time.
-	if e.Timestamp.IsZero() {
+	if e.Timestamp.IsZero() && e.StartTimestamp.IsZero() {
+		return json.Marshal(&struct {
+			*alias
+			Timestamp      json.RawMessage `json:"timestamp,omitempty"`
+			StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
+		}{
+			alias: (*alias)(e),
+		})
+	} else if e.Timestamp.IsZero() {
 		return json.Marshal(&struct {
 			*alias
 			Timestamp json.RawMessage `json:"timestamp,omitempty"`
+		}{
+			alias: (*alias)(e),
+		})
+	} else if e.StartTimestamp.IsZero() {
+		return json.Marshal(&struct {
+			*alias
+			StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
 		}{
 			alias: (*alias)(e),
 		})
@@ -219,82 +272,4 @@ type EventHint struct {
 	Context            context.Context
 	Request            *http.Request
 	Response           *http.Response
-}
-
-// Span describes a AM Span following the Sentry format.
-type Span struct {
-	TraceID        string            `json:"trace_id"`
-	SpanID         string            `json:"span_id"`
-	ParentSpanID   string            `json:"parent_span_id,omitempty"`
-	Description    string            `json:"description,omitempty"`
-	Op             string            `json:"op,omitempty"`
-	Tags           map[string]string `json:"tags,omitempty"`
-	StartTimestamp time.Time         `json:"start_timestamp"`
-	EndTimestamp   time.Time         `json:"timestamp"`
-	Status         string            `json:"status"`
-}
-
-// MarshalJSON converts the Span struct to JSON.
-func (s *Span) MarshalJSON() ([]byte, error) {
-	type alias Span
-
-	if s.EndTimestamp.IsZero() || s.StartTimestamp.IsZero() {
-		return json.Marshal(&struct {
-			*alias
-			StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
-			EndTimestamp   json.RawMessage `json:"timestamp,omitempty"`
-		}{
-			alias: (*alias)(s),
-		})
-	}
-
-	return json.Marshal(&struct {
-		*alias
-	}{
-		alias: (*alias)(s),
-	})
-}
-
-// SentryEvent aliases the sentry Event type.
-// Needed to Marshal the transactions into JSON properly.
-type sentryEvent Event
-
-// TraceContext describes the trace context of a transaction.
-type TraceContext struct {
-	TraceID     string `json:"trace_id"`
-	SpanID      string `json:"span_id"`
-	Op          string `json:"op,omitempty"`
-	Description string `json:"description,omitempty"`
-}
-
-// Transaction describes a Sentry Transaction.
-type Transaction struct {
-	*sentryEvent
-	StartTimestamp time.Time `json:"start_timestamp"`
-	Spans          []*Span   `json:"spans,omitempty"`
-}
-
-// MarshalJSON converts the Transaction struct to JSON.
-func (t *Transaction) MarshalJSON() ([]byte, error) {
-	type alias Transaction
-
-	if t.Timestamp.IsZero() || t.StartTimestamp.IsZero() {
-		return json.Marshal(&struct {
-			*alias
-			StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
-			EndTimestamp   json.RawMessage `json:"timestamp,omitempty"`
-			Type           string          `json:"type"`
-		}{
-			Type:  "transaction",
-			alias: (*alias)(t),
-		})
-	}
-
-	return json.Marshal(&struct {
-		*alias
-		Type string `json:"type"`
-	}{
-		Type:  "transaction",
-		alias: (*alias)(t),
-	})
 }

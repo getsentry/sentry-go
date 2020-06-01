@@ -63,30 +63,6 @@ func TestMarshalStruct(t *testing.T) {
 			testName:     "span",
 			sentryStruct: testSpan,
 		},
-		{
-			testName: "transaction",
-			sentryStruct: func() *Transaction {
-				event := NewEvent()
-
-				event.Contexts["trace"] = TraceContext{
-					TraceID:     "d6c4f03650bd47699ec65c84352b6208",
-					SpanID:      "442bd97bbe564317",
-					Op:          "http.server",
-					Description: "/api/users/{user_id}",
-				}
-
-				event.Tags["organization"] = "12345"
-				event.Timestamp = time.Unix(5, 0)
-
-				t := &Transaction{
-					sentryEvent:    (*sentryEvent)(event),
-					StartTimestamp: time.Unix(0, 0),
-					Spans:          []*Span{testSpan},
-				}
-
-				return t
-			}(),
-		},
 	}
 
 	for _, test := range testCases {
