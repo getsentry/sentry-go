@@ -16,6 +16,9 @@ import (
 // Level marks the severity of the event
 type Level string
 
+// transactionType refers to an transaction event
+const transactionType = "transaction"
+
 const (
 	LevelDebug   Level = "debug"
 	LevelInfo    Level = "info"
@@ -223,14 +226,18 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 		}{
 			alias: (*alias)(e),
 		})
-	} else if e.Timestamp.IsZero() {
+	}
+
+	if e.Timestamp.IsZero() {
 		return json.Marshal(&struct {
 			*alias
 			Timestamp json.RawMessage `json:"timestamp,omitempty"`
 		}{
 			alias: (*alias)(e),
 		})
-	} else if e.StartTimestamp.IsZero() {
+	}
+
+	if e.StartTimestamp.IsZero() {
 		return json.Marshal(&struct {
 			*alias
 			StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
@@ -238,6 +245,7 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 			alias: (*alias)(e),
 		})
 	}
+
 	return json.Marshal(&struct {
 		*alias
 	}{

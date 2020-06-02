@@ -109,7 +109,7 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (*http.Request, error) {
 		return nil, errors.New("event could not be marshalled")
 	}
 
-	if event.Type == "transaction" {
+	if event.Type == transactionType {
 		env := getEnvelopeFromBody(body)
 		request, _ := http.NewRequest(
 			http.MethodPost,

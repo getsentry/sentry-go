@@ -175,7 +175,7 @@ func TestGetRequestFromEvent(t *testing.T) {
 			testName: "Transaction",
 			event: func() *Event {
 				event := NewEvent()
-				event.Type = "transaction"
+				event.Type = transactionType
 
 				return event
 			}(),
@@ -184,6 +184,7 @@ func TestGetRequestFromEvent(t *testing.T) {
 	}
 
 	for _, test := range testCases {
+		test := test
 		t.Run(test.testName, func(t *testing.T) {
 			dsn, err := NewDsn("https://key@host/path/42")
 			if err != nil {

@@ -15,7 +15,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-var update = flag.Bool("update", false, "update .golden files")
+var update = flag.Bool("update", false, "update .golden files") //nolint: gochecknoglobals
 
 func TestNewRequest(t *testing.T) {
 	const payload = `{"test_data": true}`
@@ -66,6 +66,7 @@ func TestMarshalStruct(t *testing.T) {
 	}
 
 	for _, test := range testCases {
+		test := test
 		t.Run(test.testName, func(t *testing.T) {
 			got, err := json.MarshalIndent(test.sentryStruct, "", "    ")
 			if err != nil {
@@ -74,7 +75,7 @@ func TestMarshalStruct(t *testing.T) {
 
 			golden := filepath.Join(".", "testdata", fmt.Sprintf("%s.golden", test.testName))
 			if *update {
-				err := ioutil.WriteFile(golden, got, 0644)
+				err := ioutil.WriteFile(golden, got, 0600)
 				if err != nil {
 					t.Error(err)
 				}
