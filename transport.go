@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -92,15 +94,40 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
-// func getRequestBodyFromTransaction(t *Transaction) (envelope *bytes.Buffer, err error) {
-// 	var b bytes.Buffer
-// 	enc := json.NewEncoder(&b)
+func getEnvelopeFromBody(body []byte) *bytes.Buffer {
+	var b bytes.Buffer
+	fmt.Fprintf(&b, `{"sent_at":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano))
+	fmt.Fprint(&b, "\n", `{"type":"transaction"}`, "\n")
+	b.Write(body)
+	b.WriteString("\n")
+	return &b
+}
 
-// 	fmt.Fprintf(&b, `{"sent_at":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano))
-// 	fmt.Fprint(&b, "\n", `{"type":"transaction"}`, "\n")
-// 	err = enc.Encode(t)
-// 	return &b, err
-// }
+func getRequestFromEvent(event *Event, dsn *Dsn) (*http.Request, error) {
+	body := getRequestBodyFromEvent(event)
+	if body == nil {
+		return nil, errors.New("event could not be marshalled")
+	}
+
+	if event.Type == "transaction" {
+		env := getEnvelopeFromBody(body)
+		request, _ := http.NewRequest(
+			http.MethodPost,
+			dsn.EnvelopeAPIURL().String(),
+			env,
+		)
+
+		return request, nil
+	}
+
+	request, _ := http.NewRequest(
+		http.MethodPost,
+		dsn.StoreAPIURL().String(),
+		bytes.NewBuffer(body),
+	)
+
+	return request, nil
+}
 
 // ================================
 // HTTPTransport
@@ -197,18 +224,10 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		return
 	}
 
-	body := getRequestBodyFromEvent(event)
-	if body == nil {
+	request, err := getRequestFromEvent(event, t.dsn)
+	if err != nil {
 		return
 	}
-
-	request, _ := http.NewRequest(
-		http.MethodPost,
-		// Need to skip before send
-		// TODO: Change based on event.type
-		t.dsn.StoreAPIURL().String(),
-		bytes.NewBuffer(body),
-	)
 
 	for headerKey, headerValue := range t.dsn.RequestHeaders() {
 		request.Header.Set(headerKey, headerValue)

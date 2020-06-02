@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -122,6 +123,86 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 
 	if body != nil {
 		t.Error("expected body to be nil")
+	}
+}
+
+func TestGetEnvelopeFromBody(t *testing.T) {
+	body := getRequestBodyFromEvent(&Event{
+		Message: "testing",
+	})
+	env := getEnvelopeFromBody(body)
+	envString := env.String()
+	envParts := strings.Split(envString, "\n")
+
+	if len(envParts) != 4 {
+		t.Errorf("\"%s\" should have len of 4, instead has len of %d", envParts, len(envParts))
+	}
+
+	if envParts[3] != "" {
+		t.Errorf("\"%s\" is not empty", envParts[3])
+	}
+
+	var header map[string]interface{}
+	err := json.Unmarshal([]byte(envParts[0]), &header)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sentAtStr := header["sent_at"].(string)
+	if sentAtStr == "" {
+		t.Error("sent_at was not set in header")
+	}
+
+	payload := envParts[2]
+	if payload == "" {
+		t.Error("Item payload is empty")
+	}
+}
+
+func TestGetRequestFromEvent(t *testing.T) {
+	testCases := []struct {
+		testName string
+		// input
+		event *Event
+		// output
+		apiURL string
+	}{
+		{
+			testName: "Sample Event",
+			event:    NewEvent(),
+			apiURL:   "https://host/path/api/42/store/",
+		},
+		{
+			testName: "Transaction",
+			event: func() *Event {
+				event := NewEvent()
+				event.Type = "transaction"
+
+				return event
+			}(),
+			apiURL: "https://host/path/api/42/envelope/",
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.testName, func(t *testing.T) {
+			dsn, err := NewDsn("https://key@host/path/42")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			req, err := getRequestFromEvent(test.event, dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if req.Method != http.MethodPost {
+				t.Errorf("Request %v using http method: %s, supposed to use method: %s", req, req.Method, http.MethodPost)
+			}
+
+			if req.URL.String() != test.apiURL {
+				t.Errorf("Incorrect API URL. want: %s, got: %s", test.apiURL, req.URL.String())
+			}
+		})
 	}
 }
 
