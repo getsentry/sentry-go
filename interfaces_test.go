@@ -50,8 +50,8 @@ func TestMarshalStruct(t *testing.T) {
 			"function_name":  "get_users",
 			"status_message": "MYSQL OK",
 		},
-		StartTimestamp: time.Unix(0, 0),
-		EndTimestamp:   time.Unix(5, 0),
+		StartTimestamp: time.Unix(0, 0).UTC(),
+		EndTimestamp:   time.Unix(5, 0).UTC(),
 		Status:         "ok",
 	}
 
