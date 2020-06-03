@@ -67,11 +67,7 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 			alias: (*alias)(b),
 		})
 	}
-	return json.Marshal(&struct {
-		*alias
-	}{
-		alias: (*alias)(b),
-	})
+	return json.Marshal((*alias)(b))
 }
 
 // https://docs.sentry.io/development/sdk-dev/event-payloads/user/
@@ -184,11 +180,7 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 			alias: (*alias)(e),
 		})
 	}
-	return json.Marshal(&struct {
-		*alias
-	}{
-		alias: (*alias)(e),
-	})
+	return json.Marshal((*alias)(e))
 }
 
 func NewEvent() *Event {
