@@ -173,7 +173,6 @@ type Event struct {
 
 	// Experimental: This is part of a beta feature of the SDK. The fields below
 	// are only relevant for transactions.
-
 	Type           string    `json:"type,omitempty"`
 	StartTimestamp time.Time `json:"start_timestamp"`
 	Spans          []*Span   `json:"spans,omitempty"`
