@@ -156,12 +156,14 @@ func getAPIURL(dsn Dsn, s string) *url.URL {
 	return parsedURL
 }
 
-// StoreAPIURL returns assembled url that points to store endpoint
+// StoreAPIURL returns the URL of the store endpoint of the project associated
+// with the DSN.
 func (dsn Dsn) StoreAPIURL() *url.URL {
 	return getAPIURL(dsn, "store")
 }
 
-// EnvelopeAPIURL returns assembled url that points to the envelope endpoint
+// EnvelopeAPIURL returns the URL of the envelope endpoint of the project
+// associated with the DSN.
 func (dsn Dsn) EnvelopeAPIURL() *url.URL {
 	return getAPIURL(dsn, "envelope")
 }
