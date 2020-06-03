@@ -23,9 +23,6 @@ const enhancedEvent = "{\"extra\":{\"info\":\"Original event couldn't be marshal
 	"the data that uses interface{} type. Please verify that the data you attach to the scope is serializable.\"}," +
 	"\"message\":\"mkey\",\"sdk\":{},\"user\":{}}"
 
-const envPayload = `{"type":"transaction"}` +
-	`{"type":"transaction","sdk":{},"timestamp":"1970-01-01T00:00:05Z","user":{},"start_timestamp":"1970-01-01T00:00:03Z"}`
-
 func TestGetRequestBodyFromEventValid(t *testing.T) {
 	body := getRequestBodyFromEvent(&Event{
 		Message: "mkey",
@@ -138,30 +135,14 @@ func TestGetEnvelopeFromBody(t *testing.T) {
 		StartTimestamp: time.Unix(3, 0).UTC(),
 		Timestamp:      time.Unix(5, 0).UTC(),
 	})
-	env := getEnvelopeFromBody(body)
-	envString := env.String()
-	envParts := strings.Split(envString, "\n")
-
-	if len(envParts) != 4 {
-		t.Errorf("\"%s\" should have len of 4, instead has len of %d", envParts, len(envParts))
-	}
-
-	if envParts[3] != "" {
-		t.Errorf("\"%s\" is not empty", envParts[3])
-	}
-
-	var header map[string]interface{}
-	err := json.Unmarshal([]byte(envParts[0]), &header)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sentAtStr := header["sent_at"].(string)
-	if sentAtStr == "" {
-		t.Error("sent_at was not set in header")
-	}
-
-	want := envParts[1] + envParts[2]
-	got := envPayload
+	env := getEnvelopeFromBody(body, time.Unix(6, 0))
+	want := env.String()
+	got := strings.Join([]string{
+		"{\"sent_at\":\"1970-01-01T00:00:06Z\"}\n",
+		"{\"type\":\"transaction\"}\n",
+		"{\"type\":\"transaction\",\"sdk\":{},\"timestamp\":\"1970-01-01T00:00:05Z\",",
+		"\"user\":{},\"start_timestamp\":\"1970-01-01T00:00:03Z\"}\n",
+	}, "")
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}

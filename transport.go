@@ -94,9 +94,9 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
-func getEnvelopeFromBody(body []byte) *bytes.Buffer {
+func getEnvelopeFromBody(body []byte, now time.Time) *bytes.Buffer {
 	var b bytes.Buffer
-	fmt.Fprintf(&b, `{"sent_at":"%s"}`, time.Now().UTC().Format(time.RFC3339Nano))
+	fmt.Fprintf(&b, `{"sent_at":"%s"}`, now.UTC().Format(time.RFC3339Nano))
 	fmt.Fprint(&b, "\n", `{"type":"transaction"}`, "\n")
 	b.Write(body)
 	b.WriteString("\n")
@@ -110,7 +110,7 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (*http.Request, error) {
 	}
 
 	if event.Type == transactionType {
-		env := getEnvelopeFromBody(body)
+		env := getEnvelopeFromBody(body, time.Now())
 		request, _ := http.NewRequest(
 			http.MethodPost,
 			dsn.EnvelopeAPIURL().String(),
