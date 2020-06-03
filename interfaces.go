@@ -16,7 +16,7 @@ import (
 // Level marks the severity of the event
 type Level string
 
-// transactionType refers to an transaction event
+// transactionType is the type of a transaction event.
 const transactionType = "transaction"
 
 const (
@@ -147,6 +147,7 @@ type Exception struct {
 type EventID string
 
 // TraceContext describes the context of the trace.
+// Experimental: This is part of a beta feature of the SDK.
 type TraceContext struct {
 	TraceID     string `json:"trace_id"`
 	SpanID      string `json:"span_id"`
@@ -154,8 +155,8 @@ type TraceContext struct {
 	Description string `json:"description,omitempty"`
 }
 
-// Span describes a AM Span following the Sentry format.
-// Experimental: This is part of a beta feature of the SDK
+// Span describes a timed unit of work in a trace.
+// Experimental: This is part of a beta feature of the SDK.
 type Span struct {
 	TraceID        string            `json:"trace_id"`
 	SpanID         string            `json:"span_id"`
@@ -166,17 +167,6 @@ type Span struct {
 	StartTimestamp time.Time         `json:"start_timestamp"`
 	EndTimestamp   time.Time         `json:"timestamp"`
 	Status         string            `json:"status"`
-}
-
-// MarshalJSON converts the Span struct to JSON.
-func (s *Span) MarshalJSON() ([]byte, error) {
-	type alias Span
-
-	return json.Marshal(&struct {
-		*alias
-	}{
-		alias: (*alias)(s),
-	})
 }
 
 // Event is the fundamental data structure that is sent to Sentry
@@ -213,34 +203,28 @@ type Event struct {
 // MarshalJSON converts the Event struct to JSON.
 func (e *Event) MarshalJSON() ([]byte, error) {
 	type alias Event
+
+	if e.Type == transactionType {
+		return json.Marshal(&struct {
+			*alias
+		}{
+			alias: (*alias)(e),
+		})
+	}
+
 	// encoding/json doesn't support the "omitempty" option for struct types.
 	// See https://golang.org/issues/11939.
 	// This implementation of MarshalJSON shadows the original Timestamp field
 	// forcing it to be omitted when the Timestamp is the zero value of
 	// time.Time.
-	if e.Timestamp.IsZero() && e.StartTimestamp.IsZero() {
-		return json.Marshal(&struct {
-			*alias
-			Timestamp      json.RawMessage `json:"timestamp,omitempty"`
-			StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
-		}{
-			alias: (*alias)(e),
-		})
-	}
-
+	// Transaction specific fields should also be removed.
 	if e.Timestamp.IsZero() {
 		return json.Marshal(&struct {
 			*alias
-			Timestamp json.RawMessage `json:"timestamp,omitempty"`
-		}{
-			alias: (*alias)(e),
-		})
-	}
-
-	if e.StartTimestamp.IsZero() {
-		return json.Marshal(&struct {
-			*alias
-			StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
+			Timestamp      json.RawMessage `json:"timestamp,omitempty"`
+			StartTimestamp string          `json:"start_timestamp,omitempty"`
+			Spans          []*Span         `json:"spans,omitempty"`
+			Type           string          `json:"type,omitempty"`
 		}{
 			alias: (*alias)(e),
 		})
@@ -248,6 +232,9 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 
 	return json.Marshal(&struct {
 		*alias
+		StartTimestamp string  `json:"start_timestamp,omitempty"`
+		Spans          []*Span `json:"spans,omitempty"`
+		Type           string  `json:"type,omitempty"`
 	}{
 		alias: (*alias)(e),
 	})

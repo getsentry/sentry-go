@@ -1,7 +1,6 @@
 package sentry
 
 import (
-	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -39,7 +38,33 @@ func TestNewRequest(t *testing.T) {
 	}
 }
 
-func TestMarshalStruct(t *testing.T) {
+func TestEventMarshalJSON(t *testing.T) {
+	event := NewEvent()
+	event.Spans = []*Span{{
+		TraceID:        "d6c4f03650bd47699ec65c84352b6208",
+		SpanID:         "1cc4b26ab9094ef0",
+		ParentSpanID:   "442bd97bbe564317",
+		StartTimestamp: time.Unix(8, 0).UTC(),
+		EndTimestamp:   time.Unix(10, 0).UTC(),
+		Status:         "ok",
+	}}
+	event.StartTimestamp = time.Unix(7, 0).UTC()
+	event.Timestamp = time.Unix(14, 0).UTC()
+
+	got, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Non transaction event should not have fields Spans, StartTimestamp and Timestamp
+	want := []byte(`{"sdk":{},"timestamp":"1970-01-01T00:00:14Z","user":{}}`)
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Event mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestStructSnapshots(t *testing.T) {
 	testSpan := &Span{
 		TraceID:      "d6c4f03650bd47699ec65c84352b6208",
 		SpanID:       "1cc4b26ab9094ef0",
@@ -63,6 +88,51 @@ func TestMarshalStruct(t *testing.T) {
 			testName:     "span",
 			sentryStruct: testSpan,
 		},
+		{
+			testName: "error_event",
+			sentryStruct: &Event{
+				Message:     "event message",
+				Environment: "production",
+				EventID:     EventID("0123456789abcdef"),
+				Fingerprint: []string{"abcd"},
+				Level:       LevelError,
+				Platform:    "myplatform",
+				Release:     "myrelease",
+				Sdk: SdkInfo{
+					Name:         "sentry.go",
+					Version:      "0.0.1",
+					Integrations: []string{"gin", "iris"},
+					Packages: []SdkPackage{{
+						Name:    "sentry-go",
+						Version: "0.0.1",
+					}},
+				},
+				ServerName:  "myhost",
+				Timestamp:   time.Unix(5, 0).UTC(),
+				Transaction: "mytransaction",
+				User:        User{ID: "foo"},
+				Breadcrumbs: []*Breadcrumb{{
+					Data: map[string]interface{}{
+						"data_key": "data_val",
+					},
+				}},
+				Extra: map[string]interface{}{
+					"extra_key": "extra_val",
+				},
+				Contexts: map[string]interface{}{
+					"context_key": "context_val",
+				},
+			},
+		},
+		{
+			testName: "transaction_event",
+			sentryStruct: &Event{
+				Type:           transactionType,
+				Spans:          []*Span{testSpan},
+				StartTimestamp: time.Unix(3, 0).UTC(),
+				Timestamp:      time.Unix(5, 0).UTC(),
+			},
+		},
 	}
 
 	for _, test := range testCases {
@@ -77,17 +147,17 @@ func TestMarshalStruct(t *testing.T) {
 			if *update {
 				err := ioutil.WriteFile(golden, got, 0600)
 				if err != nil {
-					t.Error(err)
+					t.Fatal(err)
 				}
 			}
 
 			want, err := ioutil.ReadFile(golden)
 			if err != nil {
-				t.Error(err)
+				t.Fatal(err)
 			}
 
-			if !bytes.Equal(got, want) {
-				t.Errorf("struct %s\n\tgot:\n%s\n\twant:\n%s", test.testName, got, want)
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Errorf("struct %s mismatch (-want +got):\n%s", test.testName, diff)
 			}
 		})
 	}
