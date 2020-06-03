@@ -137,6 +137,7 @@ func TestGetEnvelopeFromBody(t *testing.T) {
 	})
 	env := getEnvelopeFromBody(body, time.Unix(6, 0))
 	got := env.String()
+	//nolint: lll
 	want := strings.Join([]string{
 		`{"sent_at":"1970-01-01T00:00:06Z"}`,
 		`{"type":"transaction"}`,
