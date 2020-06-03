@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 type unserializableType struct {
@@ -20,6 +22,9 @@ const basicEvent = "{\"message\":\"mkey\",\"sdk\":{},\"user\":{}}"
 const enhancedEvent = "{\"extra\":{\"info\":\"Original event couldn't be marshalled. Succeeded by stripping " +
 	"the data that uses interface{} type. Please verify that the data you attach to the scope is serializable.\"}," +
 	"\"message\":\"mkey\",\"sdk\":{},\"user\":{}}"
+
+const envPayload = `{"type":"transaction"}` +
+	`{"type":"transaction","sdk":{},"timestamp":"1970-01-01T00:00:05Z","user":{},"start_timestamp":"1970-01-01T00:00:03Z"}`
 
 func TestGetRequestBodyFromEventValid(t *testing.T) {
 	body := getRequestBodyFromEvent(&Event{
@@ -128,7 +133,10 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 
 func TestGetEnvelopeFromBody(t *testing.T) {
 	body := getRequestBodyFromEvent(&Event{
-		Message: "testing",
+		Type:           transactionType,
+		Spans:          []*Span{},
+		StartTimestamp: time.Unix(3, 0).UTC(),
+		Timestamp:      time.Unix(5, 0).UTC(),
 	})
 	env := getEnvelopeFromBody(body)
 	envString := env.String()
@@ -152,9 +160,10 @@ func TestGetEnvelopeFromBody(t *testing.T) {
 		t.Error("sent_at was not set in header")
 	}
 
-	payload := envParts[2]
-	if payload == "" {
-		t.Error("Item payload is empty")
+	want := envParts[1] + envParts[2]
+	got := envPayload
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -185,12 +194,12 @@ func TestGetRequestFromEvent(t *testing.T) {
 
 	for _, test := range testCases {
 		test := test
-		t.Run(test.testName, func(t *testing.T) {
-			dsn, err := NewDsn("https://key@host/path/42")
-			if err != nil {
-				t.Fatal(err)
-			}
+		dsn, err := NewDsn("https://key@host/path/42")
+		if err != nil {
+			t.Fatal(err)
+		}
 
+		t.Run(test.testName, func(t *testing.T) {
 			req, err := getRequestFromEvent(test.event, dsn)
 			if err != nil {
 				t.Fatal(err)

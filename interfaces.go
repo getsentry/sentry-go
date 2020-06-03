@@ -147,6 +147,7 @@ type Exception struct {
 type EventID string
 
 // TraceContext describes the context of the trace.
+//
 // Experimental: This is part of a beta feature of the SDK.
 type TraceContext struct {
 	TraceID     string `json:"trace_id"`
@@ -169,7 +170,7 @@ type Span struct {
 	Status         string            `json:"status"`
 }
 
-// Event is the fundamental data structure that is sent to Sentry
+// Event is the fundamental data structure that is sent to Sentry.
 type Event struct {
 	Type        string                 `json:"type,omitempty"`
 	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs,omitempty"`

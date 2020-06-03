@@ -151,7 +151,7 @@ func getAPIURL(dsn Dsn, s string) *url.URL {
 	if dsn.path != "" {
 		rawURL += dsn.path
 	}
-	rawURL += fmt.Sprintf("/api/%d/%v/", dsn.projectID, s)
+	rawURL += fmt.Sprintf("/api/%d/%s/", dsn.projectID, s)
 	parsedURL, _ := url.Parse(rawURL)
 	return parsedURL
 }
