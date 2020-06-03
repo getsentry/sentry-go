@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 type unserializableType struct {
@@ -122,6 +125,75 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 
 	if body != nil {
 		t.Error("expected body to be nil")
+	}
+}
+
+func TestGetEnvelopeFromBody(t *testing.T) {
+	body := getRequestBodyFromEvent(&Event{
+		Type:           transactionType,
+		Spans:          []*Span{},
+		StartTimestamp: time.Unix(3, 0).UTC(),
+		Timestamp:      time.Unix(5, 0).UTC(),
+	})
+	env := getEnvelopeFromBody(body, time.Unix(6, 0))
+	got := env.String()
+	//nolint: lll
+	want := strings.Join([]string{
+		`{"sent_at":"1970-01-01T00:00:06Z"}`,
+		`{"type":"transaction"}`,
+		`{"sdk":{},"timestamp":"1970-01-01T00:00:05Z","user":{},"type":"transaction","start_timestamp":"1970-01-01T00:00:03Z"}`,
+	}, "\n")
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Event mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestGetRequestFromEvent(t *testing.T) {
+	testCases := []struct {
+		testName string
+		// input
+		event *Event
+		// output
+		apiURL string
+	}{
+		{
+			testName: "Sample Event",
+			event:    NewEvent(),
+			apiURL:   "https://host/path/api/42/store/",
+		},
+		{
+			testName: "Transaction",
+			event: func() *Event {
+				event := NewEvent()
+				event.Type = transactionType
+
+				return event
+			}(),
+			apiURL: "https://host/path/api/42/envelope/",
+		},
+	}
+
+	for _, test := range testCases {
+		test := test
+		dsn, err := NewDsn("https://key@host/path/42")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		t.Run(test.testName, func(t *testing.T) {
+			req, err := getRequestFromEvent(test.event, dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if req.Method != http.MethodPost {
+				t.Errorf("Request %v using http method: %s, supposed to use method: %s", req, req.Method, http.MethodPost)
+			}
+
+			if req.URL.String() != test.apiURL {
+				t.Errorf("Incorrect API URL. want: %s, got: %s", test.apiURL, req.URL.String())
+			}
+		})
 	}
 }
 
