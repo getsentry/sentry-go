@@ -56,7 +56,7 @@ func TestEventMarshalJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Non transaction event should not have fields Spans, StartTimestamp and Timestamp
+	// Non transaction event should not have fields Spans and StartTimestamp
 	want := []byte(`{"sdk":{},"timestamp":"1970-01-01T00:00:14Z","user":{}}`)
 
 	if diff := cmp.Diff(want, got); diff != "" {
