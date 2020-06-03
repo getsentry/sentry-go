@@ -380,6 +380,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		return nil
 	}
 
+	// As per spec, transactions do not go through BeforeSend.
 	if event.Type != transactionType && options.BeforeSend != nil {
 		h := &EventHint{}
 		if hint != nil {
