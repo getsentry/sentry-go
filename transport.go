@@ -99,7 +99,6 @@ func getEnvelopeFromBody(body []byte, now time.Time) *bytes.Buffer {
 	fmt.Fprintf(&b, `{"sent_at":"%s"}`, now.UTC().Format(time.RFC3339Nano))
 	fmt.Fprint(&b, "\n", `{"type":"transaction"}`, "\n")
 	b.Write(body)
-	b.WriteString("\n")
 	return &b
 }
 

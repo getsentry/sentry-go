@@ -181,42 +181,44 @@ type Event struct {
 
 // MarshalJSON converts the Event struct to JSON.
 func (e *Event) MarshalJSON() ([]byte, error) {
-	type alias Event
+	// event aliases Event to allow calling json.Marshal without an infinite
+	// loop. It preserves all fields of Event while none of the attached
+	// methods.
+	type event Event
 
+	// Transactions are marshaled in the standard way how json.Marshal works.
 	if e.Type == transactionType {
-		return json.Marshal(&struct {
-			*alias
-		}{
-			alias: (*alias)(e),
-		})
+		return json.Marshal((*event)(e))
 	}
 
-	// encoding/json doesn't support the "omitempty" option for struct types.
-	// See https://golang.org/issues/11939.
-	// This implementation of MarshalJSON shadows the original Timestamp field
-	// forcing it to be omitted when the Timestamp is the zero value of
-	// time.Time.
-	// Transaction specific fields should also be removed.
-	if e.Timestamp.IsZero() {
-		return json.Marshal(&struct {
-			*alias
-			Timestamp      json.RawMessage `json:"timestamp,omitempty"`
-			StartTimestamp string          `json:"start_timestamp,omitempty"`
-			Spans          []*Span         `json:"spans,omitempty"`
-			Type           string          `json:"type,omitempty"`
-		}{
-			alias: (*alias)(e),
-		})
+	// errorEvent is like Event with some shadowed fields for customizing the
+	// JSON serialization of regular "error events".
+	type errorEvent struct {
+		*event
+
+		// encoding/json doesn't support the omitempty option for struct types.
+		// See https://golang.org/issues/11939.
+		// We shadow the original Event.Timestamp field with a json.RawMessage.
+		// This allows us to include the timestamp when non-zero and omit it
+		// otherwise.
+		Timestamp json.RawMessage `json:"timestamp,omitempty"`
+
+		// The fields below are not part of the regular "error events" and only
+		// make sense to be sent for transactions. They shadow the respective
+		// fields in Event and are meant to remain nil, triggering the omitempty
+		// behavior.
+		Type           json.RawMessage `json:"type,omitempty"`
+		StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
+		Spans          json.RawMessage `json:"spans,omitempty"`
 	}
 
-	return json.Marshal(&struct {
-		*alias
-		StartTimestamp string  `json:"start_timestamp,omitempty"`
-		Spans          []*Span `json:"spans,omitempty"`
-		Type           string  `json:"type,omitempty"`
-	}{
-		alias: (*alias)(e),
-	})
+	x := &errorEvent{event: (*event)(e)}
+	if !e.Timestamp.IsZero() {
+		x.Timestamp = append(x.Timestamp, '"')
+		x.Timestamp = e.Timestamp.UTC().AppendFormat(x.Timestamp, time.RFC3339Nano)
+		x.Timestamp = append(x.Timestamp, '"')
+	}
+	return json.Marshal(x)
 }
 
 func NewEvent() *Event {
