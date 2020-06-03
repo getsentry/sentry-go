@@ -141,8 +141,19 @@ func (dsn Dsn) String() string {
 	return url
 }
 
-// GetAPIURL returns assembled url to be used in the transport.
-func getAPIURL(dsn Dsn, s string) *url.URL {
+// StoreAPIURL returns the URL of the store endpoint of the project associated
+// with the DSN.
+func (dsn Dsn) StoreAPIURL() *url.URL {
+	return dsn.getAPIURL("store")
+}
+
+// EnvelopeAPIURL returns the URL of the envelope endpoint of the project
+// associated with the DSN.
+func (dsn Dsn) EnvelopeAPIURL() *url.URL {
+	return dsn.getAPIURL("envelope")
+}
+
+func (dsn Dsn) getAPIURL(s string) *url.URL {
 	var rawURL string
 	rawURL += fmt.Sprintf("%s://%s", dsn.scheme, dsn.host)
 	if dsn.port != dsn.scheme.defaultPort() {
@@ -154,18 +165,6 @@ func getAPIURL(dsn Dsn, s string) *url.URL {
 	rawURL += fmt.Sprintf("/api/%d/%s/", dsn.projectID, s)
 	parsedURL, _ := url.Parse(rawURL)
 	return parsedURL
-}
-
-// StoreAPIURL returns the URL of the store endpoint of the project associated
-// with the DSN.
-func (dsn Dsn) StoreAPIURL() *url.URL {
-	return getAPIURL(dsn, "store")
-}
-
-// EnvelopeAPIURL returns the URL of the envelope endpoint of the project
-// associated with the DSN.
-func (dsn Dsn) EnvelopeAPIURL() *url.URL {
-	return getAPIURL(dsn, "envelope")
 }
 
 // RequestHeaders returns all the necessary headers that have to be used in the transport.
