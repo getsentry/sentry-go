@@ -148,7 +148,6 @@ type EventID string
 
 // Event is the fundamental data structure that is sent to Sentry.
 type Event struct {
-	Type        string                 `json:"type,omitempty"`
 	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs,omitempty"`
 	Contexts    map[string]interface{} `json:"contexts,omitempty"`
 	Dist        string                 `json:"dist,omitempty"`
@@ -171,10 +170,13 @@ type Event struct {
 	Modules     map[string]string      `json:"modules,omitempty"`
 	Request     *Request               `json:"request,omitempty"`
 	Exception   []Exception            `json:"exception,omitempty"`
-	// Experimental: This is part of a beta feature of the SDK
+
+	// Experimental: This is part of a beta feature of the SDK. The fields below
+	// are only relevant for transactions.
+
+	Type           string    `json:"type,omitempty"`
 	StartTimestamp time.Time `json:"start_timestamp"`
-	// Experimental: This is part of a beta feature of the SDK
-	Spans []*Span `json:"spans,omitempty"`
+	Spans          []*Span   `json:"spans,omitempty"`
 }
 
 // MarshalJSON converts the Event struct to JSON.
