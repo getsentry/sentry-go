@@ -140,8 +140,8 @@ func TestGetEnvelopeFromBody(t *testing.T) {
 	got := strings.Join([]string{
 		"{\"sent_at\":\"1970-01-01T00:00:06Z\"}\n",
 		"{\"type\":\"transaction\"}\n",
-		"{\"type\":\"transaction\",\"sdk\":{},\"timestamp\":\"1970-01-01T00:00:05Z\",",
-		"\"user\":{},\"start_timestamp\":\"1970-01-01T00:00:03Z\"}\n",
+		"{\"sdk\":{},\"timestamp\":\"1970-01-01T00:00:05Z\",\"user\":{},",
+		"\"type\":\"transaction\",\"start_timestamp\":\"1970-01-01T00:00:03Z\"}\n",
 	}, "")
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)

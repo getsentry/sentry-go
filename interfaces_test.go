@@ -131,6 +131,15 @@ func TestStructSnapshots(t *testing.T) {
 				Spans:          []*Span{testSpan},
 				StartTimestamp: time.Unix(3, 0).UTC(),
 				Timestamp:      time.Unix(5, 0).UTC(),
+				Contexts: map[string]interface{}{
+					"trace": TraceContext{
+						TraceID:     "90d57511038845dcb4164a70fc3a7fdb",
+						SpanID:      "f7f3fd754a9040eb",
+						Op:          "http.GET",
+						Description: "description",
+						Status:      "ok",
+					},
+				},
 			},
 		},
 	}

@@ -256,6 +256,7 @@ type TraceContext struct {
 	SpanID      string `json:"span_id"`
 	Op          string `json:"op,omitempty"`
 	Description string `json:"description,omitempty"`
+	Status      string `json:"status,omitempty"`
 }
 
 // Span describes a timed unit of work in a trace.
