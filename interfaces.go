@@ -29,8 +29,6 @@ const (
 )
 
 // SdkInfo contains all metadata about about the SDK being used
-//
-// https://develop.sentry.dev/sdk/event-payloads/sdk/
 type SdkInfo struct {
 	Name         string       `json:"name,omitempty"`
 	Version      string       `json:"version,omitempty"`
@@ -52,8 +50,6 @@ type BreadcrumbHint map[string]interface{}
 
 // Breadcrumb specifies an application event that occurred before a Sentry event.
 // An event may contain one or more breadcrumbs.
-//
-// https://develop.sentry.dev/sdk/event-payloads/breadcrumbs/
 type Breadcrumb struct {
 	Category  string                 `json:"category,omitempty"`
 	Data      map[string]interface{} `json:"data,omitempty"`
@@ -85,8 +81,6 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 // User describes a user associated to an Event. You should provide
 // atleast an id (a unique identifier for a user) or an ip address
 // if this struct is used.
-//
-// https://develop.sentry.dev/sdk/event-payloads/user/
 type User struct {
 	Email     string `json:"email,omitempty"`
 	ID        string `json:"id,omitempty"`
@@ -95,8 +89,6 @@ type User struct {
 }
 
 // Request contains information on a HTTP request related to the event.
-//
-// https://develop.sentry.dev/sdk/event-payloads/request/
 type Request struct {
 	URL         string            `json:"url,omitempty"`
 	Method      string            `json:"method,omitempty"`
@@ -146,8 +138,6 @@ func NewRequest(r *http.Request) *Request {
 }
 
 // Exception specifies an error or exception that occurred
-//
-// https://develop.sentry.dev/sdk/event-payloads/exception/
 type Exception struct {
 	Type          string      `json:"type,omitempty"`
 	Value         string      `json:"value,omitempty"`
@@ -162,8 +152,6 @@ type Exception struct {
 type EventID string
 
 // Event is the fundamental data structure that is sent to Sentry.
-//
-// https://develop.sentry.dev/sdk/event-payloads/
 type Event struct {
 	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs,omitempty"`
 	Contexts    map[string]interface{} `json:"contexts,omitempty"`
@@ -249,8 +237,6 @@ func NewEvent() *Event {
 }
 
 // Thread specifies threads that were running at the time of an event
-//
-// https://develop.sentry.dev/sdk/event-payloads/threads/
 type Thread struct {
 	ID            string      `json:"id,omitempty"`
 	Name          string      `json:"name,omitempty"`
@@ -285,7 +271,6 @@ type TraceContext struct {
 // Span describes a timed unit of work in a trace.
 //
 // Experimental: This is part of a beta feature of the SDK.
-// https://develop.sentry.dev/sdk/event-payloads/span/
 type Span struct {
 	TraceID        string            `json:"trace_id"`
 	SpanID         string            `json:"span_id"`

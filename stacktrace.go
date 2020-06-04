@@ -18,8 +18,6 @@ const unknown string = "unknown"
 // https://github.com/golang/go/issues/26913#issuecomment-411976222
 
 // Stacktrace holds information about the frames of the stack.
-//
-// https://develop.sentry.dev/sdk/event-payloads/stacktrace/
 type Stacktrace struct {
 	Frames        []Frame `json:"frames,omitempty"`
 	FramesOmitted []uint  `json:"frames_omitted,omitempty"`
