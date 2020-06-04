@@ -368,9 +368,11 @@ func TestAddBreadcrumbAddsTimestamp(t *testing.T) {
 func TestScopeBasicInheritance(t *testing.T) {
 	scope := NewScope()
 	scope.SetExtra("a", 1)
+	scope.SetRequestBody([]byte("requestbody"))
 	clone := scope.Clone()
 
 	assertEqual(t, scope.extra, clone.extra)
+	assertEqual(t, scope.requestBody, clone.requestBody)
 }
 
 func TestScopeParentChangedInheritance(t *testing.T) {
