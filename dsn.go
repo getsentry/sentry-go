@@ -27,6 +27,8 @@ func (scheme scheme) defaultPort() int {
 	}
 }
 
+// DsnParseError represents an error that occurs if a Sentry
+// DSN cannot be parsed.
 type DsnParseError struct {
 	Message string
 }
@@ -182,10 +184,12 @@ func (dsn Dsn) RequestHeaders() map[string]string {
 	}
 }
 
+// MarshalJSON converts the Dsn struct to JSON.
 func (dsn Dsn) MarshalJSON() ([]byte, error) {
 	return json.Marshal(dsn.String())
 }
 
+// UnmarshalJSON converts JSON data to the Dsn struct.
 func (dsn *Dsn) UnmarshalJSON(data []byte) error {
 	var str string
 	_ = json.Unmarshal(data, &str)

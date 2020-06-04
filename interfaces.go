@@ -13,12 +13,13 @@ import (
 // Protocol Docs (kinda)
 // https://github.com/getsentry/rust-sentry-types/blob/master/src/protocol/v7.rs
 
-// Level marks the severity of the event
-type Level string
-
 // transactionType is the type of a transaction event.
 const transactionType = "transaction"
 
+// Level marks the severity of the event
+type Level string
+
+// Describes the severity of the event
 const (
 	LevelDebug   Level = "debug"
 	LevelInfo    Level = "info"
@@ -27,7 +28,9 @@ const (
 	LevelFatal   Level = "fatal"
 )
 
-// https://docs.sentry.io/development/sdk-dev/event-payloads/sdk/
+// SdkInfo contains all metadata about about the SDK being used
+//
+// https://develop.sentry.dev/sdk/event-payloads/sdk/
 type SdkInfo struct {
 	Name         string       `json:"name,omitempty"`
 	Version      string       `json:"version,omitempty"`
@@ -35,17 +38,22 @@ type SdkInfo struct {
 	Packages     []SdkPackage `json:"packages,omitempty"`
 }
 
+// SdkPackage describes a package that was installed
 type SdkPackage struct {
 	Name    string `json:"name,omitempty"`
 	Version string `json:"version,omitempty"`
 }
 
+// BreadcrumbHint contains information that can be associated with a Breadcrumb
 // TODO: This type could be more useful, as map of interface{} is too generic
 // and requires a lot of type assertions in beforeBreadcrumb calls
 // plus it could just be `map[string]interface{}` then
 type BreadcrumbHint map[string]interface{}
 
-// https://docs.sentry.io/development/sdk-dev/event-payloads/breadcrumbs/
+// Breadcrumb specifies an application event that occured before a Sentry event.
+// An event may contain one or more breadcrumbs.
+//
+// https://develop.sentry.dev/sdk/event-payloads/breadcrumbs/
 type Breadcrumb struct {
 	Category  string                 `json:"category,omitempty"`
 	Data      map[string]interface{} `json:"data,omitempty"`
@@ -55,6 +63,7 @@ type Breadcrumb struct {
 	Type      string                 `json:"type,omitempty"`
 }
 
+// MarshalJSON converts the Breadcrumb struct to JSON.
 func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 	type alias Breadcrumb
 	// encoding/json doesn't support the "omitempty" option for struct types.
@@ -73,7 +82,11 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 	return json.Marshal((*alias)(b))
 }
 
-// https://docs.sentry.io/development/sdk-dev/event-payloads/user/
+// User describes a user associated to an Event. You should provide
+// atleast an id (a unique identifier for a user) or an ip address
+// if this struct is used.
+//
+// https://develop.sentry.dev/sdk/event-payloads/user/
 type User struct {
 	Email     string `json:"email,omitempty"`
 	ID        string `json:"id,omitempty"`
@@ -81,7 +94,9 @@ type User struct {
 	Username  string `json:"username,omitempty"`
 }
 
-// https://docs.sentry.io/development/sdk-dev/event-payloads/request/
+// Request contains information on a HTTP request related to the event.
+//
+// https://develop.sentry.dev/sdk/event-payloads/request/
 type Request struct {
 	URL         string            `json:"url,omitempty"`
 	Method      string            `json:"method,omitempty"`
@@ -130,7 +145,9 @@ func NewRequest(r *http.Request) *Request {
 	}
 }
 
-// https://docs.sentry.io/development/sdk-dev/event-payloads/exception/
+// Exception specifies an error or exception that occured
+//
+// https://develop.sentry.dev/sdk/event-payloads/exception/
 type Exception struct {
 	Type          string      `json:"type,omitempty"`
 	Value         string      `json:"value,omitempty"`
@@ -140,9 +157,13 @@ type Exception struct {
 	RawStacktrace *Stacktrace `json:"raw_stacktrace,omitempty"`
 }
 
+// EventID is a hexadecimal string representing a unique uuid4 for an Event.
+// An EventID must be 32 characters long, lowercase and not have any dashes.
 type EventID string
 
 // Event is the fundamental data structure that is sent to Sentry.
+//
+// https://develop.sentry.dev/sdk/event-payloads/
 type Event struct {
 	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs,omitempty"`
 	Contexts    map[string]interface{} `json:"contexts,omitempty"`
@@ -216,6 +237,7 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 	return json.Marshal(x)
 }
 
+// NewEvent creates a new Event
 func NewEvent() *Event {
 	event := Event{
 		Contexts: make(map[string]interface{}),
@@ -226,6 +248,9 @@ func NewEvent() *Event {
 	return &event
 }
 
+// Thread specifies threads that were running at the time of an event
+//
+// https://develop.sentry.dev/sdk/event-payloads/threads/
 type Thread struct {
 	ID            string      `json:"id,omitempty"`
 	Name          string      `json:"name,omitempty"`
@@ -235,6 +260,7 @@ type Thread struct {
 	Current       bool        `json:"current,omitempty"`
 }
 
+// EventHint contains information that can be associated with an Event
 type EventHint struct {
 	Data               interface{}
 	EventID            string
@@ -259,6 +285,7 @@ type TraceContext struct {
 // Span describes a timed unit of work in a trace.
 //
 // Experimental: This is part of a beta feature of the SDK.
+// https://develop.sentry.dev/sdk/event-payloads/span/
 type Span struct {
 	TraceID        string            `json:"trace_id"`
 	SpanID         string            `json:"span_id"`

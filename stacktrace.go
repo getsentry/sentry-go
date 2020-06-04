@@ -18,6 +18,8 @@ const unknown string = "unknown"
 // https://github.com/golang/go/issues/26913#issuecomment-411976222
 
 // Stacktrace holds information about the frames of the stack.
+//
+// https://develop.sentry.dev/sdk/event-payloads/stacktrace/
 type Stacktrace struct {
 	Frames        []Frame `json:"frames,omitempty"`
 	FramesOmitted []uint  `json:"frames_omitted,omitempty"`
@@ -127,7 +129,8 @@ func extractPcs(method reflect.Value) []uintptr {
 	return pcs
 }
 
-// https://docs.sentry.io/development/sdk-dev/event-payloads/stacktrace/
+// Frame represents a function call and it's metadata. Frames are associated
+// with a Stacktrace.
 type Frame struct {
 	Function    string                 `json:"function,omitempty"`
 	Symbol      string                 `json:"symbol,omitempty"`
