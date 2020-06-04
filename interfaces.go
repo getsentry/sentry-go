@@ -50,7 +50,7 @@ type SdkPackage struct {
 // plus it could just be `map[string]interface{}` then
 type BreadcrumbHint map[string]interface{}
 
-// Breadcrumb specifies an application event that occured before a Sentry event.
+// Breadcrumb specifies an application event that occurred before a Sentry event.
 // An event may contain one or more breadcrumbs.
 //
 // https://develop.sentry.dev/sdk/event-payloads/breadcrumbs/
@@ -145,7 +145,7 @@ func NewRequest(r *http.Request) *Request {
 	}
 }
 
-// Exception specifies an error or exception that occured
+// Exception specifies an error or exception that occurred
 //
 // https://develop.sentry.dev/sdk/event-payloads/exception/
 type Exception struct {
