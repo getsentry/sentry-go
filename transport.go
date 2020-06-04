@@ -416,16 +416,10 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		return
 	}
 
-	body := getRequestBodyFromEvent(event)
-	if body == nil {
+	request, err := getRequestFromEvent(event, t.dsn)
+	if err != nil {
 		return
 	}
-
-	request, _ := http.NewRequest(
-		http.MethodPost,
-		t.dsn.StoreAPIURL().String(),
-		bytes.NewBuffer(body),
-	)
 
 	for headerKey, headerValue := range t.dsn.RequestHeaders() {
 		request.Header.Set(headerKey, headerValue)
