@@ -70,6 +70,12 @@ func main() {
 
 // RecoverRepanic calls f and, in case of a runtime panic, reports the panic to
 // Sentry and repanics.
+//
+// Note that if RecoverRepanic is called from multiple goroutines and they panic
+// concurrently, then the repanic initiated from RecoverRepanic, unless handled
+// further down the call stack, will cause the program to crash without waiting
+// for other goroutines to finish their work. That means that most likely only
+// the first panic will be successfully reported to Sentry.
 func RecoverRepanic(f func()) {
 	// Clone the current hub so that modifications of the scope are visible only
 	// within this function.
