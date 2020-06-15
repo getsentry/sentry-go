@@ -50,14 +50,19 @@ func main() {
 	// Run some worker goroutines to simulate work.
 	for i := 0; i < nWorkers; i++ {
 		wg.Add(1)
-		go RecoverRepanic(func() {
+		go func() {
+			// Note that wg.Done() must be outside of RecoverRepanic, otherwise
+			// it would unblock wg.Wait() before RecoverRepanic is done doing
+			// its job (reporting panic to Sentry).
 			defer wg.Done()
-			// Sleep to simulate some work.
-			time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
-			// Intentionally access an index out of bounds to trigger a runtime
-			// panic.
-			fmt.Println(make([]int, 3)[3])
-		})
+			RecoverRepanic(func() {
+				// Sleep to simulate some work.
+				time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+				// Intentionally access an index out of bounds to trigger a runtime
+				// panic.
+				fmt.Println(make([]int, 3)[3])
+			})
+		}()
 	}
 
 	wg.Wait()
@@ -65,6 +70,12 @@ func main() {
 
 // RecoverRepanic calls f and, in case of a runtime panic, reports the panic to
 // Sentry and repanics.
+//
+// Note that if RecoverRepanic is called from multiple goroutines and they panic
+// concurrently, then the repanic initiated from RecoverRepanic, unless handled
+// further down the call stack, will cause the program to crash without waiting
+// for other goroutines to finish their work. That means that most likely only
+// the first panic will be successfully reported to Sentry.
 func RecoverRepanic(f func()) {
 	// Clone the current hub so that modifications of the scope are visible only
 	// within this function.
@@ -104,12 +115,13 @@ func RecoverRepanic(f func()) {
 	// reporting to Sentry.
 	defer func() {
 		if x := recover(); x != nil {
+			// Create an event and enqueue it for reporting.
 			hub.Recover(x)
 			// Because the goroutine running this code is going to crash the
 			// program, call Flush to send the event to Sentry before it is too
 			// late. Set the timeout to an appropriate value depending on your
-			// program, what is the maximum time to wait before giving up and
-			// dropping the event.
+			// program. The value is the maximum time to wait before giving up
+			// and dropping the event.
 			hub.Flush(2 * time.Second)
 			// Note that if multiple goroutines panic, possibly only the first
 			// one to call Flush will succeed in sending the event. If you want
