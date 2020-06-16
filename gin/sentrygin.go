@@ -81,7 +81,7 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	}
 }
 
-// Check for a broken connection, as this is what Gin does already
+// Check for a broken connection, as this is what Gin does already.
 func isBrokenPipeError(err interface{}) bool {
 	if netErr, ok := err.(*net.OpError); ok {
 		if sysErr, ok := netErr.Err.(*os.SyscallError); ok {

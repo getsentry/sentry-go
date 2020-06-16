@@ -46,7 +46,7 @@ type Scope struct {
 	eventProcessors []EventProcessor
 }
 
-// NewScope creates a new Scope
+// NewScope creates a new Scope.
 func NewScope() *Scope {
 	scope := Scope{
 		breadcrumbs: make([]*Breadcrumb, 0),

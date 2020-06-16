@@ -160,7 +160,7 @@ type HTTPTransport struct {
 	disabledUntil time.Time
 }
 
-// NewHTTPTransport returns a new pre-configured instance of HTTPTransport
+// NewHTTPTransport returns a new pre-configured instance of HTTPTransport.
 func NewHTTPTransport() *HTTPTransport {
 	transport := HTTPTransport{
 		BufferSize: defaultBufferSize,
@@ -373,7 +373,7 @@ type HTTPSyncTransport struct {
 	Timeout time.Duration
 }
 
-// NewHTTPSyncTransport returns a new pre-configured instance of HTTPSyncTransport
+// NewHTTPSyncTransport returns a new pre-configured instance of HTTPSyncTransport.
 func NewHTTPSyncTransport() *HTTPSyncTransport {
 	transport := HTTPSyncTransport{
 		Timeout: defaultTimeout,

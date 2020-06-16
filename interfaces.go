@@ -16,10 +16,10 @@ import (
 // transactionType is the type of a transaction event.
 const transactionType = "transaction"
 
-// Level marks the severity of the event
+// Level marks the severity of the event.
 type Level string
 
-// Describes the severity of the event
+// Describes the severity of the event.
 const (
 	LevelDebug   Level = "debug"
 	LevelInfo    Level = "info"
@@ -28,7 +28,7 @@ const (
 	LevelFatal   Level = "fatal"
 )
 
-// SdkInfo contains all metadata about about the SDK being used
+// SdkInfo contains all metadata about about the SDK being used.
 type SdkInfo struct {
 	Name         string       `json:"name,omitempty"`
 	Version      string       `json:"version,omitempty"`
@@ -36,7 +36,7 @@ type SdkInfo struct {
 	Packages     []SdkPackage `json:"packages,omitempty"`
 }
 
-// SdkPackage describes a package that was installed
+// SdkPackage describes a package that was installed.
 type SdkPackage struct {
 	Name    string `json:"name,omitempty"`
 	Version string `json:"version,omitempty"`
@@ -137,7 +137,7 @@ func NewRequest(r *http.Request) *Request {
 	}
 }
 
-// Exception specifies an error or exception that occurred
+// Exception specifies an error that occurred.
 type Exception struct {
 	Type          string      `json:"type,omitempty"`
 	Value         string      `json:"value,omitempty"`
@@ -225,7 +225,7 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 	return json.Marshal(x)
 }
 
-// NewEvent creates a new Event
+// NewEvent creates a new Event.
 func NewEvent() *Event {
 	event := Event{
 		Contexts: make(map[string]interface{}),
@@ -236,7 +236,7 @@ func NewEvent() *Event {
 	return &event
 }
 
-// Thread specifies threads that were running at the time of an event
+// Thread specifies threads that were running at the time of an event.
 type Thread struct {
 	ID            string      `json:"id,omitempty"`
 	Name          string      `json:"name,omitempty"`
@@ -246,7 +246,7 @@ type Thread struct {
 	Current       bool        `json:"current,omitempty"`
 }
 
-// EventHint contains information that can be associated with an Event
+// EventHint contains information that can be associated with an Event.
 type EventHint struct {
 	Data               interface{}
 	EventID            string

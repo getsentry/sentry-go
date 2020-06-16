@@ -33,7 +33,7 @@ type usageError struct {
 }
 
 // Logger is an instance of log.Logger that is use to provide debug information about running Sentry Client
-// can be enabled by either using Logger.SetOutput directly or with Debug client option
+// can be enabled by either using Logger.SetOutput directly or with Debug client option.
 var Logger = log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags) //nolint: gochecknoglobals
 
 // EventProcessor is a function that processes an event.
@@ -62,7 +62,7 @@ type Integration interface {
 	SetupOnce(client *Client)
 }
 
-// ClientOptions that configures a SDK Client
+// ClientOptions that configures a SDK Client.
 type ClientOptions struct {
 	// The DSN to use. If the DSN is not set, the client is effectively
 	// disabled.

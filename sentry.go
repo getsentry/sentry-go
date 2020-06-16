@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Version is the version of the sentry-go SDK.
+// Version is the version of the SDK.
 const Version = "0.6.1"
 
 // apiVersion is the minimum version of the Sentry API compatible with the

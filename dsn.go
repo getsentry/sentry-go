@@ -125,7 +125,7 @@ func NewDsn(rawURL string) (*Dsn, error) {
 	}, nil
 }
 
-// String formats Dsn struct into a valid string url
+// String formats Dsn struct into a valid string url.
 func (dsn Dsn) String() string {
 	var url string
 	url += fmt.Sprintf("%s://%s", dsn.scheme, dsn.publicKey)
