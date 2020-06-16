@@ -18,8 +18,8 @@ import (
 // The scope can be interacted with in two ways:
 //
 // 1. the scope is routinely updated with information by functions such as
-//    `AddBreadcrumb` which will modify the currently top-most scope.
-// 2. the topmost scope can also be configured through the `ConfigureScope`
+//    AddBreadcrumb which will modify the currently top-most scope.
+// 2. the topmost scope can also be configured through the ConfigureScope
 //    method.
 //
 // Note that the scope can only be modified but not inspected.

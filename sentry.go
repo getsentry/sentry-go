@@ -12,7 +12,7 @@ const Version = "0.6.1"
 // sentry-go SDK.
 const apiVersion = "7"
 
-// Init initializes whole SDK by creating new `Client` and binding it to the current `Hub`
+// Init initializes whole SDK by creating new Client and binding it to the current Hub
 func Init(options ClientOptions) error {
 	hub := CurrentHub()
 	client, err := NewClient(options)
@@ -47,7 +47,7 @@ func CaptureException(exception error) *EventID {
 // CaptureEvent captures an event on the currently active client if any.
 //
 // The event must already be assembled. Typically code would instead use
-// the utility methods like `CaptureException`. The return value is the
+// the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
 func CaptureEvent(event *Event) *EventID {
 	hub := CurrentHub()
@@ -93,7 +93,7 @@ func WithScope(f func(scope *Scope)) {
 
 // ConfigureScope invokes a function that can modify the current scope.
 //
-// The function is passed a mutable reference to the `Scope` so that modifications
+// The function is passed a mutable reference to the Scope so that modifications
 // can be performed.
 func ConfigureScope(f func(scope *Scope)) {
 	hub := CurrentHub()

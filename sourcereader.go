@@ -36,7 +36,7 @@ func (sr *sourceReader) readContextLines(filename string, line, context int) ([]
 	return sr.calculateContextLines(lines, line, context)
 }
 
-// `contextLine` points to a line that caused an issue itself, in relation to returned slice
+// contextLine points to a line that caused an issue itself, in relation to returned slice
 func (sr *sourceReader) calculateContextLines(lines [][]byte, line, context int) ([][]byte, int) {
 	// Stacktrace lines are 1-indexed, slices are 0-indexed
 	line--

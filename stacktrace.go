@@ -23,7 +23,7 @@ type Stacktrace struct {
 	FramesOmitted []uint  `json:"frames_omitted,omitempty"`
 }
 
-// NewStacktrace creates a stacktrace using `runtime.Callers`.
+// NewStacktrace creates a stacktrace using runtime.Callers.
 func NewStacktrace() *Stacktrace {
 	pcs := make([]uintptr, 100)
 	n := runtime.Callers(1, pcs)
@@ -42,7 +42,7 @@ func NewStacktrace() *Stacktrace {
 	return &stacktrace
 }
 
-// ExtractStacktrace creates a new `Stacktrace` based on the given `error` object.
+// ExtractStacktrace creates a new Stacktrace based on the given error object.
 // TODO: Make it configurable so that anyone can provide their own implementation?
 // Use of reflection allows us to not have a hard dependency on any given package, so we don't have to import it
 func ExtractStacktrace(err error) *Stacktrace {
@@ -145,7 +145,7 @@ type Frame struct {
 	Vars        map[string]interface{} `json:"vars,omitempty"`
 }
 
-// NewFrame assembles a stacktrace frame out of `runtime.Frame`.
+// NewFrame assembles a stacktrace frame out of runtime.Frame.
 func NewFrame(f runtime.Frame) Frame {
 	abspath := f.File
 	filename := f.File

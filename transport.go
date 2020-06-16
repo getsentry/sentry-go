@@ -17,7 +17,7 @@ const defaultBufferSize = 30
 const defaultRetryAfter = time.Second * 60
 const defaultTimeout = time.Second * 30
 
-// Transport is used by the `Client` to deliver events to remote server.
+// Transport is used by the Client to deliver events to remote server.
 type Transport interface {
 	Flush(timeout time.Duration) bool
 	Configure(options ClientOptions)
@@ -139,7 +139,7 @@ type batch struct {
 	done    chan struct{} // closed to signal completion of all items
 }
 
-// HTTPTransport is a default implementation of `Transport` interface used by `Client`.
+// HTTPTransport is a default implementation of Transport interface used by Client.
 type HTTPTransport struct {
 	dsn       *Dsn
 	client    *http.Client
@@ -169,7 +169,7 @@ func NewHTTPTransport() *HTTPTransport {
 	return &transport
 }
 
-// Configure is called by the `Client` itself, providing it it's own `ClientOptions`.
+// Configure is called by the Client itself, providing it it's own ClientOptions.
 func (t *HTTPTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
@@ -211,7 +211,7 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 	})
 }
 
-// SendEvent assembles a new packet out of `Event` and sends it to remote server.
+// SendEvent assembles a new packet out of Event and sends it to remote server.
 func (t *HTTPTransport) SendEvent(event *Event) {
 	if t.dsn == nil {
 		return
@@ -362,7 +362,7 @@ func (t *HTTPTransport) worker() {
 // HTTPSyncTransport
 // ================================
 
-// HTTPSyncTransport is an implementation of `Transport` interface which blocks after each captured event.
+// HTTPSyncTransport is an implementation of Transport interface which blocks after each captured event.
 type HTTPSyncTransport struct {
 	dsn           *Dsn
 	client        *http.Client
@@ -382,7 +382,7 @@ func NewHTTPSyncTransport() *HTTPSyncTransport {
 	return &transport
 }
 
-// Configure is called by the `Client` itself, providing it it's own `ClientOptions`.
+// Configure is called by the Client itself, providing it it's own ClientOptions.
 func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
@@ -410,7 +410,7 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	}
 }
 
-// SendEvent assembles a new packet out of `Event` and sends it to remote server.
+// SendEvent assembles a new packet out of Event and sends it to remote server.
 func (t *HTTPSyncTransport) SendEvent(event *Event) {
 	if t.dsn == nil || time.Now().Before(t.disabledUntil) {
 		return
@@ -454,7 +454,7 @@ func (t *HTTPSyncTransport) Flush(_ time.Duration) bool {
 // noopTransport
 // ================================
 
-// noopTransport is an implementation of `Transport` interface which drops all the events.
+// noopTransport is an implementation of Transport interface which drops all the events.
 // Only used internally when an empty DSN is provided, which effectively disables the SDK.
 type noopTransport struct{}
 
