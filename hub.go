@@ -181,22 +181,29 @@ func (hub *Hub) BindClient(client *Client) {
 	}
 }
 
-// WithScope temporarily pushes a scope for a single call.
+// WithScope runs f in an isolated temporary scope.
 //
-// A shorthand for:
-// PushScope()
-// f(scope)
-// PopScope()
+// It is useful when extra data should be sent with a single capture call, for
+// instance a different level or tags.
+//
+// The scope passed to f starts as a clone of the current scope and can be
+// freely modified without affecting the current scope.
+//
+// It is a shorthand for PushScope followed by PopScope.
 func (hub *Hub) WithScope(f func(scope *Scope)) {
 	scope := hub.PushScope()
 	defer hub.PopScope()
 	f(scope)
 }
 
-// ConfigureScope invokes a function that can modify the current scope.
+// ConfigureScope runs f in the current scope.
 //
-// The function is passed a mutable reference to the Scope so that modifications
-// can be performed.
+// It is useful to set data that applies to all events that share the current
+// scope.
+//
+// Modifying the scope affects all references to the current scope.
+//
+// See also WithScope for making isolated temporary changes.
 func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
 	scope := hub.Scope()
 	f(scope)

@@ -80,34 +80,25 @@ func RecoverWithContext(ctx context.Context) *EventID {
 	return nil
 }
 
-// WithScope temporarily pushes a scope for a single call.
-//
-// This function takes one argument, a callback that executes
-// in the context of that scope.
-//
-// This is useful when extra data should be send with a single capture call
-// for instance a different level or tags
+// WithScope is a shorthand for CurrentHub().WithScope.
 func WithScope(f func(scope *Scope)) {
 	hub := CurrentHub()
 	hub.WithScope(f)
 }
 
-// ConfigureScope invokes a function that can modify the current scope.
-//
-// The function is passed a mutable reference to the Scope so that modifications
-// can be performed.
+// ConfigureScope is a shorthand for CurrentHub().ConfigureScope.
 func ConfigureScope(f func(scope *Scope)) {
 	hub := CurrentHub()
 	hub.ConfigureScope(f)
 }
 
-// PushScope pushes a new scope.
+// PushScope is a shorthand for CurrentHub().PushPushScope.
 func PushScope() {
 	hub := CurrentHub()
 	hub.PushScope()
 }
 
-// PopScope pushes a new scope.
+// PopScope is a shorthand for CurrentHub().PopScope.
 func PopScope() {
 	hub := CurrentHub()
 	hub.PopScope()
