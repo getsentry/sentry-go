@@ -12,7 +12,8 @@ const Version = "0.6.1"
 // sentry-go SDK.
 const apiVersion = "7"
 
-// Init initializes whole SDK by creating new Client and binding it to the current Hub
+// Init initializes the SDK with options. The returned error is non-nil if
+// options is invalid, for instance if a malformed DSN is provided.
 func Init(options ClientOptions) error {
 	hub := CurrentHub()
 	client, err := NewClient(options)
