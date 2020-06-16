@@ -79,9 +79,8 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 	return json.Marshal((*alias)(b))
 }
 
-// User describes a user associated to an Event. You should provide
-// atleast an id (a unique identifier for a user) or an ip address
-// if this struct is used.
+// User describes the user associated with an Event. If this is used, at least
+// an ID or an IP address should be provided.
 type User struct {
 	Email     string `json:"email,omitempty"`
 	ID        string `json:"id,omitempty"`
