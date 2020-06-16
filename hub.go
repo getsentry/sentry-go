@@ -8,20 +8,24 @@ import (
 
 type contextKey int
 
-// HubContextKey is a context key used to store Hub on any context.Context type
-const HubContextKey = contextKey(1)
+// Keys used to store values in a Context. Use with Context.Value to access
+// values stored by the SDK.
+const (
+	// HubContextKey is the key used to store the current Hub.
+	HubContextKey = contextKey(1)
+	// RequestContextKey is the key used to store the current http.Request.
+	RequestContextKey = contextKey(2)
+)
 
-// RequestContextKey is a context key used to store http.Request on the context passed to RecoverWithContext
-const RequestContextKey = contextKey(2)
-
-// Default maximum number of breadcrumbs added to an event. Can be overwritten maxBreadcrumbs option.
+// defaultMaxBreadcrumbs is the default maximum number of breadcrumbs added to
+// an event. Can be overwritten with the maxBreadcrumbs option.
 const defaultMaxBreadcrumbs = 30
 
-// Absolute maximum number of breadcrumbs added to an event.
-// The maxBreadcrumbs option cannot be higher than this value.
+// maxBreadcrumbs is the absolute maximum number of breadcrumbs added to an
+// event. The maxBreadcrumbs option cannot be set higher than this value.
 const maxBreadcrumbs = 100
 
-// Initial instance of the Hub that has no Client bound and an empty Scope
+// currentHub is the initial Hub with no Client bound and an empty Scope.
 var currentHub = NewHub(nil, NewScope()) //nolint: gochecknoglobals
 
 // Hub is the central object that manages scopes and clients.
