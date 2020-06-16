@@ -64,12 +64,14 @@ type Integration interface {
 
 // ClientOptions that configures a SDK Client
 type ClientOptions struct {
-	// The DSN to use. If the DSN is not set, the client is effectively disabled.
+	// The DSN to use. If the DSN is not set, the client is effectively
+	// disabled.
 	Dsn string
-	// In debug mode, the debug information is printed to stdout to help you understand what
-	// sentry is doing.
+	// In debug mode, the debug information is printed to stdout to help you
+	// understand what sentry is doing.
 	Debug bool
-	// Configures whether SDK should generate and attach stacktraces to pure capture message calls.
+	// Configures whether SDK should generate and attach stacktraces to pure
+	// capture message calls.
 	AttachStacktrace bool
 	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0).
 	SampleRate float64
@@ -81,13 +83,12 @@ type ClientOptions struct {
 	BeforeSend func(event *Event, hint *EventHint) *Event
 	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
-	// Integrations to be installed on the current Client, receives default integrations
+	// Integrations to be installed on the current Client, receives default
+	// integrations.
 	Integrations func([]Integration) []Integration
-	// io.Writer implementation that should be used with the Debug mode
+	// io.Writer implementation that should be used with the Debug mode.
 	DebugWriter io.Writer
-	// The transport to use.
-	// This is an instance of a struct implementing Transport interface.
-	// Defaults to httpTransport from transport.go
+	// The transport to use. Defaults to HTTPTransport.
 	Transport Transport
 	// The server name to be reported.
 	ServerName string
@@ -99,22 +100,22 @@ type ClientOptions struct {
 	Environment string
 	// Maximum number of breadcrumbs.
 	MaxBreadcrumbs int
-	// An optional pointer to http.Client that will be used with a default HTTPTransport.
-	// Using your own client will make HTTPTransport, HTTPProxy, HTTPSProxy and CaCerts options ignored.
+	// An optional pointer to http.Client that will be used with a default
+	// HTTPTransport. Using your own client will make HTTPTransport, HTTPProxy,
+	// HTTPSProxy and CaCerts options ignored.
 	HTTPClient *http.Client
-	// An optional pointer to http.Transport that will be used with a default HTTPTransport.
-	// Using your own transport will make HTTPProxy, HTTPSProxy and CaCerts options ignored.
+	// An optional pointer to http.Transport that will be used with a default
+	// HTTPTransport. Using your own transport will make HTTPProxy, HTTPSProxy
+	// and CaCerts options ignored.
 	HTTPTransport http.RoundTripper
 	// An optional HTTP proxy to use.
-	// This will default to the http_proxy environment variable.
-	// or https_proxy if that one exists.
+	// This will default to the HTTP_PROXY environment variable.
 	HTTPProxy string
 	// An optional HTTPS proxy to use.
-	// This will default to the HTTPS_PROXY environment variable
-	// or http_proxy if that one exists.
+	// This will default to the HTTPS_PROXY environment variable.
+	// HTTPS_PROXY takes precedence over HTTP_PROXY for https requests.
 	HTTPSProxy string
-	// An optional CaCerts to use.
-	// Defaults to gocertifi.CACerts().
+	// An optional set of SSL certificates to use.
 	CaCerts *x509.CertPool
 }
 
