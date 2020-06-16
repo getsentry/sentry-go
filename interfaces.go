@@ -42,10 +42,11 @@ type SdkPackage struct {
 	Version string `json:"version,omitempty"`
 }
 
-// BreadcrumbHint contains information that can be associated with a Breadcrumb
 // TODO: This type could be more useful, as map of interface{} is too generic
 // and requires a lot of type assertions in beforeBreadcrumb calls
-// plus it could just be map[string]interface{} then
+// plus it could just be map[string]interface{} then.
+
+// BreadcrumbHint contains information that can be associated with a Breadcrumb.
 type BreadcrumbHint map[string]interface{}
 
 // Breadcrumb specifies an application event that occurred before a Sentry event.
