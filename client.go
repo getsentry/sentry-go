@@ -50,8 +50,8 @@ type EventModifier interface {
 
 var globalEventProcessors []EventProcessor //nolint: gochecknoglobals
 
-// AddGlobalEventProcessor adds a EventProcessor to the global list of
-// event processors.
+// AddGlobalEventProcessor adds processor to the global list of event
+// processors. Global event processors apply to all events.
 func AddGlobalEventProcessor(processor EventProcessor) {
 	globalEventProcessors = append(globalEventProcessors, processor)
 }
