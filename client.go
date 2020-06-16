@@ -119,7 +119,8 @@ type ClientOptions struct {
 	CaCerts *x509.CertPool
 }
 
-// Client is the underlying processor that's used by the main API and Hub instances.
+// Client is the underlying processor that is used by the main API and Hub
+// instances.
 type Client struct {
 	options         ClientOptions
 	dsn             *Dsn
