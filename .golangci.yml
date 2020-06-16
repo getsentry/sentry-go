@@ -33,6 +33,7 @@ linters:
     - unparam
     - unused
     - varcheck
+    - whitespace
 issues:
   exclude-rules:
     - path: _test\.go
