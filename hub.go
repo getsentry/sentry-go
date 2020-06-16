@@ -26,7 +26,7 @@ const defaultMaxBreadcrumbs = 30
 const maxBreadcrumbs = 100
 
 // currentHub is the initial Hub with no Client bound and an empty Scope.
-var currentHub = NewHub(nil, NewScope()) //nolint: gochecknoglobals
+var currentHub = NewHub(nil, NewScope())
 
 // Hub is the central object that manages scopes and clients.
 //

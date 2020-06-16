@@ -34,7 +34,7 @@ type usageError struct {
 
 // Logger is an instance of log.Logger that is use to provide debug information about running Sentry Client
 // can be enabled by either using Logger.SetOutput directly or with Debug client option.
-var Logger = log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags) //nolint: gochecknoglobals
+var Logger = log.New(ioutil.Discard, "[Sentry] ", log.LstdFlags)
 
 // EventProcessor is a function that processes an event.
 // Event processors are used to change an event before it is sent to Sentry.
@@ -48,7 +48,7 @@ type EventModifier interface {
 	ApplyToEvent(event *Event, hint *EventHint) *Event
 }
 
-var globalEventProcessors []EventProcessor //nolint: gochecknoglobals
+var globalEventProcessors []EventProcessor
 
 // AddGlobalEventProcessor adds processor to the global list of event
 // processors. Global event processors apply to all events.

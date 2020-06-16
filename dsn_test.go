@@ -16,7 +16,6 @@ type DsnTest struct {
 	envURL string // expected Envelope API URL
 }
 
-//nolint: gochecknoglobals
 var dsnTests = map[string]DsnTest{
 	"AllFields": {
 		in: "https://public:secret@domain:8888/foo/bar/42",
@@ -89,7 +88,6 @@ type invalidDsnTest struct {
 	err string // expected substring of the error
 }
 
-//nolint: gochecknoglobals
 var invalidDsnTests = map[string]invalidDsnTest{
 	"Empty":     {"", "invalid scheme"},
 	"NoScheme1": {"public:secret@:8888/42", "invalid scheme"},
