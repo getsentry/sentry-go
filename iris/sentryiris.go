@@ -24,8 +24,8 @@ type Options struct {
 	// as iris.Default includes it's own Recovery middleware what handles http responses.
 	Repanic bool
 	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
-	// Because Iris's default `Recovery` handler doesn't restart the application,
-	// it's safe to either skip this option or set it to `false`.
+	// Because Iris's default Recovery handler doesn't restart the application,
+	// it's safe to either skip this option or set it to false.
 	WaitForDelivery bool
 	// Timeout for the event delivery requests.
 	Timeout time.Duration

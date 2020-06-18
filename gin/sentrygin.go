@@ -25,8 +25,8 @@ type Options struct {
 	// as gin.Default includes it's own Recovery middleware what handles http responses.
 	Repanic bool
 	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
-	// Because Gin's default `Recovery` handler doesn't restart the application,
-	// it's safe to either skip this option or set it to `false`.
+	// Because Gin's default Recovery handler doesn't restart the application,
+	// it's safe to either skip this option or set it to false.
 	WaitForDelivery bool
 	// Timeout for the event delivery requests.
 	Timeout time.Duration
@@ -81,7 +81,7 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	}
 }
 
-// Check for a broken connection, as this is what Gin does already
+// Check for a broken connection, as this is what Gin does already.
 func isBrokenPipeError(err interface{}) bool {
 	if netErr, ok := err.(*net.OpError); ok {
 		if sysErr, ok := netErr.Err.(*os.SyscallError); ok {

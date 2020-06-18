@@ -20,8 +20,8 @@ type Options struct {
 	// as negroni.Classic includes it's own Recovery middleware what handles http responses.
 	Repanic bool
 	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
-	// Because Negroni's default `Recovery` handler doesn't restart the application,
-	// it's safe to either skip this option or set it to `false`.
+	// Because Negroni's default Recovery handler doesn't restart the application,
+	// it's safe to either skip this option or set it to false.
 	WaitForDelivery bool
 	// Timeout for the event delivery requests.
 	Timeout time.Duration
@@ -77,7 +77,7 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	}
 }
 
-// PanicHandlerFunc can be used for Negroni's default Recovery middleware option called `PanicHandlerFunc`,
+// PanicHandlerFunc can be used for Negroni's default Recovery middleware option called PanicHandlerFunc,
 // which let you "plug-in" to it's own handler.
 func PanicHandlerFunc(info *negroni.PanicInformation) {
 	hub := sentry.CurrentHub().Clone()

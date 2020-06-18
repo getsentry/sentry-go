@@ -48,7 +48,7 @@ type Dsn struct {
 	projectID int
 }
 
-// NewDsn creates an instance of `Dsn` by parsing provided url in a `string` format.
+// NewDsn creates an instance of Dsn by parsing provided url in a string format.
 // If Dsn is not set the client is effectively disabled.
 func NewDsn(rawURL string) (*Dsn, error) {
 	// Parse
@@ -125,7 +125,7 @@ func NewDsn(rawURL string) (*Dsn, error) {
 	}, nil
 }
 
-// String formats Dsn struct into a valid string url
+// String formats Dsn struct into a valid string url.
 func (dsn Dsn) String() string {
 	var url string
 	url += fmt.Sprintf("%s://%s", dsn.scheme, dsn.publicKey)

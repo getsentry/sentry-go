@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-//nolint: gochecknoglobals
 var testNow = time.Now().UTC()
 
 func fillScopeWithData(scope *Scope) *Scope {

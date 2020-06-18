@@ -29,7 +29,7 @@ type Options struct {
 	// as fasthttp doesn't include it's own Recovery handler.
 	Repanic bool
 	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
-	// Because fasthttp doesn't include it's own `Recovery` handler, it will restart the application,
+	// Because fasthttp doesn't include it's own Recovery handler, it will restart the application,
 	// and event won't be delivered otherwise.
 	WaitForDelivery bool
 	// Timeout for the event delivery requests.
