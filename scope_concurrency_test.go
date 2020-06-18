@@ -1,7 +1,7 @@
 package sentry_test
 
 import (
-	"errors"
+	"fmt"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -58,7 +58,7 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.SetUser(sentry.User{ID: "foo"})
 	scope.SetRequest(httptest.NewRequest("GET", "/foo", nil))
 
-	sentry.CaptureException(errors.New(string(x)))
+	sentry.CaptureException(fmt.Errorf("error %d", x))
 
 	scope.ClearBreadcrumbs()
 	scope.Clone()
