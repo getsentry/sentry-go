@@ -281,4 +281,5 @@ type Span struct {
 	Tags           map[string]string `json:"tags,omitempty"`
 	StartTimestamp time.Time         `json:"start_timestamp"`
 	EndTimestamp   time.Time         `json:"timestamp"`
+	Data           map[string]string `json:"data,omitempty"`
 }
