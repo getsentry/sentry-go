@@ -29,7 +29,11 @@
             "timestamp": "1970-01-01T00:00:05Z",
             "data": {
                 "aws_instance": "ca-central-1",
-                "shard_id": "sdf9sdj23ij2ojf902hrhgspaie9023"
+                "related_ids": [
+                    12312342,
+                    76572,
+                    4123485
+                ]
             }
         }
     ]

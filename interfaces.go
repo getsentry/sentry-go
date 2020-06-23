@@ -272,14 +272,14 @@ type TraceContext struct {
 //
 // Experimental: This is part of a beta feature of the SDK.
 type Span struct {
-	TraceID        string            `json:"trace_id"`
-	SpanID         string            `json:"span_id"`
-	ParentSpanID   string            `json:"parent_span_id,omitempty"`
-	Op             string            `json:"op,omitempty"`
-	Description    string            `json:"description,omitempty"`
-	Status         string            `json:"status,omitempty"`
-	Tags           map[string]string `json:"tags,omitempty"`
-	StartTimestamp time.Time         `json:"start_timestamp"`
-	EndTimestamp   time.Time         `json:"timestamp"`
-	Data           map[string]string `json:"data,omitempty"`
+	TraceID        string                 `json:"trace_id"`
+	SpanID         string                 `json:"span_id"`
+	ParentSpanID   string                 `json:"parent_span_id,omitempty"`
+	Op             string                 `json:"op,omitempty"`
+	Description    string                 `json:"description,omitempty"`
+	Status         string                 `json:"status,omitempty"`
+	Tags           map[string]string      `json:"tags,omitempty"`
+	StartTimestamp time.Time              `json:"start_timestamp"`
+	EndTimestamp   time.Time              `json:"timestamp"`
+	Data           map[string]interface{} `json:"data,omitempty"`
 }

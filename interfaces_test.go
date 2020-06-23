@@ -78,8 +78,8 @@ func TestStructSnapshots(t *testing.T) {
 		StartTimestamp: time.Unix(0, 0).UTC(),
 		EndTimestamp:   time.Unix(5, 0).UTC(),
 		Status:         "ok",
-		Data: map[string]string{
-			"shard_id":     "sdf9sdj23ij2ojf902hrhgspaie9023",
+		Data: map[string]interface{}{
+			"related_ids":  []uint{12312342, 76572, 4123485},
 			"aws_instance": "ca-central-1",
 		},
 	}
