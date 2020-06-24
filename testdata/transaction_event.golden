@@ -26,7 +26,15 @@
                 "status_message": "MYSQL OK"
             },
             "start_timestamp": "1970-01-01T00:00:00Z",
-            "timestamp": "1970-01-01T00:00:05Z"
+            "timestamp": "1970-01-01T00:00:05Z",
+            "data": {
+                "aws_instance": "ca-central-1",
+                "related_ids": [
+                    12312342,
+                    76572,
+                    4123485
+                ]
+            }
         }
     ]
 }
