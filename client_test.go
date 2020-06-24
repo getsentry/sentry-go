@@ -381,3 +381,15 @@ func TestSampleRate(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkProcessEvent(b *testing.B) {
+	c, err := NewClient(ClientOptions{
+		SampleRate: 0.25,
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	for i := 0; i < b.N; i++ {
+		c.processEvent(&Event{}, nil, nil)
+	}
+}
