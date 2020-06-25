@@ -24,6 +24,14 @@ import (
 // stack trace is often the most useful information.
 const maxErrorDepth = 10
 
+// hostname is the host name reported by the kernel. It is precomputed once to
+// avoid syscalls when capturing events.
+//
+// The error is ignored because retrieving the host name is best-effort. If the
+// error is non-nil, there is nothing to do other than retrying. We choose not
+// to retry for now.
+var hostname, _ = os.Hostname()
+
 // usageError is used to report to Sentry an SDK usage error.
 //
 // It is not exported because it is never returned by any function or method in
@@ -423,7 +431,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	if event.ServerName == "" {
 		if client.Options().ServerName != "" {
 			event.ServerName = client.Options().ServerName
-		} else if hostname, err := os.Hostname(); err == nil {
+		} else {
 			event.ServerName = hostname
 		}
 	}
