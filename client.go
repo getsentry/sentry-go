@@ -12,6 +12,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,32 @@ const maxErrorDepth = 10
 // error is non-nil, there is nothing to do other than retrying. We choose not
 // to retry for now.
 var hostname, _ = os.Hostname()
+
+// lockedRand is a random number generator safe for concurrent use. Its API is
+// intentionally limited and it is not meant as a full replacement for a
+// rand.Rand.
+type lockedRand struct {
+	mu sync.Mutex
+	r  *rand.Rand
+}
+
+// Float64 returns a pseudo-random number in [0.0,1.0).
+func (r *lockedRand) Float64() float64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.r.Float64()
+}
+
+// rng is the internal random number generator.
+//
+// We do not use the global functions from math/rand because, while they are
+// safe for concurrent use, any package in a build could change the seed and
+// affect the generated numbers, for instance making them deterministic. On the
+// other hand, the source returned from rand.NewSource is not safe for
+// concurrent use, so we need to couple its use with a sync.Mutex.
+var rng = &lockedRand{
+	r: rand.New(rand.NewSource(time.Now().UnixNano())),
+}
 
 // usageError is used to report to Sentry an SDK usage error.
 //
@@ -387,7 +414,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	// which means that if someone uses ClientOptions{} struct directly
 	// and we would not check for 0 here, we'd skip all events by default
 	if options.SampleRate != 0.0 {
-		randomFloat := rand.New(rand.NewSource(time.Now().UnixNano())).Float64()
+		randomFloat := rng.Float64()
 		if randomFloat > options.SampleRate {
 			Logger.Println("Event dropped due to SampleRate hit.")
 			return nil
