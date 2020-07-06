@@ -24,6 +24,7 @@ jobs:
         go test ./... -race
   allow_failures:
     - go: master
+    - env: GO111MODULE=off
   fast_finish: true
 
 before_install:
