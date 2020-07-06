@@ -60,8 +60,6 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f1",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Filename: "stacktrace_external_test.go",
-					AbsPath:  "ignored",
 					Lineno:   18,
 					InApp:    true,
 				},
@@ -72,16 +70,12 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f2",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Filename: "stacktrace_external_test.go",
-					AbsPath:  "ignored",
 					Lineno:   22,
 					InApp:    true,
 				},
 				{
 					Function: "f1",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Filename: "stacktrace_external_test.go",
-					AbsPath:  "ignored",
 					Lineno:   18,
 					InApp:    true,
 				},
@@ -97,8 +91,6 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f3",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Filename: "stacktrace_external_test.go",
-					AbsPath:  "ignored",
 					Lineno:   25,
 					InApp:    true,
 				},
@@ -128,16 +120,12 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedPkgErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Filename: "stacktrace_external_test.go",
-					AbsPath:  "ignored",
 					Lineno:   29,
 					InApp:    true,
 				},
 				{
 					Function: "BluePkgErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Filename: "stacktrace_external_test.go",
-					AbsPath:  "ignored",
 					Lineno:   33,
 					InApp:    true,
 				},
@@ -149,16 +137,12 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedPingcapErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Filename: "stacktrace_external_test.go",
-					AbsPath:  "ignored",
 					Lineno:   37,
 					InApp:    true,
 				},
 				{
 					Function: "BluePingcapErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Filename: "stacktrace_external_test.go",
-					AbsPath:  "ignored",
 					Lineno:   41,
 					InApp:    true,
 				},
@@ -170,16 +154,12 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedGoErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Filename: "stacktrace_external_test.go",
-					AbsPath:  "ignored",
 					Lineno:   45,
 					InApp:    true,
 				},
 				{
 					Function: "BlueGoErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Filename: "stacktrace_external_test.go",
-					AbsPath:  "ignored",
 					Lineno:   49,
 					InApp:    true,
 				},
@@ -194,6 +174,17 @@ func TestExtractStacktrace(t *testing.T) {
 			}
 			got := sentry.ExtractStacktrace(err)
 			compareStacktrace(t, got, tt.want)
+			// We ignore paths in compareStacktrace because they depend on the
+			// environment where tests are run. However, Frame.Filename should
+			// be a relative path and Frame.AbsPath should be an absolute path.
+			for _, frame := range got.Frames {
+				if !filepath.IsAbs(frame.AbsPath) {
+					t.Errorf("got %q, want absolute path", frame.AbsPath)
+				}
+				if filepath.IsAbs(frame.Filename) {
+					t.Errorf("got %q, want relative path", frame.Filename)
+				}
+			}
 		})
 	}
 }
@@ -226,6 +217,6 @@ func compareStacktrace(t *testing.T, got, want *sentry.Stacktrace) {
 func stacktraceDiff(x, y *sentry.Stacktrace) string {
 	return cmp.Diff(
 		x, y,
-		cmpopts.IgnoreFields(sentry.Frame{}, "AbsPath"),
+		cmpopts.IgnoreFields(sentry.Frame{}, "AbsPath", "Filename"),
 	)
 }

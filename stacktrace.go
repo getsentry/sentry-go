@@ -149,20 +149,36 @@ type Frame struct {
 
 // NewFrame assembles a stacktrace frame out of runtime.Frame.
 func NewFrame(f runtime.Frame) Frame {
-	abspath := f.File
-	filename := f.File
+	var abspath, relpath string
+	// NOTE: f.File paths historically use forward slash as path separator even
+	// on Windows, though this is not yet documented, see
+	// https://golang.org/issues/3335. In any case, filepath.IsAbs can work with
+	// paths with either slash or backslash on Windows.
+	switch {
+	case f.File == "":
+		relpath = unknown
+		// Leave abspath as the empty string to be omitted when serializing
+		// event as JSON.
+		abspath = ""
+	case filepath.IsAbs(f.File):
+		abspath = f.File
+		// TODO: in the general case, it is not trivial to come up with a
+		// "project relative" path with the data we have in run time.
+		// We shall not use filepath.Base because it creates ambiguous paths and
+		// affects the "Suspect Commits" feature.
+		// For now, leave relpath empty to be omitted when serializing the event
+		// as JSON. Improve this later.
+		relpath = ""
+	default:
+		// f.File is a relative path. This may happen when the binary is built
+		// with the -trimpath flag.
+		relpath = f.File
+		// Omit abspath when serializing the event as JSON.
+		abspath = ""
+	}
+
 	function := f.Function
 	var pkg string
-
-	if filename != "" {
-		filename = filepath.Base(filename)
-	} else {
-		filename = unknown
-	}
-
-	if abspath == "" {
-		abspath = unknown
-	}
 
 	if function != "" {
 		pkg, function = splitQualifiedFunctionName(function)
@@ -170,7 +186,7 @@ func NewFrame(f runtime.Frame) Frame {
 
 	frame := Frame{
 		AbsPath:  abspath,
-		Filename: filename,
+		Filename: relpath,
 		Lineno:   f.Line,
 		Module:   pkg,
 		Function: function,
