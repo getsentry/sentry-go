@@ -309,6 +309,7 @@ func (scope *Scope) Clone() *Scope {
 	clone.level = scope.level
 	clone.transaction = scope.transaction
 	clone.request = scope.request
+	clone.requestBody = scope.requestBody
 
 	return clone
 }
