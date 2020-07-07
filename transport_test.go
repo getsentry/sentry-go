@@ -18,10 +18,12 @@ type unserializableType struct {
 	UnsupportedField func()
 }
 
-const basicEvent = "{\"message\":\"mkey\",\"sdk\":{},\"user\":{}}"
-const enhancedEvent = "{\"extra\":{\"info\":\"Original event couldn't be marshalled. Succeeded by stripping " +
-	"the data that uses interface{} type. Please verify that the data you attach to the scope is serializable.\"}," +
-	"\"message\":\"mkey\",\"sdk\":{},\"user\":{}}"
+//nolint: lll
+const (
+	basicEvent                         = `{"message":"mkey","sdk":{},"user":{}}`
+	enhancedEventInvalidBreadcrumb     = `{"extra":{"info":"Could not encode original event as JSON. Succeeded by removing Breadcrumbs, Contexts and Extra. Please verify the data you attach to the scope. Error: json: error calling MarshalJSON for type *sentry.Event: json: error calling MarshalJSON for type *sentry.Breadcrumb: json: unsupported type: func()"},"message":"mkey","sdk":{},"user":{}}`
+	enhancedEventInvalidContextOrExtra = `{"extra":{"info":"Could not encode original event as JSON. Succeeded by removing Breadcrumbs, Contexts and Extra. Please verify the data you attach to the scope. Error: json: error calling MarshalJSON for type *sentry.Event: json: unsupported type: func()"},"message":"mkey","sdk":{},"user":{}}`
+)
 
 func TestGetRequestBodyFromEventValid(t *testing.T) {
 	body := getRequestBodyFromEvent(&Event{
@@ -47,7 +49,7 @@ func TestGetRequestBodyFromEventInvalidBreadcrumbsField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEvent
+	want := enhancedEventInvalidBreadcrumb
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -63,7 +65,7 @@ func TestGetRequestBodyFromEventInvalidExtraField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEvent
+	want := enhancedEventInvalidContextOrExtra
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -79,7 +81,7 @@ func TestGetRequestBodyFromEventInvalidContextField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEvent
+	want := enhancedEventInvalidContextOrExtra
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -103,7 +105,7 @@ func TestGetRequestBodyFromEventMultipleInvalidFields(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEvent
+	want := enhancedEventInvalidBreadcrumb
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
