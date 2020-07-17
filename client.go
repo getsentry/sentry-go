@@ -169,7 +169,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 	if options.Debug {
 		debugWriter := options.DebugWriter
 		if debugWriter == nil {
-			debugWriter = os.Stdout
+			debugWriter = os.Stderr
 		}
 		Logger.SetOutput(debugWriter)
 	}
