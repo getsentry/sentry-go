@@ -52,10 +52,14 @@ func New(options Options) negroni.Handler {
 }
 
 func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	hub := sentry.CurrentHub().Clone()
+	ctx := r.Context()
+	hub := sentry.GetHubFromContext(ctx)
+	if hub == nil {
+		hub = sentry.CurrentHub().Clone()
+	}
 	hub.Scope().SetRequest(r)
-	ctx := sentry.SetHubOnContext(
-		context.WithValue(r.Context(), sentry.RequestContextKey, r),
+	ctx = sentry.SetHubOnContext(
+		context.WithValue(ctx, sentry.RequestContextKey, r),
 		hub,
 	)
 	defer h.recoverWithSentry(hub, r)

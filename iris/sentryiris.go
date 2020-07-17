@@ -56,7 +56,10 @@ func New(options Options) iris.Handler {
 }
 
 func (h *handler) handle(ctx iris.Context) {
-	hub := sentry.CurrentHub().Clone()
+	hub := sentry.GetHubFromContext(ctx.Request().Context())
+	if hub == nil {
+		hub = sentry.CurrentHub().Clone()
+	}
 	hub.Scope().SetRequest(ctx.Request())
 	ctx.Values().Set(valuesKey, hub)
 	defer h.recoverWithSentry(hub, ctx.Request())

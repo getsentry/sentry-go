@@ -57,7 +57,10 @@ func New(options Options) gin.HandlerFunc {
 }
 
 func (h *handler) handle(ctx *gin.Context) {
-	hub := sentry.CurrentHub().Clone()
+	hub := sentry.GetHubFromContext(ctx.Request.Context())
+	if hub == nil {
+		hub = sentry.CurrentHub().Clone()
+	}
 	hub.Scope().SetRequest(ctx.Request)
 	ctx.Set(valuesKey, hub)
 	defer h.recoverWithSentry(hub, ctx.Request)
