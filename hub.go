@@ -86,6 +86,9 @@ func CurrentHub() *Hub {
 
 // LastEventID returns an ID of last captured event for the current Hub.
 func (hub *Hub) LastEventID() EventID {
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+
 	return hub.lastEventID
 }
 
@@ -222,6 +225,9 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 		return nil
 	}
 	eventID := client.CaptureEvent(event, nil, scope)
+
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
 	if eventID != nil {
 		hub.lastEventID = *eventID
 	} else {
@@ -239,6 +245,9 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 		return nil
 	}
 	eventID := client.CaptureMessage(message, nil, scope)
+
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
 	if eventID != nil {
 		hub.lastEventID = *eventID
 	} else {
@@ -256,6 +265,9 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 		return nil
 	}
 	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
+
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
 	if eventID != nil {
 		hub.lastEventID = *eventID
 	} else {
