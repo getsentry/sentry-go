@@ -50,11 +50,13 @@ func NewStacktrace() *Stacktrace {
 func ExtractStacktrace(err error) *Stacktrace {
 	method := extractReflectedStacktraceMethod(err)
 
-	if !method.IsValid() {
-		return nil
-	}
+	var pcs []uintptr
 
-	pcs := extractPcs(method)
+	if method.IsValid() {
+		pcs = extractPcs(method)
+	} else {
+		pcs = extractXErrorsPC(err)
+	}
 
 	if len(pcs) == 0 {
 		return nil
@@ -127,6 +129,32 @@ func extractPcs(method reflect.Value) []uintptr {
 	}
 
 	return pcs
+}
+
+// extractXErrorsPC extracts program counters from error values compatible with
+// the error types from golang.org/x/xerrors.
+//
+// It returns nil if err is not compatible with errors from that package or if
+// no program counters are stored in err.
+func extractXErrorsPC(err error) []uintptr {
+	// This implementation uses the reflect package to avoid a hard dependency
+	// on third-party packages.
+
+	// We don't know if err matches the expected type. For simplicity, instead
+	// of trying to account for all possible ways things can go wrong, some
+	// assumptions are made and if they are violated the code will panic. We
+	// recover from any panic and ignore it, returning nil.
+	//nolint: errcheck
+	defer func() { recover() }()
+
+	field := reflect.ValueOf(err).Elem().FieldByName("frame") // type Frame struct{ frames [3]uintptr }
+	field = field.FieldByName("frames")
+	field = field.Slice(1, field.Len()) // drop first pc pointing to xerrors.New
+	pc := make([]uintptr, field.Len())
+	for i := 0; i < field.Len(); i++ {
+		pc[i] = uintptr(field.Index(i).Uint())
+	}
+	return pc
 }
 
 // Frame represents a function call and it's metadata. Frames are associated

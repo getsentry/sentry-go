@@ -165,6 +165,72 @@ func TestExtractStacktrace(t *testing.T) {
 				},
 			},
 		}},
+		// FIXME: The tests below are commented out to avoid introducing a
+		// dependency on golang.org/x/xerrors. We should enable them when we
+		// move tests with external dependencies to a separate module.
+		// See https://github.com/getsentry/sentry-go/issues/238.
+		//
+		// https://golang.org/x/xerrors
+		// "xerrors.errorString": {
+		// 	func() error {
+		// 		err := xerrors.New("xerror")
+		// 		errType := reflect.TypeOf(err).String()
+		// 		if errType != "*xerrors.errorString" {
+		// 			panic("unexpected error type: " + errType)
+		// 		}
+		// 		return err
+		// 	},
+		// 	&sentry.Stacktrace{
+		// 		Frames: []sentry.Frame{
+		// 			{
+		// 				Function: "TestExtractStacktrace.func1",
+		// 				Module:   "github.com/getsentry/sentry-go_test",
+		// 				Lineno:   178,
+		// 				InApp:    true,
+		// 			},
+		// 		},
+		// 	},
+		// },
+		// "xerrors.wrapError": {
+		// 	func() error {
+		// 		err := xerrors.Errorf("new error: %w", xerrors.New("xerror"))
+		// 		errType := reflect.TypeOf(err).String()
+		// 		if errType != "*xerrors.wrapError" {
+		// 			panic("unexpected error type: " + errType)
+		// 		}
+		// 		return err
+		// 	},
+		// 	&sentry.Stacktrace{
+		// 		Frames: []sentry.Frame{
+		// 			{
+		// 				Function: "TestExtractStacktrace.func2",
+		// 				Module:   "github.com/getsentry/sentry-go_test",
+		// 				Lineno:   198,
+		// 				InApp:    true,
+		// 			},
+		// 		},
+		// 	},
+		// },
+		// "xerrors.noWrapError": {
+		// 	func() error {
+		// 		err := xerrors.Errorf("new error: %w", "not an xerror")
+		// 		errType := reflect.TypeOf(err).String()
+		// 		if errType != "*xerrors.noWrapError" {
+		// 			panic("unexpected error type: " + errType)
+		// 		}
+		// 		return err
+		// 	},
+		// 	&sentry.Stacktrace{
+		// 		Frames: []sentry.Frame{
+		// 			{
+		// 				Function: "TestExtractStacktrace.func3",
+		// 				Module:   "github.com/getsentry/sentry-go_test",
+		// 				Lineno:   218,
+		// 				InApp:    true,
+		// 			},
+		// 		},
+		// 	},
+		// },
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -191,6 +257,10 @@ func TestExtractStacktrace(t *testing.T) {
 
 func compareStacktrace(t *testing.T, got, want *sentry.Stacktrace) {
 	t.Helper()
+
+	if got == nil {
+		t.Fatal("got nil stack trace")
+	}
 
 	if len(got.Frames) == 0 {
 		t.Fatal("got no frames")
