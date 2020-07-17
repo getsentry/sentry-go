@@ -414,6 +414,10 @@ func TestRecover(t *testing.T) {
 			},
 		},
 		{"panic string", &Event{Message: "panic string"}},
+		// Arbitrary types should be converted to string:
+		{101010, &Event{Message: "101010"}},
+		{[]string{"", "", "hello"}, &Event{Message: `[]string{"", "", "hello"}`}},
+		{&struct{ Field string }{"test"}, &Event{Message: `&struct { Field string }{Field:"test"}`}},
 	}
 	checkEvent := func(t *testing.T, events []*Event, want *Event) {
 		t.Helper()

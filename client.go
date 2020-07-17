@@ -316,15 +316,16 @@ func (client *Client) RecoverWithContext(
 		}
 	}
 
-	if err, ok := err.(error); ok {
-		event := client.eventFromException(err, LevelFatal)
-		return client.CaptureEvent(event, hint, scope)
+	var event *Event
+	switch err := err.(type) {
+	case error:
+		event = client.eventFromException(err, LevelFatal)
+	case string:
+		event = client.eventFromMessage(err, LevelFatal)
+	default:
+		event = client.eventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
 	}
-	if err, ok := err.(string); ok {
-		event := client.eventFromMessage(err, LevelFatal)
-		return client.CaptureEvent(event, hint, scope)
-	}
-	return nil
+	return client.CaptureEvent(event, hint, scope)
 }
 
 // Flush waits until the underlying Transport sends any buffered events to the
