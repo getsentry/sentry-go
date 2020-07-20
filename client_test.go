@@ -62,6 +62,29 @@ func TestCaptureMessageShouldSucceedWithoutNilScope(t *testing.T) {
 	assertEqual(t, transport.lastEvent.Message, "foo")
 }
 
+func TestCaptureMessageEmptyString(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	client.CaptureMessage("", nil, scope)
+	want := &Event{
+		Exception: []Exception{
+			{
+				Type:       "sentry.usageError",
+				Value:      "CaptureMessage called with empty message",
+				Stacktrace: &Stacktrace{Frames: []Frame{}},
+			},
+		},
+	}
+	got := transport.lastEvent
+	opts := cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
+		return &Event{
+			Exception: e.Exception,
+		}
+	})
+	if diff := cmp.Diff(want, got, opts); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
+}
+
 type customErr struct{}
 
 func (e *customErr) Error() string {
@@ -267,6 +290,29 @@ func TestCaptureEventShouldSendEventWithProvidedError(t *testing.T) {
 	event.Message = "event message"
 	client.CaptureEvent(event, nil, scope)
 	assertEqual(t, transport.lastEvent.Message, "event message")
+}
+
+func TestCaptureEventNil(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	client.CaptureEvent(nil, nil, scope)
+	want := &Event{
+		Exception: []Exception{
+			{
+				Type:       "sentry.usageError",
+				Value:      "CaptureEvent called with nil event",
+				Stacktrace: &Stacktrace{Frames: []Frame{}},
+			},
+		},
+	}
+	got := transport.lastEvent
+	opts := cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
+		return &Event{
+			Exception: e.Exception,
+		}
+	})
+	if diff := cmp.Diff(want, got, opts); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
 }
 
 func TestSampleRateCanDropEvent(t *testing.T) {
