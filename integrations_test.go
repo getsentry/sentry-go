@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -340,5 +341,50 @@ func TestExtractModules(t *testing.T) {
 				t.Errorf("modules info mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
+	transport := &TransportMock{}
+	client, err := NewClient(ClientOptions{
+		Transport: transport,
+		Integrations: func([]Integration) []Integration {
+			return []Integration{new(environmentIntegration)}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := NewScope()
+
+	scope.contexts["device"] = map[string]interface{}{
+		"foo": "bar",
+	}
+	scope.contexts["os"] = map[string]interface{}{
+		"name": "test",
+	}
+	scope.contexts["custom"] = "value"
+	hub := NewHub(client, scope)
+	hub.CaptureMessage("test event")
+
+	events := transport.Events()
+	if len(events) != 1 {
+		b, err := json.MarshalIndent(events, "", "  ")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Fatalf("events = %s\ngot %d events, want 1", b, len(events))
+	}
+
+	contexts := events[0].Contexts
+
+	if contexts["device"].(map[string]interface{})["foo"] != "bar" {
+		t.Errorf(`contexts["device"] = %#v, want contexts["device"]["foo"] == "bar"`, contexts["device"])
+	}
+	if contexts["os"].(map[string]interface{})["name"] != "test" {
+		t.Errorf(`contexts["os"] = %#v, want contexts["os"]["name"] == "test"`, contexts["os"])
+	}
+	if contexts["custom"] != "value" {
+		t.Errorf(`contexts["custom"] = %#v, want "value"`, contexts["custom"])
 	}
 }
