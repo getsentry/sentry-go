@@ -314,8 +314,13 @@ func (client *Client) RecoverWithContext(
 		return nil
 	}
 
-	if hint.Context == nil && ctx != nil {
-		hint.Context = ctx
+	if ctx != nil {
+		if hint == nil {
+			hint = &EventHint{}
+		}
+		if hint.Context == nil {
+			hint.Context = ctx
+		}
 	}
 
 	if err, ok := err.(error); ok {
