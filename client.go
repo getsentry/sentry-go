@@ -310,23 +310,22 @@ func (client *Client) RecoverWithContext(
 	if err == nil {
 		err = recover()
 	}
-
-	if err != nil {
-		if hint.Context == nil && ctx != nil {
-			hint.Context = ctx
-		}
-
-		if err, ok := err.(error); ok {
-			event := client.eventFromException(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope)
-		}
-
-		if err, ok := err.(string); ok {
-			event := client.eventFromMessage(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope)
-		}
+	if err == nil {
+		return nil
 	}
 
+	if hint.Context == nil && ctx != nil {
+		hint.Context = ctx
+	}
+
+	if err, ok := err.(error); ok {
+		event := client.eventFromException(err, LevelFatal)
+		return client.CaptureEvent(event, hint, scope)
+	}
+	if err, ok := err.(string); ok {
+		event := client.eventFromMessage(err, LevelFatal)
+		return client.CaptureEvent(event, hint, scope)
+	}
 	return nil
 }
 
