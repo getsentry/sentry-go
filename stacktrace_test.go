@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -157,5 +158,14 @@ func TestFilterFrames(t *testing.T) {
 				t.Errorf("filterFrames() mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestExtractXErrorsPC(t *testing.T) {
+	// This ensures that extractXErrorsPC does not break code that doesn't use
+	// golang.org/x/xerrors. For tests that check that it works on the
+	// appropriate type of errors, see stacktrace_external_test.go.
+	if got := extractXErrorsPC(errors.New("test")); got != nil {
+		t.Errorf("got %#v, want nil", got)
 	}
 }
