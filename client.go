@@ -284,19 +284,12 @@ func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModif
 		err = recover()
 	}
 
-	if err != nil {
-		if err, ok := err.(error); ok {
-			event := client.eventFromException(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope)
-		}
-
-		if err, ok := err.(string); ok {
-			event := client.eventFromMessage(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope)
-		}
-	}
-
-	return nil
+	// Normally we would not pass a nil Context, but RecoverWithContext doesn't
+	// use the Context for communicating deadline nor cancelation. All it does
+	// is store the Context in the EventHint and there nil means the Context is
+	// not available.
+	//nolint: staticcheck
+	return client.RecoverWithContext(nil, err, hint, scope)
 }
 
 // RecoverWithContext captures a panic and passes relevant context object.
