@@ -87,6 +87,8 @@ var globalEventProcessors []EventProcessor
 
 // AddGlobalEventProcessor adds processor to the global list of event
 // processors. Global event processors apply to all events.
+//
+// Deprecated: Use Scope.AddEventProcessor or Client.AddEventProcessor instead.
 func AddGlobalEventProcessor(processor EventProcessor) {
 	globalEventProcessors = append(globalEventProcessors, processor)
 }
