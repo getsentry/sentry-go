@@ -284,19 +284,12 @@ func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModif
 		err = recover()
 	}
 
-	if err != nil {
-		if err, ok := err.(error); ok {
-			event := client.eventFromException(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope)
-		}
-
-		if err, ok := err.(string); ok {
-			event := client.eventFromMessage(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope)
-		}
-	}
-
-	return nil
+	// Normally we would not pass a nil Context, but RecoverWithContext doesn't
+	// use the Context for communicating deadline nor cancelation. All it does
+	// is store the Context in the EventHint and there nil means the Context is
+	// not available.
+	//nolint: staticcheck
+	return client.RecoverWithContext(nil, err, hint, scope)
 }
 
 // RecoverWithContext captures a panic and passes relevant context object.
@@ -310,24 +303,29 @@ func (client *Client) RecoverWithContext(
 	if err == nil {
 		err = recover()
 	}
+	if err == nil {
+		return nil
+	}
 
-	if err != nil {
-		if hint.Context == nil && ctx != nil {
+	if ctx != nil {
+		if hint == nil {
+			hint = &EventHint{}
+		}
+		if hint.Context == nil {
 			hint.Context = ctx
-		}
-
-		if err, ok := err.(error); ok {
-			event := client.eventFromException(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope)
-		}
-
-		if err, ok := err.(string); ok {
-			event := client.eventFromMessage(err, LevelFatal)
-			return client.CaptureEvent(event, hint, scope)
 		}
 	}
 
-	return nil
+	var event *Event
+	switch err := err.(type) {
+	case error:
+		event = client.eventFromException(err, LevelFatal)
+	case string:
+		event = client.eventFromMessage(err, LevelFatal)
+	default:
+		event = client.eventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
+	}
+	return client.CaptureEvent(event, hint, scope)
 }
 
 // Flush waits until the underlying Transport sends any buffered events to the

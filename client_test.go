@@ -1,6 +1,8 @@
 package sentry
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -391,5 +393,83 @@ func BenchmarkProcessEvent(b *testing.B) {
 	}
 	for i := 0; i < b.N; i++ {
 		c.processEvent(&Event{}, nil, nil)
+	}
+}
+
+func TestRecover(t *testing.T) {
+	tests := []struct {
+		v    interface{} // for panic(v)
+		want *Event
+	}{
+		{
+			errors.New("panic error"),
+			&Event{
+				Exception: []Exception{
+					{
+						Type:       "*errors.errorString",
+						Value:      "panic error",
+						Stacktrace: &Stacktrace{Frames: []Frame{}},
+					},
+				},
+			},
+		},
+		{"panic string", &Event{Message: "panic string"}},
+		// Arbitrary types should be converted to string:
+		{101010, &Event{Message: "101010"}},
+		{[]string{"", "", "hello"}, &Event{Message: `[]string{"", "", "hello"}`}},
+		{&struct{ Field string }{"test"}, &Event{Message: `&struct { Field string }{Field:"test"}`}},
+	}
+	checkEvent := func(t *testing.T, events []*Event, want *Event) {
+		t.Helper()
+		if len(events) != 1 {
+			b, err := json.MarshalIndent(events, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Fatalf("events = %s\ngot %d events, want 1", b, len(events))
+		}
+		got := events[0]
+		opts := cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
+			return &Event{
+				Message:   e.Message,
+				Exception: e.Exception,
+				Level:     e.Level,
+			}
+		})
+		if diff := cmp.Diff(want, got, opts); diff != "" {
+			t.Errorf("(-want +got):\n%s", diff)
+		}
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(fmt.Sprintf("Recover/%v", tt.v), func(t *testing.T) {
+			client, scope, transport := setupClientTest()
+			func() {
+				defer client.Recover(nil, nil, scope)
+				panic(tt.v)
+			}()
+			tt.want.Level = LevelFatal
+			checkEvent(t, transport.Events(), tt.want)
+		})
+		t.Run(fmt.Sprintf("RecoverWithContext/%v", tt.v), func(t *testing.T) {
+			client, scope, transport := setupClientTest()
+			var called bool
+			client.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+				called = true
+				if hint.Context != context.TODO() {
+					t.Fatal("unexpected context value")
+				}
+				return event
+			})
+			func() {
+				defer client.RecoverWithContext(context.TODO(), nil, nil, scope)
+				panic(tt.v)
+			}()
+			tt.want.Level = LevelFatal
+			checkEvent(t, transport.Events(), tt.want)
+			if !called {
+				t.Error("event processor not called, could not test that hint has context")
+			}
+		})
 	}
 }
