@@ -344,6 +344,10 @@ func (client *Client) Flush(timeout time.Duration) bool {
 }
 
 func (client *Client) eventFromMessage(message string, level Level) *Event {
+	if message == "" {
+		err := usageError{fmt.Errorf("%s called with empty message", callerFunctionName())}
+		return client.eventFromException(err, level)
+	}
 	event := NewEvent()
 	event.Level = level
 	event.Message = message
@@ -407,6 +411,11 @@ func reverse(a []Exception) {
 }
 
 func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
+	if event == nil {
+		err := usageError{fmt.Errorf("%s called with nil event", callerFunctionName())}
+		return client.CaptureException(err, hint, scope)
+	}
+
 	options := client.Options()
 
 	// TODO: Reconsider if its worth going away from default implementation
