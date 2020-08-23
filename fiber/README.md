@@ -72,7 +72,12 @@ And it should be used instead of the global `sentry.CaptureMessage`, `sentry.Cap
 **Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentryfiber`!**
 
 ```go
-app := fiber.New()
+
+// Later in the code
+sentryHandler := sentryfiber.New(sentryfiber.Options{
+    Repanic:         true,
+    WaitForDelivery: true,
+})
 
 enhanceSentryEvent := func(ctx *fiber.Ctx) {
     if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
@@ -81,30 +86,23 @@ enhanceSentryEvent := func(ctx *fiber.Ctx) {
     ctx.Next()
 }
 
-// Later in the code
-sentryHandler := sentryfiber.New(sentryfiber.Options{
-	Repanic: true,
-	WaitForDelivery: true,
-})
+app := fiber.New()
 
 app.Use(sentryHandler)
 
-defaultHandler := func(ctx *fiber.Ctx) {
-	if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
-		hub.WithScope(func(scope *sentry.Scope) {
-			scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
-			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-		})
-	}
-	ctx.Status(fiber.StatusOK)
-}
+app.All("/foo", enhanceSentryEvent, func(ctx *fiber.Ctx) {
+    panic("y tho")
+})
 
-fooHandler := func(ctx *fiber.Ctx) {
-	panic("y tho")
-}
-
-app.Get("/foo", enhanceSentryEvent, fooHandler)
-app.Get("/", defaultHandler)
+app.All("/", func(ctx *fiber.Ctx) {
+    if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
+        hub.WithScope(func(scope *sentry.Scope) {
+            scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
+            hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
+        })
+    }
+    ctx.Status(fiber.StatusOK)
+})
 
 app.Listen(3000)
 ```
