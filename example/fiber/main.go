@@ -6,6 +6,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
 	"github.com/gofiber/fiber"
+	"github.com/gofiber/utils"
 )
 
 func main() {
@@ -15,7 +16,7 @@ func main() {
 			if hint.Context != nil {
 				if ctx, ok := hint.Context.Value(sentry.RequestContextKey).(*fiber.Ctx); ok {
 					// You have access to the original Context if it panicked
-					fmt.Println(string(ctx.Hostname()))
+					fmt.Println(utils.ImmutableString(ctx.Hostname()))
 				}
 			}
 			fmt.Println(event)
@@ -56,5 +57,7 @@ func main() {
 		ctx.Status(fiber.StatusOK)
 	})
 
-	app.Listen(3000)
+	if err := app.Listen(3000); err != nil {
+		panic(err)
+	}
 }

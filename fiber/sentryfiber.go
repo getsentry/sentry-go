@@ -11,6 +11,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/gofiber/fiber"
+	"github.com/gofiber/utils"
 )
 
 const valuesKey = "sentry"
@@ -97,7 +98,7 @@ func convert(ctx *fiber.Ctx) *http.Request {
 
 	r := new(http.Request)
 
-	r.Method = string(ctx.Fasthttp.Method())
+	r.Method = utils.ImmutableString(ctx.Method())
 	uri := ctx.Fasthttp.URI()
 	r.URL, _ = url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
 
@@ -106,7 +107,7 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	ctx.Fasthttp.Request.Header.VisitAll(func(key, value []byte) {
 		r.Header.Add(string(key), string(value))
 	})
-	r.Host = ctx.Hostname()
+	r.Host = utils.ImmutableString(ctx.Hostname())
 
 	// Cookies
 	ctx.Fasthttp.Request.Header.VisitAllCookie(func(key, value []byte) {

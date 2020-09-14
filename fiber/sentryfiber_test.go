@@ -170,6 +170,7 @@ func TestIntegration(t *testing.T) {
 		}
 		req.Header.Set("User-Agent", "fiber")
 		resp, err := app.Test(req)
+		resp.Body.Close()
 		if err != nil {
 			t.Fatalf("Request %q failed: %s", tt.Path, err)
 		}
