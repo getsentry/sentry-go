@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber"
 	"github.com/gofiber/utils"
 )
 
@@ -56,14 +56,14 @@ func New(options Options) fiber.Handler {
 	return handler.handle
 }
 
-func (h *handler) handle(ctx *fiber.Ctx) error {
+func (h *handler) handle(ctx *fiber.Ctx) {
 	hub := sentry.CurrentHub().Clone()
 	scope := hub.Scope()
 	scope.SetRequest(convert(ctx))
-	scope.SetRequestBody(ctx.Request().Body())
+	scope.SetRequestBody(ctx.Fasthttp.Request.Body())
 	ctx.Locals(valuesKey, hub)
 	defer h.recoverWithSentry(hub, ctx)
-	return ctx.Next()
+	ctx.Next()
 }
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
@@ -99,29 +99,29 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	r := new(http.Request)
 
 	r.Method = utils.ImmutableString(ctx.Method())
-	uri := ctx.Context().URI()
+	uri := ctx.Fasthttp.URI()
 	r.URL, _ = url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
 
 	// Headers
 	r.Header = make(http.Header)
-	ctx.Request().Header.VisitAll(func(key, value []byte) {
+	ctx.Fasthttp.Request.Header.VisitAll(func(key, value []byte) {
 		r.Header.Add(string(key), string(value))
 	})
 	r.Host = utils.ImmutableString(ctx.Hostname())
 
 	// Cookies
-	ctx.Request().Header.VisitAllCookie(func(key, value []byte) {
+	ctx.Fasthttp.Request.Header.VisitAllCookie(func(key, value []byte) {
 		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
 	})
 
 	// Env
-	r.RemoteAddr = ctx.Context().RemoteAddr().String()
+	r.RemoteAddr = ctx.Fasthttp.RemoteAddr().String()
 
 	// QueryString
-	r.URL.RawQuery = string(ctx.Context().URI().QueryString())
+	r.URL.RawQuery = string(ctx.Fasthttp.URI().QueryString())
 
 	// Body
-	r.Body = ioutil.NopCloser(bytes.NewReader(ctx.Request().Body()))
+	r.Body = ioutil.NopCloser(bytes.NewReader(ctx.Fasthttp.Request.Body()))
 
 	return r
 }

@@ -9,8 +9,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/utils"
+	"github.com/gofiber/fiber"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -19,32 +18,28 @@ func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
 	sentryHandler := sentryfiber.New(sentryfiber.Options{})
 
-	app := *fiber.New()
+	app := fiber.New()
 
 	app.Use(sentryHandler)
 
-	app.Get("/panic", func(c *fiber.Ctx) error {
+	app.Get("/panic", func(c *fiber.Ctx) {
 		panic("test")
 	})
-	app.Post("/post", func(c *fiber.Ctx) error {
+	app.Post("/post", func(c *fiber.Ctx) {
 		hub := sentryfiber.GetHubFromContext(c)
-		hub.CaptureMessage("post: " + utils.GetString(c.Body()))
-		return c.SendStatus(fiber.StatusOK)
+		hub.CaptureMessage("post: " + c.Body())
 	})
-	app.Get("/get", func(c *fiber.Ctx) error {
+	app.Get("/get", func(c *fiber.Ctx) {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage("get")
-		return c.SendStatus(fiber.StatusOK)
 	})
-	app.Post("/post/large", func(c *fiber.Ctx) error {
+	app.Post("/post/large", func(c *fiber.Ctx) {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(c.Body())/1024))
-		return c.SendStatus(fiber.StatusOK)
 	})
-	app.Post("/post/body-ignored", func(c *fiber.Ctx) error {
+	app.Post("/post/body-ignored", func(c *fiber.Ctx) {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage("body ignored")
-		return c.SendStatus(fiber.StatusOK)
 	})
 
 	tests := []struct {
