@@ -139,12 +139,11 @@ func NewRequest(r *http.Request) *Request {
 
 // Exception specifies an error that occurred.
 type Exception struct {
-	Type          string      `json:"type,omitempty"`
-	Value         string      `json:"value,omitempty"`
-	Module        string      `json:"module,omitempty"`
-	ThreadID      string      `json:"thread_id,omitempty"`
-	Stacktrace    *Stacktrace `json:"stacktrace,omitempty"`
-	RawStacktrace *Stacktrace `json:"raw_stacktrace,omitempty"`
+	Type       string      `json:"type,omitempty"`
+	Value      string      `json:"value,omitempty"`
+	Module     string      `json:"module,omitempty"`
+	ThreadID   string      `json:"thread_id,omitempty"`
+	Stacktrace *Stacktrace `json:"stacktrace,omitempty"`
 }
 
 // EventID is a hexadecimal string representing a unique uuid4 for an Event.
@@ -238,12 +237,11 @@ func NewEvent() *Event {
 
 // Thread specifies threads that were running at the time of an event.
 type Thread struct {
-	ID            string      `json:"id,omitempty"`
-	Name          string      `json:"name,omitempty"`
-	Stacktrace    *Stacktrace `json:"stacktrace,omitempty"`
-	RawStacktrace *Stacktrace `json:"raw_stacktrace,omitempty"`
-	Crashed       bool        `json:"crashed,omitempty"`
-	Current       bool        `json:"current,omitempty"`
+	ID         string      `json:"id,omitempty"`
+	Name       string      `json:"name,omitempty"`
+	Stacktrace *Stacktrace `json:"stacktrace,omitempty"`
+	Crashed    bool        `json:"crashed,omitempty"`
+	Current    bool        `json:"current,omitempty"`
 }
 
 // EventHint contains information that can be associated with an Event.
