@@ -132,10 +132,10 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 
 func TestGetEnvelopeFromBody(t *testing.T) {
 	body := getRequestBodyFromEvent(&Event{
-		Type:           transactionType,
-		Spans:          []*Span{},
-		StartTimestamp: time.Unix(3, 0).UTC(),
-		Timestamp:      time.Unix(5, 0).UTC(),
+		Type:      transactionType,
+		Spans:     []*RawSpan{},
+		StartTime: time.Unix(3, 0).UTC(),
+		Timestamp: time.Unix(5, 0).UTC(),
 	})
 	env := getEnvelopeFromBody(body, time.Unix(6, 0))
 	got := env.String()
