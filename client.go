@@ -114,6 +114,10 @@ type ClientOptions struct {
 	// all events are sent. Thus, as a historical special case, the sample rate
 	// 0.0 is treated as if it was 1.0.
 	SampleRate float64
+	// The sample rate for sampling traces in the range [0.0, 1.0].
+	TracesSampleRate float64
+	// Used to customize the sampling of traces, overrides TracesSampleRate.
+	TracesSampler TracesSampler
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
 	// If the match is found, then a whole event will be dropped.
