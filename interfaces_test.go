@@ -44,14 +44,14 @@ func TestNewRequest(t *testing.T) {
 func TestEventMarshalJSON(t *testing.T) {
 	event := NewEvent()
 	event.Spans = []*Span{{
-		TraceID:        "d6c4f03650bd47699ec65c84352b6208",
-		SpanID:         "1cc4b26ab9094ef0",
-		ParentSpanID:   "442bd97bbe564317",
-		StartTimestamp: time.Unix(8, 0).UTC(),
-		EndTimestamp:   time.Unix(10, 0).UTC(),
-		Status:         "ok",
+		TraceID:      TraceIDFromHex("d6c4f03650bd47699ec65c84352b6208"),
+		SpanID:       SpanIDFromHex("1cc4b26ab9094ef0"),
+		ParentSpanID: SpanIDFromHex("442bd97bbe564317"),
+		StartTime:    time.Unix(8, 0).UTC(),
+		EndTime:      time.Unix(10, 0).UTC(),
+		Status:       SpanStatusOK,
 	}}
-	event.StartTimestamp = time.Unix(7, 0).UTC()
+	event.StartTime = time.Unix(7, 0).UTC()
 	event.Timestamp = time.Unix(14, 0).UTC()
 
 	got, err := json.Marshal(event)
@@ -59,7 +59,7 @@ func TestEventMarshalJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Non transaction event should not have fields Spans and StartTimestamp
+	// Non-transaction event should not have fields Spans and StartTime
 	want := `{"sdk":{},"user":{},"timestamp":"1970-01-01T00:00:14Z"}`
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
@@ -69,18 +69,18 @@ func TestEventMarshalJSON(t *testing.T) {
 
 func TestStructSnapshots(t *testing.T) {
 	testSpan := &Span{
-		TraceID:      "d6c4f03650bd47699ec65c84352b6208",
-		SpanID:       "1cc4b26ab9094ef0",
-		ParentSpanID: "442bd97bbe564317",
+		TraceID:      TraceIDFromHex("d6c4f03650bd47699ec65c84352b6208"),
+		SpanID:       SpanIDFromHex("1cc4b26ab9094ef0"),
+		ParentSpanID: SpanIDFromHex("442bd97bbe564317"),
 		Description:  `SELECT * FROM user WHERE "user"."id" = {id}`,
 		Op:           "db.sql",
 		Tags: map[string]string{
 			"function_name":  "get_users",
 			"status_message": "MYSQL OK",
 		},
-		StartTimestamp: time.Unix(0, 0).UTC(),
-		EndTimestamp:   time.Unix(5, 0).UTC(),
-		Status:         "ok",
+		StartTime: time.Unix(0, 0).UTC(),
+		EndTime:   time.Unix(5, 0).UTC(),
+		Status:    SpanStatusOK,
 		Data: map[string]interface{}{
 			"related_ids":  []uint{12312342, 76572, 4123485},
 			"aws_instance": "ca-central-1",
@@ -134,17 +134,17 @@ func TestStructSnapshots(t *testing.T) {
 		{
 			testName: "transaction_event",
 			sentryStruct: &Event{
-				Type:           transactionType,
-				Spans:          []*Span{testSpan},
-				StartTimestamp: time.Unix(3, 0).UTC(),
-				Timestamp:      time.Unix(5, 0).UTC(),
+				Type:      transactionType,
+				Spans:     []*Span{testSpan},
+				StartTime: time.Unix(3, 0).UTC(),
+				Timestamp: time.Unix(5, 0).UTC(),
 				Contexts: map[string]interface{}{
-					"trace": TraceContext{
-						TraceID:     "90d57511038845dcb4164a70fc3a7fdb",
-						SpanID:      "f7f3fd754a9040eb",
+					"trace": &TraceContext{
+						TraceID:     TraceIDFromHex("90d57511038845dcb4164a70fc3a7fdb"),
+						SpanID:      SpanIDFromHex("f7f3fd754a9040eb"),
 						Op:          "http.GET",
 						Description: "description",
-						Status:      "ok",
+						Status:      SpanStatusOK,
 					},
 				},
 			},
