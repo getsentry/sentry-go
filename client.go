@@ -110,7 +110,9 @@ type ClientOptions struct {
 	// Configures whether SDK should generate and attach stacktraces to pure
 	// capture message calls.
 	AttachStacktrace bool
-	// The sample rate for event submission (0.0 - 1.0, defaults to 1.0).
+	// The sample rate for event submission in the range [0.0, 1.0]. By default,
+	// all events are sent. Thus, as a historical special case, the sample rate
+	// 0.0 is treated as if it was 1.0.
 	SampleRate float64
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
