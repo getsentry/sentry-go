@@ -60,7 +60,13 @@ func (h *Handler) Handle(handler http.Handler) http.Handler {
 	return h.handle(handler)
 }
 
-// Deprecated: Use the Handle method instead.
+// HandleFunc is like Handle, but with a handler function parameter for cases
+// where that is convenient. In particular, use it to wrap a handler function
+// literal.
+//
+//  http.Handle(pattern, h.HandleFunc(func (w http.ResponseWriter, r *http.Request) {
+//      // handler code here
+//  }))
 func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 	return h.handle(handler)
 }

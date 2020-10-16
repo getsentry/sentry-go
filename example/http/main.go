@@ -56,11 +56,14 @@ func run() error {
 	})
 
 	http.Handle("/", sentryHandler.Handle(&handler{}))
-	http.HandleFunc("/foo", sentryHandler.HandleFunc(
+	http.Handle("/foo", sentryHandler.Handle(
 		enhanceSentryEvent(func(w http.ResponseWriter, r *http.Request) {
 			panic("y tho")
 		}),
 	))
+	http.Handle("/bar", sentryHandler.HandleFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "ok")
+	}))
 
 	log.Print("Listening and serving HTTP on :3000")
 	return http.ListenAndServe(":3000", nil)
