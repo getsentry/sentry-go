@@ -59,7 +59,7 @@ func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 }
 
 func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
-	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		hub := sentry.GetHubFromContext(ctx)
 		if hub == nil {
@@ -68,8 +68,8 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		hub.Scope().SetRequest(r)
 		ctx = sentry.SetHubOnContext(ctx, hub)
 		defer h.recoverWithSentry(hub, r)
-		handler.ServeHTTP(rw, r.WithContext(ctx))
-	})
+		handler.ServeHTTP(w, r.WithContext(ctx))
+	}
 }
 
 func (h *Handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
