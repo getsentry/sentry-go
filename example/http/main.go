@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	sentryhttp "github.com/getsentry/sentry-go/http"
@@ -10,27 +12,26 @@ import (
 
 type handler struct{}
 
-func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if hub := sentry.GetHubFromContext(r.Context()); hub != nil {
 		hub.WithScope(func(scope *sentry.Scope) {
 			scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
 			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 		})
 	}
-	rw.WriteHeader(http.StatusOK)
 }
 
 func enhanceSentryEvent(handler http.HandlerFunc) http.HandlerFunc {
-	return func(rw http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if hub := sentry.GetHubFromContext(r.Context()); hub != nil {
 			hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
 		}
-		handler(rw, r)
+		handler(w, r)
 	}
 }
 
-func main() {
-	_ = sentry.Init(sentry.ClientOptions{
+func run() error {
+	err := sentry.Init(sentry.ClientOptions{
 		Dsn: "",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			if hint.Context != nil {
@@ -45,6 +46,10 @@ func main() {
 		Debug:            true,
 		AttachStacktrace: true,
 	})
+	if err != nil {
+		return err
+	}
+	defer sentry.Flush(2 * time.Second)
 
 	sentryHandler := sentryhttp.New(sentryhttp.Options{
 		Repanic: true,
@@ -52,14 +57,17 @@ func main() {
 
 	http.Handle("/", sentryHandler.Handle(&handler{}))
 	http.HandleFunc("/foo", sentryHandler.HandleFunc(
-		enhanceSentryEvent(func(rw http.ResponseWriter, r *http.Request) {
+		enhanceSentryEvent(func(w http.ResponseWriter, r *http.Request) {
 			panic("y tho")
 		}),
 	))
 
-	fmt.Println("Listening and serving HTTP on :3000")
+	log.Print("Listening and serving HTTP on :3000")
+	return http.ListenAndServe(":3000", nil)
+}
 
-	if err := http.ListenAndServe(":3000", nil); err != nil {
-		panic(err)
-	}
+func main() {
+	// The run function itself does not call log.Fatal, otherwise deferred
+	// function calls would not be executed when the program exits.
+	log.Fatal(run())
 }
