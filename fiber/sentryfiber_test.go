@@ -1,15 +1,17 @@
 package sentryfiber_test
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
-	"github.com/gofiber/fiber"
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -17,29 +19,43 @@ import (
 func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
 	sentryHandler := sentryfiber.New(sentryfiber.Options{})
+	exception := errors.New("unknown error")
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		ErrorHandler: func(c *fiber.Ctx, e error) error {
+			hub := sentryfiber.GetHubFromContext(c)
+			hub.CaptureException(e)
+			return nil
+		},
+	})
 
 	app.Use(sentryHandler)
 
-	app.Get("/panic", func(c *fiber.Ctx) {
+	app.Get("/panic", func(c *fiber.Ctx) error {
 		panic("test")
 	})
-	app.Post("/post", func(c *fiber.Ctx) {
+	app.Post("/post", func(c *fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
-		hub.CaptureMessage("post: " + c.Body())
+		hub.CaptureMessage("post: " + string(c.Body()))
+		return nil
 	})
-	app.Get("/get", func(c *fiber.Ctx) {
+	app.Get("/get", func(c *fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage("get")
+		return nil
 	})
-	app.Post("/post/large", func(c *fiber.Ctx) {
+	app.Post("/post/large", func(c *fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(c.Body())/1024))
+		return nil
 	})
-	app.Post("/post/body-ignored", func(c *fiber.Ctx) {
+	app.Post("/post/body-ignored", func(c *fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage("body ignored")
+		return nil
+	})
+	app.Post("/post/error-handler", func(c *fiber.Ctx) error {
+		return exception
 	})
 
 	tests := []struct {
@@ -148,6 +164,29 @@ func TestIntegration(t *testing.T) {
 				},
 			},
 		},
+		{
+			Path:   "/post/error-handler",
+			Method: "POST",
+
+			WantEvent: &sentry.Event{
+				Level: sentry.LevelError,
+				Exception: []sentry.Exception{
+					{
+						Value: exception.Error(),
+						Type:  reflect.TypeOf(exception).String(),
+					},
+				},
+				Request: &sentry.Request{
+					URL:    "http://example.com/post/error-handler",
+					Method: "POST",
+					Headers: map[string]string{
+						"Content-Length": "0",
+						"Host":           "example.com",
+						"User-Agent":     "fiber",
+					},
+				},
+			},
+		},
 	}
 
 	eventsCh := make(chan *sentry.Event, len(tests))
@@ -190,7 +229,7 @@ func TestIntegration(t *testing.T) {
 	opt := cmpopts.IgnoreFields(
 		sentry.Event{},
 		"Contexts", "EventID", "Extra", "Platform",
-		"Sdk", "ServerName", "Tags", "Timestamp",
+		"Sdk", "ServerName", "Tags", "Timestamp", "Exception",
 	)
 	if diff := cmp.Diff(want, got, opt); diff != "" {
 		t.Fatalf("Events mismatch (-want +got):\n%s", diff)
