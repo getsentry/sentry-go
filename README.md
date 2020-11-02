@@ -152,18 +152,18 @@ There are also more examples in the
 For more detailed information about how to get the most out of `sentry-go`,
 checkout the official documentation:
 
-- [Configuration](https://docs.sentry.io/platforms/go/config)
-- [Error Reporting](https://docs.sentry.io/error-reporting/quickstart?platform=go)
-- [Enriching Error Data](https://docs.sentry.io/enriching-error-data/additional-data/?platform=go)
-- [Transports](https://docs.sentry.io/platforms/go/transports)
-- [Integrations](https://docs.sentry.io/platforms/go/integrations)
-  - [net/http](https://docs.sentry.io/platforms/go/http)
-  - [echo](https://docs.sentry.io/platforms/go/echo)
-  - [fasthttp](https://docs.sentry.io/platforms/go/fasthttp)
-  - [gin](https://docs.sentry.io/platforms/go/gin)
-  - [iris](https://docs.sentry.io/platforms/go/iris)
-  - [martini](https://docs.sentry.io/platforms/go/martini)
-  - [negroni](https://docs.sentry.io/platforms/go/negroni)
+- [Configuration](https://docs.sentry.io/platforms/go/#configure)
+- [Error Reporting](https://docs.sentry.io/platforms/go/#verify)
+- [Enriching Error Data](https://docs.sentry.io/platforms/go/enriching-events/)
+- [Transports](https://docs.sentry.io/platforms/go/configuration/transports/)
+- [Integrations](https://docs.sentry.io/platforms/go/)
+  - [net/http](https://docs.sentry.io/platforms/go/guides/http/)
+  - [echo](https://docs.sentry.io/platforms/go/guides/echo/)
+  - [fasthttp](https://docs.sentry.io/platforms/go/guides/fasthttp/)
+  - [gin](https://docs.sentry.io/platforms/go/guides/gin/)
+  - [iris](https://docs.sentry.io/platforms/go/guides/iris/)
+  - [martini](https://docs.sentry.io/platforms/go/guides/martini/)
+  - [negroni](https://docs.sentry.io/platforms/go/guides/negroni/)
 
 ## Resources
 
