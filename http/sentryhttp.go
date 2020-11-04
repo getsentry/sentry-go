@@ -33,21 +33,13 @@ type Options struct {
 // existing HTTP handlers.
 func New(options Options) *Handler {
 	handler := Handler{
-		repanic:         false,
+		repanic:         options.Repanic,
 		timeout:         time.Second * 2,
-		waitForDelivery: false,
-	}
-
-	if options.Repanic {
-		handler.repanic = true
+		waitForDelivery: options.WaitForDelivery,
 	}
 
 	if options.Timeout != 0 {
 		handler.timeout = options.Timeout
-	}
-
-	if options.WaitForDelivery {
-		handler.waitForDelivery = true
 	}
 
 	return &handler
