@@ -438,11 +438,10 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 
 	// As per spec, transactions do not go through BeforeSend.
 	if event.Type != transactionType && options.BeforeSend != nil {
-		h := &EventHint{}
-		if hint != nil {
-			h = hint
+		if hint == nil {
+			hint = &EventHint{}
 		}
-		if event = options.BeforeSend(event, h); event == nil {
+		if event = options.BeforeSend(event, hint); event == nil {
 			Logger.Println("Event dropped due to BeforeSend callback.")
 			return nil
 		}
