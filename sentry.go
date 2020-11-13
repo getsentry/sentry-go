@@ -92,7 +92,7 @@ func ConfigureScope(f func(scope *Scope)) {
 	hub.ConfigureScope(f)
 }
 
-// PushScope is a shorthand for CurrentHub().PushPushScope.
+// PushScope is a shorthand for CurrentHub().PushScope.
 func PushScope() {
 	hub := CurrentHub()
 	hub.PushScope()
