@@ -52,17 +52,16 @@ Check out the [list of released versions](https://pkg.go.dev/github.com/getsentr
 ## Configuration
 
 To use `sentry-go`, you’ll need to import the `sentry-go` package and initialize
-it with your DSN and other [options](https://godoc.org/github.com/getsentry/sentry-go#ClientOptions).
+it with your DSN and other [options](https://pkg.go.dev/github.com/getsentry/sentry-go#ClientOptions).
 
 If not specified in the SDK initialization, the
-[DSN](https://docs.sentry.io/error-reporting/configuration/?platform=go#dsn),
-[Release](https://docs.sentry.io/workflow/releases/?platform=go) and
-[Environment](https://docs.sentry.io/enriching-error-data/environments/?platform=go)
+[DSN](https://docs.sentry.io/product/sentry-basics/dsn-explainer/),
+[Release](https://docs.sentry.io/product/releases/) and
+[Environment](https://docs.sentry.io/product/sentry-basics/environments/)
 are read from the environment variables `SENTRY_DSN`, `SENTRY_RELEASE` and
 `SENTRY_ENVIRONMENT`, respectively.
 
-More on this in the [Configuration](https://docs.sentry.io/platforms/go/config/)
-section of the official Sentry documentation.
+More on this in the [Configuration section of the official Sentry Go SDK documentation](https://docs.sentry.io/platforms/go/configuration/).
 
 ## Usage
 
@@ -152,11 +151,8 @@ There are also more examples in the
 For more detailed information about how to get the most out of `sentry-go`,
 checkout the official documentation:
 
-- [Configuration](https://docs.sentry.io/platforms/go/#configure)
-- [Error Reporting](https://docs.sentry.io/platforms/go/#verify)
-- [Enriching Error Data](https://docs.sentry.io/platforms/go/enriching-events/)
-- [Transports](https://docs.sentry.io/platforms/go/configuration/transports/)
-- [Integrations](https://docs.sentry.io/platforms/go/)
+- [Sentry Go SDK documentation](https://docs.sentry.io/platforms/go/)
+- Guides:
   - [net/http](https://docs.sentry.io/platforms/go/guides/http/)
   - [echo](https://docs.sentry.io/platforms/go/guides/echo/)
   - [fasthttp](https://docs.sentry.io/platforms/go/guides/fasthttp/)
@@ -176,7 +172,6 @@ checkout the official documentation:
 - [![Discord](https://img.shields.io/discord/621778831602221064)](https://discord.gg/Ww9hbqr)
 - [![Stack Overflow](https://img.shields.io/badge/stack%20overflow-sentry-green.svg)](http://stackoverflow.com/questions/tagged/sentry)
 - [![Twitter Follow](https://img.shields.io/twitter/follow/getsentry?label=getsentry&style=social)](https://twitter.com/intent/follow?screen_name=getsentry)
-
 
 ## License
 
