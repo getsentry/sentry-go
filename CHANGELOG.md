@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.8.0
+
+- build: Bump required version of Iris (#296)
+- fix: avoid unnecessary allocation in Client.processEvent (#293)
+- doc: Remove deprecation of sentryhttp.HandleFunc (#284)
+- ref: Update sentryhttp example (#283)
+- doc: Improve documentation of sentryhttp package (#282)
+- doc: Clarify SampleRate documentation (#279)
+- fix: Remove RawStacktrace (#278)
+- docs: Add example of custom HTTP transport
+- ci: Test against go1.15, drop go1.12 support (#271)
+
+_NOTE:_
+This version comes with a few updates. Some examples and documentation have been
+improved. We've bumped the supported version of the Iris framework to avoid
+LGPL-licensed modules in the module dependency graph.
+The `Exception.RawStacktrace` and `Thread.RawStacktrace` fields have been
+removed to conform to Sentry's ingestion protocol, only `Exception.Stacktrace`
+and `Thread.Stacktrace` should appear in user code.
+
 ## v0.7.0
 
 - feat: Include original error when event cannot be encoded as JSON (#258)
