@@ -39,25 +39,15 @@ type Options struct {
 // New returns a struct that provides Handle method
 // that satisfy fasthttp.RequestHandler interface.
 func New(options Options) *Handler {
-	handler := Handler{
-		repanic:         false,
-		timeout:         time.Second * 2,
-		waitForDelivery: false,
+	timeout := options.Timeout
+	if timeout == 0 {
+		timeout = 2 * time.Second
 	}
-
-	if options.Repanic {
-		handler.repanic = true
+	return &Handler{
+		repanic:         options.Repanic,
+		timeout:         timeout,
+		waitForDelivery: options.WaitForDelivery,
 	}
-
-	if options.Timeout != 0 {
-		handler.timeout = options.Timeout
-	}
-
-	if options.WaitForDelivery {
-		handler.waitForDelivery = true
-	}
-
-	return &handler
 }
 
 // Handle wraps fasthttp.RequestHandler and recovers from caught panics.

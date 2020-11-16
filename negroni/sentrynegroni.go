@@ -30,25 +30,15 @@ type Options struct {
 // New returns a handler struct which satisfies Negroni's middleware interface
 // It can be used with New(), Use() or With() methods.
 func New(options Options) negroni.Handler {
-	handler := handler{
-		repanic:         false,
-		timeout:         time.Second * 2,
-		waitForDelivery: false,
+	timeout := options.Timeout
+	if timeout == 0 {
+		timeout = 2 * time.Second
 	}
-
-	if options.Repanic {
-		handler.repanic = true
+	return &handler{
+		repanic:         options.Repanic,
+		timeout:         timeout,
+		waitForDelivery: options.WaitForDelivery,
 	}
-
-	if options.Timeout != 0 {
-		handler.timeout = options.Timeout
-	}
-
-	if options.WaitForDelivery {
-		handler.waitForDelivery = true
-	}
-
-	return &handler
 }
 
 func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {

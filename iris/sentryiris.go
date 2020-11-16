@@ -34,25 +34,15 @@ type Options struct {
 // New returns a function that satisfies iris.Handler interface
 // It can be used with Use() method.
 func New(options Options) iris.Handler {
-	handler := handler{
-		repanic:         false,
-		timeout:         time.Second * 2,
-		waitForDelivery: false,
+	timeout := options.Timeout
+	if timeout == 0 {
+		timeout = 2 * time.Second
 	}
-
-	if options.Repanic {
-		handler.repanic = true
-	}
-
-	if options.Timeout != 0 {
-		handler.timeout = options.Timeout
-	}
-
-	if options.WaitForDelivery {
-		handler.waitForDelivery = true
-	}
-
-	return handler.handle
+	return (&handler{
+		repanic:         options.Repanic,
+		timeout:         timeout,
+		waitForDelivery: options.WaitForDelivery,
+	}).handle
 }
 
 func (h *handler) handle(ctx iris.Context) {
