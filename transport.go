@@ -249,9 +249,15 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 
 	select {
 	case b.items <- request:
+		var eventType string
+		if event.Type == transactionType {
+			eventType = "transaction"
+		} else {
+			eventType = fmt.Sprintf("%s event", event.Level)
+		}
 		Logger.Printf(
-			"Sending %s event [%s] to %s project: %d\n",
-			event.Level,
+			"Sending %s [%s] to %s project: %d",
+			eventType,
 			event.EventID,
 			t.dsn.host,
 			t.dsn.projectID,
@@ -427,9 +433,15 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		request.Header.Set(headerKey, headerValue)
 	}
 
+	var eventType string
+	if event.Type == transactionType {
+		eventType = "transaction"
+	} else {
+		eventType = fmt.Sprintf("%s event", event.Level)
+	}
 	Logger.Printf(
-		"Sending %s event [%s] to %s project: %d\n",
-		event.Level,
+		"Sending %s [%s] to %s project: %d",
+		eventType,
 		event.EventID,
 		t.dsn.host,
 		t.dsn.projectID,
