@@ -14,7 +14,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-var update = flag.Bool("update", false, "update .golden files")
+var (
+	update   = flag.Bool("update", false, "update .golden files")
+	generate = flag.Bool("gen", false, "generate missing .golden files")
+)
 
 func TestNewRequest(t *testing.T) {
 	const payload = `{"test_data": true}`

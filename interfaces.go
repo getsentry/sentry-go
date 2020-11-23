@@ -52,31 +52,42 @@ type BreadcrumbHint map[string]interface{}
 // Breadcrumb specifies an application event that occurred before a Sentry event.
 // An event may contain one or more breadcrumbs.
 type Breadcrumb struct {
+	Type      string                 `json:"type,omitempty"`
 	Category  string                 `json:"category,omitempty"`
+	Message   string                 `json:"message,omitempty"`
 	Data      map[string]interface{} `json:"data,omitempty"`
 	Level     Level                  `json:"level,omitempty"`
-	Message   string                 `json:"message,omitempty"`
 	Timestamp time.Time              `json:"timestamp"`
-	Type      string                 `json:"type,omitempty"`
 }
+
+// TODO: provide constants for known breadcrumb types.
+// See https://develop.sentry.dev/sdk/event-payloads/breadcrumbs/#breadcrumb-types.
 
 // MarshalJSON converts the Breadcrumb struct to JSON.
 func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
-	type alias Breadcrumb
-	// encoding/json doesn't support the "omitempty" option for struct types.
-	// See https://golang.org/issues/11939.
-	// This implementation of MarshalJSON shadows the original Timestamp field
-	// forcing it to be omitted when the Timestamp is the zero value of
-	// time.Time.
+	// We want to omit time.Time zero values, otherwise the server will try to
+	// interpret dates too far in the past. However, encoding/json doesn't
+	// support the "omitempty" option for struct types. See
+	// https://golang.org/issues/11939.
+	//
+	// We overcome the limitation and achieve what we want by shadowing fields
+	// and a few type tricks.
+
+	// breadcrumb aliases Breadcrumb to allow calling json.Marshal without an
+	// infinite loop. It preserves all fields while none of the attached
+	// methods.
+	type breadcrumb Breadcrumb
+
 	if b.Timestamp.IsZero() {
-		return json.Marshal(&struct {
-			*alias
+		return json.Marshal(struct {
+			// Embed all of the fields of Breadcrumb.
+			*breadcrumb
+			// Timestamp shadows the original Timestamp field and is meant to
+			// remain nil, triggering the omitempty behavior.
 			Timestamp json.RawMessage `json:"timestamp,omitempty"`
-		}{
-			alias: (*alias)(b),
-		})
+		}{breadcrumb: (*breadcrumb)(b)})
 	}
-	return json.Marshal((*alias)(b))
+	return json.Marshal((*breadcrumb)(b))
 }
 
 // User describes the user associated with an Event. If this is used, at least

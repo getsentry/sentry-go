@@ -39,6 +39,10 @@ issues:
     - path: _test\.go
       linters:
         - prealloc
+    - path: _test\.go
+      test: "G306:"
+      linters:
+        - gosec
     - path: errors_test\.go
       linters:
         - unused
