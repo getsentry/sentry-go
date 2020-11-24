@@ -151,7 +151,7 @@ Please verify the usage of `sentry.Flush` in your code base.
 
 ## v0.3.0
 
-- feat: Retry event marshalling without contextual data if the first pass fails
+- feat: Retry event marshaling without contextual data if the first pass fails
 - fix: Include `url.Parse` error in `DsnParseError`
 - fix: Make more `Scope` methods safe for concurrency
 - fix: Synchronize concurrent access to `Hub.client`
