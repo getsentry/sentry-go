@@ -96,12 +96,37 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
-func getEnvelopeFromBody(body []byte, now time.Time) *bytes.Buffer {
+func transactionEnvelopeFromBody(eventID EventID, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
 	var b bytes.Buffer
-	fmt.Fprintf(&b, `{"sent_at":"%s"}`, now.UTC().Format(time.RFC3339Nano))
-	fmt.Fprint(&b, "\n", `{"type":"transaction"}`, "\n")
-	b.Write(body)
-	return &b
+	enc := json.NewEncoder(&b)
+	// envelope header
+	err := enc.Encode(struct {
+		EventID EventID   `json:"event_id"`
+		SentAt  time.Time `json:"sent_at"`
+	}{
+		EventID: eventID,
+		SentAt:  sentAt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// item header
+	err = enc.Encode(struct {
+		Type   string `json:"type"`
+		Length int    `json:"length"`
+	}{
+		Type:   transactionType,
+		Length: len(body),
+	})
+	if err != nil {
+		return nil, err
+	}
+	// payload
+	err = enc.Encode(body)
+	if err != nil {
+		return nil, err
+	}
+	return &b, nil
 }
 
 func getRequestFromEvent(event *Event, dsn *Dsn) (*http.Request, error) {
@@ -109,25 +134,22 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (*http.Request, error) {
 	if body == nil {
 		return nil, errors.New("event could not be marshaled")
 	}
-
 	if event.Type == transactionType {
-		env := getEnvelopeFromBody(body, time.Now())
-		request, _ := http.NewRequest(
+		b, err := transactionEnvelopeFromBody(event.EventID, time.Now(), body)
+		if err != nil {
+			return nil, err
+		}
+		return http.NewRequest(
 			http.MethodPost,
 			dsn.EnvelopeAPIURL().String(),
-			env,
+			b,
 		)
-
-		return request, nil
 	}
-
-	request, _ := http.NewRequest(
+	return http.NewRequest(
 		http.MethodPost,
 		dsn.StoreAPIURL().String(),
-		bytes.NewBuffer(body),
+		bytes.NewReader(body),
 	)
-
-	return request, nil
 }
 
 // ================================
