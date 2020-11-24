@@ -247,7 +247,34 @@ func (e *Event) transactionMarshalJSON() ([]byte, error) {
 	// loop. It preserves all fields while none of the attached methods.
 	type event Event
 
-	return json.Marshal((*event)(e))
+	// transactionEvent is like Event with shadowed fields for customizing JSON
+	// marshaling.
+	type transactionEvent struct {
+		*event
+
+		// The fields below shadow the respective fields in Event. They allow us
+		// to include timestamps when non-zero and omit them otherwise.
+
+		StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
+		Timestamp      json.RawMessage `json:"timestamp,omitempty"`
+	}
+
+	x := transactionEvent{event: (*event)(e)}
+	if !e.Timestamp.IsZero() {
+		b, err := e.Timestamp.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		x.Timestamp = b
+	}
+	if !e.StartTimestamp.IsZero() {
+		b, err := e.StartTimestamp.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		x.StartTimestamp = b
+	}
+	return json.Marshal(x)
 }
 
 // NewEvent creates a new Event.
