@@ -195,44 +195,59 @@ type Event struct {
 
 // MarshalJSON converts the Event struct to JSON.
 func (e *Event) MarshalJSON() ([]byte, error) {
+	// We want to omit time.Time zero values, otherwise the server will try to
+	// interpret dates too far in the past. However, encoding/json doesn't
+	// support the "omitempty" option for struct types. See
+	// https://golang.org/issues/11939.
+	//
+	// We overcome the limitation and achieve what we want by shadowing fields
+	// and a few type tricks.
+	if e.Type == transactionType {
+		return e.transactionMarshalJSON()
+	}
+	return e.defaultMarshalJSON()
+}
+
+func (e *Event) defaultMarshalJSON() ([]byte, error) {
 	// event aliases Event to allow calling json.Marshal without an infinite
-	// loop. It preserves all fields of Event while none of the attached
-	// methods.
+	// loop. It preserves all fields while none of the attached methods.
 	type event Event
 
-	// Transactions are marshaled in the standard way how json.Marshal works.
-	if e.Type == transactionType {
-		return json.Marshal((*event)(e))
-	}
-
-	// errorEvent is like Event with some shadowed fields for customizing the
-	// JSON serialization of regular "error events".
+	// errorEvent is like Event with shadowed fields for customizing JSON
+	// marshaling.
 	type errorEvent struct {
 		*event
 
-		// encoding/json doesn't support the omitempty option for struct types.
-		// See https://golang.org/issues/11939.
-		// We shadow the original Event.Timestamp field with a json.RawMessage.
-		// This allows us to include the timestamp when non-zero and omit it
-		// otherwise.
+		// Timestamp shadows the original Timestamp field. It allows us to
+		// include the timestamp when non-zero and omit it otherwise.
 		Timestamp json.RawMessage `json:"timestamp,omitempty"`
 
-		// The fields below are not part of the regular "error events" and only
-		// make sense to be sent for transactions. They shadow the respective
-		// fields in Event and are meant to remain nil, triggering the omitempty
-		// behavior.
+		// The fields below are not part of error events and only make sense to
+		// be sent for transactions. They shadow the respective fields in Event
+		// and are meant to remain nil, triggering the omitempty behavior.
+
 		Type           json.RawMessage `json:"type,omitempty"`
 		StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
 		Spans          json.RawMessage `json:"spans,omitempty"`
 	}
 
-	x := &errorEvent{event: (*event)(e)}
+	x := errorEvent{event: (*event)(e)}
 	if !e.Timestamp.IsZero() {
-		x.Timestamp = append(x.Timestamp, '"')
-		x.Timestamp = e.Timestamp.UTC().AppendFormat(x.Timestamp, time.RFC3339Nano)
-		x.Timestamp = append(x.Timestamp, '"')
+		b, err := e.Timestamp.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		x.Timestamp = b
 	}
 	return json.Marshal(x)
+}
+
+func (e *Event) transactionMarshalJSON() ([]byte, error) {
+	// event aliases Event to allow calling json.Marshal without an infinite
+	// loop. It preserves all fields while none of the attached methods.
+	type event Event
+
+	return json.Marshal((*event)(e))
 }
 
 // NewEvent creates a new Event.

@@ -48,6 +48,44 @@ func TestMarshalJSON(t *testing.T) {
 	}
 }
 
+func TestErrorEventMarshalJSON(t *testing.T) {
+	tests := []*Event{
+		{
+			Message:   "test",
+			Timestamp: goReleaseDate,
+		},
+		{
+			Message:   "test",
+			Timestamp: goReleaseDate.In(utcMinusTwo),
+		},
+		{
+			Message: "test",
+		},
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetIndent("", "  ")
+	for i, tt := range tests {
+		i, tt := i, tt
+		t.Run("", func(t *testing.T) {
+			defer buf.Reset()
+			err := enc.Encode(tt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join("testdata", "json", "event", fmt.Sprintf("%03d.json", i))
+			if *update {
+				WriteGoldenFile(t, path, buf.Bytes())
+			}
+			got := buf.String()
+			want := ReadOrGenerateGoldenFile(t, path, buf.Bytes())
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Fatalf("JSON mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestBreadcrumbMarshalJSON(t *testing.T) {
 	tests := []*Breadcrumb{
 		// complete
