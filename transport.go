@@ -72,7 +72,7 @@ func getRequestBodyFromEvent(event *Event) []byte {
 		return body
 	}
 
-	partialMarshallMessage := fmt.Sprintf("Could not encode original event as JSON. "+
+	msg := fmt.Sprintf("Could not encode original event as JSON. "+
 		"Succeeded by removing Breadcrumbs, Contexts and Extra. "+
 		"Please verify the data you attach to the scope. "+
 		"Error: %s", err)
@@ -80,18 +80,18 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	event.Breadcrumbs = nil
 	event.Contexts = nil
 	event.Extra = map[string]interface{}{
-		"info": partialMarshallMessage,
+		"info": msg,
 	}
 	body, err = json.Marshal(event)
 	if err == nil {
-		Logger.Println(partialMarshallMessage)
+		Logger.Println(msg)
 		return body
 	}
 
 	// This should _only_ happen when Event.Exception[0].Stacktrace.Frames[0].Vars is unserializable
 	// Which won't ever happen, as we don't use it now (although it's the part of public interface accepted by Sentry)
 	// Juuust in case something, somehow goes utterly wrong.
-	Logger.Println("Event couldn't be marshalled, even with stripped contextual data. Skipping delivery. " +
+	Logger.Println("Event couldn't be marshaled, even with stripped contextual data. Skipping delivery. " +
 		"Please notify the SDK owners with possibly broken payload.")
 	return nil
 }
@@ -107,7 +107,7 @@ func getEnvelopeFromBody(body []byte, now time.Time) *bytes.Buffer {
 func getRequestFromEvent(event *Event, dsn *Dsn) (*http.Request, error) {
 	body := getRequestBodyFromEvent(event)
 	if body == nil {
-		return nil, errors.New("event could not be marshalled")
+		return nil, errors.New("event could not be marshaled")
 	}
 
 	if event.Type == transactionType {
