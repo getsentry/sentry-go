@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -130,23 +129,21 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 	}
 }
 
-func TestGetEnvelopeFromBody(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
-		Type:           transactionType,
-		Spans:          []*Span{},
-		StartTimestamp: time.Unix(3, 0).UTC(),
-		Timestamp:      time.Unix(5, 0).UTC(),
-	})
-	env := getEnvelopeFromBody(body, time.Unix(6, 0))
-	got := env.String()
-	//nolint: lll
-	want := strings.Join([]string{
-		`{"sent_at":"1970-01-01T00:00:06Z"}`,
-		`{"type":"transaction"}`,
-		`{"sdk":{},"user":{},"type":"transaction","start_timestamp":"1970-01-01T00:00:03Z","timestamp":"1970-01-01T00:00:05Z"}`,
-	}, "\n")
+func TestTransactionEnvelopeFromBody(t *testing.T) {
+	const eventID = "b81c5be4d31e48959103a1f878a1efcb"
+	sentAt := time.Unix(0, 0).UTC()
+	body := json.RawMessage(`{"type":"transaction","fields":"omitted"}`)
+	b, err := transactionEnvelopeFromBody(eventID, sentAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z"}
+{"type":"transaction","length":41}
+{"type":"transaction","fields":"omitted"}
+`
 	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Event mismatch (-want +got):\n%s", diff)
+		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
 	}
 }
 
