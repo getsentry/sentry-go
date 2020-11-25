@@ -83,13 +83,11 @@ func TestPopScopeRemovesLayerFromTheStack(t *testing.T) {
 	assertEqual(t, len(*hub.stack), 2)
 }
 
-func TestPopScopeCannotRemoveFromEmptyStack(t *testing.T) {
+func TestPopScopeCannotLeaveStackEmpty(t *testing.T) {
 	hub, _, _ := setupHubTest()
 	assertEqual(t, len(*hub.stack), 1)
 	hub.PopScope()
-	assertEqual(t, len(*hub.stack), 0)
-	hub.PopScope()
-	assertEqual(t, len(*hub.stack), 0)
+	assertEqual(t, len(*hub.stack), 1)
 }
 
 func TestBindClient(t *testing.T) {
@@ -190,27 +188,6 @@ func TestLastEventIDUpdatesAfterCaptures(t *testing.T) {
 
 	eventID := hub.CaptureEvent(&Event{Message: "wat"})
 	assertEqual(t, *eventID, hub.LastEventID())
-}
-
-func TestLayerAccessingEmptyStack(t *testing.T) {
-	hub := &Hub{}
-	if hub.stackTop() != nil {
-		t.Error("expected nil to be returned")
-	}
-}
-
-func TestLayerAccessingScopeReturnsNilIfStackIsEmpty(t *testing.T) {
-	hub := &Hub{}
-	if hub.Scope() != nil {
-		t.Error("expected nil to be returned")
-	}
-}
-
-func TestLayerAccessingClientReturnsNilIfStackIsEmpty(t *testing.T) {
-	hub := &Hub{}
-	if hub.Client() != nil {
-		t.Error("expected nil to be returned")
-	}
 }
 
 func TestAddBreadcrumbRespectMaxBreadcrumbsOption(t *testing.T) {
