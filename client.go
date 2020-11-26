@@ -420,16 +420,31 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 
 	options := client.Options()
 
-	// TODO: Reconsider if its worth going away from default implementation
-	// of other SDKs. In Go zero value (default) for float32 is 0.0,
-	// which means that if someone uses ClientOptions{} struct directly
-	// and we would not check for 0 here, we'd skip all events by default
-	if options.SampleRate != 0.0 {
-		randomFloat := rng.Float64()
-		if randomFloat > options.SampleRate {
-			Logger.Println("Event dropped due to SampleRate hit.")
-			return nil
-		}
+	// The default error event sample rate for all SDKs is 1.0 (send all).
+	//
+	// In Go, the zero value (default) for float64 is 0.0, which means that
+	// constructing a client with NewClient(ClientOptions{}), or, equivalently,
+	// initializing the SDK with Init(ClientOptions{}) without an explicit
+	// SampleRate would drop all events.
+	//
+	// To retain the desired default behavior, we exceptionally flip SampleRate
+	// from 0.0 to 1.0 here. Setting the sample rate to 0.0 is not very useful
+	// anyway, and the same end result can be achieved in many other ways like
+	// not initializing the SDK, setting the DSN to the empty string or using an
+	// event processor that always returns nil.
+	//
+	// An alternative API could be such that default options don't need to be
+	// the same as Go's zero values, for example using the Functional Options
+	// pattern. That would either require a breaking change if we want to reuse
+	// the obvious NewClient name, or a new function as an alternative
+	// constructor.
+	if options.SampleRate == 0.0 {
+		options.SampleRate = 1.0
+	}
+
+	if !sample(options.SampleRate) {
+		Logger.Println("Event dropped due to SampleRate hit.")
+		return nil
 	}
 
 	if event = client.prepareEvent(event, hint, scope); event == nil {
@@ -540,4 +555,10 @@ func (client Client) integrationAlreadyInstalled(name string) bool {
 		}
 	}
 	return false
+}
+
+// sample returns true with the given probability, which must be in the range
+// [0.0, 1.0].
+func sample(probability float64) bool {
+	return rng.Float64() < probability
 }
