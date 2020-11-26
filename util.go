@@ -5,13 +5,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 )
 
 func uuid() string {
 	id := make([]byte, 16)
-	_, _ = io.ReadFull(rand.Reader, id)
+	// Prefer rand.Read over rand.Reader, see https://go-review.googlesource.com/c/go/+/272326/.
+	_, _ = rand.Read(id)
 	id[6] &= 0x0F // clear version
 	id[6] |= 0x40 // set version to 4 (random uuid)
 	id[8] &= 0x3F // clear variant
