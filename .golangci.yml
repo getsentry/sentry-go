@@ -40,9 +40,13 @@ issues:
       linters:
         - prealloc
     - path: _test\.go
-      test: "G306:"
+      text: "G306:"
       linters:
         - gosec
     - path: errors_test\.go
       linters:
         - unused
+    - path: http/example_test\.go
+      linters:
+        - errcheck
+        - bodyclose
