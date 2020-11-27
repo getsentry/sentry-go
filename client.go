@@ -88,7 +88,9 @@ var globalEventProcessors []EventProcessor
 // AddGlobalEventProcessor adds processor to the global list of event
 // processors. Global event processors apply to all events.
 //
-// Deprecated: Use Scope.AddEventProcessor or Client.AddEventProcessor instead.
+// AddGlobalEventProcessor is deprecated. Most users will prefer to initialize
+// the SDK with Init and provide a ClientOptions.BeforeSend function or use
+// Scope.AddEventProcessor instead.
 func AddGlobalEventProcessor(processor EventProcessor) {
 	globalEventProcessors = append(globalEventProcessors, processor)
 }
@@ -112,7 +114,8 @@ type ClientOptions struct {
 	AttachStacktrace bool
 	// The sample rate for event submission in the range [0.0, 1.0]. By default,
 	// all events are sent. Thus, as a historical special case, the sample rate
-	// 0.0 is treated as if it was 1.0.
+	// 0.0 is treated as if it was 1.0. To drop all events, set the DSN to the
+	// empty string.
 	SampleRate float64
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
@@ -159,16 +162,24 @@ type ClientOptions struct {
 }
 
 // Client is the underlying processor that is used by the main API and Hub
-// instances.
+// instances. It must be created with NewClient.
 type Client struct {
 	options         ClientOptions
 	dsn             *Dsn
 	eventProcessors []EventProcessor
 	integrations    []Integration
-	Transport       Transport
+	// Transport is read-only. Replacing the transport of an existing client is
+	// not supported, create a new client instead.
+	Transport Transport
 }
 
-// NewClient creates and returns an instance of Client configured using ClientOptions.
+// NewClient creates and returns an instance of Client configured using
+// ClientOptions.
+//
+// Most users will not create clients directly. Instead, initialize the SDK with
+// Init and use the package-level functions (for simple programs that run on a
+// single goroutine) or hub methods (for concurrent programs, for example web
+// servers).
 func NewClient(options ClientOptions) (*Client, error) {
 	if options.Debug {
 		debugWriter := options.DebugWriter
@@ -248,7 +259,13 @@ func (client *Client) setupIntegrations() {
 	}
 }
 
-// AddEventProcessor adds an event processor to the client.
+// AddEventProcessor adds an event processor to the client. It must not be
+// called from concurrent goroutines. Most users will prefer to use
+// ClientOptions.BeforeSend or Scope.AddEventProcessor instead.
+//
+// Note that typical programs have only a single client created by Init and the
+// client is shared among multiple hubs, one per goroutine, such that adding an
+// event processor to the client affects all hubs that share the client.
 func (client *Client) AddEventProcessor(processor EventProcessor) {
 	client.eventProcessors = append(client.eventProcessors, processor)
 }
