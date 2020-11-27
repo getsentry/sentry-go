@@ -20,12 +20,28 @@ type Handler struct {
 
 // Options configure a Handler.
 type Options struct {
-	// Repanic configures whether Sentry should repanic after recovery
+	// Repanic configures whether to panic again after recovering from a panic.
+	// Use this option if you have other panic handlers or want the default
+	// behavior from Go's http package, as documented in
+	// https://golang.org/pkg/net/http/#Handler.
 	Repanic bool
-	// WaitForDelivery indicates whether to wait until panic details have been
-	// sent to Sentry before panicking or proceeding with a request.
+	// WaitForDelivery indicates, in case of a panic, whether to block the
+	// current goroutine and wait until the panic event has been reported to
+	// Sentry before repanicking or resuming normal execution.
+	//
+	// This option is normally not needed. Unless you need different behaviors
+	// for different HTTP handlers, configure the SDK to use the
+	// HTTPSyncTransport instead.
+	//
+	// Waiting (or using HTTPSyncTransport) is useful when the web server runs
+	// in an environment that interrupts execution at the end of a request flow,
+	// like modern serverless platforms.
 	WaitForDelivery bool
-	// Timeout for the event delivery requests.
+	// Timeout for the delivery of panic events. Defaults to 2s. Only relevant
+	// when WaitForDelivery is true.
+	//
+	// If the timeout is reached, the current goroutine is no longer blocked
+	// waiting, but the delivery is not canceled.
 	Timeout time.Duration
 }
 
