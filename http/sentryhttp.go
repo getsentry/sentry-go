@@ -4,6 +4,7 @@ package sentryhttp
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -83,11 +84,23 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		hub := sentry.GetHubFromContext(ctx)
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
+			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
+		span := sentry.StartSpan(ctx, "http.server",
+			sentry.TransactionName(fmt.Sprintf("%s %s", r.Method, r.URL.Path)),
+			sentry.ContinueFromRequest(r),
+		)
+		defer span.Finish()
+		// TODO(tracing): if the next handler.ServeHTTP panics, store
+		// information on the transaction accordingly (status, tag,
+		// level?, ...).
+		r = r.WithContext(span.Context())
 		hub.Scope().SetRequest(r)
-		ctx = sentry.SetHubOnContext(ctx, hub)
 		defer h.recoverWithSentry(hub, r)
-		handler.ServeHTTP(w, r.WithContext(ctx))
+		// TODO(tracing): use custom response writer to intercept
+		// response. Use HTTP status to add tag to transaction; set span
+		// status.
+		handler.ServeHTTP(w, r)
 	}
 }
 

@@ -367,6 +367,15 @@ func GetHubFromContext(ctx context.Context) *Hub {
 	return nil
 }
 
+// hubFromContext returns either a hub stored in the context or the current hub.
+// The return value is guaranteed to be non-nil, unlike GetHubFromContext.
+func hubFromContext(ctx context.Context) *Hub {
+	if hub, ok := ctx.Value(HubContextKey).(*Hub); ok {
+		return hub
+	}
+	return currentHub
+}
+
 // SetHubOnContext stores given Hub instance on the Context struct and returns a new Context.
 func SetHubOnContext(ctx context.Context, hub *Hub) context.Context {
 	return context.WithValue(ctx, HubContextKey, hub)

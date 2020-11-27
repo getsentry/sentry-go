@@ -3,6 +3,7 @@ package sentry
 import (
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -119,6 +120,10 @@ type ClientOptions struct {
 	// 0.0 is treated as if it was 1.0. To drop all events, set the DSN to the
 	// empty string.
 	SampleRate float64
+	// The sample rate for sampling traces in the range [0.0, 1.0].
+	TracesSampleRate float64
+	// Used to customize the sampling of traces, overrides TracesSampleRate.
+	TracesSampler TracesSampler
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
 	// If the match is found, then a whole event will be dropped.
@@ -183,6 +188,10 @@ type Client struct {
 // single goroutine) or hub methods (for concurrent programs, for example web
 // servers).
 func NewClient(options ClientOptions) (*Client, error) {
+	if options.TracesSampleRate != 0.0 && options.TracesSampler != nil {
+		return nil, errors.New("TracesSampleRate and TracesSampler are mutually exclusive")
+	}
+
 	if options.Debug {
 		debugWriter := options.DebugWriter
 		if debugWriter == nil {
@@ -231,17 +240,26 @@ func NewClient(options ClientOptions) (*Client, error) {
 }
 
 func (client *Client) setupTransport() {
-	transport := client.options.Transport
+	opts := client.options
+	transport := opts.Transport
 
 	if transport == nil {
-		if client.options.Dsn == "" {
+		if opts.Dsn == "" {
 			transport = new(noopTransport)
 		} else {
-			transport = NewHTTPTransport()
+			httpTransport := NewHTTPTransport()
+			// When tracing is enabled, use larger buffer to
+			// accommodate more concurrent events.
+			// TODO(tracing): consider using separate buffers per
+			// event type.
+			if opts.TracesSampleRate != 0 || opts.TracesSampler != nil {
+				httpTransport.BufferSize = 1000
+			}
+			transport = httpTransport
 		}
 	}
 
-	transport.Configure(client.options)
+	transport.Configure(opts)
 	client.Transport = transport
 }
 
