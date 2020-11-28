@@ -380,7 +380,7 @@ func TestSampleRate(t *testing.T) {
 		// tolerated range is [SampleRate-MaxDelta, SampleRate+MaxDelta]
 		MaxDelta float64
 	}{
-		// {0.00, 0.0}, // oddly, sample rate = 0.0 means 1.0, skip test for now.
+		{0.00, 0.0},
 		{0.25, 0.2},
 		{0.50, 0.2},
 		{0.75, 0.2},
@@ -390,41 +390,40 @@ func TestSampleRate(t *testing.T) {
 		tt := tt
 		t.Run(fmt.Sprint(tt.SampleRate), func(t *testing.T) {
 			var (
-				captureMessageCount uint64
-				beforeSendCount     uint64
+				total   uint64
+				sampled uint64
 			)
-			c, err := NewClient(ClientOptions{
-				SampleRate: tt.SampleRate,
-				BeforeSend: func(event *Event, hint *EventHint) *Event {
-					atomic.AddUint64(&beforeSendCount, 1)
-					return event
-				},
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// Simulate using client from multiple hubs/goroutines to cover data
-			// races.
+			// Call sample from multiple goroutines just like multiple hubs
+			// sharing a client would. This should help uncover data races.
 			var wg sync.WaitGroup
-			mainHub := NewHub(c, NewScope())
 			for i := 0; i < 4; i++ {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					// hub shares the client with mainHub.
-					hub := mainHub.Clone()
 					for j := 0; j < 10000; j++ {
-						atomic.AddUint64(&captureMessageCount, 1)
-						hub.CaptureMessage("test")
+						atomic.AddUint64(&total, 1)
+						s := sample(tt.SampleRate)
+						switch tt.SampleRate {
+						case 0:
+							if s {
+								panic("sampled true when rate is 0")
+							}
+						case 1:
+							if !s {
+								panic("sampled false when rate is 1")
+							}
+						}
+						if s {
+							atomic.AddUint64(&sampled, 1)
+						}
 					}
 				}()
 			}
 			wg.Wait()
 
-			eventRate := float64(beforeSendCount) / float64(captureMessageCount)
-			if eventRate < tt.SampleRate-tt.MaxDelta || eventRate > tt.SampleRate+tt.MaxDelta {
-				t.Errorf("effective sample rate was %f, want %f±%f", eventRate, tt.SampleRate, tt.MaxDelta)
+			rate := float64(sampled) / float64(total)
+			if !(tt.SampleRate-tt.MaxDelta <= rate && rate <= tt.SampleRate+tt.MaxDelta) {
+				t.Errorf("effective sample rate was %f, want %f±%f", rate, tt.SampleRate, tt.MaxDelta)
 			}
 		})
 	}
