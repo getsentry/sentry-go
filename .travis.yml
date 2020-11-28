@@ -33,6 +33,15 @@ before_install:
   # branch, since Travis clones only the target branch.
   - git fetch origin master:remotes/origin/master
 
+install: |
+  if [[ $GO111MODULE == off ]]; then
+    # Iris is not supported in legacy GOPATH mode. We delete the source code
+    # because otherwise lint, build, and test steps would fail.
+    rm -vrf ./iris/ ./example/iris/
+    go get -v -t ./...
+  fi
+  # go get is not required in Module mode
+
 script:
   - golangci-lint run --new-from-rev=$(git merge-base origin/master HEAD)
   - go build ./...
