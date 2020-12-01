@@ -14,6 +14,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/getsentry/sentry-go/internal/debug"
 )
 
 // maxErrorDepth is the maximum number of errors reported in a chain of errors.
@@ -199,6 +201,13 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	if options.Environment == "" {
 		options.Environment = os.Getenv("SENTRY_ENVIRONMENT")
+	}
+
+	if env := os.Getenv("SENTRYGODEBUG"); env == "dumphttp=1" {
+		options.HTTPTransport = &debug.Transport{
+			RoundTripper: http.DefaultTransport,
+			Output:       os.Stderr,
+		}
 	}
 
 	var dsn *Dsn
