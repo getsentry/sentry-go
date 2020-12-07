@@ -43,6 +43,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
+				Transaction: "GET /panic",
 			},
 		},
 		{
@@ -71,6 +72,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
+				Transaction: "POST /post",
 			},
 		},
 		{
@@ -91,6 +93,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
+				Transaction: "GET /get",
 			},
 		},
 		{
@@ -120,6 +123,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
+				Transaction: "POST /post/large",
 			},
 		},
 		{
@@ -145,6 +149,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
+				Transaction: "POST /post/body-ignored",
 			},
 		},
 	}

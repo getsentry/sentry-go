@@ -49,6 +49,8 @@ func getTLSConfig(options ClientOptions) *tls.Config {
 }
 
 func retryAfter(now time.Time, r *http.Response) time.Duration {
+	// TODO(tracing): handle x-sentry-rate-limits, separate rate limiting
+	// per data type (error event, transaction, etc).
 	retryAfterHeader := r.Header["Retry-After"]
 
 	if retryAfterHeader == nil {

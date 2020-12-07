@@ -1,5 +1,5 @@
-// This is an example web server to demonstrate how to instrument web servers
-// with Sentry.
+// This is an example web server to demonstrate how to instrument error and
+// performance monitoring with Sentry.
 //
 // Try it by running:
 //
@@ -20,6 +20,8 @@ import (
 	"image/png"
 	"log"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -51,6 +53,31 @@ func run() error {
 			log.Printf("BeforeSend event [%s]", event.EventID)
 			return event
 		},
+		// Specify either TracesSampleRate or set a TracesSampler to
+		// enable tracing.
+		// TracesSampleRate: 0.5,
+		TracesSampler: sentry.TracesSamplerFunc(func(ctx sentry.SamplingContext) sentry.Sampled {
+			// As an example, this custom sampler does not send some
+			// transactions to Sentry based on their name.
+			hub := sentry.GetHubFromContext(ctx.Span.Context())
+			name := hub.Scope().Transaction()
+			if name == "GET /favicon.ico" {
+				return sentry.SampledFalse
+			}
+			if strings.HasPrefix(name, "HEAD") {
+				return sentry.SampledFalse
+			}
+			// As an example, sample some transactions with a
+			// uniform rate.
+			if strings.HasPrefix(name, "POST") {
+				return sentry.UniformTracesSampler(0.2).Sample(ctx)
+			}
+			// Sample all other transactions for testing. On
+			// production, use TracesSampleRate with a rate adequate
+			// for your traffic, or use the SamplingContext to
+			// customize sampling per-transaction.
+			return sentry.SampledTrue
+		}),
 	})
 	if err != nil {
 		return err
@@ -60,26 +87,62 @@ func run() error {
 	defer sentry.Flush(2 * time.Second)
 
 	// Main HTTP handler, renders an HTML page with a random image.
+	//
+	// A new transaction is automatically sent to Sentry when the handler is
+	// invoked.
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Use GetHubFromContext to get a hub associated with the
+		// current request. Hubs provide data isolation, such that tags,
+		// breadcrumbs and other attributes are never mixed up across
+		// requests.
+		ctx := r.Context()
+		hub := sentry.GetHubFromContext(ctx)
+
 		if r.URL.Path != "/" {
-			// Use GetHubFromContext to get a hub associated with the current
-			// request. Hubs provide data isolation, such that tags, breadcrumbs
-			// and other attributes are never mixed up across requests.
-			hub := sentry.GetHubFromContext(r.Context())
 			hub.Scope().SetTag("url", r.URL.Path)
 			hub.CaptureMessage("Page Not Found")
 			http.NotFound(w, r)
 			return
 		}
 
-		err := t.Execute(w, time.Now().UnixNano())
-		if err != nil {
-			log.Printf("[%s] %s", r.URL.Path, err)
-			return
-		}
+		// Set a custom transaction name: use "Home" instead of the
+		// default "/" based on r.URL.Path.
+		hub.Scope().SetTransaction("Home")
+
+		// The next block of code shows how to instrument concurrent
+		// tasks.
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			span := sentry.StartSpan(ctx, "template.execute")
+			defer span.Finish()
+			err := t.Execute(w, time.Now().UnixNano())
+			if err != nil {
+				log.Printf("[%s] %s", r.URL.Path, err)
+				return
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			span := sentry.StartSpan(ctx, "sleep")
+			defer span.Finish()
+			// For demonstration only, ensure homepage loading takes
+			// at least 40ms.
+			time.Sleep(40 * time.Millisecond)
+		}()
+		wg.Wait()
 	})
 
 	// HTTP handler for the random image.
+	//
+	// A new transaction is automatically sent to Sentry when the handler is
+	// invoked. We use sentry.StartSpan and span.Finish to create additional
+	// child spans measuring specific parts of the image computation.
+	//
+	// In general, wrap potentially slow parts of your handlers (external
+	// network calls, CPU-intensive tasks, etc) to help identify where time
+	// is spent.
 	http.HandleFunc("/random.png", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var cancel context.CancelFunc
@@ -90,9 +153,15 @@ func run() error {
 		}
 
 		q := r.URL.Query().Get("q")
-		img := NewImage(ctx, 128, 128, []byte(q))
 
+		span := sentry.StartSpan(ctx, "NewImage")
+		img := NewImage(span.Context(), 128, 128, []byte(q))
+		span.Finish()
+
+		span = sentry.StartSpan(ctx, "png.Encode")
 		err := png.Encode(w, img)
+		span.Finish()
+
 		if err != nil {
 			log.Printf("[%s] %s", r.URL.Path, err)
 			hub := sentry.GetHubFromContext(ctx)
@@ -110,10 +179,11 @@ func run() error {
 
 	log.Printf("Serving http://%s", *addr)
 
-	// Wrap the default mux with Sentry to capture panics and report errors.
+	// Wrap the default mux with Sentry to capture panics, report errors and
+	// measure performance.
 	//
-	// Alternatively, you can also wrap individual handlers if you need to use
-	// different options for different parts of your app.
+	// Alternatively, you can also wrap individual handlers if you need to
+	// use different options for different parts of your app.
 	handler := sentryhttp.New(sentryhttp.Options{}).Handle(http.DefaultServeMux)
 	return http.ListenAndServe(*addr, handler)
 }
@@ -144,17 +214,38 @@ img {
 
 // NewImage returns a random image based on seed, with the given width and
 // height.
+//
+// NewImage uses the context to create spans that measure the performance of its
+// internal parts.
 func NewImage(ctx context.Context, width, height int, seed []byte) image.Image {
+	span := sentry.StartSpan(ctx, "sha256")
 	b := sha256.Sum256(seed)
+	span.Finish()
 
 	img := image.NewGray(image.Rect(0, 0, width, height))
 
+	span = sentry.StartSpan(ctx, "img")
+	defer span.Finish()
 	for i := 0; i < len(img.Pix); i += len(b) {
 		select {
 		case <-ctx.Done():
 			// Context canceled, abort image generation.
-			// Spot the bug: the returned image cannot be encoded as PNG and
-			// will cause an error that will be reported to Sentry.
+
+			// Set a tag on the current span.
+			span.SetTag("canceled", "yes")
+			// Set a tag on the current transaction.
+			//
+			// Note that spans are not designed to be mutated from
+			// concurrent goroutines. If multiple goroutines may try
+			// to mutate a span/transaction, for example to set
+			// tags, use a mutex to synchronize changes, or use a
+			// channel to communicate the desired changes back into
+			// the goroutine where the span was created.
+			sentry.TransactionFromContext(ctx).SetTag("img.canceled", "yes")
+
+			// Spot the bug: the returned image cannot be encoded as
+			// PNG and will cause an error that will be reported to
+			// Sentry.
 			return img.SubImage(image.Rect(0, 0, 0, 0))
 		default:
 		}

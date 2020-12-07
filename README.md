@@ -65,88 +65,13 @@ More on this in the [Configuration section of the official Sentry Go SDK documen
 
 ## Usage
 
-The SDK must be initialized with a call to `sentry.Init`. The default transport
-is asynchronous and thus most programs should call `sentry.Flush` to wait until
-buffered events are sent to Sentry right before the program terminates.
+The SDK supports reporting errors and tracking application performance.
 
-Typically, `sentry.Init` is called in the beginning of `func main` and
-`sentry.Flush` is [deferred](https://golang.org/ref/spec#Defer_statements) right
-after.
+To get started, have a look at one of our [examples](example/):
+- [Basic error instrumentation](example/basic/main.go)
+- [Error and tracing for HTTP servers](example/http/main.go)
 
-> Note that if the program terminates with a call to
-> [`os.Exit`](https://golang.org/pkg/os/#Exit), either directly or indirectly
-> via another function like `log.Fatal`, deferred functions are not run.
->
-> In that case, and if it is important for you to report outstanding events
-> before terminating the program, arrange for `sentry.Flush` to be called before
-> the program terminates.
-
-Example:
-
-```go
-// This is an example program that makes an HTTP request and prints response
-// headers. Whenever a request fails, the error is reported to Sentry.
-//
-// Try it by running:
-//
-// 	go run main.go
-// 	go run main.go https://sentry.io
-// 	go run main.go bad-url
-//
-// To actually report events to Sentry, set the DSN either by editing the
-// appropriate line below or setting the environment variable SENTRY_DSN to
-// match the DSN of your Sentry project.
-package main
-
-import (
-	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"time"
-
-	"github.com/getsentry/sentry-go"
-)
-
-func main() {
-	if len(os.Args) < 2 {
-		log.Fatalf("usage: %s URL", os.Args[0])
-	}
-
-	err := sentry.Init(sentry.ClientOptions{
-		// Either set your DSN here or set the SENTRY_DSN environment variable.
-		Dsn: "",
-		// Enable printing of SDK debug messages.
-		// Useful when getting started or trying to figure something out.
-		Debug: true,
-	})
-	if err != nil {
-		log.Fatalf("sentry.Init: %s", err)
-	}
-	// Flush buffered events before the program terminates.
-	// Set the timeout to the maximum duration the program can afford to wait.
-	defer sentry.Flush(2 * time.Second)
-
-	resp, err := http.Get(os.Args[1])
-	if err != nil {
-		sentry.CaptureException(err)
-		log.Printf("reported to Sentry: %s", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	for header, values := range resp.Header {
-		for _, value := range values {
-			fmt.Printf("%s=%s\n", header, value)
-		}
-	}
-}
-```
-
-For your convenience, this example is available at
-[`example/basic/main.go`](example/basic/main.go).
-There are also more examples in the
-[example](example) directory.
+We also provide a [complete API reference](https://pkg.go.dev/github.com/getsentry/sentry-go).
 
 For more detailed information about how to get the most out of `sentry-go`,
 checkout the official documentation:
