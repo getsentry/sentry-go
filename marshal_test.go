@@ -89,14 +89,14 @@ func TestErrorEventMarshalJSON(t *testing.T) {
 func TestTransactionEventMarshalJSON(t *testing.T) {
 	tests := []*Event{
 		{
-			Type:           transactionType,
-			StartTimestamp: goReleaseDate.Add(-time.Minute),
-			Timestamp:      goReleaseDate,
+			Type:      transactionType,
+			StartTime: goReleaseDate.Add(-time.Minute),
+			Timestamp: goReleaseDate,
 		},
 		{
-			Type:           transactionType,
-			StartTimestamp: goReleaseDate.Add(-time.Minute).In(utcMinusTwo),
-			Timestamp:      goReleaseDate.In(utcMinusTwo),
+			Type:      transactionType,
+			StartTime: goReleaseDate.Add(-time.Minute).In(utcMinusTwo),
+			Timestamp: goReleaseDate.In(utcMinusTwo),
 		},
 		{
 			Type: transactionType,

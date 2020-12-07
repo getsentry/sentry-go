@@ -186,12 +186,18 @@ type Event struct {
 	Request     *Request               `json:"request,omitempty"`
 	Exception   []Exception            `json:"exception,omitempty"`
 
-	// Experimental: This is part of a beta feature of the SDK. The fields below
-	// are only relevant for transactions.
-	Type           string    `json:"type,omitempty"`
-	StartTimestamp time.Time `json:"start_timestamp"`
-	Spans          []*Span   `json:"spans,omitempty"`
+	// The fields below are only relevant for transactions.
+
+	Type      string    `json:"type,omitempty"`
+	StartTime time.Time `json:"start_timestamp"`
+	Spans     []*Span   `json:"spans,omitempty"`
 }
+
+// TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
+// to prevent accidentally storing T when we mean *T.
+// For example, the TraceContext must be stored as *TraceContext to pick up the
+// MarshalJSON method (and avoid copying).
+// type EventContext interface{ EventContext() }
 
 // MarshalJSON converts the Event struct to JSON.
 func (e *Event) MarshalJSON() ([]byte, error) {
@@ -226,9 +232,9 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 		// be sent for transactions. They shadow the respective fields in Event
 		// and are meant to remain nil, triggering the omitempty behavior.
 
-		Type           json.RawMessage `json:"type,omitempty"`
-		StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
-		Spans          json.RawMessage `json:"spans,omitempty"`
+		Type      json.RawMessage `json:"type,omitempty"`
+		StartTime json.RawMessage `json:"start_timestamp,omitempty"`
+		Spans     json.RawMessage `json:"spans,omitempty"`
 	}
 
 	x := errorEvent{event: (*event)(e)}
@@ -255,8 +261,8 @@ func (e *Event) transactionMarshalJSON() ([]byte, error) {
 		// The fields below shadow the respective fields in Event. They allow us
 		// to include timestamps when non-zero and omit them otherwise.
 
-		StartTimestamp json.RawMessage `json:"start_timestamp,omitempty"`
-		Timestamp      json.RawMessage `json:"timestamp,omitempty"`
+		StartTime json.RawMessage `json:"start_timestamp,omitempty"`
+		Timestamp json.RawMessage `json:"timestamp,omitempty"`
 	}
 
 	x := transactionEvent{event: (*event)(e)}
@@ -267,12 +273,12 @@ func (e *Event) transactionMarshalJSON() ([]byte, error) {
 		}
 		x.Timestamp = b
 	}
-	if !e.StartTimestamp.IsZero() {
-		b, err := e.StartTimestamp.MarshalJSON()
+	if !e.StartTime.IsZero() {
+		b, err := e.StartTime.MarshalJSON()
 		if err != nil {
 			return nil, err
 		}
-		x.StartTimestamp = b
+		x.StartTime = b
 	}
 	return json.Marshal(x)
 }
@@ -306,31 +312,4 @@ type EventHint struct {
 	Context            context.Context
 	Request            *http.Request
 	Response           *http.Response
-}
-
-// TraceContext describes the context of the trace.
-//
-// Experimental: This is part of a beta feature of the SDK.
-type TraceContext struct {
-	TraceID     string `json:"trace_id"`
-	SpanID      string `json:"span_id"`
-	Op          string `json:"op,omitempty"`
-	Description string `json:"description,omitempty"`
-	Status      string `json:"status,omitempty"`
-}
-
-// Span describes a timed unit of work in a trace.
-//
-// Experimental: This is part of a beta feature of the SDK.
-type Span struct {
-	TraceID        string                 `json:"trace_id"`
-	SpanID         string                 `json:"span_id"`
-	ParentSpanID   string                 `json:"parent_span_id,omitempty"`
-	Op             string                 `json:"op,omitempty"`
-	Description    string                 `json:"description,omitempty"`
-	Status         string                 `json:"status,omitempty"`
-	Tags           map[string]string      `json:"tags,omitempty"`
-	StartTimestamp time.Time              `json:"start_timestamp"`
-	EndTimestamp   time.Time              `json:"timestamp"`
-	Data           map[string]interface{} `json:"data,omitempty"`
 }
