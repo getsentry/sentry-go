@@ -9,7 +9,7 @@ require (
 	github.com/gin-gonic/gin v1.4.0
 	github.com/go-errors/errors v1.0.1
 	github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab
-	github.com/google/go-cmp v0.4.0
+	github.com/google/go-cmp v0.5.0
 	github.com/google/go-querystring v1.0.0 // indirect
 	github.com/imkira/go-interpol v1.1.0 // indirect
 	github.com/k0kubun/colorstring v0.0.0-20150214042306-9440f1994b88 // indirect
@@ -31,4 +31,5 @@ require (
 	github.com/yudai/gojsondiff v1.0.0 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect
 	github.com/yudai/pp v2.0.1+incompatible // indirect
+	google.golang.org/grpc v1.34.0
 )
