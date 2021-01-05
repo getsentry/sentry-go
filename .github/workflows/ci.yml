@@ -13,10 +13,10 @@ jobs:
     strategy:
       matrix:
         go-version: ["1.13", "1.14", "1.15", "master"]
-        go11module: ["on", "off"]
+        go111module: ["on", "off"]
 
     env:
-      GO111MODULE: ${{ matrix.go11module }}
+      GO111MODULE: ${{ matrix.go111module }}
       GOFLAGS: -mod=readonly
 
     steps:
@@ -24,7 +24,8 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version}}
-      - name: Set python version output
+      - name: 
+      - name: Remove if Go Module mode
         run: |
           if [[ $GO111MODULE == off ]]; then
             # Iris is not supported in legacy GOPATH mode. We delete the source code
