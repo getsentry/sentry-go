@@ -1,0 +1,35 @@
+name: go-workflow
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  go-workflow:
+    name: go tests
+    runs-on: ubuntu-20.04
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        go-version: ["1.13", "1.14", "1.15", "master"]
+        go11module: ["on", "off"]
+
+    env:
+      GO111MODULE: ${{ matrix.go11module }}
+      GOFLAGS: -mod=readonly
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version}}
+      - name: Set python version output
+        run: |
+          if [[ $GO111MODULE == off ]]; then
+            # Iris is not supported in legacy GOPATH mode. We delete the source code
+            # because otherwise lint, build, and test steps would fail.
+            rm -vrf ./iris/ ./example/iris/
+            # go get is not required in Module mode
+            go get -v -t ./...
+          fi
