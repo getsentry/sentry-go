@@ -27,12 +27,13 @@ jobs:
       - name: Remove if Go Module mode
         run: |
           if [[ $GO111MODULE == off ]]; then
-            echo "GOFLAGS=-mod=readonly" >> $GITHUB_ENV
+            # Do we need this variable in other steps?
+            # echo "GOFLAGS=-mod=readonly" >> $GITHUB_ENV
             # Iris is not supported in legacy GOPATH mode. We delete the source code
             # because otherwise lint, build, and test steps would fail.
             rm -vrf ./iris/ ./example/iris/
             # go get is not required in Module mode
-            go get -v -t ./...
+            GOFLAGS=-mod=readonly go get -v -t ./...
           fi
       - name: Build
         run: go build ./...
