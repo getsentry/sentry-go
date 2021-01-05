@@ -6,12 +6,13 @@ on:
   pull_request:
 
 jobs:
-  go-workflow:
+  go-tests:
     name: tests
     runs-on: ubuntu-20.04
     timeout-minutes: 20
     strategy:
       matrix:
+        # TODO: We will need to figure out how to test against `master`
         go-version: ["1.13", "1.14", "1.15"]
         go111module: ["on", "off"]
 
@@ -36,9 +37,10 @@ jobs:
             # go get is not required in Module mode
             go get -v -t ./...
           fi
-      - name: Linting
-        run: |
-          golangci-lint run --new-from-rev=$(git merge-base origin/master HEAD)
+      # TODO: Failing with `fatal: Not a valid object name origin/master`
+      # - name: Linting
+      #   run: |
+      #     golangci-lint run --new-from-rev=$(git merge-base origin/master HEAD)
       - name: Build
         run: go build ./...
       - name: Tests
