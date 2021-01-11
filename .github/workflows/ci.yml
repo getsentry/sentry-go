@@ -4,7 +4,11 @@ on:
     # branches:
     #   - master
   pull_request:
-
+env:
+  GOPATH: ${{ github.workspace }}
+defaults:
+  run:
+    working-directory: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
 jobs:
   golang-tests:
     name: tests
@@ -18,12 +22,8 @@ jobs:
         go-version: ["1.15"]
         go111module: ["on"]
     env:
-      GOPATH: ${{ github.workspace }}
       GO111MODULE: ${{ matrix.go111module }}
       GOFLAGS: "-mod=readonly"
-    defaults:
-      run:
-        working-directory: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
     steps:
       - uses: actions/checkout@v2
         with:
@@ -51,10 +51,11 @@ jobs:
   golang-lint:
     name: lint
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v2
         with:
+          path: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
           # We must fetch at least the immediate parents so that if this is
           # a pull request then we can checkout the head.
           fetch-depth: 2
@@ -66,6 +67,7 @@ jobs:
       - name: Get golangci-lint
         run: |
           curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v1.27.0/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.27.0
+          golangci-lint run --new-from-rev=$(git merge-base origin/master HEAD)
       - name: Linting
         run: |
           golangci-lint run --new-from-rev=$(git merge-base origin/master HEAD)
