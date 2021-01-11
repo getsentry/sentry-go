@@ -9,12 +9,12 @@ jobs:
   golang-tests:
     name: tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
     strategy:
       matrix:
         # TODO: We will need to figure out how to test against `master`
         go-version: ["1.13", "1.14", "1.15"]
-        go111module: ["on"]
+        go111module: ["off"]
     env:
       GOPATH: ${{ github.workspace }}
       GO111MODULE: ${{ matrix.go111module }}
@@ -56,4 +56,4 @@ jobs:
         with:
           # Required: the version of golangci-lint is required and must be specified without
           # patch version: we always use the latest patch version.
-          version: v1.28.3
+          version: v1.29
