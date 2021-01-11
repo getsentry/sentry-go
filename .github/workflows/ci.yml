@@ -15,16 +15,19 @@ jobs:
         # TODO: We will need to figure out how to test against `master`
         go-version: ["1.13", "1.14", "1.15"]
         go111module: ["on", "off"]
-
     env:
       GOPATH: ${{ github.workspace }}
       GO111MODULE: ${{ matrix.go111module }}
-
+    defaults:
+      run:
+        working-directory: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
     steps:
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version}}
       - uses: actions/checkout@v2
+        with:
+          path: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
       - name: Remove if Go Module mode
         run: |
           # XXX: For some reason getting on `go build` step:
