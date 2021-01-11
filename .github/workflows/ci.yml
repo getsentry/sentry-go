@@ -14,8 +14,7 @@ jobs:
       matrix:
         # TODO: We will need to figure out how to test against `master`
         go-version: ["1.13", "1.14", "1.15"]
-        # TODO: Add back "on"
-        go111module: ["off"]
+        go111module: ["on", "off"]
 
     env:
       GOPATH: ${{ github.workspace }}
@@ -26,19 +25,17 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version}}
-      # TODO: Go get fails after 30 seconds with "Error: Process completed with exit code 1."
-      # https://github.com/armenzg/sentry-go/runs/1652714010?check_suite_focus=true      
-      # - name: Remove if Go Module mode
-      #   run: |
-      #     if [[ $GO111MODULE == off ]]; then
-      #       # Do we need this variable in other steps?
-      #       # echo "GOFLAGS=-mod=readonly" >> $GITHUB_ENV
-      #       # Iris is not supported in legacy GOPATH mode. We delete the source code
-      #       # because otherwise lint, build, and test steps would fail.
-      #       rm -vrf ./iris/ ./example/iris/
-      #       # go get is not required in Module mode
-      #       GOFLAGS=-mod=readonly go get -v -t ./...
-      #     fi
+      - name: Remove if Go Module mode
+        run: |
+          if [[ $GO111MODULE == off ]]; then
+            # XXX: Do we need this variable for the next steps in the workflow?
+            echo "GOFLAGS=-mod=readonly" >> $GITHUB_ENV
+            # Iris is not supported in legacy GOPATH mode. We delete the source code
+            # because otherwise lint, build, and test steps would fail.
+            rm -vrf ./iris/ ./example/iris/
+            # go get is not required in Module mode
+            GOFLAGS=-mod=readonly go get -v -t ./...
+          fi
       - name: Build
         run: go build ./...
       - name: Tests
