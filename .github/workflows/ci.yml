@@ -14,8 +14,8 @@ jobs:
       matrix:
         # TODO: We will need to figure out how to test against `master`
         go-version: ["1.13", "1.14", "1.15"]
-        # TODO: Add back "off"
-        go111module: ["on"]
+        # TODO: Add back "on"
+        go111module: ["off"]
 
     env:
       GOPATH: ${{ github.workspace }}
@@ -56,4 +56,4 @@ jobs:
         with:
           # Required: the version of golangci-lint is required and must be specified without
           # patch version: we always use the latest patch version.
-          version: v1.27.0
+          version: v1.28.3
