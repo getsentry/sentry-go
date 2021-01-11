@@ -29,7 +29,7 @@ jobs:
         run: |
           # XXX: For some reason getting on `go build` step:
           # `$GOPATH/go.mod exists but should not`
-          rm -rf ${GOPATH}/go.mod
+          # rm -rf ${GOPATH}/go.mod
           if [[ $GO111MODULE == off ]]; then
             # XXX: Do we need this variable for the next steps in the workflow?
             echo "GOFLAGS=-mod=readonly" >> $GITHUB_ENV
