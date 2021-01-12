@@ -53,11 +53,11 @@ jobs:
         GOPATH: ${{ github.workspace }}
     defaults:
       run:
-        working-directory: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
+        working-directory: ${{ env.GOPATH }}/src/github.com/getsentry/sentry-go
     steps:
       - uses: actions/checkout@v2
         with:
-          path: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
+          path: ${{ env.GOPATH }}/src/github.com/getsentry/sentry-go
           # We must fetch at least the immediate parents so that if this is
           # a pull request then we can checkout the head.
           fetch-depth: 2
