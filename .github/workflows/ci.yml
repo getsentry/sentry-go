@@ -62,6 +62,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      GO111MODULE: on
+      GOFLAGS: -mod=readonly
       GOPATH: ${{ github.workspace }}
     # Required for building with GOPATH
     # https://github.com/mvdan/github-actions-golang#how-do-i-set-up-a-gopath-build
@@ -75,14 +77,12 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: 1.15
-      - name: Move outside of GOPATH
+      - name: Run tests outside of GOPATH
         run: |
           mv $GOPATH/src/github.com/getsentry/sentry-go ~/sentry-go
           cd ~/sentry-go
           export GOPATH=
           go env GOPATH
-      - name: Tests
-        run: |
           go test ./...
           go test ./... -race
       
