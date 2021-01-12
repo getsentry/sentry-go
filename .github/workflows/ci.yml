@@ -14,12 +14,13 @@ jobs:
         # TODO: We will need to figure out how to test against `master`
         # go-version: ["1.13", "1.14", "1.15"]
         # TODO: Focus on a specific vector of the matrix
-        go-version: ["1.15"]
+        go-version: ["1.15", "1.14"]
         go111module: ["on", "off"]
     env:
       GO111MODULE: ${{ matrix.go111module }}
-      GOFLAGS: "-mod=readonly"
+      # GOFLAGS: "-mod=readonly"
       GOPATH: ${{ github.workspace }}
+      GITHUB_REPO: ${{ github.repository }}
     defaults:
       run:
         working-directory: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
