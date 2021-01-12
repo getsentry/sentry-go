@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 5
     strategy:
       matrix:
-        go-version: ["1.15", "1.14", "1.13"]
+        go-version: ["master", "1.15", "1.14", "1.13"]
         go111module: ["on", "off"]
         include:
           # includes goflags when go111module is on
