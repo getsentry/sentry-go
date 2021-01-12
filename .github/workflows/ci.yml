@@ -34,7 +34,7 @@ jobs:
         run: |
           if [[ $GO111MODULE == off ]]; then
             # XXX: Do we need this variable for the next steps in the workflow?
-            echo 'GOFLAGS="-mod=readonly"' >> $GITHUB_ENV
+            echo 'GOFLAGS=' >> $GITHUB_ENV
             # Iris is not supported in legacy GOPATH mode. We delete the source code
             # because otherwise lint, build, and test steps would fail.
             rm -vrf ./iris/ ./example/iris/
