@@ -20,6 +20,8 @@ jobs:
     env:
       GO111MODULE: ${{ matrix.go111module }}
       GOPATH: ${{ github.workspace }}
+    # Required for building with GOPATH
+    # https://github.com/mvdan/github-actions-golang#how-do-i-set-up-a-gopath-build
     defaults:
       run:
         working-directory: ${{ env.GOPATH }}/src/github.com/getsentry/sentry-go
@@ -60,6 +62,8 @@ jobs:
     timeout-minutes: 5
     env:
       GOPATH: ${{ github.workspace }}
+    # Required for building with GOPATH
+    # https://github.com/mvdan/github-actions-golang#how-do-i-set-up-a-gopath-build
     defaults:
       run:
         working-directory: ${{ env.GOPATH }}/src/github.com/getsentry/sentry-go
