@@ -1,8 +1,8 @@
 name: go-workflow
 on:
   push:
-    # branches:
-    #   - master
+    branches:
+      - master
   pull_request:
 jobs:
   golang-tests:
@@ -13,9 +13,12 @@ jobs:
       matrix:
         go-version: ["1.15", "1.14", "1.13"]
         go111module: ["on", "off"]
+        include:
+          # includes goflags when go111module is on
+          - go111module: "on"
+            goflags: -mod=readonly
     env:
       GO111MODULE: ${{ matrix.go111module }}
-      GOFLAGS: -mod=readonly
       GOPATH: ${{ github.workspace }}
     defaults:
       run:
@@ -69,4 +72,30 @@ jobs:
           git fetch origin master:remotes/origin/master
           git merge-base origin/master HEAD
           $(go env GOPATH)/bin/golangci-lint run --new-from-rev=$(git merge-base origin/master HEAD)
+  golang-outside-gopath:
+    name: module support outside gopath
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GOPATH: ${{ github.workspace }}
+    defaults:
+      run:
+        working-directory: ${{ env.GOPATH }}/src/github.com/getsentry/sentry-go
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          path: ${{ env.GOPATH }}/src/github.com/getsentry/sentry-go
+      - uses: actions/setup-go@v2
+        with:
+          go-version: 1.15
+      - name: Move outside of GOPATH
+        run: |
+          mv $GOPATH/src/github.com/getsentry/sentry-go ~/sentry-go
+          cd ~/sentry-go
+          export GOPATH=
+          go env GOPATH
+      - name: Tests
+        run: |
+          go test ./...
+          go test ./... -race
       
