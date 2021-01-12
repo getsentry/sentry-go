@@ -23,11 +23,11 @@ jobs:
       GITHUB_REPO: ${{ github.repository }}
     defaults:
       run:
-        working-directory: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
+        working-directory: ${{ env.GOPATH }}/src/github.com/getsentry/sentry-go
     steps:
       - uses: actions/checkout@v2
         with:
-          path: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
+          path: ${{ env.GOPATH }}/src/github.com/getsentry/sentry-go
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version}}
