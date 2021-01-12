@@ -15,7 +15,7 @@ jobs:
         # go-version: ["1.13", "1.14", "1.15"]
         # TODO: Focus on a specific vector of the matrix
         go-version: ["1.15"]
-        go111module: ["on"]
+        go111module: ["on", "off"]
     env:
       GO111MODULE: ${{ matrix.go111module }}
       GOFLAGS: "-mod=readonly"
@@ -47,34 +47,39 @@ jobs:
         run: |
           go test ./...
           go test ./... -race
-  golang-lint:
-    name: lint
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-        GOPATH: ${{ github.workspace }}
-    defaults:
-      run:
-        working-directory: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
-    steps:
-      - uses: actions/checkout@v2
-        with:
-          path: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
-          # We must fetch at least the immediate parents so that if this is
-          # a pull request then we can checkout the head.
-          fetch-depth: 2
-      - uses: actions/setup-go@v2
-        with:
-          go-version: 1.15
-      - name: Get golangci-lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v1.27.0/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.27.0          
-      - name: Fetch origin/master
-        # Fetch origin/master. This is required for `git merge-base` when testing a
-        # branch, since Github clones only the target branch.
-        run: 
-          git fetch origin master:remotes/origin/master
       - name: Linting
         run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v1.27.0/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.27.0          
+          git fetch origin master:remotes/origin/master
           $(go env GOPATH)/bin/golangci-lint run --new-from-rev=$(git merge-base origin/master HEAD)
+  # golang-lint:
+  #   name: lint
+  #   runs-on: ubuntu-latest
+  #   timeout-minutes: 5
+  #   env:
+  #       GOPATH: ${{ github.workspace }}
+  #   defaults:
+  #     run:
+  #       working-directory: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #       with:
+  #         path: ${{ env.GOPATH }}/src/github.com/${{ github.repository }}
+  #         # We must fetch at least the immediate parents so that if this is
+  #         # a pull request then we can checkout the head.
+  #         fetch-depth: 2
+  #     - uses: actions/setup-go@v2
+  #       with:
+  #         go-version: 1.15
+  #     - name: Get golangci-lint
+  #       run: |
+  #         curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v1.27.0/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.27.0          
+  #     - name: Fetch origin/master
+  #       # Fetch origin/master. This is required for `git merge-base` when testing a
+  #       # branch, since Github clones only the target branch.
+  #       run: 
+  #         git fetch origin master:remotes/origin/master
+  #     - name: Linting
+  #       run: |
+  #         $(go env GOPATH)/bin/golangci-lint run --new-from-rev=$(git merge-base origin/master HEAD)
       
