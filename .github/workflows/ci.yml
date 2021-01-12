@@ -1,8 +1,9 @@
 name: go-workflow
 on:
   push:
-    branches:
-      - master
+    # Temporarily removed for first PR
+    # branches:
+    #   - master
   pull_request:
 jobs:
   golang-tests:
