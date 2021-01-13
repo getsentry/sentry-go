@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          path: ${{ env.GITHUB_WORKSPACE }}/src/github.com/getsentry/sentry-go
+          path: ${{ GITHUB_WORKSPACE }}/src/github.com/getsentry/sentry-go
           # Getting all history enables using `git merge-base origin/master HEAD`
           fetch-depth: 0
       - uses: actions/setup-go@v2
