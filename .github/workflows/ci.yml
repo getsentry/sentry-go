@@ -20,6 +20,7 @@ jobs:
             goflags: -mod=readonly
     env:
       GO111MODULE: ${{ matrix.go111module }}
+      GOPATH: ${{ github.workspace }}
     # Required for building with GOPATH
     # https://github.com/mvdan/github-actions-golang#how-do-i-set-up-a-gopath-build
     defaults:
