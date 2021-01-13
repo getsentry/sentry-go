@@ -1,6 +1,8 @@
 name: go-workflow
 on:
   push:
+    branches:
+      - master
   pull_request:
 jobs:
   golang-tests:
