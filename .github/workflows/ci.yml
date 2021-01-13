@@ -72,14 +72,14 @@ jobs:
     # XXX: The defaults hack is intended to be used
     # Required for building with GOPATH
     # https://github.com/mvdan/github-actions-golang#how-do-i-set-up-a-gopath-build
-    defaults:
-      run:
-        working-directory: ${{ github.workspace }}/src/github.com/getsentry/sentry-go
+    # defaults:
+    #   run:
+    #     working-directory: ${{ github.workspace }}/src/github.com/getsentry/sentry-go
     steps:
       - uses: actions/checkout@v2
         with:
           # Relative path under Github workspace
-          path: ${{ github.workspace }}/src/github.com/getsentry/sentry-go
+          # path: ${{ github.workspace }}/src/github.com/getsentry/sentry-go
           # Getting all history enables using `git merge-base origin/master HEAD`
           fetch-depth: 0
       - uses: actions/setup-go@v2
