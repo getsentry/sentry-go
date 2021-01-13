@@ -383,6 +383,8 @@ func (t *HTTPTransport) worker() {
 				t.mu.Unlock()
 				Logger.Printf("Too many requests, backing off till: %s\n", deadline)
 			}
+
+			response.Body.Close()
 		}
 
 		// Signal that processing of the batch is done.
@@ -481,6 +483,8 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		t.disabledUntil = time.Now().Add(retryAfter(time.Now(), response))
 		Logger.Printf("Too many requests, backing off till: %s\n", t.disabledUntil)
 	}
+
+	response.Body.Close()
 }
 
 // Flush is a no-op for HTTPSyncTransport. It always returns true immediately.
