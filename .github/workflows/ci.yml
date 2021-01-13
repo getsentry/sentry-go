@@ -91,6 +91,7 @@ jobs:
           # Iris does not supported in legacy GOPATH mode. We delete the source code
           # because otherwise lint, build, and test steps would fail.
           rm -vrf ./iris/ ./example/iris/
+          go env | sort
           # go get is not required in Module mode
           go get -v -t ./...
       - name: Build
