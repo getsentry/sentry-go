@@ -36,7 +36,11 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go-version}}
-      - name: Remove if Go Module mode disabled
+      - name: Adjustments for Module mode enabled
+        if: matrix.go111module == 'on'
+        run: |
+          echo "GOFLAGS=${{ matrix.goflags }}" >> $GITHUB_ENV
+      - name: Adjustments for Module mode disabled
         if: matrix.go111module == 'off'
         run: |
           # Iris does not supported in legacy GOPATH mode. We delete the source code
