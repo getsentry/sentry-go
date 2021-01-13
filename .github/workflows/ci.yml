@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         go-version: ["1.15", "1.14", "1.13"]
-        go111module: ["on", "off"]
+        go111module: ["on"] # XXX: Temp change
         include:
           # includes goflags when go111module is on
           - go111module: "on"
@@ -21,6 +21,55 @@ jobs:
     env:
       GO111MODULE: ${{ matrix.go111module }}
       GOPATH: ${{ github.workspace }}
+    # Required for building with GOPATH
+    # https://github.com/mvdan/github-actions-golang#how-do-i-set-up-a-gopath-build
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}/src/github.com/getsentry/sentry-go
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          # Relative path under Github workspace
+          path: ${{ github.workspace }}/src/github.com/getsentry/sentry-go
+          # Getting all history enables using `git merge-base origin/master HEAD`
+          fetch-depth: 0
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go-version}}
+      - name: Remove if Go Module mode disabled
+        if: matrix.go111module == 'off'
+        run: |
+          # Iris does not supported in legacy GOPATH mode. We delete the source code
+          # because otherwise lint, build, and test steps would fail.
+          rm -vrf ./iris/ ./example/iris/
+          # go get is not required in Module mode
+          go get -v -t ./...
+      - name: Build
+        run: go build ./...
+      - name: Tests
+        run: |
+          go test ./...
+          go test ./... -race
+      - name: Run linting if Go Module is on
+        if: matrix.go111module == 'on'
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v1.27.0/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.27.0
+          git fetch origin master:remotes/origin/master
+          $(go env GOPATH)/bin/golangci-lint run --new-from-rev=$(git merge-base origin/master HEAD)
+  
+  golang-module-off:
+    name: tests-module-off
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        go-version: ["1.15", "1.14", "1.13"]
+        go111module: ["off"]
+    env:
+      GO111MODULE: ${{ matrix.go111module }}
+      # Only difference with job above
+      # GOPATH: ${{ github.workspace }}
+    # XXX: The defaults hack is intended to be used
     # Required for building with GOPATH
     # https://github.com/mvdan/github-actions-golang#how-do-i-set-up-a-gopath-build
     defaults:
