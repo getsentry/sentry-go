@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           # Relative path under Github workspace
-          path: src/github.com/getsentry/sentry-go
+          path: sentry-go/src/github.com/getsentry/sentry-go
           # Getting all history enables using `git merge-base origin/master HEAD`
           fetch-depth: 0
       - uses: actions/setup-go@v2
