@@ -8,10 +8,10 @@ jobs:
   golang-tests:
     name: tests
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     strategy:
       matrix:
-        go-version: ["1.15", "1.14", "1.13"]
+        go-version: ["tip", "1.15", "1.14", "1.13"]
         go111module: ["on", "off"]
         include:
           # includes goflags when go111module is on
@@ -27,15 +27,25 @@ jobs:
       run:
         working-directory: ${{ github.workspace }}/src/github.com/getsentry/sentry-go
     steps:
+      - uses: actions/setup-go@v2
+        if: matrix.go-version != 'tip'
+        with:
+          go-version: ${{ matrix.go-version}}
+      - name: Run setup-go for tip
+        if: matrix.go-version == 'tip'
+        working-directory: ${{ github.workspace }}
+        run: |
+          git clone https://go.googlesource.com/go $HOME/gotip
+          cd $HOME/gotip/src
+          ./make.bash
+          echo "GOROOT=$HOME/gotip" >> $GITHUB_ENV
+          echo "PATH=$HOME/gotip/bin:$PATH" >> $GITHUB_ENV
       - uses: actions/checkout@v2
         with:
           # Relative path under Github workspace
           path: ${{ github.workspace }}/src/github.com/getsentry/sentry-go
           # Getting all history enables using `git merge-base origin/master HEAD`
           fetch-depth: 0
-      - uses: actions/setup-go@v2
-        with:
-          go-version: ${{ matrix.go-version}}
       - name: Adjustments for Module mode enabled
         if: matrix.go111module == 'on'
         run: |
