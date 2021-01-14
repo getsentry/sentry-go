@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -384,6 +386,7 @@ func (t *HTTPTransport) worker() {
 				Logger.Printf("Too many requests, backing off till: %s\n", deadline)
 			}
 
+			io.CopyN(ioutil.Discard, response.Body, 512)
 			response.Body.Close()
 		}
 
@@ -484,6 +487,7 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		Logger.Printf("Too many requests, backing off till: %s\n", t.disabledUntil)
 	}
 
+	io.CopyN(ioutil.Discard, response.Body, 512)
 	response.Body.Close()
 }
 
