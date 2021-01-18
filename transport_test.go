@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -359,5 +361,104 @@ func TestHTTPTransport(t *testing.T) {
 			wg.Done()
 		}()
 		wg.Wait()
+	})
+}
+
+// httptraceRoundTripper implements http.RoundTripper by wrapping
+// http.DefaultTransport and keeps track of whether TCP connections have been
+// reused for every request.
+//
+// For simplicity, httptraceRoundTripper is not safe for concurrent use.
+type httptraceRoundTripper struct {
+	reusedConn []bool
+}
+
+func (rt *httptraceRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	trace := &httptrace.ClientTrace{
+		GotConn: func(connInfo httptrace.GotConnInfo) {
+			rt.reusedConn = append(rt.reusedConn, connInfo.Reused)
+		},
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func testKeepAlive(t *testing.T, tr Transport) {
+	// event is a test event. It is empty because here we only care about
+	// the reuse of TCP connections between client and server, not the
+	// specific contents of the event itself.
+	event := &Event{}
+
+	// largeResponse controls whether the test server should simulate an
+	// unexpectedly large response from Relay -- the SDK should not try to
+	// consume arbitrarily large responses.
+	largeResponse := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulates a response from Relay. The event_id is arbitrary,
+		// it doesn't matter for this test.
+		fmt.Fprintln(w, `{"id":"ec71d87189164e79ab1e61030c183af0"}`)
+		if largeResponse {
+			fmt.Fprintln(w, strings.Repeat(" ", maxDrainResponseBytes))
+		}
+	}))
+	defer srv.Close()
+
+	dsn := strings.Replace(srv.URL, "//", "//pubkey@", 1) + "/1"
+
+	rt := &httptraceRoundTripper{}
+	tr.Configure(ClientOptions{
+		Dsn:           dsn,
+		HTTPTransport: rt,
+	})
+
+	reqCount := 0
+	checkLastConnReuse := func(reused bool) {
+		t.Helper()
+		reqCount++
+		if !tr.Flush(time.Second) {
+			t.Fatal("Flush timed out")
+		}
+		if len(rt.reusedConn) != reqCount {
+			t.Fatalf("unexpected number of requests: got %d, want %d", len(rt.reusedConn), reqCount)
+		}
+		if rt.reusedConn[reqCount-1] != reused {
+			if reused {
+				t.Fatal("TCP connection not reused")
+			}
+			t.Fatal("unexpected TCP connection reuse")
+		}
+	}
+
+	// First event creates a new TCP connection.
+	tr.SendEvent(event)
+	checkLastConnReuse(false)
+
+	// Next events reuse the TCP connection.
+	for i := 0; i < 10; i++ {
+		tr.SendEvent(event)
+		checkLastConnReuse(true)
+	}
+
+	// If server responses are too large, the SDK should close the
+	// connection instead of consuming an arbitrarily large number of bytes.
+	largeResponse = true
+
+	// Next event, first one to get a large response, reuses the connection.
+	tr.SendEvent(event)
+	checkLastConnReuse(true)
+
+	// All future events create a new TCP connection.
+	for i := 0; i < 10; i++ {
+		tr.SendEvent(event)
+		checkLastConnReuse(false)
+	}
+}
+
+func TestKeepAlive(t *testing.T) {
+	t.Run("AsyncTransport", func(t *testing.T) {
+		testKeepAlive(t, NewHTTPTransport())
+	})
+	t.Run("SyncTransport", func(t *testing.T) {
+		testKeepAlive(t, NewHTTPSyncTransport())
 	})
 }
