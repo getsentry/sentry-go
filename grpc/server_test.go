@@ -21,7 +21,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 	for _, tt := range []struct {
 		name    string
 		ctx     context.Context
-		opts    sentrygrpc.UnaryServerInterceptorOptions
+		opts    []sentrygrpc.Option
 		handler func(
 			context.Context,
 			*grpchealth.HealthCheckRequest,
@@ -32,7 +32,6 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		{
 			name: "does not report when err is nil",
 			ctx:  context.Background(),
-			opts: sentrygrpc.UnaryServerInterceptorOptions{},
 			handler: func(
 				ctx context.Context,
 				_ *grpchealth.HealthCheckRequest,
@@ -44,7 +43,6 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		{
 			name: "reports all errors by default",
 			ctx:  context.Background(),
-			opts: sentrygrpc.UnaryServerInterceptorOptions{},
 			handler: func(
 				context.Context,
 				*grpchealth.HealthCheckRequest,
@@ -67,10 +65,12 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		{
 			name: "reports errors that ReportOn returns true",
 			ctx:  context.Background(),
-			opts: sentrygrpc.UnaryServerInterceptorOptions{
-				ReportOn: func(err error) bool {
-					return errors.Is(err, grpc.ErrServerStopped)
-				},
+			opts: []sentrygrpc.Option{
+				sentrygrpc.WithReportOn(
+					func(err error) bool {
+						return errors.Is(err, grpc.ErrServerStopped)
+					},
+				),
 			},
 			handler: func(
 				context.Context,
@@ -94,10 +94,12 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		{
 			name: "does not report errors that ReportOn returns false",
 			ctx:  context.Background(),
-			opts: sentrygrpc.UnaryServerInterceptorOptions{
-				ReportOn: func(err error) bool {
-					return false
-				},
+			opts: []sentrygrpc.Option{
+				sentrygrpc.WithReportOn(
+					func(err error) bool {
+						return false
+					},
+				),
 			},
 			handler: func(
 				context.Context,
@@ -110,7 +112,6 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		{
 			name: "recovers from panic and returns internal error",
 			ctx:  context.Background(),
-			opts: sentrygrpc.UnaryServerInterceptorOptions{},
 			handler: func(
 				context.Context,
 				*grpchealth.HealthCheckRequest,
@@ -128,7 +129,6 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		{
 			name: "sets hub on context",
 			ctx:  context.Background(),
-			opts: sentrygrpc.UnaryServerInterceptorOptions{},
 			handler: func(
 				ctx context.Context,
 				_ *grpchealth.HealthCheckRequest,
@@ -165,7 +165,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 			}
 			defer lis.Close()
 
-			opt := grpc.UnaryInterceptor(sentrygrpc.UnaryServerInterceptor(tt.opts))
+			opt := grpc.UnaryInterceptor(sentrygrpc.UnaryServerInterceptor(tt.opts...))
 			server := grpc.NewServer(opt)
 			defer server.Stop()
 
@@ -267,26 +267,28 @@ func TestReportOnCodes(t *testing.T) {
 
 		t.Run(tt.name, func(t *testing.T) {
 			if w, g := tt.want, sentrygrpc.ReportOnCodes(tt.codes...)(tt.err); w != g {
-				t.Fatalf("ReportOnCodes: want %t, got %t", w, g)
+				t.Fatalf("want %t, got %t", w, g)
 			}
 		})
 	}
 }
 
 func ExampleUnaryServerInterceptor() {
-	opts := sentrygrpc.UnaryServerInterceptorOptions{
+	opts := []sentrygrpc.Option{
 		// Reports on OutOfRange or Internal error.
-		ReportOn: sentrygrpc.ReportOnCodes(
-			codes.OutOfRange,
-			codes.Internal,
+		sentrygrpc.WithReportOn(
+			sentrygrpc.ReportOnCodes(
+				codes.OutOfRange,
+				codes.Internal,
+			),
 		),
 		// Recovers from panic, reports it and returns internal error.
-		Repanic: false,
+		sentrygrpc.WithRepanic(false),
 	}
 
 	// This middleware sets *sentry.Hub to context. You can set user to
 	// hub's scope in the later interceptor for example.
-	sentry := sentrygrpc.UnaryServerInterceptor(opts)
+	sentry := sentrygrpc.UnaryServerInterceptor(opts...)
 
 	server := grpc.NewServer(grpc.UnaryInterceptor(sentry))
 	defer server.Stop()
