@@ -50,14 +50,11 @@ func ReportAlways(err error) bool {
 
 // ReportOnCodes returns true if error code matches on of the given codes.
 func ReportOnCodes(cc ...codes.Code) ReportOn {
+	cm := make(map[codes.Code]bool)
+	for _, c := range cc {
+		cm[c] = true
+	}
 	return func(err error) bool {
-		c := status.Code(err)
-		for i := range cc {
-			if c == cc[i] {
-				return true
-			}
-		}
-
-		return false
+		return cm[status.Code(err)]
 	}
 }
