@@ -159,7 +159,11 @@ func TestStartSpan(t *testing.T) {
 }
 
 func TestStartChild(t *testing.T) {
-	ctx := NewTestContext(ClientOptions{TracesSampleRate: 1.0})
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+	})
 	span := StartSpan(ctx, "top", TransactionName("Test Transaction"))
 	child := span.StartChild("child")
 	child.Finish()
@@ -171,6 +175,54 @@ func TestStartChild(t *testing.T) {
 	}
 	c.Check(t, span)
 	c.Check(t, child)
+
+	events := transport.Events()
+	if got := len(events); got != 1 {
+		t.Fatalf("sent %d events, want 1", got)
+	}
+	want := &Event{
+		Type:        transactionType,
+		Transaction: "Test Transaction",
+		Contexts: map[string]interface{}{
+			"trace": &TraceContext{
+				TraceID: span.TraceID,
+				SpanID:  span.SpanID,
+				Op:      span.Op,
+			},
+		},
+		Tags: nil,
+		// TODO(tracing): Set Transaction.Data here or in
+		// Contexts.Trace, or somewhere else. Currently ignored.
+		Extra: nil,
+		// Timestamp: endTime,
+		// StartTime: startTime,
+		Spans: []*Span{
+			{
+				TraceID:      child.TraceID,
+				SpanID:       child.SpanID,
+				ParentSpanID: child.ParentSpanID,
+				Op:           child.Op,
+				Sampled:      SampledTrue,
+			},
+		},
+	}
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(Event{},
+			"EventID", "Level", "Platform",
+			"Sdk", "ServerName", "Timestamp", "StartTime",
+		),
+		cmpopts.IgnoreMapEntries(func(k string, v interface{}) bool {
+			return k != "trace"
+		}),
+		cmpopts.IgnoreFields(Span{},
+			"StartTime", "EndTime",
+		),
+		cmpopts.IgnoreUnexported(Span{}),
+		cmpopts.EquateEmpty(),
+	}
+	if diff := cmp.Diff(want, events[0], opts); diff != "" {
+		t.Fatalf("Event mismatch (-want +got):\n%s", diff)
+	}
 }
 
 // testContextKey is used to store a value in a context so that we can check
