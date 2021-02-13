@@ -503,7 +503,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		options.SampleRate = 1.0
 	}
 
-	if !sample(options.SampleRate) {
+	if event.Type != transactionType && !sample(options.SampleRate) {
 		Logger.Println("Event dropped due to SampleRate hit.")
 		return nil
 	}
