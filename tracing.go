@@ -332,7 +332,11 @@ func (s *Span) toEvent() *Event {
 		Contexts: map[string]interface{}{
 			"trace": s.traceContext(),
 		},
-		Tags:      s.Tags,
+		Tags: s.Tags,
+		// TODO(tracing): the root span / transaction data field is
+		// mapped into Event.Extra for now, pending spec clarification.
+		// https://github.com/getsentry/develop/issues/244#issuecomment-778694182
+		Extra:     s.Data,
 		Timestamp: s.EndTime,
 		StartTime: s.StartTime,
 		Spans:     finished,
