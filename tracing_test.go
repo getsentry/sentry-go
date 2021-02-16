@@ -190,12 +190,6 @@ func TestStartChild(t *testing.T) {
 				Op:      span.Op,
 			},
 		},
-		Tags: nil,
-		// TODO(tracing): Set Transaction.Data here or in
-		// Contexts.Trace, or somewhere else. Currently ignored.
-		Extra: nil,
-		// Timestamp: endTime,
-		// StartTime: startTime,
 		Spans: []*Span{
 			{
 				TraceID:      child.TraceID,
