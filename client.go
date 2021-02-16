@@ -503,6 +503,9 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		options.SampleRate = 1.0
 	}
 
+	// Transactions are sampled by options.TracesSampleRate or
+	// options.TracesSampler when they are started. All other events
+	// (errors, messages) are sampled here.
 	if event.Type != transactionType && !sample(options.SampleRate) {
 		Logger.Println("Event dropped due to SampleRate hit.")
 		return nil
