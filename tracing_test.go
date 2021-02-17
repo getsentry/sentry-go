@@ -99,6 +99,9 @@ func TestStartSpan(t *testing.T) {
 	sampled := SampledTrue
 	startTime := time.Now()
 	endTime := startTime.Add(3 * time.Second)
+	data := map[string]interface{}{
+		"k": "v",
+	}
 	span := StartSpan(ctx, op,
 		TransactionName(transaction),
 		func(s *Span) {
@@ -108,6 +111,7 @@ func TestStartSpan(t *testing.T) {
 			s.Sampled = sampled
 			s.StartTime = startTime
 			s.EndTime = endTime
+			s.Data = data
 		},
 	)
 	span.Finish()
@@ -135,9 +139,10 @@ func TestStartSpan(t *testing.T) {
 			},
 		},
 		Tags: nil,
-		// TODO(tracing): Set Transaction.Data here or in
-		// Contexts.Trace, or somewhere else. Currently ignored.
-		Extra:     nil,
+		// TODO(tracing): the root span / transaction data field is
+		// mapped into Event.Extra for now, pending spec clarification.
+		// https://github.com/getsentry/develop/issues/244#issuecomment-778694182
+		Extra:     span.Data,
 		Timestamp: endTime,
 		StartTime: startTime,
 	}
