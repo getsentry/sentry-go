@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"reflect"
 	"testing"
@@ -363,4 +365,30 @@ func TestSpanFromContext(t *testing.T) {
 	// SpanCheck{
 	// 	RecorderLen: 1,
 	// }.Check(t, child)
+}
+
+func TestDoubleSampling(t *testing.T) {
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		SampleRate:       math.SmallestNonzeroFloat64,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+	})
+	span := StartSpan(ctx, "op", TransactionName("name"))
+
+	// CaptureException should not send any event because of SampleRate.
+	GetHubFromContext(ctx).CaptureException(errors.New("ignored"))
+	if got := len(transport.Events()); got != 0 {
+		t.Fatalf("got %d events, want 0", got)
+	}
+
+	// Finish should send one transaction event, always sampled via
+	// TracesSampleRate.
+	span.Finish()
+	if got := len(transport.Events()); got != 1 {
+		t.Fatalf("got %d events, want 1", got)
+	}
+	if got := transport.Events()[0].Type; got != transactionType {
+		t.Fatalf("got %v event, want %v", got, transactionType)
+	}
 }
