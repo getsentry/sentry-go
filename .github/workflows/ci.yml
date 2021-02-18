@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - release/**
   pull_request:
 jobs:
   golang-tests:
@@ -100,4 +101,3 @@ jobs:
           go env GOPATH
           go test ./...
           go test ./... -race
-      

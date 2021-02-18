@@ -6,6 +6,8 @@ preReleaseCommand: bash scripts/craft-pre-release.sh
 changelogPolicy: simple
 statusProvider:
   name: github
+artifactProvider:
+  name: none
 targets:
   - name: github
     includeNames: /none/
