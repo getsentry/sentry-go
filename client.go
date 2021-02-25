@@ -352,7 +352,7 @@ func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModif
 	// is store the Context in the EventHint and there nil means the Context is
 	// not available.
 	//nolint: staticcheck
-	return client.RecoverWithContext(nil, err, hint, scope)
+	return client.RecoverWithContext(context.TODO(), err, hint, scope)
 }
 
 // RecoverWithContext captures a panic and passes relevant context object.
