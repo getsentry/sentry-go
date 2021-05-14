@@ -29,7 +29,7 @@ require (
 	github.com/sergi/go-diff v1.0.0 // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/smartystreets/goconvey v1.6.4 // indirect
-	github.com/ugorji/go v1.2.5 // indirect
+	github.com/ugorji/go/codec v1.2.5 // indirect
 	github.com/urfave/negroni v1.0.0
 	github.com/valyala/fasthttp v1.6.0
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
@@ -40,7 +40,5 @@ require (
 	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a // indirect
 	golang.org/x/sys v0.0.0-20210514084401-e8d321eab015 // indirect
 	golang.org/x/text v0.3.6 // indirect
-	gopkg.in/go-playground/assert.v1 v1.2.1 // indirect
-	gopkg.in/go-playground/validator.v8 v8.18.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
