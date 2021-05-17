@@ -178,7 +178,11 @@ type batch struct {
 	done    chan struct{} // closed to signal completion of all items
 }
 
-// HTTPTransport is a default implementation of Transport interface used by Client.
+// HTTPTransport is the default, non-blocking, implementation of Transport.
+//
+// Clients using this transport will enqueue requests in a buffer and return to
+// the caller before any network communication has happened. Requests are sent
+// to Sentry sequentially from a background goroutine.
 type HTTPTransport struct {
 	dsn       *Dsn
 	client    *http.Client
@@ -410,7 +414,17 @@ func (t *HTTPTransport) worker() {
 // HTTPSyncTransport
 // ================================
 
-// HTTPSyncTransport is an implementation of Transport interface which blocks after each captured event.
+// HTTPSyncTransport is a blocking implementation of Transport.
+//
+// Clients using this transport will send requests to Sentry sequentially and
+// block until a response is returned.
+//
+// The blocking behavior is useful in a limited set of use cases. For example,
+// use it when deploying code to a Function as a Service ("Serverless")
+// platform, where any work happening in a background goroutine is not
+// guaranteed to execute.
+//
+// For most cases, prefer HTTPTransport.
 type HTTPSyncTransport struct {
 	dsn           *Dsn
 	client        *http.Client
