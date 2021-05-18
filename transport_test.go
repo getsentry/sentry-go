@@ -198,32 +198,6 @@ func TestGetRequestFromEvent(t *testing.T) {
 	}
 }
 
-func TestRetryAfterNoHeader(t *testing.T) {
-	assertEqual(t, retryAfter(time.Now(), nil), time.Second*60)
-}
-
-func TestRetryAfterIncorrectHeader(t *testing.T) {
-	h := http.Header{
-		"Retry-After": {"x"},
-	}
-	assertEqual(t, retryAfter(time.Now(), h), time.Second*60)
-}
-
-func TestRetryAfterDelayHeader(t *testing.T) {
-	h := http.Header{
-		"Retry-After": {"1337"},
-	}
-	assertEqual(t, retryAfter(time.Now(), h), time.Second*1337)
-}
-
-func TestRetryAfterDateHeader(t *testing.T) {
-	now, _ := time.Parse(time.RFC1123, "Wed, 21 Oct 2015 07:28:00 GMT")
-	h := http.Header{
-		"Retry-After": {"Wed, 21 Oct 2015 07:28:13 GMT"},
-	}
-	assertEqual(t, retryAfter(now, h), time.Second*13)
-}
-
 // A testHTTPServer counts events sent to it. It requires a call to Unblock
 // before incrementing its internal counter and sending a response to the HTTP
 // client. This allows for coordinating the execution flow when needed.
