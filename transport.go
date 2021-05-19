@@ -61,10 +61,10 @@ func getTLSConfig(options ClientOptions) *tls.Config {
 	return nil
 }
 
-func retryAfter(now time.Time, r *http.Response) time.Duration {
+func retryAfter(now time.Time, h http.Header) time.Duration {
 	// TODO(tracing): handle x-sentry-rate-limits, separate rate limiting
 	// per data type (error event, transaction, etc).
-	retryAfterHeader := r.Header["Retry-After"]
+	retryAfterHeader := h["Retry-After"]
 
 	if retryAfterHeader == nil {
 		return defaultRetryAfter
@@ -393,7 +393,7 @@ func (t *HTTPTransport) worker() {
 				continue
 			}
 			if response.StatusCode == http.StatusTooManyRequests {
-				deadline := time.Now().Add(retryAfter(time.Now(), response))
+				deadline := time.Now().Add(retryAfter(time.Now(), response.Header))
 				t.mu.Lock()
 				t.disabledUntil = deadline
 				t.mu.Unlock()
@@ -507,7 +507,7 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		return
 	}
 	if response.StatusCode == http.StatusTooManyRequests {
-		t.disabledUntil = time.Now().Add(retryAfter(time.Now(), response))
+		t.disabledUntil = time.Now().Add(retryAfter(time.Now(), response.Header))
 		Logger.Printf("Too many requests, backing off till: %s\n", t.disabledUntil)
 	}
 	// Drain body up to a limit and close it, allowing the
