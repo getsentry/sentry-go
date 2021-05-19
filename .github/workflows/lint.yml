@@ -1,0 +1,27 @@
+name: Lint
+on:
+  push:
+    branches:
+      - master
+      - release/**
+  pull_request:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  golangci-lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          version: v1.40.1
+          only-new-issues: true
+    timeout-minutes: 10

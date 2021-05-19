@@ -1,0 +1,107 @@
+name: Test
+on:
+  push:
+    branches:
+      - master
+      - release/**
+  pull_request:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    name: Module Mode
+    runs-on: ${{ matrix.os }}-latest
+    env:
+      GO111MODULE: "on"
+      GOFLAGS: "-mod=readonly"
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          # In order:
+          # * Module download cache
+          # * Build cache (Linux)
+          # * Build cache (Mac)
+          # * Build cache (Windows)
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+            %LocalAppData%\go-build
+          key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ matrix.go }}-
+            ${{ runner.os }}-go-
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Test (race)
+        run: go test -race ./...
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        go: ["1.16", "1.15", "1.14"]
+        os: [ubuntu, windows, macos]
+      fail-fast: false
+  test-gopath:
+    name: GOPATH Mode
+    runs-on: ubuntu-latest
+    env:
+      # We use two paths in GOPATH.
+      # The first one is where 'go get' will download dependencies, and
+      # the second is where sentry-go itself will be checked out.
+      GOPATH: ${{ github.workspace }}/deps:${{ github.workspace }}/main
+      GO111MODULE: "off"
+      WORKDIR: ${{ github.workspace }}/main/src/github.com/getsentry/sentry-go
+    defaults:
+      run:
+        working-directory: ${{ env.WORKDIR }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          path: ${{ env.WORKDIR }}
+      # TODO: cache dependencies
+      # - uses: actions/cache@v2
+      #   with:
+      #     # In order:
+      #     # * GOPATH with dependencies (but without sentry-go)
+      #     # * GOPATH with sentry-go installed package objects (*.a files)
+      #     # * Build cache (Linux)
+      #     path: |
+      #       ${{ github.workspace }}/deps
+      #       ${{ github.workspace }}/main/pkg
+      #       ~/.cache/go-build
+      #     key: gopath-${{ github.ref }}
+      #     restore-keys: |
+      #       gopath-
+      - uses: actions/setup-go@v2
+        with:
+          go-version: "1"
+      - name: Remove Unsupported Code
+        run: |
+          # Iris requires Module mode, therefore we delete the relevant code to
+          # skip testing it in GOPATH mode.
+          rm -vrf ./iris/ ./example/iris/
+      - name: Download Dependencies
+        run: go get -d -t -v ./...
+      - name: Build
+        run: go build ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Test (race)
+        run: go test -race ./...
+    timeout-minutes: 10
