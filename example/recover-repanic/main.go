@@ -102,7 +102,7 @@ func RecoverRepanic(f func()) {
 	// Add an EventProcessor to the scope. The event processor is a function
 	// that can change events before they are sent to Sentry.
 	// Alternatively, see also ClientOptions.BeforeSend, which is a special
-	// event processor applied to all events.
+	// event processor applied to error events.
 	hub.ConfigureScope(func(scope *sentry.Scope) {
 		scope.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			filterFrames(event)

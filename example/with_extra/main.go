@@ -67,7 +67,7 @@ func main() {
 		Dsn:   "https://hello@world.io/1337",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			// Solution 1 (use beforeSend, which will be applied to
-			// all events and is usually application specific):
+			// error events and is usually application specific):
 			if ex, ok := hint.OriginalException.(CustomComplexError); ok {
 				for key, val := range ex.GimmeMoreData() {
 					event.Extra[key] = val
@@ -80,9 +80,9 @@ func main() {
 		},
 		Transport: &devNullTransport{},
 
-		// Solution 2 (use custom integration, which will also be
-		// applied to all events, but can be easily extracted even as a
-		// separate utility and reused across all your projects):
+		// Solution 2 (use custom integration, which will be
+		// applied to all events, and can be extracted as a
+		// separate utility and reused across projects):
 		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
 			return append(integrations, new(ExtractExtra))
 		},
