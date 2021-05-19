@@ -49,11 +49,12 @@ type Scope struct {
 // NewScope creates a new Scope.
 func NewScope() *Scope {
 	scope := Scope{
-		breadcrumbs: make([]*Breadcrumb, 0),
-		tags:        make(map[string]string),
-		contexts:    make(map[string]interface{}),
-		extra:       make(map[string]interface{}),
-		fingerprint: make([]string, 0),
+		breadcrumbs:     make([]*Breadcrumb, 0),
+		tags:            make(map[string]string),
+		contexts:        make(map[string]interface{}),
+		extra:           make(map[string]interface{}),
+		fingerprint:     make([]string, 0),
+		eventProcessors: make([]EventProcessor, 0),
 	}
 
 	return &scope
@@ -303,6 +304,8 @@ func (scope *Scope) Clone() *Scope {
 	clone.user = scope.user
 	clone.breadcrumbs = make([]*Breadcrumb, len(scope.breadcrumbs))
 	copy(clone.breadcrumbs, scope.breadcrumbs)
+	clone.eventProcessors = make([]EventProcessor, len(scope.eventProcessors))
+	copy(clone.eventProcessors, scope.eventProcessors)
 	for key, value := range scope.tags {
 		clone.tags[key] = value
 	}
