@@ -368,10 +368,14 @@ func TestScopeBasicInheritance(t *testing.T) {
 	scope := NewScope()
 	scope.SetExtra("a", 1)
 	scope.SetRequestBody([]byte("requestbody"))
+	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+		return event
+	})
 	clone := scope.Clone()
 
 	assertEqual(t, scope.extra, clone.extra)
 	assertEqual(t, scope.requestBody, clone.requestBody)
+	assertEqual(t, scope.eventProcessors, clone.eventProcessors)
 }
 
 func TestScopeParentChangedInheritance(t *testing.T) {
@@ -434,6 +438,9 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.SetUser(User{ID: "bar"})
 	r1 := httptest.NewRequest("GET", "/bar", nil)
 	scope.SetRequest(r1)
+	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+		return event
+	})
 
 	clone := scope.Clone()
 	clone.SetTag("foo", "bar")
@@ -446,6 +453,9 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.SetUser(User{ID: "foo"})
 	r2 := httptest.NewRequest("GET", "/foo", nil)
 	clone.SetRequest(r2)
+	clone.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+		return event
+	})
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.contexts)
@@ -469,6 +479,9 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "bar"}}, scope.breadcrumbs)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r1, scope.request)
+
+	assertEqual(t, len(scope.eventProcessors), 1)
+	assertEqual(t, len(clone.eventProcessors), 2)
 }
 
 func TestClear(t *testing.T) {
