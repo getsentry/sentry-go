@@ -52,6 +52,11 @@ jobs:
         run: go test ./...
       - name: Test (race)
         run: go test -race ./...
+        # The race detector adds considerable runtime overhead. To save time on
+        # pull requests, only run this step for a single job in the matrix. For
+        # all other workflow triggers (e.g., pushes to a release branch) run
+        # this step for the whole matrix.
+        if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.16' && matrix.os == 'ubuntu') }}
     timeout-minutes: 10
     strategy:
       matrix:
@@ -105,6 +110,4 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test ./...
-      - name: Test (race)
-        run: go test -race ./...
     timeout-minutes: 10
