@@ -81,8 +81,8 @@ func main() {
 		Transport: &devNullTransport{},
 
 		// Solution 2 (use custom integration, which will be
-		// applied to all events, and can be extracted as a
-		// separate utility and reused across projects):
+		// applied to all events, can be extracted as a
+		// separate utility, and reused across projects):
 		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
 			return append(integrations, new(ExtractExtra))
 		},
