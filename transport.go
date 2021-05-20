@@ -402,12 +402,12 @@ func (t *HTTPTransport) worker() {
 	}
 }
 
-func (t *HTTPTransport) disabled(category ratelimit.Category) bool {
+func (t *HTTPTransport) disabled(c ratelimit.Category) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	disabled := t.limits.IsRateLimited(category)
+	disabled := t.limits.IsRateLimited(c)
 	if disabled {
-		Logger.Printf("Too many requests for %q, backing off till: %v", category, t.limits.Deadline(category))
+		Logger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
 	}
 	return disabled
 }
@@ -431,7 +431,9 @@ type HTTPSyncTransport struct {
 	dsn       *Dsn
 	client    *http.Client
 	transport http.RoundTripper
-	limits    ratelimit.Map
+
+	mu     sync.Mutex
+	limits ratelimit.Map
 
 	// HTTP Client request timeout. Defaults to 30 seconds.
 	Timeout time.Duration
@@ -481,10 +483,7 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		return
 	}
 
-	category := categoryFor(event.Type)
-
-	if t.limits.IsRateLimited(category) {
-		Logger.Printf("Too many requests for %q, backing off till: %v", category, t.limits.Deadline(category))
+	if t.disabled(categoryFor(event.Type)) {
 		return
 	}
 
@@ -516,7 +515,9 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		Logger.Printf("There was an issue with sending an event: %v", err)
 		return
 	}
+	t.mu.Lock()
 	t.limits.Merge(ratelimit.FromResponse(response))
+	t.mu.Unlock()
 
 	// Drain body up to a limit and close it, allowing the
 	// transport to reuse TCP connections.
@@ -527,6 +528,16 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 // Flush is a no-op for HTTPSyncTransport. It always returns true immediately.
 func (t *HTTPSyncTransport) Flush(_ time.Duration) bool {
 	return true
+}
+
+func (t *HTTPSyncTransport) disabled(c ratelimit.Category) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	disabled := t.limits.IsRateLimited(c)
+	if disabled {
+		Logger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
+	}
+	return disabled
 }
 
 // ================================
