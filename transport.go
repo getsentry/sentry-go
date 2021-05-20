@@ -204,6 +204,7 @@ func NewHTTPTransport() *HTTPTransport {
 	transport := HTTPTransport{
 		BufferSize: defaultBufferSize,
 		Timeout:    defaultTimeout,
+		limits:     make(ratelimit.Map),
 	}
 	return &transport
 }
@@ -389,7 +390,7 @@ func (t *HTTPTransport) worker() {
 				continue
 			}
 			t.mu.Lock()
-			t.limits = ratelimit.FromResponse(response)
+			t.limits.Merge(ratelimit.FromResponse(response))
 			t.mu.Unlock()
 			// Drain body up to a limit and close it, allowing the
 			// transport to reuse TCP connections.
