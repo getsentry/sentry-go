@@ -1,8 +1,10 @@
 package sentry
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
@@ -427,4 +429,84 @@ func TestKeepAlive(t *testing.T) {
 	t.Run("SyncTransport", func(t *testing.T) {
 		testKeepAlive(t, NewHTTPSyncTransport())
 	})
+}
+
+func TestRateLimiting(t *testing.T) {
+	t.Run("AsyncTransport", func(t *testing.T) {
+		testRateLimiting(t, NewHTTPTransport())
+	})
+	t.Run("SyncTransport", func(t *testing.T) {
+		testRateLimiting(t, NewHTTPSyncTransport())
+	})
+}
+
+func testRateLimiting(t *testing.T, tr Transport) {
+	errorEvent := &Event{}
+	transactionEvent := &Event{Type: transactionType}
+
+	var errorEventCount, transactionEventCount uint64
+
+	writeRateLimits := func(w http.ResponseWriter, s string) {
+		w.Header().Add("Retry-After", "50")
+		w.Header().Add("X-Sentry-Rate-Limits", s)
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprint(w, `{"id":"636205708f6846c8821e6576a9d05921"}`)
+	}
+
+	// Test server that simulates responses with rate limits.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			panic(err)
+		}
+		if bytes.Contains(b, []byte("transaction")) {
+			atomic.AddUint64(&transactionEventCount, 1)
+			writeRateLimits(w, "20:transaction")
+		} else {
+			atomic.AddUint64(&errorEventCount, 1)
+			writeRateLimits(w, "50:error")
+		}
+	}))
+	defer srv.Close()
+
+	dsn := strings.Replace(srv.URL, "//", "//pubkey@", 1) + "/1"
+
+	tr.Configure(ClientOptions{
+		Dsn: dsn,
+	})
+
+	// Send several errors and transactions concurrently.
+	//
+	// Because the server always returns a rate limit for the payload type
+	// in the request, the expectation is that, for both errors and
+	// transactions, the first event is sent successfully, and then all
+	// others are discarded before hitting the server.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 10; i++ {
+			tr.SendEvent(errorEvent)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 10; i++ {
+			tr.SendEvent(transactionEvent)
+		}
+	}()
+	wg.Wait()
+
+	if !tr.Flush(time.Second) {
+		t.Fatal("Flush timed out")
+	}
+
+	// Only one event of each kind should have hit the transport, all other
+	// events discarded because of rate limiting.
+	if n := atomic.LoadUint64(&errorEventCount); n != 1 {
+		t.Errorf("got errorEvent = %d, want %d", n, 1)
+	}
+	if n := atomic.LoadUint64(&transactionEventCount); n != 1 {
+		t.Errorf("got transactionEvent = %d, want %d", n, 1)
+	}
 }
