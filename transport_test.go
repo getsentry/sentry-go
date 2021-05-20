@@ -19,7 +19,6 @@ type unserializableType struct {
 	UnsupportedField func()
 }
 
-//nolint: lll
 const (
 	basicEvent                         = `{"message":"mkey","sdk":{},"user":{}}`
 	enhancedEventInvalidBreadcrumb     = `{"extra":{"info":"Could not encode original event as JSON. Succeeded by removing Breadcrumbs, Contexts and Extra. Please verify the data you attach to the scope. Error: json: error calling MarshalJSON for type *sentry.Event: json: error calling MarshalJSON for type *sentry.Breadcrumb: json: unsupported type: func()"},"message":"mkey","sdk":{},"user":{}}`
