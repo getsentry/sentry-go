@@ -50,7 +50,7 @@ func FromResponse(r *http.Response) Map {
 	return fromResponse(r, time.Now())
 }
 
-func fromResponse(r *http.Response, now time.Time) (m Map) {
+func fromResponse(r *http.Response, now time.Time) Map {
 	s := r.Header.Get("X-Sentry-Rate-Limits")
 	if s != "" {
 		return parseXSentryRateLimits(s, now)
