@@ -124,7 +124,12 @@ func transactionEnvelopeFromBody(eventID EventID, sentAt time.Time, body json.Ra
 	return &b, nil
 }
 
-func getRequestFromEvent(event *Event, dsn *Dsn) (*http.Request, error) {
+func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
+	defer func() {
+		if r != nil {
+			r.Header.Set("User-Agent", userAgent)
+		}
+	}()
 	body := getRequestBodyFromEvent(event)
 	if body == nil {
 		return nil, errors.New("event could not be marshaled")

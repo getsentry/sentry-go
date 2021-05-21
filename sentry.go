@@ -12,6 +12,9 @@ const Version = "0.10.0"
 // sentry-go SDK.
 const apiVersion = "7"
 
+// userAgent is the User-Agent of outgoing HTTP requests.
+const userAgent = "sentry-go/" + Version
+
 // Init initializes the SDK with options. The returned error is non-nil if
 // options is invalid, for instance if a malformed DSN is provided.
 func Init(options ClientOptions) error {
