@@ -208,7 +208,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	if options.Release == "" {
-		options.Release = os.Getenv("SENTRY_RELEASE")
+		options.Release = defaultRelease()
 	}
 
 	if options.Environment == "" {
