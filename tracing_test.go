@@ -151,7 +151,7 @@ func TestStartSpan(t *testing.T) {
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
-			"Sdk", "ServerName",
+			"Release", "Sdk", "ServerName",
 		),
 		cmpopts.EquateEmpty(),
 	}
@@ -210,7 +210,7 @@ func TestStartChild(t *testing.T) {
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Event{},
 			"EventID", "Level", "Platform",
-			"Sdk", "ServerName", "Timestamp", "StartTime",
+			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
 		),
 		cmpopts.IgnoreMapEntries(func(k string, v interface{}) bool {
 			return k != "trace"
