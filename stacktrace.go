@@ -32,7 +32,7 @@ func NewStacktrace() *Stacktrace {
 		return nil
 	}
 
-	frames := extractFrames(pcs[:n])
+	frames := extractFrames(pcs[:n], false)
 	frames = filterFrames(frames)
 
 	stacktrace := Stacktrace{
@@ -51,18 +51,20 @@ func ExtractStacktrace(err error) *Stacktrace {
 	method := extractReflectedStacktraceMethod(err)
 
 	var pcs []uintptr
+	var single bool
 
 	if method.IsValid() {
 		pcs = extractPcs(method)
 	} else {
 		pcs = extractXErrorsPC(err)
+		single = true
 	}
 
 	if len(pcs) == 0 {
 		return nil
 	}
 
-	frames := extractFrames(pcs)
+	frames := extractFrames(pcs, single)
 	frames = filterFrames(frames)
 
 	stacktrace := Stacktrace{
@@ -234,7 +236,7 @@ func splitQualifiedFunctionName(name string) (pkg string, fun string) {
 	return
 }
 
-func extractFrames(pcs []uintptr) []Frame {
+func extractFrames(pcs []uintptr, single bool) []Frame {
 	var frames []Frame
 	callersFrames := runtime.CallersFrames(pcs)
 
@@ -245,7 +247,7 @@ func extractFrames(pcs []uintptr) []Frame {
 			NewFrame(callerFrame),
 		}, frames...)
 
-		if !more {
+		if !more || single {
 			break
 		}
 	}

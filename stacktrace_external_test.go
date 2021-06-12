@@ -7,6 +7,7 @@ import (
 	goErrors "github.com/go-errors/errors"
 	pingcapErrors "github.com/pingcap/errors"
 	pkgErrors "github.com/pkg/errors"
+	"golang.org/x/xerrors"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -49,6 +50,15 @@ func BlueGoErrorsRanger() error {
 	return goErrors.New("this is bad from goErrors")
 }
 
+func RedXErrorsRanger() error {
+	err := BlueXErrorsRanger()
+	return xerrors.Errorf("context in RedXErrorsRanger: %w", err)
+}
+
+func BlueXErrorsRanger() error {
+	return xerrors.New("this is bad from xerrors")
+}
+
 //nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestNewStacktrace(t *testing.T) {
 	tests := map[string]struct {
@@ -60,7 +70,7 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f1",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   18,
+					Lineno:   19,
 					InApp:    true,
 				},
 			},
@@ -70,13 +80,13 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f2",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   22,
+					Lineno:   23,
 					InApp:    true,
 				},
 				{
 					Function: "f1",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   18,
+					Lineno:   19,
 					InApp:    true,
 				},
 			},
@@ -91,7 +101,7 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f3",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   25,
+					Lineno:   26,
 					InApp:    true,
 				},
 			},
@@ -103,7 +113,7 @@ func TestNewStacktrace(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			got := tt.f()
-			compareStacktrace(t, got, tt.want)
+			compareStacktrace(t, true, got, tt.want)
 		})
 	}
 }
@@ -112,125 +122,71 @@ func TestNewStacktrace(t *testing.T) {
 func TestExtractStacktrace(t *testing.T) {
 	tests := map[string]struct {
 		f    func() error
+		skip bool
 		want *sentry.Stacktrace
 	}{
 		// https://github.com/pkg/errors
-		"pkg/errors": {RedPkgErrorsRanger, &sentry.Stacktrace{
+		"pkg/errors": {RedPkgErrorsRanger, true, &sentry.Stacktrace{
 			Frames: []sentry.Frame{
 				{
 					Function: "RedPkgErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   29,
+					Lineno:   30,
 					InApp:    true,
 				},
 				{
 					Function: "BluePkgErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   33,
+					Lineno:   34,
 					InApp:    true,
 				},
 			},
 		}},
 		// https://github.com/pingcap/errors
-		"pingcap/errors": {RedPingcapErrorsRanger, &sentry.Stacktrace{
+		"pingcap/errors": {RedPingcapErrorsRanger, true, &sentry.Stacktrace{
 			Frames: []sentry.Frame{
 				{
 					Function: "RedPingcapErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   37,
+					Lineno:   38,
 					InApp:    true,
 				},
 				{
 					Function: "BluePingcapErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   41,
+					Lineno:   42,
 					InApp:    true,
 				},
 			},
 		}},
 		// https://github.com/go-errors/errors
-		"go-errors/errors": {RedGoErrorsRanger, &sentry.Stacktrace{
+		"go-errors/errors": {RedGoErrorsRanger, true, &sentry.Stacktrace{
 			Frames: []sentry.Frame{
 				{
 					Function: "RedGoErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   45,
+					Lineno:   46,
 					InApp:    true,
 				},
 				{
 					Function: "BlueGoErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   49,
+					Lineno:   50,
 					InApp:    true,
 				},
 			},
 		}},
-		// FIXME: The tests below are commented out to avoid introducing a
-		// dependency on golang.org/x/xerrors. We should enable them when we
-		// move tests with external dependencies to a separate module.
-		// See https://github.com/getsentry/sentry-go/issues/238.
-		//
 		// https://golang.org/x/xerrors
-		// "xerrors.errorString": {
-		// 	func() error {
-		// 		err := xerrors.New("xerror")
-		// 		errType := reflect.TypeOf(err).String()
-		// 		if errType != "*xerrors.errorString" {
-		// 			panic("unexpected error type: " + errType)
-		// 		}
-		// 		return err
-		// 	},
-		// 	&sentry.Stacktrace{
-		// 		Frames: []sentry.Frame{
-		// 			{
-		// 				Function: "TestExtractStacktrace.func1",
-		// 				Module:   "github.com/getsentry/sentry-go_test",
-		// 				Lineno:   178,
-		// 				InApp:    true,
-		// 			},
-		// 		},
-		// 	},
-		// },
-		// "xerrors.wrapError": {
-		// 	func() error {
-		// 		err := xerrors.Errorf("new error: %w", xerrors.New("xerror"))
-		// 		errType := reflect.TypeOf(err).String()
-		// 		if errType != "*xerrors.wrapError" {
-		// 			panic("unexpected error type: " + errType)
-		// 		}
-		// 		return err
-		// 	},
-		// 	&sentry.Stacktrace{
-		// 		Frames: []sentry.Frame{
-		// 			{
-		// 				Function: "TestExtractStacktrace.func2",
-		// 				Module:   "github.com/getsentry/sentry-go_test",
-		// 				Lineno:   198,
-		// 				InApp:    true,
-		// 			},
-		// 		},
-		// 	},
-		// },
-		// "xerrors.noWrapError": {
-		// 	func() error {
-		// 		err := xerrors.Errorf("new error: %w", "not an xerror")
-		// 		errType := reflect.TypeOf(err).String()
-		// 		if errType != "*xerrors.noWrapError" {
-		// 			panic("unexpected error type: " + errType)
-		// 		}
-		// 		return err
-		// 	},
-		// 	&sentry.Stacktrace{
-		// 		Frames: []sentry.Frame{
-		// 			{
-		// 				Function: "TestExtractStacktrace.func3",
-		// 				Module:   "github.com/getsentry/sentry-go_test",
-		// 				Lineno:   218,
-		// 				InApp:    true,
-		// 			},
-		// 		},
-		// 	},
-		// },
+		"x/errors": {RedXErrorsRanger, false, &sentry.Stacktrace{
+			Frames: []sentry.Frame{
+				{
+					Function: "RedXErrorsRanger",
+					Module:   "github.com/getsentry/sentry-go_test",
+					Lineno:   55,
+					InApp:    true,
+				},
+			},
+		}},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -239,7 +195,7 @@ func TestExtractStacktrace(t *testing.T) {
 				t.Fatal("got nil error")
 			}
 			got := sentry.ExtractStacktrace(err)
-			compareStacktrace(t, got, tt.want)
+			compareStacktrace(t, tt.skip, got, tt.want)
 			// We ignore paths in compareStacktrace because they depend on the
 			// environment where tests are run. However, Frame.Filename should
 			// be a relative path and Frame.AbsPath should be an absolute path.
@@ -255,7 +211,7 @@ func TestExtractStacktrace(t *testing.T) {
 	}
 }
 
-func compareStacktrace(t *testing.T, got, want *sentry.Stacktrace) {
+func compareStacktrace(t *testing.T, skip bool, got, want *sentry.Stacktrace) {
 	t.Helper()
 
 	if got == nil {
@@ -265,8 +221,11 @@ func compareStacktrace(t *testing.T, got, want *sentry.Stacktrace) {
 	if len(got.Frames) == 0 {
 		t.Fatal("got no frames")
 	}
-	// Skip anonymous function passed to t.Run.
-	got.Frames = got.Frames[1:]
+
+	if skip {
+		// Skip anonymous function passed to t.Run.
+		got.Frames = got.Frames[1:]
+	}
 
 	if diff := stacktraceDiff(want, got); diff != "" {
 		t.Fatalf("Stacktrace mismatch (-want +got):\n%s", diff)
