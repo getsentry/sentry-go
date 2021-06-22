@@ -22,6 +22,13 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
+// release is the release of this program that will be reported to Sentry.
+// Use go build -ldflags='-X main.release=VALUE' to set this value in build
+// time.
+// If not set, a default release value will be derived in runtime from
+// environment variables or the Git repository in the current working directory.
+var release string
+
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatalf("usage: %s URL", os.Args[0])
@@ -32,7 +39,8 @@ func main() {
 		Dsn: "",
 		// Enable printing of SDK debug messages.
 		// Useful when getting started or trying to figure something out.
-		Debug: true,
+		Debug:   true,
+		Release: release,
 	})
 	if err != nil {
 		log.Fatalf("sentry.Init: %s", err)
