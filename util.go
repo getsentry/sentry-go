@@ -1,7 +1,6 @@
 package sentry
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -43,8 +42,8 @@ func prettyPrint(data interface{}) {
 
 // defaultRelease attempts to guess a default release for the currently running
 // program.
-func defaultRelease() string {
-	// Search environment variables (EV) known to hold release info.
+func defaultRelease() (release string) {
+	// Return first non-empty environment variable known to hold release info, if any.
 	envs := []string{
 		"SENTRY_RELEASE",
 		"HEROKU_SLUG_COMMIT",
@@ -57,27 +56,32 @@ func defaultRelease() string {
 		"VERCEL_GIT_COMMIT_SHA",  // Vercel - https://vercel.com/
 		"ZEIT_GITHUB_COMMIT_SHA", // Zeit (now known as Vercel)
 		"ZEIT_GITLAB_COMMIT_SHA",
-		"ZEIT_BITBUCKET_COMMIT_SHA"}
+		"ZEIT_BITBUCKET_COMMIT_SHA",
+	}
 	for _, e := range envs {
-		if val := os.Getenv(e); val != "" {
-			return val // Stop at first non-empty variable.
+		if release = os.Getenv(e); release != "" {
+			Logger.Printf("Release from environment variable %s: %s", e, release)
+			return release
 		}
 	}
 
-	// No EV's, attempt to get the last commit hash with git.
-	var stdout bytes.Buffer
+	// Derive a version string from Git.
 	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Stdout = &stdout
-	err := cmd.Run()
+	b, err := cmd.Output()
 	if err != nil {
-		Logger.Println("Failed attempt to run git rev-parse.")
-	} else {
-		shastr := strings.TrimSpace(stdout.String())
-		if len(shastr) == 40 { // sha1 hash length
-			return shastr
+		// Either Git is not available or the current directory is not a
+		// Git repository.
+		var s strings.Builder
+		fmt.Fprintf(&s, "Release detection failed: %v", err)
+		if err, ok := err.(*exec.ExitError); ok && len(err.Stderr) > 0 {
+			fmt.Fprintf(&s, ": %s", err.Stderr)
 		}
+		Logger.Print(s.String())
+		Logger.Print("Some Sentry features will not be available. See https://docs.sentry.io/product/releases/.")
+		Logger.Print("To stop seeing this message, pass a Release to sentry.Init or set the SENTRY_RELEASE environment variable.")
+		return ""
 	}
-
-	// Not able to find a release name at all.
-	return ""
+	release = strings.TrimSpace(string(b))
+	Logger.Printf("Release from Git: %s", release)
+	return release
 }
