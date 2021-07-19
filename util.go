@@ -41,7 +41,8 @@ func prettyPrint(data interface{}) {
 	fmt.Println(string(dbg))
 }
 
-// attempts to guess a default release.
+// defaultRelease attempts to guess a default release for the currently running
+// program.
 func defaultRelease() string {
 	// Search environment variables (EV) known to hold release info.
 	envs := []string{
