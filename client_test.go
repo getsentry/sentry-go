@@ -288,7 +288,7 @@ func TestCaptureEvent(t *testing.T) {
 	}
 }
 
-func TestCaptureEventShouldSendEventWithProvidedError(t *testing.T) {
+func TestCaptureEventShouldSendEventWithMessage(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	event := NewEvent()
 	event.Message = "event message"
