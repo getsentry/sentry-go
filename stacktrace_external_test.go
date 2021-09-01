@@ -60,6 +60,7 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f1",
 					Module:   "github.com/getsentry/sentry-go_test",
+					Package:  "sentry-go_test",
 					Lineno:   18,
 					InApp:    true,
 				},
@@ -70,12 +71,14 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f2",
 					Module:   "github.com/getsentry/sentry-go_test",
+					Package:  "sentry-go_test",
 					Lineno:   22,
 					InApp:    true,
 				},
 				{
 					Function: "f1",
 					Module:   "github.com/getsentry/sentry-go_test",
+					Package:  "sentry-go_test",
 					Lineno:   18,
 					InApp:    true,
 				},
@@ -91,6 +94,7 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f3",
 					Module:   "github.com/getsentry/sentry-go_test",
+					Package:  "sentry-go_test",
 					Lineno:   25,
 					InApp:    true,
 				},
@@ -120,12 +124,14 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedPkgErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
+					Package:  "sentry-go_test",
 					Lineno:   29,
 					InApp:    true,
 				},
 				{
 					Function: "BluePkgErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
+					Package:  "sentry-go_test",
 					Lineno:   33,
 					InApp:    true,
 				},
@@ -137,12 +143,14 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedPingcapErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
+					Package:  "sentry-go_test",
 					Lineno:   37,
 					InApp:    true,
 				},
 				{
 					Function: "BluePingcapErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
+					Package:  "sentry-go_test",
 					Lineno:   41,
 					InApp:    true,
 				},
@@ -154,12 +162,14 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedGoErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
+					Package:  "sentry-go_test",
 					Lineno:   45,
 					InApp:    true,
 				},
 				{
 					Function: "BlueGoErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
+					Package:  "sentry-go_test",
 					Lineno:   49,
 					InApp:    true,
 				},
@@ -185,6 +195,7 @@ func TestExtractStacktrace(t *testing.T) {
 		// 			{
 		// 				Function: "TestExtractStacktrace.func1",
 		// 				Module:   "github.com/getsentry/sentry-go_test",
+		// 				Package:  "sentry-go_test",
 		// 				Lineno:   178,
 		// 				InApp:    true,
 		// 			},
@@ -205,6 +216,7 @@ func TestExtractStacktrace(t *testing.T) {
 		// 			{
 		// 				Function: "TestExtractStacktrace.func2",
 		// 				Module:   "github.com/getsentry/sentry-go_test",
+		// 				Package:  "sentry-go_test",
 		// 				Lineno:   198,
 		// 				InApp:    true,
 		// 			},
@@ -225,6 +237,7 @@ func TestExtractStacktrace(t *testing.T) {
 		// 			{
 		// 				Function: "TestExtractStacktrace.func3",
 		// 				Module:   "github.com/getsentry/sentry-go_test",
+		// 				Package:  "sentry-go_test",
 		// 				Lineno:   218,
 		// 				InApp:    true,
 		// 			},

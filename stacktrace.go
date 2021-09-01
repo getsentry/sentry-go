@@ -206,10 +206,16 @@ func NewFrame(f runtime.Frame) Frame {
 	}
 
 	function := f.Function
-	var pkg string
+	var pkg, lastSubpkg string
 
 	if function != "" {
 		pkg, function = splitQualifiedFunctionName(function)
+	}
+
+	if lastSlashIndex := strings.LastIndexByte(pkg, '/'); lastSlashIndex != -1 {
+		lastSubpkg = pkg[lastSlashIndex+1:]
+	} else {
+		lastSubpkg = pkg
 	}
 
 	frame := Frame{
@@ -217,6 +223,7 @@ func NewFrame(f runtime.Frame) Frame {
 		Filename: relpath,
 		Lineno:   f.Line,
 		Module:   pkg,
+		Package:  lastSubpkg,
 		Function: function,
 	}
 
