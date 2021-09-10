@@ -190,6 +190,16 @@ func TestLastEventIDUpdatesAfterCaptures(t *testing.T) {
 	assertEqual(t, *eventID, hub.LastEventID())
 }
 
+func TestLastEventIDNotChangedForTransactions(t *testing.T) {
+	hub, _, _ := setupHubTest()
+
+	errorID := hub.CaptureException(fmt.Errorf("wat"))
+	assertEqual(t, *errorID, hub.LastEventID())
+
+	hub.CaptureEvent(&Event{Type: transactionType})
+	assertEqual(t, *errorID, hub.LastEventID())
+}
+
 func TestAddBreadcrumbRespectMaxBreadcrumbsOption(t *testing.T) {
 	hub, client, scope := setupHubTest()
 	client.options.MaxBreadcrumbs = 2

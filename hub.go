@@ -212,12 +212,14 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 	}
 	eventID := client.CaptureEvent(event, nil, scope)
 
-	hub.mu.Lock()
-	defer hub.mu.Unlock()
-	if eventID != nil {
-		hub.lastEventID = *eventID
-	} else {
-		hub.lastEventID = ""
+	if event.Type != transactionType {
+		hub.mu.Lock()
+		defer hub.mu.Unlock()
+		if eventID != nil {
+			hub.lastEventID = *eventID
+		} else {
+			hub.lastEventID = ""
+		}
 	}
 	return eventID
 }
