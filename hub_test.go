@@ -200,6 +200,22 @@ func TestLastEventIDNotChangedForTransactions(t *testing.T) {
 	assertEqual(t, *errorID, hub.LastEventID())
 }
 
+func TestLastEventIDDoesNotReset(t *testing.T) {
+	hub, client, _ := setupHubTest()
+
+	id1 := hub.CaptureException(fmt.Errorf("error 1"))
+	assertEqual(t, hub.LastEventID(), *id1)
+
+	client.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+		// drop all events
+		return nil
+	})
+
+	id2 := hub.CaptureException(fmt.Errorf("error 2"))
+	assertEqual(t, id2, (*EventID)(nil))    // event must have been dropped
+	assertEqual(t, hub.LastEventID(), *id1) // last event ID must not have changed
+}
+
 func TestAddBreadcrumbRespectMaxBreadcrumbsOption(t *testing.T) {
 	hub, client, scope := setupHubTest()
 	client.options.MaxBreadcrumbs = 2

@@ -223,14 +223,10 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 	}
 	eventID := client.CaptureEvent(event, nil, scope)
 
-	if event.Type != transactionType {
+	if event.Type != transactionType && eventID != nil {
 		hub.mu.Lock()
-		defer hub.mu.Unlock()
-		if eventID != nil {
-			hub.lastEventID = *eventID
-		} else {
-			hub.lastEventID = ""
-		}
+		hub.lastEventID = *eventID
+		hub.mu.Unlock()
 	}
 	return eventID
 }
@@ -245,12 +241,10 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 	}
 	eventID := client.CaptureMessage(message, nil, scope)
 
-	hub.mu.Lock()
-	defer hub.mu.Unlock()
 	if eventID != nil {
+		hub.mu.Lock()
 		hub.lastEventID = *eventID
-	} else {
-		hub.lastEventID = ""
+		hub.mu.Unlock()
 	}
 	return eventID
 }
@@ -265,12 +259,10 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 	}
 	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
 
-	hub.mu.Lock()
-	defer hub.mu.Unlock()
 	if eventID != nil {
+		hub.mu.Lock()
 		hub.lastEventID = *eventID
-	} else {
-		hub.lastEventID = ""
+		hub.mu.Unlock()
 	}
 	return eventID
 }
