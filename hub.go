@@ -85,16 +85,17 @@ func CurrentHub() *Hub {
 }
 
 // LastEventID returns the ID of the last event (error or message) captured
-// through the hub.
+// through the hub and sent to the underlying transport.
 //
-// It is a convenience method to cover use cases in which errors are captured
-// indirectly and the ID is needed. For example, it can be used as part of an
-// HTTP middleware to log the ID of the last error, if any.
+// Transactions and events dropped by sampling or event processors do not change
+// the last event ID.
+//
+// LastEventID is a convenience method to cover use cases in which errors are
+// captured indirectly and the ID is needed. For example, it can be used as part
+// of an HTTP middleware to log the ID of the last error, if any.
 //
 // For more flexibility, consider instead using the ClientOptions.BeforeSend
 // function or event processors.
-//
-// Note: transaction events do not affect the last event ID.
 func (hub *Hub) LastEventID() EventID {
 	hub.mu.RLock()
 	defer hub.mu.RUnlock()
