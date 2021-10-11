@@ -6,7 +6,7 @@ require (
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 // indirect
 	github.com/fasthttp-contrib/websocket v0.0.0-20160511215533-1f3b11f56072 // indirect
-	github.com/gin-gonic/gin v1.4.0
+	github.com/gin-gonic/gin v1.7.0
 	github.com/go-errors/errors v1.0.1
 	github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab
 	github.com/google/go-cmp v0.5.5
@@ -16,6 +16,8 @@ require (
 	github.com/kataras/iris/v12 v12.1.8
 	github.com/labstack/echo/v4 v4.5.0
 	github.com/mattn/go-colorable v0.1.11 // indirect
+	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
+	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/moul/http2curl v1.0.0 // indirect
 	github.com/onsi/ginkgo v1.10.3 // indirect
 	github.com/onsi/gomega v1.7.1 // indirect
@@ -24,7 +26,6 @@ require (
 	github.com/sergi/go-diff v1.0.0 // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/smartystreets/goconvey v1.6.4 // indirect
-	github.com/ugorji/go v1.1.7 // indirect
 	github.com/urfave/negroni v1.0.0
 	github.com/valyala/fasthttp v1.6.0
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
