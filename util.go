@@ -60,7 +60,7 @@ func defaultRelease() (release string) {
 	}
 	for _, e := range envs {
 		if release = os.Getenv(e); release != "" {
-			Logger.Printf("Release from environment variable %s: %s", e, release)
+			Logger.Printf("Using release from environment variable %s: %s", e, release)
 			return release
 		}
 	}
@@ -82,6 +82,6 @@ func defaultRelease() (release string) {
 		return ""
 	}
 	release = strings.TrimSpace(string(b))
-	Logger.Printf("Release from Git: %s", release)
+	Logger.Printf("Using release from Git: %s", release)
 	return release
 }
