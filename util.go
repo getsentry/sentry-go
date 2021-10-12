@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
+
+	exec "golang.org/x/sys/execabs"
 )
 
 func uuid() string {
