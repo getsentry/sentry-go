@@ -7,14 +7,14 @@
 
 # Official Sentry [Iris](https://github.com/kataras/iris) Handler for Sentry-go SDK
 
-**Godoc:** https://godoc.org/github.com/getsentry/sentry-go/iris
+**Godoc:** https://godoc.org/github.com/getsentry/sentry-go/sentryiris
 
-**Example:** https://github.com/getsentry/sentry-go/tree/master/example/iris
+**Example:** https://github.com/getsentry/sentry-go/tree/master/sentryiris/example
 
 ## Installation
 
 ```sh
-go get github.com/getsentry/sentry-go/iris
+go get github.com/getsentry/sentry-go/sentryiris
 ```
 
 ```go
@@ -22,7 +22,7 @@ import (
     "fmt"
 
     "github.com/getsentry/sentry-go"
-    sentryiris "github.com/getsentry/sentry-go/iris"
+	"github.com/getsentry/sentry-go/sentryiris"
     "github.com/kataras/iris/v12"
 )
 
