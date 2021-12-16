@@ -24,9 +24,9 @@ type Stacktrace struct {
 }
 
 // NewStacktrace creates a stacktrace using runtime.Callers.
-func NewStacktrace() *Stacktrace {
+func NewStacktrace(callerSkip int) *Stacktrace {
 	pcs := make([]uintptr, 100)
-	n := runtime.Callers(1, pcs)
+	n := runtime.Callers(callerSkip+1, pcs)
 
 	if n == 0 {
 		return nil
@@ -144,7 +144,7 @@ func extractXErrorsPC(err error) []uintptr {
 	// of trying to account for all possible ways things can go wrong, some
 	// assumptions are made and if they are violated the code will panic. We
 	// recover from any panic and ignore it, returning nil.
-	//nolint: errcheck
+	// nolint: errcheck
 	defer func() { recover() }()
 
 	field := reflect.ValueOf(err).Elem().FieldByName("frame") // type Frame struct{ frames [3]uintptr }

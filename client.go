@@ -116,6 +116,8 @@ type ClientOptions struct {
 	// Configures whether SDK should generate and attach stacktraces to pure
 	// capture message calls.
 	AttachStacktrace bool
+	// StacktraceCallerSkip the number of skips frames from the top of the stacktrace.
+	StacktraceCallerSkip int
 	// The sample rate for event submission in the range [0.0, 1.0]. By default,
 	// all events are sent. Thus, as a historical special case, the sample rate
 	// 0.0 is treated as if it was 1.0. To drop all events, set the DSN to the
@@ -375,7 +377,7 @@ func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModif
 	// use the Context for communicating deadline nor cancelation. All it does
 	// is store the Context in the EventHint and there nil means the Context is
 	// not available.
-	//nolint: staticcheck
+	// nolint: staticcheck
 	return client.RecoverWithContext(nil, err, hint, scope)
 }
 
@@ -441,7 +443,7 @@ func (client *Client) eventFromMessage(message string, level Level) *Event {
 
 	if client.Options().AttachStacktrace {
 		event.Threads = []Thread{{
-			Stacktrace: NewStacktrace(),
+			Stacktrace: NewStacktrace(client.Options().StacktraceCallerSkip),
 			Crashed:    false,
 			Current:    true,
 		}}
@@ -480,7 +482,7 @@ func (client *Client) eventFromException(exception error, level Level) *Event {
 	// We only add to the most recent error to avoid duplication and because the
 	// current stack is most likely unrelated to errors deeper in the chain.
 	if event.Exception[0].Stacktrace == nil {
-		event.Exception[0].Stacktrace = NewStacktrace()
+		event.Exception[0].Stacktrace = NewStacktrace(client.Options().StacktraceCallerSkip)
 	}
 
 	// event.Exception should be sorted such that the most recent error is last.
