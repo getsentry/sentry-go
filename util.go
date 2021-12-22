@@ -66,8 +66,11 @@ func defaultRelease() (release string) {
 		}
 	}
 
-	// Derive a version string from Git.
-	cmd := exec.Command("git", "rev-parse", "HEAD")
+	// Derive a version string from Git. Example outputs:
+	// 	v1.0.1-0-g9de4
+	// 	v2.0-8-g77df-dirty
+	// 	4f72d7
+	cmd := exec.Command("git", "describe", "--long", "--always", "--dirty")
 	b, err := cmd.Output()
 	if err != nil {
 		// Either Git is not available or the current directory is not a
