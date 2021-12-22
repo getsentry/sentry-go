@@ -60,7 +60,7 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        go: ["1.16", "1.15", "1.14"]
+        go: ["1.17", "1.16", "1.15"]
         os: [ubuntu, windows, macos]
       fail-fast: false
   test-gopath:
