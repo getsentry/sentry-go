@@ -119,7 +119,7 @@ func run() error {
 			defer span.Finish()
 			err := t.Execute(w, time.Now().UnixNano())
 			if err != nil {
-				log.Printf("[%s] %s", r.URL.Path, err)
+				log.Printf("[%q] %s", r.URL.Path, err)
 				return
 			}
 		}()
@@ -163,7 +163,7 @@ func run() error {
 		span.Finish()
 
 		if err != nil {
-			log.Printf("[%s] %s", r.URL.Path, err)
+			log.Printf("[%q] %s", r.URL.Path, err)
 			hub := sentry.GetHubFromContext(ctx)
 			hub.CaptureException(err)
 			code := http.StatusInternalServerError
