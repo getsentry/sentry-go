@@ -1,6 +1,7 @@
 package sentryhttp_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -19,10 +20,11 @@ func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
 
 	tests := []struct {
-		Path    string
-		Method  string
-		Body    string
-		Handler http.Handler
+		Path           string
+		Method         string
+		Body           string
+		Handler        http.Handler
+		requestHeaders map[string]string
 
 		WantEvent *sentry.Event
 	}{
@@ -38,6 +40,7 @@ func TestIntegration(t *testing.T) {
 				Request: &sentry.Request{
 					URL:    "/panic",
 					Method: "GET",
+					Data:   "",
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip",
 						"User-Agent":      "Go-http-client/1.1",
@@ -76,6 +79,41 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
+			Path:   "/post",
+			Method: "POST",
+			Body:   "{\"key\":\"i am a body\"}",
+			requestHeaders: map[string]string{
+				"Content-Type": "application/json",
+			},
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				hub := sentry.GetHubFromContext(r.Context())
+				body, err := ioutil.ReadAll(r.Body)
+				if err != nil {
+					t.Error(err)
+				}
+				hub.CaptureMessage("post: " + string(body))
+			}),
+
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "post: {\"key\":\"i am a body\"}",
+				Request: &sentry.Request{
+					URL:    "/post",
+					Method: "POST",
+					Data: map[string]json.RawMessage{
+						"key": json.RawMessage("\"i am a body\""),
+					},
+					Headers: map[string]string{
+						"Content-Type":    "application/json",
+						"Accept-Encoding": "gzip",
+						"Content-Length":  "21",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				Transaction: "POST /post",
+			},
+		},
+		{
 			Path: "/get",
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				hub := sentry.GetHubFromContext(r.Context())
@@ -88,6 +126,7 @@ func TestIntegration(t *testing.T) {
 				Request: &sentry.Request{
 					URL:    "/get",
 					Method: "GET",
+					Data:   "",
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip",
 						"User-Agent":      "Go-http-client/1.1",
@@ -191,6 +230,9 @@ func TestIntegration(t *testing.T) {
 		req, err := http.NewRequest(tt.Method, srv.URL+tt.Path, strings.NewReader(tt.Body))
 		if err != nil {
 			t.Fatal(err)
+		}
+		for k, v := range tt.requestHeaders {
+			req.Header.Set(k, v)
 		}
 		res, err := c.Do(req)
 		if err != nil {

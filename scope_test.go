@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -547,6 +548,70 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	assertNotEqual(t, processedEvent.User, scope.user, "should use event user if one exist")
 	assertNotEqual(t, processedEvent.Request, scope.request, "should use event request if one exist")
 	assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprints if they exist")
+}
+
+func TestApplyToEventWithRequestBody(t *testing.T) {
+	scope := fillScopeWithData(NewScope())
+	scope.request = httptest.NewRequest("POST", "/wat", nil)
+	scope.SetRequestBody([]byte("i am a body"))
+	event := fillEventWithData(NewEvent())
+	event.Request = nil
+
+	processedEvent := scope.ApplyToEvent(event, nil)
+
+	assertEqual(t, processedEvent.Request.Data, "i am a body", "should accept body as a string")
+}
+
+func TestApplyToEventWithRequestBodyJson(t *testing.T) {
+	s := struct {
+		A string `json:"a"`
+		B int    `json:"b"`
+		C struct {
+			D float64 `json:"d"`
+		} `json:"c"`
+	}{
+		A: "value",
+		B: 2,
+		C: struct {
+			D float64 `json:"d"`
+		}{
+			D: 0.3,
+		},
+	}
+	scope := fillScopeWithData(NewScope())
+	r := httptest.NewRequest("POST", "/wat", nil)
+	r.Header.Set("Content-Type", "application/json")
+	scope.request = r
+
+	marshal, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope.SetRequestBody(marshal)
+	event := fillEventWithData(NewEvent())
+	event.Request = nil
+
+	processedEvent := scope.ApplyToEvent(event, nil)
+
+	assertEqual(t, processedEvent.Request.Data, map[string]json.RawMessage{
+		"a": json.RawMessage("\"value\""),
+		"b": json.RawMessage("2"),
+		"c": json.RawMessage("{\"d\":0.3}"),
+	}, "should accept body as a json")
+}
+
+func TestApplyToEventWithRequestBodyMisleadingContentType(t *testing.T) {
+	scope := fillScopeWithData(NewScope())
+	r := httptest.NewRequest("POST", "/wat", nil)
+	r.Header.Set("Content-Type", "application/json")
+	scope.request = r
+	scope.SetRequestBody([]byte("i am not a json body"))
+	event := fillEventWithData(NewEvent())
+	event.Request = nil
+
+	processedEvent := scope.ApplyToEvent(event, nil)
+
+	assertEqual(t, processedEvent.Request.Data, "i am not a json body", "should accept body as a string")
 }
 
 func TestApplyToEventUsingEmptyScope(t *testing.T) {

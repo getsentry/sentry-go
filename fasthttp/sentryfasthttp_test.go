@@ -39,6 +39,7 @@ func TestIntegration(t *testing.T) {
 				Request: &sentry.Request{
 					URL:    "http://example.com/panic",
 					Method: "GET",
+					Data:   "",
 					Headers: map[string]string{
 						"Host":       "example.com",
 						"User-Agent": "fasthttp",
@@ -82,6 +83,7 @@ func TestIntegration(t *testing.T) {
 				Request: &sentry.Request{
 					URL:    "http://example.com/get",
 					Method: "GET",
+					Data:   "",
 					Headers: map[string]string{
 						"Host":       "example.com",
 						"User-Agent": "fasthttp",

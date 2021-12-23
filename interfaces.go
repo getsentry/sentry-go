@@ -103,7 +103,7 @@ type User struct {
 type Request struct {
 	URL         string            `json:"url,omitempty"`
 	Method      string            `json:"method,omitempty"`
-	Data        string            `json:"data,omitempty"`
+	Data        interface{}       `json:"data,omitempty"`
 	QueryString string            `json:"query_string,omitempty"`
 	Cookies     string            `json:"cookies,omitempty"`
 	Headers     map[string]string `json:"headers,omitempty"`
@@ -142,6 +142,7 @@ func NewRequest(r *http.Request) *Request {
 		URL:         url,
 		Method:      r.Method,
 		QueryString: r.URL.RawQuery,
+		Data:        "",
 		Cookies:     cookies,
 		Headers:     headers,
 		Env:         env,

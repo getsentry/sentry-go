@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"reflect"
@@ -416,7 +417,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		// Users can still send more data along their events if they want to,
 		// for example using Event.Extra.
 		if scope.requestBody != nil && !scope.requestBody.Overflow() {
-			event.Request.Data = string(scope.requestBody.Bytes())
+			scope.getRequestBody(event)
 		}
 	}
 
@@ -430,4 +431,19 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 	}
 
 	return event
+}
+
+func (scope *Scope) getRequestBody(event *Event) {
+	if event.Request.Headers["Content-Type"] == "application/json" {
+		var jsonData map[string]json.RawMessage
+		err := json.Unmarshal(scope.requestBody.Bytes(), &jsonData)
+		if err != nil {
+			event.Request.Data = string(scope.requestBody.Bytes())
+			return
+		}
+		event.Request.Data = jsonData
+		return
+	}
+	event.Request.Data = string(scope.requestBody.Bytes())
+	return
 }
