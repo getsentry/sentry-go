@@ -214,6 +214,10 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 	return e.defaultMarshalJSON()
 }
 
+type exceptionValues struct {
+	Values []Exception `json:"values,omitempty"`
+}
+
 func (e *Event) defaultMarshalJSON() ([]byte, error) {
 	// event aliases Event to allow calling json.Marshal without an infinite
 	// loop. It preserves all fields while none of the attached methods.
@@ -235,9 +239,14 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 		Type      json.RawMessage `json:"type,omitempty"`
 		StartTime json.RawMessage `json:"start_timestamp,omitempty"`
 		Spans     json.RawMessage `json:"spans,omitempty"`
+
+		Exception *exceptionValues `json:"exception,omitempty"`
 	}
 
 	x := errorEvent{event: (*event)(e)}
+	if len(e.Exception) > 0 {
+		x.Exception = &exceptionValues{Values: e.Exception}
+	}
 	if !e.Timestamp.IsZero() {
 		b, err := e.Timestamp.MarshalJSON()
 		if err != nil {
@@ -263,9 +272,14 @@ func (e *Event) transactionMarshalJSON() ([]byte, error) {
 
 		StartTime json.RawMessage `json:"start_timestamp,omitempty"`
 		Timestamp json.RawMessage `json:"timestamp,omitempty"`
+
+		Exception *exceptionValues `json:"exception,omitempty"`
 	}
 
 	x := transactionEvent{event: (*event)(e)}
+	if len(e.Exception) > 0 {
+		x.Exception = &exceptionValues{Values: e.Exception}
+	}
 	if !e.Timestamp.IsZero() {
 		b, err := e.Timestamp.MarshalJSON()
 		if err != nil {
