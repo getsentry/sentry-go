@@ -46,8 +46,8 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Check go.mod Tidiness
-        run: go mod tidy && git diff --exit-code
-        if: ${{ matrix.go == '1.16' }}
+        run: go mod tidy -go=1.17 -compat=1.15 && git diff --exit-code
+        if: ${{ matrix.go == '1.17' }}
       - name: Test
         run: go test -count=1 ./...
       - name: Test (race)
@@ -56,7 +56,7 @@ jobs:
         # pull requests, only run this step for a single job in the matrix. For
         # all other workflow triggers (e.g., pushes to a release branch) run
         # this step for the whole matrix.
-        if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.16' && matrix.os == 'ubuntu') }}
+        if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.17' && matrix.os == 'ubuntu') }}
     timeout-minutes: 10
     strategy:
       matrix:
