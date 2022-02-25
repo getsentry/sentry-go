@@ -57,6 +57,7 @@ func main() {
 			defer wg.Done()
 			RecoverRepanic(func() {
 				// Sleep to simulate some work.
+				//#nosec G404 -- We are fine using transparent, non-secure value here.
 				time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
 				// Intentionally access an index out of bounds to trigger a runtime
 				// panic.

@@ -127,7 +127,7 @@ func extractPcs(method reflect.Value) []uintptr {
 					pcs = append(pcs, uintptr(field.Uint()))
 					break
 				}
- 			}
+			}
 		}
 	}
 
