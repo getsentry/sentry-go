@@ -26,7 +26,7 @@ var dsnTests = map[string]DsnTest{
 			host:      "domain",
 			port:      8888,
 			path:      "/foo/bar",
-			projectID: 42,
+			projectID: "42",
 		},
 		url:    "https://domain:8888/foo/bar/api/42/store/",
 		envURL: "https://domain:8888/foo/bar/api/42/envelope/",
@@ -38,7 +38,7 @@ var dsnTests = map[string]DsnTest{
 			publicKey: "public",
 			host:      "domain",
 			port:      443,
-			projectID: 42,
+			projectID: "42",
 		},
 		url:    "https://domain/api/42/store/",
 		envURL: "https://domain/api/42/envelope/",
@@ -50,7 +50,7 @@ var dsnTests = map[string]DsnTest{
 			publicKey: "public",
 			host:      "domain",
 			port:      80,
-			projectID: 42,
+			projectID: "42",
 		},
 		url:    "http://domain/api/42/store/",
 		envURL: "http://domain/api/42/envelope/",
@@ -100,9 +100,8 @@ var invalidDsnTests = map[string]invalidDsnTest{
 	"NoProjectID2":  {"https://public:secret@domain:8888", "empty project id"},
 	"BadURL":        {"!@#$%^&*()", "invalid url"},
 	"BadScheme":     {"ftp://public:secret@domain:8888/1", "invalid scheme"},
-	"BadProjectID":  {"https://public:secret@domain:8888/wbvdf7^W#$", "invalid project id"},
 	"BadPort":       {"https://public:secret@domain:wat/42", "invalid port"},
-	"TrailingSlash": {"https://public:secret@domain:8888/42/", "invalid project id"},
+	"TrailingSlash": {"https://public:secret@domain:8888/42/", "empty project id"},
 }
 
 //nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4

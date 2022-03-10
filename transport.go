@@ -304,7 +304,7 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 			eventType = fmt.Sprintf("%s event", event.Level)
 		}
 		Logger.Printf(
-			"Sending %s [%s] to %s project: %d",
+			"Sending %s [%s] to %s project: %s",
 			eventType,
 			event.EventID,
 			t.dsn.host,
@@ -511,7 +511,7 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		eventType = fmt.Sprintf("%s event", event.Level)
 	}
 	Logger.Printf(
-		"Sending %s [%s] to %s project: %d",
+		"Sending %s [%s] to %s project: %s",
 		eventType,
 		event.EventID,
 		t.dsn.host,
