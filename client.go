@@ -192,6 +192,14 @@ type ClientOptions struct {
 	HTTPSProxy string
 	// An optional set of SSL certificates to use.
 	CaCerts *x509.CertPool
+	// MaxErrorDepth is the maximum number of errors reported in a chain of errors.
+	// This protects the SDK from an arbitrarily long chain of wrapped errors.
+	//
+	// An additional consideration is that arguably reporting a long chain of errors
+	// is of little use when debugging production errors with Sentry. The Sentry UI
+	// is not optimized for long chains either. The top-level error together with a
+	// stack trace is often the most useful information.
+	MaxErrorDepth int
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -236,6 +244,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	if options.Environment == "" {
 		options.Environment = os.Getenv("SENTRY_ENVIRONMENT")
+	}
+
+	if options.MaxErrorDepth == 0 {
+		options.MaxErrorDepth = maxErrorDepth
 	}
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
@@ -460,7 +472,7 @@ func (client *Client) eventFromException(exception error, level Level) *Event {
 	event := NewEvent()
 	event.Level = level
 
-	for i := 0; i < maxErrorDepth && err != nil; i++ {
+	for i := 0; i < client.options.MaxErrorDepth && err != nil; i++ {
 		event.Exception = append(event.Exception, Exception{
 			Value:      err.Error(),
 			Type:       reflect.TypeOf(err).String(),
