@@ -4,3 +4,7 @@ coverage.txt
 FIXME.md
 TODO.md
 !NOTES.md
+
+# IDE system files
+.idea
+.vscode
