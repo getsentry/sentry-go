@@ -96,7 +96,7 @@ jobs:
       #       gopath-
       - uses: actions/setup-go@v2
         with:
-          go-version: "1"
+          go-version: "1.17"
       - name: Remove Unsupported Code
         run: |
           # Iris requires Module mode, therefore we delete the relevant code to
