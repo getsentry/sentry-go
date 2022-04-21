@@ -213,7 +213,7 @@ func TestIntegration(t *testing.T) {
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(
 			sentry.Event{},
-			"Contexts", "EventID", "Extra", "Platform",
+			"Contexts", "EventID", "Extra", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
 		),
 		cmpopts.IgnoreFields(

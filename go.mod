@@ -1,6 +1,6 @@
 module github.com/getsentry/sentry-go
 
-go 1.17
+go 1.18
 
 require (
 	github.com/gin-gonic/gin v1.7.7
@@ -14,6 +14,7 @@ require (
 	github.com/urfave/negroni v1.0.0
 	github.com/valyala/fasthttp v1.6.0
 	golang.org/x/sys v0.0.0-20211007075335-d3039528d8ac
+	golang.org/x/text v0.3.7
 )
 
 require (
@@ -65,7 +66,6 @@ require (
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
 	golang.org/x/net v0.0.0-20211008194852-3b03d305991f // indirect
-	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324 // indirect
 	golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543 // indirect
 	gopkg.in/ini.v1 v1.51.1 // indirect
