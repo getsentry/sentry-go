@@ -545,9 +545,17 @@ func TransactionName(name string) SpanOption {
 // ContinueFromRequest returns a span option that updates the span to continue
 // an existing trace. If it cannot detect an existing trace in the request, the
 // span will be left unchanged.
+//
+// ContinueFromRequest is an alias for:
+// 	ContinueFromTrace(r.Header.Get("sentry-trace"))
 func ContinueFromRequest(r *http.Request) SpanOption {
+	return ContinueFromTrace(r.Header.Get("sentry-trace"))
+}
+
+// ContinueFromTrace returns a span option that updates the span to continue
+// an existing TraceID.
+func ContinueFromTrace(trace string) SpanOption {
 	return func(s *Span) {
-		trace := r.Header.Get("sentry-trace")
 		if trace == "" {
 			return
 		}
