@@ -553,8 +553,7 @@ func ContinueFromRequest(r *http.Request) SpanOption {
 }
 
 // ContinueFromTrace returns a span option that updates the span to continue
-// an existing trace. If it cannot detect an existing trace in the request, the
-// span will be left unchanged.
+// an existing TraceID.
 func ContinueFromTrace(trace string) SpanOption {
 	return func(s *Span) {
 		if trace == "" {
