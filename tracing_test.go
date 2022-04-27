@@ -342,6 +342,32 @@ func TestContinueSpanFromRequest(t *testing.T) {
 		})
 	}
 }
+func TestContinueSpanFromTrace(t *testing.T) {
+	traceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
+	spanID := SpanIDFromHex("b72fa28504b07285")
+
+	for _, sampled := range []Sampled{SampledTrue, SampledFalse, SampledUndefined} {
+		sampled := sampled
+		t.Run(sampled.String(), func(t *testing.T) {
+			var s Span
+			trace := (&Span{
+				TraceID: traceID,
+				SpanID:  spanID,
+				Sampled: sampled,
+			}).ToSentryTrace()
+			ContinueFromTrace(trace)(&s)
+			if s.TraceID != traceID {
+				t.Errorf("got %q, want %q", s.TraceID, traceID)
+			}
+			if s.ParentSpanID != spanID {
+				t.Errorf("got %q, want %q", s.ParentSpanID, spanID)
+			}
+			if s.Sampled != sampled {
+				t.Errorf("got %q, want %q", s.Sampled, sampled)
+			}
+		})
+	}
+}
 
 func TestSpanFromContext(t *testing.T) {
 	// SpanFromContext always returns a non-nil value, such that you can use
