@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fatih/structs"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -142,13 +141,13 @@ func TestStructSnapshots(t *testing.T) {
 				StartTime: time.Unix(3, 0).UTC(),
 				Timestamp: time.Unix(5, 0).UTC(),
 				Contexts: map[string]Context{
-					"trace": structs.Map(TraceContext{
+					"trace": TraceContext{
 						TraceID:     TraceIDFromHex("90d57511038845dcb4164a70fc3a7fdb"),
 						SpanID:      SpanIDFromHex("f7f3fd754a9040eb"),
 						Op:          "http.GET",
 						Description: "description",
 						Status:      SpanStatusOK,
-					}),
+					}.Map(),
 				},
 			},
 		},

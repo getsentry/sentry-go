@@ -3,7 +3,6 @@ module github.com/getsentry/sentry-go
 go 1.18
 
 require (
-	github.com/fatih/structs v1.1.0
 	github.com/gin-gonic/gin v1.7.7
 	github.com/go-errors/errors v1.0.1
 	github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab
@@ -27,6 +26,7 @@ require (
 	github.com/aymerick/raymond v2.0.3-0.20180322193309-b565731e1464+incompatible // indirect
 	github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 // indirect
 	github.com/eknkc/amber v0.0.0-20171010120322-cdade1c07385 // indirect
+	github.com/fatih/structs v1.1.0 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-playground/locales v0.13.0 // indirect
 	github.com/go-playground/universal-translator v0.17.0 // indirect
