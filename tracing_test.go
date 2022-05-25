@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -130,15 +131,15 @@ func TestStartSpan(t *testing.T) {
 	want := &Event{
 		Type:        transactionType,
 		Transaction: transaction,
-		Contexts: map[string]interface{}{
-			"trace": &TraceContext{
+		Contexts: map[string]Context{
+			"trace": structs.Map(TraceContext{
 				TraceID:      span.TraceID,
 				SpanID:       span.SpanID,
 				ParentSpanID: parentSpanID,
 				Op:           op,
 				Description:  description,
 				Status:       status,
-			},
+			}),
 		},
 		Tags: nil,
 		// TODO(tracing): the root span / transaction data field is
@@ -190,12 +191,12 @@ func TestStartChild(t *testing.T) {
 	want := &Event{
 		Type:        transactionType,
 		Transaction: "Test Transaction",
-		Contexts: map[string]interface{}{
-			"trace": &TraceContext{
+		Contexts: map[string]Context{
+			"trace": structs.Map(TraceContext{
 				TraceID: span.TraceID,
 				SpanID:  span.SpanID,
 				Op:      span.Op,
-			},
+			}),
 		},
 		Spans: []*Span{
 			{

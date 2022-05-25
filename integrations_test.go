@@ -357,13 +357,13 @@ func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
 	}
 	scope := NewScope()
 
-	scope.contexts["device"] = map[string]interface{}{
+	scope.contexts["device"] = Context{
 		"foo": "bar",
 	}
-	scope.contexts["os"] = map[string]interface{}{
+	scope.contexts["os"] = Context{
 		"name": "test",
 	}
-	scope.contexts["custom"] = "value"
+	scope.contexts["custom"] = Context{"key": "value"}
 	hub := NewHub(client, scope)
 	hub.CaptureMessage("test event")
 
@@ -378,13 +378,13 @@ func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
 
 	contexts := events[0].Contexts
 
-	if contexts["device"].(map[string]interface{})["foo"] != "bar" {
+	if contexts["device"]["foo"] != "bar" {
 		t.Errorf(`contexts["device"] = %#v, want contexts["device"]["foo"] == "bar"`, contexts["device"])
 	}
-	if contexts["os"].(map[string]interface{})["name"] != "test" {
+	if contexts["os"]["name"] != "test" {
 		t.Errorf(`contexts["os"] = %#v, want contexts["os"]["name"] == "test"`, contexts["os"])
 	}
-	if contexts["custom"] != "value" {
-		t.Errorf(`contexts["custom"] = %#v, want "value"`, contexts["custom"])
+	if contexts["custom"]["key"] != "value" {
+		t.Errorf(`contexts["custom"]["key"] = %#v, want "value"`, contexts["custom"]["key"])
 	}
 }

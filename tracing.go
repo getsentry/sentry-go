@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/fatih/structs"
 )
 
 // A Span is the building block of a Sentry transaction. Spans build up a tree
@@ -148,7 +150,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	// Update scope so that all events include a trace context, allowing
 	// Sentry to correlate errors to transactions/spans.
-	hubFromContext(ctx).Scope().SetContext("trace", span.traceContext())
+	hubFromContext(ctx).Scope().SetContext("trace", structs.Map(span.traceContext()))
 
 	return &span
 }
@@ -329,8 +331,8 @@ func (s *Span) toEvent() *Event {
 	return &Event{
 		Type:        transactionType,
 		Transaction: hub.Scope().Transaction(),
-		Contexts: map[string]interface{}{
-			"trace": s.traceContext(),
+		Contexts: map[string]Context{
+			"trace": structs.Map(s.traceContext()),
 		},
 		Tags:      s.Tags,
 		Extra:     s.Data,
@@ -473,12 +475,12 @@ func (ss SpanStatus) MarshalJSON() ([]byte, error) {
 // A TraceContext carries information about an ongoing trace and is meant to be
 // stored in Event.Contexts (as *TraceContext).
 type TraceContext struct {
-	TraceID      TraceID    `json:"trace_id"`
-	SpanID       SpanID     `json:"span_id"`
-	ParentSpanID SpanID     `json:"parent_span_id"`
-	Op           string     `json:"op,omitempty"`
-	Description  string     `json:"description,omitempty"`
-	Status       SpanStatus `json:"status,omitempty"`
+	TraceID      TraceID    `json:"trace_id" structs:"trace_id"`
+	SpanID       SpanID     `json:"span_id" structs:"span_id"`
+	ParentSpanID SpanID     `json:"parent_span_id" structs:"parent_span_id,omitempty"`
+	Op           string     `json:"op,omitempty" structs:"op,omitempty"`
+	Description  string     `json:"description,omitempty" structs:"description,omitempty"`
+	Status       SpanStatus `json:"status,omitempty" structs:"status,omitempty"`
 }
 
 func (tc *TraceContext) MarshalJSON() ([]byte, error) {

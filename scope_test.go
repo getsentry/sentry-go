@@ -13,7 +13,7 @@ func fillScopeWithData(scope *Scope) *Scope {
 	scope.breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "scopeBreadcrumbMessage"}}
 	scope.user = User{ID: "1337"}
 	scope.tags = map[string]string{"scopeTagKey": "scopeTagValue"}
-	scope.contexts = map[string]interface{}{"scopeContextsKey": "scopeContextsValue"}
+	scope.contexts = map[string]Context{"scopeContextsKey": Context{"scopeContextKey": "scopeContextValue"}}
 	scope.extra = map[string]interface{}{"scopeExtraKey": "scopeExtraValue"}
 	scope.fingerprint = []string{"scopeFingerprintOne", "scopeFingerprintTwo"}
 	scope.level = LevelDebug
@@ -26,7 +26,7 @@ func fillEventWithData(event *Event) *Event {
 	event.Breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "eventBreadcrumbMessage"}}
 	event.User = User{ID: "42"}
 	event.Tags = map[string]string{"eventTagKey": "eventTagValue"}
-	event.Contexts = map[string]interface{}{"eventContextsKey": "eventContextsValue"}
+	event.Contexts = map[string]Context{"eventContextsKey": Context{"eventContextKey": "eventContextValue"}}
 	event.Extra = map[string]interface{}{"eventExtraKey": "eventExtraValue"}
 	event.Fingerprint = []string{"eventFingerprintOne", "eventFingerprintTwo"}
 	event.Level = LevelInfo
@@ -139,72 +139,72 @@ func TestScopeRemoveTagOnEmptyScope(t *testing.T) {
 
 func TestScopeSetContext(t *testing.T) {
 	scope := NewScope()
-	scope.SetContext("a", 1)
+	scope.SetContext("a", Context{"b": 1})
 
-	assertEqual(t, map[string]interface{}{"a": 1}, scope.contexts)
+	assertEqual(t, map[string]Context{"a": Context{"b": 1}}, scope.contexts)
 }
 
 func TestScopeSetContextMerges(t *testing.T) {
 	scope := NewScope()
-	scope.SetContext("a", "foo")
-	scope.SetContext("b", 2)
+	scope.SetContext("a", Context{"foo": "bar"})
+	scope.SetContext("b", Context{"b": 2})
 
-	assertEqual(t, map[string]interface{}{"a": "foo", "b": 2}, scope.contexts)
+	assertEqual(t, map[string]Context{"a": Context{"foo": "bar"}, "b": Context{"b": 2}}, scope.contexts)
 }
 
 func TestScopeSetContextOverrides(t *testing.T) {
 	scope := NewScope()
-	scope.SetContext("a", "foo")
-	scope.SetContext("a", 2)
+	scope.SetContext("a", Context{"foo": "bar"})
+	scope.SetContext("a", Context{"foo": 2})
 
-	assertEqual(t, map[string]interface{}{"a": 2}, scope.contexts)
+	assertEqual(t, map[string]Context{"a": Context{"foo": 2}}, scope.contexts)
 }
 
 func TestScopeSetContexts(t *testing.T) {
 	scope := NewScope()
-	scope.SetContexts(map[string]interface{}{"a": 1})
+	scope.SetContexts(map[string]Context{"a": Context{"b": 1}})
 
-	assertEqual(t, map[string]interface{}{"a": 1}, scope.contexts)
+	assertEqual(t, map[string]Context{"a": Context{"b": 1}}, scope.contexts)
 }
 
 func TestScopeSetContextsMerges(t *testing.T) {
 	scope := NewScope()
-	scope.SetContexts(map[string]interface{}{"a": "foo"})
-	scope.SetContexts(map[string]interface{}{"b": 2, "c": 3})
+	scope.SetContexts(map[string]Context{"a": Context{"a": "foo"}})
+	scope.SetContexts(map[string]Context{"b": Context{"b": 2}, "c": Context{"c": 3}})
 
-	assertEqual(t, map[string]interface{}{"a": "foo", "b": 2, "c": 3}, scope.contexts)
+	assertEqual(t, map[string]Context{"a": Context{"a": "foo"}, "b": Context{"b": 2}, "c": Context{"c": 3}}, scope.contexts)
 }
 
 func TestScopeSetContextsOverrides(t *testing.T) {
 	scope := NewScope()
-	scope.SetContexts(map[string]interface{}{"a": "foo"})
-	scope.SetContexts(map[string]interface{}{"a": 2, "b": 3})
+	scope.SetContexts(map[string]Context{"a": Context{"foo": "bar"}})
+	scope.SetContexts(map[string]Context{"a": Context{"a": 2}, "b": Context{"b": 3}})
 
-	assertEqual(t, map[string]interface{}{"a": 2, "b": 3}, scope.contexts)
+	assertEqual(t, map[string]Context{"a": Context{"a": 2}, "b": Context{"b": 3}}, scope.contexts)
 }
 
 func TestScopeRemoveContext(t *testing.T) {
 	scope := NewScope()
-	scope.SetContext("a", "foo")
-	scope.SetContext("b", "bar")
+	scope.SetContext("a", Context{"foo": "foo"})
+	scope.SetContext("b", Context{"bar": "bar"})
 	scope.RemoveContext("b")
 
-	assertEqual(t, map[string]interface{}{"a": "foo"}, scope.contexts)
+	assertEqual(t, map[string]Context{"a": Context{"foo": "foo"}}, scope.contexts)
 }
 
 func TestScopeRemoveContextSkipsEmptyValues(t *testing.T) {
 	scope := NewScope()
-	scope.SetContext("a", "foo")
+	scope.SetContext("a", Context{"foo": "bar"})
 	scope.RemoveContext("b")
 
-	assertEqual(t, map[string]interface{}{"a": "foo"}, scope.contexts)
+	assertEqual(t, map[string]Context{"a": Context{"foo": "bar"}}, scope.contexts)
 }
 
 func TestScopeRemoveContextOnEmptyScope(t *testing.T) {
 	scope := NewScope()
 	scope.RemoveContext("b")
 
-	assertEqual(t, make(map[string]interface{}), scope.contexts)
+	assertEqual(t, make(map[string]Context), scope.contexts)
 }
 
 func TestScopeSetExtra(t *testing.T) {
@@ -274,7 +274,7 @@ func TestScopeRemoveExtraOnEmptyScope(t *testing.T) {
 	scope := NewScope()
 	scope.RemoveExtra("b")
 
-	assertEqual(t, make(map[string]interface{}), scope.contexts)
+	assertEqual(t, make(map[string]Context), scope.contexts)
 }
 
 func TestScopeSetFingerprint(t *testing.T) {
@@ -383,7 +383,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone := scope.Clone()
 
 	clone.SetTag("foo", "bar")
-	clone.SetContext("foo", "bar")
+	clone.SetContext("foo", Context{"foo": "bar"})
 	clone.SetExtra("foo", "bar")
 	clone.SetLevel(LevelDebug)
 	clone.SetTransaction("foo")
@@ -394,7 +394,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone.SetRequest(r1)
 
 	scope.SetTag("foo", "baz")
-	scope.SetContext("foo", "baz")
+	scope.SetContext("foo", Context{"foo": "baz"})
 	scope.SetExtra("foo", "baz")
 	scope.SetLevel(LevelFatal)
 	scope.SetTransaction("bar")
@@ -405,7 +405,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	scope.SetRequest(r2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
-	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.contexts)
+	assertEqual(t, map[string]Context{"foo": Context{"foo": "bar"}}, clone.contexts)
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.extra)
 	assertEqual(t, LevelDebug, clone.level)
 	assertEqual(t, "foo", clone.transaction)
@@ -415,7 +415,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, r1, clone.request)
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
-	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.contexts)
+	assertEqual(t, map[string]Context{"foo": Context{"foo": "baz"}}, scope.contexts)
 	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.extra)
 	assertEqual(t, LevelFatal, scope.level)
 	assertEqual(t, "bar", scope.transaction)
@@ -429,7 +429,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope := NewScope()
 
 	scope.SetTag("foo", "baz")
-	scope.SetContext("foo", "baz")
+	scope.SetContext("foo", Context{"foo": "baz"})
 	scope.SetExtra("foo", "baz")
 	scope.SetLevel(LevelFatal)
 	scope.SetTransaction("bar")
@@ -444,7 +444,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 
 	clone := scope.Clone()
 	clone.SetTag("foo", "bar")
-	clone.SetContext("foo", "bar")
+	clone.SetContext("foo", Context{"foo": "bar"})
 	clone.SetExtra("foo", "bar")
 	clone.SetLevel(LevelDebug)
 	clone.SetTransaction("foo")
@@ -458,7 +458,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	})
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
-	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.contexts)
+	assertEqual(t, map[string]Context{"foo": Context{"foo": "bar"}}, clone.contexts)
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, clone.extra)
 	assertEqual(t, LevelDebug, clone.level)
 	assertEqual(t, "foo", clone.transaction)
@@ -471,7 +471,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, r2, clone.request)
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
-	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.contexts)
+	assertEqual(t, map[string]Context{"foo": Context{"foo": "baz"}}, scope.contexts)
 	assertEqual(t, map[string]interface{}{"foo": "baz"}, scope.extra)
 	assertEqual(t, LevelFatal, scope.level)
 	assertEqual(t, "bar", scope.transaction)
@@ -491,7 +491,7 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []*Breadcrumb{}, scope.breadcrumbs)
 	assertEqual(t, User{}, scope.user)
 	assertEqual(t, map[string]string{}, scope.tags)
-	assertEqual(t, map[string]interface{}{}, scope.contexts)
+	assertEqual(t, map[string]Context{}, scope.contexts)
 	assertEqual(t, map[string]interface{}{}, scope.extra)
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
@@ -504,7 +504,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.Clear()
 
 	scope.SetTag("foo", "bar")
-	scope.SetContext("foo", "bar")
+	scope.SetContext("foo", Context{"foo": "bar"})
 	scope.SetExtra("foo", "bar")
 	scope.SetLevel(LevelDebug)
 	scope.SetTransaction("foo")
@@ -515,7 +515,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetRequest(r)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, scope.tags)
-	assertEqual(t, map[string]interface{}{"foo": "bar"}, scope.contexts)
+	assertEqual(t, map[string]Context{"foo": Context{"foo": "bar"}}, scope.contexts)
 	assertEqual(t, map[string]interface{}{"foo": "bar"}, scope.extra)
 	assertEqual(t, LevelDebug, scope.level)
 	assertEqual(t, "foo", scope.transaction)

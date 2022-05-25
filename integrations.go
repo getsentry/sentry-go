@@ -72,18 +72,18 @@ func (ei *environmentIntegration) SetupOnce(client *Client) {
 func (ei *environmentIntegration) processor(event *Event, hint *EventHint) *Event {
 	// Initialize maps as necessary.
 	if event.Contexts == nil {
-		event.Contexts = make(map[string]interface{})
+		event.Contexts = make(map[string]Context)
 	}
 	for _, name := range []string{"device", "os", "runtime"} {
 		if event.Contexts[name] == nil {
-			event.Contexts[name] = make(map[string]interface{})
+			event.Contexts[name] = make(Context)
 		}
 	}
 
 	// Set contextual information preserving existing data. For each context, if
 	// the existing value is not of type map[string]interface{}, then no
 	// additional information is added.
-	if deviceContext, ok := event.Contexts["device"].(map[string]interface{}); ok {
+	if deviceContext, ok := event.Contexts["device"]; ok {
 		if _, ok := deviceContext["arch"]; !ok {
 			deviceContext["arch"] = runtime.GOARCH
 		}
@@ -91,12 +91,12 @@ func (ei *environmentIntegration) processor(event *Event, hint *EventHint) *Even
 			deviceContext["num_cpu"] = runtime.NumCPU()
 		}
 	}
-	if osContext, ok := event.Contexts["os"].(map[string]interface{}); ok {
+	if osContext, ok := event.Contexts["os"]; ok {
 		if _, ok := osContext["name"]; !ok {
 			osContext["name"] = runtime.GOOS
 		}
 	}
-	if runtimeContext, ok := event.Contexts["runtime"].(map[string]interface{}); ok {
+	if runtimeContext, ok := event.Contexts["runtime"]; ok {
 		if _, ok := runtimeContext["name"]; !ok {
 			runtimeContext["name"] = "go"
 		}
