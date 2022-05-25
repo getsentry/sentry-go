@@ -128,7 +128,7 @@ func TestStructSnapshots(t *testing.T) {
 					"extra_key": "extra_val",
 				},
 				Contexts: map[string]Context{
-					"context_key": Context{
+					"context_key": {
 						"context_key": "context_val",
 					},
 				},

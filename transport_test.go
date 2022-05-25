@@ -78,7 +78,7 @@ func TestGetRequestBodyFromEventInvalidContextField(t *testing.T) {
 	body := getRequestBodyFromEvent(&Event{
 		Message: "mkey",
 		Contexts: map[string]Context{
-			"wat": Context{"key": unserializableType{}},
+			"wat": {"key": unserializableType{}},
 		},
 	})
 
@@ -102,7 +102,7 @@ func TestGetRequestBodyFromEventMultipleInvalidFields(t *testing.T) {
 			"wat": unserializableType{},
 		},
 		Contexts: map[string]Context{
-			"wat": Context{"key": unserializableType{}},
+			"wat": {"key": unserializableType{}},
 		},
 	})
 
