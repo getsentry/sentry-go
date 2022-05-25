@@ -473,12 +473,12 @@ func (ss SpanStatus) MarshalJSON() ([]byte, error) {
 // A TraceContext carries information about an ongoing trace and is meant to be
 // stored in Event.Contexts (as *TraceContext).
 type TraceContext struct {
-	TraceID      TraceID    `json:"trace_id" structs:"trace_id"`
-	SpanID       SpanID     `json:"span_id" structs:"span_id"`
-	ParentSpanID SpanID     `json:"parent_span_id" structs:"parent_span_id,omitempty"`
-	Op           string     `json:"op,omitempty" structs:"op,omitempty"`
-	Description  string     `json:"description,omitempty" structs:"description,omitempty"`
-	Status       SpanStatus `json:"status,omitempty" structs:"status,omitempty"`
+	TraceID      TraceID    `json:"trace_id"`
+	SpanID       SpanID     `json:"span_id"`
+	ParentSpanID SpanID     `json:"parent_span_id"`
+	Op           string     `json:"op,omitempty"`
+	Description  string     `json:"description,omitempty"`
+	Status       SpanStatus `json:"status,omitempty"`
 }
 
 func (tc *TraceContext) MarshalJSON() ([]byte, error) {
