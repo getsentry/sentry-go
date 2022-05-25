@@ -5,6 +5,5 @@ repos:
     - id: go-build
     - id: go-fmt
     - id: go-imports
-    - id: go-mod-tidy
     - id: golangci-lint
     - id: no-go-testing
