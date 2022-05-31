@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- ref: Use a Context type mapping to a map[string]interface{} for all contexts
+- ref: Use a `Context` type mapping to a `map[string]interface{}` for all event contexts (#444)
 
 ## v0.13.0
 
