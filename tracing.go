@@ -148,7 +148,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	// Update scope so that all events include a trace context, allowing
 	// Sentry to correlate errors to transactions/spans.
-	hubFromContext(ctx).Scope().SetContext("trace", span.traceContext())
+	hubFromContext(ctx).Scope().SetContext("trace", span.traceContext().Map())
 
 	return &span
 }
@@ -329,8 +329,8 @@ func (s *Span) toEvent() *Event {
 	return &Event{
 		Type:        transactionType,
 		Transaction: hub.Scope().Transaction(),
-		Contexts: map[string]interface{}{
-			"trace": s.traceContext(),
+		Contexts: map[string]Context{
+			"trace": s.traceContext().Map(),
 		},
 		Tags:      s.Tags,
 		Extra:     s.Data,
@@ -497,6 +497,31 @@ func (tc *TraceContext) MarshalJSON() ([]byte, error) {
 		traceContext: (*traceContext)(tc),
 		ParentSpanID: parentSpanID,
 	})
+}
+
+func (tc TraceContext) Map() map[string]interface{} {
+	m := map[string]interface{}{
+		"trace_id": tc.TraceID,
+		"span_id":  tc.SpanID,
+	}
+
+	if tc.ParentSpanID != [8]byte{} {
+		m["parent_span_id"] = tc.ParentSpanID
+	}
+
+	if tc.Op != "" {
+		m["op"] = tc.Op
+	}
+
+	if tc.Description != "" {
+		m["description"] = tc.Description
+	}
+
+	if tc.Status > 0 && tc.Status < maxSpanStatus {
+		m["status"] = tc.Status
+	}
+
+	return m
 }
 
 // Sampled signifies a sampling decision.

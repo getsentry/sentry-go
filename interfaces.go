@@ -161,10 +161,12 @@ type Exception struct {
 // An EventID must be 32 characters long, lowercase and not have any dashes.
 type EventID string
 
+type Context = map[string]interface{}
+
 // Event is the fundamental data structure that is sent to Sentry.
 type Event struct {
 	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs,omitempty"`
-	Contexts    map[string]interface{} `json:"contexts,omitempty"`
+	Contexts    map[string]Context     `json:"contexts,omitempty"`
 	Dist        string                 `json:"dist,omitempty"`
 	Environment string                 `json:"environment,omitempty"`
 	EventID     EventID                `json:"event_id,omitempty"`
@@ -286,7 +288,7 @@ func (e *Event) transactionMarshalJSON() ([]byte, error) {
 // NewEvent creates a new Event.
 func NewEvent() *Event {
 	event := Event{
-		Contexts: make(map[string]interface{}),
+		Contexts: make(map[string]Context),
 		Extra:    make(map[string]interface{}),
 		Tags:     make(map[string]string),
 		Modules:  make(map[string]string),

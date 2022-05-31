@@ -126,8 +126,10 @@ func TestStructSnapshots(t *testing.T) {
 				Extra: map[string]interface{}{
 					"extra_key": "extra_val",
 				},
-				Contexts: map[string]interface{}{
-					"context_key": "context_val",
+				Contexts: map[string]Context{
+					"context_key": {
+						"context_key": "context_val",
+					},
 				},
 			},
 		},
@@ -138,14 +140,14 @@ func TestStructSnapshots(t *testing.T) {
 				Spans:     []*Span{testSpan},
 				StartTime: time.Unix(3, 0).UTC(),
 				Timestamp: time.Unix(5, 0).UTC(),
-				Contexts: map[string]interface{}{
-					"trace": &TraceContext{
+				Contexts: map[string]Context{
+					"trace": TraceContext{
 						TraceID:     TraceIDFromHex("90d57511038845dcb4164a70fc3a7fdb"),
 						SpanID:      SpanIDFromHex("f7f3fd754a9040eb"),
 						Op:          "http.GET",
 						Description: "description",
 						Status:      SpanStatusOK,
-					},
+					}.Map(),
 				},
 			},
 		},

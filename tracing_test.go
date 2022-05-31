@@ -130,15 +130,15 @@ func TestStartSpan(t *testing.T) {
 	want := &Event{
 		Type:        transactionType,
 		Transaction: transaction,
-		Contexts: map[string]interface{}{
-			"trace": &TraceContext{
+		Contexts: map[string]Context{
+			"trace": TraceContext{
 				TraceID:      span.TraceID,
 				SpanID:       span.SpanID,
 				ParentSpanID: parentSpanID,
 				Op:           op,
 				Description:  description,
 				Status:       status,
-			},
+			}.Map(),
 		},
 		Tags: nil,
 		// TODO(tracing): the root span / transaction data field is
@@ -190,12 +190,12 @@ func TestStartChild(t *testing.T) {
 	want := &Event{
 		Type:        transactionType,
 		Transaction: "Test Transaction",
-		Contexts: map[string]interface{}{
-			"trace": &TraceContext{
+		Contexts: map[string]Context{
+			"trace": TraceContext{
 				TraceID: span.TraceID,
 				SpanID:  span.SpanID,
 				Op:      span.Op,
-			},
+			}.Map(),
 		},
 		Spans: []*Span{
 			{

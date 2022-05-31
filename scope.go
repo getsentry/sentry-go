@@ -28,7 +28,7 @@ type Scope struct {
 	breadcrumbs []*Breadcrumb
 	user        User
 	tags        map[string]string
-	contexts    map[string]interface{}
+	contexts    map[string]Context
 	extra       map[string]interface{}
 	fingerprint []string
 	level       Level
@@ -51,7 +51,7 @@ func NewScope() *Scope {
 	scope := Scope{
 		breadcrumbs: make([]*Breadcrumb, 0),
 		tags:        make(map[string]string),
-		contexts:    make(map[string]interface{}),
+		contexts:    make(map[string]Context),
 		extra:       make(map[string]interface{}),
 		fingerprint: make([]string, 0),
 	}
@@ -209,7 +209,7 @@ func (scope *Scope) RemoveTag(key string) {
 }
 
 // SetContext adds a context to the current scope.
-func (scope *Scope) SetContext(key string, value interface{}) {
+func (scope *Scope) SetContext(key string, value Context) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -217,7 +217,7 @@ func (scope *Scope) SetContext(key string, value interface{}) {
 }
 
 // SetContexts assigns multiple contexts to the current scope.
-func (scope *Scope) SetContexts(contexts map[string]interface{}) {
+func (scope *Scope) SetContexts(contexts map[string]Context) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -358,7 +358,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 
 	if len(scope.contexts) > 0 {
 		if event.Contexts == nil {
-			event.Contexts = make(map[string]interface{})
+			event.Contexts = make(map[string]Context)
 		}
 
 		for key, value := range scope.contexts {

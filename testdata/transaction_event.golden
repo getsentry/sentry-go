@@ -1,11 +1,11 @@
 {
     "contexts": {
         "trace": {
-            "trace_id": "90d57511038845dcb4164a70fc3a7fdb",
-            "span_id": "f7f3fd754a9040eb",
-            "op": "http.GET",
             "description": "description",
-            "status": "ok"
+            "op": "http.GET",
+            "span_id": "f7f3fd754a9040eb",
+            "status": "ok",
+            "trace_id": "90d57511038845dcb4164a70fc3a7fdb"
         }
     },
     "sdk": {},
