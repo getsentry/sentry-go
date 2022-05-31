@@ -161,7 +161,7 @@ type Exception struct {
 // An EventID must be 32 characters long, lowercase and not have any dashes.
 type EventID string
 
-type Context map[string]interface{}
+type Context = map[string]interface{}
 
 // Event is the fundamental data structure that is sent to Sentry.
 type Event struct {
