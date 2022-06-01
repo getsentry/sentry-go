@@ -24,7 +24,7 @@ func TestNewClientAllowsEmptyDSN(t *testing.T) {
 		t.Fatalf("expected no error when creating client without a DNS but got %v", err)
 	}
 
-	client.CaptureException(errors.New("custom error"), nil, &ScopeMock{})
+	client.CaptureError(errors.New("custom error"), nil, &ScopeMock{})
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
 }
 
@@ -133,7 +133,7 @@ func TestCaptureException(t *testing.T) {
 			want: []Exception{
 				{
 					Type:       "sentry.usageError",
-					Value:      "CaptureException called with nil error",
+					Value:      "CaptureError called with nil error",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 				},
 			},
@@ -229,7 +229,7 @@ func TestCaptureException(t *testing.T) {
 			tt := tt
 			t.Run(grp.name+"/"+tt.name, func(t *testing.T) {
 				client, _, transport := setupClientTest()
-				client.CaptureException(tt.err, nil, nil)
+				client.CaptureError(tt.err, nil, nil)
 				if transport.lastEvent == nil {
 					t.Fatal("missing event")
 				}
@@ -371,7 +371,7 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	}
 	ex := customComplexError{Message: "Foo"}
 
-	client.CaptureException(ex, &EventHint{OriginalException: ex}, scope)
+	client.CaptureError(ex, &EventHint{OriginalException: ex}, scope)
 
 	assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
 }

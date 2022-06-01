@@ -75,7 +75,7 @@ Timeout         time.Duration
 
 `sentrynegroni` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the request's context, which makes it available throughout the rest of the request's lifetime.
 You can access it by using the `sentry.GetHubFromContext()` method on the request itself in any of your proceeding middleware and routes.
-And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
+And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureError`, or any other calls, as it keeps the separation of data between the requests.
 
 **Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentrynegroni`!**
 

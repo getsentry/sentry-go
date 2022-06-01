@@ -112,5 +112,5 @@ func main() {
 		},
 	}
 
-	sentry.CaptureException(errWithExtra)
+	sentry.CaptureError(errWithExtra)
 }

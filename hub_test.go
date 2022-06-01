@@ -183,7 +183,7 @@ func TestLastEventIDUpdatesAfterCaptures(t *testing.T) {
 	messageID := hub.CaptureMessage("wat")
 	assertEqual(t, *messageID, hub.LastEventID())
 
-	errorID := hub.CaptureException(fmt.Errorf("wat"))
+	errorID := hub.CaptureError(fmt.Errorf("wat"))
 	assertEqual(t, *errorID, hub.LastEventID())
 
 	eventID := hub.CaptureEvent(&Event{Message: "wat"})
@@ -193,7 +193,7 @@ func TestLastEventIDUpdatesAfterCaptures(t *testing.T) {
 func TestLastEventIDNotChangedForTransactions(t *testing.T) {
 	hub, _, _ := setupHubTest()
 
-	errorID := hub.CaptureException(fmt.Errorf("wat"))
+	errorID := hub.CaptureError(fmt.Errorf("wat"))
 	assertEqual(t, *errorID, hub.LastEventID())
 
 	hub.CaptureEvent(&Event{Type: transactionType})
@@ -203,7 +203,7 @@ func TestLastEventIDNotChangedForTransactions(t *testing.T) {
 func TestLastEventIDDoesNotReset(t *testing.T) {
 	hub, client, _ := setupHubTest()
 
-	id1 := hub.CaptureException(fmt.Errorf("error 1"))
+	id1 := hub.CaptureError(fmt.Errorf("error 1"))
 	assertEqual(t, hub.LastEventID(), *id1)
 
 	client.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
@@ -211,7 +211,7 @@ func TestLastEventIDDoesNotReset(t *testing.T) {
 		return nil
 	})
 
-	id2 := hub.CaptureException(fmt.Errorf("error 2"))
+	id2 := hub.CaptureError(fmt.Errorf("error 2"))
 	assertEqual(t, id2, (*EventID)(nil))    // event must have been dropped
 	assertEqual(t, hub.LastEventID(), *id1) // last event ID must not have changed
 }
