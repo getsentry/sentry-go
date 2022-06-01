@@ -370,7 +370,11 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 				// to link errors and traces/spans in Sentry.
 				continue
 			}
-			event.Contexts[key] = value
+
+			// Ensure we are not overwriting event fields
+			if _, ok := event.Contexts[key]; !ok {
+				event.Contexts[key] = value
+			}
 		}
 	}
 
