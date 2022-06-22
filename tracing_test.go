@@ -259,7 +259,7 @@ func (c SpanCheck) Check(t *testing.T, span *Span) {
 		t.Errorf("original context value lost")
 	}
 	// Invariant: SpanFromContext(span.Context) == span
-	if spanFromContext(gotCtx) != span {
+	if SpanFromContext(gotCtx) != span {
 		t.Errorf("span not in its context")
 	}
 
@@ -377,7 +377,7 @@ func TestSpanFromContext(t *testing.T) {
 	// SpanFromContext(ctx).StartChild(...) === StartSpan(ctx, ...)
 
 	ctx := NewTestContext(ClientOptions{})
-	span := spanFromContext(ctx)
+	span := SpanFromContext(ctx)
 
 	_ = span
 
