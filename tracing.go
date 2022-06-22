@@ -608,3 +608,12 @@ func SpanFromContext(ctx context.Context) *Span {
 	}
 	return nil
 }
+
+// StripSpanContextKeyFromContext returns a new context with the parent span removed
+// but critically retaining the parentSpanID, allowing for new transactions
+// to be formed within the same running process while retaining all the current
+// context benefits, including existing sentry context keys (apart  from
+// `spanContextKey`) and timeouts etc.
+func StripSpanContextKeyFromContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, spanContextKey{}, nil)
+}
