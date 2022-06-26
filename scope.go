@@ -146,7 +146,7 @@ const maxRequestBodyBytes = 10 * 1024
 
 // A limitedBuffer is like a bytes.Buffer, but limited to store at most Capacity
 // bytes. Any writes past the capacity are silently discarded, similar to
-// ioutil.Discard.
+// io.Discard.
 type limitedBuffer struct {
 	Capacity int
 
