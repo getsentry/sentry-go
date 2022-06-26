@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -125,7 +125,7 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 	r.URL.RawQuery = string(ctx.URI().QueryString())
 
 	// Body
-	r.Body = ioutil.NopCloser(bytes.NewReader(ctx.Request.Body()))
+	r.Body = io.NopCloser(bytes.NewReader(ctx.Request.Body()))
 
 	return r
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -181,7 +180,7 @@ func WriteGoldenFile(t *testing.T, path string, bytes []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = ioutil.WriteFile(path, bytes, 0666)
+	err = os.WriteFile(path, bytes, 0666)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +188,7 @@ func WriteGoldenFile(t *testing.T, path string, bytes []byte) {
 
 func ReadOrGenerateGoldenFile(t *testing.T, path string, bytes []byte) string {
 	t.Helper()
-	b, err := ioutil.ReadFile(path)
+	b, err := os.ReadFile(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		if *generate {
