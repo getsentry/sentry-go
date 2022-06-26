@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -163,13 +163,13 @@ func TestStructSnapshots(t *testing.T) {
 
 			golden := filepath.Join(".", "testdata", fmt.Sprintf("%s.golden", test.testName))
 			if *update {
-				err := ioutil.WriteFile(golden, got, 0600)
+				err := os.WriteFile(golden, got, 0600)
 				if err != nil {
 					t.Fatal(err)
 				}
 			}
 
-			want, err := ioutil.ReadFile(golden)
+			want, err := os.ReadFile(golden)
 			if err != nil {
 				t.Fatal(err)
 			}

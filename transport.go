@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"sync"
@@ -55,7 +54,7 @@ func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error)
 
 func getTLSConfig(options ClientOptions) *tls.Config {
 	if options.CaCerts != nil {
-		//#nosec G402 -- We should be using `MinVersion: tls.VersionTLS12`,
+		// #nosec G402 -- We should be using `MinVersion: tls.VersionTLS12`,
 		// 				 but we don't want to break peoples code without the major bump.
 		return &tls.Config{
 			RootCAs: options.CaCerts,
@@ -403,7 +402,7 @@ func (t *HTTPTransport) worker() {
 			t.mu.Unlock()
 			// Drain body up to a limit and close it, allowing the
 			// transport to reuse TCP connections.
-			_, _ = io.CopyN(ioutil.Discard, response.Body, maxDrainResponseBytes)
+			_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
 			response.Body.Close()
 		}
 
@@ -531,7 +530,7 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 
 	// Drain body up to a limit and close it, allowing the
 	// transport to reuse TCP connections.
-	_, _ = io.CopyN(ioutil.Discard, response.Body, maxDrainResponseBytes)
+	_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
 	response.Body.Close()
 }
 
