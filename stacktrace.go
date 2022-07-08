@@ -25,8 +25,18 @@ type Stacktrace struct {
 
 // NewStacktrace creates a stacktrace using runtime.Callers.
 func NewStacktrace() *Stacktrace {
+	return newStacktrace(2)
+}
+
+// NewCustomStacktrace creates a stacktrace using runtime.Callers while skipping the specified
+// number of stack frames.
+func NewCustomStacktrace(skip int) *Stacktrace {
+	return newStacktrace(skip)
+}
+
+func newStacktrace(skip int) *Stacktrace {
 	pcs := make([]uintptr, 100)
-	n := runtime.Callers(1, pcs)
+	n := runtime.Callers(skip, pcs)
 
 	if n == 0 {
 		return nil
@@ -251,9 +261,11 @@ func extractFrames(pcs []uintptr) []Frame {
 	for {
 		callerFrame, more := callersFrames.Next()
 
-		frames = append([]Frame{
-			NewFrame(callerFrame),
-		}, frames...)
+		frames = append(
+			[]Frame{
+				NewFrame(callerFrame),
+			}, frames...,
+		)
 
 		if !more {
 			break
