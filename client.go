@@ -29,7 +29,7 @@ import (
 // stack trace is often the most useful information.
 const maxErrorDepth = 10
 
-// maxSpans limits the number of recorded spans per transaction. The limit is
+// defaultMaxSpans limits the default number of recorded spans per transaction. The limit is
 // meant to bound memory usage and prevent too large transaction events that
 // would be rejected by Sentry.
 const defaultMaxSpans = 1000
