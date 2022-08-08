@@ -12,7 +12,7 @@ require (
 	github.com/pingcap/errors v0.11.4
 	github.com/pkg/errors v0.8.1
 	github.com/urfave/negroni v1.0.0
-	github.com/valyala/fasthttp v1.6.0
+	github.com/valyala/fasthttp v1.34.0
 	golang.org/x/sys v0.0.0-20220804214406-8e32c043e418
 	golang.org/x/text v0.3.7
 )
@@ -23,6 +23,7 @@ require (
 	github.com/CloudyKit/jet/v3 v3.0.1 // indirect
 	github.com/Shopify/goreferrer v0.0.0-20220729165902-8cddb4f5de06 // indirect
 	github.com/ajg/form v1.5.1 // indirect
+	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/aymerick/raymond v2.0.3-0.20180322193309-b565731e1464+incompatible // indirect
 	github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 // indirect
