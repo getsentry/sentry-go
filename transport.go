@@ -556,14 +556,16 @@ func (t *HTTPSyncTransport) disabled(c ratelimit.Category) bool {
 // Only used internally when an empty DSN is provided, which effectively disables the SDK.
 type noopTransport struct{}
 
-func (t noopTransport) Configure(ClientOptions) {
+var _ Transport = noopTransport{}
+
+func (noopTransport) Configure(ClientOptions) {
 	Logger.Println("Sentry client initialized with an empty DSN. Using noopTransport. No events will be delivered.")
 }
 
-func (t noopTransport) SendEvent(*Event) {
+func (noopTransport) SendEvent(*Event) {
 	Logger.Println("Event dropped due to noopTransport usage.")
 }
 
-func (t noopTransport) Flush(time.Duration) bool {
+func (noopTransport) Flush(time.Duration) bool {
 	return true
 }
