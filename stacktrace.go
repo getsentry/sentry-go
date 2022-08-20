@@ -245,7 +245,7 @@ func splitQualifiedFunctionName(name string) (pkg string, fun string) {
 }
 
 func extractFrames(pcs []uintptr) []Frame {
-	var frames []Frame
+	var frames = make([]Frame, 0, len(pcs))
 	callersFrames := runtime.CallersFrames(pcs)
 
 	for {
@@ -273,7 +273,8 @@ func filterFrames(frames []Frame) []Frame {
 		return nil
 	}
 
-	filteredFrames := make([]Frame, 0, len(frames))
+	// reuse
+	filteredFrames := frames[:0]
 
 	for _, frame := range frames {
 		// Skip Go internal frames.
