@@ -251,13 +251,16 @@ func extractFrames(pcs []uintptr) []Frame {
 	for {
 		callerFrame, more := callersFrames.Next()
 
-		frames = append([]Frame{
-			NewFrame(callerFrame),
-		}, frames...)
+		frames = append(frames, NewFrame(callerFrame))
 
 		if !more {
 			break
 		}
+	}
+
+	// reverse
+	for i, j := 0, len(frames)-1; i < j; i, j = i+1, j-1 {
+		frames[i], frames[j] = frames[j], frames[i]
 	}
 
 	return frames
