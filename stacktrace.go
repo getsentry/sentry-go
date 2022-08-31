@@ -75,12 +75,14 @@ func ExtractStacktrace(err error) *Stacktrace {
 func extractReflectedStacktraceMethod(err error) reflect.Value {
 	var method reflect.Value
 
+	errValue := reflect.ValueOf(err)
+
 	// https://github.com/pingcap/errors
-	methodGetStackTracer := reflect.ValueOf(err).MethodByName("GetStackTracer")
+	methodGetStackTracer := errValue.MethodByName("GetStackTracer")
 	// https://github.com/pkg/errors
-	methodStackTrace := reflect.ValueOf(err).MethodByName("StackTrace")
+	methodStackTrace := errValue.MethodByName("StackTrace")
 	// https://github.com/go-errors/errors
-	methodStackFrames := reflect.ValueOf(err).MethodByName("StackFrames")
+	methodStackFrames := errValue.MethodByName("StackFrames")
 
 	if methodGetStackTracer.IsValid() {
 		stacktracer := methodGetStackTracer.Call(make([]reflect.Value, 0))[0]
