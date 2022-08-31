@@ -73,41 +73,38 @@ func ExtractStacktrace(err error) *Stacktrace {
 }
 
 func extractReflectedStacktraceMethod(err error) reflect.Value {
-	var method reflect.Value
-
 	errValue := reflect.ValueOf(err)
+
+	// https://github.com/go-errors/errors
+	methodStackFrames := errValue.MethodByName("StackFrames")
+	if methodStackFrames.IsValid() {
+		return methodStackFrames
+	}
+
+	// https://github.com/pkg/errors
+	methodStackTrace := errValue.MethodByName("StackTrace")
+	if methodStackTrace.IsValid() {
+		return methodStackTrace
+	}
 
 	// https://github.com/pingcap/errors
 	methodGetStackTracer := errValue.MethodByName("GetStackTracer")
-	// https://github.com/pkg/errors
-	methodStackTrace := errValue.MethodByName("StackTrace")
-	// https://github.com/go-errors/errors
-	methodStackFrames := errValue.MethodByName("StackFrames")
-
 	if methodGetStackTracer.IsValid() {
-		stacktracer := methodGetStackTracer.Call(make([]reflect.Value, 0))[0]
+		stacktracer := methodGetStackTracer.Call(nil)[0]
 		stacktracerStackTrace := reflect.ValueOf(stacktracer).MethodByName("StackTrace")
 
 		if stacktracerStackTrace.IsValid() {
-			method = stacktracerStackTrace
+			return stacktracerStackTrace
 		}
 	}
 
-	if methodStackTrace.IsValid() {
-		method = methodStackTrace
-	}
-
-	if methodStackFrames.IsValid() {
-		method = methodStackFrames
-	}
-
-	return method
+	return reflect.Value{}
 }
 
 func extractPcs(method reflect.Value) []uintptr {
 	var pcs []uintptr
 
-	stacktrace := method.Call(make([]reflect.Value, 0))[0]
+	stacktrace := method.Call(nil)[0]
 
 	if stacktrace.Kind() != reflect.Slice {
 		return nil
