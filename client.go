@@ -173,7 +173,8 @@ type ClientOptions struct {
 	Dist string
 	// The environment to be sent with events.
 	Environment string
-	// Maximum number of breadcrumbs.
+	// Maximum number of breadcrumbs
+	// when MaxBreadcrumbs is negative then ignore breadcrumbs.
 	MaxBreadcrumbs int
 	// An optional pointer to http.Client that will be used with a default
 	// HTTPTransport. Using your own client will make HTTPTransport, HTTPProxy,

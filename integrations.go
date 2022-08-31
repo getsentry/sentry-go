@@ -71,10 +71,11 @@ func (ei *environmentIntegration) SetupOnce(client *Client) {
 
 func (ei *environmentIntegration) processor(event *Event, hint *EventHint) *Event {
 	// Initialize maps as necessary.
+	contextNames := []string{"device", "os", "runtime"}
 	if event.Contexts == nil {
-		event.Contexts = make(map[string]Context)
+		event.Contexts = make(map[string]Context, len(contextNames))
 	}
-	for _, name := range []string{"device", "os", "runtime"} {
+	for _, name := range contextNames {
 		if event.Contexts[name] == nil {
 			event.Contexts[name] = make(Context)
 		}
