@@ -338,6 +338,10 @@ func (client *Client) setupIntegrations() {
 		integration.SetupOnce(client)
 		Logger.Printf("Integration installed: %s\n", integration.Name())
 	}
+
+	sort.Slice(client.integrations, func(i, j int) bool {
+		return client.integrations[i].Name() < client.integrations[j].Name()
+	})
 }
 
 // AddEventProcessor adds an event processor to the client. It must not be
@@ -582,22 +586,22 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if event.ServerName == "" {
-		if client.Options().ServerName != "" {
-			event.ServerName = client.Options().ServerName
-		} else {
+		event.ServerName = client.Options().ServerName
+
+		if event.ServerName == "" {
 			event.ServerName = hostname
 		}
 	}
 
-	if event.Release == "" && client.Options().Release != "" {
+	if event.Release == "" {
 		event.Release = client.Options().Release
 	}
 
-	if event.Dist == "" && client.Options().Dist != "" {
+	if event.Dist == "" {
 		event.Dist = client.Options().Dist
 	}
 
-	if event.Environment == "" && client.Options().Environment != "" {
+	if event.Environment == "" {
 		event.Environment = client.Options().Environment
 	}
 
@@ -641,11 +645,10 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 }
 
 func (client Client) listIntegrations() []string {
-	integrations := make([]string, 0, len(client.integrations))
-	for _, integration := range client.integrations {
-		integrations = append(integrations, integration.Name())
+	integrations := make([]string, len(client.integrations))
+	for i, integration := range client.integrations {
+		integrations[i] = integration.Name()
 	}
-	sort.Strings(integrations)
 	return integrations
 }
 
