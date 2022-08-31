@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -339,10 +338,6 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 	defer scope.mu.RUnlock()
 
 	if len(scope.breadcrumbs) > 0 {
-		if event.Breadcrumbs == nil {
-			event.Breadcrumbs = []*Breadcrumb{}
-		}
-
 		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
 	}
 
@@ -384,14 +379,13 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		}
 	}
 
-	if (reflect.DeepEqual(event.User, User{})) {
+	var emptyUser User
+	if event.User == emptyUser {
 		event.User = scope.user
 	}
 
-	if (event.Fingerprint == nil || len(event.Fingerprint) == 0) &&
-		len(scope.fingerprint) > 0 {
-		event.Fingerprint = make([]string, len(scope.fingerprint))
-		copy(event.Fingerprint, scope.fingerprint)
+	if len(event.Fingerprint) == 0 {
+		event.Fingerprint = append(event.Fingerprint, scope.fingerprint...)
 	}
 
 	if scope.level != "" {
