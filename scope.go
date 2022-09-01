@@ -343,7 +343,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 
 	if len(scope.tags) > 0 {
 		if event.Tags == nil {
-			event.Tags = make(map[string]string)
+			event.Tags = make(map[string]string, len(scope.tags))
 		}
 
 		for key, value := range scope.tags {
@@ -371,7 +371,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 
 	if len(scope.extra) > 0 {
 		if event.Extra == nil {
-			event.Extra = make(map[string]interface{})
+			event.Extra = make(map[string]interface{}, len(scope.extra))
 		}
 
 		for key, value := range scope.extra {

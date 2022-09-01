@@ -39,11 +39,13 @@ type Transport interface {
 
 func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
 	if options.HTTPSProxy != "" {
-		return func(_ *http.Request) (*url.URL, error) {
+		return func(*http.Request) (*url.URL, error) {
 			return url.Parse(options.HTTPSProxy)
 		}
-	} else if options.HTTPProxy != "" {
-		return func(_ *http.Request) (*url.URL, error) {
+	}
+
+	if options.HTTPProxy != "" {
+		return func(*http.Request) (*url.URL, error) {
 			return url.Parse(options.HTTPProxy)
 		}
 	}
