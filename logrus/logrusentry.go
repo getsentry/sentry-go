@@ -1,0 +1,240 @@
+// Package logrusentry provides a simple Logrus hook for Sentry.
+package logrusentry
+
+import (
+	"errors"
+	"net/http"
+	"time"
+
+	sentry "github.com/getsentry/sentry-go"
+	"github.com/sirupsen/logrus"
+)
+
+// These default log field keys are used to pass specific metadata in a way that
+// Sentry understands. If they are found in the log fields, and the value is of
+// the expected datatype, it will be converted from a generic field, into Sentry
+// metadata.
+//
+// These keys may be overridden by calling SetKey on the hook object.
+const (
+	// FieldRequest holds an *http.Request.
+	FieldRequest = "request"
+	// FieldUser holds a User or *User value.
+	FieldUser = "user"
+	// FieldTransaction holds a transaction ID as a string.
+	FieldTransaction = "transaction"
+	// FieldFingerprint holds a string slice ([]string), used to dictate the
+	// deduplication of this event
+	FieldFingerprint = "fingerprint"
+
+	// These fields are simply omitted, as they are duplicated by the Sentry SDK.
+	FieldGoVersion = "go_version"
+	FieldMaxProcs  = "go_maxprocs"
+)
+
+// ClientOptions is an alias for sentry.ClientOptions, and is all of the options
+// available for configuring the sentry SDK client.
+type ClientOptions = sentry.ClientOptions
+
+// User is an alias for sentry.User. Pass a this value with key FieldUser, and
+// it will be passed to Sentry appropriately.
+type User = sentry.User
+
+// Event is an alias for sentry.Event.
+type Event = sentry.Event
+
+// EventHint is an alias for sentry.EventHint
+type EventHint = sentry.EventHint
+
+// Hook is the logrus hook for Sentry.
+//
+// It is not safe to configure the hook while logging is happening. Please
+// perform all configuration before using it.
+type Hook struct {
+	client   *sentry.Client
+	scope    *sentry.Scope
+	hub      *sentry.Hub
+	fallback FallbackFunc
+	keys     map[string]string
+	levels   []logrus.Level
+}
+
+var _ logrus.Hook = &Hook{}
+
+// New initializes a new Sentry hook.
+func New(levels []logrus.Level, opts ClientOptions) (*Hook, error) {
+	client, err := sentry.NewClient(opts)
+	if err != nil {
+		return nil, err
+	}
+	h := &Hook{
+		levels: levels,
+		client: client,
+		scope:  sentry.NewScope(),
+		keys:   make(map[string]string),
+	}
+	h.setHub()
+	return h, nil
+}
+
+// setHub refreshes the hub, to be used any time client or scope changes.
+func (h *Hook) setHub() {
+	h.hub = sentry.NewHub(h.client, h.scope)
+}
+
+// AddTags adds tags to the hook's scope.
+func (h *Hook) AddTags(tags map[string]string) {
+	h.scope.SetTags(tags)
+	h.setHub()
+}
+
+// A FallbackFunc can be used to attempt to handle any errors in logging, before
+// resorting to Logrus's standard error reporting.
+type FallbackFunc func(*logrus.Entry) error
+
+// Fallback sets a fallback function, which will be called in case logging to
+// sentry fails. In case of a logging failure in the Fire() method, the
+// fallback function is called with the original logrus entry. If the
+// fallback function returns nil, the error is considered handled. If it returns
+// an error, that error is passed along to logrus as the return value from the
+// Fire() call. If no fallback function is defined, a default error message is
+// returned to Logrus in case of failure to send to Sentry.
+func (h *Hook) Fallback(fb FallbackFunc) {
+	h.fallback = fb
+}
+
+// SetKey sets an alternate field key. Use this if the default values conflict
+// with other loggers, for instance. You may pass "" for new, to unset an
+// existing alternate.
+func (h *Hook) SetKey(oldKey, newKey string) {
+	if oldKey == "" {
+		return
+	}
+	if newKey == "" {
+		delete(h.keys, oldKey)
+		return
+	}
+	delete(h.keys, newKey)
+	h.keys[oldKey] = newKey
+}
+
+func (h *Hook) key(key string) string {
+	if val := h.keys[key]; val != "" {
+		return val
+	}
+	return key
+}
+
+// Levels returns the list of logging levels that will be sent to
+// Sentry.
+func (h *Hook) Levels() []logrus.Level {
+	return h.levels
+}
+
+// Fire sends entry to Sentry.
+func (h *Hook) Fire(entry *logrus.Entry) error {
+	event := h.entry2event(entry)
+	if id := h.hub.CaptureEvent(event); id == nil {
+		if h.fallback != nil {
+			return h.fallback(entry)
+		}
+		return errors.New("failed to send to sentry")
+	}
+	return nil
+}
+
+var levelMap = map[logrus.Level]sentry.Level{
+	logrus.TraceLevel: sentry.LevelDebug,
+	logrus.DebugLevel: sentry.LevelDebug,
+	logrus.InfoLevel:  sentry.LevelInfo,
+	logrus.WarnLevel:  sentry.LevelWarning,
+	logrus.ErrorLevel: sentry.LevelError,
+	logrus.FatalLevel: sentry.LevelFatal,
+	logrus.PanicLevel: sentry.LevelFatal,
+}
+
+func (h *Hook) entry2event(l *logrus.Entry) *sentry.Event {
+	data := make(logrus.Fields, len(l.Data))
+	for k, v := range l.Data {
+		data[k] = v
+	}
+	s := &sentry.Event{
+		Level:     levelMap[l.Level],
+		Extra:     data,
+		Message:   l.Message,
+		Timestamp: l.Time,
+	}
+	key := h.key(FieldRequest)
+	if req, ok := s.Extra[key].(*http.Request); ok {
+		delete(s.Extra, key)
+		s.Request = sentry.NewRequest(req)
+	}
+	if err, ok := s.Extra[logrus.ErrorKey].(error); ok {
+		delete(s.Extra, logrus.ErrorKey)
+		ex := h.exceptions(err)
+		s.Exception = ex
+	}
+	key = h.key(FieldUser)
+	if user, ok := s.Extra[key].(User); ok {
+		delete(s.Extra, key)
+		s.User = user
+	}
+	if user, ok := s.Extra[key].(*User); ok {
+		delete(s.Extra, key)
+		s.User = *user
+	}
+	key = h.key(FieldTransaction)
+	if txn, ok := s.Extra[key].(string); ok {
+		delete(s.Extra, key)
+		s.Transaction = txn
+	}
+	key = h.key(FieldFingerprint)
+	if fp, ok := s.Extra[key].([]string); ok {
+		delete(s.Extra, key)
+		s.Fingerprint = fp
+	}
+	delete(s.Extra, FieldGoVersion)
+	delete(s.Extra, FieldMaxProcs)
+	return s
+}
+
+func (h *Hook) exceptions(err error) []sentry.Exception {
+	if !h.hub.Client().Options().AttachStacktrace {
+		return []sentry.Exception{{
+			Type:  "error",
+			Value: err.Error(),
+		}}
+	}
+	excs := []sentry.Exception{}
+	var last *sentry.Exception
+	for ; err != nil; err = errors.Unwrap(err) {
+		exc := sentry.Exception{
+			Type:       "error",
+			Value:      err.Error(),
+			Stacktrace: sentry.ExtractStacktrace(err),
+		}
+		if last != nil && exc.Value == last.Value {
+			if last.Stacktrace == nil {
+				last.Stacktrace = exc.Stacktrace
+				continue
+			}
+			if exc.Stacktrace == nil {
+				continue
+			}
+		}
+		excs = append(excs, exc)
+		last = &excs[len(excs)-1]
+	}
+	// reverse
+	for i, j := 0, len(excs)-1; i < j; i, j = i+1, j-1 {
+		excs[i], excs[j] = excs[j], excs[i]
+	}
+	return excs
+}
+
+// Flush waits until the underlying Sentry transport sends any buffered events,
+// blocking for at most the given timeout. It returns false if the timeout was
+// reached, in which case some events may not have been sent.
+func (h *Hook) Flush(timeout time.Duration) bool {
+	return h.client.Flush(timeout)
+}
