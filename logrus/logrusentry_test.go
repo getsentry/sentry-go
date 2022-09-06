@@ -5,24 +5,29 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"regexp"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/getsentry/sentry-go"
+	"github.com/google/go-cmp/cmp"
 	pkgerr "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	aleerr "gitlab.com/flimzy/ale/errors"
-	"gitlab.com/flimzy/testy"
+
+	"github.com/getsentry/sentry-go"
 )
 
 const testDSN = "http://test:test@localhost/1234"
 
+type testResponder func(*http.Request) (*http.Response, error)
+
+func (t testResponder) RoundTrip(r *http.Request) (*http.Response, error) {
+	return t(r)
+}
+
 func xport(req *http.Request) http.RoundTripper {
-	return testy.HTTPResponder(func(r *http.Request) (*http.Response, error) {
+	return testResponder(func(r *http.Request) (*http.Response, error) {
 		*req = *r
 		return &http.Response{}, nil
 	})
@@ -33,7 +38,9 @@ func TestNew(t *testing.T) {
 	t.Run("invalid DSN", func(t *testing.T) {
 		t.Parallel()
 		_, err := New(nil, ClientOptions{Dsn: "%xxx"})
-		testy.Error(t, `[Sentry] DsnParseError: invalid url: parse "%xxx": invalid URL escape "%xx"`, err)
+		if err == nil || !strings.Contains(err.Error(), "invalid URL escape") {
+			t.Errorf("Unexpected error: %s", err)
+		}
 	})
 
 	t.Run("success", func(t *testing.T) {
@@ -52,130 +59,145 @@ func TestNew(t *testing.T) {
 		if !h.Flush(5 * time.Second) {
 			t.Error("flush failed")
 		}
-		testEvent(t, req.Body)
+		testEvent(t, req.Body, map[string]interface{}{
+			"level": "info",
+		})
 	})
 }
 
 func TestFire(t *testing.T) {
 	t.Parallel()
-	type tt struct {
-		opts   ClientOptions
-		levels []logrus.Level
-		entry  *logrus.Entry
-		err    string
+
+	entry := &logrus.Entry{
+		Level: logrus.ErrorLevel,
 	}
 
-	tests := testy.NewTable()
-	tests.Add("error", tt{
-		levels: []logrus.Level{logrus.ErrorLevel},
-		entry: &logrus.Entry{
-			Level: logrus.ErrorLevel,
-		},
-	})
+	req := new(http.Request)
+	opts := ClientOptions{}
+	opts.Dsn = testDSN
+	opts.HTTPTransport = xport(req)
+	hook, err := New([]logrus.Level{logrus.ErrorLevel}, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = hook.Fire(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	tests.Run(t, func(t *testing.T, tt tt) {
-		t.Parallel()
-		req := new(http.Request)
-		opts := tt.opts
-		opts.Dsn = testDSN
-		opts.HTTPTransport = xport(req)
-		hook, err := New(tt.levels, opts)
-		if err != nil {
-			t.Fatal(err)
-		}
-		err = hook.Fire(tt.entry)
-		testy.Error(t, tt.err, err)
-
-		if !hook.Flush(5 * time.Second) {
-			t.Error("flush failed")
-		}
-		testEvent(t, req.Body)
+	if !hook.Flush(5 * time.Second) {
+		t.Error("flush failed")
+	}
+	testEvent(t, req.Body, map[string]interface{}{
+		"level": "error",
 	})
 }
 
 func Test_e2e(t *testing.T) {
 	t.Parallel()
-	type tt struct {
+	tests := []struct {
+		name    string
 		levels  []logrus.Level
 		opts    ClientOptions
 		init    func(*Hook)
 		log     func(*logrus.Logger)
 		skipped bool
+		want    map[string]interface{}
+	}{
+		{
+			name:   "skip info",
+			levels: []logrus.Level{logrus.ErrorLevel},
+			log: func(l *logrus.Logger) {
+				l.Info("foo")
+			},
+			skipped: true,
+		},
+		{
+			name:   "error level",
+			levels: []logrus.Level{logrus.ErrorLevel},
+			log: func(l *logrus.Logger) {
+				l.Error("foo")
+			},
+			want: map[string]interface{}{
+				"level":   "error",
+				"message": "foo",
+			},
+		},
+		{
+			name:   "metadata",
+			levels: []logrus.Level{logrus.ErrorLevel},
+			opts: ClientOptions{
+				Environment: "production",
+				ServerName:  "localhost",
+				Release:     "v1.2.3",
+				Dist:        "beta",
+			},
+			log: func(l *logrus.Logger) {
+				l.Error("foo")
+			},
+			want: map[string]interface{}{
+				"dist":        "beta",
+				"environment": "production",
+				"level":       "error",
+				"message":     "foo",
+			},
+		},
+		{
+			name:   "tags",
+			levels: []logrus.Level{logrus.ErrorLevel},
+			opts: ClientOptions{
+				AttachStacktrace: true,
+			},
+			init: func(h *Hook) {
+				h.AddTags(map[string]string{
+					"foo": "bar",
+				})
+			},
+			log: func(l *logrus.Logger) {
+				l.Error("foo")
+			},
+			want: map[string]interface{}{
+				"level":   "error",
+				"message": "foo",
+				"tags":    map[string]interface{}{"foo": "bar"},
+			},
+		},
 	}
 
-	tests := testy.NewTable()
-	tests.Add("skip info", tt{
-		levels: []logrus.Level{logrus.ErrorLevel},
-		log: func(l *logrus.Logger) {
-			l.Info("foo")
-		},
-		skipped: true,
-	})
-	tests.Add("error level", tt{
-		levels: []logrus.Level{logrus.ErrorLevel},
-		log: func(l *logrus.Logger) {
-			l.Error("foo")
-		},
-	})
-	tests.Add("metadata", tt{
-		levels: []logrus.Level{logrus.ErrorLevel},
-		opts: ClientOptions{
-			Environment: "production",
-			ServerName:  "localhost",
-			Release:     "v1.2.3",
-			Dist:        "beta",
-		},
-		log: func(l *logrus.Logger) {
-			l.Error("foo")
-		},
-	})
-	tests.Add("tags", tt{
-		levels: []logrus.Level{logrus.ErrorLevel},
-		opts: ClientOptions{
-			AttachStacktrace: true,
-		},
-		init: func(h *Hook) {
-			h.AddTags(map[string]string{
-				"foo": "bar",
-			})
-		},
-		log: func(l *logrus.Logger) {
-			l.Error("foo")
-		},
-	})
-
-	tests.Run(t, func(t *testing.T, tt tt) {
-		t.Parallel()
-		req := new(http.Request)
-		l := logrus.New()
-		opts := tt.opts
-		opts.Dsn = testDSN
-		opts.HTTPTransport = xport(req)
-		hook, err := New(tt.levels, opts)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if init := tt.init; init != nil {
-			init(hook)
-		}
-		l.SetOutput(ioutil.Discard)
-		l.AddHook(hook)
-		tt.log(l)
-
-		if !hook.Flush(5 * time.Second) {
-			t.Fatal("failed to flush")
-		}
-		if tt.skipped {
-			if req.Method != "" {
-				t.Error("Got an unexpected request")
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			req := new(http.Request)
+			l := logrus.New()
+			opts := tt.opts
+			opts.Dsn = testDSN
+			opts.HTTPTransport = xport(req)
+			hook, err := New(tt.levels, opts)
+			if err != nil {
+				t.Fatal(err)
 			}
-			return
-		}
-		testEvent(t, req.Body)
-	})
+			if init := tt.init; init != nil {
+				init(hook)
+			}
+			l.SetOutput(io.Discard)
+			l.AddHook(hook)
+			tt.log(l)
+
+			if !hook.Flush(5 * time.Second) {
+				t.Fatal("failed to flush")
+			}
+			if tt.skipped {
+				if req.Method != "" {
+					t.Error("Got an unexpected request")
+				}
+				return
+			}
+			testEvent(t, req.Body, tt.want)
+		})
+	}
 }
 
-func testEvent(t *testing.T, r io.ReadCloser) {
+func testEvent(t *testing.T, r io.ReadCloser, want map[string]interface{}) {
 	t.Helper()
 	t.Cleanup(func() {
 		_ = r.Close()
@@ -184,84 +206,184 @@ func testEvent(t *testing.T, r io.ReadCloser) {
 	if err := json.NewDecoder(r).Decode(&event); err != nil {
 		t.Fatal(err)
 	}
-	// normalize fields
-	event["timestamp"] = "xxx"
-	event["event_id"] = "yyy"
-	event["contexts"] = "zzz"
-	event["server_name"] = "server"
-	if d := testy.DiffAsJSON(testy.Snapshot(t), event); d != nil {
+	// delete static or non-deterministic fields
+	for _, k := range []string{"timestamp", "event_id", "contexts", "release", "server_name", "sdk", "platform", "user", "modules"} {
+		delete(event, k)
+	}
+	if d := cmp.Diff(want, event); d != "" {
 		t.Error(d)
 	}
 }
 
 func Test_entry2event(t *testing.T) {
 	t.Parallel()
-	tests := testy.NewTable()
-	tests.Add("empty event", &logrus.Entry{})
-	tests.Add("data fields", &logrus.Entry{
-		Data: map[string]interface{}{
-			"foo": 123.4,
-			"bar": "oink",
-		},
-	})
-	tests.Add("info level", &logrus.Entry{
-		Level: logrus.InfoLevel,
-	})
-	tests.Add("message", &logrus.Entry{
-		Message: "the only thing we have to fear is fear itself",
-	})
-	tests.Add("timestamp", &logrus.Entry{
-		Time: time.Unix(1, 2).UTC(),
-	})
-	tests.Add("http request", &logrus.Entry{
-		Data: map[string]interface{}{
-			FieldRequest: httptest.NewRequest("GET", "/", nil),
-		},
-	})
-	tests.Add("non-http request", &logrus.Entry{
-		Data: map[string]interface{}{
-			FieldRequest: "some other request type",
-		},
-	})
-	tests.Add("error", &logrus.Entry{
-		Data: map[string]interface{}{
-			logrus.ErrorKey: errors.New("things failed"),
-		},
-	})
-	tests.Add("non-error", &logrus.Entry{
-		Data: map[string]interface{}{
-			logrus.ErrorKey: "this isn't really an error",
-		},
-	})
-	tests.Add("stack trace error", &logrus.Entry{
-		Data: map[string]interface{}{
-			logrus.ErrorKey: pkgerr.WithStack(errors.New("failure")),
-		},
-	})
-	tests.Add("user", &logrus.Entry{
-		Data: map[string]interface{}{
-			FieldUser: User{
-				ID: "bob",
-			},
-		},
-	})
-	tests.Add("user pointer", &logrus.Entry{
-		Data: map[string]interface{}{
-			FieldUser: &User{
-				ID: "alice",
-			},
-		},
-	})
-	tests.Add("non-user", &logrus.Entry{
-		Data: map[string]interface{}{
-			FieldUser: "just say no to drugs",
-		},
-	})
-
-	res := []testy.Replacement{
+	tests := []struct {
+		name  string
+		entry *logrus.Entry
+		want  *sentry.Event
+	}{
 		{
-			Regexp:      regexp.MustCompile(`\(len=\d+\) "[^"]+/backend/log/`),
-			Replacement: `(len=XX) ".../backend/log/`,
+			name:  "empty entry",
+			entry: &logrus.Entry{},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]interface{}{},
+			},
+		},
+		{
+			name: "data fields",
+			entry: &logrus.Entry{
+				Data: map[string]interface{}{
+					"foo": 123.4,
+					"bar": "oink",
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]interface{}{"bar": "oink", "foo": 123.4},
+			},
+		},
+		{
+			name: "info level",
+			entry: &logrus.Entry{
+				Level: logrus.InfoLevel,
+			},
+			want: &sentry.Event{
+				Level: "info",
+				Extra: map[string]interface{}{},
+			},
+		},
+		{
+			name: "message",
+			entry: &logrus.Entry{
+				Message: "the only thing we have to fear is fear itself",
+			},
+			want: &sentry.Event{
+				Level:   "fatal",
+				Extra:   map[string]interface{}{},
+				Message: "the only thing we have to fear is fear itself",
+			},
+		},
+		{
+			name: "timestamp",
+			entry: &logrus.Entry{
+				Time: time.Unix(1, 2).UTC(),
+			},
+			want: &sentry.Event{
+				Level:     "fatal",
+				Extra:     map[string]interface{}{},
+				Timestamp: time.Unix(1, 2).UTC(),
+			},
+		},
+		{
+			name: "http request",
+			entry: &logrus.Entry{
+				Data: map[string]interface{}{
+					FieldRequest: httptest.NewRequest("GET", "/", nil),
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]interface{}{},
+				Request: &sentry.Request{
+					URL:     "http://example.com/",
+					Method:  http.MethodGet,
+					Headers: map[string]string{"Host": "example.com"},
+					Env:     map[string]string{"REMOTE_ADDR": "192.0.2.1", "REMOTE_PORT": "1234"},
+				},
+			},
+		},
+		{
+			name: "error",
+			entry: &logrus.Entry{
+				Data: map[string]interface{}{
+					logrus.ErrorKey: errors.New("things failed"),
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]interface{}{},
+				Exception: []sentry.Exception{
+					{Type: "error", Value: "things failed"},
+				},
+			},
+		},
+		{
+			name: "non-error",
+			entry: &logrus.Entry{
+				Data: map[string]interface{}{
+					logrus.ErrorKey: "this isn't really an error",
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]interface{}{
+					"error": "this isn't really an error",
+				},
+			},
+		},
+		{
+			name: "error with stack trace",
+			entry: &logrus.Entry{
+				Data: map[string]interface{}{
+					logrus.ErrorKey: pkgerr.WithStack(errors.New("failure")),
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]interface{}{},
+				Exception: []sentry.Exception{
+					{Type: "error", Value: "failure", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+				},
+			},
+		},
+		{
+			name: "user",
+			entry: &logrus.Entry{
+				Data: map[string]interface{}{
+					FieldUser: User{
+						ID: "bob",
+					},
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]interface{}{},
+				User: sentry.User{
+					ID: "bob",
+				},
+			},
+		},
+		{
+			name: "user pointer",
+			entry: &logrus.Entry{
+				Data: map[string]interface{}{
+					FieldUser: &User{
+						ID: "alice",
+					},
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]interface{}{},
+				User: sentry.User{
+					ID: "alice",
+				},
+			},
+		},
+		{
+			name: "non-user",
+			entry: &logrus.Entry{
+				Data: map[string]interface{}{
+					FieldUser: "just say no to drugs",
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]interface{}{
+					"user": "just say no to drugs",
+				},
+			},
 		},
 	}
 
@@ -273,84 +395,92 @@ func Test_entry2event(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tests.Run(t, func(t *testing.T, tt *logrus.Entry) {
-		t.Parallel()
-		got := h.entry2event(tt)
-		if d := testy.DiffInterface(testy.Snapshot(t), got, res...); d != nil {
-			t.Error(d)
-		}
-	})
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := h.entry2event(tt.entry)
+			if d := cmp.Diff(tt.want, got); d != "" {
+				t.Error(d)
+			}
+		})
+	}
 }
 
 func Test_exceptions(t *testing.T) {
 	t.Parallel()
-	type tt struct {
+	tests := []struct {
+		name  string
 		trace bool
 		err   error
+		want  []sentry.Exception
+	}{
+		{
+			name:  "std error",
+			trace: true,
+			err:   errors.New("foo"),
+			want: []sentry.Exception{
+				{Type: "error", Value: "foo"},
+			},
+		},
+		{
+			name:  "wrapped, no stack",
+			trace: true,
+			err:   fmt.Errorf("foo: %w", errors.New("bar")),
+			want: []sentry.Exception{
+				{Type: "error", Value: "bar"},
+				{Type: "error", Value: "foo: bar"},
+			},
+		},
+		{
+			name:  "ignored stack",
+			trace: false,
+			err:   pkgerr.New("foo"),
+			want: []sentry.Exception{
+				{Type: "error", Value: "foo"},
+			},
+		},
+		{
+			name:  "stack",
+			trace: true,
+			err:   pkgerr.New("foo"),
+			want: []sentry.Exception{
+				{Type: "error", Value: "foo", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+			},
+		},
+		{
+			name:  "multi-wrapped error",
+			trace: true,
+			err: func() error {
+				err := errors.New("original")
+				err = fmt.Errorf("fmt: %w", err)
+				err = pkgerr.Wrap(err, "wrap")
+				err = pkgerr.WithStack(err)
+				return fmt.Errorf("wrapped: %w", err)
+			}(),
+			want: []sentry.Exception{
+				{Type: "error", Value: "original"},
+				{Type: "error", Value: "fmt: original"},
+				{Type: "error", Value: "wrap: fmt: original", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+				{Type: "error", Value: "wrap: fmt: original", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+				{Type: "error", Value: "wrapped: wrap: fmt: original"},
+			},
+		},
 	}
 
-	tests := testy.NewTable()
-	tests.Add("std error", tt{
-		trace: true,
-		err:   errors.New("foo"),
-	})
-	tests.Add("wrapped, no stack", tt{
-		trace: true,
-		err:   fmt.Errorf("foo: %w", errors.New("bar")),
-	})
-	tests.Add("ignored stack", tt{
-		trace: false,
-		err:   pkgerr.New("foo"),
-	})
-	tests.Add("stack", tt{
-		trace: true,
-		err:   pkgerr.New("foo"),
-	})
-	tests.Add("emulate middleware", func() interface{} {
-		err := errors.New("original")
-		err = fmt.Errorf("fmt: %w", err)
-		err = pkgerr.Wrap(err, "wrap")
-		err = pkgerr.WithStack(err)
-		err = aleerr.NewNotes().NoStack().Fields(aleerr.Fields{
-			"field": "value",
-		}).Wrap(err)
-		return tt{
-			trace: true,
-			err:   err,
-		}
-	})
-	tests.Add("failing", func() interface{} {
-		err := errors.New("converting NULL to string is unsupported")
-		err = fmt.Errorf("sql: Scan error on column index 7, name \"email\": %w", err)
-		err = pkgerr.WithStack(err)
-		err = aleerr.NewNotes().NoStack().Fields(aleerr.Fields{
-			"field": "value",
-		}).Wrap(err)
-		return tt{
-			trace: true,
-			err:   err,
-		}
-	})
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h, err := New(nil, ClientOptions{AttachStacktrace: tt.trace})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := h.exceptions(tt.err)
 
-	tests.Run(t, func(t *testing.T, tt tt) {
-		t.Parallel()
-		h, err := New(nil, ClientOptions{AttachStacktrace: tt.trace})
-		if err != nil {
-			t.Fatal(err)
-		}
-		got := h.exceptions(tt.err)
-		res := []testy.Replacement{
-			{
-				Regexp:      regexp.MustCompile(`AbsPath: \(string\) \(len=\d+\) ".*/backend/log`),
-				Replacement: `AbsPath: (string) (len=XX) ".../backend/log`,
-			},
-			{
-				Regexp:      regexp.MustCompile(`AbsPath: \(string\) \(len=\d+\) ".*/go/pkg/mod`),
-				Replacement: `AbsPath: (string) (len=XX) ".../go/pkg/mod`,
-			},
-		}
-		if d := testy.DiffInterface(testy.Snapshot(t), got, res...); d != nil {
-			t.Error(d)
-		}
-	})
+			if d := cmp.Diff(tt.want, got); d != "" {
+				t.Error(d)
+			}
+		})
+	}
 }

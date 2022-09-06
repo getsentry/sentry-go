@@ -24,7 +24,7 @@ const (
 	// FieldTransaction holds a transaction ID as a string.
 	FieldTransaction = "transaction"
 	// FieldFingerprint holds a string slice ([]string), used to dictate the
-	// deduplication of this event
+	// deduplication of this event.
 	FieldFingerprint = "fingerprint"
 
 	// These fields are simply omitted, as they are duplicated by the Sentry SDK.
@@ -43,7 +43,7 @@ type User = sentry.User
 // Event is an alias for sentry.Event.
 type Event = sentry.Event
 
-// EventHint is an alias for sentry.EventHint
+// EventHint is an alias for sentry.EventHint.
 type EventHint = sentry.EventHint
 
 // Hook is the logrus hook for Sentry.
