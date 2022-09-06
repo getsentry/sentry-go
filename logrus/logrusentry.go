@@ -47,12 +47,19 @@ type Hook struct {
 
 var _ logrus.Hook = &Hook{}
 
-// New initializes a new Sentry hook.
+// New initializes a new Logrus hook which sends logs to a new Sentry client
+// configured according to opts.
 func New(levels []logrus.Level, opts sentry.ClientOptions) (*Hook, error) {
 	client, err := sentry.NewClient(opts)
 	if err != nil {
 		return nil, err
 	}
+	return NewFromClient(levels, client), nil
+}
+
+// NewFromClient initializes a new Logrus hook which sends logs to the provided
+// sentry client.
+func NewFromClient(levels []logrus.Level, client *sentry.Client) *Hook {
 	h := &Hook{
 		levels: levels,
 		client: client,
@@ -60,7 +67,7 @@ func New(levels []logrus.Level, opts sentry.ClientOptions) (*Hook, error) {
 		keys:   make(map[string]string),
 	}
 	h.setHub()
-	return h, nil
+	return h
 }
 
 // setHub refreshes the hub, to be used any time client or scope changes.
