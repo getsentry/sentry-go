@@ -37,7 +37,7 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 	t.Run("invalid DSN", func(t *testing.T) {
 		t.Parallel()
-		_, err := New(nil, ClientOptions{Dsn: "%xxx"})
+		_, err := New(nil, sentry.ClientOptions{Dsn: "%xxx"})
 		if err == nil || !strings.Contains(err.Error(), "invalid URL escape") {
 			t.Errorf("Unexpected error: %s", err)
 		}
@@ -46,7 +46,7 @@ func TestNew(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 		req := new(http.Request)
-		h, err := New(nil, ClientOptions{
+		h, err := New(nil, sentry.ClientOptions{
 			Dsn:           testDSN,
 			HTTPTransport: xport(req),
 		})
@@ -73,7 +73,7 @@ func TestFire(t *testing.T) {
 	}
 
 	req := new(http.Request)
-	opts := ClientOptions{}
+	opts := sentry.ClientOptions{}
 	opts.Dsn = testDSN
 	opts.HTTPTransport = xport(req)
 	hook, err := New([]logrus.Level{logrus.ErrorLevel}, opts)
@@ -98,7 +98,7 @@ func Test_e2e(t *testing.T) {
 	tests := []struct {
 		name    string
 		levels  []logrus.Level
-		opts    ClientOptions
+		opts    sentry.ClientOptions
 		init    func(*Hook)
 		log     func(*logrus.Logger)
 		skipped bool
@@ -126,7 +126,7 @@ func Test_e2e(t *testing.T) {
 		{
 			name:   "metadata",
 			levels: []logrus.Level{logrus.ErrorLevel},
-			opts: ClientOptions{
+			opts: sentry.ClientOptions{
 				Environment: "production",
 				ServerName:  "localhost",
 				Release:     "v1.2.3",
@@ -145,7 +145,7 @@ func Test_e2e(t *testing.T) {
 		{
 			name:   "tags",
 			levels: []logrus.Level{logrus.ErrorLevel},
-			opts: ClientOptions{
+			opts: sentry.ClientOptions{
 				AttachStacktrace: true,
 			},
 			init: func(h *Hook) {
@@ -341,7 +341,7 @@ func Test_entry2event(t *testing.T) {
 			name: "user",
 			entry: &logrus.Entry{
 				Data: map[string]interface{}{
-					FieldUser: User{
+					FieldUser: sentry.User{
 						ID: "bob",
 					},
 				},
@@ -358,7 +358,7 @@ func Test_entry2event(t *testing.T) {
 			name: "user pointer",
 			entry: &logrus.Entry{
 				Data: map[string]interface{}{
-					FieldUser: &User{
+					FieldUser: &sentry.User{
 						ID: "alice",
 					},
 				},
@@ -387,7 +387,7 @@ func Test_entry2event(t *testing.T) {
 		},
 	}
 
-	h, err := New(nil, ClientOptions{
+	h, err := New(nil, sentry.ClientOptions{
 		Dsn:              testDSN,
 		AttachStacktrace: true,
 	})
@@ -472,7 +472,7 @@ func Test_exceptions(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			h, err := New(nil, ClientOptions{AttachStacktrace: tt.trace})
+			h, err := New(nil, sentry.ClientOptions{AttachStacktrace: tt.trace})
 			if err != nil {
 				t.Fatal(err)
 			}

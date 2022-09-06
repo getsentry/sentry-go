@@ -32,20 +32,6 @@ const (
 	FieldMaxProcs  = "go_maxprocs"
 )
 
-// ClientOptions is an alias for sentry.ClientOptions, and is all of the options
-// available for configuring the sentry SDK client.
-type ClientOptions = sentry.ClientOptions
-
-// User is an alias for sentry.User. Pass a this value with key FieldUser, and
-// it will be passed to Sentry appropriately.
-type User = sentry.User
-
-// Event is an alias for sentry.Event.
-type Event = sentry.Event
-
-// EventHint is an alias for sentry.EventHint.
-type EventHint = sentry.EventHint
-
 // Hook is the logrus hook for Sentry.
 //
 // It is not safe to configure the hook while logging is happening. Please
@@ -62,7 +48,7 @@ type Hook struct {
 var _ logrus.Hook = &Hook{}
 
 // New initializes a new Sentry hook.
-func New(levels []logrus.Level, opts ClientOptions) (*Hook, error) {
+func New(levels []logrus.Level, opts sentry.ClientOptions) (*Hook, error) {
 	client, err := sentry.NewClient(opts)
 	if err != nil {
 		return nil, err
@@ -175,11 +161,11 @@ func (h *Hook) entry2event(l *logrus.Entry) *sentry.Event {
 		s.Exception = ex
 	}
 	key = h.key(FieldUser)
-	if user, ok := s.Extra[key].(User); ok {
+	if user, ok := s.Extra[key].(sentry.User); ok {
 		delete(s.Extra, key)
 		s.User = user
 	}
-	if user, ok := s.Extra[key].(*User); ok {
+	if user, ok := s.Extra[key].(*sentry.User); ok {
 		delete(s.Extra, key)
 		s.User = *user
 	}
