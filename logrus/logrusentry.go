@@ -1,5 +1,5 @@
-// Package logrusentry provides a simple Logrus hook for Sentry.
-package logrusentry
+// Package sentrylogrus provides a simple Logrus hook for Sentry.
+package sentrylogrus
 
 import (
 	"errors"

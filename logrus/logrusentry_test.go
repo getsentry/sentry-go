@@ -1,4 +1,4 @@
-package logrusentry
+package sentrylogrus
 
 import (
 	"encoding/json"
