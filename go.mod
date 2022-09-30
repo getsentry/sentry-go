@@ -8,7 +8,7 @@ require (
 	github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab
 	github.com/google/go-cmp v0.5.8
 	github.com/kataras/iris/v12 v12.2.0-beta4
-	github.com/labstack/echo/v4 v4.5.0
+	github.com/labstack/echo/v4 v4.9.0
 	github.com/pingcap/errors v0.11.4
 	github.com/pkg/errors v0.8.1
 	github.com/urfave/negroni v1.0.0
@@ -47,7 +47,7 @@ require (
 	github.com/kataras/sitemap v0.0.5 // indirect
 	github.com/kataras/tunnel v0.0.4 // indirect
 	github.com/klauspost/compress v1.15.9 // indirect
-	github.com/labstack/gommon v0.3.0 // indirect
+	github.com/labstack/gommon v0.3.1 // indirect
 	github.com/leodido/go-urn v1.2.0 // indirect
 	github.com/mailgun/raymond/v2 v2.0.46 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
