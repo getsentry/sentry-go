@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.0
 
 - feat: Add function to continue from trace string (#434)
 - feat: Add `max-depth` options (#428)
