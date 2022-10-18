@@ -399,7 +399,7 @@ func Test_entry2event(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := h.entry2event(tt.entry)
+			got := h.entryToEvent(tt.entry)
 			if d := cmp.Diff(tt.want, got); d != "" {
 				t.Error(d)
 			}

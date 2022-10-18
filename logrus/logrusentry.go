@@ -126,7 +126,7 @@ func (h *Hook) Levels() []logrus.Level {
 
 // Fire sends entry to Sentry.
 func (h *Hook) Fire(entry *logrus.Entry) error {
-	event := h.entry2event(entry)
+	event := h.entryToEvent(entry)
 	if id := h.hub.CaptureEvent(event); id == nil {
 		if h.fallback != nil {
 			return h.fallback(entry)
@@ -146,7 +146,7 @@ var levelMap = map[logrus.Level]sentry.Level{
 	logrus.PanicLevel: sentry.LevelFatal,
 }
 
-func (h *Hook) entry2event(l *logrus.Entry) *sentry.Event {
+func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 	data := make(logrus.Fields, len(l.Data))
 	for k, v := range l.Data {
 		data[k] = v
