@@ -85,14 +85,14 @@ func (h *Hook) AddTags(tags map[string]string) {
 // resorting to Logrus's standard error reporting.
 type FallbackFunc func(*logrus.Entry) error
 
-// Fallback sets a fallback function, which will be called in case logging to
+// SetFallback sets a fallback function, which will be called in case logging to
 // sentry fails. In case of a logging failure in the Fire() method, the
 // fallback function is called with the original logrus entry. If the
 // fallback function returns nil, the error is considered handled. If it returns
 // an error, that error is passed along to logrus as the return value from the
 // Fire() call. If no fallback function is defined, a default error message is
 // returned to Logrus in case of failure to send to Sentry.
-func (h *Hook) Fallback(fb FallbackFunc) {
+func (h *Hook) SetFallback(fb FallbackFunc) {
 	h.fallback = fb
 }
 
