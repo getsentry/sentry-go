@@ -24,7 +24,7 @@ const (
 	// FieldTransaction holds a transaction ID as a string.
 	FieldTransaction = "transaction"
 	// FieldFingerprint holds a string slice ([]string), used to dictate the
-	// deduplication of this event.
+	// grouping of this event.
 	FieldFingerprint = "fingerprint"
 
 	// These fields are simply omitted, as they are duplicated by the Sentry SDK.
