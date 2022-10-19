@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -567,6 +568,13 @@ func TransactionName(name string) SpanOption {
 	}
 }
 
+// OpName sets the operation name for a given span
+func OpName(name string) SpanOption {
+	return func(s *Span) {
+		s.Op = name
+	}
+}
+
 // ContinueFromRequest returns a span option that updates the span to continue
 // an existing trace. If it cannot detect an existing trace in the request, the
 // span will be left unchanged.
@@ -625,4 +633,28 @@ func spanFromContext(ctx context.Context) *Span {
 		return span
 	}
 	return nil
+}
+
+// ErrTransactionAlreadyInProgress is returne when we try to start a transaction
+// when another one is in progress
+var ErrTransactionAlreadyInProgress = errors.New("transaction already in progress")
+
+// StartTransaction will create a transaction (root span) if there's no existing
+// transaction in the context
+func StartTransaction(ctx context.Context, name string, options ...SpanOption) *Span {
+	currentTransaction := ctx.Value(spanContextKey{})
+	if currentTransaction != nil {
+		panic(ErrTransactionAlreadyInProgress)
+	}
+	hub := GetHubFromContext(ctx)
+	if hub == nil {
+		hub = CurrentHub().Clone()
+		ctx = SetHubOnContext(ctx, hub)
+	}
+	options = append(options, TransactionName(name))
+	return StartSpan(
+		ctx,
+		"",
+		options...,
+	)
 }
