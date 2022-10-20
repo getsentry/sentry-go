@@ -568,7 +568,7 @@ func TransactionName(name string) SpanOption {
 	}
 }
 
-// OpName sets the operation name for a given span
+// OpName sets the operation name for a given span.
 func OpName(name string) SpanOption {
 	return func(s *Span) {
 		s.Op = name
@@ -636,11 +636,11 @@ func spanFromContext(ctx context.Context) *Span {
 }
 
 // ErrTransactionAlreadyInProgress is returne when we try to start a transaction
-// when another one is in progress
+// when another one is in progress.
 var ErrTransactionAlreadyInProgress = errors.New("transaction already in progress")
 
 // StartTransaction will create a transaction (root span) if there's no existing
-// transaction in the context
+// transaction in the context.
 func StartTransaction(ctx context.Context, name string, options ...SpanOption) *Span {
 	currentTransaction := ctx.Value(spanContextKey{})
 	if currentTransaction != nil {
