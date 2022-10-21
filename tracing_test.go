@@ -240,7 +240,7 @@ func TestStartTransaction(t *testing.T) {
 	data := map[string]interface{}{
 		"k": "v",
 	}
-	transaction, _ := StartTransaction(ctx,
+	transaction := StartTransaction(ctx,
 		transactionName,
 		func(s *Span) {
 			s.Description = description
@@ -295,20 +295,6 @@ func TestStartTransaction(t *testing.T) {
 	// disregard other contexts.
 	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
 		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestStartTransactionAlreadyInProgress(t *testing.T) {
-	transport := &TransportMock{}
-	ctx := NewTestContext(ClientOptions{
-		Transport: transport,
-	})
-	// Simulate a transaction already in progress
-	ctx = context.WithValue(ctx, spanContextKey{}, &Span{})
-	transactionName := "Test Transaction"
-	_, existing := StartTransaction(ctx, transactionName)
-	if !existing {
-		t.Fatal("StartTransaction should return true if a transaction is already in progress")
 	}
 }
 

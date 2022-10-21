@@ -636,11 +636,10 @@ func spanFromContext(ctx context.Context) *Span {
 
 // StartTransaction will create a transaction (root span) if there's no existing
 // transaction in the context otherwise, it will return the existing transaction.
-// The boolean indicates if it returned the existing transaction or not.
-func StartTransaction(ctx context.Context, name string, options ...SpanOption) (*Span, bool) {
-	currentTransaction := ctx.Value(spanContextKey{})
-	if currentTransaction != nil {
-		return currentTransaction.(*Span), true
+func StartTransaction(ctx context.Context, name string, options ...SpanOption) *Span {
+	currentTransaction, exists := ctx.Value(spanContextKey{}).(*Span)
+	if exists {
+		return currentTransaction
 	}
 	hub := GetHubFromContext(ctx)
 	if hub == nil {
@@ -652,5 +651,5 @@ func StartTransaction(ctx context.Context, name string, options ...SpanOption) (
 		ctx,
 		"",
 		options...,
-	), false
+	)
 }
