@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -635,16 +634,13 @@ func spanFromContext(ctx context.Context) *Span {
 	return nil
 }
 
-// ErrTransactionAlreadyInProgress is returne when we try to start a transaction
-// when another one is in progress.
-var ErrTransactionAlreadyInProgress = errors.New("transaction already in progress")
-
 // StartTransaction will create a transaction (root span) if there's no existing
-// transaction in the context.
-func StartTransaction(ctx context.Context, name string, options ...SpanOption) *Span {
+// transaction in the context otherwise, it will return the existing transaction.
+// The boolean indicates if it returned the existing transaction or not.
+func StartTransaction(ctx context.Context, name string, options ...SpanOption) (*Span, bool) {
 	currentTransaction := ctx.Value(spanContextKey{})
 	if currentTransaction != nil {
-		panic(ErrTransactionAlreadyInProgress)
+		return currentTransaction.(*Span), true
 	}
 	hub := GetHubFromContext(ctx)
 	if hub == nil {
@@ -656,5 +652,5 @@ func StartTransaction(ctx context.Context, name string, options ...SpanOption) *
 		ctx,
 		"",
 		options...,
-	)
+	), false
 }

@@ -90,7 +90,9 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			sentry.OpName("http.server"),
 			sentry.ContinueFromRequest(r),
 		}
-		transaction := sentry.StartTransaction(ctx,
+		// We don't mind getting an existing transaction back so we don't need to
+		// check if it is.
+		transaction, _ := sentry.StartTransaction(ctx,
 			fmt.Sprintf("%s %s", r.Method, r.URL.Path),
 			options...,
 		)

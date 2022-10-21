@@ -88,37 +88,40 @@ func testMarshalJSONOmitEmptyParentSpanID(t *testing.T, v interface{}) {
 	}
 }
 
-func TestStartTransaction(t *testing.T) {
+func TestStartSpan(t *testing.T) {
 	transport := &TransportMock{}
 	ctx := NewTestContext(ClientOptions{
 		Transport: transport,
 	})
-	transactionName := "Test Transaction"
+	op := "test.op"
+	transaction := "Test Transaction"
 	description := "A Description"
 	status := SpanStatusOK
+	parentSpanID := SpanIDFromHex("f00db33f")
 	sampled := SampledTrue
 	startTime := time.Now()
 	endTime := startTime.Add(3 * time.Second)
 	data := map[string]interface{}{
 		"k": "v",
 	}
-	transaction := StartTransaction(ctx,
-		transactionName,
+	span := StartSpan(ctx, op,
+		TransactionName(transaction),
 		func(s *Span) {
 			s.Description = description
 			s.Status = status
+			s.ParentSpanID = parentSpanID
 			s.Sampled = sampled
 			s.StartTime = startTime
 			s.EndTime = endTime
 			s.Data = data
 		},
 	)
-	transaction.Finish()
+	span.Finish()
 
 	SpanCheck{
 		Sampled:     sampled,
 		RecorderLen: 1,
-	}.Check(t, transaction)
+	}.Check(t, span)
 
 	events := transport.Events()
 	if got := len(events); got != 1 {
@@ -126,20 +129,22 @@ func TestStartTransaction(t *testing.T) {
 	}
 	want := &Event{
 		Type:        transactionType,
-		Transaction: transactionName,
+		Transaction: transaction,
 		Contexts: map[string]Context{
 			"trace": TraceContext{
-				TraceID:     transaction.TraceID,
-				SpanID:      transaction.SpanID,
-				Description: description,
-				Status:      status,
+				TraceID:      span.TraceID,
+				SpanID:       span.SpanID,
+				ParentSpanID: parentSpanID,
+				Op:           op,
+				Description:  description,
+				Status:       status,
 			}.Map(),
 		},
 		Tags: nil,
 		// TODO(tracing): the root span / transaction data field is
 		// mapped into Event.Extra for now, pending spec clarification.
 		// https://github.com/getsentry/develop/issues/244#issuecomment-778694182
-		Extra:     transaction.Data,
+		Extra:     span.Data,
 		Timestamp: endTime,
 		StartTime: startTime,
 	}
@@ -158,22 +163,6 @@ func TestStartTransaction(t *testing.T) {
 	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
 		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
 	}
-}
-
-func TestStartTransactionAlreadyInProgress(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("StartTransaction should panic if a transaction is already in progress")
-		}
-	}()
-	transport := &TransportMock{}
-	ctx := NewTestContext(ClientOptions{
-		Transport: transport,
-	})
-	// Simulate a transaction already in progress
-	ctx = context.WithValue(ctx, spanContextKey{}, &Span{})
-	transactionName := "Test Transaction"
-	_ = StartTransaction(ctx, transactionName)
 }
 
 func TestStartChild(t *testing.T) {
@@ -234,6 +223,92 @@ func TestStartChild(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, events[0], opts); diff != "" {
 		t.Fatalf("Event mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestStartTransaction(t *testing.T) {
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		Transport: transport,
+	})
+	transactionName := "Test Transaction"
+	description := "A Description"
+	status := SpanStatusOK
+	sampled := SampledTrue
+	startTime := time.Now()
+	endTime := startTime.Add(3 * time.Second)
+	data := map[string]interface{}{
+		"k": "v",
+	}
+	transaction, _ := StartTransaction(ctx,
+		transactionName,
+		func(s *Span) {
+			s.Description = description
+			s.Status = status
+			s.Sampled = sampled
+			s.StartTime = startTime
+			s.EndTime = endTime
+			s.Data = data
+		},
+	)
+	transaction.Finish()
+
+	SpanCheck{
+		Sampled:     sampled,
+		RecorderLen: 1,
+	}.Check(t, transaction)
+
+	events := transport.Events()
+	if got := len(events); got != 1 {
+		t.Fatalf("sent %d events, want 1", got)
+	}
+	want := &Event{
+		Type:        transactionType,
+		Transaction: transactionName,
+		Contexts: map[string]Context{
+			"trace": TraceContext{
+				TraceID:     transaction.TraceID,
+				SpanID:      transaction.SpanID,
+				Description: description,
+				Status:      status,
+			}.Map(),
+		},
+		Tags: nil,
+		// TODO(tracing): the root span / transaction data field is
+		// mapped into Event.Extra for now, pending spec clarification.
+		// https://github.com/getsentry/develop/issues/244#issuecomment-778694182
+		Extra:     transaction.Data,
+		Timestamp: endTime,
+		StartTime: startTime,
+	}
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(Event{},
+			"Contexts", "EventID", "Level", "Platform",
+			"Release", "Sdk", "ServerName", "Modules",
+		),
+		cmpopts.EquateEmpty(),
+	}
+	if diff := cmp.Diff(want, events[0], opts); diff != "" {
+		t.Fatalf("Event mismatch (-want +got):\n%s", diff)
+	}
+	// Check trace context explicitly, as we ignored all contexts above to
+	// disregard other contexts.
+	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
+		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestStartTransactionAlreadyInProgress(t *testing.T) {
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		Transport: transport,
+	})
+	// Simulate a transaction already in progress
+	ctx = context.WithValue(ctx, spanContextKey{}, &Span{})
+	transactionName := "Test Transaction"
+	_, existing := StartTransaction(ctx, transactionName)
+	if !existing {
+		t.Fatal("StartTransaction should return true if a transaction is already in progress")
 	}
 }
 
