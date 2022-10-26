@@ -93,13 +93,45 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 // User describes the user associated with an Event. If this is used, at least
 // an ID or an IP address should be provided.
 type User struct {
-	Data      map[string]string `json:"data,omitempty"`
-	Email     string            `json:"email,omitempty"`
 	ID        string            `json:"id,omitempty"`
+	Email     string            `json:"email,omitempty"`
 	IPAddress string            `json:"ip_address,omitempty"`
+	Username  string            `json:"username,omitempty"`
 	Name      string            `json:"name,omitempty"`
 	Segment   string            `json:"segment,omitempty"`
-	Username  string            `json:"username,omitempty"`
+	Data      map[string]string `json:"data,omitempty"`
+}
+
+func (u User) IsEmpty() bool {
+	if len(u.ID) > 0 {
+		return false
+	}
+
+	if len(u.Email) > 0 {
+		return false
+	}
+
+	if len(u.IPAddress) > 0 {
+		return false
+	}
+
+	if len(u.Username) > 0 {
+		return false
+	}
+
+	if len(u.Name) > 0 {
+		return false
+	}
+
+	if len(u.Segment) > 0 {
+		return false
+	}
+
+	if len(u.Data) > 0 {
+		return false
+	}
+
+	return true
 }
 
 // Request contains information on a HTTP request related to the event.

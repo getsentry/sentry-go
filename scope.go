@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -380,7 +379,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		}
 	}
 
-	if reflect.DeepEqual(event.User, User{}) {
+	if event.User.IsEmpty() {
 		event.User = scope.user
 	}
 
