@@ -19,6 +19,27 @@ var (
 	generate = flag.Bool("gen", false, "generate missing .golden files")
 )
 
+func TestIsEmpty(t *testing.T) {
+	tests := []struct {
+		input User
+		want  bool
+	}{
+		{input: User{}, want: true},
+		{input: User{ID: "foo"}, want: false},
+		{input: User{Email: "foo@example.com"}, want: false},
+		{input: User{IPAddress: "127.0.0.1"}, want: false},
+		{input: User{Username: "My Username"}, want: false},
+		{input: User{Name: "My Name"}, want: false},
+		{input: User{Segment: "My Segment"}, want: false},
+		{input: User{Data: map[string]string{"foo": "bar"}}, want: false},
+		{input: User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Segment: "My Segment", Data: map[string]string{"foo": "bar"}}, want: false},
+	}
+
+	for _, test := range tests {
+		assertEqual(t, test.input.IsEmpty(), test.want)
+	}
+}
+
 func TestNewRequest(t *testing.T) {
 	const payload = `{"test_data": true}`
 	got := NewRequest(httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload)))
