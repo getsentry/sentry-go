@@ -37,9 +37,9 @@ func fillEventWithData(event *Event) *Event {
 
 func TestScopeSetUser(t *testing.T) {
 	scope := NewScope()
-	scope.SetUser(User{ ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Segment: "My Segment", Data: map[string]string{"foo": "bar"}})
+	scope.SetUser(User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Segment: "My Segment", Data: map[string]string{"foo": "bar"}})
 
-	assertEqual(t, User{ ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Segment: "My Segment", Data: map[string]string{"foo": "bar"}}, scope.user)
+	assertEqual(t, User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Segment: "My Segment", Data: map[string]string{"foo": "bar"}}, scope.user)
 }
 
 func TestScopeSetUserOverrides(t *testing.T) {
