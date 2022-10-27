@@ -40,6 +40,31 @@ func TestIsEmpty(t *testing.T) {
 	}
 }
 
+func TestUserMarhsalJson(t *testing.T) {
+	tests := []struct {
+		input User
+		want  string
+	}{
+		{input: User{}, want: `{}`},
+		{input: User{ID: "foo"}, want: `{"id":"foo"}`},
+		{input: User{Email: "foo@example.com"}, want: `{"email":"foo@example.com"}`},
+		{input: User{IPAddress: "127.0.0.1"}, want: `{"ip_address":"127.0.0.1"}`},
+		{input: User{Username: "My Username"}, want: `{"username":"My Username"}`},
+		{input: User{Name: "My Name"}, want: `{"name":"My Name"}`},
+		{input: User{Segment: "My Segment"}, want: `{"segment":"My Segment"}`},
+		{input: User{Data: map[string]string{"foo": "bar"}}, want: `{"data":{"foo":"bar"}}`},
+	}
+
+	for _, test := range tests {
+		got, err := json.Marshal(test.input)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		assertEqual(t, string(got), test.want)
+	}
+}
+
 func TestNewRequest(t *testing.T) {
 	const payload = `{"test_data": true}`
 	got := NewRequest(httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload)))
