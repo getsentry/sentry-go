@@ -40,7 +40,7 @@ func TestIsEmpty(t *testing.T) {
 	}
 }
 
-func TestUserMarhsalJson(t *testing.T) {
+func TestUserMarshalJson(t *testing.T) {
 	tests := []struct {
 		input User
 		want  string
