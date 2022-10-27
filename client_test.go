@@ -520,3 +520,17 @@ func TestRecover(t *testing.T) {
 		})
 	}
 }
+
+func TestCustomMaxSpansProperty(t *testing.T) {
+	client, _, _ := setupClientTest()
+	assertEqual(t, client.Options().MaxSpans, defaultMaxSpans)
+
+	client.options.MaxSpans = 2000
+	assertEqual(t, client.Options().MaxSpans, 2000)
+
+	properClient, _ := NewClient(ClientOptions{
+		MaxSpans: 3000,
+	})
+
+	assertEqual(t, properClient.Options().MaxSpans, 3000)
+}
