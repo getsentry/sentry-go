@@ -19,7 +19,7 @@ var (
 	generate = flag.Bool("gen", false, "generate missing .golden files")
 )
 
-func TestIsEmpty(t *testing.T) {
+func TestUserIsEmpty(t *testing.T) {
 	tests := []struct {
 		input User
 		want  bool
