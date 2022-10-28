@@ -1,5 +1,7 @@
 # Changelog
 
+- feat: Extend User inteface by adding Data, Name and Segment (#483)
+
 ## 0.14.0
 
 - feat: Add function to continue from trace string (#434)

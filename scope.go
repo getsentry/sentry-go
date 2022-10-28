@@ -379,8 +379,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		}
 	}
 
-	var emptyUser User
-	if event.User == emptyUser {
+	if event.User.IsEmpty() {
 		event.User = scope.user
 	}
 

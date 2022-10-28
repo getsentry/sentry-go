@@ -19,6 +19,52 @@ var (
 	generate = flag.Bool("gen", false, "generate missing .golden files")
 )
 
+func TestUserIsEmpty(t *testing.T) {
+	tests := []struct {
+		input User
+		want  bool
+	}{
+		{input: User{}, want: true},
+		{input: User{ID: "foo"}, want: false},
+		{input: User{Email: "foo@example.com"}, want: false},
+		{input: User{IPAddress: "127.0.0.1"}, want: false},
+		{input: User{Username: "My Username"}, want: false},
+		{input: User{Name: "My Name"}, want: false},
+		{input: User{Segment: "My Segment"}, want: false},
+		{input: User{Data: map[string]string{"foo": "bar"}}, want: false},
+		{input: User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Segment: "My Segment", Data: map[string]string{"foo": "bar"}}, want: false},
+	}
+
+	for _, test := range tests {
+		assertEqual(t, test.input.IsEmpty(), test.want)
+	}
+}
+
+func TestUserMarshalJson(t *testing.T) {
+	tests := []struct {
+		input User
+		want  string
+	}{
+		{input: User{}, want: `{}`},
+		{input: User{ID: "foo"}, want: `{"id":"foo"}`},
+		{input: User{Email: "foo@example.com"}, want: `{"email":"foo@example.com"}`},
+		{input: User{IPAddress: "127.0.0.1"}, want: `{"ip_address":"127.0.0.1"}`},
+		{input: User{Username: "My Username"}, want: `{"username":"My Username"}`},
+		{input: User{Name: "My Name"}, want: `{"name":"My Name"}`},
+		{input: User{Segment: "My Segment"}, want: `{"segment":"My Segment"}`},
+		{input: User{Data: map[string]string{"foo": "bar"}}, want: `{"data":{"foo":"bar"}}`},
+	}
+
+	for _, test := range tests {
+		got, err := json.Marshal(test.input)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		assertEqual(t, string(got), test.want)
+	}
+}
+
 func TestNewRequest(t *testing.T) {
 	const payload = `{"test_data": true}`
 	got := NewRequest(httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload)))
