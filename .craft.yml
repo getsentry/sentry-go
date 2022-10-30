@@ -1,6 +1,6 @@
 minVersion: 0.23.1
 preReleaseCommand: bash scripts/craft-pre-release.sh
-changelogPolicy: simple
+changelogPolicy: auto
 artifactProvider:
   name: none
 targets:

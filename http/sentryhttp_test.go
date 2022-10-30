@@ -2,7 +2,7 @@ package sentryhttp_test
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -52,7 +52,7 @@ func TestIntegration(t *testing.T) {
 			Body:   "payload",
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				hub := sentry.GetHubFromContext(r.Context())
-				body, err := ioutil.ReadAll(r.Body)
+				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
@@ -102,7 +102,7 @@ func TestIntegration(t *testing.T) {
 			Body:   largePayload,
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				hub := sentry.GetHubFromContext(r.Context())
-				body, err := ioutil.ReadAll(r.Body)
+				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}

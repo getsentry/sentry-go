@@ -86,15 +86,21 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			hub = sentry.CurrentHub().Clone()
 			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
-		span := sentry.StartSpan(ctx, "http.server",
-			sentry.TransactionName(fmt.Sprintf("%s %s", r.Method, r.URL.Path)),
+		options := []sentry.SpanOption{
+			sentry.OpName("http.server"),
 			sentry.ContinueFromRequest(r),
+		}
+		// We don't mind getting an existing transaction back so we don't need to
+		// check if it is.
+		transaction := sentry.StartTransaction(ctx,
+			fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+			options...,
 		)
-		defer span.Finish()
+		defer transaction.Finish()
 		// TODO(tracing): if the next handler.ServeHTTP panics, store
 		// information on the transaction accordingly (status, tag,
 		// level?, ...).
-		r = r.WithContext(span.Context())
+		r = r.WithContext(transaction.Context())
 		hub.Scope().SetRequest(r)
 		defer h.recoverWithSentry(hub, r)
 		// TODO(tracing): use custom response writer to intercept
