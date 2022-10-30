@@ -49,7 +49,7 @@ func BlueGoErrorsRanger() error {
 	return goErrors.New("this is bad from goErrors")
 }
 
-//nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
+// nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestNewStacktrace(t *testing.T) {
 	tests := map[string]struct {
 		f    func() *sentry.Stacktrace
@@ -108,7 +108,7 @@ func TestNewStacktrace(t *testing.T) {
 	}
 }
 
-//nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
+// nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestExtractStacktrace(t *testing.T) {
 	tests := map[string]struct {
 		f    func() error

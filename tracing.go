@@ -228,13 +228,13 @@ func (s *Span) ToSentryTrace() string {
 
 // sentryTracePattern matches either
 //
-// 	TRACE_ID - SPAN_ID
-// 	[[:xdigit:]]{32}-[[:xdigit:]]{16}
+//	TRACE_ID - SPAN_ID
+//	[[:xdigit:]]{32}-[[:xdigit:]]{16}
 //
 // or
 //
-// 	TRACE_ID - SPAN_ID - SAMPLED
-// 	[[:xdigit:]]{32}-[[:xdigit:]]{16}-[01]
+//	TRACE_ID - SPAN_ID - SAMPLED
+//	[[:xdigit:]]{32}-[[:xdigit:]]{16}-[01]
 var sentryTracePattern = regexp.MustCompile(`^([[:xdigit:]]{32})-([[:xdigit:]]{16})(?:-([01]))?$`)
 
 // updateFromSentryTrace parses a sentry-trace HTTP header (as returned by
@@ -579,7 +579,8 @@ func OpName(name string) SpanOption {
 // span will be left unchanged.
 //
 // ContinueFromRequest is an alias for:
-// 	ContinueFromTrace(r.Header.Get("sentry-trace"))
+//
+//	ContinueFromTrace(r.Header.Get("sentry-trace"))
 func ContinueFromRequest(r *http.Request) SpanOption {
 	return ContinueFromTrace(r.Header.Get("sentry-trace"))
 }
@@ -619,7 +620,7 @@ func TransactionFromContext(ctx context.Context) *Span {
 //
 // Note the equivalence:
 //
-// 	SpanFromContext(ctx).StartChild(...) === StartSpan(ctx, ...)
+//	SpanFromContext(ctx).StartChild(...) === StartSpan(ctx, ...)
 //
 // So we don't aim spanFromContext at creating spans, but mutating existing
 // spans that you'd have no access otherwise (because it was created in code you
