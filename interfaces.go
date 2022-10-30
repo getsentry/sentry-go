@@ -28,6 +28,15 @@ const (
 	LevelFatal   Level = "fatal"
 )
 
+func getSensitiveHeaders() map[string]bool {
+	return map[string]bool{
+		"Authorization":   true,
+		"Cookie":          true,
+		"X-Forwarded-For": true,
+		"X-Real-Ip":       true,
+	}
+}
+
 // SdkInfo contains all metadata about about the SDK being used.
 type SdkInfo struct {
 	Name         string       `json:"name,omitempty"`
@@ -156,22 +165,36 @@ func NewRequest(r *http.Request) *Request {
 	}
 	url := fmt.Sprintf("%s://%s%s", protocol, r.Host, r.URL.Path)
 
-	// We read only the first Cookie header because of the specification:
-	// https://tools.ietf.org/html/rfc6265#section-5.4
-	// When the user agent generates an HTTP request, the user agent MUST NOT
-	// attach more than one Cookie header field.
-	cookies := r.Header.Get("Cookie")
-
-	headers := make(map[string]string, len(r.Header))
-	for k, v := range r.Header {
-		headers[k] = strings.Join(v, ",")
-	}
-	headers["Host"] = r.Host
-
+	var cookies string
 	var env map[string]string
-	if addr, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
+	headers := map[string]string{}
+
+	if client := CurrentHub().Client(); client != nil {
+		if client.Options().SendDefaultPii {
+			// We read only the first Cookie header because of the specification:
+			// https://tools.ietf.org/html/rfc6265#section-5.4
+			// When the user agent generates an HTTP request, the user agent MUST NOT
+			// attach more than one Cookie header field.
+			cookies = r.Header.Get("Cookie")
+
+			for k, v := range r.Header {
+				headers[k] = strings.Join(v, ",")
+			}
+
+			if addr, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+				env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
+			}
+		}
+	} else {
+		sensitiveHeaders := getSensitiveHeaders()
+		for k, v := range r.Header {
+			if _, ok := sensitiveHeaders[k]; !ok {
+				headers[k] = strings.Join(v, ",")
+			}
+		}
 	}
+
+	headers["Host"] = r.Host
 
 	return &Request{
 		URL:         url,

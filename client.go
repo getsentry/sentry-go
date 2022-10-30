@@ -129,6 +129,9 @@ type ClientOptions struct {
 	// and if applicable, caught errors type and value.
 	// If the match is found, then a whole event will be dropped.
 	IgnoreErrors []string
+	// If this flag is enabled, certain personally identifiable information (PII) is added by active integrations.
+	// By default, no such data is sent.
+	SendDefaultPii bool
 	// BeforeSend is called before error events are sent to Sentry.
 	// Use it to mutate the event or return nil to discard the event.
 	// See EventProcessor if you need to mutate transactions.
