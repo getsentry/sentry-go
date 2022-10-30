@@ -255,6 +255,21 @@ func TestExtractStacktrace(t *testing.T) {
 	}
 }
 
+func BenchmarkExtractStacktrace(b *testing.B) {
+	var fs = []func() error{
+		RedPkgErrorsRanger,
+		RedPingcapErrorsRanger,
+		RedGoErrorsRanger,
+	}
+
+	for i := 0; i < b.N; i++ {
+		f := fs[i%len(fs)]
+		err := f()
+
+		sentry.ExtractStacktrace(err)
+	}
+}
+
 func compareStacktrace(t *testing.T, got, want *sentry.Stacktrace) {
 	t.Helper()
 

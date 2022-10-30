@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -146,7 +145,7 @@ const maxRequestBodyBytes = 10 * 1024
 
 // A limitedBuffer is like a bytes.Buffer, but limited to store at most Capacity
 // bytes. Any writes past the capacity are silently discarded, similar to
-// ioutil.Discard.
+// io.Discard.
 type limitedBuffer struct {
 	Capacity int
 
@@ -339,16 +338,12 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 	defer scope.mu.RUnlock()
 
 	if len(scope.breadcrumbs) > 0 {
-		if event.Breadcrumbs == nil {
-			event.Breadcrumbs = []*Breadcrumb{}
-		}
-
 		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
 	}
 
 	if len(scope.tags) > 0 {
 		if event.Tags == nil {
-			event.Tags = make(map[string]string)
+			event.Tags = make(map[string]string, len(scope.tags))
 		}
 
 		for key, value := range scope.tags {
@@ -376,7 +371,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 
 	if len(scope.extra) > 0 {
 		if event.Extra == nil {
-			event.Extra = make(map[string]interface{})
+			event.Extra = make(map[string]interface{}, len(scope.extra))
 		}
 
 		for key, value := range scope.extra {
@@ -384,14 +379,12 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 		}
 	}
 
-	if (reflect.DeepEqual(event.User, User{})) {
+	if event.User.IsEmpty() {
 		event.User = scope.user
 	}
 
-	if (event.Fingerprint == nil || len(event.Fingerprint) == 0) &&
-		len(scope.fingerprint) > 0 {
-		event.Fingerprint = make([]string, len(scope.fingerprint))
-		copy(event.Fingerprint, scope.fingerprint)
+	if len(event.Fingerprint) == 0 {
+		event.Fingerprint = append(event.Fingerprint, scope.fingerprint...)
 	}
 
 	if scope.level != "" {
