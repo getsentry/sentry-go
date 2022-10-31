@@ -57,7 +57,7 @@ var dsnTests = map[string]DsnTest{
 	},
 }
 
-//nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
+// nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestNewDsn(t *testing.T) {
 	for name, tt := range dsnTests {
 		t.Run(name, func(t *testing.T) {
@@ -104,7 +104,7 @@ var invalidDsnTests = map[string]invalidDsnTest{
 	"TrailingSlash": {"https://public:secret@domain:8888/42/", "empty project id"},
 }
 
-//nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
+// nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestNewDsnInvalidInput(t *testing.T) {
 	for name, tt := range invalidDsnTests {
 		t.Run(name, func(t *testing.T) {
