@@ -7,13 +7,18 @@ import (
 	"time"
 )
 
+const sharedContextsKey = "sharedContextsKey"
+
 var testNow = time.Now().UTC()
 
 func fillScopeWithData(scope *Scope) *Scope {
 	scope.breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "scopeBreadcrumbMessage"}}
 	scope.user = User{ID: "1337"}
 	scope.tags = map[string]string{"scopeTagKey": "scopeTagValue"}
-	scope.contexts = map[string]Context{"scopeContextsKey": {"scopeContextKey": "scopeContextValue"}}
+	scope.contexts = map[string]Context{
+		"scopeContextsKey": {"scopeContextKey": "scopeContextValue"},
+		sharedContextsKey:  {"scopeContextKey": "scopeContextValue"},
+	}
 	scope.extra = map[string]interface{}{"scopeExtraKey": "scopeExtraValue"}
 	scope.fingerprint = []string{"scopeFingerprintOne", "scopeFingerprintTwo"}
 	scope.level = LevelDebug
@@ -26,7 +31,10 @@ func fillEventWithData(event *Event) *Event {
 	event.Breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "eventBreadcrumbMessage"}}
 	event.User = User{ID: "42"}
 	event.Tags = map[string]string{"eventTagKey": "eventTagValue"}
-	event.Contexts = map[string]Context{"eventContextsKey": {"eventContextKey": "eventContextValue"}}
+	event.Contexts = map[string]Context{
+		"eventContextsKey": {"eventContextKey": "eventContextValue"},
+		sharedContextsKey:  {"eventContextKey": "eventContextKey"},
+	}
 	event.Extra = map[string]interface{}{"eventExtraKey": "eventExtraValue"}
 	event.Fingerprint = []string{"eventFingerprintOne", "eventFingerprintTwo"}
 	event.Level = LevelInfo
@@ -541,7 +549,8 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 2, "should merge breadcrumbs")
 	assertEqual(t, len(processedEvent.Tags), 2, "should merge tags")
-	assertEqual(t, len(processedEvent.Contexts), 2, "should merge contexts")
+	assertEqual(t, len(processedEvent.Contexts), 3, "should merge contexts")
+	assertEqual(t, event.Contexts[sharedContextsKey], event.Contexts[sharedContextsKey], "should not override event context")
 	assertEqual(t, len(processedEvent.Extra), 2, "should merge extra")
 	assertEqual(t, processedEvent.Level, scope.level, "should use scope level if its set")
 	assertEqual(t, processedEvent.Transaction, scope.transaction, "should use scope transaction if its set")
@@ -558,7 +567,7 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
-	assertEqual(t, len(processedEvent.Contexts), 1, "should use event contexts")
+	assertEqual(t, len(processedEvent.Contexts), 2, "should use event contexts")
 	assertEqual(t, len(processedEvent.Extra), 1, "should use event extra")
 	assertNotEqual(t, processedEvent.User, scope.user, "should use event user")
 	assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprint")
@@ -575,7 +584,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
-	assertEqual(t, len(processedEvent.Contexts), 1, "should use scope contexts")
+	assertEqual(t, len(processedEvent.Contexts), 2, "should use scope contexts")
 	assertEqual(t, len(processedEvent.Extra), 1, "should use scope extra")
 	assertEqual(t, processedEvent.User, scope.user, "should use scope user")
 	assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
