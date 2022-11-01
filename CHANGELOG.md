@@ -1,6 +1,7 @@
 # Changelog
 
 - feat: Extend User inteface by adding Data, Name and Segment (#483)
+- feat: Add ClientOptions.SendDefaultPii #485
 
 ## 0.14.0
 
