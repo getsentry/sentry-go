@@ -68,7 +68,7 @@ func TestUserMarshalJson(t *testing.T) {
 func TestNewRequest(t *testing.T) {
 	currentHub.BindClient(&Client{
 		options: ClientOptions{
-			SendDefaultPii: true,
+			SendDefaultPII: true,
 		},
 	})
 	// Unbind the client afterwards, to not affect other tests
@@ -105,7 +105,7 @@ func TestNewRequest(t *testing.T) {
 	}
 }
 
-func TestNewRequestWithNoPii(t *testing.T) {
+func TestNewRequestWithNoPII(t *testing.T) {
 	const payload = `{"test_data": true}`
 	r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
 	r.Header.Add("Authorization", "Bearer 1234567890")

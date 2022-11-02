@@ -170,7 +170,7 @@ func NewRequest(r *http.Request) *Request {
 	headers := map[string]string{}
 
 	if client := CurrentHub().Client(); client != nil {
-		if client.Options().SendDefaultPii {
+		if client.Options().SendDefaultPII {
 			// We read only the first Cookie header because of the specification:
 			// https://tools.ietf.org/html/rfc6265#section-5.4
 			// When the user agent generates an HTTP request, the user agent MUST NOT

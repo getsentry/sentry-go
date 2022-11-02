@@ -156,7 +156,7 @@ func TestIntegration(t *testing.T) {
 
 	eventsCh := make(chan *sentry.Event, len(tests))
 	err := sentry.Init(sentry.ClientOptions{
-		SendDefaultPii: true,
+		SendDefaultPII: true,
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
