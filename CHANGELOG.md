@@ -1,8 +1,11 @@
 # Changelog
 
+## Unreleased
+
 - fix: Scope values should not override Event values (#446)
 - feat: Extend User inteface by adding Data, Name and Segment (#483)
 - feat: Make maximum amount of spans configurable (#460)
+- feat: Add ClientOptions.SendDefaultPii #485
 
 ## 0.14.0
 

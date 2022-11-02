@@ -66,8 +66,54 @@ func TestUserMarshalJson(t *testing.T) {
 }
 
 func TestNewRequest(t *testing.T) {
+	currentHub.BindClient(&Client{
+		options: ClientOptions{
+			SendDefaultPii: true,
+		},
+	})
+	// Unbind the client afterwards, to not affect other tests
+	defer currentHub.stackTop().SetClient(nil)
+
 	const payload = `{"test_data": true}`
-	got := NewRequest(httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload)))
+	r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
+	r.Header.Add("Authorization", "Bearer 1234567890")
+	r.Header.Add("Cookie", "foo=bar")
+	r.Header.Add("X-Forwarded-For", "127.0.0.1")
+	r.Header.Add("X-Real-Ip", "127.0.0.1")
+
+	got := NewRequest(r)
+	want := &Request{
+		URL:         "http://example.com/test/",
+		Method:      "POST",
+		Data:        "",
+		QueryString: "q=sentry",
+		Cookies:     "foo=bar",
+		Headers: map[string]string{
+			"Authorization":   "Bearer 1234567890",
+			"Cookie":          "foo=bar",
+			"Host":            "example.com",
+			"X-Forwarded-For": "127.0.0.1",
+			"X-Real-Ip":       "127.0.0.1",
+		},
+		Env: map[string]string{
+			"REMOTE_ADDR": "192.0.2.1",
+			"REMOTE_PORT": "1234",
+		},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Request mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestNewRequestWithNoPii(t *testing.T) {
+	const payload = `{"test_data": true}`
+	r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
+	r.Header.Add("Authorization", "Bearer 1234567890")
+	r.Header.Add("Cookie", "foo=bar")
+	r.Header.Add("X-Forwarded-For", "127.0.0.1")
+	r.Header.Add("X-Real-Ip", "127.0.0.1")
+
+	got := NewRequest(r)
 	want := &Request{
 		URL:         "http://example.com/test/",
 		Method:      "POST",
@@ -77,10 +123,7 @@ func TestNewRequest(t *testing.T) {
 		Headers: map[string]string{
 			"Host": "example.com",
 		},
-		Env: map[string]string{
-			"REMOTE_ADDR": "192.0.2.1",
-			"REMOTE_PORT": "1234",
-		},
+		Env: nil,
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Request mismatch (-want +got):\n%s", diff)
