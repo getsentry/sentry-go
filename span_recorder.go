@@ -16,8 +16,8 @@ type spanRecorder struct {
 // span tree.
 func (r *spanRecorder) record(s *Span) {
 	maxSpans := defaultMaxSpans
-	if CurrentHub().Client() != nil {
-		maxSpans = CurrentHub().Client().options.MaxSpans
+	if client := CurrentHub().Client(); client != nil {
+		maxSpans = client.Options().MaxSpans
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
