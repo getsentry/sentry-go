@@ -73,39 +73,38 @@ func ExtractStacktrace(err error) *Stacktrace {
 }
 
 func extractReflectedStacktraceMethod(err error) reflect.Value {
-	var method reflect.Value
+	errValue := reflect.ValueOf(err)
+
+	// https://github.com/go-errors/errors
+	methodStackFrames := errValue.MethodByName("StackFrames")
+	if methodStackFrames.IsValid() {
+		return methodStackFrames
+	}
+
+	// https://github.com/pkg/errors
+	methodStackTrace := errValue.MethodByName("StackTrace")
+	if methodStackTrace.IsValid() {
+		return methodStackTrace
+	}
 
 	// https://github.com/pingcap/errors
-	methodGetStackTracer := reflect.ValueOf(err).MethodByName("GetStackTracer")
-	// https://github.com/pkg/errors
-	methodStackTrace := reflect.ValueOf(err).MethodByName("StackTrace")
-	// https://github.com/go-errors/errors
-	methodStackFrames := reflect.ValueOf(err).MethodByName("StackFrames")
-
+	methodGetStackTracer := errValue.MethodByName("GetStackTracer")
 	if methodGetStackTracer.IsValid() {
-		stacktracer := methodGetStackTracer.Call(make([]reflect.Value, 0))[0]
+		stacktracer := methodGetStackTracer.Call(nil)[0]
 		stacktracerStackTrace := reflect.ValueOf(stacktracer).MethodByName("StackTrace")
 
 		if stacktracerStackTrace.IsValid() {
-			method = stacktracerStackTrace
+			return stacktracerStackTrace
 		}
 	}
 
-	if methodStackTrace.IsValid() {
-		method = methodStackTrace
-	}
-
-	if methodStackFrames.IsValid() {
-		method = methodStackFrames
-	}
-
-	return method
+	return reflect.Value{}
 }
 
 func extractPcs(method reflect.Value) []uintptr {
 	var pcs []uintptr
 
-	stacktrace := method.Call(make([]reflect.Value, 0))[0]
+	stacktrace := method.Call(nil)[0]
 
 	if stacktrace.Kind() != reflect.Slice {
 		return nil
@@ -245,19 +244,22 @@ func splitQualifiedFunctionName(name string) (pkg string, fun string) {
 }
 
 func extractFrames(pcs []uintptr) []Frame {
-	var frames []Frame
+	var frames = make([]Frame, 0, len(pcs))
 	callersFrames := runtime.CallersFrames(pcs)
 
 	for {
 		callerFrame, more := callersFrames.Next()
 
-		frames = append([]Frame{
-			NewFrame(callerFrame),
-		}, frames...)
+		frames = append(frames, NewFrame(callerFrame))
 
 		if !more {
 			break
 		}
+	}
+
+	// reverse
+	for i, j := 0, len(frames)-1; i < j; i, j = i+1, j-1 {
+		frames[i], frames[j] = frames[j], frames[i]
 	}
 
 	return frames
@@ -270,7 +272,8 @@ func filterFrames(frames []Frame) []Frame {
 		return nil
 	}
 
-	filteredFrames := make([]Frame, 0, len(frames))
+	// reuse
+	filteredFrames := frames[:0]
 
 	for _, frame := range frames {
 		// Skip Go internal frames.

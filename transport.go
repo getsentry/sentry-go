@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"sync"
@@ -39,11 +38,13 @@ type Transport interface {
 
 func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
 	if options.HTTPSProxy != "" {
-		return func(_ *http.Request) (*url.URL, error) {
+		return func(*http.Request) (*url.URL, error) {
 			return url.Parse(options.HTTPSProxy)
 		}
-	} else if options.HTTPProxy != "" {
-		return func(_ *http.Request) (*url.URL, error) {
+	}
+
+	if options.HTTPProxy != "" {
+		return func(*http.Request) (*url.URL, error) {
 			return url.Parse(options.HTTPProxy)
 		}
 	}
@@ -53,7 +54,7 @@ func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error)
 
 func getTLSConfig(options ClientOptions) *tls.Config {
 	if options.CaCerts != nil {
-		//#nosec G402 -- We should be using `MinVersion: tls.VersionTLS12`,
+		// #nosec G402 -- We should be using `MinVersion: tls.VersionTLS12`,
 		// 				 but we don't want to break peoples code without the major bump.
 		return &tls.Config{
 			RootCAs: options.CaCerts,
@@ -401,7 +402,7 @@ func (t *HTTPTransport) worker() {
 			t.mu.Unlock()
 			// Drain body up to a limit and close it, allowing the
 			// transport to reuse TCP connections.
-			_, _ = io.CopyN(ioutil.Discard, response.Body, maxDrainResponseBytes)
+			_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
 			response.Body.Close()
 		}
 
@@ -529,7 +530,7 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 
 	// Drain body up to a limit and close it, allowing the
 	// transport to reuse TCP connections.
-	_, _ = io.CopyN(ioutil.Discard, response.Body, maxDrainResponseBytes)
+	_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
 	response.Body.Close()
 }
 
@@ -556,14 +557,16 @@ func (t *HTTPSyncTransport) disabled(c ratelimit.Category) bool {
 // Only used internally when an empty DSN is provided, which effectively disables the SDK.
 type noopTransport struct{}
 
-func (t *noopTransport) Configure(options ClientOptions) {
+var _ Transport = noopTransport{}
+
+func (noopTransport) Configure(ClientOptions) {
 	Logger.Println("Sentry client initialized with an empty DSN. Using noopTransport. No events will be delivered.")
 }
 
-func (t *noopTransport) SendEvent(event *Event) {
+func (noopTransport) SendEvent(*Event) {
 	Logger.Println("Event dropped due to noopTransport usage.")
 }
 
-func (t *noopTransport) Flush(_ time.Duration) bool {
+func (noopTransport) Flush(time.Duration) bool {
 	return true
 }

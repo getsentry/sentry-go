@@ -1,8 +1,19 @@
 # Changelog
 
-## Unreleased
+- fix: Scope values should not override Event values (#446)
+- feat: Extend User inteface by adding Data, Name and Segment (#483)
 
-- ref: Use a `Context` type mapping to a `map[string]interface{}` for all event contexts (#444)
+## 0.14.0
+
+- feat: Add function to continue from trace string (#434)
+- feat: Add `max-depth` options (#428)
+- *[breaking]* ref: Use a `Context` type mapping to a `map[string]interface{}` for all event contexts (#444)
+- *[breaking]* ref: Replace deprecated `ioutil` pkg with `os` & `io` (#454)
+- ref: Optimize `stacktrace.go` from size and speed (#467)
+- ci: Test against `go1.19` and `go1.18`, drop `go1.16` and `go1.15` support (#432, #477)
+- deps: Dependency update to fix CVEs (#462, #464, #477)
+
+_NOTE:_ This version drops support for Go 1.16 and Go 1.15. The currently supported Go versions are the last 3 stable releases: 1.19, 1.18 and 1.17.
 
 ## v0.13.0
 

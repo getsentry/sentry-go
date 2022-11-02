@@ -7,7 +7,7 @@ tracing.
 For more information about Sentry and SDK features please have a look at the
 documentation site https://docs.sentry.io/platforms/go/.
 
-Basic Usage
+# Basic Usage
 
 The first step is to initialize the SDK, providing at a minimum the DSN of your
 Sentry project. This step is accomplished through a call to sentry.Init.
@@ -20,7 +20,7 @@ Sentry project. This step is accomplished through a call to sentry.Init.
 A more detailed yet simple example is available at
 https://github.com/getsentry/sentry-go/blob/master/example/basic/main.go.
 
-Error Reporting
+# Error Reporting
 
 The Capture* functions report messages and errors to Sentry.
 
@@ -31,7 +31,7 @@ The Capture* functions report messages and errors to Sentry.
 Use similarly named functions in the Hub for concurrent programs like web
 servers.
 
-Performance Monitoring
+# Performance Monitoring
 
 You can use Sentry to monitor your application's performance. More information
 on the product page https://docs.sentry.io/product/performance/.
@@ -42,15 +42,16 @@ The StartSpan function creates new spans.
 	...
 	span.Finish()
 
-Integrations
+# Integrations
 
 The SDK has support for several Go frameworks, available as subpackages.
 
-Getting Support
+# Getting Support
 
 For paid Sentry.io accounts, head out to https://sentry.io/support.
 
 For all users, support channels include:
+
 	Forum: https://forum.sentry.io
 	Discord: https://discord.gg/Ww9hbqr (#go channel)
 

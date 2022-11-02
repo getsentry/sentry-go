@@ -228,13 +228,13 @@ func (s *Span) ToSentryTrace() string {
 
 // sentryTracePattern matches either
 //
-// 	TRACE_ID - SPAN_ID
-// 	[[:xdigit:]]{32}-[[:xdigit:]]{16}
+//	TRACE_ID - SPAN_ID
+//	[[:xdigit:]]{32}-[[:xdigit:]]{16}
 //
 // or
 //
-// 	TRACE_ID - SPAN_ID - SAMPLED
-// 	[[:xdigit:]]{32}-[[:xdigit:]]{16}-[01]
+//	TRACE_ID - SPAN_ID - SAMPLED
+//	[[:xdigit:]]{32}-[[:xdigit:]]{16}-[01]
 var sentryTracePattern = regexp.MustCompile(`^([[:xdigit:]]{32})-([[:xdigit:]]{16})(?:-([01]))?$`)
 
 // updateFromSentryTrace parses a sentry-trace HTTP header (as returned by
@@ -567,12 +567,20 @@ func TransactionName(name string) SpanOption {
 	}
 }
 
+// OpName sets the operation name for a given span.
+func OpName(name string) SpanOption {
+	return func(s *Span) {
+		s.Op = name
+	}
+}
+
 // ContinueFromRequest returns a span option that updates the span to continue
 // an existing trace. If it cannot detect an existing trace in the request, the
 // span will be left unchanged.
 //
 // ContinueFromRequest is an alias for:
-// 	ContinueFromTrace(r.Header.Get("sentry-trace"))
+//
+//	ContinueFromTrace(r.Header.Get("sentry-trace"))
 func ContinueFromRequest(r *http.Request) SpanOption {
 	return ContinueFromTrace(r.Header.Get("sentry-trace"))
 }
@@ -612,7 +620,7 @@ func TransactionFromContext(ctx context.Context) *Span {
 //
 // Note the equivalence:
 //
-// 	SpanFromContext(ctx).StartChild(...) === StartSpan(ctx, ...)
+//	SpanFromContext(ctx).StartChild(...) === StartSpan(ctx, ...)
 //
 // So we don't aim spanFromContext at creating spans, but mutating existing
 // spans that you'd have no access otherwise (because it was created in code you
@@ -625,4 +633,24 @@ func spanFromContext(ctx context.Context) *Span {
 		return span
 	}
 	return nil
+}
+
+// StartTransaction will create a transaction (root span) if there's no existing
+// transaction in the context otherwise, it will return the existing transaction.
+func StartTransaction(ctx context.Context, name string, options ...SpanOption) *Span {
+	currentTransaction, exists := ctx.Value(spanContextKey{}).(*Span)
+	if exists {
+		return currentTransaction
+	}
+	hub := GetHubFromContext(ctx)
+	if hub == nil {
+		hub = CurrentHub().Clone()
+		ctx = SetHubOnContext(ctx, hub)
+	}
+	options = append(options, TransactionName(name))
+	return StartSpan(
+		ctx,
+		"",
+		options...,
+	)
 }

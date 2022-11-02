@@ -226,6 +226,78 @@ func TestStartChild(t *testing.T) {
 	}
 }
 
+func TestStartTransaction(t *testing.T) {
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		Transport: transport,
+	})
+	transactionName := "Test Transaction"
+	description := "A Description"
+	status := SpanStatusOK
+	sampled := SampledTrue
+	startTime := time.Now()
+	endTime := startTime.Add(3 * time.Second)
+	data := map[string]interface{}{
+		"k": "v",
+	}
+	transaction := StartTransaction(ctx,
+		transactionName,
+		func(s *Span) {
+			s.Description = description
+			s.Status = status
+			s.Sampled = sampled
+			s.StartTime = startTime
+			s.EndTime = endTime
+			s.Data = data
+		},
+	)
+	transaction.Finish()
+
+	SpanCheck{
+		Sampled:     sampled,
+		RecorderLen: 1,
+	}.Check(t, transaction)
+
+	events := transport.Events()
+	if got := len(events); got != 1 {
+		t.Fatalf("sent %d events, want 1", got)
+	}
+	want := &Event{
+		Type:        transactionType,
+		Transaction: transactionName,
+		Contexts: map[string]Context{
+			"trace": TraceContext{
+				TraceID:     transaction.TraceID,
+				SpanID:      transaction.SpanID,
+				Description: description,
+				Status:      status,
+			}.Map(),
+		},
+		Tags: nil,
+		// TODO(tracing): the root span / transaction data field is
+		// mapped into Event.Extra for now, pending spec clarification.
+		// https://github.com/getsentry/develop/issues/244#issuecomment-778694182
+		Extra:     transaction.Data,
+		Timestamp: endTime,
+		StartTime: startTime,
+	}
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(Event{},
+			"Contexts", "EventID", "Level", "Platform",
+			"Release", "Sdk", "ServerName", "Modules",
+		),
+		cmpopts.EquateEmpty(),
+	}
+	if diff := cmp.Diff(want, events[0], opts); diff != "" {
+		t.Fatalf("Event mismatch (-want +got):\n%s", diff)
+	}
+	// Check trace context explicitly, as we ignored all contexts above to
+	// disregard other contexts.
+	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
+		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
+	}
+}
+
 // testContextKey is used to store a value in a context so that we can check
 // that SDK operations on that context preserve the original context values.
 type testContextKey struct{}
