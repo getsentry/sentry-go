@@ -4,11 +4,6 @@ import (
 	"sync"
 )
 
-// maxSpans limits the number of recorded spans per transaction. The limit is
-// meant to bound memory usage and prevent too large transaction events that
-// would be rejected by Sentry.
-const maxSpans = 1000
-
 // A spanRecorder stores a span tree that makes up a transaction. Safe for
 // concurrent use. It is okay to add child spans from multiple goroutines.
 type spanRecorder struct {
@@ -20,6 +15,10 @@ type spanRecorder struct {
 // record stores a span. The first stored span is assumed to be the root of a
 // span tree.
 func (r *spanRecorder) record(s *Span) {
+	maxSpans := defaultMaxSpans
+	if client := CurrentHub().Client(); client != nil {
+		maxSpans = client.Options().MaxSpans
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.spans) >= maxSpans {
