@@ -41,7 +41,7 @@ func Test_spanRecorder_record(t *testing.T) {
 					MaxSpans: tt.maxSpans,
 				},
 			})
-			// unbind client after test for not affecting other tests
+			// Unbind the client afterwards, to not affect other tests
 			defer currentHub.stackTop().SetClient(nil)
 
 			for i := 0; i < tt.toRecordSpans; i++ {
