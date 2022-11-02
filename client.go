@@ -28,6 +28,11 @@ import (
 // stack trace is often the most useful information.
 const maxErrorDepth = 10
 
+// defaultMaxSpans limits the default number of recorded spans per transaction. The limit is
+// meant to bound memory usage and prevent too large transaction events that
+// would be rejected by Sentry.
+const defaultMaxSpans = 1000
+
 // hostname is the host name reported by the kernel. It is precomputed once to
 // avoid syscalls when capturing events.
 //
@@ -178,6 +183,11 @@ type ClientOptions struct {
 	// Maximum number of breadcrumbs
 	// when MaxBreadcrumbs is negative then ignore breadcrumbs.
 	MaxBreadcrumbs int
+	// Maximum number of spans.
+	//
+	// See https://develop.sentry.dev/sdk/envelopes/#size-limits for size limits
+	// applied during event ingestion. Events that exceed these limits might get dropped.
+	MaxSpans int
 	// An optional pointer to http.Client that will be used with a default
 	// HTTPTransport. Using your own client will make HTTPTransport, HTTPProxy,
 	// HTTPSProxy and CaCerts options ignored.
@@ -251,6 +261,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	if options.MaxErrorDepth == 0 {
 		options.MaxErrorDepth = maxErrorDepth
+	}
+
+	if options.MaxSpans == 0 {
+		options.MaxSpans = defaultMaxSpans
 	}
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
