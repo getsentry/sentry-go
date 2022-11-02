@@ -136,7 +136,7 @@ type ClientOptions struct {
 	IgnoreErrors []string
 	// If this flag is enabled, certain personally identifiable information (PII) is added by active integrations.
 	// By default, no such data is sent.
-	SendDefaultPii bool
+	SendDefaultPII bool
 	// BeforeSend is called before error events are sent to Sentry.
 	// Use it to mutate the event or return nil to discard the event.
 	// See EventProcessor if you need to mutate transactions.
