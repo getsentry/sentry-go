@@ -181,6 +181,9 @@ type ClientOptions struct {
 	// Maximum number of breadcrumbs.
 	MaxBreadcrumbs int
 	// Maximum number of spans.
+	//
+	// See https://develop.sentry.dev/sdk/envelopes/#size-limits for size limits
+	// applied during event ingestion. Events that exceed these limits might get dropped.
 	MaxSpans int
 	// An optional pointer to http.Client that will be used with a default
 	// HTTPTransport. Using your own client will make HTTPTransport, HTTPProxy,
