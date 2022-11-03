@@ -215,6 +215,18 @@ type Exception struct {
 	Stacktrace *Stacktrace `json:"stacktrace,omitempty"`
 }
 
+type SDKMetaDataKey = string
+
+const (
+	DynamicSamplingContextKey SDKMetaDataKey = "DynamicSamplingContext"
+)
+
+// SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
+// but which shouldn't get send to Sentry.
+type SDKMetaData = struct {
+	DynamicSamplingContextKey DynamicSamplingContext
+}
+
 // EventID is a hexadecimal string representing a unique uuid4 for an Event.
 // An EventID must be 32 characters long, lowercase and not have any dashes.
 type EventID string
@@ -251,6 +263,10 @@ type Event struct {
 	Type      string    `json:"type,omitempty"`
 	StartTime time.Time `json:"start_timestamp"`
 	Spans     []*Span   `json:"spans,omitempty"`
+
+	// The fields below are not part of the final JSON payload.
+
+	SDKMetaData SDKMetaData `json:"-"`
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,

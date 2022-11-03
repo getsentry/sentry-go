@@ -134,9 +134,11 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 
 func TestTransactionEnvelopeFromBody(t *testing.T) {
 	const eventID = "b81c5be4d31e48959103a1f878a1efcb"
+	event := NewEvent()
+	event.EventID = eventID
 	sentAt := time.Unix(0, 0).UTC()
 	body := json.RawMessage(`{"type":"transaction","fields":"omitted"}`)
-	b, err := transactionEnvelopeFromBody(eventID, sentAt, body)
+	b, err := transactionEnvelopeFromBody(event, sentAt, body)
 	if err != nil {
 		t.Fatal(err)
 	}

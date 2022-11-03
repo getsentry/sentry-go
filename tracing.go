@@ -34,6 +34,9 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	// ctx is the context where the span was started. Always non-nil.
 	ctx context.Context
 
+	// Dynamic Sampling context
+	dynamicSamplingContext DynamicSamplingContext
+
 	// parent refers to the immediate local parent span. A remote parent span is
 	// only referenced by setting ParentSpanID.
 	parent *Span
@@ -226,6 +229,14 @@ func (s *Span) ToSentryTrace() string {
 	return b.String()
 }
 
+func (s *Span) ToBaggage() string {
+	if dsc := s.dynamicSamplingContext; len(dsc.Entries) > 0 {
+		return dsc.String()
+	}
+
+	return ""
+}
+
 // sentryTracePattern matches either
 //
 //	TRACE_ID - SPAN_ID
@@ -255,6 +266,17 @@ func (s *Span) updateFromSentryTrace(header []byte) {
 		case '1':
 			s.Sampled = SampledTrue
 		}
+	}
+}
+
+func (s *Span) updateFromBaggage(header []byte) {
+	if s.isTransaction {
+		dsc, err := NewDynamicSamplingContext(header)
+		if err != nil {
+			return
+		}
+
+		s.dynamicSamplingContext = dsc
 	}
 }
 
@@ -337,6 +359,9 @@ func (s *Span) toEvent() *Event {
 		Timestamp: s.EndTime,
 		StartTime: s.StartTime,
 		Spans:     finished,
+		SDKMetaData: SDKMetaData{
+			DynamicSamplingContextKey: s.dynamicSamplingContext,
+		},
 	}
 }
 
@@ -580,9 +605,22 @@ func OpName(name string) SpanOption {
 //
 // ContinueFromRequest is an alias for:
 //
-//	ContinueFromTrace(r.Header.Get("sentry-trace"))
+//	ContinueFromHeaders(r.Header.Get("sentry-trace"), r.Header.Get("baggage"))
 func ContinueFromRequest(r *http.Request) SpanOption {
-	return ContinueFromTrace(r.Header.Get("sentry-trace"))
+	return ContinueFromHeaders(r.Header.Get("sentry-trace"), r.Header.Get("baggage"))
+}
+
+// ContinueFromHeaders returns a span option that updates the span to continue
+// an existing TraceID and propagates the Dynamic Sampling context.
+func ContinueFromHeaders(trace string, baggage string) SpanOption {
+	return func(s *Span) {
+		if trace != "" {
+			s.updateFromSentryTrace([]byte(trace))
+		}
+		if baggage != "" {
+			s.updateFromBaggage([]byte(baggage))
+		}
+	}
 }
 
 // ContinueFromTrace returns a span option that updates the span to continue
