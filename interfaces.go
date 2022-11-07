@@ -223,7 +223,7 @@ const (
 
 // SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
 // but which shouldn't get send to Sentry.
-type SDKMetaData = struct {
+type SDKMetaData struct {
 	DynamicSamplingContextKey DynamicSamplingContext
 }
 

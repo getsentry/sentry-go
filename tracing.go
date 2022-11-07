@@ -230,8 +230,8 @@ func (s *Span) ToSentryTrace() string {
 }
 
 func (s *Span) ToBaggage() string {
-	if dsc := s.dynamicSamplingContext; len(dsc.Entries) > 0 {
-		return dsc.String()
+	if len(s.dynamicSamplingContext.Entries) > 0 {
+		return s.dynamicSamplingContext.String()
 	}
 
 	return ""
@@ -612,7 +612,7 @@ func ContinueFromRequest(r *http.Request) SpanOption {
 
 // ContinueFromHeaders returns a span option that updates the span to continue
 // an existing TraceID and propagates the Dynamic Sampling context.
-func ContinueFromHeaders(trace string, baggage string) SpanOption {
+func ContinueFromHeaders(trace, baggage string) SpanOption {
 	return func(s *Span) {
 		if trace != "" {
 			s.updateFromSentryTrace([]byte(trace))
