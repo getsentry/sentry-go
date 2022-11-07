@@ -266,14 +266,14 @@ func TestCaptureEvent(t *testing.T) {
 		Platform:   "go",
 		Sdk: SdkInfo{
 			Name:         "sentry.go",
-			Version:      Version,
+			Version:      SDKVersion,
 			Integrations: []string{},
 			Packages: []SdkPackage{
 				{
 					// FIXME: name format doesn't follow spec in
 					// https://docs.sentry.io/development/sdk-dev/event-payloads/sdk/
 					Name:    "sentry-go",
-					Version: Version,
+					Version: SDKVersion,
 				},
 				// TODO: perhaps the list of packages is incomplete or there
 				// should not be any package at all. We may include references

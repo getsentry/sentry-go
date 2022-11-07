@@ -624,12 +624,12 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 
 	event.Platform = "go"
 	event.Sdk = SdkInfo{
-		Name:         "sentry.go",
-		Version:      Version,
+		Name:         SDKIdentifier,
+		Version:      SDKVersion,
 		Integrations: client.listIntegrations(),
 		Packages: []SdkPackage{{
 			Name:    "sentry-go",
-			Version: Version,
+			Version: SDKVersion,
 		}},
 	}
 
