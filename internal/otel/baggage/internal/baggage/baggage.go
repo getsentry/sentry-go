@@ -22,7 +22,7 @@ this need this package would not need to exist and the
 W3C baggage is handled.
 */
 
-// From from https://github.com/open-telemetry/opentelemetry-go/blob/main/internal/baggage/baggage.go
+// From https://github.com/open-telemetry/opentelemetry-go/blob/main/internal/baggage/baggage.go
 package baggage
 
 // List is the collection of baggage members. The W3C allows for duplicates,
