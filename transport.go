@@ -94,7 +94,7 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
-func transactionEnvelopeFromBody(event *Event, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
+func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 
@@ -106,18 +106,21 @@ func transactionEnvelopeFromBody(event *Event, sentAt time.Time, body json.RawMe
 	}
 
 	// Envelope header
-	//
-	// TODO
-	//  - add DSN
-	//  - add SDK map[string]string{"name": "sentry.go", "version": Version}
 	err := enc.Encode(struct {
 		EventID EventID           `json:"event_id"`
 		SentAt  time.Time         `json:"sent_at"`
+		Dsn     string            `json:"dsn"`
+		Sdk     map[string]string `json:"sdk"`
 		Trace   map[string]string `json:"trace,omitempty"`
 	}{
 		EventID: event.EventID,
 		SentAt:  sentAt,
 		Trace:   trace,
+		Dsn:     dsn.String(),
+		Sdk: map[string]string{
+			"name":    event.Sdk.Name,
+			"version": event.Sdk.Version,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -154,7 +157,7 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 		return nil, errors.New("event could not be marshaled")
 	}
 	if event.Type == transactionType {
-		b, err := transactionEnvelopeFromBody(event, time.Now(), body)
+		b, err := transactionEnvelopeFromBody(event, dsn, time.Now(), body)
 		if err != nil {
 			return nil, err
 		}
