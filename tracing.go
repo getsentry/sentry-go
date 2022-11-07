@@ -359,7 +359,7 @@ func (s *Span) toEvent() *Event {
 		Timestamp: s.EndTime,
 		StartTime: s.StartTime,
 		Spans:     finished,
-		SDKMetaData: SDKMetaData{
+		sdkMetaData: SDKMetaData{
 			DynamicSamplingContextKey: s.dynamicSamplingContext,
 		},
 	}

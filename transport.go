@@ -98,7 +98,7 @@ func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body 
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 
-	dsc := event.SDKMetaData.DynamicSamplingContextKey
+	dsc := event.sdkMetaData.DynamicSamplingContextKey
 	var trace = map[string]string{}
 
 	for k, v := range dsc.Entries {

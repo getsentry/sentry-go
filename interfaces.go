@@ -221,7 +221,7 @@ const (
 	DynamicSamplingContextKey SDKMetaDataKey = "DynamicSamplingContext"
 )
 
-// SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
+// sdkMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
 // but which shouldn't get send to Sentry.
 type SDKMetaData struct {
 	DynamicSamplingContextKey DynamicSamplingContext
@@ -266,7 +266,7 @@ type Event struct {
 
 	// The fields below are not part of the final JSON payload.
 
-	SDKMetaData SDKMetaData `json:"-"`
+	sdkMetaData SDKMetaData
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,

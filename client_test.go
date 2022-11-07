@@ -78,11 +78,15 @@ func TestCaptureMessageEmptyString(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
-		return &Event{
-			Exception: e.Exception,
-		}
-	})
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
+			return &Event{
+				Exception: e.Exception,
+			}
+		}),
+	}
+
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("(-want +got):\n%s", diff)
 	}
@@ -282,7 +286,7 @@ func TestCaptureEvent(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release")}
+	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "sdkMetaData")}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
@@ -309,11 +313,14 @@ func TestCaptureEventNil(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
-		return &Event{
-			Exception: e.Exception,
-		}
-	})
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
+			return &Event{
+				Exception: e.Exception,
+			}
+		}),
+	}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("(-want +got):\n%s", diff)
 	}
@@ -476,13 +483,17 @@ func TestRecover(t *testing.T) {
 			t.Fatalf("events = %s\ngot %d events, want 1", b, len(events))
 		}
 		got := events[0]
-		opts := cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
-			return &Event{
-				Message:   e.Message,
-				Exception: e.Exception,
-				Level:     e.Level,
-			}
-		})
+		opts := cmp.Options{
+			cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+			cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
+				return &Event{
+					Message:   e.Message,
+					Exception: e.Exception,
+					Level:     e.Level,
+				}
+			}),
+		}
+
 		if diff := cmp.Diff(want, got, opts); diff != "" {
 			t.Errorf("(-want +got):\n%s", diff)
 		}
