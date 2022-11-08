@@ -53,7 +53,7 @@ func TestNew(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if id := h.client.CaptureEvent(&sentry.Event{}, nil, nil); id == nil {
+		if id := h.hub.CaptureEvent(&sentry.Event{}); id == nil {
 			t.Error("CaptureEvent failed")
 		}
 		if !h.Flush(5 * time.Second) {

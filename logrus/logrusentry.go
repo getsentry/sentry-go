@@ -37,8 +37,6 @@ const (
 // It is not safe to configure the hook while logging is happening. Please
 // perform all configuration before using it.
 type Hook struct {
-	client   *sentry.Client
-	scope    *sentry.Scope
 	hub      *sentry.Hub
 	fallback FallbackFunc
 	keys     map[string]string
@@ -62,23 +60,15 @@ func New(levels []logrus.Level, opts sentry.ClientOptions) (*Hook, error) {
 func NewFromClient(levels []logrus.Level, client *sentry.Client) *Hook {
 	h := &Hook{
 		levels: levels,
-		client: client,
-		scope:  sentry.NewScope(),
+		hub:    sentry.NewHub(client, sentry.NewScope()),
 		keys:   make(map[string]string),
 	}
-	h.setHub()
 	return h
-}
-
-// setHub refreshes the hub, to be used any time client or scope changes.
-func (h *Hook) setHub() {
-	h.hub = sentry.NewHub(h.client, h.scope)
 }
 
 // AddTags adds tags to the hook's scope.
 func (h *Hook) AddTags(tags map[string]string) {
-	h.scope.SetTags(tags)
-	h.setHub()
+	h.hub.Scope().SetTags(tags)
 }
 
 // A FallbackFunc can be used to attempt to handle any errors in logging, before
@@ -229,5 +219,5 @@ func (h *Hook) exceptions(err error) []sentry.Exception {
 // blocking for at most the given timeout. It returns false if the timeout was
 // reached, in which case some events may not have been sent.
 func (h *Hook) Flush(timeout time.Duration) bool {
-	return h.client.Flush(timeout)
+	return h.hub.Client().Flush(timeout)
 }
