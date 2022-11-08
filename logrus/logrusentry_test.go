@@ -289,7 +289,6 @@ func Test_entry2event(t *testing.T) {
 					URL:     "http://example.com/",
 					Method:  http.MethodGet,
 					Headers: map[string]string{"Host": "example.com"},
-					Env:     map[string]string{"REMOTE_ADDR": "192.0.2.1", "REMOTE_PORT": "1234"},
 				},
 			},
 		},
