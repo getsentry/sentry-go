@@ -1,3 +1,6 @@
+// This file was vendored in unmodified from
+// https://github.com/open-telemetry/opentelemetry-go/blob/c21b6b6bb31a2f74edd06e262f1690f3f6ea3d5c/internal/baggage/baggage.go
+//
 // Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,8 +24,6 @@ this need this package would not need to exist and the
 `go.opentelemetry.io/otel/baggage` package would be the singular place where
 W3C baggage is handled.
 */
-
-// From https://github.com/open-telemetry/opentelemetry-go/blob/main/internal/baggage/baggage.go
 package baggage
 
 // List is the collection of baggage members. The W3C allows for duplicates,
