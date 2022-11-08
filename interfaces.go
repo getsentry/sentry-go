@@ -215,16 +215,10 @@ type Exception struct {
 	Stacktrace *Stacktrace `json:"stacktrace,omitempty"`
 }
 
-type SDKMetaDataKey = string
-
-const (
-	DynamicSamplingContextKey SDKMetaDataKey = "DynamicSamplingContext"
-)
-
-// sdkMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
+// SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
 // but which shouldn't get send to Sentry.
 type SDKMetaData struct {
-	DynamicSamplingContextKey DynamicSamplingContext
+	dsc DynamicSamplingContext
 }
 
 // EventID is a hexadecimal string representing a unique uuid4 for an Event.

@@ -360,7 +360,7 @@ func (s *Span) toEvent() *Event {
 		StartTime: s.StartTime,
 		Spans:     finished,
 		sdkMetaData: SDKMetaData{
-			DynamicSamplingContextKey: s.dynamicSamplingContext,
+			dsc: s.dynamicSamplingContext,
 		},
 	}
 }
