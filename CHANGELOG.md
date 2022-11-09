@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.15.0
 
 - fix: Scope values should not override Event values (#446)
 - feat: Extend User inteface by adding Data, Name and Segment (#483)
