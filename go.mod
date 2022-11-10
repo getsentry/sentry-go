@@ -9,6 +9,7 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/kataras/iris/v12 v12.2.0-beta5
 	github.com/labstack/echo/v4 v4.9.0
+	github.com/pierrre/errors v0.0.5
 	github.com/pingcap/errors v0.11.4
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0

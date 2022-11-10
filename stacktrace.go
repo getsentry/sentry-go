@@ -75,8 +75,14 @@ func ExtractStacktrace(err error) *Stacktrace {
 func extractReflectedStacktraceMethod(err error) reflect.Value {
 	errValue := reflect.ValueOf(err)
 
+	// https://github.com/pierrre/errors
+	methodStackFrames := errValue.MethodByName("StackPCs")
+	if methodStackFrames.IsValid() {
+		return methodStackFrames
+	}
+
 	// https://github.com/go-errors/errors
-	methodStackFrames := errValue.MethodByName("StackFrames")
+	methodStackFrames = errValue.MethodByName("StackFrames")
 	if methodStackFrames.IsValid() {
 		return methodStackFrames
 	}

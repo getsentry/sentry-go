@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	goErrors "github.com/go-errors/errors"
+	pierrreErrors "github.com/pierrre/errors"
 	pingcapErrors "github.com/pingcap/errors"
 	pkgErrors "github.com/pkg/errors"
 
@@ -49,6 +50,14 @@ func BlueGoErrorsRanger() error {
 	return goErrors.New("this is bad from goErrors")
 }
 
+func RedPierrreErrorsRanger() error {
+	return BluePierrreErrorsRanger()
+}
+
+func BluePierrreErrorsRanger() error {
+	return pierrreErrors.New("this is bad from pierrreErrors")
+}
+
 // nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestNewStacktrace(t *testing.T) {
 	tests := map[string]struct {
@@ -60,7 +69,7 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f1",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   18,
+					Lineno:   19,
 					InApp:    true,
 				},
 			},
@@ -70,13 +79,13 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f2",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   22,
+					Lineno:   23,
 					InApp:    true,
 				},
 				{
 					Function: "f1",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   18,
+					Lineno:   19,
 					InApp:    true,
 				},
 			},
@@ -91,7 +100,7 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f3",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   25,
+					Lineno:   26,
 					InApp:    true,
 				},
 			},
@@ -120,13 +129,13 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedPkgErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   29,
+					Lineno:   30,
 					InApp:    true,
 				},
 				{
 					Function: "BluePkgErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   33,
+					Lineno:   34,
 					InApp:    true,
 				},
 			},
@@ -137,13 +146,13 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedPingcapErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   37,
+					Lineno:   38,
 					InApp:    true,
 				},
 				{
 					Function: "BluePingcapErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   41,
+					Lineno:   42,
 					InApp:    true,
 				},
 			},
@@ -154,13 +163,30 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedGoErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   45,
+					Lineno:   46,
 					InApp:    true,
 				},
 				{
 					Function: "BlueGoErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   49,
+					Lineno:   50,
+					InApp:    true,
+				},
+			},
+		}},
+		// https://github.com/pierrre/errors
+		"pierrre/errors": {RedPierrreErrorsRanger, &sentry.Stacktrace{
+			Frames: []sentry.Frame{
+				{
+					Function: "RedPierrreErrorsRanger",
+					Module:   "github.com/getsentry/sentry-go_test",
+					Lineno:   54,
+					InApp:    true,
+				},
+				{
+					Function: "BluePierrreErrorsRanger",
+					Module:   "github.com/getsentry/sentry-go_test",
+					Lineno:   58,
 					InApp:    true,
 				},
 			},
@@ -260,6 +286,7 @@ func BenchmarkExtractStacktrace(b *testing.B) {
 		RedPkgErrorsRanger,
 		RedPingcapErrorsRanger,
 		RedGoErrorsRanger,
+		RedPierrreErrorsRanger,
 	}
 
 	for i := 0; i < b.N; i++ {
