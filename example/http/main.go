@@ -3,7 +3,7 @@
 //
 // Try it by running:
 //
-// 	go run main.go
+//	go run main.go
 //
 // To actually report events to Sentry, set the DSN either by editing the
 // appropriate line below or setting the environment variable SENTRY_DSN to
@@ -56,27 +56,26 @@ func run() error {
 		// Specify either TracesSampleRate or set a TracesSampler to
 		// enable tracing.
 		// TracesSampleRate: 0.5,
-		TracesSampler: sentry.TracesSamplerFunc(func(ctx sentry.SamplingContext) sentry.Sampled {
+		TracesSampler: sentry.TracesSampler(func(ctx sentry.SamplingContext) float64 {
 			// As an example, this custom sampler does not send some
 			// transactions to Sentry based on their name.
 			hub := sentry.GetHubFromContext(ctx.Span.Context())
 			name := hub.Scope().Transaction()
 			if name == "GET /favicon.ico" {
-				return sentry.SampledFalse
+				return 0.0
 			}
 			if strings.HasPrefix(name, "HEAD") {
-				return sentry.SampledFalse
+				return 0.0
 			}
-			// As an example, sample some transactions with a
-			// uniform rate.
+			// As an example, sample some transactions with a uniform rate.
 			if strings.HasPrefix(name, "POST") {
-				return sentry.UniformTracesSampler(0.2).Sample(ctx)
+				return 0.2
 			}
 			// Sample all other transactions for testing. On
 			// production, use TracesSampleRate with a rate adequate
 			// for your traffic, or use the SamplingContext to
 			// customize sampling per-transaction.
-			return sentry.SampledTrue
+			return 1.0
 		}),
 	})
 	if err != nil {

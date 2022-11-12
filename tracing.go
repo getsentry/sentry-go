@@ -81,6 +81,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		// defaults
 		Op:        operation,
 		StartTime: time.Now(),
+		Sampled:   SampledUndefined,
 
 		ctx:           context.WithValue(ctx, spanContextKey{}, &span),
 		parent:        parent,
@@ -276,38 +277,57 @@ func (s *Span) MarshalJSON() ([]byte, error) {
 }
 
 func (s *Span) sample() Sampled {
-	// https://develop.sentry.dev/sdk/unified-api/tracing/#sampling
+	// https://develop.sentry.dev/sdk/performance/#sampling
 	// #1 explicit sampling decision via StartSpan options.
 	if s.Sampled != SampledUndefined {
 		return s.Sampled
 	}
+
 	hub := hubFromContext(s.ctx)
 	var clientOptions ClientOptions
 	client := hub.Client()
 	if client != nil {
 		clientOptions = hub.Client().Options()
 	}
-	samplingContext := SamplingContext{Span: s, Parent: s.parent}
-	// Variant for non-transaction spans: they inherit the parent decision.
-	// TracesSampler only runs for the root span.
-	// Note: non-transaction should always have a parent, but we check both
-	// conditions anyway -- the first for semantic meaning, the second to
-	// avoid a nil pointer dereference.
-	if !s.isTransaction && s.parent != nil {
-		return s.parent.Sampled
-	}
+
 	// #2 use TracesSampler from ClientOptions.
 	sampler := clientOptions.TracesSampler
+	samplingContext := SamplingContext{Span: s, Parent: s.parent}
 	if sampler != nil {
-		return sampler.Sample(samplingContext)
+		sampleRate := sampler.Sample(samplingContext)
+		if sampleRate < 0.0 || sampleRate > 1.0 {
+			Logger.Printf("TracesSampler returned rate is out of range [0.0, 1.0]: %f", sampleRate)
+			return SampledFalse
+		}
+		if sampleRate == 0 {
+			return SampledFalse
+		}
+
+		if rng.Float64() < sampleRate {
+			return SampledTrue
+		}
+		return SampledFalse
 	}
 	// #3 inherit parent decision.
 	if s.parent != nil {
 		return s.parent.Sampled
 	}
-	// #4 uniform sampling using TracesSampleRate.
-	sampler = UniformTracesSampler(clientOptions.TracesSampleRate)
-	return sampler.Sample(samplingContext)
+
+	// #4 use TracesSampleRate from ClientOptions.
+	sampleRate := clientOptions.TracesSampleRate
+	if sampleRate < 0.0 || sampleRate > 1.0 {
+		Logger.Printf("TracesSamplerRate out of range [0.0, 1.0]: %f", sampleRate)
+		return SampledFalse
+	}
+	if sampleRate == 0.0 {
+		return SampledFalse
+	}
+
+	if rng.Float64() < sampleRate {
+		return SampledTrue
+	}
+
+	return SampledFalse
 }
 
 func (s *Span) toEvent() *Event {
@@ -530,9 +550,9 @@ type Sampled int8
 // The possible trace sampling decisions are: SampledFalse, SampledUndefined
 // (default) and SampledTrue.
 const (
-	SampledFalse Sampled = -1 + iota
-	SampledUndefined
-	SampledTrue
+	SampledFalse     Sampled = -1
+	SampledUndefined Sampled = 0
+	SampledTrue      Sampled = 1
 )
 
 func (s Sampled) String() string {
