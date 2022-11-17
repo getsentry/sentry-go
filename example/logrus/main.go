@@ -43,9 +43,16 @@ func main() {
 	defer sentryHook.Flush(5 * time.Second)
 	logger.AddHook(sentryHook)
 
+	// Flushes before calling os.Exit(1) when using logger.Fatal
+	// (else all defers are not called, and Sentry does not have time to send the event)
+	logrus.RegisterExitHandler(func() { sentryHook.Flush(5 * time.Second) })
+
 	// The following line is logged to STDERR, but not to Sentry
 	logger.Infof("Application has started")
 
 	// The following line is logged to STDERR and also sent to Sentry
 	logger.Errorf("oh no!")
+
+	// The following line is logged to STDERR, sent to Sentry, then the program abruptly stops
+	logger.Fatalf("can't continue...")
 }
