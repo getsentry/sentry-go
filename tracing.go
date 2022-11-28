@@ -138,6 +138,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		option(&span)
 	}
 
+	// TODO only sample transactions?
 	span.Sampled = span.sample()
 
 	if hasParent {
@@ -278,8 +279,9 @@ func (s *Span) MarshalJSON() ([]byte, error) {
 
 func (s *Span) sample() Sampled {
 	// https://develop.sentry.dev/sdk/performance/#sampling
-	// #1 explicit sampling decision via StartSpan options.
+	// #1 explicit sampling decision via StartSpan/StartTransaction options.
 	if s.Sampled != SampledUndefined {
+		Logger.Printf("Using explicit sampling decision from StartSpan/StartTransaction: %v", s.Sampled)
 		return s.Sampled
 	}
 
@@ -290,36 +292,46 @@ func (s *Span) sample() Sampled {
 		clientOptions = hub.Client().Options()
 	}
 
-	// #2 use TracesSampler from ClientOptions.
+	// #2 sampling is not enabled.
+	if !clientOptions.EnableTracing {
+		Logger.Printf("Dropping transaction: EnableTracing is set to %t", clientOptions.EnableTracing)
+		return SampledFalse
+	}
+
+	// #3 use TracesSampler from ClientOptions.
 	sampler := clientOptions.TracesSampler
 	samplingContext := SamplingContext{Span: s, Parent: s.parent}
 	if sampler != nil {
-		sampleRate := sampler.Sample(samplingContext)
-		if sampleRate < 0.0 || sampleRate > 1.0 {
-			Logger.Printf("TracesSampler returned rate is out of range [0.0, 1.0]: %f", sampleRate)
+		tracesSamplerSampleRate := sampler.Sample(samplingContext)
+		if tracesSamplerSampleRate < 0.0 || tracesSamplerSampleRate > 1.0 {
+			Logger.Printf("Dropping transaction: Returned TracesSampler rate is out of range [0.0, 1.0]: %f", tracesSamplerSampleRate)
 			return SampledFalse
 		}
-		if sampleRate == 0 {
+		if tracesSamplerSampleRate == 0 {
+			Logger.Printf("Dropping transaction: Returned TracesSampler rate is: %f", tracesSamplerSampleRate)
 			return SampledFalse
 		}
 
-		if rng.Float64() < sampleRate {
+		if rng.Float64() < tracesSamplerSampleRate {
 			return SampledTrue
 		}
+		Logger.Printf("Dropping transaction: TracesSampler returned rate: %f", tracesSamplerSampleRate)
 		return SampledFalse
 	}
-	// #3 inherit parent decision.
+	// #4 inherit parent decision.
 	if s.parent != nil {
+		Logger.Printf("Using sampling decision from parent: %v", s.parent.Sampled)
 		return s.parent.Sampled
 	}
 
-	// #4 use TracesSampleRate from ClientOptions.
+	// #5 use TracesSampleRate from ClientOptions.
 	sampleRate := clientOptions.TracesSampleRate
 	if sampleRate < 0.0 || sampleRate > 1.0 {
-		Logger.Printf("TracesSamplerRate out of range [0.0, 1.0]: %f", sampleRate)
+		Logger.Printf("Dropping transaction: TracesSamplerRate out of range [0.0, 1.0]: %f", sampleRate)
 		return SampledFalse
 	}
 	if sampleRate == 0.0 {
+		Logger.Printf("Dropping transaction: TracesSampleRate rate is: %f", sampleRate)
 		return SampledFalse
 	}
 

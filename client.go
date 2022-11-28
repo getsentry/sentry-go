@@ -3,7 +3,6 @@ package sentry
 import (
 	"context"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -126,6 +125,10 @@ type ClientOptions struct {
 	// 0.0 is treated as if it was 1.0. To drop all events, set the DSN to the
 	// empty string.
 	SampleRate float64
+	// Enable performance tracing.
+	// By default, this is disabled.
+	// Explicitly set sampling decisions when calling StartSpan/StartTransaction will overwrite this flag.
+	EnableTracing bool
 	// The sample rate for sampling traces in the range [0.0, 1.0].
 	TracesSampleRate float64
 	// Used to customize the sampling of traces, overrides TracesSampleRate.
@@ -235,10 +238,6 @@ type Client struct {
 // single goroutine) or hub methods (for concurrent programs, for example web
 // servers).
 func NewClient(options ClientOptions) (*Client, error) {
-	if options.TracesSampleRate != 0.0 && options.TracesSampler != nil {
-		return nil, errors.New("TracesSampleRate and TracesSampler are mutually exclusive")
-	}
-
 	if options.Debug {
 		debugWriter := options.DebugWriter
 		if debugWriter == nil {
@@ -323,7 +322,7 @@ func (client *Client) setupTransport() {
 			// accommodate more concurrent events.
 			// TODO(tracing): consider using separate buffers per
 			// event type.
-			if opts.TracesSampleRate != 0 || opts.TracesSampler != nil {
+			if opts.EnableTracing {
 				httpTransport.BufferSize = 1000
 			}
 			transport = httpTransport

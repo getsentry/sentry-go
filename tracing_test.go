@@ -168,6 +168,7 @@ func TestStartSpan(t *testing.T) {
 func TestStartChild(t *testing.T) {
 	transport := &TransportMock{}
 	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Transport:        transport,
 	})
@@ -468,7 +469,10 @@ func TestSpanFromContext(t *testing.T) {
 func TestDoubleSampling(t *testing.T) {
 	transport := &TransportMock{}
 	ctx := NewTestContext(ClientOptions{
+		// A SampleRate set to 0.0 will be transformed to 1.0,
+		// hence we're using math.SmallestNonzeroFloat64.
 		SampleRate:       math.SmallestNonzeroFloat64,
+		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Transport:        transport,
 	})
