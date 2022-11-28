@@ -53,9 +53,11 @@ func run() error {
 			log.Printf("BeforeSend event [%s]", event.EventID)
 			return event
 		},
-		// Specify either TracesSampleRate or set a TracesSampler to
-		// enable tracing.
-		// TracesSampleRate: 0.5,
+		// Enable tracing
+		EnableTracing: true,
+		// Specify either a TracesSampleRate...
+		TracesSampleRate: 1.0,
+		// ... or a TracesSampler
 		TracesSampler: sentry.TracesSampler(func(ctx sentry.SamplingContext) float64 {
 			// As an example, this custom sampler does not send some
 			// transactions to Sentry based on their name.
