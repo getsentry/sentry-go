@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgerr "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
@@ -399,7 +400,12 @@ func Test_entry2event(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := h.entryToEvent(tt.entry)
-			if d := cmp.Diff(tt.want, got); d != "" {
+			opts := cmp.Options{
+				cmpopts.IgnoreFields(sentry.Event{},
+					"sdkMetaData",
+				),
+			}
+			if d := cmp.Diff(tt.want, got, opts); d != "" {
 				t.Error(d)
 			}
 		})
