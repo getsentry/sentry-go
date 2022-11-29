@@ -278,13 +278,6 @@ func (s *Span) MarshalJSON() ([]byte, error) {
 }
 
 func (s *Span) sample() Sampled {
-	// https://develop.sentry.dev/sdk/performance/#sampling
-	// #1 explicit sampling decision via StartSpan/StartTransaction options.
-	if s.Sampled != SampledUndefined {
-		Logger.Printf("Using explicit sampling decision from StartSpan/StartTransaction: %v", s.Sampled)
-		return s.Sampled
-	}
-
 	hub := hubFromContext(s.ctx)
 	var clientOptions ClientOptions
 	client := hub.Client()
@@ -292,10 +285,17 @@ func (s *Span) sample() Sampled {
 		clientOptions = hub.Client().Options()
 	}
 
-	// #2 sampling is not enabled.
+	// https://develop.sentry.dev/sdk/performance/#sampling
+	// #1 tracing is not enabled.
 	if !clientOptions.EnableTracing {
 		Logger.Printf("Dropping transaction: EnableTracing is set to %t", clientOptions.EnableTracing)
 		return SampledFalse
+	}
+
+	// #2 explicit sampling decision via StartSpan/StartTransaction options.
+	if s.Sampled != SampledUndefined {
+		Logger.Printf("Using explicit sampling decision from StartSpan/StartTransaction: %v", s.Sampled)
+		return s.Sampled
 	}
 
 	// #3 use TracesSampler from ClientOptions.

@@ -91,7 +91,8 @@ func testMarshalJSONOmitEmptyParentSpanID(t *testing.T, v interface{}) {
 func TestStartSpan(t *testing.T) {
 	transport := &TransportMock{}
 	ctx := NewTestContext(ClientOptions{
-		Transport: transport,
+		EnableTracing: true,
+		Transport:     transport,
 	})
 	op := "test.op"
 	transaction := "Test Transaction"
@@ -230,7 +231,8 @@ func TestStartChild(t *testing.T) {
 func TestStartTransaction(t *testing.T) {
 	transport := &TransportMock{}
 	ctx := NewTestContext(ClientOptions{
-		Transport: transport,
+		EnableTracing: true,
+		Transport:     transport,
 	})
 	transactionName := "Test Transaction"
 	description := "A Description"
