@@ -1,5 +1,7 @@
 # Changelog
 
+- *[breaking]* ref: Unify TracesSampler (#444)
+
 ## 0.15.0
 
 - fix: Scope values should not override Event values (#446)
