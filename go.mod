@@ -11,6 +11,7 @@ require (
 	github.com/labstack/echo/v4 v4.9.0
 	github.com/pingcap/errors v0.11.4
 	github.com/pkg/errors v0.9.1
+	github.com/sirupsen/logrus v1.9.0
 	github.com/urfave/negroni v1.0.0
 	github.com/valyala/fasthttp v1.40.0
 	golang.org/x/sys v0.0.0-20220928140112-f11e5e49a4ec
@@ -59,7 +60,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
-	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/tdewolff/minify/v2 v2.12.4 // indirect
 	github.com/tdewolff/parse/v2 v2.6.4 // indirect
 	github.com/ugorji/go/codec v1.2.7 // indirect
