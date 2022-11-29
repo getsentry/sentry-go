@@ -298,6 +298,14 @@ func (s *Span) sample() Sampled {
 		return s.Sampled
 	}
 
+	// Variant for non-transaction spans: they inherit the parent decision.
+	// Note: non-transaction should always have a parent, but we check both
+	// conditions anyway -- the first for semantic meaning, the second to
+	// avoid a nil pointer dereference.
+	if !s.isTransaction && s.parent != nil {
+		return s.parent.Sampled
+	}
+
 	// #3 use TracesSampler from ClientOptions.
 	sampler := clientOptions.TracesSampler
 	samplingContext := SamplingContext{Span: s, Parent: s.parent}
