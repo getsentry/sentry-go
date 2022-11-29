@@ -496,3 +496,62 @@ func TestDoubleSampling(t *testing.T) {
 		t.Fatalf("got %v event, want %v", got, transactionType)
 	}
 }
+
+func TestSample(t *testing.T) {
+	var ctx context.Context
+	var span *Span
+
+	// tracing is disabled
+	ctx = NewTestContext(ClientOptions{
+		EnableTracing: false,
+	})
+	span = StartSpan(ctx, "op", TransactionName("name"))
+	if got := span.Sampled; got != SampledFalse {
+		t.Fatalf("got %s, want %s", got, SampledFalse)
+	}
+
+	// explicit sampling decision
+	ctx = NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 0.0,
+	})
+	span = StartSpan(ctx, "op", TransactionName("name"), func(s *Span) {
+		s.Sampled = SampledTrue
+	})
+	if got := span.Sampled; got != SampledTrue {
+		t.Fatalf("got %s, want %s", got, SampledTrue)
+	}
+
+	// traces sampler
+	ctx = NewTestContext(ClientOptions{
+		EnableTracing: true,
+		TracesSampler: func(ctx SamplingContext) float64 {
+			return 1.0
+		},
+	})
+	span = StartSpan(ctx, "op", TransactionName("name"))
+	if got := span.Sampled; got != SampledTrue {
+		t.Fatalf("got %s, want %s", got, SampledTrue)
+	}
+
+	// parent sampling decision
+	ctx = NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	})
+	span = StartSpan(ctx, "op", TransactionName("name"))
+	childSpan := span.StartChild("child")
+	if got := childSpan.Sampled; got != SampledTrue {
+		t.Fatalf("got %s, want %s", got, SampledTrue)
+	}
+
+	// traces sample rate
+	ctx = NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	})
+	span = StartSpan(ctx, "op", TransactionName("name"))
+	if got := span.Sampled; got != SampledTrue {
+		t.Fatalf("got %s, want %s", got, SampledTrue)
+	}
+}
