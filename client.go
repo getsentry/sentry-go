@@ -126,8 +126,6 @@ type ClientOptions struct {
 	// empty string.
 	SampleRate float64
 	// Enable performance tracing.
-	// By default, this is disabled.
-	// Explicitly set sampling decisions when calling StartSpan/StartTransaction will overwrite this flag.
 	EnableTracing bool
 	// The sample rate for sampling traces in the range [0.0, 1.0].
 	TracesSampleRate float64
