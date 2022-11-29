@@ -29,7 +29,7 @@ The only requirement is a Go compiler.
 
 We verify this package against the 3 most recent releases of Go. Those are the
 supported versions. The exact versions are defined in
-[`GitHub workflow`](.github/workflows/ci.yml).
+[`GitHub workflow`](.github/workflows/test.yml).
 
 In addition, we run tests against the current master branch of the Go toolchain,
 though support for this configuration is best-effort.
