@@ -81,6 +81,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		// defaults
 		Op:        operation,
 		StartTime: time.Now(),
+		Sampled:   SampledUndefined,
 
 		ctx:           context.WithValue(ctx, spanContextKey{}, &span),
 		parent:        parent,
@@ -137,6 +138,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		option(&span)
 	}
 
+	// TODO only sample transactions?
 	span.Sampled = span.sample()
 
 	if hasParent {
@@ -276,38 +278,76 @@ func (s *Span) MarshalJSON() ([]byte, error) {
 }
 
 func (s *Span) sample() Sampled {
-	// https://develop.sentry.dev/sdk/unified-api/tracing/#sampling
-	// #1 explicit sampling decision via StartSpan options.
-	if s.Sampled != SampledUndefined {
-		return s.Sampled
-	}
 	hub := hubFromContext(s.ctx)
 	var clientOptions ClientOptions
 	client := hub.Client()
 	if client != nil {
 		clientOptions = hub.Client().Options()
 	}
-	samplingContext := SamplingContext{Span: s, Parent: s.parent}
+
+	// https://develop.sentry.dev/sdk/performance/#sampling
+	// #1 tracing is not enabled.
+	if !clientOptions.EnableTracing {
+		Logger.Printf("Dropping transaction: EnableTracing is set to %t", clientOptions.EnableTracing)
+		return SampledFalse
+	}
+
+	// #2 explicit sampling decision via StartSpan/StartTransaction options.
+	if s.Sampled != SampledUndefined {
+		Logger.Printf("Using explicit sampling decision from StartSpan/StartTransaction: %v", s.Sampled)
+		return s.Sampled
+	}
+
 	// Variant for non-transaction spans: they inherit the parent decision.
-	// TracesSampler only runs for the root span.
 	// Note: non-transaction should always have a parent, but we check both
 	// conditions anyway -- the first for semantic meaning, the second to
 	// avoid a nil pointer dereference.
 	if !s.isTransaction && s.parent != nil {
 		return s.parent.Sampled
 	}
-	// #2 use TracesSampler from ClientOptions.
+
+	// #3 use TracesSampler from ClientOptions.
 	sampler := clientOptions.TracesSampler
+	samplingContext := SamplingContext{Span: s, Parent: s.parent}
 	if sampler != nil {
-		return sampler.Sample(samplingContext)
+		tracesSamplerSampleRate := sampler.Sample(samplingContext)
+		if tracesSamplerSampleRate < 0.0 || tracesSamplerSampleRate > 1.0 {
+			Logger.Printf("Dropping transaction: Returned TracesSampler rate is out of range [0.0, 1.0]: %f", tracesSamplerSampleRate)
+			return SampledFalse
+		}
+		if tracesSamplerSampleRate == 0 {
+			Logger.Printf("Dropping transaction: Returned TracesSampler rate is: %f", tracesSamplerSampleRate)
+			return SampledFalse
+		}
+
+		if rng.Float64() < tracesSamplerSampleRate {
+			return SampledTrue
+		}
+		Logger.Printf("Dropping transaction: TracesSampler returned rate: %f", tracesSamplerSampleRate)
+		return SampledFalse
 	}
-	// #3 inherit parent decision.
+	// #4 inherit parent decision.
 	if s.parent != nil {
+		Logger.Printf("Using sampling decision from parent: %v", s.parent.Sampled)
 		return s.parent.Sampled
 	}
-	// #4 uniform sampling using TracesSampleRate.
-	sampler = UniformTracesSampler(clientOptions.TracesSampleRate)
-	return sampler.Sample(samplingContext)
+
+	// #5 use TracesSampleRate from ClientOptions.
+	sampleRate := clientOptions.TracesSampleRate
+	if sampleRate < 0.0 || sampleRate > 1.0 {
+		Logger.Printf("Dropping transaction: TracesSamplerRate out of range [0.0, 1.0]: %f", sampleRate)
+		return SampledFalse
+	}
+	if sampleRate == 0.0 {
+		Logger.Printf("Dropping transaction: TracesSampleRate rate is: %f", sampleRate)
+		return SampledFalse
+	}
+
+	if rng.Float64() < sampleRate {
+		return SampledTrue
+	}
+
+	return SampledFalse
 }
 
 func (s *Span) toEvent() *Event {
@@ -530,9 +570,9 @@ type Sampled int8
 // The possible trace sampling decisions are: SampledFalse, SampledUndefined
 // (default) and SampledTrue.
 const (
-	SampledFalse Sampled = -1 + iota
-	SampledUndefined
-	SampledTrue
+	SampledFalse     Sampled = -1
+	SampledUndefined Sampled = 0
+	SampledTrue      Sampled = 1
 )
 
 func (s Sampled) String() string {
