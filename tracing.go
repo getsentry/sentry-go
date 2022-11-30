@@ -403,10 +403,7 @@ func (s *Span) toEvent() *Event {
 	// Create and attach a DynamicSamplingContext to the transaction.
 	// If the DynamicSamplingContext is not frozen at this point, we can assume being head of trace.
 	if !s.dynamicSamplingContext.IsFrozen() {
-		dsc, err := DynamicSamplingContextFromTransaction(s)
-		if err == nil {
-			s.dynamicSamplingContext = dsc
-		}
+		s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(s)
 	}
 
 	return &Event{

@@ -110,10 +110,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		got, err := DynamicSamplingContextFromTransaction(tc.input)
-		if err != nil {
-			t.Fatal(err)
-		}
+		got := DynamicSamplingContextFromTransaction(tc.input)
 		assertEqual(t, got, tc.want)
 	}
 }

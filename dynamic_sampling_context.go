@@ -37,12 +37,13 @@ func DynamicSamplingContextFromHeader(header []byte) (DynamicSamplingContext, er
 	}, nil
 }
 
-func DynamicSamplingContextFromTransaction(span *Span) (DynamicSamplingContext, error) {
+func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	entries := map[string]string{}
 
 	hub := hubFromContext(span.Context())
 	scope := hub.Scope()
-	options := hub.Client().Options()
+	client := hub.Client()
+	options := client.Options()
 
 	if traceID := span.TraceID.String(); traceID != "" {
 		entries["trace_id"] = traceID
@@ -51,7 +52,7 @@ func DynamicSamplingContextFromTransaction(span *Span) (DynamicSamplingContext, 
 		entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
 	}
 
-	if dsn := hub.Client().dsn; dsn != nil {
+	if dsn := client.dsn; dsn != nil {
 		if publicKey := dsn.publicKey; publicKey != "" {
 			entries["public_key"] = publicKey
 		}
@@ -77,7 +78,7 @@ func DynamicSamplingContextFromTransaction(span *Span) (DynamicSamplingContext, 
 	return DynamicSamplingContext{
 		Entries: entries,
 		Frozen:  true,
-	}, nil
+	}
 }
 
 func (d DynamicSamplingContext) HasEntries() bool {
