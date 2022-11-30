@@ -356,6 +356,12 @@ func (s *Span) sample() Sampled {
 	// #4 inherit parent decision.
 	if s.parent != nil {
 		Logger.Printf("Using sampling decision from parent: %v", s.parent.Sampled)
+		switch s.parent.Sampled {
+		case SampledTrue:
+			s.sampleRate = 1.0
+		case SampledFalse:
+			s.sampleRate = 0.0
+		}
 		return s.parent.Sampled
 	}
 
