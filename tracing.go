@@ -91,6 +91,9 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 	if hasParent {
 		span.TraceID = parent.TraceID
 	} else {
+		// Only set the Source if this is a transaction
+		span.Source = SourceCustom
+
 		// Implementation note:
 		//
 		// While math/rand is ~2x faster than crypto/rand (exact
@@ -417,9 +420,11 @@ func (s *Span) toEvent() *Event {
 		Timestamp: s.EndTime,
 		StartTime: s.StartTime,
 		Spans:     finished,
+		TransactionInfo: &TransactionInfo{
+			Source: s.Source,
+		},
 		sdkMetaData: SDKMetaData{
-			dsc:               s.dynamicSamplingContext,
-			transactionSource: s.Source,
+			dsc: s.dynamicSamplingContext,
 		},
 	}
 }
