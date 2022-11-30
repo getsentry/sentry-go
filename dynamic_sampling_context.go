@@ -65,8 +65,8 @@ func DynamicSamplingContextFromTransaction(span *Span) (DynamicSamplingContext, 
 
 	// Only include the transaction name if it's of good quality (not empty and not SourceURL)
 	if span.Source != "" && span.Source != SourceURL {
-		if transactioName := scope.Transaction(); transactioName != "" {
-			entries["transaction"] = transactioName
+		if transactionName := scope.Transaction(); transactionName != "" {
+			entries["transaction"] = transactionName
 		}
 	}
 
