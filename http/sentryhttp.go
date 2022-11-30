@@ -72,7 +72,7 @@ func (h *Handler) Handle(handler http.Handler) http.Handler {
 // literal.
 //
 //	http.Handle(pattern, h.HandleFunc(func (w http.ResponseWriter, r *http.Request) {
-//		// handler code here
+//	    // handler code here
 //	}))
 func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 	return h.handle(handler)
