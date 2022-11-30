@@ -218,7 +218,8 @@ type Exception struct {
 // SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
 // but which shouldn't get send to Sentry.
 type SDKMetaData struct {
-	dsc DynamicSamplingContext
+	dsc               DynamicSamplingContext
+	transactionSource TransactionSource
 }
 
 // EventID is a hexadecimal string representing a unique uuid4 for an Event.
