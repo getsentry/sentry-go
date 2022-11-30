@@ -29,7 +29,7 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	EndTime      time.Time              `json:"timestamp"`
 	Data         map[string]interface{} `json:"data,omitempty"`
 	Sampled      Sampled                `json:"-"`
-	Source       Source                 `json:"-"`
+	Source       TransactionSource      `json:"-"`
 
 	// sample rate the span was sampled with.
 	sampleRate float64
@@ -418,8 +418,8 @@ func (s *Span) toEvent() *Event {
 		StartTime: s.StartTime,
 		Spans:     finished,
 		sdkMetaData: SDKMetaData{
-			dsc:    s.dynamicSamplingContext,
-			source: s.Source,
+			dsc:               s.dynamicSamplingContext,
+			transactionSource: s.Source,
 		},
 	}
 }
@@ -479,15 +479,15 @@ var (
 )
 
 // Contains information about how the name of the transaction was determined.
-type Source string
+type TransactionSource string
 
 const (
-	SourceCustom    Source = "custom"
-	SourceURL       Source = "url"
-	SourceRoute     Source = "route"
-	SourceView      Source = "view"
-	SourceComponent Source = "component"
-	SourceTask      Source = "task"
+	SourceCustom    TransactionSource = "custom"
+	SourceURL       TransactionSource = "url"
+	SourceRoute     TransactionSource = "route"
+	SourceView      TransactionSource = "view"
+	SourceComponent TransactionSource = "component"
+	SourceTask      TransactionSource = "task"
 )
 
 // SpanStatus is the status of a span.
@@ -671,7 +671,7 @@ func OpName(name string) SpanOption {
 }
 
 // TransctionSource sets the source of the transaction name.
-func TransctionSource(source Source) SpanOption {
+func TransctionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
 	}
