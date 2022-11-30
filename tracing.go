@@ -28,25 +28,23 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	StartTime    time.Time              `json:"start_timestamp"`
 	EndTime      time.Time              `json:"timestamp"`
 	Data         map[string]interface{} `json:"data,omitempty"`
+	Sampled      Sampled                `json:"-"`
+	Source       Source                 `json:"-"`
 
-	Sampled Sampled `json:"-"`
-
+	// sample rate the span was sampled with.
+	sampleRate float64
 	// ctx is the context where the span was started. Always non-nil.
 	ctx context.Context
-
 	// Dynamic Sampling context
 	dynamicSamplingContext DynamicSamplingContext
-
 	// parent refers to the immediate local parent span. A remote parent span is
 	// only referenced by setting ParentSpanID.
 	parent *Span
-
 	// isTransaction is true only for the root span of a local span tree. The
 	// root span is the first span started in a context. Note that a local root
 	// span may have a remote parent belonging to the same trace, therefore
 	// isTransaction depends on ctx and not on parent.
 	isTransaction bool
-
 	// recorder stores all spans in a transaction. Guaranteed to be non-nil.
 	recorder *spanRecorder
 }
@@ -141,7 +139,6 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		option(&span)
 	}
 
-	// TODO only sample transactions?
 	span.Sampled = span.sample()
 
 	if hasParent {
@@ -273,7 +270,7 @@ func (s *Span) updateFromSentryTrace(header []byte) {
 
 func (s *Span) updateFromBaggage(header []byte) {
 	if s.isTransaction {
-		dsc, err := NewDynamicSamplingContext(header)
+		dsc, err := DynamicSamplingContextFromHeader(header)
 		if err != nil {
 			return
 		}
@@ -311,12 +308,19 @@ func (s *Span) sample() Sampled {
 	// #1 tracing is not enabled.
 	if !clientOptions.EnableTracing {
 		Logger.Printf("Dropping transaction: EnableTracing is set to %t", clientOptions.EnableTracing)
+		s.sampleRate = 0.0
 		return SampledFalse
 	}
 
 	// #2 explicit sampling decision via StartSpan/StartTransaction options.
 	if s.Sampled != SampledUndefined {
 		Logger.Printf("Using explicit sampling decision from StartSpan/StartTransaction: %v", s.Sampled)
+		switch s.Sampled {
+		case SampledTrue:
+			s.sampleRate = 1.0
+		case SampledFalse:
+			s.sampleRate = 0.0
+		}
 		return s.Sampled
 	}
 
@@ -333,6 +337,7 @@ func (s *Span) sample() Sampled {
 	samplingContext := SamplingContext{Span: s, Parent: s.parent}
 	if sampler != nil {
 		tracesSamplerSampleRate := sampler.Sample(samplingContext)
+		s.sampleRate = tracesSamplerSampleRate
 		if tracesSamplerSampleRate < 0.0 || tracesSamplerSampleRate > 1.0 {
 			Logger.Printf("Dropping transaction: Returned TracesSampler rate is out of range [0.0, 1.0]: %f", tracesSamplerSampleRate)
 			return SampledFalse
@@ -356,6 +361,7 @@ func (s *Span) sample() Sampled {
 
 	// #5 use TracesSampleRate from ClientOptions.
 	sampleRate := clientOptions.TracesSampleRate
+	s.sampleRate = sampleRate
 	if sampleRate < 0.0 || sampleRate > 1.0 {
 		Logger.Printf("Dropping transaction: TracesSamplerRate out of range [0.0, 1.0]: %f", sampleRate)
 		return SampledFalse
@@ -388,6 +394,15 @@ func (s *Span) toEvent() *Event {
 		finished = append(finished, child)
 	}
 
+	// Create and attach a DynamicSamplingContext to the transaction.
+	// If the DynamicSamplingContext is not frozen at this point, we can assume being head of trace.
+	if !s.dynamicSamplingContext.IsFrozen() {
+		dsc, err := DynamicSamplingContextFromTransaction(s)
+		if err == nil {
+			s.dynamicSamplingContext = dsc
+		}
+	}
+
 	return &Event{
 		Type:        transactionType,
 		Transaction: hub.Scope().Transaction(),
@@ -400,7 +415,8 @@ func (s *Span) toEvent() *Event {
 		StartTime: s.StartTime,
 		Spans:     finished,
 		sdkMetaData: SDKMetaData{
-			dsc: s.dynamicSamplingContext,
+			dsc:    s.dynamicSamplingContext,
+			source: s.Source,
 		},
 	}
 }
@@ -457,6 +473,18 @@ func (id SpanID) MarshalText() ([]byte, error) {
 var (
 	zeroTraceID TraceID
 	zeroSpanID  SpanID
+)
+
+// Contains information about how the name of the transaction was determined.
+type Source string
+
+const (
+	SourceCustom    Source = "custom"
+	SourceURL       Source = "url"
+	SourceRoute     Source = "route"
+	SourceView      Source = "view"
+	SourceComponent Source = "component"
+	SourceTask      Source = "task"
 )
 
 // SpanStatus is the status of a span.
@@ -639,13 +667,20 @@ func OpName(name string) SpanOption {
 	}
 }
 
+// TransctionSource sets the source of the transaction name.
+func TransctionSource(source Source) SpanOption {
+	return func(s *Span) {
+		s.Source = source
+	}
+}
+
 // ContinueFromRequest returns a span option that updates the span to continue
 // an existing trace. If it cannot detect an existing trace in the request, the
 // span will be left unchanged.
 //
 // ContinueFromRequest is an alias for:
 //
-//	ContinueFromHeaders(r.Header.Get("sentry-trace"), r.Header.Get("baggage"))
+// ContinueFromHeaders(r.Header.Get("sentry-trace"), r.Header.Get("baggage")).
 func ContinueFromRequest(r *http.Request) SpanOption {
 	return ContinueFromHeaders(r.Header.Get("sentry-trace"), r.Header.Get("baggage"))
 }
