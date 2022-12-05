@@ -218,8 +218,12 @@ type Exception struct {
 // SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
 // but which shouldn't get send to Sentry.
 type SDKMetaData struct {
-	dsc               DynamicSamplingContext
-	transactionSource TransactionSource
+	dsc DynamicSamplingContext
+}
+
+// Contains information about how the name of the transaction was determined.
+type TransactionInfo struct {
+	Source TransactionSource `json:"source,omitempty"`
 }
 
 // EventID is a hexadecimal string representing a unique uuid4 for an Event.
@@ -255,9 +259,10 @@ type Event struct {
 
 	// The fields below are only relevant for transactions.
 
-	Type      string    `json:"type,omitempty"`
-	StartTime time.Time `json:"start_timestamp"`
-	Spans     []*Span   `json:"spans,omitempty"`
+	Type            string           `json:"type,omitempty"`
+	StartTime       time.Time        `json:"start_timestamp"`
+	Spans           []*Span          `json:"spans,omitempty"`
+	TransactionInfo *TransactionInfo `json:"transaction_info,omitempty"`
 
 	// The fields below are not part of the final JSON payload.
 
@@ -303,9 +308,10 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 		// be sent for transactions. They shadow the respective fields in Event
 		// and are meant to remain nil, triggering the omitempty behavior.
 
-		Type      json.RawMessage `json:"type,omitempty"`
-		StartTime json.RawMessage `json:"start_timestamp,omitempty"`
-		Spans     json.RawMessage `json:"spans,omitempty"`
+		Type            json.RawMessage `json:"type,omitempty"`
+		StartTime       json.RawMessage `json:"start_timestamp,omitempty"`
+		Spans           json.RawMessage `json:"spans,omitempty"`
+		TransactionInfo json.RawMessage `json:"transaction_info,omitempty"`
 	}
 
 	x := errorEvent{event: (*event)(e)}

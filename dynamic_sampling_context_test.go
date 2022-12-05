@@ -93,7 +93,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 					Dsn:              "http://public@example.com/sentry/1",
 					Release:          "1.0.0",
 				})
-				txn := StartTransaction(ctx, "name")
+				txn := StartTransaction(ctx, "name", TransctionSource(SourceURL))
 				txn.TraceID = TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")
 				return txn
 			}(),

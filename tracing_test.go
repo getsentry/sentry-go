@@ -148,6 +148,9 @@ func TestStartSpan(t *testing.T) {
 		Extra:     span.Data,
 		Timestamp: endTime,
 		StartTime: startTime,
+		TransactionInfo: &TransactionInfo{
+			Source: span.Source,
+		},
 	}
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Event{},
@@ -208,6 +211,9 @@ func TestStartChild(t *testing.T) {
 				Op:           child.Op,
 				Sampled:      SampledTrue,
 			},
+		},
+		TransactionInfo: &TransactionInfo{
+			Source: span.Source,
 		},
 	}
 	opts := cmp.Options{
@@ -285,6 +291,9 @@ func TestStartTransaction(t *testing.T) {
 		Extra:     transaction.Data,
 		Timestamp: endTime,
 		StartTime: startTime,
+		TransactionInfo: &TransactionInfo{
+			Source: transaction.Source,
+		},
 	}
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Event{},
