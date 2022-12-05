@@ -71,9 +71,9 @@ func (h *Handler) Handle(handler http.Handler) http.Handler {
 // where that is convenient. In particular, use it to wrap a handler function
 // literal.
 //
-//  http.Handle(pattern, h.HandleFunc(func (w http.ResponseWriter, r *http.Request) {
-//      // handler code here
-//  }))
+//	http.Handle(pattern, h.HandleFunc(func (w http.ResponseWriter, r *http.Request) {
+//	    // handler code here
+//	}))
 func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 	return h.handle(handler)
 }
@@ -89,6 +89,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		options := []sentry.SpanOption{
 			sentry.OpName("http.server"),
 			sentry.ContinueFromRequest(r),
+			sentry.TransctionSource(sentry.SourceURL),
 		}
 		// We don't mind getting an existing transaction back so we don't need to
 		// check if it is.
