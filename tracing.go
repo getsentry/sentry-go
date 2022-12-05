@@ -229,11 +229,7 @@ func (s *Span) ToSentryTrace() string {
 }
 
 func (s *Span) ToBaggage() string {
-	if s.dynamicSamplingContext.HasEntries() {
-		return s.dynamicSamplingContext.String()
-	}
-
-	return ""
+	return s.dynamicSamplingContext.String()
 }
 
 // sentryTracePattern matches either
