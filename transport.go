@@ -98,7 +98,7 @@ func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body 
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 
-	// Construct the trace envolope header
+	// Construct the trace envelope header
 	var trace = map[string]string{}
 	if dsc := event.sdkMetaData.dsc; dsc.HasEntries() {
 		for k, v := range dsc.Entries {
