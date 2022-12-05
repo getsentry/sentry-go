@@ -759,11 +759,7 @@ func StartTransaction(ctx context.Context, name string, options ...SpanOption) *
 	if exists {
 		return currentTransaction
 	}
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub().Clone()
-		ctx = SetHubOnContext(ctx, hub)
-	}
+
 	options = append(options, TransactionName(name))
 	return StartSpan(
 		ctx,
