@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -127,4 +128,23 @@ func TestHasEntries(t *testing.T) {
 		},
 	}
 	assertEqual(t, dsc.HasEntries(), true)
+}
+
+func TestString(t *testing.T) {
+	var dsc DynamicSamplingContext
+
+	dsc = DynamicSamplingContext{}
+	assertEqual(t, dsc.String(), "")
+
+	dsc = DynamicSamplingContext{
+		Frozen: true,
+		Entries: map[string]string{
+			"trace_id":    "d49d9bf66f13450b81f65bc51cf49c03",
+			"public_key":  "public",
+			"sample_rate": "1",
+		},
+	}
+	assertEqual(t, strings.Contains(dsc.String(), "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03"), true)
+	assertEqual(t, strings.Contains(dsc.String(), "sentry-public_key=public"), true)
+	assertEqual(t, strings.Contains(dsc.String(), "sentry-sample_rate=1"), true)
 }

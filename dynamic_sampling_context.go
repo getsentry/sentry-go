@@ -90,6 +90,21 @@ func (d DynamicSamplingContext) IsFrozen() bool {
 }
 
 func (d DynamicSamplingContext) String() string {
-	// TODO implement me
+	members := []baggage.Member{}
+	for k, entry := range d.Entries {
+		member, err := baggage.NewMember(sentryPrefix+k, entry)
+		if err != nil {
+			continue
+		}
+		members = append(members, member)
+	}
+	if len(members) > 0 {
+		baggage, err := baggage.New(members...)
+		if err != nil {
+			return ""
+		}
+		return baggage.String()
+	}
+
 	return ""
 }
