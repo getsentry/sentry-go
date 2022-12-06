@@ -3,7 +3,7 @@
 ## 0.16.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.16.0.
-Due to ongoing work towards a stable API for `v1.0.0`, we sadly had to include two breaking changes in this release.
+Due to ongoing work towards a stable API for `v1.0.0`, we sadly had to include **two breaking changes** in this release.
 
 ### Breaking Changes
 
