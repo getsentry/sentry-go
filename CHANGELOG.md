@@ -42,7 +42,7 @@ Due to ongoing work towards a stable API for `v1.0.0`, we sadly had to include t
 - Send errors logged with [Logrus](https://github.com/sirupsen/logrus) to Sentry.
     - Have a look at our [logrus examples](https://github.com/getsentry/sentry-go/blob/master/example/logrus/main.go) on how to use the integration.
 - Add support for Dynamic Sampling [#491](https://github.com/getsentry/sentry-go/pull/491)
-    - You can read more about Dynamic Sampling in our [prodcut docs](https://docs.sentry.io/product/data-management-settings/dynamic-sampling/).
+    - You can read more about Dynamic Sampling in our [product docs](https://docs.sentry.io/product/data-management-settings/dynamic-sampling/).
 - Add detailed logging about the reason transactions are being dropped.
     - You can enable SDK logging via `sentry.ClientOptions.Debug: true`.
 
