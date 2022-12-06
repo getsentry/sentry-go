@@ -699,6 +699,13 @@ func ContinueFromHeaders(trace, baggage string) SpanOption {
 		if baggage != "" {
 			s.updateFromBaggage([]byte(baggage))
 		}
+		// In case a sentry-trace header is present but no baggage header,
+		// create an empty, frozen DynamicSamplingContext.
+		if trace != "" && baggage == "" {
+			s.dynamicSamplingContext = DynamicSamplingContext{
+				Frozen: true,
+			}
+		}
 	}
 }
 
