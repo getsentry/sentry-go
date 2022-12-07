@@ -53,6 +53,6 @@ func main() {
 	// The following line is logged to STDERR and also sent to Sentry
 	logger.Errorf("oh no!")
 
-	// The following line is logged to STDERR, sent to Sentry, then the program abruptly stops
+	// Log a fatal error to STDERR, which sends an event to Sentry and terminates the application
 	logger.Fatalf("can't continue...")
 }
