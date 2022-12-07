@@ -50,7 +50,7 @@ func main() {
 	// The following line is logged to STDERR, but not to Sentry
 	logger.Infof("Application has started")
 
-	// The following line is logged to STDERR and also sent to Sentry
+	// Log an error to STDERR which is also send to Sentry
 	logger.Errorf("oh no!")
 
 	// Log a fatal error to STDERR, which sends an event to Sentry and terminates the application
