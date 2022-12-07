@@ -91,7 +91,8 @@ func testMarshalJSONOmitEmptyParentSpanID(t *testing.T, v interface{}) {
 func TestStartSpan(t *testing.T) {
 	transport := &TransportMock{}
 	ctx := NewTestContext(ClientOptions{
-		Transport: transport,
+		EnableTracing: true,
+		Transport:     transport,
 	})
 	op := "test.op"
 	transaction := "Test Transaction"
@@ -147,11 +148,15 @@ func TestStartSpan(t *testing.T) {
 		Extra:     span.Data,
 		Timestamp: endTime,
 		StartTime: startTime,
+		TransactionInfo: &TransactionInfo{
+			Source: span.Source,
+		},
 	}
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
+			"sdkMetaData",
 		),
 		cmpopts.EquateEmpty(),
 	}
@@ -168,6 +173,7 @@ func TestStartSpan(t *testing.T) {
 func TestStartChild(t *testing.T) {
 	transport := &TransportMock{}
 	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Transport:        transport,
 	})
@@ -206,11 +212,15 @@ func TestStartChild(t *testing.T) {
 				Sampled:      SampledTrue,
 			},
 		},
+		TransactionInfo: &TransactionInfo{
+			Source: span.Source,
+		},
 	}
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Event{},
 			"EventID", "Level", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
+			"sdkMetaData",
 		),
 		cmpopts.IgnoreMapEntries(func(k string, v interface{}) bool {
 			return k != "trace"
@@ -229,7 +239,8 @@ func TestStartChild(t *testing.T) {
 func TestStartTransaction(t *testing.T) {
 	transport := &TransportMock{}
 	ctx := NewTestContext(ClientOptions{
-		Transport: transport,
+		EnableTracing: true,
+		Transport:     transport,
 	})
 	transactionName := "Test Transaction"
 	description := "A Description"
@@ -280,11 +291,15 @@ func TestStartTransaction(t *testing.T) {
 		Extra:     transaction.Data,
 		Timestamp: endTime,
 		StartTime: startTime,
+		TransactionInfo: &TransactionInfo{
+			Source: transaction.Source,
+		},
 	}
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
+			"sdkMetaData",
 		),
 		cmpopts.EquateEmpty(),
 	}
@@ -468,7 +483,10 @@ func TestSpanFromContext(t *testing.T) {
 func TestDoubleSampling(t *testing.T) {
 	transport := &TransportMock{}
 	ctx := NewTestContext(ClientOptions{
+		// A SampleRate set to 0.0 will be transformed to 1.0,
+		// hence we're using math.SmallestNonzeroFloat64.
 		SampleRate:       math.SmallestNonzeroFloat64,
+		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Transport:        transport,
 	})
@@ -488,5 +506,64 @@ func TestDoubleSampling(t *testing.T) {
 	}
 	if got := transport.Events()[0].Type; got != transactionType {
 		t.Fatalf("got %v event, want %v", got, transactionType)
+	}
+}
+
+func TestSample(t *testing.T) {
+	var ctx context.Context
+	var span *Span
+
+	// tracing is disabled
+	ctx = NewTestContext(ClientOptions{
+		EnableTracing: false,
+	})
+	span = StartSpan(ctx, "op", TransactionName("name"))
+	if got := span.Sampled; got != SampledFalse {
+		t.Fatalf("got %s, want %s", got, SampledFalse)
+	}
+
+	// explicit sampling decision
+	ctx = NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 0.0,
+	})
+	span = StartSpan(ctx, "op", TransactionName("name"), func(s *Span) {
+		s.Sampled = SampledTrue
+	})
+	if got := span.Sampled; got != SampledTrue {
+		t.Fatalf("got %s, want %s", got, SampledTrue)
+	}
+
+	// traces sampler
+	ctx = NewTestContext(ClientOptions{
+		EnableTracing: true,
+		TracesSampler: func(ctx SamplingContext) float64 {
+			return 1.0
+		},
+	})
+	span = StartSpan(ctx, "op", TransactionName("name"))
+	if got := span.Sampled; got != SampledTrue {
+		t.Fatalf("got %s, want %s", got, SampledTrue)
+	}
+
+	// parent sampling decision
+	ctx = NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	})
+	span = StartSpan(ctx, "op", TransactionName("name"))
+	childSpan := span.StartChild("child")
+	if got := childSpan.Sampled; got != SampledTrue {
+		t.Fatalf("got %s, want %s", got, SampledTrue)
+	}
+
+	// traces sample rate
+	ctx = NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	})
+	span = StartSpan(ctx, "op", TransactionName("name"))
+	if got := span.Sampled; got != SampledTrue {
+		t.Fatalf("got %s, want %s", got, SampledTrue)
 	}
 }
