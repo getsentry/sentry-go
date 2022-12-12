@@ -42,7 +42,7 @@ though support for this configuration is best-effort.
 $ go get github.com/getsentry/sentry-go@latest
 ```
 
-Check out the [list of released versions](https://pkg.go.dev/github.com/getsentry/sentry-go?tab=versions).
+Check out the [list of released versions](https://github.com/getsentry/sentry-go/releases).
 
 ## Configuration
 
