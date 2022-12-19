@@ -431,11 +431,10 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 	)
 	transaction.Finish()
 
-	last_event := transport.lastEvent
-
-	assertEqual(t, last_event.Transaction, "Bar")
+	lastEvent := transport.lastEvent
+	assertEqual(t, lastEvent.Transaction, "Bar")
 	// Make sure it's the same span
-	assertEqual(t, last_event.Contexts["trace"]["span_id"], transaction.SpanID)
+	assertEqual(t, lastEvent.Contexts["trace"]["span_id"], transaction.SpanID)
 }
 
 func TestSampleRate(t *testing.T) {
