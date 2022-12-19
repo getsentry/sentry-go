@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+* Add `beforeSendTransaction` hook ([#517](https://github.com/getsentry/sentry-go/pull/517))
+
 ## 0.16.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.16.0.
@@ -18,10 +24,10 @@ Due to ongoing work towards a stable API for `v1.0.0`, we sadly had to include *
       ```
 - Unify TracesSampler [#498](https://github.com/getsentry/sentry-go/pull/498)
     - `TracesSampler` was changed to a callback that must return a `float64` between `0.0` and `1.0`.
-       
+
        For example, you can apply a sample rate of `1.0` (100%) to all `/api` transactions, and a sample rate of `0.5` (50%) to all other transactions.
        You can read more about this in our [SDK docs](https://docs.sentry.io/platforms/go/configuration/filtering/#using-sampling-to-filter-transaction-events).
-       
+
        ```go
        sentry.Init(sentry.ClientOptions{
            TracesSampler: sentry.TracesSampler(func(ctx sentry.SamplingContext) float64 {
