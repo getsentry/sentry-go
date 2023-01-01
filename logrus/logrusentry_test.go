@@ -1,6 +1,7 @@
 package sentrylogrus
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -487,5 +488,41 @@ func Test_exceptions(t *testing.T) {
 				t.Error(d)
 			}
 		})
+	}
+}
+
+func Test_hubExtractor(t *testing.T) {
+	opts := sentry.ClientOptions{}
+	opts.Dsn = testDSN
+
+	sentry.Init(opts)
+	client := sentry.CurrentHub().Client()
+
+	hook := NewFromClient([]logrus.Level{logrus.ErrorLevel}, client)
+
+	defaultEntry := &logrus.Entry{
+		Level: logrus.ErrorLevel,
+	}
+
+	if err := hook.Fire(defaultEntry); err != nil {
+		t.Error("errored as default")
+	}
+
+	hook.SetContextHub(DefaultContextExtractor)
+
+	hub := sentry.CurrentHub().Clone()
+	hub.BindClient(nil)
+	ctx := sentry.SetHubOnContext(context.Background(), hub)
+
+	entryWithContext := &logrus.Entry{
+		Level:   logrus.ErrorLevel,
+		Context: ctx,
+	}
+
+	err := hook.Fire(entryWithContext)
+	if err == nil {
+		t.Error("must error, 'cause hub is invalid for sending")
+	} else if err.Error() != "failed to send to sentry" {
+		t.Error("not right error")
 	}
 }
