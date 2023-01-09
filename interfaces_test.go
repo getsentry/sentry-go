@@ -80,6 +80,7 @@ func TestNewRequest(t *testing.T) {
 	r.Header.Add("Cookie", "foo=bar")
 	r.Header.Add("X-Forwarded-For", "127.0.0.1")
 	r.Header.Add("X-Real-Ip", "127.0.0.1")
+	r.Header.Add("Some-Header", "some-header value")
 
 	got := NewRequest(r)
 	want := &Request{
@@ -94,6 +95,7 @@ func TestNewRequest(t *testing.T) {
 			"Host":            "example.com",
 			"X-Forwarded-For": "127.0.0.1",
 			"X-Real-Ip":       "127.0.0.1",
+			"Some-Header":     "some-header value",
 		},
 		Env: map[string]string{
 			"REMOTE_ADDR": "192.0.2.1",
@@ -112,6 +114,7 @@ func TestNewRequestWithNoPII(t *testing.T) {
 	r.Header.Add("Cookie", "foo=bar")
 	r.Header.Add("X-Forwarded-For", "127.0.0.1")
 	r.Header.Add("X-Real-Ip", "127.0.0.1")
+	r.Header.Add("Some-Header", "some-header value")
 
 	got := NewRequest(r)
 	want := &Request{
@@ -121,7 +124,8 @@ func TestNewRequestWithNoPII(t *testing.T) {
 		QueryString: "q=sentry",
 		Cookies:     "",
 		Headers: map[string]string{
-			"Host": "example.com",
+			"Host":        "example.com",
+			"Some-Header": "some-header value",
 		},
 		Env: nil,
 	}
