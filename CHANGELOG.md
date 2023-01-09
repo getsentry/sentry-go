@@ -4,7 +4,8 @@
 
 ### Features
 
-* Add `beforeSendTransaction` hook ([#517](https://github.com/getsentry/sentry-go/pull/517))
+* Add `BeforeSendTransaction` hook to `ClientOptions` ([#517](https://github.com/getsentry/sentry-go/pull/517))
+  * Here's [an example](https://github.com/getsentry/sentry-go/blob/master/_examples/http/main.go#L56-L66) of how BeforeSendTransaction can be used to modify or drop transaction events.
 
 ## 0.16.0
 
