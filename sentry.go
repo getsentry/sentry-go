@@ -48,17 +48,22 @@ func CaptureMessage(message string) *EventID {
 	return hub.CaptureMessage(message)
 }
 
-// CaptureException captures an error.
-func CaptureException(exception error) *EventID {
+// Deprecated: Please use CaptureError instead.
+func CaptureException(err error) *EventID {
+	return CaptureError(err)
+}
+
+// CaptureError captures an error.
+func CaptureError(err error) *EventID {
 	hub := CurrentHub()
-	return hub.CaptureException(exception)
+	return hub.CaptureError(err)
 }
 
 // CaptureEvent captures an event on the currently active client if any.
 //
 // The event must already be assembled. Typically code would instead use
-// the utility methods like CaptureException. The return value is the
-// event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
+// the utility methods like CaptureError. The return value is the event ID.
+// In case Sentry is disabled or event was dropped, the return value will be nil.
 func CaptureEvent(event *Event) *EventID {
 	hub := CurrentHub()
 	return hub.CaptureEvent(event)
@@ -121,7 +126,7 @@ func PopScope() {
 // unintentionally dropping events.
 //
 // Do not call Flush indiscriminately after every call to CaptureEvent,
-// CaptureException or CaptureMessage. Instead, to have the SDK send events over
+// CaptureError or CaptureMessage. Instead, to have the SDK send events over
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func Flush(timeout time.Duration) bool {

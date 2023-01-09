@@ -20,7 +20,7 @@ func Example() {
 		hub := sentry.GetHubFromContext(r.Context())
 		_, err := http.Get("example.com")
 		if err != nil {
-			hub.CaptureException(err)
+			hub.CaptureError(err)
 		}
 	})
 

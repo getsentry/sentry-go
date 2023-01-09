@@ -58,7 +58,7 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.SetUser(sentry.User{ID: "foo"})
 	scope.SetRequest(httptest.NewRequest("GET", "/foo", nil))
 
-	sentry.CaptureException(fmt.Errorf("error %d", x))
+	sentry.CaptureError(fmt.Errorf("error %d", x))
 
 	scope.ClearBreadcrumbs()
 	scope.Clone()

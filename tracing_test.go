@@ -492,8 +492,8 @@ func TestDoubleSampling(t *testing.T) {
 	})
 	span := StartSpan(ctx, "op", TransactionName("name"))
 
-	// CaptureException should not send any event because of SampleRate.
-	GetHubFromContext(ctx).CaptureException(errors.New("ignored"))
+	// CaptureError should not send any event because of SampleRate.
+	GetHubFromContext(ctx).CaptureError(errors.New("ignored"))
 	if got := len(transport.Events()); got != 0 {
 		t.Fatalf("got %d events, want 0", got)
 	}

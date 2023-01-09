@@ -25,7 +25,7 @@ https://github.com/getsentry/sentry-go/blob/master/example/basic/main.go.
 The Capture* functions report messages and errors to Sentry.
 
 	sentry.CaptureMessage(...)
-	sentry.CaptureException(...)
+	sentry.CaptureError(...)
 	sentry.CaptureEvent(...)
 
 Use similarly named functions in the Hub for concurrent programs like web

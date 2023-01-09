@@ -249,15 +249,15 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 	return eventID
 }
 
-// CaptureException calls the method of a same name on currently bound Client instance
+// CaptureError calls the method of a same name on currently bound Client instance
 // passing it a top-level Scope.
 // Returns EventID if successfully, or nil if there's no Scope or Client available.
-func (hub *Hub) CaptureException(exception error) *EventID {
+func (hub *Hub) CaptureError(err error) *EventID {
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil || scope == nil {
 		return nil
 	}
-	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
+	eventID := client.CaptureError(err, &EventHint{OriginalException: err}, scope)
 
 	if eventID != nil {
 		hub.mu.Lock()
@@ -341,7 +341,7 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 // unintentionally dropping events.
 //
 // Do not call Flush indiscriminately after every call to CaptureEvent,
-// CaptureException or CaptureMessage. Instead, to have the SDK send events over
+// CaptureError or CaptureMessage. Instead, to have the SDK send events over
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (hub *Hub) Flush(timeout time.Duration) bool {

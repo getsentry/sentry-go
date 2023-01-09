@@ -380,17 +380,21 @@ func (client *Client) CaptureMessage(message string, hint *EventHint, scope Even
 	return client.CaptureEvent(event, hint, scope)
 }
 
-// CaptureException captures an error.
-func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
-	event := client.eventFromException(exception, LevelError)
+// Deprecated: Please use CaptureError instead.
+func (client *Client) CaptureException(err error, hint *EventHint, scope EventModifier) *EventID {
+	return client.CaptureError(err, hint, scope)
+}
+
+func (client *Client) CaptureError(err error, hint *EventHint, scope EventModifier) *EventID {
+	event := client.eventFromException(err, LevelError)
 	return client.CaptureEvent(event, hint, scope)
 }
 
 // CaptureEvent captures an event on the currently active client if any.
 //
 // The event must already be assembled. Typically code would instead use
-// the utility methods like CaptureException. The return value is the
-// event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
+// the utility methods like CaptureError. The return value is the event ID.
+// In case Sentry is disabled or event was dropped, the return value will be nil.
 func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
 	return client.processEvent(event, hint, scope)
 }
@@ -454,7 +458,7 @@ func (client *Client) RecoverWithContext(
 // unintentionally dropping events.
 //
 // Do not call Flush indiscriminately after every call to CaptureEvent,
-// CaptureException or CaptureMessage. Instead, to have the SDK send events over
+// CaptureError or CaptureMessage. Instead, to have the SDK send events over
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
@@ -531,7 +535,7 @@ func reverse(a []Exception) {
 func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
 	if event == nil {
 		err := usageError{fmt.Errorf("%s called with nil event", callerFunctionName())}
-		return client.CaptureException(err, hint, scope)
+		return client.CaptureError(err, hint, scope)
 	}
 
 	options := client.Options()

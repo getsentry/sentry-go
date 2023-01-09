@@ -59,7 +59,7 @@ func configureScope() {
 func withScope() {
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetLevel(sentry.LevelFatal)
-		sentry.CaptureException(errors.New("say what again. SAY WHAT again"))
+		sentry.CaptureError(errors.New("say what again. SAY WHAT again"))
 	})
 }
 
@@ -110,7 +110,7 @@ func (e CustomComplexError) GimmeMoreData() string {
 }
 
 func eventHint() {
-	sentry.CaptureException(CustomComplexError{Message: "Captured", AnswerToLife: 42})
+	sentry.CaptureError(CustomComplexError{Message: "Captured", AnswerToLife: 42})
 }
 
 func main() {
