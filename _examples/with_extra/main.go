@@ -64,7 +64,7 @@ func (ee ExtractExtra) SetupOnce(client *sentry.Client) {
 func main() {
 	if err := sentry.Init(sentry.ClientOptions{
 		Debug: true,
-		Dsn:   "https://hello@world.io/1337",
+		Dsn:   "https://hello@example.com/1337",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			// Solution 1 (use beforeSend, which will be applied to
 			// error events and is usually application specific):

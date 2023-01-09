@@ -10,8 +10,10 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
+const testDsn = "http://whatever@example.com/1337"
+
 func setupHubTest() (*Hub, *Client, *Scope) {
-	client, _ := NewClient(ClientOptions{Dsn: "http://whatever@really.com/1337"})
+	client, _ := NewClient(ClientOptions{Dsn: testDsn})
 	scope := NewScope()
 	hub := NewHub(client, scope)
 	return hub, client, scope
@@ -93,7 +95,7 @@ func TestPopScopeCannotLeaveStackEmpty(t *testing.T) {
 func TestBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 	hub.PushScope()
-	newClient, _ := NewClient(ClientOptions{Dsn: "http://whatever@really.com/1337"})
+	newClient, _ := NewClient(ClientOptions{Dsn: testDsn})
 	hub.BindClient(newClient)
 
 	if (*hub.stack)[0].client == (*hub.stack)[1].client {
@@ -121,7 +123,7 @@ func TestWithScopeBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 
 	hub.WithScope(func(scope *Scope) {
-		newClient, _ := NewClient(ClientOptions{Dsn: "http://whatever@really.com/1337"})
+		newClient, _ := NewClient(ClientOptions{Dsn: testDsn})
 		hub.BindClient(newClient)
 		if hub.stackTop().client != newClient {
 			t.Error("should use newly bound client")

@@ -9,7 +9,7 @@
 
 **Godoc:** https://godoc.org/github.com/getsentry/sentry-go/http
 
-**Example:** https://github.com/getsentry/sentry-go/tree/master/example/http
+**Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/http
 
 ## Installation
 
