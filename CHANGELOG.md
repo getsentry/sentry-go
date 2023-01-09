@@ -18,10 +18,10 @@ Due to ongoing work towards a stable API for `v1.0.0`, we sadly had to include *
       ```
 - Unify TracesSampler [#498](https://github.com/getsentry/sentry-go/pull/498)
     - `TracesSampler` was changed to a callback that must return a `float64` between `0.0` and `1.0`.
-       
+
        For example, you can apply a sample rate of `1.0` (100%) to all `/api` transactions, and a sample rate of `0.5` (50%) to all other transactions.
        You can read more about this in our [SDK docs](https://docs.sentry.io/platforms/go/configuration/filtering/#using-sampling-to-filter-transaction-events).
-       
+
        ```go
        sentry.Init(sentry.ClientOptions{
            TracesSampler: sentry.TracesSampler(func(ctx sentry.SamplingContext) float64 {
@@ -40,7 +40,7 @@ Due to ongoing work towards a stable API for `v1.0.0`, we sadly had to include *
 ### Features
 
 - Send errors logged with [Logrus](https://github.com/sirupsen/logrus) to Sentry.
-    - Have a look at our [logrus examples](https://github.com/getsentry/sentry-go/blob/master/example/logrus/main.go) on how to use the integration.
+    - Have a look at our [logrus examples](https://github.com/getsentry/sentry-go/blob/master/_examples/logrus/main.go) on how to use the integration.
 - Add support for Dynamic Sampling [#491](https://github.com/getsentry/sentry-go/pull/491)
     - You can read more about Dynamic Sampling in our [product docs](https://docs.sentry.io/product/data-management-settings/dynamic-sampling/).
 - Add detailed logging about the reason transactions are being dropped.
@@ -128,7 +128,7 @@ There are no breaking changes and upgrading should be a smooth experience for al
 _NOTE:_
 This version introduces support for [Sentry's Performance Monitoring](https://docs.sentry.io/platforms/go/performance/).
 The new tracing capabilities are beta, and we plan to expand them on future versions. Feedback is welcome, please open new issues on GitHub.
-The `sentryhttp` package got better API docs, an [updated usage example](https://github.com/getsentry/sentry-go/tree/master/example/http) and support for creating automatic transactions as part of Performance Monitoring.
+The `sentryhttp` package got better API docs, an [updated usage example](https://github.com/getsentry/sentry-go/tree/master/_examples/http) and support for creating automatic transactions as part of Performance Monitoring.
 
 ## v0.8.0
 

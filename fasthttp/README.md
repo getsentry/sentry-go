@@ -9,7 +9,7 @@
 
 **Godoc:** https://godoc.org/github.com/getsentry/sentry-go/fasthttp
 
-**Example:** https://github.com/getsentry/sentry-go/tree/master/example/fasthttp
+**Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/fasthttp
 
 ## Installation
 
