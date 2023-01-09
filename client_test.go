@@ -44,7 +44,7 @@ func setupClientTest() (*Client, *ScopeMock, *TransportMock) {
 	scope := &ScopeMock{}
 	transport := &TransportMock{}
 	client, _ := NewClient(ClientOptions{
-		Dsn:       "http://whatever@really.com/1337",
+		Dsn:       "http://whatever@example.com/1337",
 		Transport: transport,
 		Integrations: func(i []Integration) []Integration {
 			return []Integration{}
