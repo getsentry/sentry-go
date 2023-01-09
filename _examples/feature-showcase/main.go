@@ -116,7 +116,7 @@ func eventHint() {
 func main() {
 	if err := sentry.Init(sentry.ClientOptions{
 		Debug:        true,
-		Dsn:          "https://hello@world.io/1337",
+		Dsn:          "https://hello@example.com/1337",
 		IgnoreErrors: []string{"^(?i)drop me"},
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			if ex, ok := hint.OriginalException.(CustomComplexError); ok {

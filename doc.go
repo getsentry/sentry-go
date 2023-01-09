@@ -18,7 +18,7 @@ Sentry project. This step is accomplished through a call to sentry.Init.
 	}
 
 A more detailed yet simple example is available at
-https://github.com/getsentry/sentry-go/blob/master/example/basic/main.go.
+https://github.com/getsentry/sentry-go/blob/master/_examples/basic/main.go.
 
 # Error Reporting
 
