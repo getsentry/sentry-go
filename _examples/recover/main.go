@@ -41,7 +41,7 @@ func bazMsg() {
 func main() {
 	_ = sentry.Init(sentry.ClientOptions{
 		Debug:            true,
-		Dsn:              "https://hello@world.io/1337",
+		Dsn:              "https://hello@example.com/1337",
 		AttachStacktrace: true,
 		BeforeSend: func(e *sentry.Event, h *sentry.EventHint) *sentry.Event {
 			fmt.Println(prettyPrint(e))
