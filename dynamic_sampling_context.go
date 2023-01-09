@@ -45,7 +45,10 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	client := hub.Client()
 
 	if client == nil || scope == nil {
-		return DynamicSamplingContext{}
+		return DynamicSamplingContext{
+			Entries: map[string]string{},
+			Frozen:  false,
+		}
 	}
 
 	options := client.Options()
