@@ -48,6 +48,22 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s sdkTrace.ReadW
 }
 
 func (ssp *sentrySpanProcessor) OnEnd(s sdkTrace.ReadOnlySpan) {
+	otelSpanId := s.SpanContext().SpanID()
+	sentrySpan, ok := ssp.SpanMap[otelSpanId]
+	if !ok || sentrySpan == nil {
+		return
+	}
+
+	// TODO(michi) export span.isTransaction
+	if len(sentrySpan.TraceID) > 0 {
+		// TODO(michi) add otel context
+		sentrySpan.Status = sentry.SpanStatusOK
+		sentrySpan.Op = s.Name()
+		sentrySpan.Description = "Hello"
+	}
+
+	sentrySpan.EndTime = s.EndTime()
+	sentrySpan.Finish()
 }
 
 func (bsp *sentrySpanProcessor) Shutdown(ctx context.Context) error {
