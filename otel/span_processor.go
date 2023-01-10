@@ -6,10 +6,13 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sdkTrace "go.opentelemetry.io/otel/sdk/trace"
+
+	// TODO(anton): is it ok to use this module?
 	trace "go.opentelemetry.io/otel/trace"
 )
 
 type sentrySpanProcessor struct {
+	// TODO(anton): any concurrency concerns here?
 	SpanMap map[trace.SpanID]*sentry.Span
 }
 
