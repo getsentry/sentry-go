@@ -1,4 +1,4 @@
-module github.com/getsentry/sentry-otel
+module github.com/getsentry/sentry-go/otel
 
 go 1.19
 
