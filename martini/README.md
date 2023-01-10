@@ -9,7 +9,7 @@
 
 **Godoc:** https://godoc.org/github.com/getsentry/sentry-go/martini
 
-**Example:** https://github.com/getsentry/sentry-go/tree/master/example/martini
+**Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/martini
 
 ## Installation
 

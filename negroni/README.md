@@ -9,7 +9,7 @@
 
 **Godoc:** https://godoc.org/github.com/getsentry/sentry-go/negroni
 
-**Example:** https://github.com/getsentry/sentry-go/tree/master/example/negroni
+**Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/negroni
 
 ## Installation
 

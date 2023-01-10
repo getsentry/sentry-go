@@ -12,7 +12,7 @@ func main() {
 	sentrySyncTransport.Timeout = time.Second * 3
 
 	_ = sentry.Init(sentry.ClientOptions{
-		Dsn:       "https://hello@world.io/1337",
+		Dsn:       "https://hello@example.com/1337",
 		Debug:     true,
 		Transport: sentrySyncTransport,
 	})
