@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- fix(dynamic-sampling): Do not crash in Span.Finish() when Client is empty [#520](https://github.com/getsentry/sentry-go/pull/520)
+  - Fixes [#518](https://github.com/getsentry/sentry-go/issues/518)
+
 ## 0.16.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.16.0.
