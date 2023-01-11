@@ -24,7 +24,6 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	// FIXME(anton): the span map should be accessible here
 	// sentrySpan := SENTRY_SPAN_PROCESSOR_MAP.get(spanContext.spanId);
 	sentrySpan := &sentry.Span{}
-
 	if sentrySpan == nil {
 		return
 	}
@@ -34,6 +33,7 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	if len(sentrySpan.TraceID) > 0 {
 		baggageValue := sentrySpan.ToBaggage()
 		if baggageValue != "" {
+			// TODO(anton): Won't this override the existing baggage header?
 			carrier.Set(sentry.SentryBaggageHeader, baggageValue)
 		}
 	}
@@ -45,23 +45,27 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 	fmt.Printf("\n--- Propagator Extract\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
 
 	sentryTraceHeader := carrier.Get(sentry.SentryTraceHeader)
-	baggageHeader := carrier.Get(sentry.SentryBaggageHeader)
 
-	if sentryTraceHeader != "" {
-		// Probably not necessary to go through sentry.Span for this
-		var s sentry.Span
-		sentry.ContinueFromHeaders(sentryTraceHeader, baggageHeader)(&s)
-
-		spanContextConfig := trace.SpanContextConfig{
-			TraceID:    trace.TraceID(s.TraceID),
-			SpanID:     trace.SpanID(s.ParentSpanID),
-			TraceFlags: trace.FlagsSampled,
-			Remote:     true,
-		}
-		ctx = trace.ContextWithSpanContext(ctx, trace.NewSpanContext(spanContextConfig))
+	// TODO(anton): Can we return early? Or we still need to handle baggage/DS?
+	if sentryTraceHeader == "" {
+		return ctx
 	}
 
-	// TODO(anton): Handle errors
+	baggageHeader := carrier.Get(sentry.SentryBaggageHeader)
+
+	// Probably not necessary to go through sentry.Span for this
+	var s sentry.Span
+	sentry.ContinueFromHeaders(sentryTraceHeader, baggageHeader)(&s)
+
+	spanContextConfig := trace.SpanContextConfig{
+		TraceID:    trace.TraceID(s.TraceID),
+		SpanID:     trace.SpanID(s.ParentSpanID),
+		TraceFlags: trace.FlagsSampled,
+		Remote:     true,
+	}
+	ctx = trace.ContextWithSpanContext(ctx, trace.NewSpanContext(spanContextConfig))
+
+	// TODO(anton): Handle errors?
 	// dynamicSamplingContext, _ := sentry.DynamicSamplingContextFromHeader([]byte(baggageHeader))
 	// ctx = context.WithValue(ctx, sentry.DynamicSamplingContextKey, dynamicSamplingContext)
 
