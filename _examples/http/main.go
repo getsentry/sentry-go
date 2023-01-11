@@ -48,9 +48,20 @@ func run() error {
 		// Useful when getting started or trying to figure something out.
 		Debug: true,
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			// Here you can inspect/modify events before they are sent.
+			// Here you can inspect/modify non-transaction events (for example, errors) before they are sent.
 			// Returning nil drops the event.
 			log.Printf("BeforeSend event [%s]", event.EventID)
+			return event
+		},
+		BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			// Here you can inspect/modify transaction events before they are sent.
+			// Returning nil drops the event.
+			if strings.Contains(event.Message, "test-transaction") {
+				// Drop the transaction
+				return nil
+			}
+			event.Message += " [example]"
+			log.Printf("BeforeSendTransaction event [%s]", event.EventID)
 			return event
 		},
 		// Enable tracing

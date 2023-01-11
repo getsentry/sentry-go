@@ -383,6 +383,60 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
 }
 
+func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+		BeforeSend: func(event *Event, hint *EventHint) *Event {
+			t.Error("beforeSend should not be called")
+			return event
+		},
+		BeforeSendTransaction: func(event *Event, hint *EventHint) *Event {
+			assertEqual(t, event.Transaction, "Foo")
+			return nil
+		},
+	})
+
+	transaction := StartTransaction(ctx,
+		"Foo",
+	)
+	transaction.Finish()
+
+	if transport.lastEvent != nil {
+		t.Error("expected event to be dropped")
+	}
+}
+
+func TestBeforeSendTransactionIsCalled(t *testing.T) {
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+		BeforeSend: func(event *Event, hint *EventHint) *Event {
+			t.Error("beforeSend should not be called")
+			return event
+		},
+		BeforeSendTransaction: func(event *Event, hint *EventHint) *Event {
+			assertEqual(t, event.Transaction, "Foo")
+			event.Transaction = "Bar"
+			return event
+		},
+	})
+
+	transaction := StartTransaction(ctx,
+		"Foo",
+	)
+	transaction.Finish()
+
+	lastEvent := transport.lastEvent
+	assertEqual(t, lastEvent.Transaction, "Bar")
+	// Make sure it's the same span
+	assertEqual(t, lastEvent.Contexts["trace"]["span_id"], transaction.SpanID)
+}
+
 func TestSampleRate(t *testing.T) {
 	tests := []struct {
 		SampleRate float64
