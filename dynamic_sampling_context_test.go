@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -106,6 +107,18 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 					"public_key":  "public",
 					"release":     "1.0.0",
 				},
+			},
+		},
+		// Empty context without a valid Client
+		{
+			input: func() *Span {
+				ctx := context.Background()
+				tx := StartTransaction(ctx, "op")
+				return tx
+			}(),
+			want: DynamicSamplingContext{
+				Frozen:  false,
+				Entries: map[string]string{},
 			},
 		},
 	}

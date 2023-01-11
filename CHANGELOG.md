@@ -4,8 +4,13 @@
 
 ### Features
 
-* Add `BeforeSendTransaction` hook to `ClientOptions` ([#517](https://github.com/getsentry/sentry-go/pull/517))
-  * Here's [an example](https://github.com/getsentry/sentry-go/blob/master/_examples/http/main.go#L56-L66) of how BeforeSendTransaction can be used to modify or drop transaction events.
+- Add `BeforeSendTransaction` hook to `ClientOptions` ([#517](https://github.com/getsentry/sentry-go/pull/517))
+  - Here's [an example](https://github.com/getsentry/sentry-go/blob/master/_examples/http/main.go#L56-L66) of how BeforeSendTransaction can be used to modify or drop transaction events.
+
+### Bug Fixes
+
+- fix(dynamic-sampling): Do not crash in Span.Finish() when Client is empty [#520](https://github.com/getsentry/sentry-go/pull/520)
+  - Fixes [#518](https://github.com/getsentry/sentry-go/issues/518)
 
 ## 0.16.0
 
