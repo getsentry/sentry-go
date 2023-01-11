@@ -409,7 +409,7 @@ func TestContinueSpanFromRequest(t *testing.T) {
 		sampled := sampled
 		t.Run(sampled.String(), func(t *testing.T) {
 			var s Span
-			hkey := http.CanonicalHeaderKey("sentry-trace")
+			hkey := http.CanonicalHeaderKey(SentryTraceHeader)
 			hval := (&Span{
 				TraceID: traceID,
 				SpanID:  spanID,
