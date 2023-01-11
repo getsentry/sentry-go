@@ -9,6 +9,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.11.2
 )
 
+// TODO(anton): Should we remove this before releasing?
+replace github.com/getsentry/sentry-go => ../
+
 require (
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
