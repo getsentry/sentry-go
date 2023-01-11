@@ -15,12 +15,25 @@ func setupPropagatorTest() (propagation.TextMapPropagator, propagation.TextMapCa
 	return propagator, carrier
 }
 
-func TestExtractDoesNothingWithEmptyHeaders(t *testing.T) {
+// Fields
+func TestFieldsReturnsRightSet(t *testing.T) {
+	propagator, _ := setupPropagatorTest()
+	fields := propagator.Fields()
+	assertEqual(t, fields, []string{sentry.SentryTraceHeader, sentry.SentryBaggageHeader})
+}
+
+// Inject
+
+// Extract
+
+func TestExtractDoesNotChangeContextWithEmptyHeaders(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
+	type ctxKey struct{}
+	ctx := context.WithValue(context.Background(), ctxKey{}, "value")
 
-	ctx := propagator.Extract(context.Background(), carrier)
+	newCtx := propagator.Extract(ctx, carrier)
 
-	assertEqual(t, ctx, context.Background())
+	assertEqual(t, ctx, newCtx)
 }
 
 func TestExtractSetsSentrySpanContext(t *testing.T) {

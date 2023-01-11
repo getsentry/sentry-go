@@ -11,18 +11,44 @@ import (
 
 type sentryPropagator struct{}
 
+// Inject set tracecontext from the Context into the carrier.
 func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMapCarrier) {
-	fmt.Printf("\n--- Inject\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
+	fmt.Printf("\n--- Propagator Inject\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
+
+	spanContext := trace.SpanContextFromContext(ctx)
+
+	if !spanContext.IsValid() {
+		return
+	}
+
+	// FIXME(anton): the span map should be accessible here
+	// sentrySpan := SENTRY_SPAN_PROCESSOR_MAP.get(spanContext.spanId);
+	sentrySpan := &sentry.Span{}
+
+	if sentrySpan == nil {
+		return
+	}
+
+	carrier.Set(sentry.SentryTraceHeader, sentrySpan.ToSentryTrace())
+	// TODO(anton): this is basically the isTransaction check
+	if len(sentrySpan.TraceID) > 0 {
+		baggageValue := sentrySpan.ToBaggage()
+		if baggageValue != "" {
+			carrier.Set(sentry.SentryBaggageHeader, baggageValue)
+		}
+	}
+
 }
 
 // Extract reads cross-cutting concerns from the carrier into a Context.
 func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextMapCarrier) context.Context {
-	fmt.Printf("\n--- Extract\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
+	fmt.Printf("\n--- Propagator Extract\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
 
 	sentryTraceHeader := carrier.Get(sentry.SentryTraceHeader)
 	baggageHeader := carrier.Get(sentry.SentryBaggageHeader)
 
 	if sentryTraceHeader != "" {
+		// Probably not necessary to go through sentry.Span for this
 		var s sentry.Span
 		sentry.ContinueFromHeaders(sentryTraceHeader, baggageHeader)(&s)
 

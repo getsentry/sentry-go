@@ -2,6 +2,7 @@ package sentryotel
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -27,6 +28,8 @@ func NewSentrySpanProcessor() sdkTrace.SpanProcessor {
 }
 
 func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s sdkTrace.ReadWriteSpan) {
+	fmt.Printf("\n--- SpanProcessor OnStart\nContext: %#v\nSpan: %#v\n", parent, s)
+
 	otelSpanId := s.SpanContext().SpanID()
 	otelParentSpanId := s.Parent().SpanID()
 
@@ -51,6 +54,8 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s sdkTrace.ReadW
 }
 
 func (ssp *sentrySpanProcessor) OnEnd(s sdkTrace.ReadOnlySpan) {
+	fmt.Printf("\n--- SpanProcessor OnEnd\nSpan: %#v\n", s)
+
 	otelSpanId := s.SpanContext().SpanID()
 	sentrySpan, ok := ssp.SpanMap[otelSpanId]
 	if !ok || sentrySpan == nil {
