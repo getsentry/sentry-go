@@ -43,6 +43,14 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	hub := hubFromContext(span.Context())
 	scope := hub.Scope()
 	client := hub.Client()
+
+	if client == nil || scope == nil {
+		return DynamicSamplingContext{
+			Entries: map[string]string{},
+			Frozen:  false,
+		}
+	}
+
 	options := client.Options()
 
 	if traceID := span.TraceID.String(); traceID != "" {

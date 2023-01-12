@@ -44,7 +44,7 @@ func setupClientTest() (*Client, *ScopeMock, *TransportMock) {
 	scope := &ScopeMock{}
 	transport := &TransportMock{}
 	client, _ := NewClient(ClientOptions{
-		Dsn:       "http://whatever@really.com/1337",
+		Dsn:       "http://whatever@example.com/1337",
 		Transport: transport,
 		Integrations: func(i []Integration) []Integration {
 			return []Integration{}
@@ -381,6 +381,60 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	client.CaptureException(ex, &EventHint{OriginalException: ex}, scope)
 
 	assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
+}
+
+func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+		BeforeSend: func(event *Event, hint *EventHint) *Event {
+			t.Error("beforeSend should not be called")
+			return event
+		},
+		BeforeSendTransaction: func(event *Event, hint *EventHint) *Event {
+			assertEqual(t, event.Transaction, "Foo")
+			return nil
+		},
+	})
+
+	transaction := StartTransaction(ctx,
+		"Foo",
+	)
+	transaction.Finish()
+
+	if transport.lastEvent != nil {
+		t.Error("expected event to be dropped")
+	}
+}
+
+func TestBeforeSendTransactionIsCalled(t *testing.T) {
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+		BeforeSend: func(event *Event, hint *EventHint) *Event {
+			t.Error("beforeSend should not be called")
+			return event
+		},
+		BeforeSendTransaction: func(event *Event, hint *EventHint) *Event {
+			assertEqual(t, event.Transaction, "Foo")
+			event.Transaction = "Bar"
+			return event
+		},
+	})
+
+	transaction := StartTransaction(ctx,
+		"Foo",
+	)
+	transaction.Finish()
+
+	lastEvent := transport.lastEvent
+	assertEqual(t, lastEvent.Transaction, "Bar")
+	// Make sure it's the same span
+	assertEqual(t, lastEvent.Contexts["trace"]["span_id"], transaction.SpanID)
 }
 
 func TestSampleRate(t *testing.T) {

@@ -25,7 +25,7 @@ func (pi *pickleIntegration) processor(event *sentry.Event, hint *sentry.EventHi
 func main() {
 	scope1 := sentry.NewScope()
 	client1, _ := sentry.NewClient(sentry.ClientOptions{
-		Dsn: "https://hello@world.io/1",
+		Dsn: "https://hello@example.com/1",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			log.Println(event.Message)
 			return nil
@@ -38,7 +38,7 @@ func main() {
 
 	scope2 := sentry.NewScope()
 	client2, _ := sentry.NewClient(sentry.ClientOptions{
-		Dsn: "https://hello@world.io/2",
+		Dsn: "https://hello@example.com/2",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			log.Println(event.Message)
 			return nil

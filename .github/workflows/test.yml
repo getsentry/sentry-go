@@ -99,7 +99,7 @@ jobs:
         run: |
           # Iris requires Module mode, therefore we delete the relevant code to
           # skip testing it in GOPATH mode.
-          rm -vrf ./iris/ ./example/iris/
+          rm -vrf ./iris/ ./_examples/iris/
       - name: Download Dependencies
         run: go get -d -t -v ./...
       - name: Build

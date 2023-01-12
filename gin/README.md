@@ -9,7 +9,7 @@
 
 **Godoc:** https://godoc.org/github.com/getsentry/sentry-go/gin
 
-**Example:** https://github.com/getsentry/sentry-go/tree/master/example/gin
+**Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/gin
 
 ## Installation
 
