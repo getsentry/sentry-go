@@ -16,7 +16,7 @@ This release contains a new `BeforeSendTransaction` hook option and corrects two
 
 - Do not crash in Span.Finish() when the Client is empty [#520](https://github.com/getsentry/sentry-go/pull/520)
   - Fixes [#518](https://github.com/getsentry/sentry-go/issues/518)
-- Attach none Pii/sensitive request headers to events when `ClientOptions.SendDefaultPii` is set to `false` ([#524](https://github.com/getsentry/sentry-go/pull/524))
+- Attach non-PII/non-sensitive request headers to events when `ClientOptions.SendDefaultPii` is set to `false` ([#524](https://github.com/getsentry/sentry-go/pull/524))
   - Fixes [#523](https://github.com/getsentry/sentry-go/issues/523)
 
 ### Misc
