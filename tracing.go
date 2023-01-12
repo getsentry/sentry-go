@@ -254,11 +254,11 @@ var sentryTracePattern = regexp.MustCompile(`^([[:xdigit:]]{32})-([[:xdigit:]]{1
 // updateFromSentryTrace parses a sentry-trace HTTP header (as returned by
 // ToSentryTrace) and updates fields of the span. If the header cannot be
 // recognized as valid, the span is left unchanged.
-func (s *Span) updateFromSentryTrace(header []byte) {
+func (s *Span) updateFromSentryTrace(header []byte) (updated bool) {
 	m := sentryTracePattern.FindSubmatch(header)
 	if m == nil {
 		// no match
-		return
+		return false
 	}
 	_, _ = hex.Decode(s.TraceID[:], m[1])
 	_, _ = hex.Decode(s.ParentSpanID[:], m[2])
@@ -270,6 +270,7 @@ func (s *Span) updateFromSentryTrace(header []byte) {
 			s.Sampled = SampledTrue
 		}
 	}
+	return true
 }
 
 func (s *Span) updateFromBaggage(header []byte) {
@@ -281,6 +282,17 @@ func (s *Span) updateFromBaggage(header []byte) {
 
 		s.dynamicSamplingContext = dsc
 	}
+}
+
+// ExtractSentryTrace parses a sentry-trace header and builds a Span from the
+// parsed values. If the header was parsed correctly, the second returned argument
+// ("valid") will be set to true, otherwise (e.g., empty or malformed header) it will
+// be false.
+// TODO(anton): add some tests for this new function.
+func ExtractSentryTrace(header []byte) (traceparentData Span, valid bool) {
+	s := Span{}
+	updated := s.updateFromSentryTrace(header)
+	return s, updated
 }
 
 func (s *Span) MarshalJSON() ([]byte, error) {

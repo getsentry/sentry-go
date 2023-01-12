@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/otel/interal/utils"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -46,29 +47,33 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 
 	sentryTraceHeader := carrier.Get(sentry.SentryTraceHeader)
 
-	// TODO(anton): Can we return early? Or we still need to handle baggage/DS?
-	if sentryTraceHeader == "" {
-		return ctx
+	if sentryTraceHeader != "" {
+		if traceparentData, valid := sentry.ExtractSentryTrace([]byte(sentryTraceHeader)); valid {
+			spanContextConfig := trace.SpanContextConfig{
+				TraceID:    trace.TraceID(traceparentData.TraceID),
+				SpanID:     trace.SpanID(traceparentData.ParentSpanID),
+				TraceFlags: trace.FlagsSampled,
+				// TODO(anton): wtf is this
+				Remote: true,
+			}
+			ctx = trace.ContextWithSpanContext(ctx, trace.NewSpanContext(spanContextConfig))
+		}
 	}
 
 	baggageHeader := carrier.Get(sentry.SentryBaggageHeader)
-
-	// Probably not necessary to go through sentry.Span for this
-	var s sentry.Span
-	sentry.ContinueFromHeaders(sentryTraceHeader, baggageHeader)(&s)
-
-	spanContextConfig := trace.SpanContextConfig{
-		TraceID:    trace.TraceID(s.TraceID),
-		SpanID:     trace.SpanID(s.ParentSpanID),
-		TraceFlags: trace.FlagsSampled,
-		Remote:     true,
+	// The following cases should be already covered here:
+	// * We can extract a valid dynamic sampling context (DSC) from the baggage
+	// * No baggage header is present
+	// * No Sentry-related values are present
+	// * We cannot parse the baggage header for whatever reason
+	// In all of these cases we want to end up with a frozen DSC.
+	dynamicSamplingContext, err := sentry.DynamicSamplingContextFromHeader([]byte(baggageHeader))
+	if err != nil {
+		// If there are any errors, create
+		dynamicSamplingContext = sentry.DynamicSamplingContext{}
 	}
-	ctx = trace.ContextWithSpanContext(ctx, trace.NewSpanContext(spanContextConfig))
-
-	// TODO(anton): Handle errors?
-	// dynamicSamplingContext, _ := sentry.DynamicSamplingContextFromHeader([]byte(baggageHeader))
-	// ctx = context.WithValue(ctx, sentry.DynamicSamplingContextKey, dynamicSamplingContext)
-
+	dynamicSamplingContext.Frozen = true
+	ctx = context.WithValue(ctx, utils.DynamicSamplingContextKey(), dynamicSamplingContext)
 	return ctx
 }
 
