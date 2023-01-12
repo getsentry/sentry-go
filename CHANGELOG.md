@@ -5,7 +5,7 @@
 ## 0.17.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.17.0.
-This is release contains a new `BeforeSendTransaction` hook option and corrects two regressions introcuded in `0.16.0`.
+This release contains a new `BeforeSendTransaction` hook option and corrects two regressions introduced in `0.16.0`.
 
 ### Features
 
