@@ -567,3 +567,12 @@ func TestSample(t *testing.T) {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
 	}
 }
+
+func TestDoesNotCrashWithEmptyContext(t *testing.T) {
+	// This test makes sure that we can still start and finish transactions
+	// with empty context (for example, when Sentry SDK is not initialized)
+	ctx := context.Background()
+	tx := StartTransaction(ctx, "op")
+	tx.Sampled = SampledTrue
+	tx.Finish()
+}

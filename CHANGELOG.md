@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+## 0.17.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.17.0.
+This release contains a new `BeforeSendTransaction` hook option and corrects two regressions introduced in `0.16.0`.
+
+### Features
+
+- Add `BeforeSendTransaction` hook to `ClientOptions` ([#517](https://github.com/getsentry/sentry-go/pull/517))
+  - Here's [an example](https://github.com/getsentry/sentry-go/blob/master/_examples/http/main.go#L56-L66) of how BeforeSendTransaction can be used to modify or drop transaction events.
+
+### Bug Fixes
+
+- Do not crash in Span.Finish() when the Client is empty [#520](https://github.com/getsentry/sentry-go/pull/520)
+  - Fixes [#518](https://github.com/getsentry/sentry-go/issues/518)
+- Attach non-PII/non-sensitive request headers to events when `ClientOptions.SendDefaultPii` is set to `false` ([#524](https://github.com/getsentry/sentry-go/pull/524))
+  - Fixes [#523](https://github.com/getsentry/sentry-go/issues/523)
+
+### Misc
+
+- Clarify how to handle logrus.Fatalf events ([#501](https://github.com/getsentry/sentry-go/pull/501/))
+- Rename the `examples` directory to `_examples` ([#521](https://github.com/getsentry/sentry-go/pull/521))
+  - This removes an indirect dependency to `github.com/golang-jwt/jwt`
+
 ## 0.16.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.16.0.

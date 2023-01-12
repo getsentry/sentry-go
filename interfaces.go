@@ -169,21 +169,19 @@ func NewRequest(r *http.Request) *Request {
 	var env map[string]string
 	headers := map[string]string{}
 
-	if client := CurrentHub().Client(); client != nil {
-		if client.Options().SendDefaultPII {
-			// We read only the first Cookie header because of the specification:
-			// https://tools.ietf.org/html/rfc6265#section-5.4
-			// When the user agent generates an HTTP request, the user agent MUST NOT
-			// attach more than one Cookie header field.
-			cookies = r.Header.Get("Cookie")
+	if client := CurrentHub().Client(); client != nil && client.Options().SendDefaultPII {
+		// We read only the first Cookie header because of the specification:
+		// https://tools.ietf.org/html/rfc6265#section-5.4
+		// When the user agent generates an HTTP request, the user agent MUST NOT
+		// attach more than one Cookie header field.
+		cookies = r.Header.Get("Cookie")
 
-			for k, v := range r.Header {
-				headers[k] = strings.Join(v, ",")
-			}
+		for k, v := range r.Header {
+			headers[k] = strings.Join(v, ",")
+		}
 
-			if addr, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-				env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
-			}
+		if addr, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
 		}
 	} else {
 		sensitiveHeaders := getSensitiveHeaders()

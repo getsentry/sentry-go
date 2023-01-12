@@ -140,8 +140,10 @@ type ClientOptions struct {
 	SendDefaultPII bool
 	// BeforeSend is called before error events are sent to Sentry.
 	// Use it to mutate the event or return nil to discard the event.
-	// See EventProcessor if you need to mutate transactions.
 	BeforeSend func(event *Event, hint *EventHint) *Event
+	// BeforeSendTransaction is called before transaction events are sent to Sentry.
+	// Use it to mutate the transaction or return nil to discard the transaction.
+	BeforeSendTransaction func(event *Event, hint *EventHint) *Event
 	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
 	// Integrations to be installed on the current Client, receives default
@@ -570,11 +572,18 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		return nil
 	}
 
-	// As per spec, transactions do not go through BeforeSend.
-	if event.Type != transactionType && options.BeforeSend != nil {
-		if hint == nil {
-			hint = &EventHint{}
+	// Apply beforeSend* processors
+	if hint == nil {
+		hint = &EventHint{}
+	}
+	if event.Type == transactionType && options.BeforeSendTransaction != nil {
+		// Transaction events
+		if event = options.BeforeSendTransaction(event, hint); event == nil {
+			Logger.Println("Transaction dropped due to BeforeSendTransaction callback.")
+			return nil
 		}
+	} else if event.Type != transactionType && options.BeforeSend != nil {
+		// All other events
 		if event = options.BeforeSend(event, hint); event == nil {
 			Logger.Println("Event dropped due to BeforeSend callback.")
 			return nil
