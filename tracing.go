@@ -236,6 +236,7 @@ func (s *Span) ToSentryTrace() string {
 	return b.String()
 }
 
+// TODO(anton): let's rename this to ToBaggageString?
 func (s *Span) ToBaggage() string {
 	return s.dynamicSamplingContext.String()
 }

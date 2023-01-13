@@ -30,11 +30,17 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	}
 
 	carrier.Set(sentry.SentryTraceHeader, sentrySpan.ToSentryTrace())
+
 	// TODO(anton): this is basically the isTransaction check
 	if len(sentrySpan.TraceID) > 0 {
+
+		// baggage := baggage.FromContext(ctx)
+
+		// Update the existing baggage with the (potentially updated) dynamic
+		// sampling context.
+
 		baggageValue := sentrySpan.ToBaggage()
 		if baggageValue != "" {
-			// TODO(anton): Won't this override the existing baggage header?
 			carrier.Set(sentry.SentryBaggageHeader, baggageValue)
 		}
 	}
