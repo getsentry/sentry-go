@@ -127,6 +127,34 @@ func NewDsn(rawURL string) (*Dsn, error) {
 	}, nil
 }
 
+func (dsn Dsn) GetScheme() scheme {
+	return dsn.scheme
+}
+
+func (dsn Dsn) GetPublicKey() string {
+	return dsn.publicKey
+}
+
+func (dsn Dsn) GetSecretKey() string {
+	return dsn.secretKey
+}
+
+func (dsn Dsn) GetHost() string {
+	return dsn.host
+}
+
+func (dsn Dsn) GetPort() int {
+	return dsn.port
+}
+
+func (dsn Dsn) GetPath() string {
+	return dsn.path
+}
+
+func (dsn Dsn) GetProjectID() string {
+	return dsn.projectID
+}
+
 // String formats Dsn struct into a valid string url.
 func (dsn Dsn) String() string {
 	var url string
