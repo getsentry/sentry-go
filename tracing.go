@@ -35,11 +35,6 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	Data         map[string]interface{} `json:"data,omitempty"`
 	Sampled      Sampled                `json:"-"`
 	Source       TransactionSource      `json:"-"`
-	// isTransaction is true only for the root span of a local span tree. The
-	// root span is the first span started in a context. Note that a local root
-	// span may have a remote parent belonging to the same trace, therefore
-	// isTransaction depends on ctx and not on parent.
-	IsTransaction bool `json:"-"`
 
 	// sample rate the span was sampled with.
 	sampleRate float64
@@ -50,6 +45,11 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	// parent refers to the immediate local parent span. A remote parent span is
 	// only referenced by setting ParentSpanID.
 	parent *Span
+	// isTransaction is true only for the root span of a local span tree. The
+	// root span is the first span started in a context. Note that a local root
+	// span may have a remote parent belonging to the same trace, therefore
+	// isTransaction depends on ctx and not on parent.
+	isTransaction bool
 	// recorder stores all spans in a transaction. Guaranteed to be non-nil.
 	recorder *spanRecorder
 }
