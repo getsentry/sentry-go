@@ -72,14 +72,15 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 	// * No baggage header is present
 	// * No Sentry-related values are present
 	// * We cannot parse the baggage header for whatever reason
-	// In all of these cases we want to end up with a frozen DSC.
 	dynamicSamplingContext, err := sentry.DynamicSamplingContextFromHeader([]byte(baggageHeader))
 	if err != nil {
-		// If there are any errors, create
+		// If there are any errors, create a new non-frozen one.
 		dynamicSamplingContext = sentry.DynamicSamplingContext{}
 	}
-	dynamicSamplingContext.Frozen = true
 	ctx = context.WithValue(ctx, utils.DynamicSamplingContextKey(), dynamicSamplingContext)
+
+	// TODO(anton): We should preserve the baggage header, so it can be later injected again.
+
 	return ctx
 }
 
