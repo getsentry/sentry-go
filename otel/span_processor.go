@@ -3,6 +3,7 @@ package sentryotel
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -13,17 +14,38 @@ import (
 	otelTrace "go.opentelemetry.io/otel/trace"
 )
 
-type sentrySpanProcessor struct {
-	// TODO(anton): any concurrency concerns here?
-	SpanMap map[otelTrace.SpanID]*sentry.Span
+type SentrySpanMap struct {
+	spanMap map[otelTrace.SpanID]*sentry.Span
+	mu      sync.RWMutex
 }
+
+func (ssm *SentrySpanMap) Get(otelSpandID otelTrace.SpanID) (*sentry.Span, bool) {
+	ssm.mu.RLock()
+	defer ssm.mu.RUnlock()
+	span, ok := ssm.spanMap[otelSpandID]
+	return span, ok
+}
+
+func (ssm *SentrySpanMap) Set(otelSpandID otelTrace.SpanID, sentrySpan *sentry.Span) {
+	ssm.mu.Lock()
+	defer ssm.mu.Unlock()
+	ssm.spanMap[otelSpandID] = sentrySpan
+}
+
+func (ssm *SentrySpanMap) Delete(otelSpandID otelTrace.SpanID) {
+	ssm.mu.Lock()
+	defer ssm.mu.Unlock()
+	delete(ssm.spanMap, otelSpandID)
+}
+
+var sentrySpanMap SentrySpanMap
+
+type sentrySpanProcessor struct{}
 
 var _ otelSdkTrace.SpanProcessor = (*sentrySpanProcessor)(nil)
 
 func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
-	ssp := &sentrySpanProcessor{
-		SpanMap: map[otelTrace.SpanID]*sentry.Span{},
-	}
+	ssp := &sentrySpanProcessor{}
 
 	return ssp
 }
@@ -36,7 +58,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 
 	var sentryParentSpan *sentry.Span
 	if otelParentSpanId.IsValid() {
-		sentryParentSpan = ssp.SpanMap[otelParentSpanId]
+		sentryParentSpan, _ = sentrySpanMap.Get(otelParentSpanId)
 	}
 
 	if sentryParentSpan != nil {
@@ -44,14 +66,14 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 		span.SpanID = sentry.SpanID(otelSpanId)
 		span.StartTime = s.StartTime()
 
-		ssp.SpanMap[otelSpanId] = span
+		sentrySpanMap.Set(otelSpanId, span)
 	} else {
 		// TODO(michi) add trace context
 		transaction := sentry.StartTransaction(parent, s.Name())
 		transaction.SpanID = sentry.SpanID(otelSpanId)
 		transaction.StartTime = s.StartTime()
 
-		ssp.SpanMap[otelSpanId] = transaction
+		sentrySpanMap.Set(otelSpanId, transaction)
 	}
 }
 
@@ -59,13 +81,13 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	fmt.Printf("\n--- SpanProcessor OnEnd\nSpan: %#v\n", s)
 
 	otelSpanId := s.SpanContext().SpanID()
-	sentrySpan, ok := ssp.SpanMap[otelSpanId]
+	sentrySpan, ok := sentrySpanMap.Get(otelSpanId)
 	if !ok || sentrySpan == nil {
 		return
 	}
 
 	if utils.IsSentryRequestSpan(s) {
-		delete(ssp.SpanMap, otelSpanId)
+		sentrySpanMap.Delete(otelSpanId)
 		return
 	}
 
@@ -79,7 +101,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	sentrySpan.EndTime = s.EndTime()
 	sentrySpan.Finish()
 
-	delete(ssp.SpanMap, otelSpanId)
+	sentrySpanMap.Delete(otelSpanId)
 }
 
 func (bsp *sentrySpanProcessor) Shutdown(ctx context.Context) error {
