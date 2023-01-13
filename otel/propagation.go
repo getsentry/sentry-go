@@ -24,8 +24,8 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 
 	// FIXME(anton): the span map should be accessible here
 	// sentrySpan := SENTRY_SPAN_PROCESSOR_MAP.get(spanContext.spanId);
-	sentrySpan := &sentry.Span{}
-	if sentrySpan == nil {
+	sentrySpan, ok := sentrySpanMap.Get(spanContext.SpanID())
+	if sentrySpan == nil || !ok {
 		return
 	}
 
@@ -55,6 +55,10 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 
 	if sentryTraceHeader != "" {
 		if traceparentData, valid := sentry.ExtractSentryTrace([]byte(sentryTraceHeader)); valid {
+
+			// TODO(anton): Do we need to set trace parent context somewhere here?
+			// Like SENTRY_TRACE_PARENT_CONTEXT_KEY in JS
+
 			spanContextConfig := trace.SpanContextConfig{
 				TraceID:    trace.TraceID(traceparentData.TraceID),
 				SpanID:     trace.SpanID(traceparentData.ParentSpanID),
