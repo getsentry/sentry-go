@@ -68,7 +68,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 
 		sentrySpanMap.Set(otelSpanId, span)
 	} else {
-		// TODO(michi) add trace context
+		// StartTransaction/StartSpan adds the trace context internally
 		transaction := sentry.StartTransaction(parent, s.Name())
 		transaction.SpanID = sentry.SpanID(otelSpanId)
 		transaction.StartTime = s.StartTime()
@@ -91,8 +91,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 		return
 	}
 
-	// TODO(michi) export span.isTransaction
-	if len(sentrySpan.TraceID) > 0 {
+	if sentrySpan.IsTransaction() {
 		updateTransactionWithOtelData(sentrySpan, s)
 	} else {
 		updateSpanWithOtelData(sentrySpan, s)
@@ -120,18 +119,19 @@ func (bsp *sentrySpanProcessor) ForceFlush(ctx context.Context) error {
 }
 
 func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
-	// transaction.setContext('otel', {
-	// 	attributes: otelSpan.attributes,
-	// 	resource: otelSpan.resource.attributes,
-	//   });
+	// TODO(michi) We might need to set this somewhere else then on the scope
+	sentry.CurrentHub().Scope().SetContext("otel", map[string]interface{}{
+		"attributes": s.Attributes(),
+		"resource":   s.Resource().Attributes(),
+	})
+
 	transaction.Status = utils.MapOtelStatus(s)
 
 	attributes := utils.ParseSpanAttributes(s)
 	transaction.Op = attributes.Op
 	transaction.Source = attributes.Source
-
-	// TODO(michi) the span name is only set on the scope
-	// transaction.Name = attributes.description
+	// TODO(michi) We might need to set this somewhere else then on the scope
+	sentry.CurrentHub().Scope().SetTransaction(attributes.Description)
 }
 
 func updateSpanWithOtelData(span *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
