@@ -49,9 +49,9 @@ jobs:
         run: go mod tidy -go=1.19 -compat=1.17 && git diff --exit-code
         if: ${{ matrix.go == '1.19' }}
       - name: Test
-        run: go test ./...
+        run: go test -count=1 ./...
       - name: Test (race)
-        run: go test -race ./... -coverprofile=coverage.out -covermode=atomic
+        run: go test -count=1 -race ./... -coverprofile=coverage.out -covermode=atomic
         # The race detector adds considerable runtime overhead. To save time on
         # pull requests, only run this step for a single job in the matrix. For
         # all other workflow triggers (e.g., pushes to a release branch) run
@@ -109,5 +109,5 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Test
-        run: go test ./...
+        run: go test -count=1 ./...
     timeout-minutes: 10
