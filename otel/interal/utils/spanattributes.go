@@ -58,9 +58,11 @@ func ParseSpanAttributes(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 
 func descriptionForDbSystem(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 	description := s.Name()
-	// Use DB statement (Ex "SELECT * FROM table") if possible as description.
 	for _, attribute := range s.Attributes() {
 		if attribute.Key == semconv.DBStatementKey {
+			// TODO(michi)
+			// Note: The value may be sanitized to exclude sensitive information.
+			// See: https://pkg.go.dev/go.opentelemetry.io/otel/semconv/v1.12.0
 			description = attribute.Value.AsString()
 			break
 		}
