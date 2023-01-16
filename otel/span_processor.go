@@ -29,6 +29,11 @@ func (ssm *SentrySpanMap) Get(otelSpandID otelTrace.SpanID) (*sentry.Span, bool)
 func (ssm *SentrySpanMap) Set(otelSpandID otelTrace.SpanID, sentrySpan *sentry.Span) {
 	ssm.mu.Lock()
 	defer ssm.mu.Unlock()
+
+	if ssm.spanMap == nil {
+		ssm.spanMap = make(map[otelTrace.SpanID]*sentry.Span)
+	}
+
 	ssm.spanMap[otelSpandID] = sentrySpan
 }
 
