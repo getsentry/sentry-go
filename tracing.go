@@ -213,6 +213,10 @@ func (s *Span) SetTag(name, value string) {
 	s.Tags[name] = value
 }
 
+func (s *Span) IsTransaction() bool {
+	return s.isTransaction
+}
+
 // TODO(tracing): maybe add shortcuts to get/set transaction name. Right now the
 // transaction name is in the Scope, as it has existed there historically, prior
 // to tracing.
