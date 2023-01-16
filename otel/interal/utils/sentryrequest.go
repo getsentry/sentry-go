@@ -30,7 +30,6 @@ func isSentryRequestUrl(url string) bool {
 	if client != nil {
 		dsn, _ := sentry.NewDsn(client.Options().Dsn)
 
-		// TODO(michi) Export Client.Dsn, so we can access the host field
 		return strings.Contains(url, dsn.GetHost())
 	}
 
