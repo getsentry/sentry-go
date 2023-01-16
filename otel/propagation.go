@@ -6,6 +6,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/otel/interal/utils"
+	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -18,33 +19,47 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 
 	spanContext := trace.SpanContextFromContext(ctx)
 
-	if !spanContext.IsValid() {
-		return
+	var sentrySpan *sentry.Span
+
+	if spanContext.IsValid() {
+		sentrySpan, _ = sentrySpanMap.Get(spanContext.SpanID())
+	} else {
+		sentrySpan = nil
 	}
 
-	// FIXME(anton): the span map should be accessible here
-	// sentrySpan := SENTRY_SPAN_PROCESSOR_MAP.get(spanContext.spanId);
-	sentrySpan, ok := sentrySpanMap.Get(spanContext.SpanID())
-	if sentrySpan == nil || !ok {
-		return
-	}
-
-	carrier.Set(sentry.SentryTraceHeader, sentrySpan.ToSentryTrace())
-
-	// TODO(anton): this is basically the isTransaction check
-	if len(sentrySpan.TraceID) > 0 {
-
-		// baggage := baggage.FromContext(ctx)
-
-		// Update the existing baggage with the (potentially updated) dynamic
-		// sampling context.
-
-		baggageValue := sentrySpan.ToBaggage()
-		if baggageValue != "" {
-			carrier.Set(sentry.SentryBaggageHeader, baggageValue)
+	// Propagate sentry-trace header
+	if sentrySpan != nil {
+		// Sentry span exists => generate "sentry-trace" from it
+		carrier.Set(sentry.SentryTraceHeader, sentrySpan.ToSentryTrace())
+	} else {
+		// No span => propagate the incoming sentry-trace header, if exists
+		sentryTraceHeader, _ := ctx.Value(utils.SentryTraceHeaderKey()).(string)
+		if sentryTraceHeader != "" {
+			carrier.Set(sentry.SentryTraceHeader, sentryTraceHeader)
 		}
 	}
 
+	// Propagate baggage header
+	sentryBaggageStr := ""
+	// TODO(anton): this is basically the isTransaction check. Do we actually need it?
+	if sentrySpan != nil && len(sentrySpan.TraceID) > 0 {
+		sentryBaggageStr = sentrySpan.ToBaggage().String()
+	}
+	sentryBaggage, _ := baggage.Parse(sentryBaggageStr)
+
+	// Merge the baggage values
+	finalBaggage := baggage.FromContext(ctx)
+	for _, member := range sentryBaggage.Members() {
+		var err error
+		finalBaggage, err = finalBaggage.SetMember(member)
+		if err != nil {
+			continue
+		}
+	}
+
+	if finalBaggage.Len() > 0 {
+		carrier.Set(sentry.SentryBaggageHeader, finalBaggage.String())
+	}
 }
 
 // Extract reads cross-cutting concerns from the carrier into a Context.
@@ -54,6 +69,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 	sentryTraceHeader := carrier.Get(sentry.SentryTraceHeader)
 
 	if sentryTraceHeader != "" {
+		ctx = context.WithValue(ctx, utils.SentryTraceHeaderKey(), sentryTraceHeader)
 		if traceparentData, valid := sentry.ExtractSentryTrace([]byte(sentryTraceHeader)); valid {
 
 			// TODO(anton): Do we need to set trace parent context somewhere here?
@@ -71,7 +87,15 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 	}
 
 	baggageHeader := carrier.Get(sentry.SentryBaggageHeader)
-	// The following cases should be already covered here:
+	if baggageHeader != "" {
+		// Preserve the original baggage
+		parsedBaggage, err := baggage.Parse(baggageHeader)
+		if err == nil {
+			ctx = baggage.ContextWithBaggage(ctx, parsedBaggage)
+		}
+	}
+
+	// The following cases should be already covered below:
 	// * We can extract a valid dynamic sampling context (DSC) from the baggage
 	// * No baggage header is present
 	// * No Sentry-related values are present
@@ -79,11 +103,9 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 	dynamicSamplingContext, err := sentry.DynamicSamplingContextFromHeader([]byte(baggageHeader))
 	if err != nil {
 		// If there are any errors, create a new non-frozen one.
-		dynamicSamplingContext = sentry.DynamicSamplingContext{}
+		dynamicSamplingContext = sentry.DynamicSamplingContext{Frozen: false}
 	}
 	ctx = context.WithValue(ctx, utils.DynamicSamplingContextKey(), dynamicSamplingContext)
-
-	// TODO(anton): We should preserve the baggage header, so it can be later injected again.
 
 	return ctx
 }

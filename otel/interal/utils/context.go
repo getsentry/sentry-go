@@ -29,8 +29,26 @@ func DynamicSamplingContextKey() CtxKey {
 var sentryTraceContextKey CtxKey
 
 func SentryTraceContextKey() CtxKey {
-	if dynamicSamplingContextKey == "" {
+	if sentryTraceContextKey == "" {
 		sentryTraceContextKey = contextKey("SentryTraceContextKey")
 	}
 	return sentryTraceContextKey
+}
+
+var sentryTraceHeaderKey CtxKey
+
+func SentryTraceHeaderKey() CtxKey {
+	if sentryTraceHeaderKey == "" {
+		sentryTraceHeaderKey = contextKey("SentryTraceHeaderKey")
+	}
+	return sentryTraceHeaderKey
+}
+
+var sentryBaggageHeaderKey CtxKey
+
+func SentryBaggageHeaderKey() CtxKey {
+	if sentryBaggageHeaderKey == "" {
+		sentryBaggageHeaderKey = contextKey("SentryBaggageHeaderKey")
+	}
+	return sentryBaggageHeaderKey
 }

@@ -116,3 +116,50 @@ func TestExtractSetsDefinedDynamicSamplingContext(t *testing.T) {
 			Frozen: true},
 	)
 }
+
+/// Integration tests
+
+// Valid baggage and sentry-trace headers
+func TestExtractAndInjectValidSentryTraceAndBaggage(t *testing.T) {
+	propagator, incomingCarrier := setupPropagatorTest()
+	outgoingCarrier := propagation.MapCarrier{}
+	incomingCarrier.Set(
+		sentry.SentryBaggageHeader,
+		"sentry-environment=production,sentry-release=1.0.0,othervendor=bla,sentry-transaction=dsc-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b",
+	)
+	incomingCarrier.Set(
+		sentry.SentryTraceHeader,
+		"d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1",
+	)
+
+	ctx := propagator.Extract(context.Background(), incomingCarrier)
+	propagator.Inject(ctx, outgoingCarrier)
+
+	assertEqual(t,
+		outgoingCarrier,
+		propagation.MapCarrier{
+			"baggage":        "sentry-environment=production,sentry-release=1.0.0,othervendor=bla,sentry-transaction=dsc-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b",
+			"sentry-tracing": "d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1",
+		},
+	)
+}
+
+// No sentry-trace header, and baggage without sentry values
+func TestExtractAndInjectNoSentryTraceAndExistingBaggage(t *testing.T) {
+	propagator, incomingCarrier := setupPropagatorTest()
+	outgoingCarrier := propagation.MapCarrier{}
+	incomingCarrier.Set(
+		sentry.SentryBaggageHeader,
+		"othervendor=bla",
+	)
+
+	ctx := propagator.Extract(context.Background(), incomingCarrier)
+	propagator.Inject(ctx, outgoingCarrier)
+
+	assertEqual(t,
+		outgoingCarrier,
+		propagation.MapCarrier{
+			"baggage": "othervendor=bla",
+		},
+	)
+}
