@@ -11,13 +11,23 @@ func TestDynamicSamplingContextFromHeader(t *testing.T) {
 		input []byte
 		want  DynamicSamplingContext
 	}{
+		// Empty baggage header
 		{
 			input: []byte(""),
 			want: DynamicSamplingContext{
-				Frozen:  true,
+				Frozen:  false,
 				Entries: map[string]string{},
 			},
 		},
+		// Third-party baggage
+		{
+			input: []byte("other-vendor-key1=value1;value2, other-vendor-key2=value3"),
+			want: DynamicSamplingContext{
+				Frozen:  false,
+				Entries: map[string]string{},
+			},
+		},
+		// Sentry-only baggage
 		{
 			input: []byte("sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1"),
 			want: DynamicSamplingContext{
@@ -29,6 +39,7 @@ func TestDynamicSamplingContextFromHeader(t *testing.T) {
 				},
 			},
 		},
+		// Mixed baggage
 		{
 			input: []byte("sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1,foo=bar;foo;bar;bar=baz"),
 			want: DynamicSamplingContext{
