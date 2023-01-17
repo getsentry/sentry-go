@@ -8,8 +8,9 @@ import (
 
 func TestDynamicSamplingContextFromHeader(t *testing.T) {
 	tests := []struct {
-		input []byte
-		want  DynamicSamplingContext
+		input  []byte
+		want   DynamicSamplingContext
+		errMsg string
 	}{
 		// Empty baggage header
 		{
@@ -51,14 +52,22 @@ func TestDynamicSamplingContextFromHeader(t *testing.T) {
 				},
 			},
 		},
+		// Invalid baggage value
+		{
+			input: []byte(","),
+			want: DynamicSamplingContext{
+				Frozen: false,
+			},
+			errMsg: "invalid baggage list-member: \"\"",
+		},
 	}
 
 	for _, tc := range tests {
 		got, err := DynamicSamplingContextFromHeader(tc.input)
+		assertEqual(t, got, tc.want, "Context mismatch")
 		if err != nil {
-			t.Fatal(err)
+			assertEqual(t, err.Error(), tc.errMsg, "Error mismatch")
 		}
-		assertEqual(t, got, tc.want)
 	}
 }
 
