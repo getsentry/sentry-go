@@ -41,8 +41,8 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 
 	// Propagate baggage header
 	sentryBaggageStr := ""
-	// TODO(anton): this is basically the isTransaction check. Do we actually need it?
-	if sentrySpan != nil && len(sentrySpan.TraceID) > 0 {
+	// TODO(anton): Do we actually need the IsTransaction() check?
+	if sentrySpan != nil && sentrySpan.IsTransaction() {
 		sentryBaggageStr = sentrySpan.ToBaggage()
 	}
 	sentryBaggage, _ := baggage.Parse(sentryBaggageStr)
@@ -58,8 +58,6 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	}
 
 	if finalBaggage.Len() > 0 {
-		fmt.Printf("\n--- Baggage (Inject)\nContext: %#v\n", finalBaggage)
-		fmt.Printf("\n--- String: %#v\n", finalBaggage.String())
 		carrier.Set(sentry.SentryBaggageHeader, finalBaggage.String())
 	}
 }
