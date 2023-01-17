@@ -10,8 +10,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/getsentry/sentry-go/internal/otel/baggage"
 )
 
 const (
@@ -243,13 +241,8 @@ func (s *Span) ToSentryTrace() string {
 }
 
 // TODO(anton): let's rename this to ToBaggageString?
-func (s *Span) ToBaggage() baggage.Baggage {
-	outBaggage, err := s.dynamicSamplingContext.ToBaggage()
-	if err == nil {
-		return outBaggage
-	} else {
-		return baggage.Baggage{}
-	}
+func (s *Span) ToBaggage() string {
+	return s.dynamicSamplingContext.String()
 }
 
 // sentryTracePattern matches either
