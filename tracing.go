@@ -693,14 +693,19 @@ func ContinueFromRequest(r *http.Request) SpanOption {
 // an existing TraceID and propagates the Dynamic Sampling context.
 func ContinueFromHeaders(trace, baggage string) SpanOption {
 	return func(s *Span) {
+		if trace != "" {
+			s.updateFromSentryTrace([]byte(trace))
+		}
 		if baggage != "" {
 			s.updateFromBaggage([]byte(baggage))
 		}
-		if trace != "" {
-			s.updateFromSentryTrace([]byte(trace))
-			// In case a sentry-trace header is present, we want to freeze the
-			// DynamicSamplingContext in all cases.
-			s.dynamicSamplingContext.Frozen = true
+
+		// In case a sentry-trace header is present but there are no sentry-related
+		// values in the baggage, create an empty, frozen DynamicSamplingContext.
+		if trace != "" && !s.dynamicSamplingContext.HasEntries() {
+			s.dynamicSamplingContext = DynamicSamplingContext{
+				Frozen: true,
+			}
 		}
 	}
 }
