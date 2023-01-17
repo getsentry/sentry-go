@@ -240,7 +240,7 @@ func (s *Span) ToSentryTrace() string {
 	return b.String()
 }
 
-// TODO(anton): let's rename this to ToBaggageString?
+// ToBaggage returns the serialized dynamic sampling context in the baggage format.
 func (s *Span) ToBaggage() string {
 	return s.dynamicSamplingContext.String()
 }

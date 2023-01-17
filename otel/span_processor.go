@@ -9,8 +9,6 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/otel/interal/utils"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
-
-	// TODO(anton): is it ok to use this module?
 	otelTrace "go.opentelemetry.io/otel/trace"
 )
 
