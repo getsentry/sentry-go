@@ -93,7 +93,6 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 		if err == nil {
 			ctx = baggage.ContextWithBaggage(ctx, parsedBaggage)
 		}
-		fmt.Printf("\n--- Baggage\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
 	}
 
 	// The following cases should be already covered below:
@@ -106,6 +105,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 		// If there are any errors, create a new non-frozen one.
 		dynamicSamplingContext = sentry.DynamicSamplingContext{Frozen: false}
 	}
+
 	ctx = context.WithValue(ctx, utils.DynamicSamplingContextKey(), dynamicSamplingContext)
 
 	return ctx
