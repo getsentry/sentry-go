@@ -429,6 +429,85 @@ func TestContinueSpanFromRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestContinueTransactionFromHeaders(t *testing.T) {
+	tests := []struct {
+		traceStr   string
+		baggageStr string
+		wantSpan   Span
+	}{
+		{
+			// No sentry-trace or baggage => nothing to do, unfrozen DSC
+			traceStr:   "",
+			baggageStr: "",
+			wantSpan: Span{
+				isTransaction: true,
+				Sampled:       0,
+				dynamicSamplingContext: DynamicSamplingContext{
+					Frozen:  false,
+					Entries: nil,
+				},
+			},
+		},
+		{
+			// Third-party baggage => nothing to do, unfrozen DSC
+			traceStr:   "",
+			baggageStr: "other-vendor-key1=value1;value2, other-vendor-key2=value3",
+			wantSpan: Span{
+				isTransaction: true,
+				Sampled:       0,
+				dynamicSamplingContext: DynamicSamplingContext{
+					Frozen:  false,
+					Entries: map[string]string{},
+				},
+			},
+		},
+		{
+			// sentry-trace and no baggage => we should create a new DSC and freeze it
+			// immediately.
+			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
+			baggageStr: "",
+			wantSpan: Span{
+				isTransaction: true,
+				TraceID:       TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
+				ParentSpanID:  SpanIDFromHex("b72fa28504b07285"),
+				Sampled:       1,
+				dynamicSamplingContext: DynamicSamplingContext{
+					Frozen: true,
+				},
+			},
+		},
+		{
+			// sentry-trace and baggage with Sentry values => we
+			// immediately.
+			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
+			baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
+			wantSpan: Span{
+				isTransaction: true,
+				TraceID:       TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
+				ParentSpanID:  SpanIDFromHex("b72fa28504b07285"),
+				Sampled:       1,
+				dynamicSamplingContext: DynamicSamplingContext{
+					Frozen: true,
+					Entries: map[string]string{
+						"public_key":  "public",
+						"sample_rate": "1",
+						"trace_id":    "d49d9bf66f13450b81f65bc51cf49c03",
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		s := Span{isTransaction: true}
+		spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
+		spanOption(&s)
+
+		assertEqual(t, s, tt.wantSpan)
+	}
+}
+
 func TestContinueSpanFromTrace(t *testing.T) {
 	traceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
 	spanID := SpanIDFromHex("b72fa28504b07285")
