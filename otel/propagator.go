@@ -113,6 +113,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 	}
 
 	ctx = context.WithValue(ctx, utils.DynamicSamplingContextKey(), dynamicSamplingContext)
+	fmt.Printf("DSC: %#v\n", dynamicSamplingContext)
 
 	return ctx
 }

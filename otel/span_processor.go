@@ -76,6 +76,9 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 		transaction.TraceID = sentry.TraceID(otelTraceId)
 		transaction.ParentSpanID = sentry.SpanID(otelParentSpanId)
 		transaction.StartTime = s.StartTime()
+		if dynamicSamplingContext, valid := parent.Value(utils.DynamicSamplingContextKey()).(sentry.DynamicSamplingContext); valid {
+			transaction.SetDynamicSamplingContext(dynamicSamplingContext)
+		}
 
 		sentrySpanMap.Set(otelSpanId, transaction)
 	}
