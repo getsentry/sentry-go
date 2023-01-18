@@ -496,19 +496,6 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 				},
 			},
 		},
-		// TODO(anton): we should handle this case properly
-		// {
-		// 	// No sentry-trace, but baggage with Sentry values => this is a head SDK, so the DSC
-		// 	// should be empty and unfrozen.
-		// 	traceStr:   "",
-		// 	baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
-		// 	wantSpan: Span{
-		// 		isTransaction: true,
-		// 		dynamicSamplingContext: DynamicSamplingContext{
-		// 			Frozen: false,
-		// 		},
-		// 	},
-		// },
 	}
 
 	for _, tt := range tests {
