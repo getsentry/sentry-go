@@ -53,6 +53,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 	fmt.Printf("\n--- SpanProcessor OnStart\nContext: %#v\nSpan: %#v\n", parent, s)
 
 	otelSpanId := s.SpanContext().SpanID()
+	otelTraceId := s.SpanContext().TraceID()
 	otelParentSpanId := s.Parent().SpanID()
 
 	var sentryParentSpan *sentry.Span
@@ -72,6 +73,8 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 		// See: https://github.com/getsentry/sentry-javascript/blob/master/packages/opentelemetry-node/src/spanprocessor.ts#L145
 		transaction := sentry.StartTransaction(parent, s.Name())
 		transaction.SpanID = sentry.SpanID(otelSpanId)
+		transaction.TraceID = sentry.TraceID(otelTraceId)
+		transaction.ParentSpanID = sentry.SpanID(otelParentSpanId)
 		transaction.StartTime = s.StartTime()
 
 		sentrySpanMap.Set(otelSpanId, transaction)
