@@ -68,9 +68,6 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 
 		sentrySpanMap.Set(otelSpanId, span)
 	} else {
-		// StartTransaction/StartSpan adds the trace context internally
-		// TODO(michi) We might miss some info about the trace contet here
-		// See: https://github.com/getsentry/sentry-javascript/blob/master/packages/opentelemetry-node/src/spanprocessor.ts#L145
 		transaction := sentry.StartTransaction(parent, s.Name())
 		transaction.SpanID = sentry.SpanID(otelSpanId)
 		transaction.TraceID = sentry.TraceID(otelTraceId)
