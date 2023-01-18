@@ -51,8 +51,7 @@ func ParseSpanAttributes(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 	}
 
 	return SpanAttributes{
-		// TODO(michi) Do we have a better default?
-		Op:          "undefined",
+		Op:          "", // becomes "default" in Relay
 		Description: s.Name(),
 		Source:      sentry.SourceCustom,
 	}
