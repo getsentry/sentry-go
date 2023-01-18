@@ -20,7 +20,7 @@ func setupPropagatorTest() (propagation.TextMapPropagator, propagation.TextMapCa
 func TestFieldsReturnsRightSet(t *testing.T) {
 	propagator, _ := setupPropagatorTest()
 	fields := propagator.Fields()
-	assertEqual(t, fields, []string{sentry.SentryTraceHeader, sentry.SentryBaggageHeader})
+	assertEqual(t, fields, []string{"sentry-trace", "baggage"})
 }
 
 /// Inject
@@ -138,8 +138,8 @@ func TestExtractAndInjectValidSentryTraceAndBaggage(t *testing.T) {
 	assertMapCarrierEqual(t,
 		outgoingCarrier,
 		propagation.MapCarrier{
-			"baggage":        "sentry-environment=production,sentry-release=1.0.0,othervendor=bla,sentry-transaction=dsc-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b",
-			"sentry-tracing": "d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1",
+			"baggage":      "sentry-environment=production,sentry-release=1.0.0,othervendor=bla,sentry-transaction=dsc-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b",
+			"sentry-trace": "d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1",
 		},
 	)
 }
