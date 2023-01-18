@@ -33,7 +33,8 @@ func DynamicSamplingContextFromHeader(header []byte) (DynamicSamplingContext, er
 
 	return DynamicSamplingContext{
 		Entries: entries,
-		Frozen:  true,
+		// If there's at least one Sentry value, we consider the DSC frozen
+		Frozen: len(entries) > 0,
 	}, nil
 }
 
