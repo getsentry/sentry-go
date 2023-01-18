@@ -8,6 +8,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/otel/interal/utils"
+	"go.opentelemetry.io/otel/attribute"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
 	otelTrace "go.opentelemetry.io/otel/trace"
 )
@@ -119,19 +120,33 @@ func (bsp *sentrySpanProcessor) ForceFlush(ctx context.Context) error {
 }
 
 func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
+	// TODO(michi) This is crazy inefficient
+	attributes := map[attribute.Key]string{}
+	resource := map[attribute.Key]string{}
+
+	for _, kv := range s.Attributes() {
+		attributes[kv.Key] = kv.Value.AsString()
+	}
+	for _, kv := range s.Resource().Attributes() {
+		resource[kv.Key] = kv.Value.AsString()
+	}
+
 	// TODO(michi) We might need to set this somewhere else then on the scope
 	sentry.CurrentHub().Scope().SetContext("otel", map[string]interface{}{
-		"attributes": s.Attributes(),
-		"resource":   s.Resource().Attributes(),
+		"attributes": attributes,
+		"resource":   resource,
 	})
+
+	fmt.Printf("attributes: %+v \n", attributes)
+	fmt.Printf("resource: %+v \n", resource)
 
 	transaction.Status = utils.MapOtelStatus(s)
 
-	attributes := utils.ParseSpanAttributes(s)
-	transaction.Op = attributes.Op
-	transaction.Source = attributes.Source
+	spanAttributes := utils.ParseSpanAttributes(s)
+	transaction.Op = spanAttributes.Op
+	transaction.Source = spanAttributes.Source
 	// TODO(michi) We might need to set this somewhere else then on the scope
-	sentry.CurrentHub().Scope().SetTransaction(attributes.Description)
+	sentry.CurrentHub().Scope().SetTransaction(spanAttributes.Description)
 }
 
 func updateSpanWithOtelData(span *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
