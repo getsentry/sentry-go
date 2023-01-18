@@ -35,11 +35,11 @@ func TestExtractDoesNotChangeContextWithEmptyHeaders(t *testing.T) {
 
 	assertEqual(t,
 		ctx.Value(utils.DynamicSamplingContextKey()),
-		sentry.DynamicSamplingContext{Entries: map[string]string{}, Frozen: true},
+		sentry.DynamicSamplingContext{Entries: map[string]string{}, Frozen: false},
 	)
 }
 
-// No sentry-trace header, unrelated baggage header
+// No sentry-trace header, 3rd-party baggage header
 func TestExtractSetsUndefinedDynamicSamplingContext(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
 	carrier.Set(sentry.SentryBaggageHeader, "othervendor=bla")
@@ -48,7 +48,7 @@ func TestExtractSetsUndefinedDynamicSamplingContext(t *testing.T) {
 
 	assertEqual(t,
 		ctx.Value(utils.DynamicSamplingContextKey()),
-		sentry.DynamicSamplingContext{Entries: map[string]string{}, Frozen: true},
+		sentry.DynamicSamplingContext{Entries: map[string]string{}, Frozen: false},
 	)
 }
 
