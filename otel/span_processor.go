@@ -143,12 +143,9 @@ func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.Read
 		"resource":   resource,
 	})
 
-	fmt.Printf("attributes: %+v \n", attributes)
-	fmt.Printf("resource: %+v \n", resource)
+	spanAttributes := utils.ParseSpanAttributes(s)
 
 	transaction.Status = utils.MapOtelStatus(s)
-
-	spanAttributes := utils.ParseSpanAttributes(s)
 	transaction.Op = spanAttributes.Op
 	transaction.Source = spanAttributes.Source
 	// TODO(michi) We might need to set this somewhere else then on the scope
@@ -156,17 +153,13 @@ func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.Read
 }
 
 func updateSpanWithOtelData(span *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
-	// const { attributes, kind } = otelSpan;
+	spanAttributes := utils.ParseSpanAttributes(s)
 
 	span.Status = utils.MapOtelStatus(s)
-	// sentrySpan.setData('otel.kind', kind.valueOf());
-
-	// Object.keys(attributes).forEach(prop => {
-	//   const value = attributes[prop];
-	//   sentrySpan.setData(prop, value);
-	// });
-
-	attributes := utils.ParseSpanAttributes(s)
-	span.Op = attributes.Op
-	span.Description = attributes.Description
+	span.Op = spanAttributes.Op
+	span.Description = spanAttributes.Description
+	span.SetData("otel.kind", s.SpanKind().String())
+	for _, kv := range s.Attributes() {
+		span.SetData(string(kv.Key), kv.Value.AsString())
+	}
 }
