@@ -41,8 +41,9 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 
 	// Propagate baggage header
 	sentryBaggageStr := ""
-	// TODO(anton): Do we actually need the IsTransaction() check?
 	if sentrySpan != nil && sentrySpan.IsTransaction() {
+		// TODO(anton): Normally, this should return the DSC baggage from the transaction
+		// (not necessarily the current span). So this might break things in some cases.
 		sentryBaggageStr = sentrySpan.ToBaggage()
 	}
 	sentryBaggage, _ := baggage.Parse(sentryBaggageStr)

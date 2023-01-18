@@ -5,6 +5,8 @@ import (
 	"fmt"
 )
 
+// TODO(anton): Do we actually need all this? Take a look at spanContextKey in tracing.go
+
 type CtxKey string
 
 // ContextKey generates a unique values suitable as a key for context.WithValue()

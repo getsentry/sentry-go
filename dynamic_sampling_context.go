@@ -97,6 +97,7 @@ func (d DynamicSamplingContext) IsFrozen() bool {
 	return d.Frozen
 }
 
+// TODO(anton): check if we actually use this, and if not -- revert
 func (d DynamicSamplingContext) String() string {
 	outBaggage, err := d.ToBaggage()
 	if err == nil {
