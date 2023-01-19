@@ -53,7 +53,6 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 	fmt.Printf("\n--- SpanProcessor OnStart\nContext: %#v\nSpan: %#v\n", parent, s)
 
 	otelSpanId := s.SpanContext().SpanID()
-	otelTraceId := s.SpanContext().TraceID()
 	otelParentSpanId := s.Parent().SpanID()
 
 	var sentryParentSpan *sentry.Span
@@ -68,10 +67,16 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 
 		sentrySpanMap.Set(otelSpanId, span)
 	} else {
-		transaction := sentry.StartTransaction(parent, s.Name())
+		traceParentContext, _ := parent.Value(utils.SentryTraceParentContextKey()).(sentry.TraceParentContext)
+
+		transaction := sentry.StartTransaction(
+			parent,
+			s.Name(),
+			sentry.SpanSampled(traceParentContext.Sampled),
+		)
 		transaction.SpanID = sentry.SpanID(otelSpanId)
-		transaction.TraceID = sentry.TraceID(otelTraceId)
-		transaction.ParentSpanID = sentry.SpanID(otelParentSpanId)
+		transaction.TraceID = traceParentContext.TraceID
+		transaction.ParentSpanID = traceParentContext.ParentSpanID
 		transaction.StartTime = s.StartTime()
 		if dynamicSamplingContext, valid := parent.Value(utils.DynamicSamplingContextKey()).(sentry.DynamicSamplingContext); valid {
 			transaction.SetDynamicSamplingContext(dynamicSamplingContext)

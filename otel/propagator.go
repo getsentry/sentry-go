@@ -75,14 +75,14 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 
 	if sentryTraceHeader != "" {
 		ctx = context.WithValue(ctx, utils.SentryTraceHeaderKey(), sentryTraceHeader)
-		if traceparentData, valid := sentry.ExtractSentryTrace([]byte(sentryTraceHeader)); valid {
-
-			// TODO(anton): Do we need to set trace parent context somewhere here?
-			// Like SENTRY_TRACE_PARENT_CONTEXT_KEY in JS
+		if traceParentContext, valid := sentry.ParseTraceParentContext([]byte(sentryTraceHeader)); valid {
+			// Save traceParentContext because we'll at least need to know the original "sampled"
+			// value in the span processor.
+			ctx = context.WithValue(ctx, utils.SentryTraceParentContextKey(), traceParentContext)
 
 			spanContextConfig := trace.SpanContextConfig{
-				TraceID:    trace.TraceID(traceparentData.TraceID),
-				SpanID:     trace.SpanID(traceparentData.ParentSpanID),
+				TraceID:    trace.TraceID(traceParentContext.TraceID),
+				SpanID:     trace.SpanID(traceParentContext.ParentSpanID),
 				TraceFlags: trace.FlagsSampled,
 				Remote:     true,
 			}

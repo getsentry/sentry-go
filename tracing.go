@@ -54,6 +54,13 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	recorder *spanRecorder
 }
 
+// TODO(anton): yes
+type TraceParentContext struct {
+	TraceID      TraceID
+	ParentSpanID SpanID
+	Sampled      Sampled
+}
+
 // (*) Note on maligned:
 //
 // We prefer readability over optimal memory layout. If we ever decide to
@@ -308,17 +315,6 @@ func (s *Span) updateFromBaggage(header []byte) {
 	}
 }
 
-// ExtractSentryTrace parses a sentry-trace header and builds a Span from the
-// parsed values. If the header was parsed correctly, the second returned argument
-// ("valid") will be set to true, otherwise (e.g., empty or malformed header) it will
-// be false.
-// TODO(anton): add some tests for this new function.
-func ExtractSentryTrace(header []byte) (traceparentData Span, valid bool) {
-	s := Span{}
-	updated := s.updateFromSentryTrace(header)
-	return s, updated
-}
-
 func (s *Span) MarshalJSON() ([]byte, error) {
 	// span aliases Span to allow calling json.Marshal without an infinite loop.
 	// It preserves all fields while none of the attached methods.
@@ -479,6 +475,25 @@ func (s *Span) traceContext() *TraceContext {
 
 // spanRecorder stores the span tree. Guaranteed to be non-nil.
 func (s *Span) spanRecorder() *spanRecorder { return s.recorder }
+
+// ParseTraceParentContext parses a sentry-trace header and builds a TraceParentContext from the
+// parsed values. If the header was parsed correctly, the second returned argument
+// ("valid") will be set to true, otherwise (e.g., empty or malformed header) it will
+// be false.
+// TODO(anton): add some tests for this new function.
+func ParseTraceParentContext(header []byte) (traceParentContext TraceParentContext, valid bool) {
+	s := Span{}
+	updated := s.updateFromSentryTrace(header)
+	if !updated {
+		return TraceParentContext{}, false
+	}
+	parentContext := TraceParentContext{
+		TraceID:      s.TraceID,
+		ParentSpanID: s.ParentSpanID,
+		Sampled:      s.Sampled,
+	}
+	return parentContext, true
+}
 
 // TraceID identifies a trace.
 type TraceID [16]byte
@@ -716,6 +731,13 @@ func OpName(name string) SpanOption {
 func TransctionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
+	}
+}
+
+// SpanSampled updates the sampling flag for a given span.
+func SpanSampled(sampled Sampled) SpanOption {
+	return func(s *Span) {
+		s.Sampled = sampled
 	}
 }
 

@@ -54,3 +54,12 @@ func SentryBaggageHeaderKey() CtxKey {
 	}
 	return sentryBaggageHeaderKey
 }
+
+var sentryTraceParentContextKey CtxKey
+
+func SentryTraceParentContextKey() CtxKey {
+	if sentryTraceParentContextKey == "" {
+		sentryTraceParentContextKey = contextKey("SentryTraceParentContextKey")
+	}
+	return sentryTraceParentContextKey
+}
