@@ -145,6 +145,41 @@ func (dsn Dsn) String() string {
 	return url
 }
 
+// Get the scheme of the DSN.
+func (dsn Dsn) GetScheme() string {
+	return string(dsn.scheme)
+}
+
+// Get the public key of the DSN.
+func (dsn Dsn) GetPublicKey() string {
+	return dsn.publicKey
+}
+
+// Get the secret key of the DSN.
+func (dsn Dsn) GetSecretKey() string {
+	return dsn.secretKey
+}
+
+// Get the host of the DSN.
+func (dsn Dsn) GetHost() string {
+	return dsn.host
+}
+
+// Get the port of the DSN.
+func (dsn Dsn) GetPort() int {
+	return dsn.port
+}
+
+// Get the path of the DSN.
+func (dsn Dsn) GetPath() string {
+	return dsn.path
+}
+
+// Get the project ID of the DSN.
+func (dsn Dsn) GetProjectID() string {
+	return dsn.projectID
+}
+
 // StoreAPIURL returns the URL of the store endpoint of the project associated
 // with the DSN.
 func (dsn Dsn) StoreAPIURL() *url.URL {
