@@ -5,6 +5,7 @@
 ### Misc
 
 - Add SentryTraceHeader and SentryBaggageHeader constants ([#538](https://github.com/getsentry/sentry-go/pull/538/))
+- Add DSN getters ([#540](https://github.com/getsentry/sentry-go/pull/540))
 
 ## 0.17.0
 
