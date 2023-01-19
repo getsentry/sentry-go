@@ -235,6 +235,14 @@ func (s *Span) ToBaggage() string {
 	return s.dynamicSamplingContext.String()
 }
 
+// SetDynamicSamplingContext sets the given dynamic sampling context on the
+// current transaction.
+func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
+	if s.isTransaction {
+		s.dynamicSamplingContext = dsc
+	}
+}
+
 // sentryTracePattern matches either
 //
 //	TRACE_ID - SPAN_ID
