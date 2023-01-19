@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+const (
+	SentryTraceHeader   = "sentry-trace"
+	SentryBaggageHeader = "baggage"
+)
+
 // A Span is the building block of a Sentry transaction. Spans build up a tree
 // structure of timed operations. The span tree makes up a transaction event
 // that is sent to Sentry when the root span is finished.
@@ -692,9 +697,9 @@ func TransctionSource(source TransactionSource) SpanOption {
 //
 // ContinueFromRequest is an alias for:
 //
-// ContinueFromHeaders(r.Header.Get("sentry-trace"), r.Header.Get("baggage")).
+// ContinueFromHeaders(r.Header.Get(SentryTraceHeader), r.Header.Get(SentryBaggageHeader)).
 func ContinueFromRequest(r *http.Request) SpanOption {
-	return ContinueFromHeaders(r.Header.Get("sentry-trace"), r.Header.Get("baggage"))
+	return ContinueFromHeaders(r.Header.Get(SentryTraceHeader), r.Header.Get(SentryBaggageHeader))
 }
 
 // ContinueFromHeaders returns a span option that updates the span to continue

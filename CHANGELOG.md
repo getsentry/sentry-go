@@ -4,6 +4,7 @@
 
 ### Misc
 
+- Add SentryTraceHeader and SentryBaggageHeader constants ([#538](https://github.com/getsentry/sentry-go/pull/538/))
 - Add `Span.SetDynamicSamplingContext` method ([#539](https://github.com/getsentry/sentry-go/pull/539/))
 
 ## 0.17.0
