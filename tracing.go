@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	SentryTraceHeader   = "sentry-tracing"
+	SentryTraceHeader   = "sentry-trace"
 	SentryBaggageHeader = "baggage"
 )
 
