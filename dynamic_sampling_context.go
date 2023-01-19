@@ -98,17 +98,7 @@ func (d DynamicSamplingContext) IsFrozen() bool {
 	return d.Frozen
 }
 
-// TODO(anton): check if we actually use this, and if not -- revert
 func (d DynamicSamplingContext) String() string {
-	outBaggage, err := d.ToBaggage()
-	if err == nil {
-		return outBaggage.String()
-	} else {
-		return ""
-	}
-}
-
-func (d DynamicSamplingContext) ToBaggage() (baggage.Baggage, error) {
 	members := []baggage.Member{}
 	for k, entry := range d.Entries {
 		member, err := baggage.NewMember(sentryPrefix+k, entry)
@@ -117,5 +107,13 @@ func (d DynamicSamplingContext) ToBaggage() (baggage.Baggage, error) {
 		}
 		members = append(members, member)
 	}
-	return baggage.New(members...)
+	if len(members) > 0 {
+		baggage, err := baggage.New(members...)
+		if err != nil {
+			return ""
+		}
+		return baggage.String()
+	}
+
+	return ""
 }
