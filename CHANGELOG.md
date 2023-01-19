@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Misc
+
+- Add SentryTraceHeader and SentryBaggageHeader constants ([#538](https://github.com/getsentry/sentry-go/pull/538/))
+- Add `Span.SetDynamicSamplingContext` method ([#539](https://github.com/getsentry/sentry-go/pull/539/))
+- Add DSN getters ([#540](https://github.com/getsentry/sentry-go/pull/540))
+
 ## 0.17.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.17.0.

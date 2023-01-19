@@ -654,3 +654,38 @@ func TestDoesNotCrashWithEmptyContext(t *testing.T) {
 	tx.Sampled = SampledTrue
 	tx.Finish()
 }
+
+func TestSetDynamicSamplingContextWorksOnTransaction(t *testing.T) {
+	s := Span{
+		isTransaction:          true,
+		dynamicSamplingContext: DynamicSamplingContext{Frozen: false},
+	}
+	newDsc := DynamicSamplingContext{
+		Entries: map[string]string{"environment": "dev"},
+		Frozen:  true,
+	}
+
+	s.SetDynamicSamplingContext(newDsc)
+
+	if diff := cmp.Diff(newDsc, s.dynamicSamplingContext); diff != "" {
+		t.Errorf("DynamicSamplingContext mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestSetDynamicSamplingContextDoesNothingOnSpan(t *testing.T) {
+	// SetDynamicSamplingContext should do nothing on non-transaction spans
+	s := Span{
+		isTransaction:          false,
+		dynamicSamplingContext: DynamicSamplingContext{},
+	}
+	newDsc := DynamicSamplingContext{
+		Entries: map[string]string{"environment": "dev"},
+		Frozen:  true,
+	}
+
+	s.SetDynamicSamplingContext(newDsc)
+
+	if diff := cmp.Diff(DynamicSamplingContext{}, s.dynamicSamplingContext); diff != "" {
+		t.Errorf("DynamicSamplingContext mismatch (-want +got):\n%s", diff)
+	}
+}
