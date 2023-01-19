@@ -37,6 +37,12 @@ func (ssm *SentrySpanMap) Delete(otelSpandID otelTrace.SpanID) {
 	delete(ssm.spanMap, otelSpandID)
 }
 
+func (ssm *SentrySpanMap) Clear() {
+	ssm.mu.Lock()
+	defer ssm.mu.Unlock()
+	ssm.spanMap = make(map[otelTrace.SpanID]*sentry.Span)
+}
+
 var sentrySpanMap = SentrySpanMap{spanMap: make(map[otelTrace.SpanID]*sentry.Span)}
 
 type sentrySpanProcessor struct{}

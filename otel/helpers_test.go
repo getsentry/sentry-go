@@ -4,6 +4,7 @@ package sentryotel
 // We should figure out how to share testing helpers.
 
 import (
+	"encoding/hex"
 	"fmt"
 	"reflect"
 	"sort"
@@ -89,4 +90,23 @@ func assertMapCarrierEqual(t *testing.T, got, want propagation.MapCarrier, userM
 		// Everything else: do the exact comparison
 		assertEqual(t, gotValue, wantValue, userMessage...)
 	}
+}
+
+// FIXME: copied from tracing_test.go
+func TraceIDFromHex(s string) sentry.TraceID {
+	var id sentry.TraceID
+	_, err := hex.Decode(id[:], []byte(s))
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
+func SpanIDFromHex(s string) sentry.SpanID {
+	var id sentry.SpanID
+	_, err := hex.Decode(id[:], []byte(s))
+	if err != nil {
+		panic(err)
+	}
+	return id
 }

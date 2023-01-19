@@ -46,6 +46,10 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 		// (not necessarily the current span). So this might break things in some cases.
 		sentryBaggageStr = sentrySpan.ToBaggage()
 	}
+	fmt.Printf("sentrySpan: %#v, baggage: %#v\n", sentrySpan, sentryBaggageStr)
+	// FIXME: We're basically reparsing the header again, because internally in sentry-go
+	// we currently use a vendored version of "otel/baggage" package.
+	// This is not optimal and we should consider other approaches.
 	sentryBaggage, _ := baggage.Parse(sentryBaggageStr)
 
 	// Merge the baggage values
