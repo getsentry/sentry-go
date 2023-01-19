@@ -84,8 +84,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 				TraceID:    trace.TraceID(traceparentData.TraceID),
 				SpanID:     trace.SpanID(traceparentData.ParentSpanID),
 				TraceFlags: trace.FlagsSampled,
-				// TODO(anton): wtf is this
-				Remote: true,
+				Remote:     true,
 			}
 			ctx = trace.ContextWithSpanContext(ctx, trace.NewSpanContext(spanContextConfig))
 		}
