@@ -190,3 +190,120 @@ func TestRequestHeadersWithSecretKey(t *testing.T) {
 		t.Error("expected auth header to fulfill provided pattern")
 	}
 }
+
+func TestGetScheme(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"http://public:secret@domain/42", "http"},
+		{"https://public:secret@domain/42", "https"},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetScheme(), tt.want)
+	}
+}
+
+func TestGetPublicKey(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"https://public:secret@domain/42", "public"},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetPublicKey(), tt.want)
+	}
+}
+
+func TestGetSecretKey(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"https://public:secret@domain/42", "secret"},
+		{"https://public@domain/42", ""},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetSecretKey(), tt.want)
+	}
+}
+
+func TestGetHost(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"http://public:secret@domain/42", "domain"},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetHost(), tt.want)
+	}
+}
+
+func TestGetPort(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want int
+	}{
+		{"https://public:secret@domain/42", 443},
+		{"http://public:secret@domain/42", 80},
+		{"https://public:secret@domain:3000/42", 3000},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetPort(), tt.want)
+	}
+}
+
+func TestGetPath(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"https://public:secret@domain/42", ""},
+		{"https://public:secret@domain/foo/bar/42", "/foo/bar"},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetPath(), tt.want)
+	}
+}
+
+func TestGetProjectID(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"https://public:secret@domain/42", "42"},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetProjectID(), tt.want)
+	}
+}
