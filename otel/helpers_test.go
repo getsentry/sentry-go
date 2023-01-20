@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/google/go-cmp/cmp"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 )
@@ -71,7 +72,10 @@ func assertMapCarrierEqual(t *testing.T, got, want propagation.MapCarrier, userM
 	sort.Strings(gotKeysSorted)
 	wantKeysSorted := want.Keys()
 	sort.Strings(wantKeysSorted)
-	assertEqual(t, gotKeysSorted, wantKeysSorted, append(userMessage, "compare MapCarrier keys")...)
+
+	if diff := cmp.Diff(wantKeysSorted, gotKeysSorted); diff != "" {
+		t.Errorf("Comparing MapCarrier keys (-want +got):\n%s", diff)
+	}
 
 	for _, key := range gotKeysSorted {
 		gotValue := got.Get(key)
@@ -82,13 +86,26 @@ func assertMapCarrierEqual(t *testing.T, got, want propagation.MapCarrier, userM
 			gotBaggage, gotErr := baggage.Parse(gotValue)
 			wantBaggage, wantErr := baggage.Parse(wantValue)
 
-			assertEqual(t, gotBaggage, wantBaggage, append(userMessage, "compare Baggage values")...)
-			assertEqual(t, gotErr, wantErr, append(userMessage, "compare Baggage parsing errors")...)
+			if diff := cmp.Diff(wantErr, gotErr); diff != "" {
+				t.Errorf("Comparing Baggage parsing errors (-want +got):\n%s", diff)
+			}
+
+			// sortedBaggage = gotBaggage.Members()
+
+			if diff := cmp.Diff(
+				wantBaggage,
+				gotBaggage,
+				cmp.AllowUnexported(baggage.Member{}, baggage.Baggage{}),
+			); diff != "" {
+				t.Errorf("Comparing Baggage values (-want +got):\n%s", diff)
+			}
 			continue
 		}
 
 		// Everything else: do the exact comparison
-		assertEqual(t, gotValue, wantValue, userMessage...)
+		if diff := cmp.Diff(wantValue, gotValue); diff != "" {
+			t.Errorf("Comparing MapCarrier values (-want +got):\n%s", diff)
+		}
 	}
 }
 
@@ -109,4 +126,8 @@ func SpanIDFromHex(s string) sentry.SpanID {
 		panic(err)
 	}
 	return id
+}
+
+func stringPtr(s string) *string {
+	return &s
 }

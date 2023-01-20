@@ -7,7 +7,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/otel/interal/utils"
-	"github.com/google/go-cmp/cmp"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -39,7 +38,7 @@ func createTransactionAndMaybeSpan(transactionContext transactionTestContext, wi
 	client, _ := sentry.NewClient(sentry.ClientOptions{
 		Dsn:           "https://abc@example.com/123",
 		Environment:   "testing",
-		Release:       "1.0.0",
+		Release:       "1.2.3",
 		EnableTracing: true,
 	})
 	hub := sentry.NewHub(client, sentry.NewScope())
@@ -118,8 +117,8 @@ func TestInjectUsesSetsValidTraceFromTransaction(t *testing.T) {
 		name                     string
 		otelSpanContext          otelTestContext
 		sentryTransactionContext transactionTestContext
-		baggage                  string
-		sentryTrace              string
+		baggage                  *string
+		sentryTrace              *string
 	}{
 		{
 			name: "should set baggage and sentry-trace when sampled",
@@ -129,12 +128,61 @@ func TestInjectUsesSetsValidTraceFromTransaction(t *testing.T) {
 				traceFlags: trace.FlagsSampled,
 			},
 			sentryTransactionContext: transactionTestContext{
+				name:    "sampled-transaction",
 				traceID: "d4cda95b652f4a1592b449d5929fda1b",
 				spanID:  "6e0c63257de34c92",
 				sampled: sentry.SampledTrue,
 			},
-			baggage:     "sentry-environment=testing,sentry-release=1.0.0,sentry-transaction=sampled-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b",
-			sentryTrace: "d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1",
+			baggage:     stringPtr("sentry-environment=testing,sentry-release=1.2.3,sentry-transaction=sampled-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b,sentry-sample_rate=1"),
+			sentryTrace: stringPtr("d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1"),
+		},
+		{
+			name: "should set proper baggage and sentry-trace when not sampled",
+			otelSpanContext: otelTestContext{
+				traceId:    "d4cda95b652f4a1592b449d5929fda1b",
+				spanId:     "6e0c63257de34c92",
+				traceFlags: trace.FlagsSampled,
+			},
+			sentryTransactionContext: transactionTestContext{
+				name:    "not-sampled-transaction",
+				traceID: "d4cda95b652f4a1592b449d5929fda1b",
+				spanID:  "6e0c63257de34c92",
+				sampled: sentry.SampledFalse,
+			},
+			baggage:     stringPtr("sentry-environment=testing,sentry-release=1.2.3,sentry-transaction=not-sampled-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b"),
+			sentryTrace: stringPtr("d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-0"),
+		},
+		{
+			name: "should NOT set headers when traceId is empty",
+			otelSpanContext: otelTestContext{
+				traceId:    "",
+				spanId:     "6e0c63257de34c92",
+				traceFlags: trace.FlagsSampled,
+			},
+			sentryTransactionContext: transactionTestContext{
+				name:    "transaction-name",
+				traceID: "",
+				spanID:  "6e0c63257de34c92",
+				sampled: sentry.SampledTrue,
+			},
+			baggage:     nil,
+			sentryTrace: nil,
+		},
+		{
+			name: "should NOT set headers when spanId is empty",
+			otelSpanContext: otelTestContext{
+				traceId:    "d4cda95b652f4a1592b449d5929fda1b",
+				spanId:     "",
+				traceFlags: trace.FlagsSampled,
+			},
+			sentryTransactionContext: transactionTestContext{
+				name:    "transaction-name",
+				traceID: "d4cda95b652f4a1592b449d5929fda1b",
+				spanID:  "",
+				sampled: sentry.SampledTrue,
+			},
+			baggage:     nil,
+			sentryTrace: nil,
 		},
 	}
 
@@ -142,7 +190,6 @@ func TestInjectUsesSetsValidTraceFromTransaction(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			propagator, carrier := setupPropagatorTest()
-
 			traceId, _ := trace.TraceIDFromHex(tt.otelSpanContext.traceId)
 			spanId, _ := trace.SpanIDFromHex(tt.otelSpanContext.spanId)
 			otelSpanContext := trace.NewSpanContext(trace.SpanContextConfig{
@@ -155,14 +202,14 @@ func TestInjectUsesSetsValidTraceFromTransaction(t *testing.T) {
 
 			propagator.Inject(ctx, carrier)
 
-			expectedCarrier := propagation.MapCarrier{
-				"baggage":      tt.baggage,
-				"sentry-trace": tt.sentryTrace,
+			expectedCarrier := propagation.MapCarrier{}
+			if tt.baggage != nil {
+				expectedCarrier["baggage"] = *tt.baggage
 			}
-
-			if diff := cmp.Diff(expectedCarrier, carrier); diff != "" {
-				t.Errorf("(-want +got):\n%s", diff)
+			if tt.sentryTrace != nil {
+				expectedCarrier["sentry-trace"] = *tt.sentryTrace
 			}
+			assertMapCarrierEqual(t, carrier, expectedCarrier)
 		})
 	}
 
