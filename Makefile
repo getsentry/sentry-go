@@ -2,6 +2,8 @@
 
 .DEFAULT_GOAL := help
 
+MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+MKFILE_DIR := $(dir $(MKFILE_PATH))
 ALL_GO_MOD_DIRS := $(shell find . -type f -name 'go.mod' -exec dirname {} \; | sort)
 GO = go
 TIMEOUT = 60
@@ -41,22 +43,28 @@ test: $(ALL_GO_MOD_DIRS:%=test/%)
 test/%: DIR=$*
 test/%:
 	@echo ">>> Running tests for module: $(DIR)"
-	cd $(DIR) && $(GO) test -timeout $(TIMEOUT)s $(ARGS) ./...
+	@# We use '-count=1' to disable test caching.
+	cd $(DIR) && $(GO) test -count=1 -timeout $(TIMEOUT)s $(ARGS) ./...
 
+# Coverage
 COVERAGE_MODE    = atomic
 COVERAGE_PROFILE = coverage.out
-.PHONY: test-coverage
-test-coverage: | $(GOCOVMERGE)
+COVERAGE_REPORT_DIR = .coverage
+COVERAGE_REPORT_DIR_ABS = "$(MKFILE_DIR)/$(COVERAGE_REPORT_DIR)"
+.PHONY: test-coverage clean-report-dir
+$(COVERAGE_REPORT_DIR):
+	mkdir -p $(COVERAGE_REPORT_DIR)
+clean-report-dir: $(COVERAGE_REPORT_DIR)
+	test $(COVERAGE_REPORT_DIR) && rm -f $(COVERAGE_REPORT_DIR)/*
+test-coverage: $(COVERAGE_REPORT_DIR) clean-report-dir
 	@set -e; \
-	printf "" > coverage.txt; \
 	for dir in $(ALL_GO_MOD_DIRS); do \
-	  echo "$(GO) test -coverpkg=go.opentelemetry.io/otel/... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" $${dir}/..."; \
+	  echo "$(GO) test -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" $${dir}/..."; \
 	  (cd "$${dir}" && \
-	    $(GO) list ./... \
-	    | xargs $(GO) test -coverpkg=./... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" && \
-	  $(GO) tool cover -html=coverage.out -o coverage.html); \
-	done; \
-	$(GOCOVMERGE) $$(find . -name coverage.out) > coverage.txt
+	    $(GO) test -coverpkg=./... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" && \
+		cp $(COVERAGE_PROFILE) "$(COVERAGE_REPORT_DIR_ABS)/$${RANDOM}_$(COVERAGE_PROFILE)" && \
+	    $(GO) tool cover -html=$(COVERAGE_PROFILE) -o coverage.html); \
+	done;
 
 vet: ## Run "go vet"
 	go vet ./...
