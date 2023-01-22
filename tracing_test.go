@@ -318,12 +318,12 @@ func TestIsTansaction(t *testing.T) {
 		EnableTracing: true,
 	})
 
-	transaction := StartTransaction(ctx, "Test Transaction", func(s *Span) {})
+	transaction := StartTransaction(ctx, "Test Transaction")
 	if !transaction.IsTransaction() {
 		t.Fatalf("span.IsTransaction() = false, want true")
 	}
 
-	span := transaction.StartChild("Test Span", func(s *Span) {})
+	span := transaction.StartChild("Test Span")
 	if span.IsTransaction() {
 		t.Fatalf("span.IsTransaction() = true, want false")
 	}
