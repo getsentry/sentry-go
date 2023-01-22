@@ -59,9 +59,9 @@ clean-report-dir: $(COVERAGE_REPORT_DIR)
 test-coverage: $(COVERAGE_REPORT_DIR) clean-report-dir
 	@set -e; \
 	for dir in $(ALL_GO_MOD_DIRS); do \
-	  echo "$(GO) test -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" $${dir}/..."; \
+	  echo "$(GO) test -count=1 -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" $${dir}/..."; \
 	  (cd "$${dir}" && \
-	    $(GO) test -coverpkg=./... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" && \
+	    $(GO) test -count=1 -coverpkg=./... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" && \
 		cp $(COVERAGE_PROFILE) "$(COVERAGE_REPORT_DIR_ABS)/$${RANDOM}_$(COVERAGE_PROFILE)" && \
 	    $(GO) tool cover -html=$(COVERAGE_PROFILE) -o coverage.html); \
 	done;
