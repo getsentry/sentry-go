@@ -93,7 +93,7 @@ func TestInjectUsesSentryTraceOnEmptySpan(t *testing.T) {
 
 	propagator.Inject(ctx, carrier)
 
-	assertEqual(t,
+	assertMapCarrierEqual(t,
 		carrier,
 		propagation.MapCarrier{"sentry-trace": "d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1"},
 	)
@@ -106,7 +106,7 @@ func TestInjectUsesBaggageOnEmptySpan(t *testing.T) {
 
 	propagator.Inject(ctx, carrier)
 
-	assertEqual(t,
+	assertMapCarrierEqual(t,
 		carrier,
 		propagation.MapCarrier{"baggage": "key1=value1;value2,key2=value2"},
 	)
