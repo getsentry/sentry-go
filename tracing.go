@@ -730,7 +730,7 @@ func OpName(name string) SpanOption {
 }
 
 // TransctionSource sets the source of the transaction name.
-// TODO(anton): Fix the typo
+// TODO(anton): Fix the typo.
 func TransctionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
