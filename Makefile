@@ -43,7 +43,7 @@ test-coverage: $(COVERAGE_REPORT_DIR) clean-report-dir  ## Test with coverage en
 	for dir in $(ALL_GO_MOD_DIRS); do \
 	  echo ">>> Running tests with coverage for module: $${dir}"; \
 	  echo "$(GO) test -count=1 -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" $${dir}/..."; \
-	  DIR_ABS=$$(realpath $${dir}) ;\
+	  DIR_ABS=$$(python -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' $${dir}) ; \
 	  REPORT_NAME=$$(basename $${DIR_ABS}); \
 	  (cd "$${dir}" && \
 	    $(GO) test -count=1 -coverpkg=./... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" && \
