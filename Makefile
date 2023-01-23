@@ -4,7 +4,7 @@ MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR := $(dir $(MKFILE_PATH))
 ALL_GO_MOD_DIRS := $(shell find . -type f -name 'go.mod' -exec dirname {} \; | sort)
 GO = go
-TIMEOUT = 60
+TIMEOUT = 300
 
 # Parse Makefile and display the help
 help: ## Show help
