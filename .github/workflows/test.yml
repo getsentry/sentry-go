@@ -4,8 +4,6 @@ on:
     branches:
       - master
       - release/**
-      # REMOVEME
-      - tonyo/otel-plus-testing-submodules
   pull_request:
 permissions:
   contents: read

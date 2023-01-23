@@ -1,5 +1,3 @@
-### Inspired by https://github.com/open-telemetry/opentelemetry-go/blob/main/Makefile
-
 .DEFAULT_GOAL := help
 
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
@@ -7,20 +5,6 @@ MKFILE_DIR := $(dir $(MKFILE_PATH))
 ALL_GO_MOD_DIRS := $(shell find . -type f -name 'go.mod' -exec dirname {} \; | sort)
 GO = go
 TIMEOUT = 60
-
-# Tools
-
-TOOLS = $(CURDIR)/.tools
-
-$(TOOLS):
-	@mkdir -p $@
-$(TOOLS)/%: | $(TOOLS)
-	cd $(TOOLS_MOD_DIR) && \
-	$(GO) build -o $@ $(PACKAGE)
-
-GOCOVMERGE = $(TOOLS)/gocovmerge
-$(TOOLS)/gocovmerge: PACKAGE=github.com/wadey/gocovmerge
-
 
 # Parse Makefile and display the help
 help: ## Show help
@@ -31,52 +15,46 @@ build: ## Build everything
 	go build ./...
 .PHONY: build
 
-
-# Tests
+### Tests (inspired by https://github.com/open-telemetry/opentelemetry-go/blob/main/Makefile)
 TEST_TARGETS := test-short test-verbose test-race
-.PHONY: $(TEST_TARGETS) test
-test-race: ARGS=-race
+test-race:    ARGS=-race
 test-short:   ARGS=-short
 test-verbose: ARGS=-v -race
 $(TEST_TARGETS): test
-test: $(ALL_GO_MOD_DIRS:%=test/%)
+test: $(ALL_GO_MOD_DIRS:%=test/%)  ## Run tests
 test/%: DIR=$*
 test/%:
 	@echo ">>> Running tests for module: $(DIR)"
 	@# We use '-count=1' to disable test caching.
 	cd $(DIR) && $(GO) test -count=1 -timeout $(TIMEOUT)s $(ARGS) ./...
+.PHONY: $(TEST_TARGETS) test
 
 # Coverage
 COVERAGE_MODE    = atomic
 COVERAGE_PROFILE = coverage.out
 COVERAGE_REPORT_DIR = .coverage
 COVERAGE_REPORT_DIR_ABS = "$(MKFILE_DIR)/$(COVERAGE_REPORT_DIR)"
-.PHONY: test-coverage clean-report-dir
 $(COVERAGE_REPORT_DIR):
 	mkdir -p $(COVERAGE_REPORT_DIR)
 clean-report-dir: $(COVERAGE_REPORT_DIR)
 	test $(COVERAGE_REPORT_DIR) && rm -f $(COVERAGE_REPORT_DIR)/*
-test-coverage: $(COVERAGE_REPORT_DIR) clean-report-dir
+test-coverage: $(COVERAGE_REPORT_DIR) clean-report-dir  ## Test with coverage enabled
 	@set -e; \
 	for dir in $(ALL_GO_MOD_DIRS); do \
+	  echo ">>> Running tests with coverage for module: $${dir}"; \
 	  echo "$(GO) test -count=1 -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" $${dir}/..."; \
+	  DIR_ABS=$$(realpath $${dir}) ;\
+	  REPORT_NAME=$$(basename $${DIR_ABS}); \
 	  (cd "$${dir}" && \
 	    $(GO) test -count=1 -coverpkg=./... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" && \
-		cp $(COVERAGE_PROFILE) "$(COVERAGE_REPORT_DIR_ABS)/$${RANDOM}_$(COVERAGE_PROFILE)" && \
+		cp $(COVERAGE_PROFILE) "$(COVERAGE_REPORT_DIR_ABS)/$${REPORT_NAME}_$(COVERAGE_PROFILE)" && \
 	    $(GO) tool cover -html=$(COVERAGE_PROFILE) -o coverage.html); \
 	done;
+.PHONY: test-coverage clean-report-dir
 
 vet: ## Run "go vet"
 	go vet ./...
 .PHONY: vet
-
-test-with-coverage: ## Test with coverage enabled
-	go test -count=1 -race -coverprofile=coverage.txt -covermode=atomic ./...
-.PHONY: test-with-coverage
-
-coverage-report: test-with-coverage ## Test with coverage and open the produced HTML report
-	go tool cover -html coverage.txt
-.PHONY: coverage-report
 
 lint: ## Lint (using "golangci-lint")
 	golangci-lint run
