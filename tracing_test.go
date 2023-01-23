@@ -337,6 +337,22 @@ func TestSetData(t *testing.T) {
 	}
 }
 
+func TestIsTransaction(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+
+	transaction := StartTransaction(ctx, "Test Transaction")
+	if !transaction.IsTransaction() {
+		t.Fatalf("span.IsTransaction() = false, want true")
+	}
+
+	span := transaction.StartChild("Test Span")
+	if span.IsTransaction() {
+		t.Fatalf("span.IsTransaction() = true, want false")
+	}
+}
+
 // testContextKey is used to store a value in a context so that we can check
 // that SDK operations on that context preserve the original context values.
 type testContextKey struct{}

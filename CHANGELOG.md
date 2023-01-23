@@ -8,6 +8,7 @@
 - Add `Span.SetDynamicSamplingContext` method ([#539](https://github.com/getsentry/sentry-go/pull/539/))
 - Add DSN getters ([#540](https://github.com/getsentry/sentry-go/pull/540))
 - Add Span.SetData() ([#542](https://github.com/getsentry/sentry-go/pull/542))
+- Add Span.IsTransaction() ([#543](https://github.com/getsentry/sentry-go/pull/543))
 
 ## 0.17.0
 
