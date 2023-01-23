@@ -47,18 +47,6 @@ var canonicalCodesGrpcMap = map[string]sentry.SpanStatus{
 func MapOtelStatus(s trace.ReadOnlySpan) sentry.SpanStatus {
 	statusCode := s.Status().Code
 
-	if statusCode > codes.Ok {
-		return sentry.SpanStatusUnknown
-	}
-
-	if statusCode == codes.Unset || statusCode == codes.Ok {
-		return sentry.SpanStatusOK
-	}
-
-	if statusCode == codes.Error {
-		return sentry.SpanStatusInternalError
-	}
-
 	for _, attribute := range s.Attributes() {
 		if attribute.Key == semconv.HTTPStatusCodeKey {
 			if status, ok := canonicalCodesHTTPMap[attribute.Value.AsString()]; ok {
@@ -71,6 +59,14 @@ func MapOtelStatus(s trace.ReadOnlySpan) sentry.SpanStatus {
 				return status
 			}
 		}
+	}
+
+	if statusCode == codes.Unset || statusCode == codes.Ok {
+		return sentry.SpanStatusOK
+	}
+
+	if statusCode == codes.Error {
+		return sentry.SpanStatusInternalError
 	}
 
 	return sentry.SpanStatusUnknown
