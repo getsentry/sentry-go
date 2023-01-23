@@ -49,7 +49,14 @@ jobs:
         run: go mod tidy -go=1.19 -compat=1.17 && git diff --exit-code
         if: ${{ matrix.go == '1.19' }}
       - name: Test
+        run: make test
+      - name: Test (with race detection)
         run: make test-race
+        # The race detector adds considerable runtime overhead. To save time on
+        # pull requests, only run this step for a single job in the matrix. For
+        # all other workflow triggers (e.g., pushes to a release branch) run
+        # this step for the whole matrix.
+        if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.19' && matrix.os == 'ubuntu') }}
       - name: Collect coverage
         run: make test-coverage
       - name: Upload coverage to Codecov
