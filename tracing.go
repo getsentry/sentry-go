@@ -221,7 +221,6 @@ func (s *Span) SetTag(name, value string) {
 // SetData sets a data on the span. It is recommended to use SetData instead of
 // accessing the data map directly as SetData takes care of initializing the map
 // when necessary.
-// TODO(michi) Tests pls!
 func (s *Span) SetData(name, value string) {
 	if s.Data == nil {
 		s.Data = make(map[string]interface{})
@@ -229,6 +228,7 @@ func (s *Span) SetData(name, value string) {
 	s.Data[name] = value
 }
 
+// IsTransaction checks if the given span is a transaction.
 func (s *Span) IsTransaction() bool {
 	return s.isTransaction
 }
