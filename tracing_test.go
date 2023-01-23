@@ -313,7 +313,7 @@ func TestStartTransaction(t *testing.T) {
 	}
 }
 
-func TestIsTansaction(t *testing.T) {
+func TestIsTransaction(t *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing: true,
 	})
