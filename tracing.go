@@ -211,6 +211,21 @@ func (s *Span) SetTag(name, value string) {
 	s.Tags[name] = value
 }
 
+// SetData sets a data on the span. It is recommended to use SetData instead of
+// accessing the data map directly as SetData takes care of initializing the map
+// when necessary.
+func (s *Span) SetData(name, value string) {
+	if s.Data == nil {
+		s.Data = make(map[string]interface{})
+	}
+	s.Data[name] = value
+}
+
+// IsTransaction checks if the given span is a transaction.
+func (s *Span) IsTransaction() bool {
+	return s.isTransaction
+}
+
 // TODO(tracing): maybe add shortcuts to get/set transaction name. Right now the
 // transaction name is in the Scope, as it has existed there historically, prior
 // to tracing.

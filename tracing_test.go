@@ -313,6 +313,46 @@ func TestStartTransaction(t *testing.T) {
 	}
 }
 
+func TestSetTag(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	span := StartSpan(ctx, "Test Span")
+	span.SetTag("key", "value")
+
+	if (span.Tags == nil) || (span.Tags["key"] != "value") {
+		t.Fatalf("Tags mismatch, got %v", span.Tags)
+	}
+}
+
+func TestSetData(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	span := StartSpan(ctx, "Test Span")
+	span.SetData("key", "value")
+
+	if (span.Data == nil) || (span.Data["key"] != "value") {
+		t.Fatalf("Data mismatch, got %v", span.Data)
+	}
+}
+
+func TestIsTransaction(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+
+	transaction := StartTransaction(ctx, "Test Transaction")
+	if !transaction.IsTransaction() {
+		t.Fatalf("span.IsTransaction() = false, want true")
+	}
+
+	span := transaction.StartChild("Test Span")
+	if span.IsTransaction() {
+		t.Fatalf("span.IsTransaction() = true, want false")
+	}
+}
+
 // testContextKey is used to store a value in a context so that we can check
 // that SDK operations on that context preserve the original context values.
 type testContextKey struct{}
