@@ -9,7 +9,7 @@
 - Add DSN getters ([#540](https://github.com/getsentry/sentry-go/pull/540))
 - Add Span.SetData() ([#542](https://github.com/getsentry/sentry-go/pull/542))
 - Add Span.IsTransaction() ([#543](https://github.com/getsentry/sentry-go/pull/543))
-- Add TraceParentContext structure and its helper methods ([545](https://github.com/getsentry/sentry-go/pull/545))
+- Add TraceParentContext structure ([545](https://github.com/getsentry/sentry-go/pull/545))
 
 ## 0.17.0
 
