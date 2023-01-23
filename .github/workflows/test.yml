@@ -69,6 +69,7 @@ jobs:
         go: ["1.19", "1.18", "1.17"]
         os: [ubuntu, windows, macos]
       fail-fast: false
+  # Test the GOPATH mode with the oldest Go version we support
   test-gopath:
     name: GOPATH Mode
     runs-on: ubuntu-latest
@@ -84,6 +85,8 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
     steps:
       - uses: actions/setup-go@v3
+        with:
+          go-version: "1.17"
       - uses: actions/checkout@v3
         with:
           path: ${{ env.WORKDIR }}
