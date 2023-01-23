@@ -350,7 +350,7 @@ func TestIsTransaction(t *testing.T) {
 	span := transaction.StartChild("Test Span")
 	if span.IsTransaction() {
 		t.Fatalf("span.IsTransaction() = true, want false")
-  }
+	}
 }
 
 // testContextKey is used to store a value in a context so that we can check
