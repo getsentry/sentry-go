@@ -211,7 +211,7 @@ func (s *Span) SetTag(name, value string) {
 	s.Tags[name] = value
 }
 
-// Check if the given span is a transaction.
+// IsTransaction checks if the given span is a transaction.
 func (s *Span) IsTransaction() bool {
 	return s.isTransaction
 }
