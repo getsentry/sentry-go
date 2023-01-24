@@ -54,13 +54,6 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	recorder *spanRecorder
 }
 
-// TODO(anton): yes
-type TraceParentContext struct {
-	TraceID      TraceID
-	ParentSpanID SpanID
-	Sampled      Sampled
-}
-
 // (*) Note on maligned:
 //
 // We prefer readability over optimal memory layout. If we ever decide to
@@ -258,7 +251,6 @@ func (s *Span) ToSentryTrace() string {
 	return b.String()
 }
 
-// ToBaggage returns the serialized dynamic sampling context in the baggage format.
 func (s *Span) ToBaggage() string {
 	return s.dynamicSamplingContext.String()
 }
@@ -285,11 +277,11 @@ var sentryTracePattern = regexp.MustCompile(`^([[:xdigit:]]{32})-([[:xdigit:]]{1
 // updateFromSentryTrace parses a sentry-trace HTTP header (as returned by
 // ToSentryTrace) and updates fields of the span. If the header cannot be
 // recognized as valid, the span is left unchanged.
-func (s *Span) updateFromSentryTrace(header []byte) (updated bool) {
+func (s *Span) updateFromSentryTrace(header []byte) {
 	m := sentryTracePattern.FindSubmatch(header)
 	if m == nil {
 		// no match
-		return false
+		return
 	}
 	_, _ = hex.Decode(s.TraceID[:], m[1])
 	_, _ = hex.Decode(s.ParentSpanID[:], m[2])
@@ -301,7 +293,6 @@ func (s *Span) updateFromSentryTrace(header []byte) (updated bool) {
 			s.Sampled = SampledTrue
 		}
 	}
-	return true
 }
 
 func (s *Span) updateFromBaggage(header []byte) {
@@ -475,25 +466,6 @@ func (s *Span) traceContext() *TraceContext {
 
 // spanRecorder stores the span tree. Guaranteed to be non-nil.
 func (s *Span) spanRecorder() *spanRecorder { return s.recorder }
-
-// ParseTraceParentContext parses a sentry-trace header and builds a TraceParentContext from the
-// parsed values. If the header was parsed correctly, the second returned argument
-// ("valid") will be set to true, otherwise (e.g., empty or malformed header) it will
-// be false.
-// TODO(anton): add some tests for this new function.
-func ParseTraceParentContext(header []byte) (traceParentContext TraceParentContext, valid bool) {
-	s := Span{}
-	updated := s.updateFromSentryTrace(header)
-	if !updated {
-		return TraceParentContext{}, false
-	}
-	parentContext := TraceParentContext{
-		TraceID:      s.TraceID,
-		ParentSpanID: s.ParentSpanID,
-		Sampled:      s.Sampled,
-	}
-	return parentContext, true
-}
 
 // TraceID identifies a trace.
 type TraceID [16]byte
