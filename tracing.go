@@ -56,8 +56,13 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 
 // TraceParentContext describes the context of a (remote) parent span.
 //
-// The context is normally extracted from a received sentry-trace header and
+// The context is normally extracted from a received "sentry-trace" header and
 // used to initialize a new transaction.
+//
+// Note: the name might be not the best one. It (somewhat unintentionally) alludes
+// to W3C "traceparent" header (https://www.w3.org/TR/trace-context/), which serves
+// a similar purpose to "sentry-trace". We should consider making this type
+// internal-only and give it a better name.
 type TraceParentContext struct {
 	TraceID      TraceID
 	ParentSpanID SpanID
