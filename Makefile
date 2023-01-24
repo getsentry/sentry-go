@@ -26,7 +26,7 @@ test/%: DIR=$*
 test/%:
 	@echo ">>> Running tests for module: $(DIR)"
 	@# We use '-count=1' to disable test caching.
-	cd $(DIR) && $(GO) test -count=1 -timeout $(TIMEOUT)s $(ARGS) ./...
+	(cd $(DIR) && $(GO) test -count=1 -timeout $(TIMEOUT)s $(ARGS) ./...)
 .PHONY: $(TEST_TARGETS) test
 
 # Coverage
@@ -39,14 +39,12 @@ $(COVERAGE_REPORT_DIR):
 clean-report-dir: $(COVERAGE_REPORT_DIR)
 	test $(COVERAGE_REPORT_DIR) && rm -f $(COVERAGE_REPORT_DIR)/*
 test-coverage: $(COVERAGE_REPORT_DIR) clean-report-dir  ## Test with coverage enabled
-	@set -e; \
 	for dir in $(ALL_GO_MOD_DIRS); do \
 	  echo ">>> Running tests with coverage for module: $${dir}"; \
-	  echo "$(GO) test -count=1 -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" $${dir}/..."; \
 	  DIR_ABS=$$(python -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' $${dir}) ; \
 	  REPORT_NAME=$$(basename $${DIR_ABS}); \
 	  (cd "$${dir}" && \
-	    $(GO) test -count=1 -coverpkg=./... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" && \
+	    $(GO) test -count=1 -coverpkg=./... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" ./... && \
 		cp $(COVERAGE_PROFILE) "$(COVERAGE_REPORT_DIR_ABS)/$${REPORT_NAME}_$(COVERAGE_PROFILE)" && \
 	    $(GO) tool cover -html=$(COVERAGE_PROFILE) -o coverage.html); \
 	done;
