@@ -1,3 +1,5 @@
+//go:build go1.18
+
 package sentryotel
 
 // TODO(anton): This is a copy of helpers_test.go in the repo root.
