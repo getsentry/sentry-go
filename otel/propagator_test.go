@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/otel/interal/utils"
+	"github.com/getsentry/sentry-go/otel/internal/utils"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
