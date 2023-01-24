@@ -39,4 +39,10 @@ func (ssm *SentrySpanMap) Clear() {
 	ssm.spanMap = make(map[otelTrace.SpanID]*sentry.Span)
 }
 
+func (ssm *SentrySpanMap) Len() int {
+	ssm.mu.RLock()
+	defer ssm.mu.RUnlock()
+	return len(ssm.spanMap)
+}
+
 var sentrySpanMap = SentrySpanMap{spanMap: make(map[otelTrace.SpanID]*sentry.Span)}

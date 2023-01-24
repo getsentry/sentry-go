@@ -8,6 +8,7 @@ package sentryotel
 import (
 	"encoding/hex"
 	"fmt"
+	"log"
 	"reflect"
 	"sort"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func assertEqual(t *testing.T, got, want interface{}, userMessage ...interface{}) {
@@ -132,4 +134,20 @@ func SpanIDFromHex(s string) sentry.SpanID {
 
 func stringPtr(s string) *string {
 	return &s
+}
+
+func otelTraceIDFromHex(s string) trace.TraceID {
+	traceID, err := trace.TraceIDFromHex(s)
+	if err != nil {
+		log.Fatalf("Cannot make a TraceID from the hex string: '%s'", s)
+	}
+	return traceID
+}
+
+func otelSpanIDFromHex(s string) trace.SpanID {
+	spanID, err := trace.SpanIDFromHex(s)
+	if err != nil {
+		log.Fatalf("Cannot make a SPanID from the hex string: '%s'", s)
+	}
+	return spanID
 }
