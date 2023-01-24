@@ -49,22 +49,27 @@ jobs:
         run: go mod tidy -go=1.19 -compat=1.17 && git diff --exit-code
         if: ${{ matrix.go == '1.19' }}
       - name: Test
-        run: go test -count=1 ./...
-      - name: Test (race)
-        run: go test -count=1 -race ./... -coverprofile=coverage.out -covermode=atomic
+        run: make test
+      - name: Test (with race detection)
+        run: make test-race
         # The race detector adds considerable runtime overhead. To save time on
         # pull requests, only run this step for a single job in the matrix. For
         # all other workflow triggers (e.g., pushes to a release branch) run
         # this step for the whole matrix.
         if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.19' && matrix.os == 'ubuntu') }}
+      - name: Collect coverage
+        run: make test-coverage
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
+        with:
+          directory: .coverage
     timeout-minutes: 10
     strategy:
       matrix:
         go: ["1.19", "1.18", "1.17"]
         os: [ubuntu, windows, macos]
       fail-fast: false
+  # Test the GOPATH mode with the oldest Go version we support
   test-gopath:
     name: GOPATH Mode
     runs-on: ubuntu-latest
@@ -80,6 +85,8 @@ jobs:
         working-directory: ${{ env.WORKDIR }}
     steps:
       - uses: actions/setup-go@v3
+        with:
+          go-version: "1.17"
       - uses: actions/checkout@v3
         with:
           path: ${{ env.WORKDIR }}
@@ -109,5 +116,5 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Test
-        run: go test -count=1 ./...
+        run: make test-race
     timeout-minutes: 10

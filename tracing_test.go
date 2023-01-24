@@ -645,9 +645,7 @@ func TestSample(t *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 0.0,
 	})
-	span = StartSpan(ctx, "op", TransactionName("name"), func(s *Span) {
-		s.Sampled = SampledTrue
-	})
+	span = StartSpan(ctx, "op", TransactionName("name"), SpanSampled(SampledTrue))
 	if got := span.Sampled; got != SampledTrue {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
 	}
@@ -727,5 +725,54 @@ func TestSetDynamicSamplingContextDoesNothingOnSpan(t *testing.T) {
 
 	if diff := cmp.Diff(DynamicSamplingContext{}, s.dynamicSamplingContext); diff != "" {
 		t.Errorf("DynamicSamplingContext mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestParseTraceParentContext(t *testing.T) {
+	tests := []struct {
+		name        string
+		sentryTrace string
+		wantContext TraceParentContext
+		wantValid   bool
+	}{
+		{
+			name:        "Malformed header",
+			sentryTrace: "xxx-malformed",
+			wantContext: TraceParentContext{},
+			wantValid:   false,
+		},
+		{
+			name:        "Valid header, sampled",
+			sentryTrace: "d49d9bf66f13450b81f65bc51cf49c03-1cc4b26ab9094ef0-1",
+			wantContext: TraceParentContext{
+				TraceID:      TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+				ParentSpanID: SpanIDFromHex("1cc4b26ab9094ef0"),
+				Sampled:      SampledTrue,
+			},
+			wantValid: true,
+		},
+		{
+			name:        "Valid header, unsampled",
+			sentryTrace: "d49d9bf66f13450b81f65bc51cf49c03-1cc4b26ab9094ef0-0",
+			wantContext: TraceParentContext{
+				TraceID:      TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+				ParentSpanID: SpanIDFromHex("1cc4b26ab9094ef0"),
+				Sampled:      SampledFalse,
+			},
+			wantValid: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			traceParentContext, valid := ParseTraceParentContext([]byte(tt.sentryTrace))
+
+			if diff := cmp.Diff(tt.wantContext, traceParentContext); diff != "" {
+				t.Errorf("Context mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantValid, valid); diff != "" {
+				t.Errorf("Context validity mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
