@@ -742,6 +742,13 @@ func TransctionSource(source TransactionSource) SpanOption {
 	}
 }
 
+// SpanSampled updates the sampling flag for a given span.
+func SpanSampled(sampled Sampled) SpanOption {
+	return func(s *Span) {
+		s.Sampled = sampled
+	}
+}
+
 // ContinueFromRequest returns a span option that updates the span to continue
 // an existing trace. If it cannot detect an existing trace in the request, the
 // span will be left unchanged.

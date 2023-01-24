@@ -645,9 +645,7 @@ func TestSample(t *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 0.0,
 	})
-	span = StartSpan(ctx, "op", TransactionName("name"), func(s *Span) {
-		s.Sampled = SampledTrue
-	})
+	span = StartSpan(ctx, "op", TransactionName("name"), SpanSampled(SampledTrue))
 	if got := span.Sampled; got != SampledTrue {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
 	}
