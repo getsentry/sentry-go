@@ -54,6 +54,21 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	recorder *spanRecorder
 }
 
+// TraceParentContext describes the context of a (remote) parent span.
+//
+// The context is normally extracted from a received "sentry-trace" header and
+// used to initialize a new transaction.
+//
+// Note: the name might be not the best one. It was taken mostly to stay aligned
+// with other SDKs, and it alludes to W3C "traceparent" header (https://www.w3.org/TR/trace-context/),
+// which serves a similar purpose to "sentry-trace". We should eventually consider
+// making this type internal-only and give it a better name.
+type TraceParentContext struct {
+	TraceID      TraceID
+	ParentSpanID SpanID
+	Sampled      Sampled
+}
+
 // (*) Note on maligned:
 //
 // We prefer readability over optimal memory layout. If we ever decide to
@@ -251,6 +266,7 @@ func (s *Span) ToSentryTrace() string {
 	return b.String()
 }
 
+// ToBaggage returns the serialized dynamic sampling context in the baggage format.
 func (s *Span) ToBaggage() string {
 	return s.dynamicSamplingContext.String()
 }
@@ -276,12 +292,13 @@ var sentryTracePattern = regexp.MustCompile(`^([[:xdigit:]]{32})-([[:xdigit:]]{1
 
 // updateFromSentryTrace parses a sentry-trace HTTP header (as returned by
 // ToSentryTrace) and updates fields of the span. If the header cannot be
-// recognized as valid, the span is left unchanged.
-func (s *Span) updateFromSentryTrace(header []byte) {
+// recognized as valid, the span is left unchanged. The returned value indicates
+// whether the span was updated.
+func (s *Span) updateFromSentryTrace(header []byte) (updated bool) {
 	m := sentryTracePattern.FindSubmatch(header)
 	if m == nil {
 		// no match
-		return
+		return false
 	}
 	_, _ = hex.Decode(s.TraceID[:], m[1])
 	_, _ = hex.Decode(s.ParentSpanID[:], m[2])
@@ -293,6 +310,7 @@ func (s *Span) updateFromSentryTrace(header []byte) {
 			s.Sampled = SampledTrue
 		}
 	}
+	return true
 }
 
 func (s *Span) updateFromBaggage(header []byte) {
@@ -466,6 +484,23 @@ func (s *Span) traceContext() *TraceContext {
 
 // spanRecorder stores the span tree. Guaranteed to be non-nil.
 func (s *Span) spanRecorder() *spanRecorder { return s.recorder }
+
+// ParseTraceParentContext parses a sentry-trace header and builds a TraceParentContext from the
+// parsed values. If the header was parsed correctly, the second returned argument
+// ("valid") will be set to true, otherwise (e.g., empty or malformed header) it will
+// be false.
+func ParseTraceParentContext(header []byte) (traceParentContext TraceParentContext, valid bool) {
+	s := Span{}
+	updated := s.updateFromSentryTrace(header)
+	if !updated {
+		return TraceParentContext{}, false
+	}
+	return TraceParentContext{
+		TraceID:      s.TraceID,
+		ParentSpanID: s.ParentSpanID,
+		Sampled:      s.Sampled,
+	}, true
+}
 
 // TraceID identifies a trace.
 type TraceID [16]byte
@@ -700,6 +735,7 @@ func OpName(name string) SpanOption {
 }
 
 // TransctionSource sets the source of the transaction name.
+// TODO(anton): Fix the typo.
 func TransctionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
