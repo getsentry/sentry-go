@@ -87,19 +87,22 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	sentrySpanMap.Delete(otelSpanId)
 }
 
-func (bsp *sentrySpanProcessor) Shutdown(ctx context.Context) error {
-	var err error
-
-	return err
+func (ssp *sentrySpanProcessor) Shutdown(ctx context.Context) error {
+	// Note: according to the spec (https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown-1),
+	// "Shutdown MUST include the effects of ForceFlush".
+	sentrySpanMap.Clear()
+	return flushSpanProcessor(ctx)
 }
 
-func (bsp *sentrySpanProcessor) ForceFlush(ctx context.Context) error {
-	var err error
+func (ssp *sentrySpanProcessor) ForceFlush(ctx context.Context) error {
+	return flushSpanProcessor(ctx)
+}
 
+func flushSpanProcessor(ctx context.Context) error {
+	hub := sentry.GetHubFromContext(ctx)
 	// TODO(michi) should we make this configurable?
-	defer sentry.Flush(2 * time.Second)
-
-	return err
+	defer hub.Flush(2 * time.Second)
+	return nil
 }
 
 func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
