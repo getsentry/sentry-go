@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/otel/internal/utils"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -89,7 +88,7 @@ func TestInjectUsesSentryTraceOnEmptySpan(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
 	ctx := context.WithValue(
 		context.Background(),
-		utils.SentryTraceHeaderKey(),
+		sentryTraceHeaderContextKey{},
 		"d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1",
 	)
 
@@ -226,7 +225,7 @@ func TestExtractDoesNotChangeContextWithEmptyHeaders(t *testing.T) {
 	ctx := propagator.Extract(context.Background(), carrier)
 
 	assertEqual(t,
-		ctx.Value(utils.DynamicSamplingContextKey()),
+		ctx.Value(dynamicSamplingContextKey{}),
 		sentry.DynamicSamplingContext{Entries: map[string]string{}, Frozen: false},
 	)
 }
@@ -239,7 +238,7 @@ func TestExtractSetsUndefinedDynamicSamplingContext(t *testing.T) {
 	ctx := propagator.Extract(context.Background(), carrier)
 
 	assertEqual(t,
-		ctx.Value(utils.DynamicSamplingContextKey()),
+		ctx.Value(dynamicSamplingContextKey{}),
 		sentry.DynamicSamplingContext{Entries: map[string]string{}, Frozen: false},
 	)
 }
@@ -296,7 +295,7 @@ func TestExtractSetsDefinedDynamicSamplingContext(t *testing.T) {
 	ctx := propagator.Extract(context.Background(), carrier)
 
 	assertEqual(t,
-		ctx.Value(utils.DynamicSamplingContextKey()),
+		ctx.Value(dynamicSamplingContextKey{}),
 		sentry.DynamicSamplingContext{
 			Entries: map[string]string{
 				"environment": "production",

@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/otel/internal/utils"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -32,7 +31,7 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	// Propagate sentry-trace header
 	if sentrySpan == nil {
 		// No span => propagate the incoming sentry-trace header, if exists
-		sentryTraceHeader, _ := ctx.Value(utils.SentryTraceHeaderKey()).(string)
+		sentryTraceHeader, _ := ctx.Value(sentryTraceHeaderContextKey{}).(string)
 		if sentryTraceHeader != "" {
 			carrier.Set(sentry.SentryTraceHeader, sentryTraceHeader)
 		}
@@ -80,11 +79,11 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 	fmt.Printf("sentry-trace header: '%s'\n", sentryTraceHeader)
 
 	if sentryTraceHeader != "" {
-		ctx = context.WithValue(ctx, utils.SentryTraceHeaderKey(), sentryTraceHeader)
+		ctx = context.WithValue(ctx, sentryTraceHeaderContextKey{}, sentryTraceHeader)
 		if traceParentContext, valid := sentry.ParseTraceParentContext([]byte(sentryTraceHeader)); valid {
 			// Save traceParentContext because we'll at least need to know the original "sampled"
 			// value in the span processor.
-			ctx = context.WithValue(ctx, utils.SentryTraceParentContextKey(), traceParentContext)
+			ctx = context.WithValue(ctx, sentryTraceParentContextKey{}, traceParentContext)
 
 			spanContextConfig := trace.SpanContextConfig{
 				TraceID:    trace.TraceID(traceParentContext.TraceID),
@@ -117,7 +116,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 		dynamicSamplingContext = sentry.DynamicSamplingContext{Frozen: false}
 	}
 
-	ctx = context.WithValue(ctx, utils.DynamicSamplingContextKey(), dynamicSamplingContext)
+	ctx = context.WithValue(ctx, dynamicSamplingContextKey{}, dynamicSamplingContext)
 	fmt.Printf("DSC: %#v\n", dynamicSamplingContext)
 
 	return ctx

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/otel/internal/utils"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -93,7 +92,7 @@ func TestSentrySpanProcessorOnStartWithTraceParentContext(t *testing.T) {
 	// Sentry context
 	ctx := context.WithValue(
 		emptyContextWithSentry(),
-		utils.SentryTraceParentContextKey(),
+		sentryTraceParentContextKey{},
 		sentry.TraceParentContext{
 			TraceID:      TraceIDFromHex("d4cda95b652f4a1592b449d5929fda1b"),
 			ParentSpanID: SpanIDFromHex("6e0c63257de34c92"),
@@ -104,11 +103,7 @@ func TestSentrySpanProcessorOnStartWithTraceParentContext(t *testing.T) {
 		Frozen:  true,
 		Entries: map[string]string{"environment": "dev"},
 	}
-	ctx = context.WithValue(
-		ctx,
-		utils.DynamicSamplingContextKey(),
-		dsc,
-	)
+	ctx = context.WithValue(ctx, dynamicSamplingContextKey{}, dsc)
 	// Otel span context
 	ctx = trace.ContextWithSpanContext(
 		ctx,
