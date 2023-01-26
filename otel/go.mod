@@ -10,7 +10,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.11.2
 )
 
-// TODO(anton): Should we remove this before releasing?
 replace github.com/getsentry/sentry-go => ../
 
 require (

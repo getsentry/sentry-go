@@ -7,8 +7,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"go.opentelemetry.io/otel/sdk/trace"
-
-	// TODO(anton): Why can't we use v1.16.0? Not released yet?
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 )
 
