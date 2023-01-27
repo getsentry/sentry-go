@@ -492,6 +492,15 @@ func (s *Span) traceContext() *TraceContext {
 // spanRecorder stores the span tree. Guaranteed to be non-nil.
 func (s *Span) spanRecorder() *spanRecorder { return s.recorder }
 
+// GetTransaction returns the root span (transaction span) for
+// the given span.
+func (s *Span) GetTransaction() *Span {
+	if s.transaction == nil {
+		return s
+	}
+	return s.transaction
+}
+
 // ParseTraceParentContext parses a sentry-trace header and builds a TraceParentContext from the
 // parsed values. If the header was parsed correctly, the second returned argument
 // ("valid") will be set to true, otherwise (e.g., empty or malformed header) it will

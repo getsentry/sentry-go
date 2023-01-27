@@ -349,6 +349,27 @@ func TestChildShouldInheritParentTransaction(t *testing.T) {
 	}
 }
 
+func TestGetTransaction(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+		Transport:     &TransportMock{},
+	})
+
+	transaction := StartTransaction(ctx, "transaction")
+	child := transaction.StartChild("child")
+	grandchild := child.StartChild("grandchild")
+
+	if transaction.GetTransaction() != transaction {
+		t.Fatalf("GetTransaction() should return self for a transaction span")
+	}
+	if child.GetTransaction() != transaction {
+		t.Fatalf("GetTransaction() should return the root level span for immediate children")
+	}
+	if grandchild.GetTransaction() != transaction {
+		t.Fatalf("GetTransaction() should return the root level span for nested spans")
+	}
+}
+
 func TestSetTag(t *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing: true,
