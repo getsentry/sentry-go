@@ -45,11 +45,11 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	// parent refers to the immediate local parent span. A remote parent span is
 	// only referenced by setting ParentSpanID.
 	parent *Span
-	// isTransaction is true only for the root span of a local span tree. The
-	// root span is the first span started in a context. Note that a local root
-	// span may have a remote parent belonging to the same trace, therefore
-	// isTransaction depends on ctx and not on parent.
-	isTransaction bool
+	// transaction refers to the root span of a local span tree. For the root span
+	// itself it is set to nil. The root span is the first span started in a context.
+	// Note that a local root span may have a remote parent belonging to the same trace,
+	// therefore the transaction pointer depends on ctx and not on parent.
+	transaction *Span
 	// recorder stores all spans in a transaction. Guaranteed to be non-nil.
 	recorder *spanRecorder
 }
@@ -104,9 +104,8 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		StartTime: time.Now(),
 		Sampled:   SampledUndefined,
 
-		ctx:           context.WithValue(ctx, spanContextKey{}, &span),
-		parent:        parent,
-		isTransaction: !hasParent,
+		ctx:    context.WithValue(ctx, spanContextKey{}, &span),
+		parent: parent,
 	}
 	if hasParent {
 		span.TraceID = parent.TraceID
@@ -153,8 +152,16 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 	if err != nil {
 		panic(err)
 	}
+
 	if hasParent {
 		span.ParentSpanID = parent.SpanID
+		if parent.IsTransaction() {
+			span.transaction = parent
+		} else {
+			span.transaction = parent.transaction
+		}
+	} else {
+		span.transaction = nil
 	}
 
 	// Apply options to override defaults.
@@ -238,7 +245,7 @@ func (s *Span) SetData(name, value string) {
 
 // IsTransaction checks if the given span is a transaction.
 func (s *Span) IsTransaction() bool {
-	return s.isTransaction
+	return s.parent == nil
 }
 
 // TODO(tracing): maybe add shortcuts to get/set transaction name. Right now the
@@ -274,7 +281,7 @@ func (s *Span) ToBaggage() string {
 // SetDynamicSamplingContext sets the given dynamic sampling context on the
 // current transaction.
 func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
-	if s.isTransaction {
+	if s.IsTransaction() {
 		s.dynamicSamplingContext = dsc
 	}
 }
@@ -314,7 +321,7 @@ func (s *Span) updateFromSentryTrace(header []byte) (updated bool) {
 }
 
 func (s *Span) updateFromBaggage(header []byte) {
-	if s.isTransaction {
+	if s.IsTransaction() {
 		dsc, err := DynamicSamplingContextFromHeader(header)
 		if err != nil {
 			return
@@ -373,7 +380,7 @@ func (s *Span) sample() Sampled {
 	// Note: non-transaction should always have a parent, but we check both
 	// conditions anyway -- the first for semantic meaning, the second to
 	// avoid a nil pointer dereference.
-	if !s.isTransaction && s.parent != nil {
+	if !s.IsTransaction() && s.parent != nil {
 		return s.parent.Sampled
 	}
 
@@ -430,7 +437,7 @@ func (s *Span) sample() Sampled {
 }
 
 func (s *Span) toEvent() *Event {
-	if !s.isTransaction {
+	if !s.IsTransaction() {
 		return nil // only transactions can be transformed into events
 	}
 	hub := hubFromContext(s.ctx)
