@@ -9,7 +9,9 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/resource"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -18,7 +20,15 @@ func setupSpanProcessorTest() (otelSdkTrace.SpanProcessor, *otelSdkTrace.TracerP
 	sentrySpanMap.Clear()
 
 	spanProcessor := NewSentrySpanProcessor()
-	tp := otelSdkTrace.NewTracerProvider(otelSdkTrace.WithSampler(otelSdkTrace.AlwaysSample()))
+	tp := otelSdkTrace.NewTracerProvider(
+		otelSdkTrace.WithSampler(otelSdkTrace.AlwaysSample()),
+		otelSdkTrace.WithResource(
+			resource.NewWithAttributes(
+				"",
+				semconv.ServiceNameKey.String("test-otel"),
+			),
+		),
+	)
 	tp.RegisterSpanProcessor(spanProcessor)
 	tracer := tp.Tracer("test-tracer")
 	return spanProcessor, tp, tracer
@@ -54,7 +64,7 @@ func getSentryTransportFromContext(ctx context.Context) *TransportMock {
 	transport, ok := hub.Client().Transport.(*TransportMock)
 	if !ok {
 		log.Fatal(
-			"Cannot get mock transport from ",
+			"Cannot get mock transport from context",
 		)
 	}
 	return transport
@@ -100,7 +110,7 @@ func TestSpanProcessorForceFlush(t *testing.T) {
 	}
 }
 
-func TestSentrySpanProcessorOnStartRootSpan(t *testing.T) {
+func TestOnStartRootSpan(t *testing.T) {
 	_, _, tracer := setupSpanProcessorTest()
 	_, otelSpan := tracer.Start(emptyContextWithSentry(), "spanName")
 
@@ -125,7 +135,7 @@ func TestSentrySpanProcessorOnStartRootSpan(t *testing.T) {
 	assertEqual(t, transactionName(sentrySpan), "spanName")
 }
 
-func TestSentrySpanProcessorOnStartWithTraceParentContext(t *testing.T) {
+func TestOnStartWithTraceParentContext(t *testing.T) {
 	_, _, tracer := setupSpanProcessorTest()
 
 	// Sentry context
@@ -172,9 +182,11 @@ func TestSentrySpanProcessorOnStartWithTraceParentContext(t *testing.T) {
 	assertEqual(t, sentrySpan.ToBaggage(), "sentry-environment=dev")
 	assertEqual(t, sentrySpan.Sampled, sentry.SampledFalse)
 	assertEqual(t, transactionName(sentrySpan), "spanName")
+	assertEqual(t, sentrySpan.Status, sentry.SpanStatusUndefined)
+	assertEqual(t, sentrySpan.Source, sentry.SourceCustom)
 }
 
-func TestSentrySpanProcessorOnStartWithExistingParentSpan(t *testing.T) {
+func TestOnStartWithExistingParentSpan(t *testing.T) {
 	_, _, tracer := setupSpanProcessorTest()
 
 	// Otel span context
@@ -212,14 +224,13 @@ func TestSentrySpanProcessorOnStartWithExistingParentSpan(t *testing.T) {
 	assertEqual(t, sentryChildSpan.Op, "childSpan")
 }
 
-func TestSentrySpanProcessorOnEndForTransaction(t *testing.T) {
+func TestOnEndWithTransaction(t *testing.T) {
 	_, _, tracer := setupSpanProcessorTest()
 	ctx, otelSpan := tracer.Start(
 		emptyContextWithSentry(),
 		"transactionName",
 		trace.WithAttributes(
 			attribute.String("key1", "value1"),
-			attribute.String("key2", "value2"),
 		),
 	)
 	sentryTransaction, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
@@ -242,22 +253,28 @@ func TestSentrySpanProcessorOnEndForTransaction(t *testing.T) {
 		map[string]interface{}{
 			"attributes": map[attribute.Key]string{
 				"key1": "value1",
-				"key2": "value2",
 			},
 			"resource": map[attribute.Key]string{
-				"service.name":           "unknown_service:otel.test",
-				"telemetry.sdk.language": "go",
-				"telemetry.sdk.name":     "opentelemetry",
-				"telemetry.sdk.version":  "1.11.2",
+				"service.name": "test-otel",
 			},
 		},
 	)
+	assertEqual(t, sentryTransaction.Status, sentry.SpanStatusOK)
+	assertEqual(t, sentryTransaction.Source, sentry.TransactionSource("custom"))
+	assertEqual(t, sentryTransaction.Op, "")
+	assertEqual(t, sentryTransaction.Description, "")
 }
 
-func TestSentrySpanProcessorOnEndWithChildSpan(t *testing.T) {
+func TestOnEndWithChildSpan(t *testing.T) {
 	_, _, tracer := setupSpanProcessorTest()
 	ctx, otelRootSpan := tracer.Start(emptyContextWithSentry(), "rootSpan")
-	_, otelChildSpan := tracer.Start(ctx, "childSpan")
+	_, otelChildSpan := tracer.Start(
+		ctx,
+		"childSpan",
+		trace.WithAttributes(
+			attribute.String("childKey1", "value1"),
+		),
+	)
 	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
 	sentryChildSpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().SpanID())
 	otelChildSpan.End()
@@ -268,6 +285,19 @@ func TestSentrySpanProcessorOnEndWithChildSpan(t *testing.T) {
 	// EndTime should be populated
 	assertEqual(t, sentryTransaction.EndTime.IsZero(), false)
 	assertEqual(t, sentryChildSpan.EndTime.IsZero(), false)
+
+	assertEqual(t, sentryChildSpan.Status, sentry.SpanStatusOK)
+	assertEqual(t, sentryChildSpan.Source, sentry.TransactionSource(""))
+	assertEqual(t, sentryChildSpan.Op, "")
+	assertEqual(t, sentryChildSpan.Description, "childSpan")
+	assertEqual(
+		t,
+		sentryChildSpan.Data,
+		map[string]interface{}{
+			"childKey1": "value1",
+			"otel.kind": "internal",
+		},
+	)
 }
 
 func TestOnEndDoesNotFinishSentryRequests(t *testing.T) {
