@@ -235,18 +235,26 @@ func TestOnEndWithTransaction(t *testing.T) {
 	)
 	sentryTransaction, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
 	assertEqual(t, sentryTransaction.EndTime.IsZero(), true)
-
 	otelSpan.End()
+
 	// The span map should be empty
 	assertEqual(t, sentrySpanMap.Len(), 0)
 	// EndTime should be populated
 	assertEqual(t, sentryTransaction.EndTime.IsZero(), false)
 
+	assertEqual(t, sentryTransaction.Status, sentry.SpanStatusOK)
+	assertEqual(t, sentryTransaction.Source, sentry.TransactionSource("custom"))
+	assertEqual(t, sentryTransaction.Op, "")
+	assertEqual(t, sentryTransaction.Description, "")
+
+	// One events should be captured by transport
 	sentryTransport := getSentryTransportFromContext(ctx)
 	events := sentryTransport.Events()
 	assertEqual(t, len(events), 1)
+	event := events[0]
+	assertEqual(t, event.StartTime, sentryTransaction.StartTime)
 
-	otelContextGot := events[0].Contexts["otel"]
+	otelContextGot := event.Contexts["otel"]
 	assertEqual(
 		t,
 		otelContextGot,
@@ -259,10 +267,6 @@ func TestOnEndWithTransaction(t *testing.T) {
 			},
 		},
 	)
-	assertEqual(t, sentryTransaction.Status, sentry.SpanStatusOK)
-	assertEqual(t, sentryTransaction.Source, sentry.TransactionSource("custom"))
-	assertEqual(t, sentryTransaction.Op, "")
-	assertEqual(t, sentryTransaction.Description, "")
 }
 
 func TestOnEndWithChildSpan(t *testing.T) {
@@ -298,21 +302,30 @@ func TestOnEndWithChildSpan(t *testing.T) {
 			"otel.kind": "internal",
 		},
 	)
+	// One events should be captured by transport
+	sentryTransport := getSentryTransportFromContext(ctx)
+	events := sentryTransport.Events()
+	assertEqual(t, len(events), 1)
+	assertEqual(t, events[0].StartTime, sentryTransaction.StartTime)
 }
 
 func TestOnEndDoesNotFinishSentryRequests(t *testing.T) {
 	_, _, tracer := setupSpanProcessorTest()
-	_, otelSpan := tracer.Start(
+	ctx, otelSpan := tracer.Start(
 		emptyContextWithSentry(),
 		"POST to Sentry",
 		// Hostname is same as in Sentry DSN
 		trace.WithAttributes(attribute.String("http.url", "https://example.com/sub/route")),
 	)
 	sentrySpan, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
-
 	otelSpan.End()
+
 	// The span map should be empty
 	assertEqual(t, sentrySpanMap.Len(), 0)
 	// EndTime should NOT be populated
 	assertEqual(t, sentrySpan.EndTime.IsZero(), true)
+	// No events should be captured by transport
+	sentryTransport := getSentryTransportFromContext(ctx)
+	events := sentryTransport.Events()
+	assertEqual(t, len(events), 0)
 }
