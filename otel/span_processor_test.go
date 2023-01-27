@@ -12,13 +12,15 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func setupSpanProcessorTest() (otelSdkTrace.SpanProcessor, *otelSdkTrace.TracerProvider) {
+func setupSpanProcessorTest() (otelSdkTrace.SpanProcessor, *otelSdkTrace.TracerProvider, trace.Tracer) {
 	// Make sure that the global span map is empty
 	sentrySpanMap.Clear()
 
 	spanProcessor := NewSentrySpanProcessor()
 	tp := otelSdkTrace.NewTracerProvider(otelSdkTrace.WithSampler(otelSdkTrace.AlwaysSample()))
-	return spanProcessor, tp
+	tp.RegisterSpanProcessor(spanProcessor)
+	tracer := tp.Tracer("test-tracer")
+	return spanProcessor, tp, tracer
 }
 
 func transactionName(span *sentry.Span) string {
@@ -58,11 +60,37 @@ func TestNewSentrySpanProcessor(t *testing.T) {
 	}
 }
 
-func TestSentrySpanProcessorOnStartRootSpan(t *testing.T) {
-	spanProcessor, tp := setupSpanProcessorTest()
-	tp.RegisterSpanProcessor(spanProcessor)
+func TestSpanProcessorShutdown(t *testing.T) {
+	spanProcessor, _, tracer := setupSpanProcessorTest()
+	ctx := emptyContextWithSentry()
+	tracer.Start(emptyContextWithSentry(), "spanName")
 
-	_, otelSpan := tp.Tracer("test-tracer").Start(emptyContextWithSentry(), "spanName")
+	assertEqual(t, sentrySpanMap.Len(), 1)
+
+	spanProcessor.Shutdown(ctx)
+
+	// The span map should be empty
+	assertEqual(t, sentrySpanMap.Len(), 0)
+}
+
+func TestSpanProcessorForceFlush(t *testing.T) {
+	// This test is pretty naive at the moment and just checks that
+	// ForceFlush() doesn't crash or return an error. Ideally we test it
+	// with a Sentry transport that can be checked to see if events were
+	// actually flushed.
+	spanProcessor, _, tracer := setupSpanProcessorTest()
+	ctx, span := tracer.Start(emptyContextWithSentry(), "spanName")
+	span.End()
+
+	err := spanProcessor.ForceFlush(ctx)
+	if err != nil {
+		t.Errorf("Error from ForceFlush(): %v", err)
+	}
+}
+
+func TestSentrySpanProcessorOnStartRootSpan(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+	_, otelSpan := tracer.Start(emptyContextWithSentry(), "spanName")
 
 	if sentrySpanMap.Len() != 1 {
 		t.Errorf("Span map size is %d, expected: 1", sentrySpanMap.Len())
@@ -86,8 +114,7 @@ func TestSentrySpanProcessorOnStartRootSpan(t *testing.T) {
 }
 
 func TestSentrySpanProcessorOnStartWithTraceParentContext(t *testing.T) {
-	spanProcessor, tp := setupSpanProcessorTest()
-	tp.RegisterSpanProcessor(spanProcessor)
+	_, _, tracer := setupSpanProcessorTest()
 
 	// Sentry context
 	ctx := context.WithValue(
@@ -113,7 +140,7 @@ func TestSentrySpanProcessorOnStartWithTraceParentContext(t *testing.T) {
 			TraceFlags: trace.FlagsSampled,
 		}),
 	)
-	_, otelSpan := tp.Tracer("test-tracer").Start(ctx, "spanName")
+	_, otelSpan := tracer.Start(ctx, "spanName")
 
 	if sentrySpanMap.Len() != 1 {
 		t.Errorf("Span map size is %d, expected: 1", sentrySpanMap.Len())
@@ -136,9 +163,7 @@ func TestSentrySpanProcessorOnStartWithTraceParentContext(t *testing.T) {
 }
 
 func TestSentrySpanProcessorOnStartWithExistingParentSpan(t *testing.T) {
-	spanProcessor, tp := setupSpanProcessorTest()
-	tp.RegisterSpanProcessor(spanProcessor)
-	tracer := tp.Tracer("test-tracer")
+	_, _, tracer := setupSpanProcessorTest()
 
 	// Otel span context
 	ctx := trace.ContextWithSpanContext(
@@ -176,10 +201,9 @@ func TestSentrySpanProcessorOnStartWithExistingParentSpan(t *testing.T) {
 }
 
 func TestSentrySpanProcessorOnEndBasicFlow(t *testing.T) {
-	spanProcessor, tp := setupSpanProcessorTest()
-	tp.RegisterSpanProcessor(spanProcessor)
+	_, _, tracer := setupSpanProcessorTest()
 
-	_, otelSpan := tp.Tracer("test-tracer").Start(emptyContextWithSentry(), "spanName")
+	_, otelSpan := tracer.Start(emptyContextWithSentry(), "spanName")
 	sentrySpan, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
 
 	assertEqual(t, sentrySpan.EndTime.IsZero(), true)
@@ -190,4 +214,21 @@ func TestSentrySpanProcessorOnEndBasicFlow(t *testing.T) {
 	assertEqual(t, sentrySpanMap.Len(), 0)
 	// EndTime should be populated
 	assertEqual(t, sentrySpan.EndTime.IsZero(), false)
+}
+
+func TestSentrySpanProcessorOnEndWithChildSpan(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+
+	ctx, otelRootSpan := tracer.Start(emptyContextWithSentry(), "rootSpan")
+	_, otelChildSpan := tracer.Start(ctx, "childSpan")
+	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
+	sentryChildSpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().SpanID())
+	otelChildSpan.End()
+	otelRootSpan.End()
+
+	// The span map should be empty
+	assertEqual(t, sentrySpanMap.Len(), 0)
+	// EndTime should be populated
+	assertEqual(t, sentryTransaction.EndTime.IsZero(), false)
+	assertEqual(t, sentryChildSpan.EndTime.IsZero(), false)
 }

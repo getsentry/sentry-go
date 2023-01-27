@@ -91,7 +91,7 @@ func (ssp *sentrySpanProcessor) Shutdown(ctx context.Context) error {
 	// Note: according to the spec (https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown-1),
 	// "Shutdown MUST include the effects of ForceFlush".
 	sentrySpanMap.Clear()
-	return flushSpanProcessor(ctx)
+	return ssp.ForceFlush(ctx)
 }
 
 func (ssp *sentrySpanProcessor) ForceFlush(ctx context.Context) error {
