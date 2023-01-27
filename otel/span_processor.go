@@ -41,8 +41,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 		fmt.Printf("Sentry Span: %#v\n", span)
 		sentrySpanMap.Set(otelSpanID, span)
 	} else {
-		traceParentContext, _ := parent.Value(sentryTraceParentContextKey{}).(sentry.TraceParentContext)
-
+		traceParentContext := getTraceParentContext(parent)
 		transaction := sentry.StartTransaction(
 			parent,
 			s.Name(),
@@ -70,7 +69,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 		return
 	}
 
-	if utils.IsSentryRequestSpan(s) {
+	if utils.IsSentryRequestSpan(sentrySpan.Context(), s) {
 		sentrySpanMap.Delete(otelSpanId)
 		return
 	}
@@ -82,6 +81,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	}
 
 	sentrySpan.EndTime = s.EndTime()
+	// fmt.Printf("\nSentrySpanFinal: %#v\n", sentrySpan)
 	sentrySpan.Finish()
 
 	sentrySpanMap.Delete(otelSpanId)
@@ -105,7 +105,20 @@ func flushSpanProcessor(ctx context.Context) error {
 	return nil
 }
 
+func getTraceParentContext(ctx context.Context) sentry.TraceParentContext {
+	traceParentContext, ok := ctx.Value(sentryTraceParentContextKey{}).(sentry.TraceParentContext)
+	if !ok {
+		traceParentContext.Sampled = sentry.SampledUndefined
+	}
+	return traceParentContext
+}
+
 func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
+	hub := sentry.GetHubFromContext(transaction.Context())
+	if hub == nil {
+		return
+	}
+
 	// TODO(michi) This is crazy inefficient
 	attributes := map[attribute.Key]string{}
 	resource := map[attribute.Key]string{}
@@ -118,7 +131,7 @@ func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.Read
 	}
 
 	// TODO(michi) We might need to set this somewhere else then on the scope
-	sentry.CurrentHub().Scope().SetContext("otel", map[string]interface{}{
+	hub.Scope().SetContext("otel", map[string]interface{}{
 		"attributes": attributes,
 		"resource":   resource,
 	})
@@ -129,7 +142,7 @@ func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.Read
 	transaction.Op = spanAttributes.Op
 	transaction.Source = spanAttributes.Source
 	// TODO(michi) We might need to set this somewhere else then on the scope
-	sentry.CurrentHub().Scope().SetTransaction(spanAttributes.Description)
+	hub.Scope().SetTransaction(spanAttributes.Description)
 }
 
 func updateSpanWithOtelData(span *sentry.Span, s otelSdkTrace.ReadOnlySpan) {

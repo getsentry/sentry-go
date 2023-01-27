@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/getsentry/sentry-go"
+	"go.opentelemetry.io/otel/attribute"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -37,15 +38,26 @@ func transactionName(span *sentry.Span) string {
 
 func emptyContextWithSentry() context.Context {
 	client, _ := sentry.NewClient(sentry.ClientOptions{
-		Dsn:           "https://abc@example.com/123",
-		Environment:   "testing",
-		Release:       "1.2.3",
-		EnableTracing: true,
-		// FIXME(anton): Would be nice to have TransportMock here (and
-		// other similar places)
+		Dsn:              "https://abc@example.com/123",
+		Environment:      "testing",
+		Release:          "1.2.3",
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        &TransportMock{},
 	})
 	hub := sentry.NewHub(client, sentry.NewScope())
 	return sentry.SetHubOnContext(context.Background(), hub)
+}
+
+func getSentryTransportFromContext(ctx context.Context) *TransportMock {
+	hub := sentry.GetHubFromContext(ctx)
+	transport, ok := hub.Client().Transport.(*TransportMock)
+	if !ok {
+		log.Fatal(
+			"Cannot get mock transport from ",
+		)
+	}
+	return transport
 }
 
 func TestNewSentrySpanProcessor(t *testing.T) {
@@ -109,7 +121,7 @@ func TestSentrySpanProcessorOnStartRootSpan(t *testing.T) {
 	assertEqual(t, sentrySpan.ParentSpanID, sentry.SpanID{})
 	assertEqual(t, sentrySpan.IsTransaction(), true)
 	assertEqual(t, sentrySpan.ToBaggage(), "")
-	assertEqual(t, sentrySpan.Sampled, sentry.SampledFalse)
+	assertEqual(t, sentrySpan.Sampled, sentry.SampledTrue)
 	assertEqual(t, transactionName(sentrySpan), "spanName")
 }
 
@@ -123,7 +135,7 @@ func TestSentrySpanProcessorOnStartWithTraceParentContext(t *testing.T) {
 		sentry.TraceParentContext{
 			TraceID:      TraceIDFromHex("d4cda95b652f4a1592b449d5929fda1b"),
 			ParentSpanID: SpanIDFromHex("6e0c63257de34c92"),
-			Sampled:      sentry.SampledTrue,
+			Sampled:      sentry.SampledFalse,
 		},
 	)
 	dsc := sentry.DynamicSamplingContext{
@@ -158,7 +170,7 @@ func TestSentrySpanProcessorOnStartWithTraceParentContext(t *testing.T) {
 	assertEqual(t, sentrySpan.ParentSpanID, SpanIDFromHex("b72fa28504b07285"))
 	assertEqual(t, sentrySpan.IsTransaction(), true)
 	assertEqual(t, sentrySpan.ToBaggage(), "sentry-environment=dev")
-	assertEqual(t, sentrySpan.Sampled, sentry.SampledTrue)
+	assertEqual(t, sentrySpan.Sampled, sentry.SampledFalse)
 	assertEqual(t, transactionName(sentrySpan), "spanName")
 }
 
@@ -200,25 +212,50 @@ func TestSentrySpanProcessorOnStartWithExistingParentSpan(t *testing.T) {
 	assertEqual(t, sentryChildSpan.Op, "childSpan")
 }
 
-func TestSentrySpanProcessorOnEndBasicFlow(t *testing.T) {
+func TestSentrySpanProcessorOnEndForTransaction(t *testing.T) {
 	_, _, tracer := setupSpanProcessorTest()
-
-	_, otelSpan := tracer.Start(emptyContextWithSentry(), "spanName")
-	sentrySpan, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
-
-	assertEqual(t, sentrySpan.EndTime.IsZero(), true)
+	ctx, otelSpan := tracer.Start(
+		emptyContextWithSentry(),
+		"transactionName",
+		trace.WithAttributes(
+			attribute.String("key1", "value1"),
+			attribute.String("key2", "value2"),
+		),
+	)
+	sentryTransaction, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
+	assertEqual(t, sentryTransaction.EndTime.IsZero(), true)
 
 	otelSpan.End()
-
 	// The span map should be empty
 	assertEqual(t, sentrySpanMap.Len(), 0)
 	// EndTime should be populated
-	assertEqual(t, sentrySpan.EndTime.IsZero(), false)
+	assertEqual(t, sentryTransaction.EndTime.IsZero(), false)
+
+	sentryTransport := getSentryTransportFromContext(ctx)
+	events := sentryTransport.Events()
+	assertEqual(t, len(events), 1)
+
+	otelContextGot := events[0].Contexts["otel"]
+	assertEqual(
+		t,
+		otelContextGot,
+		map[string]interface{}{
+			"attributes": map[attribute.Key]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+			"resource": map[attribute.Key]string{
+				"service.name":           "unknown_service:otel.test",
+				"telemetry.sdk.language": "go",
+				"telemetry.sdk.name":     "opentelemetry",
+				"telemetry.sdk.version":  "1.11.2",
+			},
+		},
+	)
 }
 
 func TestSentrySpanProcessorOnEndWithChildSpan(t *testing.T) {
 	_, _, tracer := setupSpanProcessorTest()
-
 	ctx, otelRootSpan := tracer.Start(emptyContextWithSentry(), "rootSpan")
 	_, otelChildSpan := tracer.Start(ctx, "childSpan")
 	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
@@ -231,4 +268,21 @@ func TestSentrySpanProcessorOnEndWithChildSpan(t *testing.T) {
 	// EndTime should be populated
 	assertEqual(t, sentryTransaction.EndTime.IsZero(), false)
 	assertEqual(t, sentryChildSpan.EndTime.IsZero(), false)
+}
+
+func TestOnEndDoesNotFinishSentryRequests(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+	_, otelSpan := tracer.Start(
+		emptyContextWithSentry(),
+		"POST to Sentry",
+		// Hostname is same as in Sentry DSN
+		trace.WithAttributes(attribute.String("http.url", "https://example.com/sub/route")),
+	)
+	sentrySpan, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
+
+	otelSpan.End()
+	// The span map should be empty
+	assertEqual(t, sentrySpanMap.Len(), 0)
+	// EndTime should NOT be populated
+	assertEqual(t, sentrySpan.EndTime.IsZero(), true)
 }
