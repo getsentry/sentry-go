@@ -241,6 +241,25 @@ func (s *Span) IsTransaction() bool {
 	return s.isTransaction
 }
 
+// GetTransaction returns the root span (basically, a)
+// FIXME(anton): Name -- TBC. In Python it's called "containing_transaction".
+// Caveat: there's already sentry.Transaction() function.
+func (s *Span) GetTransaction() *Span {
+	spanRecorder := s.spanRecorder()
+	if spanRecorder == nil {
+		// This probably means that the Span was created manually (not via
+		// StartTransaction or StartChild).
+		// Return "nil" to indicate that it's not a normal situation.
+		return nil
+	}
+	recorderRoot := spanRecorder.root()
+	if recorderRoot == nil {
+		// Same as above: manually created Span.
+		return nil
+	}
+	return recorderRoot
+}
+
 // TODO(tracing): maybe add shortcuts to get/set transaction name. Right now the
 // transaction name is in the Scope, as it has existed there historically, prior
 // to tracing.
