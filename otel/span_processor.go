@@ -28,6 +28,7 @@ func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
 	return sentrySpanProcessorInstance
 }
 
+// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onstart
 func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.ReadWriteSpan) {
 	fmt.Printf("\n--- SpanProcessor OnStart\nContext: %#v\nOTel Span: %#v\n", parent, s)
 
@@ -68,6 +69,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 	}
 }
 
+// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onendspan
 func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	fmt.Printf("\n--- SpanProcessor OnEnd\nSpan: %#v\n", s)
 
@@ -95,13 +97,14 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	sentrySpanMap.Delete(otelSpanId)
 }
 
+// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown-1
 func (ssp *sentrySpanProcessor) Shutdown(ctx context.Context) error {
-	// Note: according to the spec (https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown-1),
-	// "Shutdown MUST include the effects of ForceFlush".
 	sentrySpanMap.Clear()
+	// Note: according to the spec, "Shutdown MUST include the effects of ForceFlush".
 	return ssp.ForceFlush(ctx)
 }
 
+// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#forceflush-1
 func (ssp *sentrySpanProcessor) ForceFlush(ctx context.Context) error {
 	return flushSpanProcessor(ctx)
 }

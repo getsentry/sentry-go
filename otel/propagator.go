@@ -14,9 +14,15 @@ import (
 
 type sentryPropagator struct{}
 
-// Inject set tracecontext from the Context into the carrier.
+func NewSentryPropagator() propagation.TextMapPropagator {
+	return sentryPropagator{}
+}
+
+// Inject sets Sentry-related values from the Context into the carrier.
+//
+// https://opentelemetry.io/docs/reference/specification/context/api-propagators/#inject
 func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMapCarrier) {
-	fmt.Printf("\n--- Propagator Inject\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
+	sentry.Logger.Printf("\n--- Propagator Inject\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
 
 	spanContext := trace.SpanContextFromContext(ctx)
 
@@ -72,6 +78,8 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 }
 
 // Extract reads cross-cutting concerns from the carrier into a Context.
+//
+// https://opentelemetry.io/docs/reference/specification/context/api-propagators/#extract
 func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextMapCarrier) context.Context {
 	fmt.Printf("\n--- Propagator Extract\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
 
@@ -122,10 +130,9 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 	return ctx
 }
 
+// Fields returns a list of fields that will be used by the propagator.
+//
+// https://opentelemetry.io/docs/reference/specification/context/api-propagators/#fields
 func (p sentryPropagator) Fields() []string {
 	return []string{sentry.SentryTraceHeader, sentry.SentryBaggageHeader}
-}
-
-func NewSentryPropagator() propagation.TextMapPropagator {
-	return sentryPropagator{}
 }
