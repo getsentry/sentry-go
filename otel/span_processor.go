@@ -4,7 +4,6 @@ package sentryotel
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -30,7 +29,7 @@ func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onstart
 func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.ReadWriteSpan) {
-	fmt.Printf("\n--- SpanProcessor OnStart\nContext: %#v\nOTel Span: %#v\n", parent, s)
+	sentry.Logger.Printf("\n--- SpanProcessor OnStart\nContext: %#v\nOTel Span: %#v\n", parent, s)
 
 	otelSpanContext := s.SpanContext()
 	otelSpanID := otelSpanContext.SpanID()
@@ -47,7 +46,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 		span.SpanID = sentry.SpanID(otelSpanID)
 		span.StartTime = s.StartTime()
 
-		fmt.Printf("Sentry Span: %#v\n", span)
+		sentry.Logger.Printf("Sentry Span: %#v\n", span)
 		sentrySpanMap.Set(otelSpanID, span)
 	} else {
 		traceParentContext := getTraceParentContext(parent)
@@ -64,14 +63,14 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 			transaction.SetDynamicSamplingContext(dynamicSamplingContext)
 		}
 
-		fmt.Printf("Sentry Transaction: %#v\n", transaction)
+		sentry.Logger.Printf("Sentry Transaction: %#v\n", transaction)
 		sentrySpanMap.Set(otelSpanID, transaction)
 	}
 }
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onendspan
 func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
-	fmt.Printf("\n--- SpanProcessor OnEnd\nSpan: %#v\n", s)
+	sentry.Logger.Printf("\n--- SpanProcessor OnEnd\nSpan: %#v\n", s)
 
 	otelSpanId := s.SpanContext().SpanID()
 	sentrySpan, ok := sentrySpanMap.Get(otelSpanId)
@@ -91,7 +90,6 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	}
 
 	sentrySpan.EndTime = s.EndTime()
-	// fmt.Printf("\nSentrySpanFinal: %#v\n", sentrySpan)
 	sentrySpan.Finish()
 
 	sentrySpanMap.Delete(otelSpanId)

@@ -4,7 +4,6 @@ package sentryotel
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/getsentry/sentry-go"
 	"go.opentelemetry.io/otel/baggage"
@@ -53,7 +52,7 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 		// (not necessarily the current span). So this might break things in some cases.
 		sentryBaggageStr = sentrySpan.ToBaggage()
 	}
-	fmt.Printf("sentrySpan: %#v, baggage: %#v\n", sentrySpan, sentryBaggageStr)
+	sentry.Logger.Printf("sentrySpan: %#v, baggage: %#v\n", sentrySpan, sentryBaggageStr)
 	// FIXME: We're basically reparsing the header again, because internally in sentry-go
 	// we currently use a vendored version of "otel/baggage" package.
 	// This is not optimal and we should consider other approaches.
@@ -73,18 +72,18 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 		carrier.Set(sentry.SentryBaggageHeader, finalBaggage.String())
 	}
 
-	fmt.Printf("sentry-trace header: '%s'\n", carrier.Get(sentry.SentryTraceHeader))
-	fmt.Printf("baggage header: '%s'\n", carrier.Get(sentry.SentryBaggageHeader))
+	sentry.Logger.Printf("sentry-trace header: '%s'\n", carrier.Get(sentry.SentryTraceHeader))
+	sentry.Logger.Printf("baggage header: '%s'\n", carrier.Get(sentry.SentryBaggageHeader))
 }
 
 // Extract reads cross-cutting concerns from the carrier into a Context.
 //
 // https://opentelemetry.io/docs/reference/specification/context/api-propagators/#extract
 func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextMapCarrier) context.Context {
-	fmt.Printf("\n--- Propagator Extract\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
+	sentry.Logger.Printf("\n--- Propagator Extract\nContext: %#v\nCarrier: %#v\n", ctx, carrier)
 
 	sentryTraceHeader := carrier.Get(sentry.SentryTraceHeader)
-	fmt.Printf("sentry-trace header: '%s'\n", sentryTraceHeader)
+	sentry.Logger.Printf("sentry-trace header: '%s'\n", sentryTraceHeader)
 
 	if sentryTraceHeader != "" {
 		ctx = context.WithValue(ctx, sentryTraceHeaderContextKey{}, sentryTraceHeader)
@@ -104,7 +103,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 	}
 
 	baggageHeader := carrier.Get(sentry.SentryBaggageHeader)
-	fmt.Printf("baggage header: '%s'\n", baggageHeader)
+	sentry.Logger.Printf("baggage header: '%s'\n", baggageHeader)
 	if baggageHeader != "" {
 		// Preserve the original baggage
 		parsedBaggage, err := baggage.Parse(baggageHeader)
@@ -125,7 +124,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 	}
 
 	ctx = context.WithValue(ctx, dynamicSamplingContextKey{}, dynamicSamplingContext)
-	fmt.Printf("DSC: %#v\n", dynamicSamplingContext)
+	sentry.Logger.Printf("DSC: %#v\n", dynamicSamplingContext)
 
 	return ctx
 }

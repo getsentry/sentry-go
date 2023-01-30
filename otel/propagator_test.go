@@ -4,7 +4,6 @@ package sentryotel
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -51,8 +50,6 @@ func createTransactionAndMaybeSpan(transactionContext transactionTestContext, wi
 		sentry.SpanSampled(transactionContext.sampled),
 	)
 
-	fmt.Printf("Transaction: %#v\n", transaction)
-
 	transaction.TraceID = TraceIDFromHex(transactionContext.traceID)
 	transaction.SpanID = SpanIDFromHex(transactionContext.spanID)
 	transaction.SetDynamicSamplingContext(sentry.DynamicSamplingContextFromTransaction(transaction))
@@ -65,6 +62,7 @@ func createTransactionAndMaybeSpan(transactionContext transactionTestContext, wi
 }
 
 /// Fields
+
 func TestFieldsReturnsRightSet(t *testing.T) {
 	propagator, _ := setupPropagatorTest()
 	fields := propagator.Fields()
