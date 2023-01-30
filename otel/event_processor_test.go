@@ -38,7 +38,6 @@ func TestLinkTraceContextToErrorEventWithEmptyTraceContext(t *testing.T) {
 			"parent_span_id": sentrySpan.ParentSpanID.String(),
 		},
 	)
-	assertEqual(t, true, false)
 }
 
 func TestLinkTraceContextToErrorEventDoesNotTouchExistingTraceContext(t *testing.T) {
@@ -66,5 +65,4 @@ func TestLinkTraceContextToErrorEventDoesNotTouchExistingTraceContext(t *testing
 		err.Contexts["trace"],
 		map[string]interface{}{"trace_id": "123"},
 	)
-	assertEqual(t, true, false)
 }
