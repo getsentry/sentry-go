@@ -241,7 +241,8 @@ func (s *Span) IsTransaction() bool {
 	return s.isTransaction
 }
 
-// GetTransaction returns the root span (basically, a)
+// GetTransaction returns the root span (basically, a transaction) for the given span
+// and its local span tree.
 // FIXME(anton): Name -- TBC. In Python it's called "containing_transaction".
 // Caveat: there's already sentry.Transaction() function.
 func (s *Span) GetTransaction() *Span {
