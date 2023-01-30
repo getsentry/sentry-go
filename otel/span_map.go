@@ -9,6 +9,9 @@ import (
 	otelTrace "go.opentelemetry.io/otel/trace"
 )
 
+// SentrySpanMap is a mapping between OpenTelemetry spans and Sentry spans.
+// It helps Sentry span processor and propagator to keep track of unfinished
+// Sentry spans and to establish parent-child links between spans.
 type SentrySpanMap struct {
 	spanMap map[otelTrace.SpanID]*sentry.Span
 	mu      sync.RWMutex

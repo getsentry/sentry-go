@@ -14,7 +14,7 @@ import (
 type sentryPropagator struct{}
 
 func NewSentryPropagator() propagation.TextMapPropagator {
-	return sentryPropagator{}
+	return &sentryPropagator{}
 }
 
 // Inject sets Sentry-related values from the Context into the carrier.

@@ -73,11 +73,10 @@ func getSentryTransportFromContext(ctx context.Context) *TransportMock {
 func TestNewSentrySpanProcessor(t *testing.T) {
 	spanProcessor := NewSentrySpanProcessor()
 
-	sentrySpanProcessor, valid := spanProcessor.(*sentrySpanProcessor)
-	if !valid {
+	if _, valid := spanProcessor.(*sentrySpanProcessor); !valid {
 		t.Errorf(
 			"Invalid type returned by the span processor constructor: %#v\n",
-			sentrySpanProcessor,
+			spanProcessor,
 		)
 	}
 }
