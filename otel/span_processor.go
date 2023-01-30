@@ -15,21 +15,29 @@ import (
 
 type sentrySpanProcessor struct{}
 
-func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
-	ssp := &sentrySpanProcessor{}
+// Singleton instance of the Sentry span processor.
+// At the moment we do not support multiple instances.
+var sentrySpanProcessorInstance *sentrySpanProcessor
 
-	return ssp
+func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
+	if sentrySpanProcessorInstance != nil {
+		return sentrySpanProcessorInstance
+	}
+	sentry.AddGlobalEventProcessor(linkTraceContextToErrorEvent)
+	sentrySpanProcessorInstance := &sentrySpanProcessor{}
+	return sentrySpanProcessorInstance
 }
 
 func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.ReadWriteSpan) {
 	fmt.Printf("\n--- SpanProcessor OnStart\nContext: %#v\nOTel Span: %#v\n", parent, s)
 
-	otelSpanID := s.SpanContext().SpanID()
-	otelTraceID := s.SpanContext().TraceID()
+	otelSpanContext := s.SpanContext()
+	otelSpanID := otelSpanContext.SpanID()
+	otelTraceID := otelSpanContext.TraceID()
 	otelParentSpanID := s.Parent().SpanID()
 
 	var sentryParentSpan *sentry.Span
-	if otelParentSpanID.IsValid() {
+	if otelSpanContext.IsValid() {
 		sentryParentSpan, _ = sentrySpanMap.Get(otelParentSpanID)
 	}
 
