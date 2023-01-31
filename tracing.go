@@ -241,10 +241,10 @@ func (s *Span) IsTransaction() bool {
 	return s.isTransaction
 }
 
-// GetTransaction returns the root span (basically, a transaction) for the given span
-// and its local span tree.
-// FIXME(anton): Name -- TBC. In Python it's called "containing_transaction".
-// Caveat: there's already sentry.Transaction() function.
+// GetTransaction returns the transaction that contains this span.
+//
+// For transaction span it returns itself. For spans that were created manually
+// it returns "nil".
 func (s *Span) GetTransaction() *Span {
 	spanRecorder := s.spanRecorder()
 	if spanRecorder == nil {
