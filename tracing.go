@@ -249,7 +249,7 @@ func (s *Span) GetTransaction() *Span {
 	spanRecorder := s.spanRecorder()
 	if spanRecorder == nil {
 		// This probably means that the Span was created manually (not via
-		// StartTransaction or StartChild).
+		// StartTransaction/StartSpan or StartChild).
 		// Return "nil" to indicate that it's not a normal situation.
 		return nil
 	}
