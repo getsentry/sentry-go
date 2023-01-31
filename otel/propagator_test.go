@@ -4,7 +4,6 @@ package sentryotel
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -37,7 +36,6 @@ func createTransactionAndMaybeSpan(transactionContext transactionTestContext, wi
 	)
 	transaction.TraceID = TraceIDFromHex(transactionContext.traceID)
 	transaction.SpanID = SpanIDFromHex(transactionContext.spanID)
-	transaction.SetDynamicSamplingContext(sentry.DynamicSamplingContextFromTransaction(transaction))
 
 	if withSpan {
 		span := transaction.StartChild("op")
@@ -47,6 +45,8 @@ func createTransactionAndMaybeSpan(transactionContext transactionTestContext, wi
 		span.SpanID = SpanIDFromHex(transactionContext.spanID)
 		sentrySpanMap.Set(trace.SpanID(span.SpanID), span)
 	}
+
+	transaction.SetDynamicSamplingContext(sentry.DynamicSamplingContextFromTransaction(transaction))
 	sentrySpanMap.Set(trace.SpanID(transaction.SpanID), transaction)
 
 	otelContext := trace.SpanContextConfig{
@@ -118,7 +118,7 @@ func TestInjectUsesBaggageOnEmptySpan(t *testing.T) {
 	)
 }
 
-func TestInjectUsesSetsValidTraceFromTransaction(t *testing.T) {
+func testInjectUsesSetsValidTrace(t *testing.T, withChildSpan bool) {
 	tests := []struct {
 		name                     string
 		sentryTransactionContext transactionTestContext
@@ -171,30 +171,33 @@ func TestInjectUsesSetsValidTraceFromTransaction(t *testing.T) {
 		},
 	}
 
-	withSpanOptions := []bool{true, false}
-	for _, withSpan := range withSpanOptions {
-		for _, tt := range tests {
-			tt, withSpan := tt, withSpan
-			testName := fmt.Sprintf("%s__withSpan_%v", tt.name, withSpan)
-			t.Run(testName, func(t *testing.T) {
-				propagator, carrier := setupPropagatorTest()
-				testContextConfig := createTransactionAndMaybeSpan(tt.sentryTransactionContext, withSpan)
-				otelSpanContext := trace.NewSpanContext(testContextConfig)
-				ctx := trace.ContextWithSpanContext(context.Background(), otelSpanContext)
-				propagator.Inject(ctx, carrier)
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			propagator, carrier := setupPropagatorTest()
+			testContextConfig := createTransactionAndMaybeSpan(tt.sentryTransactionContext, withChildSpan)
+			otelSpanContext := trace.NewSpanContext(testContextConfig)
+			ctx := trace.ContextWithSpanContext(context.Background(), otelSpanContext)
+			propagator.Inject(ctx, carrier)
 
-				expectedCarrier := propagation.MapCarrier{}
-				if tt.wantBaggage != nil {
-					expectedCarrier["baggage"] = *tt.wantBaggage
-				}
-				if tt.wantSentryTrace != nil {
-					expectedCarrier["sentry-trace"] = *tt.wantSentryTrace
-				}
-				assertMapCarrierEqual(t, carrier, expectedCarrier)
-			})
-		}
+			expectedCarrier := propagation.MapCarrier{}
+			if tt.wantBaggage != nil {
+				expectedCarrier["baggage"] = *tt.wantBaggage
+			}
+			if tt.wantSentryTrace != nil {
+				expectedCarrier["sentry-trace"] = *tt.wantSentryTrace
+			}
+			assertMapCarrierEqual(t, carrier, expectedCarrier)
+		})
 	}
+}
 
+func TestInjectUsesSetsValidTraceFromTransaction(t *testing.T) {
+	testInjectUsesSetsValidTrace(t, false)
+}
+
+func TestInjectUsesSetsValidTraceFromChildSpan(t *testing.T) {
+	testInjectUsesSetsValidTrace(t, true)
 }
 
 /// Extract
