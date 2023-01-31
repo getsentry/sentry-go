@@ -29,8 +29,6 @@ func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onstart
 func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.ReadWriteSpan) {
-	sentry.Logger.Printf("\n--- SpanProcessor OnStart\nContext: %#v\nOTel Span: %#v\n", parent, s)
-
 	otelSpanContext := s.SpanContext()
 	otelSpanID := otelSpanContext.SpanID()
 	otelTraceID := otelSpanContext.TraceID()
@@ -46,7 +44,6 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 		span.SpanID = sentry.SpanID(otelSpanID)
 		span.StartTime = s.StartTime()
 
-		sentry.Logger.Printf("Sentry Span: %#v\n", span)
 		sentrySpanMap.Set(otelSpanID, span)
 	} else {
 		traceParentContext := getTraceParentContext(parent)
@@ -63,15 +60,12 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 			transaction.SetDynamicSamplingContext(dynamicSamplingContext)
 		}
 
-		sentry.Logger.Printf("Sentry Transaction: %#v\n", transaction)
 		sentrySpanMap.Set(otelSpanID, transaction)
 	}
 }
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onendspan
 func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
-	sentry.Logger.Printf("\n--- SpanProcessor OnEnd\nSpan: %#v\n", s)
-
 	otelSpanId := s.SpanContext().SpanID()
 	sentrySpan, ok := sentrySpanMap.Get(otelSpanId)
 	if !ok || sentrySpan == nil {
