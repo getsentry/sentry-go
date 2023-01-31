@@ -243,8 +243,8 @@ func (s *Span) IsTransaction() bool {
 
 // GetTransaction returns the transaction that contains this span.
 //
-// For transaction span it returns itself. For spans that were created manually
-// it returns "nil".
+// For transaction spans it returns itself. For spans that were created manually
+// the method returns "nil".
 func (s *Span) GetTransaction() *Span {
 	spanRecorder := s.spanRecorder()
 	if spanRecorder == nil {
