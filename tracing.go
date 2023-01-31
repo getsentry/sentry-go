@@ -241,6 +241,26 @@ func (s *Span) IsTransaction() bool {
 	return s.isTransaction
 }
 
+// GetTransaction returns the transaction that contains this span.
+//
+// For transaction spans it returns itself. For spans that were created manually
+// the method returns "nil".
+func (s *Span) GetTransaction() *Span {
+	spanRecorder := s.spanRecorder()
+	if spanRecorder == nil {
+		// This probably means that the Span was created manually (not via
+		// StartTransaction/StartSpan or StartChild).
+		// Return "nil" to indicate that it's not a normal situation.
+		return nil
+	}
+	recorderRoot := spanRecorder.root()
+	if recorderRoot == nil {
+		// Same as above: manually created Span.
+		return nil
+	}
+	return recorderRoot
+}
+
 // TODO(tracing): maybe add shortcuts to get/set transaction name. Right now the
 // transaction name is in the Scope, as it has existed there historically, prior
 // to tracing.

@@ -11,6 +11,7 @@
 - Add Span.IsTransaction() ([#543](https://github.com/getsentry/sentry-go/pull/543))
 - Add TraceParentContext structure ([#545](https://github.com/getsentry/sentry-go/pull/545))
 - Add a new SpanOption: `SpanSampled` ([#546](https://github.com/getsentry/sentry-go/pull/546))
+- Add `Span.GetTransaction()` method ([#558](https://github.com/getsentry/sentry-go/pull/558))
 
 ## 0.17.0
 
