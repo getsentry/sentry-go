@@ -124,11 +124,11 @@ func TestOnStartRootSpan(t *testing.T) {
 	otelTraceId := otelSpan.SpanContext().TraceID()
 	otelSpanId := otelSpan.SpanContext().SpanID()
 	// TODO(anton): use a simple "assert", not "assertEqual"
-	assertEqual(t, otelSpan.SpanContext().IsValid(), true)
+	assertTrue(t, otelSpan.SpanContext().IsValid())
 	assertEqual(t, sentrySpan.SpanID.String(), otelSpanId.String())
 	assertEqual(t, sentrySpan.TraceID.String(), otelTraceId.String())
 	assertEqual(t, sentrySpan.ParentSpanID, sentry.SpanID{})
-	assertEqual(t, sentrySpan.IsTransaction(), true)
+	assertTrue(t, sentrySpan.IsTransaction())
 	assertEqual(t, sentrySpan.ToBaggage(), "")
 	assertEqual(t, sentrySpan.Sampled, sentry.SampledTrue)
 	assertEqual(t, transactionName(sentrySpan), "spanName")
@@ -171,13 +171,13 @@ func TestOnStartWithTraceParentContext(t *testing.T) {
 		t.Errorf("Sentry span not found in the map")
 	}
 
-	assertEqual(t, otelSpan.SpanContext().IsValid(), true)
+	assertTrue(t, otelSpan.SpanContext().IsValid())
 	assertEqual(t, sentrySpan.SpanID.String(), otelSpan.SpanContext().SpanID().String())
 	// We're currently taking trace id and parent span id from the otel span context,
 	// (not sentry-trace header), mostly to be aligned with other SDKs.
 	assertEqual(t, sentrySpan.TraceID.String(), "bc6d53f15eb88f4320054569b8c553d4")
 	assertEqual(t, sentrySpan.ParentSpanID, SpanIDFromHex("b72fa28504b07285"))
-	assertEqual(t, sentrySpan.IsTransaction(), true)
+	assertTrue(t, sentrySpan.IsTransaction())
 	assertEqual(t, sentrySpan.ToBaggage(), "sentry-environment=dev")
 	assertEqual(t, sentrySpan.Sampled, sentry.SampledFalse)
 	assertEqual(t, transactionName(sentrySpan), "spanName")
@@ -213,12 +213,12 @@ func TestOnStartWithExistingParentSpan(t *testing.T) {
 		t.Errorf("Sentry span not found in the map")
 	}
 
-	assertEqual(t, otelChildSpan.SpanContext().IsValid(), true)
-	assertEqual(t, otelRootSpan.SpanContext().IsValid(), true)
+	assertTrue(t, otelChildSpan.SpanContext().IsValid())
+	assertTrue(t, otelRootSpan.SpanContext().IsValid())
 	assertEqual(t, sentryChildSpan.ParentSpanID, sentryTransaction.SpanID)
 	assertEqual(t, sentryChildSpan.SpanID.String(), otelChildSpan.SpanContext().SpanID().String())
 	assertEqual(t, sentryChildSpan.TraceID.String(), "bc6d53f15eb88f4320054569b8c553d4")
-	assertEqual(t, sentryChildSpan.IsTransaction(), false)
+	assertFalse(t, sentryChildSpan.IsTransaction())
 	assertEqual(t, transactionName(sentryChildSpan), "rootSpan")
 	assertEqual(t, sentryChildSpan.Op, "childSpan")
 }
@@ -233,13 +233,13 @@ func TestOnEndWithTransaction(t *testing.T) {
 		),
 	)
 	sentryTransaction, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
-	assertEqual(t, sentryTransaction.EndTime.IsZero(), true)
+	assertTrue(t, sentryTransaction.EndTime.IsZero())
 	otelSpan.End()
 
 	// The span map should be empty
 	assertEqual(t, sentrySpanMap.Len(), 0)
 	// EndTime should be populated
-	assertEqual(t, sentryTransaction.EndTime.IsZero(), false)
+	assertFalse(t, sentryTransaction.EndTime.IsZero())
 
 	assertEqual(t, sentryTransaction.Status, sentry.SpanStatusOK)
 	assertEqual(t, sentryTransaction.Source, sentry.TransactionSource("custom"))
@@ -286,8 +286,8 @@ func TestOnEndWithChildSpan(t *testing.T) {
 	// The span map should be empty
 	assertEqual(t, sentrySpanMap.Len(), 0)
 	// EndTime should be populated
-	assertEqual(t, sentryTransaction.EndTime.IsZero(), false)
-	assertEqual(t, sentryChildSpan.EndTime.IsZero(), false)
+	assertFalse(t, sentryTransaction.EndTime.IsZero())
+	assertFalse(t, sentryChildSpan.EndTime.IsZero())
 
 	assertEqual(t, sentryChildSpan.Status, sentry.SpanStatusOK)
 	assertEqual(t, sentryChildSpan.Source, sentry.TransactionSource(""))
@@ -322,7 +322,7 @@ func TestOnEndDoesNotFinishSentryRequests(t *testing.T) {
 	// The span map should be empty
 	assertEqual(t, sentrySpanMap.Len(), 0)
 	// EndTime should NOT be populated
-	assertEqual(t, sentrySpan.EndTime.IsZero(), true)
+	assertTrue(t, sentrySpan.EndTime.IsZero())
 	// No events should be captured by transport
 	sentryTransport := getSentryTransportFromContext(ctx)
 	events := sentryTransport.Events()

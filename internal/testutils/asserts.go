@@ -33,7 +33,7 @@ func AssertTrue(t *testing.T, condition bool, userMessage ...interface{}) {
 	t.Helper()
 
 	if !condition {
-		logFailedAssertion(t, "Failed assertion:", userMessage...)
+		logFailedAssertion(t, "\nExpected: true", userMessage...)
 	}
 }
 
@@ -41,7 +41,7 @@ func AssertFalse(t *testing.T, condition bool, userMessage ...interface{}) {
 	t.Helper()
 
 	if condition {
-		logFailedAssertion(t, "Failed assertion:", userMessage...)
+		logFailedAssertion(t, "\nExpected: false", userMessage...)
 	}
 }
 

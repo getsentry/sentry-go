@@ -19,6 +19,8 @@ import (
 
 var assertEqual = testutils.AssertEqual
 var assertNotEqual = testutils.AssertNotEqual
+var assertTrue = testutils.AssertTrue
+var assertFalse = testutils.AssertFalse
 
 // assertMapCarrierEqual compares two values of type propagation.MapCarrier and raises an
 // assertion error if the values differ.
