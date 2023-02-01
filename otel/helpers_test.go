@@ -2,9 +2,6 @@
 
 package sentryotel
 
-// TODO(anton): This is a copy of helpers_test.go in the repo root.
-// We should figure out how to share testing helpers.
-
 import (
 	"encoding/hex"
 	"sort"
@@ -51,8 +48,6 @@ func assertMapCarrierEqual(t *testing.T, got, want propagation.MapCarrier, userM
 			if diff := cmp.Diff(wantErr, gotErr); diff != "" {
 				t.Errorf("Comparing Baggage parsing errors (-want +got):\n%s", diff)
 			}
-
-			// sortedBaggage = gotBaggage.Members()
 
 			if diff := cmp.Diff(
 				wantBaggage,
