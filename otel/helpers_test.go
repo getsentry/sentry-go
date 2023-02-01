@@ -8,7 +8,6 @@ package sentryotel
 import (
 	"encoding/hex"
 	"fmt"
-	"log"
 	"reflect"
 	"sort"
 	"sync"
@@ -139,17 +138,23 @@ func stringPtr(s string) *string {
 }
 
 func otelTraceIDFromHex(s string) trace.TraceID {
+	if s == "" {
+		return trace.TraceID{}
+	}
 	traceID, err := trace.TraceIDFromHex(s)
 	if err != nil {
-		log.Fatalf("Cannot make a TraceID from the hex string: '%s'", s)
+		panic(err)
 	}
 	return traceID
 }
 
 func otelSpanIDFromHex(s string) trace.SpanID {
+	if s == "" {
+		return trace.SpanID{}
+	}
 	spanID, err := trace.SpanIDFromHex(s)
 	if err != nil {
-		log.Fatalf("Cannot make a SPanID from the hex string: '%s'", s)
+		panic(err)
 	}
 	return spanID
 }
