@@ -46,7 +46,11 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	// Propagate baggage header
 	sentryBaggageStr := ""
 	if sentrySpan != nil {
-		sentryBaggageStr = sentrySpan.ToBaggage()
+		// Finalize/freeze the baggage
+		containingTransaction := sentrySpan.GetTransaction()
+		dynamicSamplingContext := sentry.DynamicSamplingContextFromTransaction(containingTransaction)
+		containingTransaction.SetDynamicSamplingContext(dynamicSamplingContext)
+		sentryBaggageStr = dynamicSamplingContext.String()
 	}
 	// FIXME: We're basically reparsing the header again, because internally in sentry-go
 	// we currently use a vendored version of "otel/baggage" package.

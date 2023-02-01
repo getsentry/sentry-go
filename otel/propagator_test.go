@@ -45,8 +45,6 @@ func createTransactionAndMaybeSpan(transactionContext transactionTestContext, wi
 		span.SpanID = SpanIDFromHex(transactionContext.spanID)
 		sentrySpanMap.Set(trace.SpanID(span.SpanID), span)
 	}
-
-	transaction.SetDynamicSamplingContext(sentry.DynamicSamplingContextFromTransaction(transaction))
 	sentrySpanMap.Set(trace.SpanID(transaction.SpanID), transaction)
 
 	otelContext := trace.SpanContextConfig{
