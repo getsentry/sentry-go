@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/getsentry/sentry-go/internal/otel/baggage"
 )
 
 func assertEqual(t *testing.T, got, want interface{}, userMessage ...interface{}) {
@@ -49,4 +51,21 @@ func formatUnequalValues(got, want interface{}) string {
 	}
 
 	return fmt.Sprintf("\ngot: %s\nwant: %s", a, b)
+}
+
+func assertBaggageStringsEqual(t *testing.T, got, want string, userMessage ...interface{}) {
+	t.Helper()
+
+	baggageGot, err := baggage.Parse(got)
+	if err != nil {
+		t.Error(err)
+	}
+	baggageWant, err := baggage.Parse(want)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if !reflect.DeepEqual(baggageGot, baggageWant) {
+		logFailedAssertion(t, formatUnequalValues(got, want), userMessage...)
+	}
 }
