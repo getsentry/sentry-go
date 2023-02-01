@@ -288,7 +288,10 @@ func (s *Span) ToSentryTrace() string {
 
 // ToBaggage returns the serialized dynamic sampling context in the baggage format.
 func (s *Span) ToBaggage() string {
-	return s.dynamicSamplingContext.String()
+	if containingTransaction := s.GetTransaction(); containingTransaction != nil {
+		return containingTransaction.dynamicSamplingContext.String()
+	}
+	return ""
 }
 
 // SetDynamicSamplingContext sets the given dynamic sampling context on the
