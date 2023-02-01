@@ -12,6 +12,10 @@ import (
 func AssertEqual(t *testing.T, got, want interface{}, userMessage ...interface{}) {
 	t.Helper()
 
+	// Ideally, we would switch to cmp.Diff. However, in a general case, cmp.Diff
+	// is not able to compare structs with unexported (private) fields by default. There
+	// are ways to override modify that behaviour (e.g. by passing AllowUnexported), but
+	// it significantly complicates its usage.
 	if !reflect.DeepEqual(got, want) {
 		logFailedAssertion(t, formatUnequalValues(got, want), userMessage...)
 	}
@@ -22,6 +26,22 @@ func AssertNotEqual(t *testing.T, got, want interface{}, userMessage ...interfac
 
 	if reflect.DeepEqual(got, want) {
 		logFailedAssertion(t, formatUnequalValues(got, want), userMessage...)
+	}
+}
+
+func AssertTrue(t *testing.T, condition bool, userMessage ...interface{}) {
+	t.Helper()
+
+	if !condition {
+		logFailedAssertion(t, "Failed assertion:", userMessage...)
+	}
+}
+
+func AssertFalse(t *testing.T, condition bool, userMessage ...interface{}) {
+	t.Helper()
+
+	if condition {
+		logFailedAssertion(t, "Failed assertion:", userMessage...)
 	}
 }
 

@@ -111,7 +111,13 @@ func otelSpanIDFromHex(s string) trace.SpanID {
 	return spanID
 }
 
-// FIXME(anton): copied from mocks_test.go
+// FIXME(anton): TransportMock is copied from mocks_test.go
+// I don't see an easy way right now to reuse this struct in "sentry" and
+// "sentryotel" packages: it naturally depends on "sentry", but tests in "sentry"
+// package also depend on it, so if we move it to a new package, we'll get an
+// import cycle.
+// Alternatively, it could be made public on "sentry" package, but it doesn't
+// feel right.
 
 type TransportMock struct {
 	mu        sync.Mutex
