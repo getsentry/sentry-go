@@ -5,6 +5,7 @@ package sentryotel
 import (
 	"context"
 	"log"
+	"strings"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -129,9 +130,17 @@ func TestOnStartRootSpan(t *testing.T) {
 	assertEqual(t, sentrySpan.TraceID.String(), otelTraceId.String())
 	assertEqual(t, sentrySpan.ParentSpanID, sentry.SpanID{})
 	assertTrue(t, sentrySpan.IsTransaction())
-	assertEqual(t, sentrySpan.ToBaggage(), "")
 	assertEqual(t, sentrySpan.Sampled, sentry.SampledTrue)
 	assertEqual(t, transactionName(sentrySpan), "spanName")
+
+	// sentrySpan.ToBaggage() returns the baggage members in a random order
+	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-trace_id="+otelTraceId.String()), true)
+	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-sample_rate=1"), true)
+	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-public_key=abc"), true)
+	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-release=1.2.3"), true)
+	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-environment=testing"), true)
+	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-transaction=spanName"), true)
+
 }
 
 func TestOnStartWithTraceParentContext(t *testing.T) {
