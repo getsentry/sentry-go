@@ -2,8 +2,9 @@ package sentry
 
 import (
 	"context"
-	"strings"
 	"testing"
+
+	"github.com/getsentry/sentry-go/internal/testutils"
 )
 
 func TestDynamicSamplingContextFromHeader(t *testing.T) {
@@ -177,7 +178,5 @@ func TestString(t *testing.T) {
 			"sample_rate": "1",
 		},
 	}
-	assertEqual(t, strings.Contains(dsc.String(), "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03"), true)
-	assertEqual(t, strings.Contains(dsc.String(), "sentry-public_key=public"), true)
-	assertEqual(t, strings.Contains(dsc.String(), "sentry-sample_rate=1"), true)
+	testutils.AssertBaggageStringsEqual(t, dsc.String(), "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1")
 }
