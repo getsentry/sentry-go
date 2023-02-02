@@ -5,10 +5,10 @@ package sentryotel
 import (
 	"context"
 	"log"
-	"strings"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
@@ -133,14 +133,11 @@ func TestOnStartRootSpan(t *testing.T) {
 	assertEqual(t, sentrySpan.Sampled, sentry.SampledTrue)
 	assertEqual(t, transactionName(sentrySpan), "spanName")
 
-	// sentrySpan.ToBaggage() returns the baggage members in a random order
-	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-trace_id="+otelTraceId.String()), true)
-	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-sample_rate=1"), true)
-	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-public_key=abc"), true)
-	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-release=1.2.3"), true)
-	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-environment=testing"), true)
-	assertEqual(t, strings.Contains(sentrySpan.ToBaggage(), "sentry-transaction=spanName"), true)
-
+	testutils.AssertBaggageStringsEqual(
+		t,
+		sentrySpan.ToBaggage(),
+		"sentry-transaction=spanName,sentry-environment=testing,sentry-public_key=abc,sentry-release=1.2.3,sentry-sample_rate=1,sentry-trace_id="+otelTraceId.String(),
+	)
 }
 
 func TestOnStartWithTraceParentContext(t *testing.T) {
@@ -187,11 +184,16 @@ func TestOnStartWithTraceParentContext(t *testing.T) {
 	assertEqual(t, sentrySpan.TraceID.String(), "bc6d53f15eb88f4320054569b8c553d4")
 	assertEqual(t, sentrySpan.ParentSpanID, SpanIDFromHex("b72fa28504b07285"))
 	assertTrue(t, sentrySpan.IsTransaction())
-	assertEqual(t, sentrySpan.ToBaggage(), "sentry-environment=dev")
 	assertEqual(t, sentrySpan.Sampled, sentry.SampledFalse)
 	assertEqual(t, transactionName(sentrySpan), "spanName")
 	assertEqual(t, sentrySpan.Status, sentry.SpanStatusUndefined)
 	assertEqual(t, sentrySpan.Source, sentry.SourceCustom)
+
+	testutils.AssertBaggageStringsEqual(
+		t,
+		sentrySpan.ToBaggage(),
+		"sentry-environment=dev",
+	)
 }
 
 func TestOnStartWithExistingParentSpan(t *testing.T) {
