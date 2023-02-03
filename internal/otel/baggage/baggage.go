@@ -265,11 +265,12 @@ func NewMember(key, value string, props ...Property) (Member, error) {
 	if err := m.validate(); err != nil {
 		return newInvalidMember(), err
 	}
-	decodedValue, err := url.PathUnescape(value)
-	if err != nil {
-		return newInvalidMember(), fmt.Errorf("%w: %q", errInvalidValue, value)
-	}
-	m.value = decodedValue
+	//// NOTE(anton): I don't think we need to unescape here
+	// decodedValue, err := url.PathUnescape(value)
+	// if err != nil {
+	// 	return newInvalidMember(), fmt.Errorf("%w: %q", errInvalidValue, value)
+	// }
+	// m.value = decodedValue
 	return m, nil
 }
 
@@ -347,9 +348,10 @@ func (m Member) validate() error {
 	if !keyRe.MatchString(m.key) {
 		return fmt.Errorf("%w: %q", errInvalidKey, m.key)
 	}
-	if !valueRe.MatchString(m.value) {
-		return fmt.Errorf("%w: %q", errInvalidValue, m.value)
-	}
+	//// NOTE(anton): IMO it's too early to validate the value here.
+	// if !valueRe.MatchString(m.value) {
+	// 	return fmt.Errorf("%w: %q", errInvalidValue, m.value)
+	// }
 	return m.properties.validate()
 }
 
@@ -383,7 +385,7 @@ func percentEncodeValue(s string) string {
 		runeValue, w := utf8.DecodeRuneInString(s[byteIndex:])
 		width = w
 		char := string(runeValue)
-		if valueRe.MatchString(char) {
+		if valueRe.MatchString(char) && char != "%" {
 			// The character is returned as is, no need to percent-encode
 			sb.WriteString(char)
 		} else {

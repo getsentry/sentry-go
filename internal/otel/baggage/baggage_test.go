@@ -373,6 +373,13 @@ func TestBaggageParse(t *testing.T) {
 			},
 		},
 		{
+			name: "percent character in value",
+			in:   "key1=1%25",
+			want: baggage.List{
+				"key1": {Value: "1%"},
+			},
+		},
+		{
 			name: "non-encoded equal signs in value",
 			in:   "foo=bar=baz",
 			want: baggage.List{
@@ -491,6 +498,13 @@ func TestBaggageString(t *testing.T) {
 			out:  "foo=1+2",
 			baggage: baggage.List{
 				"foo": {Value: "1+2"},
+			},
+		},
+		{
+			name: "value with percent character",
+			out:  "foo=1%25",
+			baggage: baggage.List{
+				"foo": {Value: "1%"},
 			},
 		},
 		{
@@ -795,7 +809,7 @@ func TestMemberValidation(t *testing.T) {
 	assert.ErrorIs(t, m.validate(), errInvalidKey)
 
 	m.key, m.value = "k", "\\"
-	assert.ErrorIs(t, m.validate(), errInvalidValue)
+	assert.NoError(t, m.validate())
 
 	m.value = "v"
 	assert.NoError(t, m.validate())
@@ -818,17 +832,12 @@ func TestNewMember(t *testing.T) {
 	}
 	assert.Equal(t, expected, m)
 
-	// wrong value with wrong decoding
-	val = "%zzzzz"
-	_, err = NewMember(key, val, p)
-	assert.ErrorIs(t, err, errInvalidValue)
-
-	// value should be decoded
+	// value should not be decoded
 	val = "%3B"
 	m, err = NewMember(key, val, p)
 	expected = Member{
 		key:        key,
-		value:      ";",
+		value:      "%3B",
 		properties: properties{{key: "foo", hasData: true}},
 		hasData:    true,
 	}
@@ -856,10 +865,10 @@ func TestMemberString(t *testing.T) {
 	member, _ := NewMember("key", "value")
 	memberStr := member.String()
 	assert.Equal(t, memberStr, "key=value")
-	// encoded key
+	// percent sign should be percent-encoded
 	member, _ = NewMember("key", "%3B")
 	memberStr = member.String()
-	assert.Equal(t, memberStr, "key=%3B")
+	assert.Equal(t, memberStr, "key=%253B")
 }
 
 var benchBaggage Baggage
