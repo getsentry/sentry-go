@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/getsentry/sentry-go/internal/otel/baggage/internal/baggage"
 )
@@ -315,16 +316,17 @@ func parseMember(member string) (Member, error) {
 		// "Leading and trailing whitespaces are allowed but MUST be trimmed
 		// when converting the header into a data structure."
 		key = strings.TrimSpace(kv[0])
+		value = strings.TrimSpace(kv[1])
 		var err error
-		value, err = url.QueryUnescape(strings.TrimSpace(kv[1]))
-		if err != nil {
-			return newInvalidMember(), fmt.Errorf("%w: %q", err, value)
-		}
 		if !keyRe.MatchString(key) {
 			return newInvalidMember(), fmt.Errorf("%w: %q", errInvalidKey, key)
 		}
 		if !valueRe.MatchString(value) {
 			return newInvalidMember(), fmt.Errorf("%w: %q", errInvalidValue, value)
+		}
+		value, err = url.QueryUnescape(value)
+		if err != nil {
+			return newInvalidMember(), fmt.Errorf("%w: %q", err, value)
 		}
 	default:
 		// This should never happen unless a developer has changed the string
@@ -366,11 +368,36 @@ func (m Member) Properties() []Property { return m.properties.Copy() }
 // specification.
 func (m Member) String() string {
 	// A key is just an ASCII string, but a value is URL encoded UTF-8.
-	s := fmt.Sprintf("%s%s%s", m.key, keyValueDelimiter, url.QueryEscape(m.value))
+	s := fmt.Sprintf("%s%s%s", m.key, keyValueDelimiter, percentEncodeDisallowed(m.value))
 	if len(m.properties) > 0 {
 		s = fmt.Sprintf("%s%s%s", s, propertyDelimiter, m.properties.String())
 	}
 	return s
+}
+
+func percentEncodeDisallowed(s string) string {
+	const upperhex = "0123456789ABCDEF"
+	var sb strings.Builder
+
+	for byteIndex, width := 0, 0; byteIndex < len(s); byteIndex += width {
+		runeValue, w := utf8.DecodeRuneInString(s[byteIndex:])
+		width = w
+		char := string(runeValue)
+		if valueRe.MatchString(char) {
+			// The character is returned as is, no need to percent-encode
+			sb.WriteString(char)
+		} else {
+			// We need to percent-encode each byte of the rune
+			for j := 0; j < width; j++ {
+				b := s[byteIndex+j]
+				sb.WriteByte('%')
+				// Bitwise operations are inspired by "net/url"
+				sb.WriteByte(upperhex[b>>4])
+				sb.WriteByte(upperhex[b&15])
+			}
+		}
+	}
+	return sb.String()
 }
 
 // Baggage is a list of baggage members representing the baggage-string as

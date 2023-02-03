@@ -351,17 +351,24 @@ func TestBaggageParse(t *testing.T) {
 			},
 		},
 		{
-			name: "url encoded value with percent-encoded whitespaces",
+			name: "percent-encoded whitespaces in value",
 			in:   "key1=val1%20%20val2",
 			want: baggage.List{
 				"key1": {Value: "val1  val2"},
 			},
 		},
 		{
-			name: "url encoded value with plus-encoded whitespaces",
-			in:   "key1=val1++val2",
+			name: "percent-encoded whitespaces in value",
+			in:   "userId=Am%C3%A9lie",
 			want: baggage.List{
-				"key1": {Value: "val1  val2"},
+				"userId": {Value: "Amélie"},
+			},
+		},
+		{
+			name: "non-encoded equal signs in value",
+			in:   "foo=bar=baz",
+			want: baggage.List{
+				"foo": {Value: "bar=baz"},
 			},
 		},
 		{
@@ -451,17 +458,24 @@ func TestBaggageString(t *testing.T) {
 			},
 		},
 		{
-			name: "URL encoded value",
-			out:  "foo=1%3D1",
+			name: "value with equal signs",
+			out:  "foo=1=1",
 			baggage: baggage.List{
 				"foo": {Value: "1=1"},
 			},
 		},
 		{
-			name: "URL encoded value with whitespace",
-			out:  "foo=1++2",
+			name: "value with whitespaces",
+			out:  "foo=1%20%202",
 			baggage: baggage.List{
 				"foo": {Value: "1  2"},
+			},
+		},
+		{
+			name: "value with non-ASCII characters",
+			out:  "userId=Am%C3%A9lie",
+			baggage: baggage.List{
+				"userId": {Value: "Amélie"},
 			},
 		},
 		{
