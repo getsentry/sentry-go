@@ -368,14 +368,16 @@ func (m Member) Properties() []Property { return m.properties.Copy() }
 // specification.
 func (m Member) String() string {
 	// A key is just an ASCII string, but a value is URL encoded UTF-8.
-	s := fmt.Sprintf("%s%s%s", m.key, keyValueDelimiter, percentEncodeDisallowed(m.value))
+	s := fmt.Sprintf("%s%s%s", m.key, keyValueDelimiter, percentEncodeValue(m.value))
 	if len(m.properties) > 0 {
 		s = fmt.Sprintf("%s%s%s", s, propertyDelimiter, m.properties.String())
 	}
 	return s
 }
 
-func percentEncodeDisallowed(s string) string {
+// percentEncodeValue encodes the baggage value, using percent-encoding for
+// disallowed octets.
+func percentEncodeValue(s string) string {
 	const upperhex = "0123456789ABCDEF"
 	var sb strings.Builder
 
@@ -387,7 +389,7 @@ func percentEncodeDisallowed(s string) string {
 			// The character is returned as is, no need to percent-encode
 			sb.WriteString(char)
 		} else {
-			// We need to percent-encode each byte of the rune
+			// We need to percent-encode each byte of the multi-octet character
 			for j := 0; j < width; j++ {
 				b := s[byteIndex+j]
 				sb.WriteByte('%')
