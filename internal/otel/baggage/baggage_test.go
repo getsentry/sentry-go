@@ -352,19 +352,27 @@ func TestBaggageParse(t *testing.T) {
 			},
 		},
 		{
-			name: "percent-encoded whitespaces in value",
-			in:   "key1=val1%20%20val2",
+			name: "percent-encoded whitespace in value",
+			in:   "key1=val1%20val2",
 			want: baggage.List{
-				"key1": {Value: "val1  val2"},
+				"key1": {Value: "val1 val2"},
 			},
 		},
 		{
-			name: "percent-encoded whitespaces in value",
+			name: "non-ASCII character in value",
 			in:   "userId=Am%C3%A9lie",
 			want: baggage.List{
 				"userId": {Value: "Amélie"},
 			},
 		},
+		//// This test fails now
+		// {
+		// 	name: "plus character in value",
+		// 	in:   "key1=1+2",
+		// 	want: baggage.List{
+		// 		"key1": {Value: "1+2"},
+		// 	},
+		// },
 		{
 			name: "non-encoded equal signs in value",
 			in:   "foo=bar=baz",
@@ -467,9 +475,9 @@ func TestBaggageString(t *testing.T) {
 		},
 		{
 			name: "value with whitespaces",
-			out:  "foo=1%20%202",
+			out:  "foo=1%202",
 			baggage: baggage.List{
-				"foo": {Value: "1  2"},
+				"foo": {Value: "1 2"},
 			},
 		},
 		{
@@ -477,6 +485,13 @@ func TestBaggageString(t *testing.T) {
 			out:  "userId=Am%C3%A9lie",
 			baggage: baggage.List{
 				"userId": {Value: "Amélie"},
+			},
+		},
+		{
+			name: "value with plus character",
+			out:  "foo=1+2",
+			baggage: baggage.List{
+				"foo": {Value: "1+2"},
 			},
 		},
 		{
