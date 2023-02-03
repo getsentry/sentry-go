@@ -351,6 +351,20 @@ func TestBaggageParse(t *testing.T) {
 			},
 		},
 		{
+			name: "url encoded value with percent-encoded whitespaces",
+			in:   "key1=val1%20%20val2",
+			want: baggage.List{
+				"key1": {Value: "val1  val2"},
+			},
+		},
+		{
+			name: "url encoded value with plus-encoded whitespaces",
+			in:   "key1=val1++val2",
+			want: baggage.List{
+				"key1": {Value: "val1  val2"},
+			},
+		},
+		{
 			name: "invalid member: empty",
 			in:   "foo=,,bar=",
 			err:  errInvalidMember,
@@ -441,6 +455,13 @@ func TestBaggageString(t *testing.T) {
 			out:  "foo=1%3D1",
 			baggage: baggage.List{
 				"foo": {Value: "1=1"},
+			},
+		},
+		{
+			name: "URL encoded value with whitespace",
+			out:  "foo=1++2",
+			baggage: baggage.List{
+				"foo": {Value: "1  2"},
 			},
 		},
 		{
