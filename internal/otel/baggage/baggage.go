@@ -321,10 +321,11 @@ func parseMember(member string) (Member, error) {
 		if !valueRe.MatchString(value) {
 			return newInvalidMember(), fmt.Errorf("%w: %q", errInvalidValue, value)
 		}
-		value, err = url.QueryUnescape(value)
+		decodedValue, err := url.QueryUnescape(value)
 		if err != nil {
 			return newInvalidMember(), fmt.Errorf("%w: %q", err, value)
 		}
+		value = decodedValue
 	default:
 		// This should never happen unless a developer has changed the string
 		// splitting somehow. Panic instead of failing silently and allowing
