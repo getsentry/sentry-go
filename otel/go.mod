@@ -5,9 +5,9 @@ go 1.19
 require (
 	github.com/getsentry/sentry-go v0.17.0
 	github.com/google/go-cmp v0.5.9
-	go.opentelemetry.io/otel v1.11.2
-	go.opentelemetry.io/otel/sdk v1.11.2
-	go.opentelemetry.io/otel/trace v1.11.2
+	go.opentelemetry.io/otel v1.11.0
+	go.opentelemetry.io/otel/sdk v1.11.0
+	go.opentelemetry.io/otel/trace v1.11.0
 )
 
 replace github.com/getsentry/sentry-go => ../
