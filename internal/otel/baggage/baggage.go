@@ -265,7 +265,7 @@ func NewMember(key, value string, props ...Property) (Member, error) {
 	if err := m.validate(); err != nil {
 		return newInvalidMember(), err
 	}
-	decodedValue, err := url.QueryUnescape(value)
+	decodedValue, err := url.PathUnescape(value)
 	if err != nil {
 		return newInvalidMember(), fmt.Errorf("%w: %q", errInvalidValue, value)
 	}
@@ -321,7 +321,7 @@ func parseMember(member string) (Member, error) {
 		if !valueRe.MatchString(value) {
 			return newInvalidMember(), fmt.Errorf("%w: %q", errInvalidValue, value)
 		}
-		decodedValue, err := url.QueryUnescape(value)
+		decodedValue, err := url.PathUnescape(value)
 		if err != nil {
 			return newInvalidMember(), fmt.Errorf("%w: %q", err, value)
 		}

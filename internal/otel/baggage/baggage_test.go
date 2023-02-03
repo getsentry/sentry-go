@@ -365,14 +365,13 @@ func TestBaggageParse(t *testing.T) {
 				"userId": {Value: "Amélie"},
 			},
 		},
-		//// This test fails now
-		// {
-		// 	name: "plus character in value",
-		// 	in:   "key1=1+2",
-		// 	want: baggage.List{
-		// 		"key1": {Value: "1+2"},
-		// 	},
-		// },
+		{
+			name: "plus character in value",
+			in:   "key1=1+2",
+			want: baggage.List{
+				"key1": {Value: "1+2"},
+			},
+		},
 		{
 			name: "non-encoded equal signs in value",
 			in:   "foo=bar=baz",
