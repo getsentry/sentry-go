@@ -1,9 +1,25 @@
 # Changelog
 
-## Unreleased
+## 0.18.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.18.0.
+
+The main highlight of this release is the initial support for [OpenTelemetry](https://opentelemetry.io/).
+
+**Note**: This will be the last release officially supporting Go 1.17.
+
+### Features
+
+TODO: OTel stuff, code snippets
+
+### Bug Fixes
+
+- Do not freeze Dynamic Sampling Context when no Sentry values are present in Baggage ([#532](https://github.com/getsentry/sentry-go/pull/532))
 
 ### Misc
 
+- Configure Codecov to CI ([#530](https://github.com/getsentry/sentry-go/pull/530))
+- Configure CodeQL to CI ([#531](https://github.com/getsentry/sentry-go/pull/531))
 - Add SentryTraceHeader and SentryBaggageHeader constants ([#538](https://github.com/getsentry/sentry-go/pull/538/))
 - Add `Span.SetDynamicSamplingContext` method ([#539](https://github.com/getsentry/sentry-go/pull/539/))
 - Add DSN getters ([#540](https://github.com/getsentry/sentry-go/pull/540))
