@@ -342,5 +342,4 @@ func TestExtractAndInjectIntegration(t *testing.T) {
 			)
 		})
 	}
-	t.Fail()
 }
