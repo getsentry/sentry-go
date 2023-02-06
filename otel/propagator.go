@@ -6,7 +6,7 @@ import (
 	"context"
 
 	"github.com/getsentry/sentry-go"
-	"go.opentelemetry.io/otel/baggage"
+	"github.com/getsentry/sentry-go/internal/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -48,13 +48,16 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	if sentrySpan != nil {
 		sentryBaggageStr = sentrySpan.GetTransaction().ToBaggage()
 	}
-	// FIXME: We're basically reparsing the header again, because internally in sentry-go
-	// we currently use a vendored version of "otel/baggage" package.
+	// FIXME(anton): We're basically reparsing the header again, because in sentry-go
+	// we currently don't expose a method to get only DSC or its baggage (only a string).
 	// This is not optimal and we should consider other approaches.
 	sentryBaggage, _ := baggage.Parse(sentryBaggageStr)
 
 	// Merge the baggage values
-	finalBaggage := baggage.FromContext(ctx)
+	finalBaggage, baggageOk := ctx.Value(baggageContextKey{}).(baggage.Baggage)
+	if !baggageOk {
+		finalBaggage = baggage.Baggage{}
+	}
 	for _, member := range sentryBaggage.Members() {
 		var err error
 		finalBaggage, err = finalBaggage.SetMember(member)
@@ -96,7 +99,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 		// Preserve the original baggage
 		parsedBaggage, err := baggage.Parse(baggageHeader)
 		if err == nil {
-			ctx = baggage.ContextWithBaggage(ctx, parsedBaggage)
+			ctx = context.WithValue(ctx, baggageContextKey{}, parsedBaggage)
 		}
 	}
 

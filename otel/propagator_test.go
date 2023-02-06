@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/getsentry/sentry-go"
-	"go.opentelemetry.io/otel/baggage"
+	"github.com/getsentry/sentry-go/internal/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -106,7 +106,7 @@ func TestInjectUsesSentryTraceOnEmptySpan(t *testing.T) {
 func TestInjectUsesBaggageOnEmptySpan(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
 	bag, _ := baggage.Parse("key1=value1;value2, key2=value2")
-	ctx := baggage.ContextWithBaggage(context.Background(), bag)
+	ctx := context.WithValue(context.Background(), baggageContextKey{}, bag)
 
 	propagator.Inject(ctx, carrier)
 
