@@ -292,47 +292,55 @@ func TestExtractSetsDefinedDynamicSamplingContext(t *testing.T) {
 
 /// Integration tests
 
-// Valid baggage and sentry-trace headers
-func TestExtractAndInjectValidSentryTraceAndBaggage(t *testing.T) {
-	propagator, incomingCarrier := setupPropagatorTest()
-	outgoingCarrier := propagation.MapCarrier{}
-	incomingCarrier.Set(
-		sentry.SentryBaggageHeader,
-		"sentry-environment=production,sentry-release=1.0.0,othervendor=bla,sentry-transaction=dsc-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b",
-	)
-	incomingCarrier.Set(
-		sentry.SentryTraceHeader,
-		"d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1",
-	)
-
-	ctx := propagator.Extract(context.Background(), incomingCarrier)
-	propagator.Inject(ctx, outgoingCarrier)
-
-	assertMapCarrierEqual(t,
-		outgoingCarrier,
-		propagation.MapCarrier{
-			"baggage":      "sentry-environment=production,sentry-release=1.0.0,othervendor=bla,sentry-transaction=dsc-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b",
-			"sentry-trace": "d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1",
+func TestExtractAndInjectIntegration(t *testing.T) {
+	tests := []struct {
+		name          string
+		inSentryTrace *string
+		inBaggage     *string
+	}{
+		{
+			name:          "valid sentry-trace and baggage",
+			inSentryTrace: stringPtr("d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1"),
+			inBaggage:     stringPtr("sentry-environment=production,sentry-release=1.0.0,othervendor=bla,sentry-transaction=dsc-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b"),
 		},
-	)
-}
-
-// No sentry-trace header, and baggage without sentry values
-func TestExtractAndInjectNoSentryTraceAndExistingBaggage(t *testing.T) {
-	propagator, incomingCarrier := setupPropagatorTest()
-	outgoingCarrier := propagation.MapCarrier{}
-	incomingCarrier.Set(
-		sentry.SentryBaggageHeader,
-		"othervendor=bla",
-	)
-
-	ctx := propagator.Extract(context.Background(), incomingCarrier)
-	propagator.Inject(ctx, outgoingCarrier)
-
-	assertMapCarrierEqual(t,
-		outgoingCarrier,
-		propagation.MapCarrier{
-			"baggage": "othervendor=bla",
+		{
+			name:          "only sentry-trace, no baggage",
+			inSentryTrace: stringPtr("d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1"),
 		},
-	)
+		{
+			name:          "valid sentry-trace and mixed baggage with special characters",
+			inSentryTrace: stringPtr("d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1"),
+			inBaggage:     stringPtr("sentry-transaction=GET%20POST,userId=Am%C3%A9lie, key1 = +++ , key2=%253B"),
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			propagator, incomingCarrier := setupPropagatorTest()
+
+			if tt.inBaggage != nil {
+				incomingCarrier.Set(
+					"baggage",
+					*tt.inBaggage,
+				)
+			}
+			if tt.inSentryTrace != nil {
+				incomingCarrier.Set(
+					"sentry-trace",
+					*tt.inSentryTrace,
+				)
+			}
+			outgoingCarrier := propagation.MapCarrier{}
+
+			ctx := propagator.Extract(context.Background(), incomingCarrier)
+			propagator.Inject(ctx, outgoingCarrier)
+
+			assertMapCarrierEqual(t,
+				outgoingCarrier,
+				incomingCarrier,
+			)
+		})
+	}
+	t.Fail()
 }
