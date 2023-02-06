@@ -6,3 +6,4 @@ package sentryotel
 type dynamicSamplingContextKey struct{}
 type sentryTraceHeaderContextKey struct{}
 type sentryTraceParentContextKey struct{}
+type baggageContextKey struct{}
