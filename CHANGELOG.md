@@ -15,38 +15,38 @@ This release contains initial support for [OpenTelemetry](https://opentelemetry.
   Install the `otel` module
 
   ```bash
-    go get github.com/getsentry/sentry-go \
-       github.com/getsentry/sentry-go/otel
+  go get github.com/getsentry/sentry-go \
+         github.com/getsentry/sentry-go/otel
   ```
 
   Configure the Sentry and OpenTelemetry SDKs
 
   ```go
-    import (
-        "go.opentelemetry.io/otel"
-        sdktrace "go.opentelemetry.io/otel/sdk/trace"
-        "github.com/getsentry/sentry-go"
-        "github.com/getsentry/sentry-go/otel"
-        // ...
-    )
+  import (
+      "go.opentelemetry.io/otel"
+      sdktrace "go.opentelemetry.io/otel/sdk/trace"
+      "github.com/getsentry/sentry-go"
+      "github.com/getsentry/sentry-go/otel"
+      // ...
+  )
 
-    // Initlaize the Sentry SDK
-    sentry.Init(sentry.ClientOptions{
-        Dsn:              "__DSN__",
-        EnableTracing:    true,
-        TracesSampleRate: 1.0,
-        Debug:            true,
-    })
+  // Initlaize the Sentry SDK
+  sentry.Init(sentry.ClientOptions{
+      Dsn:              "__DSN__",
+      EnableTracing:    true,
+      TracesSampleRate: 1.0,
+      Debug:            true,
+  })
 
-    // Set up the Sentry span processor
-    tp := sdktrace.NewTracerProvider(
-        sdktrace.WithSpanProcessor(sentryotel.NewSentrySpanProcessor()),
-        // ...
-    )
-    otel.SetTracerProvider(tp)
+  // Set up the Sentry span processor
+  tp := sdktrace.NewTracerProvider(
+      sdktrace.WithSpanProcessor(sentryotel.NewSentrySpanProcessor()),
+      // ...
+  )
+  otel.SetTracerProvider(tp)
 
-    // Set up the Sentry propagator
-    otel.SetTextMapPropagator(sentryotel.NewSentryPropagator())
+  // Set up the Sentry propagator
+  otel.SetTextMapPropagator(sentryotel.NewSentryPropagator())
   ```
 
   You can read more about using OpenTelemetry with Sentry in our [docs](https://docs.sentry.io/platforms/go/performance/instrumentation/opentelemetry/).
