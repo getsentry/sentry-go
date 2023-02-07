@@ -27,7 +27,7 @@ This release contains initial support for [OpenTelemetry](https://opentelemetry.
         sdktrace "go.opentelemetry.io/otel/sdk/trace"
         "github.com/getsentry/sentry-go"
         "github.com/getsentry/sentry-go/otel"
-      // ...
+        // ...
     )
 
     // Initlaize the Sentry SDK
