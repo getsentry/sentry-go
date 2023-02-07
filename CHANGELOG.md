@@ -9,7 +9,7 @@ This release contains initial support for [OpenTelemetry](https://opentelemetry.
 
 ### Features
 
-- Initial support for [OpenTelemetry](https://opentelemetry.io/)
+- Initial support for [OpenTelemetry](https://opentelemetry.io/).
   You can now send all your OpenTelemetry spans to Sentry.
 
   Install the `otel` module
