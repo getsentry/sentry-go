@@ -5,7 +5,7 @@
 ## 0.18.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.18.0.
-This release contains initial support for [OpenTelemetry](https://opentelemetry.io/) and various other bug fixes and imrpovmenets.
+This release contains initial support for [OpenTelemetry](https://opentelemetry.io/) and various other bug fixes and improvements.
 
 **Note**: This is the last release supporting Go 1.17.
 
