@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/otel/baggage"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
-	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -28,6 +28,8 @@ var assertFalse = testutils.AssertFalse
 // It is needed because some headers (e.g. "baggage") might contain the same set of values/attributes,
 // (and therefore be semantically equal), but serialized in different order.
 func assertMapCarrierEqual(t *testing.T, got, want propagation.MapCarrier, userMessage ...interface{}) {
+	t.Helper()
+
 	// Make sure that keys are the same
 	gotKeysSorted := got.Keys()
 	sort.Strings(gotKeysSorted)
