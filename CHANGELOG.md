@@ -23,25 +23,25 @@ This release contains initial support for [OpenTelemetry](https://opentelemetry.
 
   ```go
     import (
-      "go.opentelemetry.io/otel"
-      sdktrace "go.opentelemetry.io/otel/sdk/trace"
-      "github.com/getsentry/sentry-go"
-      "github.com/getsentry/sentry-go/otel"
+        "go.opentelemetry.io/otel"
+        sdktrace "go.opentelemetry.io/otel/sdk/trace"
+        "github.com/getsentry/sentry-go"
+        "github.com/getsentry/sentry-go/otel"
       // ...
     )
 
     // Initlaize the Sentry SDK
     sentry.Init(sentry.ClientOptions{
-      Dsn:              "__DSN__",
-      EnableTracing:    true,
-      TracesSampleRate: 1.0,
-      Debug:            true,
+        Dsn:              "__DSN__",
+        EnableTracing:    true,
+        TracesSampleRate: 1.0,
+        Debug:            true,
     })
 
     // Set up the Sentry span processor
     tp := sdktrace.NewTracerProvider(
-      sdktrace.WithSpanProcessor(sentryotel.NewSentrySpanProcessor()),
-      // ...
+        sdktrace.WithSpanProcessor(sentryotel.NewSentrySpanProcessor()),
+        // ...
     )
     otel.SetTracerProvider(tp)
 
