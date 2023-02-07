@@ -58,12 +58,12 @@ This release contains initial support for [OpenTelemetry](https://opentelemetry.
 
 ### Misc
 
-- Added `Span.SetDynamicSamplingContext()` ([#539](https://github.com/getsentry/sentry-go/pull/539/))
-- Added various getters for `Dsn` ([#540](https://github.com/getsentry/sentry-go/pull/540))
-- Added `SpanOption::SpanSampled` ([#546](https://github.com/getsentry/sentry-go/pull/546))
-- Added `Span.SetData()` ([#542](https://github.com/getsentry/sentry-go/pull/542))
-- Added `Span.IsTransaction()` ([#543](https://github.com/getsentry/sentry-go/pull/543))
-- Added `Span.GetTransaction()` method ([#558](https://github.com/getsentry/sentry-go/pull/558))
+- Add `Span.SetDynamicSamplingContext()` ([#539](https://github.com/getsentry/sentry-go/pull/539/))
+- Add various getters for `Dsn` ([#540](https://github.com/getsentry/sentry-go/pull/540))
+- Add `SpanOption::SpanSampled` ([#546](https://github.com/getsentry/sentry-go/pull/546))
+- Add `Span.SetData()` ([#542](https://github.com/getsentry/sentry-go/pull/542))
+- Add `Span.IsTransaction()` ([#543](https://github.com/getsentry/sentry-go/pull/543))
+- Add `Span.GetTransaction()` method ([#558](https://github.com/getsentry/sentry-go/pull/558))
 
 ## 0.17.0
 
