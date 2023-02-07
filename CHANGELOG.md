@@ -54,15 +54,17 @@ This release contains initial support for [OpenTelemetry](https://opentelemetry.
 ### Bug Fixes
 
 - Do not freeze the Dynamic Sampling Context when no Sentry values are present in the baggage header ([#532](https://github.com/getsentry/sentry-go/pull/532))
+- Create a frozen Dynamic Sampling Context when calling ToBaggage([#566](https://github.com/getsentry/sentry-go/pull/566))
+- Fix baggage parsing and encoding in vendored otel package ([#568](https://github.com/getsentry/sentry-go/pull/568))
 
 ### Misc
 
 - Added `Span.SetDynamicSamplingContext()` ([#539](https://github.com/getsentry/sentry-go/pull/539/))
+- Added various getters for `Dsn` ([#540](https://github.com/getsentry/sentry-go/pull/540))
+- Added `SpanOption::SpanSampled` ([#546](https://github.com/getsentry/sentry-go/pull/546))
 - Added `Span.SetData()` ([#542](https://github.com/getsentry/sentry-go/pull/542))
 - Added `Span.IsTransaction()` ([#543](https://github.com/getsentry/sentry-go/pull/543))
 - Added `Span.GetTransaction()` method ([#558](https://github.com/getsentry/sentry-go/pull/558))
-- Added `SpanOption::SpanSampled` ([#546](https://github.com/getsentry/sentry-go/pull/546))
-- Added various getters for `Dsn` ([#540](https://github.com/getsentry/sentry-go/pull/540))
 
 ## 0.17.0
 
