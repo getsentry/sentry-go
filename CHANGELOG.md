@@ -54,7 +54,7 @@ This release contains initial support for [OpenTelemetry](https://opentelemetry.
 ### Bug Fixes
 
 - Do not freeze the Dynamic Sampling Context when no Sentry values are present in the baggage header ([#532](https://github.com/getsentry/sentry-go/pull/532))
-- Create a frozen Dynamic Sampling Context when calling ToBaggage([#566](https://github.com/getsentry/sentry-go/pull/566))
+- Create a frozen Dynamic Sampling Context when calling `span.ToBaggage()` ([#566](https://github.com/getsentry/sentry-go/pull/566))
 - Fix baggage parsing and encoding in vendored otel package ([#568](https://github.com/getsentry/sentry-go/pull/568))
 
 ### Misc
