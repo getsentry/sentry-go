@@ -46,7 +46,7 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Check go.mod Tidiness
-        run: go mod tidy -go=1.19 -compat=1.17 && git diff --exit-code
+        run: make mod-tidy
         if: ${{ matrix.go == '1.19' }}
       - name: Test
         run: make test
