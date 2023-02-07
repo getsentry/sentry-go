@@ -35,7 +35,6 @@ This release contains initial support for [OpenTelemetry](https://opentelemetry.
       Dsn:              "__DSN__",
       EnableTracing:    true,
       TracesSampleRate: 1.0,
-      Debug:            true,
   })
 
   // Set up the Sentry span processor
