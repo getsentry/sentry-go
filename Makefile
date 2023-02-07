@@ -12,7 +12,11 @@ help: ## Show help
 .PHONY: help
 
 build: ## Build everything
-	go build ./...
+	for dir in $(ALL_GO_MOD_DIRS); do \
+		cd "$${dir}"; \
+		echo ">>> Running 'go build' for module: $${dir}"; \
+		go build ./...; \
+	done;
 .PHONY: build
 
 ### Tests (inspired by https://github.com/open-telemetry/opentelemetry-go/blob/main/Makefile)
@@ -50,7 +54,7 @@ test-coverage: $(COVERAGE_REPORT_DIR) clean-report-dir  ## Test with coverage en
 	done;
 .PHONY: test-coverage clean-report-dir
 
-mod-tidy: ## Check go.mod Tidiness
+mod-tidy: ## Check go.mod tidiness
 	for dir in $(ALL_GO_MOD_DIRS); do \
 		cd "$${dir}"; \
 		echo ">>> Running 'go mod tidy' for module: $${dir}"; \
@@ -60,7 +64,11 @@ mod-tidy: ## Check go.mod Tidiness
 .PHONY: mod-tidy
 
 vet: ## Run "go vet"
-	go vet ./...
+	for dir in $(ALL_GO_MOD_DIRS); do \
+		cd "$${dir}"; \
+		echo ">>> Running 'go vet' for module: $${dir}"; \
+		go vet ./...; \
+	done;
 .PHONY: vet
 
 lint: ## Lint (using "golangci-lint")
