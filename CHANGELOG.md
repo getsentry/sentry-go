@@ -1,7 +1,5 @@
 # Changelog
 
-## Unreleased
-
 ## 0.18.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.18.0.
