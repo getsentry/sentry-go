@@ -121,7 +121,6 @@ func (h *Hook) Fire(entry *logrus.Entry) error {
 		if h.fallback != nil {
 			return h.fallback(entry)
 		}
-		return errors.New("failed to send to sentry")
 	}
 	return nil
 }
