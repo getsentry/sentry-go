@@ -24,7 +24,11 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 		return event
 	}
 
-	traceContext := event.Contexts["trace"]
+	traceContext, found := event.Contexts["trace"]
+	if !found {
+		event.Contexts["trace"] = make(map[string]interface{})
+		traceContext = event.Contexts["trace"]
+	}
 	traceContext["trace_id"] = sentrySpan.TraceID.String()
 	traceContext["span_id"] = sentrySpan.SpanID.String()
 	traceContext["parent_span_id"] = sentrySpan.ParentSpanID.String()
