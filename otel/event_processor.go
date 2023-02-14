@@ -12,6 +12,8 @@ import (
 //
 // Caveat: hint.Context should contain a valid context populated by OpenTelemetry's span context.
 func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+	sentry.Logger.Printf("\nEvent Processor\nEvent: %#v\nHint: %#v", event, hint)
+
 	if hint == nil || hint.Context == nil {
 		return event
 	}
