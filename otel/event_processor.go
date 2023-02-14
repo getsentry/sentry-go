@@ -25,14 +25,8 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 	}
 
 	traceContext := event.Contexts["trace"]
-	if len(traceContext) > 0 {
-		// trace context is already set, not touching it
-		return event
-	}
-	event.Contexts["trace"] = map[string]interface{}{
-		"trace_id":       sentrySpan.TraceID.String(),
-		"span_id":        sentrySpan.SpanID.String(),
-		"parent_span_id": sentrySpan.ParentSpanID.String(),
-	}
+	traceContext["trace_id"] = sentrySpan.TraceID.String()
+	traceContext["span_id"] = sentrySpan.SpanID.String()
+	traceContext["parent_span_id"] = sentrySpan.ParentSpanID.String()
 	return event
 }
