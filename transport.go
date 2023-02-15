@@ -544,8 +544,6 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		Logger.Printf("There was an issue with sending an event: %v", err)
 		return
 	}
-	Logger.Printf("Response status: %q", response.Status)
-
 	t.mu.Lock()
 	t.limits.Merge(ratelimit.FromResponse(response))
 	t.mu.Unlock()
