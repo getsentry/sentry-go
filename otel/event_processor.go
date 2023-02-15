@@ -15,7 +15,7 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 	if hint == nil || hint.Context == nil {
 		return event
 	}
-	// TODO: what we want here is to compare with the (unexported) transactionType
+	// TODO: what we want here is to compare with the (unexported) sentry.transactionType
 	if event.Type == "transaction" {
 		return event
 	}
