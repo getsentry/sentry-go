@@ -270,8 +270,9 @@ func (s *Span) GetTransaction() *Span {
 // func (s *Span) TransactionName() string
 // func (s *Span) SetTransactionName(name string)
 
-// ToSentryTrace returns the trace propagation value used with the sentry-trace
-// HTTP header.
+// ToSentryTrace returns the seralized TraceParentContext from a transaction/sapn.
+// Use this function to propagate the TraceParentContext to a downstream SDK,
+// either as the value of the "sentry-trace" HTTP header, or as an html "sentry-trace" meta tag.
 func (s *Span) ToSentryTrace() string {
 	// TODO(tracing): add instrumentation for outgoing HTTP requests using
 	// ToSentryTrace.
@@ -286,9 +287,18 @@ func (s *Span) ToSentryTrace() string {
 	return b.String()
 }
 
-// ToBaggage returns the serialized dynamic sampling context in the baggage format.
+// ToBaggage returns the serialized DynamicSamplingContext from a transaction.
+// Use this function to propagate the DynamicSamplingContext to a downstream SDK,
+// either as the value of the "baggage" HTTP header, or as an html "baggage" meta tag.
 func (s *Span) ToBaggage() string {
 	if containingTransaction := s.GetTransaction(); containingTransaction != nil {
+		// In case there is currently no frozen DynamicSamplingContext attached to the transaction,
+		// create one from the properties of the transaction.
+		if !s.dynamicSamplingContext.IsFrozen() {
+			// This will return a frozen DynamicSamplingContext.
+			s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(containingTransaction)
+		}
+
 		return containingTransaction.dynamicSamplingContext.String()
 	}
 	return ""

@@ -42,9 +42,9 @@ jobs:
             ${{ runner.os }}-go-${{ matrix.go }}-
             ${{ runner.os }}-go-
       - name: Build
-        run: go build ./...
+        run: make build
       - name: Vet
-        run: go vet ./...
+        run: make vet
       - name: Check go.mod Tidiness
         run: go mod tidy -go=1.20 -compat=1.17 && git diff --exit-code
         if: ${{ matrix.go == '1.20' }}

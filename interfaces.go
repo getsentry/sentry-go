@@ -204,6 +204,22 @@ func NewRequest(r *http.Request) *Request {
 	}
 }
 
+// Mechanism is the mechanism by which an exception was generated and handled.
+type Mechanism struct {
+	Type        string                 `json:"type,omitempty"`
+	Description string                 `json:"description,omitempty"`
+	HelpLink    string                 `json:"help_link,omitempty"`
+	Handled     *bool                  `json:"handled,omitempty"`
+	Data        map[string]interface{} `json:"data,omitempty"`
+}
+
+// SetUnhandled indicates that the exception is an unhandled exception, i.e.
+// from a panic.
+func (m *Mechanism) SetUnhandled() {
+	h := false
+	m.Handled = &h
+}
+
 // Exception specifies an error that occurred.
 type Exception struct {
 	Type       string      `json:"type,omitempty"`  // used as the main issue title
@@ -211,6 +227,7 @@ type Exception struct {
 	Module     string      `json:"module,omitempty"`
 	ThreadID   string      `json:"thread_id,omitempty"`
 	Stacktrace *Stacktrace `json:"stacktrace,omitempty"`
+	Mechanism  *Mechanism  `json:"mechanism,omitempty"`
 }
 
 // SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
