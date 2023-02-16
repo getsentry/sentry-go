@@ -764,6 +764,7 @@ func TestParseTraceParentContext(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			traceParentContext, valid := ParseTraceParentContext([]byte(tt.sentryTrace))
 
@@ -775,4 +776,61 @@ func TestParseTraceParentContext(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetTransactionWithProperTransactionsSpans(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	transaction := StartTransaction(ctx, "transaction")
+	child1 := transaction.StartChild("child1")
+	child2 := transaction.StartChild("child2")
+	grandchild := child1.StartChild("grandchild")
+
+	assertEqual(t, transaction.GetTransaction(), transaction)
+	assertEqual(t, child1.GetTransaction(), transaction)
+	assertEqual(t, child2.GetTransaction(), transaction)
+	assertEqual(t, grandchild.GetTransaction(), transaction)
+
+	// Another transaction, unrelated to the first one
+	anotherTransaction := StartTransaction(ctx, "another transaction")
+
+	assertNotEqual(t, transaction, anotherTransaction)
+	assertEqual(t, anotherTransaction.GetTransaction(), anotherTransaction)
+}
+
+func TestGetTransactionReturnsNilOnManuallyCreatedSpans(t *testing.T) {
+	span1 := Span{}
+	if span1.GetTransaction() != nil {
+		t.Errorf("GetTransaction() should return nil on manually created Spans")
+	}
+
+	span2 := Span{isTransaction: true}
+	if span2.GetTransaction() != nil {
+		t.Errorf("GetTransaction() should return nil on manually created Spans")
+	}
+}
+
+func TestToBaggage(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+		SampleRate:    1.0,
+		Release:       "test-release",
+	})
+	transaction := StartTransaction(ctx, "transaction-name")
+	transaction.TraceID = TraceIDFromHex("f1a4c5c9071eca1cdf04e4132527ed16")
+
+	assertBaggageStringsEqual(
+		t,
+		transaction.ToBaggage(),
+		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name",
+	)
+
+	// Calling ToBaggage() on a child span should return the same result
+	child := transaction.StartChild("op-name")
+	assertBaggageStringsEqual(
+		t,
+		child.ToBaggage(),
+		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name",
+	)
 }

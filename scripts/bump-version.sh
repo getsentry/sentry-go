@@ -17,8 +17,14 @@ echo "Bumping version: $NEW_VERSION"
 
 function replace() {
     ! grep "$2" $3
-    perl -i -pe "s/$1/$2/g" $3
+    perl -i -pe "s!$1!$2!g" $3
     grep "$2" $3  # verify that replacement was successful
 }
 
 replace "const SDKVersion = \"[\w.-]+\"" "const SDKVersion = \"$NEW_VERSION\"" ./sentry.go
+
+# Replace root module versions in submodules
+GO_MOD_FILES=$(find . -type f -name 'go.mod' -not -path ./go.mod)
+for GO_MOD in ${GO_MOD_FILES}; do
+    replace "github.com/getsentry/sentry-go v.*" "github.com/getsentry/sentry-go v${NEW_VERSION}" "${GO_MOD}"
+done

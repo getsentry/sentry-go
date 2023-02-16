@@ -1,16 +1,69 @@
 # Changelog
 
-## Unreleased
+## 0.18.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.18.0.
+This release contains initial support for [OpenTelemetry](https://opentelemetry.io/) and various other bug fixes and improvements.
+
+**Note**: This is the last release supporting Go 1.17.
+
+### Features
+
+- Initial support for [OpenTelemetry](https://opentelemetry.io/).
+  You can now send all your OpenTelemetry spans to Sentry.
+
+  Install the `otel` module
+
+  ```bash
+  go get github.com/getsentry/sentry-go \
+         github.com/getsentry/sentry-go/otel
+  ```
+
+  Configure the Sentry and OpenTelemetry SDKs
+
+  ```go
+  import (
+      "go.opentelemetry.io/otel"
+      sdktrace "go.opentelemetry.io/otel/sdk/trace"
+      "github.com/getsentry/sentry-go"
+      "github.com/getsentry/sentry-go/otel"
+      // ...
+  )
+
+  // Initlaize the Sentry SDK
+  sentry.Init(sentry.ClientOptions{
+      Dsn:              "__DSN__",
+      EnableTracing:    true,
+      TracesSampleRate: 1.0,
+  })
+
+  // Set up the Sentry span processor
+  tp := sdktrace.NewTracerProvider(
+      sdktrace.WithSpanProcessor(sentryotel.NewSentrySpanProcessor()),
+      // ...
+  )
+  otel.SetTracerProvider(tp)
+
+  // Set up the Sentry propagator
+  otel.SetTextMapPropagator(sentryotel.NewSentryPropagator())
+  ```
+
+  You can read more about using OpenTelemetry with Sentry in our [docs](https://docs.sentry.io/platforms/go/performance/instrumentation/opentelemetry/).
+
+### Bug Fixes
+
+- Do not freeze the Dynamic Sampling Context when no Sentry values are present in the baggage header ([#532](https://github.com/getsentry/sentry-go/pull/532))
+- Create a frozen Dynamic Sampling Context when calling `span.ToBaggage()` ([#566](https://github.com/getsentry/sentry-go/pull/566))
+- Fix baggage parsing and encoding in vendored otel package ([#568](https://github.com/getsentry/sentry-go/pull/568))
 
 ### Misc
 
-- Add SentryTraceHeader and SentryBaggageHeader constants ([#538](https://github.com/getsentry/sentry-go/pull/538/))
-- Add `Span.SetDynamicSamplingContext` method ([#539](https://github.com/getsentry/sentry-go/pull/539/))
-- Add DSN getters ([#540](https://github.com/getsentry/sentry-go/pull/540))
-- Add Span.SetData() ([#542](https://github.com/getsentry/sentry-go/pull/542))
-- Add Span.IsTransaction() ([#543](https://github.com/getsentry/sentry-go/pull/543))
-- Add TraceParentContext structure ([#545](https://github.com/getsentry/sentry-go/pull/545))
-- Add a new SpanOption: `SpanSampled` ([#546](https://github.com/getsentry/sentry-go/pull/546))
+- Add `Span.SetDynamicSamplingContext()` ([#539](https://github.com/getsentry/sentry-go/pull/539/))
+- Add various getters for `Dsn` ([#540](https://github.com/getsentry/sentry-go/pull/540))
+- Add `SpanOption::SpanSampled` ([#546](https://github.com/getsentry/sentry-go/pull/546))
+- Add `Span.SetData()` ([#542](https://github.com/getsentry/sentry-go/pull/542))
+- Add `Span.IsTransaction()` ([#543](https://github.com/getsentry/sentry-go/pull/543))
+- Add `Span.GetTransaction()` method ([#558](https://github.com/getsentry/sentry-go/pull/558))
 
 ## 0.17.0
 
