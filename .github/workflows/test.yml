@@ -47,7 +47,7 @@ jobs:
         run: make vet
       - name: Check go.mod Tidiness
         run: make mod-tidy
-        if: ${{ matrix.go == '1.19' }}
+        if: ${{ matrix.go == '1.20' }}
       - name: Test
         run: make test
       - name: Test (with race detection)
@@ -56,7 +56,7 @@ jobs:
         # pull requests, only run this step for a single job in the matrix. For
         # all other workflow triggers (e.g., pushes to a release branch) run
         # this step for the whole matrix.
-        if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.19' && matrix.os == 'ubuntu') }}
+        if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.20' && matrix.os == 'ubuntu') }}
       - name: Collect coverage
         run: make test-coverage
       - name: Upload coverage to Codecov
@@ -66,7 +66,7 @@ jobs:
     timeout-minutes: 10
     strategy:
       matrix:
-        go: ["1.19", "1.18", "1.17"]
+        go: ["1.20", "1.19", "1.18"]
         os: [ubuntu, windows, macos]
       fail-fast: false
   # Test the GOPATH mode with the oldest Go version we support
@@ -86,7 +86,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v3
         with:
-          go-version: "1.17"
+          go-version: "1.18"
       - uses: actions/checkout@v3
         with:
           path: ${{ env.WORKDIR }}
