@@ -15,6 +15,10 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 	if hint == nil || hint.Context == nil {
 		return event
 	}
+	// TODO: what we want here is to compare with the (unexported) sentry.transactionType
+	if event.Type == "transaction" {
+		return event
+	}
 	otelSpanContext := trace.SpanContextFromContext(hint.Context)
 	var sentrySpan *sentry.Span
 	if otelSpanContext.IsValid() {
@@ -24,15 +28,13 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 		return event
 	}
 
-	traceContext := event.Contexts["trace"]
-	if len(traceContext) > 0 {
-		// trace context is already set, not touching it
-		return event
+	traceContext, found := event.Contexts["trace"]
+	if !found {
+		event.Contexts["trace"] = make(map[string]interface{})
+		traceContext = event.Contexts["trace"]
 	}
-	event.Contexts["trace"] = map[string]interface{}{
-		"trace_id":       sentrySpan.TraceID.String(),
-		"span_id":        sentrySpan.SpanID.String(),
-		"parent_span_id": sentrySpan.ParentSpanID.String(),
-	}
+	traceContext["trace_id"] = sentrySpan.TraceID.String()
+	traceContext["span_id"] = sentrySpan.SpanID.String()
+	traceContext["parent_span_id"] = sentrySpan.ParentSpanID.String()
 	return event
 }
