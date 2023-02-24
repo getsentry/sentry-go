@@ -18,6 +18,8 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
   - According to our policy, we're officially supporting the last three minor releases of Go.
 - Switch repository license to MIT ([#583](https://github.com/getsentry/sentry-go/pull/583/))
   - More about Sentry licensing [here](https://open.sentry.io/licensing/).
+- Bump `golang.org/x/text` minimum required version to 0.3.8 ([#586](https://github.com/getsentry/sentry-go/pull/586))
+  - This fixes [CVE-2022-32149](https://github.com/advisories/GHSA-69ch-w2m2-3vjp) vulnerability.
 
 ## 0.18.0
 
