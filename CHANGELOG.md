@@ -15,7 +15,7 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 
 ### Misc
 - Drop support for Go 1.17, add support for Go 1.20 ([#563](https://github.com/getsentry/sentry-go/pull/563/))
-  - According to our policy, we're officially supporting three latest minor releases of Go.
+  - According to our policy, we're officially supporting the last three minor releases of Go.
 - Switch repository license to MIT ([#583](https://github.com/getsentry/sentry-go/pull/583/))
   - More about Sentry licensing [here](https://open.sentry.io/licensing/).
 
