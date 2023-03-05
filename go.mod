@@ -15,8 +15,8 @@ require (
 	github.com/stretchr/testify v1.8.0
 	github.com/urfave/negroni v1.0.0
 	github.com/valyala/fasthttp v1.40.0
-	golang.org/x/sys v0.0.0-20220928140112-f11e5e49a4ec
-	golang.org/x/text v0.3.8
+	golang.org/x/sys v0.5.0
+	golang.org/x/text v0.7.0
 )
 
 require (
@@ -71,7 +71,7 @@ require (
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yosssi/ace v0.0.5 // indirect
 	golang.org/x/crypto v0.0.0-20220926161630-eccd6366d1be // indirect
-	golang.org/x/net v0.0.0-20221002022538-bcab6841153b // indirect
+	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
