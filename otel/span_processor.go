@@ -133,7 +133,7 @@ func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.Read
 		resource[kv.Key] = kv.Value.AsString()
 	}
 
-	// TODO(michi) We might need to set this somewhere else then on the scope
+	// TODO(michi) We might need to set this somewhere else than on the scope
 	hub.Scope().SetContext("otel", map[string]interface{}{
 		"attributes": attributes,
 		"resource":   resource,
@@ -144,7 +144,7 @@ func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.Read
 	transaction.Status = utils.MapOtelStatus(s)
 	transaction.Op = spanAttributes.Op
 	transaction.Source = spanAttributes.Source
-	// TODO(michi) We might need to set this somewhere else then on the scope
+	// TODO(michi) We might need to set this somewhere else than on the scope
 	hub.Scope().SetTransaction(spanAttributes.Description)
 }
 
