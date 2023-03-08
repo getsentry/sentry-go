@@ -834,3 +834,36 @@ func TestToBaggage(t *testing.T) {
 		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name",
 	)
 }
+
+func TestSpanSetContext(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	transaction := StartTransaction(ctx, "Test Transaction")
+
+	transaction.SetContext("a", Context{"b": 1})
+
+	assertEqual(t, map[string]Context{"a": {"b": 1}}, transaction.contexts)
+}
+
+func TestSpanSetContextMerges(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	transaction := StartTransaction(ctx, "Test Transaction")
+	transaction.SetContext("a", Context{"foo": "bar"})
+	transaction.SetContext("b", Context{"b": 2})
+
+	assertEqual(t, map[string]Context{"a": {"foo": "bar"}, "b": {"b": 2}}, transaction.contexts)
+}
+
+func TestSpanSetContextOverrides(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	transaction := StartTransaction(ctx, "Test Transaction")
+	transaction.SetContext("a", Context{"foo": "bar"})
+	transaction.SetContext("a", Context{"foo": 2})
+
+	assertEqual(t, map[string]Context{"a": {"foo": 2}}, transaction.contexts)
+}
