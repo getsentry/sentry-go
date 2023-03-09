@@ -260,6 +260,7 @@ func TestStartTransaction(t *testing.T) {
 			s.StartTime = startTime
 			s.EndTime = endTime
 			s.Data = data
+			s.SetContext("otel", Context{"k": "v"})
 		},
 	)
 	transaction.Finish()
@@ -283,6 +284,7 @@ func TestStartTransaction(t *testing.T) {
 				Description: description,
 				Status:      status,
 			}.Map(),
+			"otel": {"k": "v"},
 		},
 		Tags: nil,
 		// TODO(tracing): the root span / transaction data field is
