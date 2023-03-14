@@ -52,6 +52,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	isTransaction bool
 	// recorder stores all spans in a transaction. Guaranteed to be non-nil.
 	recorder *spanRecorder
+	// span context, can only be set on transactions
+	contexts map[string]Context
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -107,7 +109,10 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		ctx:           context.WithValue(ctx, spanContextKey{}, &span),
 		parent:        parent,
 		isTransaction: !hasParent,
+
+		contexts: make(map[string]Context),
 	}
+
 	if hasParent {
 		span.TraceID = parent.TraceID
 	} else {
@@ -234,6 +239,10 @@ func (s *Span) SetData(name, value string) {
 		s.Data = make(map[string]interface{})
 	}
 	s.Data[name] = value
+}
+
+func (s *Span) SetContext(key string, value Context) {
+	s.contexts[key] = value
 }
 
 // IsTransaction checks if the given span is a transaction.
@@ -484,17 +493,21 @@ func (s *Span) toEvent() *Event {
 		s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(s)
 	}
 
+	contexts := map[string]Context{}
+	for k, v := range s.contexts {
+		contexts[k] = v
+	}
+	contexts["trace"] = s.traceContext().Map()
+
 	return &Event{
 		Type:        transactionType,
 		Transaction: hub.Scope().Transaction(),
-		Contexts: map[string]Context{
-			"trace": s.traceContext().Map(),
-		},
-		Tags:      s.Tags,
-		Extra:     s.Data,
-		Timestamp: s.EndTime,
-		StartTime: s.StartTime,
-		Spans:     finished,
+		Contexts:    contexts,
+		Tags:        s.Tags,
+		Extra:       s.Data,
+		Timestamp:   s.EndTime,
+		StartTime:   s.StartTime,
+		Spans:       finished,
 		TransactionInfo: &TransactionInfo{
 			Source: s.Source,
 		},

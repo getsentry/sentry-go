@@ -260,6 +260,7 @@ func TestStartTransaction(t *testing.T) {
 			s.StartTime = startTime
 			s.EndTime = endTime
 			s.Data = data
+			s.SetContext("otel", Context{"k": "v"})
 		},
 	)
 	transaction.Finish()
@@ -283,6 +284,7 @@ func TestStartTransaction(t *testing.T) {
 				Description: description,
 				Status:      status,
 			}.Map(),
+			"otel": {"k": "v"},
 		},
 		Tags: nil,
 		// TODO(tracing): the root span / transaction data field is
@@ -833,4 +835,37 @@ func TestToBaggage(t *testing.T) {
 		child.ToBaggage(),
 		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name",
 	)
+}
+
+func TestSpanSetContext(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	transaction := StartTransaction(ctx, "Test Transaction")
+
+	transaction.SetContext("a", Context{"b": 1})
+
+	assertEqual(t, map[string]Context{"a": {"b": 1}}, transaction.contexts)
+}
+
+func TestSpanSetContextMerges(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	transaction := StartTransaction(ctx, "Test Transaction")
+	transaction.SetContext("a", Context{"foo": "bar"})
+	transaction.SetContext("b", Context{"b": 2})
+
+	assertEqual(t, map[string]Context{"a": {"foo": "bar"}, "b": {"b": 2}}, transaction.contexts)
+}
+
+func TestSpanSetContextOverrides(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	transaction := StartTransaction(ctx, "Test Transaction")
+	transaction.SetContext("a", Context{"foo": "bar"})
+	transaction.SetContext("a", Context{"foo": 2})
+
+	assertEqual(t, map[string]Context{"a": {"foo": 2}}, transaction.contexts)
 }

@@ -133,8 +133,7 @@ func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.Read
 		resource[kv.Key] = kv.Value.AsString()
 	}
 
-	// TODO(michi) We might need to set this somewhere else than on the scope
-	hub.Scope().SetContext("otel", map[string]interface{}{
+	transaction.SetContext("otel", map[string]interface{}{
 		"attributes": attributes,
 		"resource":   resource,
 	})
