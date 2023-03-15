@@ -255,7 +255,7 @@ func TestOnEndWithTransaction(t *testing.T) {
 	assertEqual(t, sentryTransaction.Status, sentry.SpanStatusOK)
 	assertEqual(t, sentryTransaction.Source, sentry.TransactionSource("custom"))
 	assertEqual(t, sentryTransaction.Op, "")
-	assertEqual(t, sentryTransaction.Description, "")
+	assertEqual(t, sentryTransaction.Description, "transactionName")
 
 	// One events should be captured by transport
 	sentryTransport := getSentryTransportFromContext(ctx)

@@ -499,9 +499,14 @@ func (s *Span) toEvent() *Event {
 	}
 	contexts["trace"] = s.traceContext().Map()
 
+	transaction := hub.Scope().Transaction()
+	if s.Description != "" {
+		transaction = s.Description
+	}
+
 	return &Event{
 		Type:        transactionType,
-		Transaction: hub.Scope().Transaction(),
+		Transaction: transaction,
 		Contexts:    contexts,
 		Tags:        s.Tags,
 		Extra:       s.Data,
