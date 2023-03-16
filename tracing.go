@@ -663,6 +663,44 @@ func (ss SpanStatus) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s)
 }
 
+// Convert HTTP Status to [SpanStatus]
+func FromHTTPStatusToSpanStatus(code int) SpanStatus {
+	if code < http.StatusBadRequest {
+		return SpanStatusOK
+	}
+	if http.StatusBadRequest <= code && code < http.StatusInternalServerError {
+		switch code {
+		case http.StatusForbidden:
+			return SpanStatusPermissionDenied
+		case http.StatusNotFound:
+			return SpanStatusNotFound
+		case http.StatusTooManyRequests:
+			return SpanStatusResourceExhausted
+		case http.StatusRequestEntityTooLarge:
+			return SpanStatusFailedPrecondition
+		case http.StatusUnauthorized:
+			return SpanStatusUnauthenticated
+		case http.StatusConflict:
+			return SpanStatusAlreadyExists
+		default:
+			return SpanStatusInvalidArgument
+		}
+	}
+	if http.StatusInternalServerError <= code && code < 600 {
+		switch code {
+		case http.StatusGatewayTimeout:
+			return SpanStatusDeadlineExceeded
+		case http.StatusNotImplemented:
+			return SpanStatusUnimplemented
+		case http.StatusServiceUnavailable:
+			return SpanStatusUnavailable
+		default:
+			return SpanStatusInternalError
+		}
+	}
+	return SpanStatusUnknown
+}
+
 // A TraceContext carries information about an ongoing trace and is meant to be
 // stored in Event.Contexts (as *TraceContext).
 type TraceContext struct {
