@@ -68,6 +68,9 @@ func (h *handler) handle(ctx *gin.Context) {
 		ctx, fmt.Sprintf("%v %v", ctx.Request.Method, ctx.FullPath()),
 		options...,
 	)
+
+	ctx.Request = ctx.Request.WithContext(transaction.Context())
+
 	ctx.Writer.Header().Set(sentry.SentryTraceHeader, transaction.ToSentryTrace())
 	ctx.Writer.Header().Set(sentry.SentryBaggageHeader, transaction.ToBaggage())
 	ctx.Set(traceValuesKey, transaction)
@@ -118,13 +121,4 @@ func GetHubFromContext(ctx *gin.Context) *sentry.Hub {
 		}
 	}
 	return nil
-}
-
-// StartSpanFromGinContext start a new *sentry.Span from gin.Context.
-func StartSpanFromGinContext(ctx *gin.Context, op string) *sentry.Span {
-	span, ok := ctx.Value(traceValuesKey).(*sentry.Span)
-	if ok && span != nil {
-		return span.StartChild(op)
-	}
-	return sentry.StartSpan(ctx, op)
 }
