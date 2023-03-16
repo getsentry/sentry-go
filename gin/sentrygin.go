@@ -36,14 +36,6 @@ type Options struct {
 	Timeout time.Duration
 }
 
-func extractTraceFromRequest(ctx *gin.Context) string {
-	return ctx.GetHeader(sentry.SentryTraceHeader)
-}
-
-func extractBaggageFromRequest(ctx *gin.Context) string {
-	return ctx.GetHeader(sentry.SentryBaggageHeader)
-}
-
 // New returns a function that satisfies gin.HandlerFunc interface
 // It can be used with Use() methods.
 func New(options Options) gin.HandlerFunc {
@@ -65,10 +57,16 @@ func (h *handler) handle(ctx *gin.Context) {
 	}
 	hub.Scope().SetRequest(ctx.Request)
 
+	options := []sentry.SpanOption{
+		sentry.ContinueFromHeaders(
+			ctx.GetHeader(sentry.SentryTraceHeader),
+			ctx.GetHeader(sentry.SentryBaggageHeader),
+		),
+		sentry.TransctionSource(sentry.SourceURL),
+	}
 	transaction := sentry.StartTransaction(
 		ctx, fmt.Sprintf("%v %v", ctx.Request.Method, ctx.FullPath()),
-		sentry.ContinueFromHeaders(extractTraceFromRequest(ctx), extractBaggageFromRequest(ctx)),
-		sentry.TransctionSource(sentry.SourceURL),
+		options...,
 	)
 	ctx.Writer.Header().Set(sentry.SentryTraceHeader, transaction.ToSentryTrace())
 	ctx.Writer.Header().Set(sentry.SentryBaggageHeader, transaction.ToBaggage())
