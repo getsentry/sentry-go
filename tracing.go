@@ -109,8 +109,6 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		ctx:           context.WithValue(ctx, spanContextKey{}, &span),
 		parent:        parent,
 		isTransaction: !hasParent,
-
-		contexts: make(map[string]Context),
 	}
 
 	if hasParent {
@@ -241,7 +239,13 @@ func (s *Span) SetData(name, value string) {
 	s.Data[name] = value
 }
 
+// SetContext sets a context on the span. It is recommended to use SetContext instead of
+// accessing the contexts map directly as SetContext takes care of initializing the map
+// when necessary.
 func (s *Span) SetContext(key string, value Context) {
+	if s.contexts == nil {
+		s.contexts = make(map[string]Context)
+	}
 	s.contexts[key] = value
 }
 
