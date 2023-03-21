@@ -26,6 +26,7 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	TraceID      TraceID                `json:"trace_id"`
 	SpanID       SpanID                 `json:"span_id"`
 	ParentSpanID SpanID                 `json:"parent_span_id"`
+	Name         string                 `json:"name,omitempty"`
 	Op           string                 `json:"op,omitempty"`
 	Description  string                 `json:"description,omitempty"`
 	Status       SpanStatus             `json:"status,omitempty"`
@@ -202,9 +203,6 @@ func (s *Span) Finish() {
 	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
 
 	hub := hubFromContext(s.ctx)
-	if hub.Scope().Transaction() == "" {
-		Logger.Printf("Missing transaction name for span with op = %q", s.Op)
-	}
 	hub.CaptureEvent(event)
 }
 
@@ -425,7 +423,11 @@ func (s *Span) sample() Sampled {
 
 	// #3 use TracesSampler from ClientOptions.
 	sampler := clientOptions.TracesSampler
-	samplingContext := SamplingContext{Span: s, Parent: s.parent}
+	samplingContext := SamplingContext{
+		Span:   s,
+		Parent: s.parent,
+	}
+
 	if sampler != nil {
 		tracesSamplerSampleRate := sampler.Sample(samplingContext)
 		s.sampleRate = tracesSamplerSampleRate
@@ -479,7 +481,6 @@ func (s *Span) toEvent() *Event {
 	if !s.isTransaction {
 		return nil // only transactions can be transformed into events
 	}
-	hub := hubFromContext(s.ctx)
 
 	children := s.recorder.children()
 	finished := make([]*Span, 0, len(children))
@@ -505,7 +506,7 @@ func (s *Span) toEvent() *Event {
 
 	return &Event{
 		Type:        transactionType,
-		Transaction: hub.Scope().Transaction(),
+		Transaction: s.Name,
 		Contexts:    contexts,
 		Tags:        s.Tags,
 		Extra:       s.Data,
@@ -773,7 +774,7 @@ type SpanOption func(s *Span)
 // name set previously.
 func TransactionName(name string) SpanOption {
 	return func(s *Span) {
-		hubFromContext(s.Context()).Scope().SetTransaction(name)
+		s.Name = name
 	}
 }
 

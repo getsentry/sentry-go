@@ -141,10 +141,9 @@ func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.Read
 	spanAttributes := utils.ParseSpanAttributes(s)
 
 	transaction.Status = utils.MapOtelStatus(s)
+	transaction.Name = spanAttributes.Description
 	transaction.Op = spanAttributes.Op
 	transaction.Source = spanAttributes.Source
-	// TODO(michi) We might need to set this somewhere else than on the scope
-	hub.Scope().SetTransaction(spanAttributes.Description)
 }
 
 func updateSpanWithOtelData(span *sentry.Span, s otelSdkTrace.ReadOnlySpan) {

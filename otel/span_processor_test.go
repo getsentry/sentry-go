@@ -35,18 +35,6 @@ func setupSpanProcessorTest() (otelSdkTrace.SpanProcessor, *otelSdkTrace.TracerP
 	return spanProcessor, tp, tracer
 }
 
-func transactionName(span *sentry.Span) string {
-	hub := sentry.GetHubFromContext(span.Context())
-	if hub == nil {
-		log.Fatal("Cannot extract transaction name: Hub is nil")
-	}
-	scope := hub.Scope()
-	if scope == nil {
-		log.Fatal("Cannot extract transaction name: Hub is nil")
-	}
-	return scope.Transaction()
-}
-
 func emptyContextWithSentry() context.Context {
 	client, _ := sentry.NewClient(sentry.ClientOptions{
 		Dsn:              "https://abc@example.com/123",
@@ -131,7 +119,7 @@ func TestOnStartRootSpan(t *testing.T) {
 	assertEqual(t, sentrySpan.ParentSpanID, sentry.SpanID{})
 	assertTrue(t, sentrySpan.IsTransaction())
 	assertEqual(t, sentrySpan.Sampled, sentry.SampledTrue)
-	assertEqual(t, transactionName(sentrySpan), "spanName")
+	assertEqual(t, sentrySpan.Name, "spanName")
 
 	testutils.AssertBaggageStringsEqual(
 		t,
@@ -185,7 +173,7 @@ func TestOnStartWithTraceParentContext(t *testing.T) {
 	assertEqual(t, sentrySpan.ParentSpanID, SpanIDFromHex("b72fa28504b07285"))
 	assertTrue(t, sentrySpan.IsTransaction())
 	assertEqual(t, sentrySpan.Sampled, sentry.SampledFalse)
-	assertEqual(t, transactionName(sentrySpan), "spanName")
+	assertEqual(t, sentrySpan.Name, "spanName")
 	assertEqual(t, sentrySpan.Status, sentry.SpanStatusUndefined)
 	assertEqual(t, sentrySpan.Source, sentry.SourceCustom)
 
@@ -230,7 +218,7 @@ func TestOnStartWithExistingParentSpan(t *testing.T) {
 	assertEqual(t, sentryChildSpan.SpanID.String(), otelChildSpan.SpanContext().SpanID().String())
 	assertEqual(t, sentryChildSpan.TraceID.String(), "bc6d53f15eb88f4320054569b8c553d4")
 	assertFalse(t, sentryChildSpan.IsTransaction())
-	assertEqual(t, transactionName(sentryChildSpan), "rootSpan")
+	assertEqual(t, sentryChildSpan.GetTransaction().Name, "rootSpan")
 	assertEqual(t, sentryChildSpan.Op, "childSpan")
 }
 
