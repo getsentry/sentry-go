@@ -52,7 +52,6 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.SetContext("foo", sentry.Context{"foo": "bar"})
 	scope.SetExtra("foo", "bar")
 	scope.SetLevel(sentry.LevelDebug)
-	scope.SetTransaction("foo")
 	scope.SetFingerprint([]string{"foo"})
 	scope.AddBreadcrumb(&sentry.Breadcrumb{Message: "foo"}, 100)
 	scope.SetUser(sentry.User{ID: "foo"})
