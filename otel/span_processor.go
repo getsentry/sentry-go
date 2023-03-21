@@ -117,11 +117,6 @@ func getTraceParentContext(ctx context.Context) sentry.TraceParentContext {
 }
 
 func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
-	hub := sentry.GetHubFromContext(transaction.Context())
-	if hub == nil {
-		return
-	}
-
 	// TODO(michi) This is crazy inefficient
 	attributes := map[attribute.Key]string{}
 	resource := map[attribute.Key]string{}
