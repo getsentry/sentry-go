@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -484,40 +483,15 @@ func (client *Client) EventFromMessage(message string, level Level) *Event {
 }
 
 func (client *Client) EventFromException(exception error, level Level) *Event {
+	event := NewEvent()
+	event.Level = level
+
 	err := exception
 	if err == nil {
 		err = usageError{fmt.Errorf("%s called with nil error", callerFunctionName())}
 	}
 
-	event := NewEvent()
-	event.Level = level
-
-	for i := 0; i < client.options.MaxErrorDepth && err != nil; i++ {
-		event.Exception = append(event.Exception, Exception{
-			Value:      err.Error(),
-			Type:       reflect.TypeOf(err).String(),
-			Stacktrace: ExtractStacktrace(err),
-		})
-		switch previous := err.(type) {
-		case interface{ Unwrap() error }:
-			err = previous.Unwrap()
-		case interface{ Cause() error }:
-			err = previous.Cause()
-		default:
-			err = nil
-		}
-	}
-
-	// Add a trace of the current stack to the most recent error in a chain if
-	// it doesn't have a stack trace yet.
-	// We only add to the most recent error to avoid duplication and because the
-	// current stack is most likely unrelated to errors deeper in the chain.
-	if event.Exception[0].Stacktrace == nil {
-		event.Exception[0].Stacktrace = NewStacktrace()
-	}
-
-	// event.Exception should be sorted such that the most recent error is last.
-	reverse(event.Exception)
+	event.SetException(err, client.options.MaxErrorDepth)
 
 	return event
 }

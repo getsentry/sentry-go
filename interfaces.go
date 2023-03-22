@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -282,6 +283,40 @@ type Event struct {
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
+}
+
+func (e *Event) SetException(exception error, maxErrorDepth int) {
+	err := exception
+	if err == nil {
+		return
+	}
+
+	for i := 0; i < maxErrorDepth && err != nil; i++ {
+		e.Exception = append(e.Exception, Exception{
+			Value:      err.Error(),
+			Type:       reflect.TypeOf(err).String(),
+			Stacktrace: ExtractStacktrace(err),
+		})
+		switch previous := err.(type) {
+		case interface{ Unwrap() error }:
+			err = previous.Unwrap()
+		case interface{ Cause() error }:
+			err = previous.Cause()
+		default:
+			err = nil
+		}
+	}
+
+	// Add a trace of the current stack to the most recent error in a chain if
+	// it doesn't have a stack trace yet.
+	// We only add to the most recent error to avoid duplication and because the
+	// current stack is most likely unrelated to errors deeper in the chain.
+	if e.Exception[0].Stacktrace == nil {
+		e.Exception[0].Stacktrace = NewStacktrace()
+	}
+
+	// event.Exception should be sorted such that the most recent error is last.
+	reverse(e.Exception)
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
