@@ -82,7 +82,6 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	} else {
 		updateSpanWithOtelData(sentrySpan, s)
 	}
-
 	sentrySpan.EndTime = s.EndTime()
 	sentrySpan.Finish()
 
