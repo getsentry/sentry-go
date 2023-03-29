@@ -370,18 +370,18 @@ func TestParseSpanAttributesHttpServer(t *testing.T) {
 		"rootSpan",
 		trace.WithSpanKind(trace.SpanKindServer),
 		trace.WithAttributes(attribute.String("http.method", "GET")),
-		trace.WithAttributes(attribute.String("http.target", "/api/checkout?k=v")),
+		trace.WithAttributes(attribute.String("http.target", "/api/checkout1?k=v")),
 		// We ignore "http.url" if "http.target" is present
-		trace.WithAttributes(attribute.String("http.url", "http://localhost:1234/api/checkout1?q1=q2#fragment")),
+		trace.WithAttributes(attribute.String("http.url", "http://localhost:1234/api/checkout?q1=q2#fragment")),
 	)
 	_, otelChildSpan := tracer.Start(
 		ctx,
 		"span name",
 		trace.WithSpanKind(trace.SpanKindServer),
 		trace.WithAttributes(attribute.String("http.method", "POST")),
-		trace.WithAttributes(attribute.String("http.target", "/api/checkout?k=v")),
+		trace.WithAttributes(attribute.String("http.target", "/api/checkout2?k=v")),
 		// We ignore "http.url" if "http.target" is present
-		trace.WithAttributes(attribute.String("http.url", "http://localhost:2345/api/checkout2?q1=q2#fragment")),
+		trace.WithAttributes(attribute.String("http.url", "http://localhost:2345/api/checkout?q1=q2#fragment")),
 	)
 	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
 	sentrySpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().SpanID())
@@ -390,14 +390,14 @@ func TestParseSpanAttributesHttpServer(t *testing.T) {
 	otelRootSpan.End()
 
 	// Transaction
-	assertEqual(t, sentryTransaction.Name, "GET /api/checkout")
+	assertEqual(t, sentryTransaction.Name, "GET /api/checkout1")
 	assertEqual(t, sentryTransaction.Description, "")
 	assertEqual(t, sentryTransaction.Op, "http.server")
 	assertEqual(t, sentryTransaction.Source, sentry.TransactionSource("url"))
 
 	// Span
 	assertEqual(t, sentrySpan.Name, "")
-	assertEqual(t, sentrySpan.Description, "POST /api/checkout")
+	assertEqual(t, sentrySpan.Description, "POST /api/checkout2")
 	assertEqual(t, sentrySpan.Op, "http.server")
 	assertEqual(t, sentrySpan.Source, sentry.TransactionSource(""))
 }
