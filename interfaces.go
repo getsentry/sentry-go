@@ -241,6 +241,34 @@ type TransactionInfo struct {
 	Source TransactionSource `json:"source,omitempty"`
 }
 
+// The DebugMeta interface is not used in Golang apps, but may be populated
+// when proxying Events from other platforms, like iOS, Android, and the
+// Web.  (See: https://develop.sentry.dev/sdk/event-payloads/debugmeta/ ).
+type DebugMeta struct {
+	SdkInfo *DebugMetaSdkInfo `json:"sdk_info,omitempty"`
+	Images  []DebugMetaImage  `json:"images,omitempty"`
+}
+
+type DebugMetaSdkInfo struct {
+	SdkName           string `json:"sdk_name,omitempty"`
+	VersionMajor      int    `json:"version_major,omitempty"`
+	VersionMinor      int    `json:"version_minor,omitempty"`
+	VersionPatchlevel int    `json:"version_patchlevel,omitempty"`
+}
+
+type DebugMetaImage struct {
+	Type        string `json:"type,omitempty"`         // all
+	ImageAddr   string `json:"image_addr,omitempty"`   // macho,elf,pe
+	ImageSize   int    `json:"image_size,omitempty"`   // macho,elf,pe
+	DebugID     string `json:"debug_id,omitempty"`     // macho,elf,pe,wasm,sourcemap
+	DebugFile   string `json:"debug_file,omitempty"`   // macho,elf,pe,wasm
+	CodeID      string `json:"code_id,omitempty"`      // macho,elf,pe,wasm
+	CodeFile    string `json:"code_file,omitempty"`    // macho,elf,pe,wasm,sourcemap
+	ImageVmaddr string `json:"image_vmaddr,omitempty"` // macho,elf,pe
+	Arch        string `json:"arch,omitempty"`         // macho,elf,pe
+	UUID        string `json:"uuid,omitempty"`         // proguard
+}
+
 // EventID is a hexadecimal string representing a unique uuid4 for an Event.
 // An EventID must be 32 characters long, lowercase and not have any dashes.
 type EventID string
@@ -271,6 +299,7 @@ type Event struct {
 	Modules     map[string]string      `json:"modules,omitempty"`
 	Request     *Request               `json:"request,omitempty"`
 	Exception   []Exception            `json:"exception,omitempty"`
+	DebugMeta   *DebugMeta             `json:"debug_meta,omitempty"`
 
 	// The fields below are only relevant for transactions.
 
