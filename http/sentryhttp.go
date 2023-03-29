@@ -89,7 +89,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		options := []sentry.SpanOption{
 			sentry.OpName("http.server"),
 			sentry.ContinueFromRequest(r),
-			sentry.TransctionSource(sentry.SourceURL),
+			sentry.WithTransactionSource(sentry.SourceURL),
 		}
 		// We don't mind getting an existing transaction back so we don't need to
 		// check if it is.
