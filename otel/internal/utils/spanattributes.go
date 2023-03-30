@@ -4,7 +4,7 @@ package utils
 
 import (
 	"fmt"
-	"strings"
+	"net/url"
 
 	"github.com/getsentry/sentry-go"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
@@ -77,44 +77,53 @@ func descriptionForDbSystem(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 }
 
 func descriptionForHttpMethod(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
-	opParts := []string{"http"}
-
+	op := "http"
 	switch s.SpanKind() {
 	case otelTrace.SpanKindClient:
-		opParts = append(opParts, "client")
+		op = "http.client"
 	case otelTrace.SpanKindServer:
-		opParts = append(opParts, "server")
+		op = "http.server"
 	}
 
 	var httpTarget string
 	var httpRoute string
 	var httpMethod string
+	var httpUrl string
 
 	for _, attribute := range s.Attributes() {
-		if attribute.Key == semconv.HTTPTargetKey {
+		switch attribute.Key {
+		case semconv.HTTPTargetKey:
 			httpTarget = attribute.Value.AsString()
-			break
-		}
-		if attribute.Key == semconv.HTTPRouteKey {
+		case semconv.HTTPRouteKey:
 			httpRoute = attribute.Value.AsString()
-			break
-		}
-		if attribute.Key == semconv.HTTPMethodKey {
+		case semconv.HTTPMethodKey:
 			httpMethod = attribute.Value.AsString()
-			break
+		case semconv.HTTPURLKey:
+			httpUrl = attribute.Value.AsString()
 		}
 	}
 
 	var httpPath string
 	if httpTarget != "" {
-		httpPath = httpTarget
+		if parsedUrl, err := url.Parse(httpTarget); err == nil {
+			// Do not include the query and fragment parts
+			httpPath = parsedUrl.Path
+		} else {
+			httpPath = httpTarget
+		}
 	} else if httpRoute != "" {
 		httpPath = httpRoute
+	} else if httpUrl != "" {
+		// This is normally the HTTP-client case
+		if parsedUrl, err := url.Parse(httpUrl); err == nil {
+			// Do not include the query and fragment parts
+			httpPath = fmt.Sprintf("%s://%s%s", parsedUrl.Scheme, parsedUrl.Host, parsedUrl.Path)
+		}
 	}
 
 	if httpPath == "" {
 		return SpanAttributes{
-			Op:          strings.Join(opParts[:], "."),
+			Op:          op,
 			Description: s.Name(),
 			Source:      sentry.SourceCustom,
 		}
@@ -132,7 +141,7 @@ func descriptionForHttpMethod(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 	}
 
 	return SpanAttributes{
-		Op:          strings.Join(opParts[:], "."),
+		Op:          op,
 		Description: description,
 		Source:      source,
 	}
