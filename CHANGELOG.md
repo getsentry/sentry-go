@@ -8,7 +8,7 @@ Note: this release has some **breaking changes**, which are listed below.
 
 ### Breaking Changes
 
-- Remove the following methods: Scope.SetTransaction(), Scope.Transaction() ([#605](https://github.com/getsentry/sentry-go/pull/605))
+- Remove the following methods: `Scope.SetTransaction()`, `Scope.Transaction()` ([#605](https://github.com/getsentry/sentry-go/pull/605))
 
   Span.Name should be used instead to access the transaction's name.
 
@@ -37,8 +37,9 @@ Note: this release has some **breaking changes**, which are listed below.
 
 ### Features
 
-- Add Span.SetContext() ([#599](https://github.com/getsentry/sentry-go/pull/599/))
-- Add DebugMeta interface to Event and extend Frame structure with more fields ([#606](https://github.com/getsentry/sentry-go/pull/606))
+- Add `Span.SetContext()` method ([#599](https://github.com/getsentry/sentry-go/pull/599/))
+  - It is recommended to use it instead of `hub.Scope().SetContext` when setting or updating context on transactions.
+- Add `DebugMeta` interface to `Event` and extend `Frame` structure with more fields ([#606](https://github.com/getsentry/sentry-go/pull/606))
   - More about DebugMeta interface [here](https://develop.sentry.dev/sdk/event-payloads/debugmeta/).
 
 ### Bug Fixes
