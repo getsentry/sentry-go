@@ -1,4 +1,6 @@
-// # Copyright The OpenTelemetry Authors
+// Adapted from https://github.com/open-telemetry/opentelemetry-go/blob/c21b6b6bb31a2f74edd06e262f1690f3f6ea3d5c/baggage/baggage.go
+//
+// Copyright The OpenTelemetry Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.

@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.20.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.20.0.
+
+Note: this release has some **breaking changes**, which are listed below.
+
+### Breaking Changes
+
+- Remove the following methods: `Scope.SetTransaction()`, `Scope.Transaction()` ([#605](https://github.com/getsentry/sentry-go/pull/605))
+
+  Span.Name should be used instead to access the transaction's name.
+
+  For example, the following [`TracesSampler`](https://docs.sentry.io/platforms/go/configuration/sampling/#setting-a-sampling-function) function should be now written as follows:
+
+  **Before:**
+  ```go
+  TracesSampler: func(ctx sentry.SamplingContext) float64 {
+    hub := sentry.GetHubFromContext(ctx.Span.Context())
+    if hub.Scope().Transaction() == "GET /health" {
+      return 0
+    }
+    return 1
+  },
+  ```
+
+  **After:**
+  ```go
+  TracesSampler: func(ctx sentry.SamplingContext) float64 {
+    if ctx.Span.Name == "GET /health" {
+      return 0
+    }
+    return 1
+  },
+  ```
+
+### Features
+
+- Add `Span.SetContext()` method ([#599](https://github.com/getsentry/sentry-go/pull/599/))
+  - It is recommended to use it instead of `hub.Scope().SetContext` when setting or updating context on transactions.
+- Add `DebugMeta` interface to `Event` and extend `Frame` structure with more fields ([#606](https://github.com/getsentry/sentry-go/pull/606))
+  - More about DebugMeta interface [here](https://develop.sentry.dev/sdk/event-payloads/debugmeta/).
+
+### Bug Fixes
+
+- [otel] Fix missing OpenTelemetry context on some events ([#599](https://github.com/getsentry/sentry-go/pull/599), [#605](https://github.com/getsentry/sentry-go/pull/605))
+  - Fixes ([#596](https://github.com/getsentry/sentry-go/issues/596)).
+- [otel] Better handling for HTTP span attributes ([#610](https://github.com/getsentry/sentry-go/pull/610))
+
+### Misc
+
+- Bump minimum versions: `github.com/kataras/iris/v12` to 12.2.0, `github.com/labstack/echo/v4` to v4.10.0 ([#595](https://github.com/getsentry/sentry-go/pull/595))
+  - Resolves [GO-2022-1144 / CVE-2022-41717](https://deps.dev/advisory/osv/GO-2022-1144), [GO-2023-1495 / CVE-2022-41721](https://deps.dev/advisory/osv/GO-2023-1495), [GO-2022-1059 / CVE-2022-32149](https://deps.dev/advisory/osv/GO-2022-1059).
+- Bump `google.golang.org/protobuf` minimum required version to 1.29.1  ([#604](https://github.com/getsentry/sentry-go/pull/604))
+  - This fixes a potential denial of service issue ([CVE-2023-24535](https://github.com/advisories/GHSA-hw7c-3rfg-p46j)).
+- Exclude the `otel` module when building in GOPATH mode ([#615](https://github.com/getsentry/sentry-go/pull/615))
+
 ## 0.19.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.19.0.
