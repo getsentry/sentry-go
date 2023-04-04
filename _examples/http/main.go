@@ -106,7 +106,7 @@ func run() error {
 
 		// Set a custom transaction name: use "Home" instead of the
 		// default "/" based on r.URL.Path.
-		hub.Scope().SetTransaction("Home")
+		sentry.TransactionFromContext(ctx).Name = "Home"
 
 		// The next block of code shows how to instrument concurrent
 		// tasks.
