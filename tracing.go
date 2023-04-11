@@ -801,8 +801,14 @@ func OpName(name string) SpanOption {
 }
 
 // TransctionSource sets the source of the transaction name.
-// TODO(anton): Fix the typo.
+//
+// Deprecated: Use WithTransactionSource() instead.
 func TransctionSource(source TransactionSource) SpanOption {
+	return WithTransactionSource(source)
+}
+
+// WithTransactionSource sets the source of the transaction name.
+func WithTransactionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
 	}
