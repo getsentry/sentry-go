@@ -806,7 +806,7 @@ func WithTransactionName(name string) SpanOption {
 
 // OpName sets the operation name for a given span.
 //
-// Deprecated: Use WithOpName instead.
+// Deprecated: Use WithOpName() instead.
 func OpName(name string) SpanOption {
 	return WithOpName(name)
 }
@@ -839,7 +839,7 @@ func SpanSampled(sampled Sampled) SpanOption {
 	return WithSpanSampled(sampled)
 }
 
-// SpanSampled updates the sampling flag for a given span.
+// WithSpanSampled updates the sampling flag for a given span.
 func WithSpanSampled(sampled Sampled) SpanOption {
 	return func(s *Span) {
 		s.Sampled = sampled
