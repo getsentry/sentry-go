@@ -885,3 +885,8 @@ func TestDeprecatedSpanOptionOpName(t *testing.T) {
 func TestDeprecatedSpanOptionSpanSampled(t *testing.T) {
 	StartSpan(context.Background(), "op", SpanSampled(SampledTrue))
 }
+
+// This test should be the only thing to fail when deprecated TransctionSource is removed.
+func TestDeprecatedSpanOptionTransctionSource(t *testing.T) {
+	StartSpan(context.Background(), "op", TransctionSource("src"))
+}
