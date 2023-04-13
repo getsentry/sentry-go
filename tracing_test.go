@@ -648,7 +648,7 @@ func TestSample(t *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 0.0,
 	})
-	span = StartSpan(ctx, "op", WithTransactionName("name"), SpanSampled(SampledTrue))
+	span = StartSpan(ctx, "op", WithTransactionName("name"), WithSpanSampled(SampledTrue))
 	if got := span.Sampled; got != SampledTrue {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
 	}
@@ -879,4 +879,9 @@ func TestDeprecatedSpanOptionTransactionName(t *testing.T) {
 // This test should be the only thing to fail when deprecated OpName is removed
 func TestDeprecatedSpanOptionOpName(t *testing.T) {
 	StartSpan(context.Background(), "op", OpName("name"))
+}
+
+// This test should be the only thing to fail when deprecated SpanSampled is removed
+func TestDeprecatedSpanOptionSpanSampled(t *testing.T) {
+	StartSpan(context.Background(), "op", SpanSampled(SampledTrue))
 }

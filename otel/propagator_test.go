@@ -32,7 +32,7 @@ func createTransactionAndMaybeSpan(transactionContext transactionTestContext, wi
 	transaction := sentry.StartTransaction(
 		emptyContextWithSentry(),
 		transactionContext.name,
-		sentry.SpanSampled(transactionContext.sampled),
+		sentry.WithSpanSampled(transactionContext.sampled),
 	)
 	transaction.TraceID = TraceIDFromHex(transactionContext.traceID)
 	transaction.SpanID = SpanIDFromHex(transactionContext.spanID)

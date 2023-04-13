@@ -833,7 +833,14 @@ func WithTransactionSource(source TransactionSource) SpanOption {
 }
 
 // SpanSampled updates the sampling flag for a given span.
+//
+// Deprecated: Use WithSpanSampled() instead
 func SpanSampled(sampled Sampled) SpanOption {
+	return WithSpanSampled(sampled)
+}
+
+// SpanSampled updates the sampling flag for a given span.
+func WithSpanSampled(sampled Sampled) SpanOption {
 	return func(s *Span) {
 		s.Sampled = sampled
 	}
