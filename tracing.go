@@ -805,7 +805,14 @@ func WithTransactionName(name string) SpanOption {
 }
 
 // OpName sets the operation name for a given span.
+//
+// Deprecated: Use WithOpName instead.
 func OpName(name string) SpanOption {
+	return WithOpName(name)
+}
+
+// WithOpName sets the operation name for a given span.
+func WithOpName(name string) SpanOption {
 	return func(s *Span) {
 		s.Op = name
 	}

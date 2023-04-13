@@ -875,3 +875,8 @@ func TestSpanSetContextOverrides(t *testing.T) {
 func TestDeprecatedSpanOptionTransactionName(t *testing.T) {
 	StartSpan(context.Background(), "op", TransactionName("name"))
 }
+
+// This test should be the only thing to fail when deprecated OpName is removed
+func TestDeprecatedSpanOptionOpName(t *testing.T) {
+	StartSpan(context.Background(), "op", OpName("name"))
+}
