@@ -871,17 +871,17 @@ func TestSpanSetContextOverrides(t *testing.T) {
 	assertEqual(t, map[string]Context{"a": {"foo": 2}}, transaction.contexts)
 }
 
-// This test should be the only thing to fail when deprecated TransactionName is removed
+// This test should be the only thing to fail when deprecated TransactionName is removed.
 func TestDeprecatedSpanOptionTransactionName(t *testing.T) {
 	StartSpan(context.Background(), "op", TransactionName("name"))
 }
 
-// This test should be the only thing to fail when deprecated OpName is removed
+// This test should be the only thing to fail when deprecated OpName is removed.
 func TestDeprecatedSpanOptionOpName(t *testing.T) {
 	StartSpan(context.Background(), "op", OpName("name"))
 }
 
-// This test should be the only thing to fail when deprecated SpanSampled is removed
+// This test should be the only thing to fail when deprecated SpanSampled is removed.
 func TestDeprecatedSpanOptionSpanSampled(t *testing.T) {
 	StartSpan(context.Background(), "op", SpanSampled(SampledTrue))
 }
