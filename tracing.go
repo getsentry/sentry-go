@@ -787,14 +787,32 @@ type SpanOption func(s *Span)
 // A span tree has a single transaction name, therefore using this option when
 // starting a span affects the span tree as a whole, potentially overwriting a
 // name set previously.
+//
+// Deprecated: Use WithTransactionSource() instead.
 func TransactionName(name string) SpanOption {
+	return WithTransactionName(name)
+}
+
+// WithTransactionName option sets the name of the current transaction.
+//
+// A span tree has a single transaction name, therefore using this option when
+// starting a span affects the span tree as a whole, potentially overwriting a
+// name set previously.
+func WithTransactionName(name string) SpanOption {
 	return func(s *Span) {
 		s.Name = name
 	}
 }
 
 // OpName sets the operation name for a given span.
+//
+// Deprecated: Use WithOpName() instead.
 func OpName(name string) SpanOption {
+	return WithOpName(name)
+}
+
+// WithOpName sets the operation name for a given span.
+func WithOpName(name string) SpanOption {
 	return func(s *Span) {
 		s.Op = name
 	}
@@ -815,7 +833,14 @@ func WithTransactionSource(source TransactionSource) SpanOption {
 }
 
 // SpanSampled updates the sampling flag for a given span.
+//
+// Deprecated: Use WithSpanSampled() instead.
 func SpanSampled(sampled Sampled) SpanOption {
+	return WithSpanSampled(sampled)
+}
+
+// WithSpanSampled updates the sampling flag for a given span.
+func WithSpanSampled(sampled Sampled) SpanOption {
 	return func(s *Span) {
 		s.Sampled = sampled
 	}
@@ -911,7 +936,7 @@ func StartTransaction(ctx context.Context, name string, options ...SpanOption) *
 		return currentTransaction
 	}
 
-	options = append(options, TransactionName(name))
+	options = append(options, WithTransactionName(name))
 	return StartSpan(
 		ctx,
 		"",

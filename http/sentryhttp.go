@@ -87,7 +87,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
 		options := []sentry.SpanOption{
-			sentry.OpName("http.server"),
+			sentry.WithOpName("http.server"),
 			sentry.ContinueFromRequest(r),
 			sentry.WithTransactionSource(sentry.SourceURL),
 		}

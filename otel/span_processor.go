@@ -50,7 +50,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 		transaction := sentry.StartTransaction(
 			parent,
 			s.Name(),
-			sentry.SpanSampled(traceParentContext.Sampled),
+			sentry.WithSpanSampled(traceParentContext.Sampled),
 		)
 		transaction.SpanID = sentry.SpanID(otelSpanID)
 		transaction.TraceID = sentry.TraceID(otelTraceID)
