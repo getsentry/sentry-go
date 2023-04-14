@@ -32,8 +32,8 @@ func NewStacktrace() *Stacktrace {
 		return nil
 	}
 
-	frames := extractFrames(pcs[:n])
-	frames = filterFrames(frames)
+	runtimeFrames := extractFrames(pcs[:n])
+	frames := createFrames(runtimeFrames)
 
 	stacktrace := Stacktrace{
 		Frames: frames,
@@ -62,8 +62,8 @@ func ExtractStacktrace(err error) *Stacktrace {
 		return nil
 	}
 
-	frames := extractFrames(pcs)
-	frames = filterFrames(frames)
+	runtimeFrames := extractFrames(pcs)
+	frames := createFrames(runtimeFrames)
 
 	stacktrace := Stacktrace{
 		Frames: frames,
@@ -192,6 +192,17 @@ type Frame struct {
 
 // NewFrame assembles a stacktrace frame out of runtime.Frame.
 func NewFrame(f runtime.Frame) Frame {
+	function := f.Function
+	var pkg string
+
+	if function != "" {
+		pkg, function = splitQualifiedFunctionName(function)
+	}
+
+	return newFrame(f, pkg, function)
+}
+
+func newFrame(f runtime.Frame, module string, function string) Frame {
 	var abspath, relpath string
 	// NOTE: f.File paths historically use forward slash as path separator even
 	// on Windows, though this is not yet documented, see
@@ -220,18 +231,11 @@ func NewFrame(f runtime.Frame) Frame {
 		abspath = ""
 	}
 
-	function := f.Function
-	var pkg string
-
-	if function != "" {
-		pkg, function = splitQualifiedFunctionName(function)
-	}
-
 	frame := Frame{
 		AbsPath:  abspath,
 		Filename: relpath,
 		Lineno:   f.Line,
-		Module:   pkg,
+		Module:   module,
 		Function: function,
 	}
 
@@ -249,20 +253,21 @@ func splitQualifiedFunctionName(name string) (pkg string, fun string) {
 	return
 }
 
-func extractFrames(pcs []uintptr) []Frame {
-	var frames = make([]Frame, 0, len(pcs))
+func extractFrames(pcs []uintptr) []runtime.Frame {
+	var frames = make([]runtime.Frame, 0, len(pcs))
 	callersFrames := runtime.CallersFrames(pcs)
 
 	for {
 		callerFrame, more := callersFrames.Next()
 
-		frames = append(frames, NewFrame(callerFrame))
+		frames = append(frames, callerFrame)
 
 		if !more {
 			break
 		}
 	}
 
+	// TODO don't append and reverse, put in the right place from the start.
 	// reverse
 	for i, j := 0, len(frames)-1; i < j; i, j = i+1, j-1 {
 		frames[i], frames[j] = frames[j], frames[i]
@@ -271,31 +276,46 @@ func extractFrames(pcs []uintptr) []Frame {
 	return frames
 }
 
-// filterFrames filters out stack frames that are not meant to be reported to
-// Sentry. Those are frames internal to the SDK or Go.
-func filterFrames(frames []Frame) []Frame {
+type frameFactory func(f runtime.Frame, module string, function string) Frame
+
+// createFrames creates Frame objects while filtering out frames that are not
+// meant to be reported to Sentry, those are frames internal to the SDK or Go.
+func createFrames(frames []runtime.Frame) []Frame {
 	if len(frames) == 0 {
 		return nil
 	}
 
-	// reuse
-	filteredFrames := frames[:0]
+	result := make([]Frame, 0, len(frames))
 
 	for _, frame := range frames {
-		// Skip Go internal frames.
-		if frame.Module == "runtime" || frame.Module == "testing" {
-			continue
+		function := frame.Function
+		var pkg string
+		if function != "" {
+			pkg, function = splitQualifiedFunctionName(function)
 		}
-		// Skip Sentry internal frames, except for frames in _test packages (for
-		// testing).
-		if strings.HasPrefix(frame.Module, "github.com/getsentry/sentry-go") &&
-			!strings.HasSuffix(frame.Module, "_test") {
-			continue
+
+		if !shouldSkipFrame(pkg) {
+			result = append(result, newFrame(frame, pkg, function))
 		}
-		filteredFrames = append(filteredFrames, frame)
 	}
 
-	return filteredFrames
+	return result
+}
+
+func shouldSkipFrame(module string) bool {
+	// Skip Go internal frames.
+	if module == "runtime" || module == "testing" {
+		return true
+	}
+
+	// Skip Sentry internal frames, except for frames in _test packages (for
+	// testing).
+	if strings.HasPrefix(module, "github.com/getsentry/sentry-go") &&
+		!strings.HasSuffix(module, "_test") {
+		return true
+	}
+
+	return false
 }
 
 func isInAppFrame(frame Frame) bool {
