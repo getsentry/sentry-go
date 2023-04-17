@@ -36,6 +36,8 @@ if err := sentry.Init(sentry.ClientOptions{
 
 // Then create your app
 app := gin.Default()
+// NOTE: toggle this for tracing
+app.ContextWithFallback = true
 
 // Once it's done, you can attach the handler as one of your middleware
 app.Use(sentrygin.New(sentrygin.Options{}))

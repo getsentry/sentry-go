@@ -13,10 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const (
-	valuesKey      = "sentry"
-	traceValuesKey = "sentry-gin"
-)
+const valuesKey = "sentry"
 
 type handler struct {
 	repanic         bool
@@ -70,7 +67,6 @@ func (h *handler) handle(ctx *gin.Context) {
 
 	ctx.Writer.Header().Set(sentry.SentryTraceHeader, transaction.ToSentryTrace())
 	ctx.Writer.Header().Set(sentry.SentryBaggageHeader, transaction.ToBaggage())
-	ctx.Set(traceValuesKey, transaction)
 
 	ctx.Set(valuesKey, hub)
 	defer h.recoverWithSentry(hub, ctx.Request)
