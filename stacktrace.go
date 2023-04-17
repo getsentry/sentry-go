@@ -174,7 +174,7 @@ type Frame struct {
 	PreContext  []string               `json:"pre_context,omitempty"`
 	ContextLine string                 `json:"context_line,omitempty"`
 	PostContext []string               `json:"post_context,omitempty"`
-	InApp       bool                   `json:"in_app,omitempty"`
+	InApp       bool                   `json:"in_app"`
 	Vars        map[string]interface{} `json:"vars,omitempty"`
 	// Package and the below are not used for Go stack trace frames.  In
 	// other platforms it refers to a container where the Module can be
