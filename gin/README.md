@@ -105,6 +105,19 @@ app.GET("/foo", func(ctx *gin.Context) {
     panic("y tho")
 })
 
+app.GET("/bar", func(ctx *gin.Context) {
+    // NOTE: Use `ctx.Request.Context()` for StartSpan instead of Gin's Context
+    span := sentry.StartSpan(ctx.Request.Context(), "slow 1")
+    time.Sleep(100 * time.Millisecond)
+    span.Finish()
+
+    span = sentry.StartSpan(ctx.Request.Context(), "slow 2")
+    time.Sleep(100 * time.Millisecond)
+    span.Finish()
+
+    ctx.String(http.StatusOK, "bar")
+})
+
 app.Run(":3000")
 ```
 
