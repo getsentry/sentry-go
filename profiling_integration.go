@@ -4,13 +4,13 @@ import (
 	"time"
 )
 
-type profilingIntegration struct{}
+type ProfilingIntegration struct{}
 
-func (pi *profilingIntegration) Name() string {
+func (pi *ProfilingIntegration) Name() string {
 	return "Profiling"
 }
 
-func (pi *profilingIntegration) SetupOnce(client *Client) {
+func (pi *ProfilingIntegration) SetupOnce(client *Client) {
 	client.profilerFactory = func() transactionProfiler {
 		return &_transactionProfiler{
 			stopFunc: startProfiling(),
@@ -44,6 +44,10 @@ func (tp *_transactionProfiler) Finish(span *Span, event *Event) *profileInfo {
 			Name:           span.Name,
 			TraceID:        span.TraceID.String(),
 		},
+	}
+	if len(info.Transaction.Name) == 0 {
+		// Name is required by Relay so use the operation name if the span name is empty.
+		info.Transaction.Name = span.Op
 	}
 	if runtimeContext, ok := event.Contexts["runtime"]; ok {
 		if value, ok := runtimeContext["name"]; !ok {

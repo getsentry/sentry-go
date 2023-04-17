@@ -56,7 +56,7 @@ type (
 	}
 
 	profileInfo struct {
-		DebugMeta   DebugMeta     `json:"debug_meta"`
+		DebugMeta   *DebugMeta    `json:"debug_meta,omitempty"`
 		Device      profileDevice `json:"device"`
 		Environment string        `json:"environment,omitempty"`
 		EventID     string        `json:"event_id"`

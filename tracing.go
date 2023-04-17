@@ -215,7 +215,7 @@ func (s *Span) Finish() {
 	}
 
 	if s.profiler != nil {
-		s.profiler.Finish(s, event)
+		event.transactionProfile = s.profiler.Finish(s, event)
 	}
 
 	// TODO(tracing): add breadcrumbs

@@ -12,7 +12,7 @@ func TestTraceProfiling(t *testing.T) {
 		TracesSampleRate: 1.0,
 		Transport:        transport,
 		Integrations: func(integrations []Integration) []Integration {
-			return append(integrations, &profilingIntegration{})
+			return append(integrations, &ProfilingIntegration{})
 		},
 	})
 	span := StartSpan(ctx, "top")
