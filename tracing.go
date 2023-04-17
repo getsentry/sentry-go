@@ -58,6 +58,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	recorder *spanRecorder
 	// span context, can only be set on transactions
 	contexts map[string]Context
+	// profiler instance if attached, nil otherwise.
+	profiler transactionProfiler
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -175,12 +177,22 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		span.recorder = parent.spanRecorder()
 	} else {
 		span.recorder = &spanRecorder{}
+
 	}
 	span.recorder.record(&span)
 
+	hub := hubFromContext(ctx)
+
 	// Update scope so that all events include a trace context, allowing
 	// Sentry to correlate errors to transactions/spans.
-	hubFromContext(ctx).Scope().SetContext("trace", span.traceContext().Map())
+	hub.Scope().SetContext("trace", span.traceContext().Map())
+
+	// Start profiling only if it's a sampled root transaction.
+	if span.IsTransaction() && span.Sampled.Bool() {
+		if profilerFactory := hub.Client().profilerFactory; profilerFactory != nil {
+			span.profiler = profilerFactory()
+		}
+	}
 
 	return &span
 }
@@ -200,6 +212,10 @@ func (s *Span) Finish() {
 	event := s.toEvent()
 	if event == nil {
 		return
+	}
+
+	if s.profiler != nil {
+		s.profiler.Finish(s, event)
 	}
 
 	// TODO(tracing): add breadcrumbs

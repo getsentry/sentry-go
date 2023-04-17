@@ -228,6 +228,9 @@ type Client struct {
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
 	Transport Transport
+
+	// Transaction (tracing) startProfiling.
+	profilerFactory func() transactionProfiler
 }
 
 // NewClient creates and returns an instance of Client configured using

@@ -70,7 +70,7 @@ type (
 		// RetentionDays int                       `json:"retention_days"`
 		Runtime     profileRuntime     `json:"runtime"`
 		Timestamp   time.Time          `json:"timestamp"`
-		Trace       profileTrace       `json:"profile"`
+		Trace       *profileTrace      `json:"profile"`
 		Transaction profileTransaction `json:"transaction"`
 		// Transactions []transaction.Transaction `json:"transactions,omitempty"`
 		Version string `json:"version"`

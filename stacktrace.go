@@ -276,8 +276,6 @@ func extractFrames(pcs []uintptr) []runtime.Frame {
 	return frames
 }
 
-type frameFactory func(f runtime.Frame, module string, function string) Frame
-
 // createFrames creates Frame objects while filtering out frames that are not
 // meant to be reported to Sentry, those are frames internal to the SDK or Go.
 func createFrames(frames []runtime.Frame) []Frame {

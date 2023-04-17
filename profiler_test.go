@@ -8,7 +8,7 @@ import (
 )
 
 func TestStart(t *testing.T) {
-	stopFn := startProfiler()
+	stopFn := startProfiling()
 	time.Sleep(300 * time.Millisecond)
 	trace := stopFn()
 	require.NotEmpty(t, trace.Samples)

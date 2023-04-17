@@ -94,6 +94,22 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
+func encodeEnvelopeItem(enc *json.Encoder, itemType string, body json.RawMessage) error {
+	// Item header
+	err := enc.Encode(struct {
+		Type   string `json:"type"`
+		Length int    `json:"length"`
+	}{
+		Type:   transactionType,
+		Length: len(body),
+	})
+	if err == nil {
+		// payload
+		err = enc.Encode(body)
+	}
+	return err
+}
+
 func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -127,21 +143,22 @@ func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body 
 		return nil, err
 	}
 
-	// Item header
-	err = enc.Encode(struct {
-		Type   string `json:"type"`
-		Length int    `json:"length"`
-	}{
-		Type:   transactionType,
-		Length: len(body),
-	})
+	err = encodeEnvelopeItem(enc, transactionType, body)
 	if err != nil {
 		return nil, err
 	}
-	// payload
-	err = enc.Encode(body)
-	if err != nil {
-		return nil, err
+
+	// Profile data
+	if event.transactionProfile != nil {
+		event.transactionProfile.Transaction.ID = string(event.EventID)
+		body, err = json.Marshal(event.transactionProfile)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeEnvelopeItem(enc, "profile", body)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &b, nil

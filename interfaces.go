@@ -311,6 +311,9 @@ type Event struct {
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
+
+	// TODO remove once https://github.com/getsentry/sentry-go/issues/629 is implemented
+	transactionProfile *profileInfo
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,

@@ -402,7 +402,7 @@ func Test_entry2event(t *testing.T) {
 			got := h.entryToEvent(tt.entry)
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(sentry.Event{},
-					"sdkMetaData",
+					"sdkMetaData", "transactionProfile",
 				),
 			}
 			if d := cmp.Diff(tt.want, got, opts); d != "" {
