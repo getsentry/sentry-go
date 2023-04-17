@@ -58,11 +58,9 @@ func (h *handler) handle(ctx *gin.Context) {
 	hub.Scope().SetRequest(ctx.Request)
 
 	options := []sentry.SpanOption{
-		sentry.ContinueFromHeaders(
-			ctx.GetHeader(sentry.SentryTraceHeader),
-			ctx.GetHeader(sentry.SentryBaggageHeader),
-		),
+		sentry.ContinueFromRequest(ctx.Request),
 		sentry.TransctionSource(sentry.SourceURL),
+		sentry.OpName("gin.Server"),
 	}
 	transaction := sentry.StartTransaction(
 		ctx, fmt.Sprintf("%v %v", ctx.Request.Method, ctx.FullPath()),

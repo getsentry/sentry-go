@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
@@ -24,6 +25,9 @@ func main() {
 		},
 		Debug:            true,
 		AttachStacktrace: true,
+		TracesSampleRate: 1,
+		SampleRate:       1,
+		EnableTracing:    true,
 	})
 
 	app := gin.Default()
@@ -53,6 +57,18 @@ func main() {
 		// sentrygin handler will catch it just fine, and because we attached "someRandomTag"
 		// in the middleware before, it will be sent through as well
 		panic("y tho")
+	})
+
+	app.GET("/bar", func(ctx *gin.Context) {
+		span := sentry.StartSpan(ctx.Request.Context(), "slow 1")
+		time.Sleep(100 * time.Millisecond)
+		span.Finish()
+
+		span = sentry.StartSpan(ctx.Request.Context(), "slow 2")
+		time.Sleep(100 * time.Millisecond)
+		span.Finish()
+
+		ctx.String(http.StatusOK, "bar")
 	})
 
 	_ = app.Run(":3000")
