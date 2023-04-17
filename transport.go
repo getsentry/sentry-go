@@ -100,7 +100,7 @@ func encodeEnvelopeItem(enc *json.Encoder, itemType string, body json.RawMessage
 		Type   string `json:"type"`
 		Length int    `json:"length"`
 	}{
-		Type:   transactionType,
+		Type:   itemType,
 		Length: len(body),
 	})
 	if err == nil {
