@@ -63,6 +63,10 @@ func (h *handler) handle(ctx *gin.Context) {
 		ctx.Request.Context(), fmt.Sprintf("%v %v", ctx.Request.Method, ctx.FullPath()),
 		options...,
 	)
+	defer func() {
+		transaction.Status = sentry.FromHTTPStatusToSpanStatus(ctx.Writer.Status())
+		transaction.Finish()
+	}()
 	ctx.Request = ctx.Request.WithContext(transaction.Context())
 
 	ctx.Writer.Header().Set(sentry.SentryTraceHeader, transaction.ToSentryTrace())
@@ -71,9 +75,6 @@ func (h *handler) handle(ctx *gin.Context) {
 	ctx.Set(valuesKey, hub)
 	defer h.recoverWithSentry(hub, ctx.Request)
 	ctx.Next()
-
-	transaction.Status = sentry.FromHTTPStatusToSpanStatus(ctx.Writer.Status())
-	transaction.Finish()
 }
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
