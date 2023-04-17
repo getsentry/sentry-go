@@ -106,12 +106,11 @@ app.GET("/foo", func(ctx *gin.Context) {
 })
 
 app.GET("/bar", func(ctx *gin.Context) {
-    // NOTE: Use `ctx.Request.Context()` for StartSpan instead of Gin's Context
-    span := sentry.StartSpan(ctx.Request.Context(), "slow 1")
+    span := sentry.StartSpan(ctx, "slow 1")
     time.Sleep(100 * time.Millisecond)
     span.Finish()
 
-    span = sentry.StartSpan(ctx.Request.Context(), "slow 2")
+    span = sentry.StartSpan(ctx, "slow 2")
     time.Sleep(100 * time.Millisecond)
     span.Finish()
 

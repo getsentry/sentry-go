@@ -31,6 +31,8 @@ func main() {
 	})
 
 	app := gin.Default()
+	// NOTE: toggle this for tracing
+	app.ContextWithFallback = true
 
 	app.Use(sentrygin.New(sentrygin.Options{
 		Repanic: true,
@@ -60,11 +62,11 @@ func main() {
 	})
 
 	app.GET("/bar", func(ctx *gin.Context) {
-		span := sentry.StartSpan(ctx.Request.Context(), "slow 1")
+		span := sentry.StartSpan(ctx, "slow 1")
 		time.Sleep(100 * time.Millisecond)
 		span.Finish()
 
-		span = sentry.StartSpan(ctx.Request.Context(), "slow 2")
+		span = sentry.StartSpan(ctx, "slow 2")
 		time.Sleep(100 * time.Millisecond)
 		span.Finish()
 

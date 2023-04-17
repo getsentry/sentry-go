@@ -63,10 +63,9 @@ func (h *handler) handle(ctx *gin.Context) {
 		sentry.OpName("gin.Server"),
 	}
 	transaction := sentry.StartTransaction(
-		ctx, fmt.Sprintf("%v %v", ctx.Request.Method, ctx.FullPath()),
+		ctx.Request.Context(), fmt.Sprintf("%v %v", ctx.Request.Method, ctx.FullPath()),
 		options...,
 	)
-
 	ctx.Request = ctx.Request.WithContext(transaction.Context())
 
 	ctx.Writer.Header().Set(sentry.SentryTraceHeader, transaction.ToSentryTrace())
