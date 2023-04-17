@@ -35,18 +35,6 @@ func setupSpanProcessorTest() (otelSdkTrace.SpanProcessor, *otelSdkTrace.TracerP
 	return spanProcessor, tp, tracer
 }
 
-func transactionName(span *sentry.Span) string {
-	hub := sentry.GetHubFromContext(span.Context())
-	if hub == nil {
-		log.Fatal("Cannot extract transaction name: Hub is nil")
-	}
-	scope := hub.Scope()
-	if scope == nil {
-		log.Fatal("Cannot extract transaction name: Hub is nil")
-	}
-	return scope.Transaction()
-}
-
 func emptyContextWithSentry() context.Context {
 	client, _ := sentry.NewClient(sentry.ClientOptions{
 		Dsn:              "https://abc@example.com/123",
@@ -131,7 +119,7 @@ func TestOnStartRootSpan(t *testing.T) {
 	assertEqual(t, sentrySpan.ParentSpanID, sentry.SpanID{})
 	assertTrue(t, sentrySpan.IsTransaction())
 	assertEqual(t, sentrySpan.Sampled, sentry.SampledTrue)
-	assertEqual(t, transactionName(sentrySpan), "spanName")
+	assertEqual(t, sentrySpan.Name, "spanName")
 
 	testutils.AssertBaggageStringsEqual(
 		t,
@@ -185,7 +173,7 @@ func TestOnStartWithTraceParentContext(t *testing.T) {
 	assertEqual(t, sentrySpan.ParentSpanID, SpanIDFromHex("b72fa28504b07285"))
 	assertTrue(t, sentrySpan.IsTransaction())
 	assertEqual(t, sentrySpan.Sampled, sentry.SampledFalse)
-	assertEqual(t, transactionName(sentrySpan), "spanName")
+	assertEqual(t, sentrySpan.Name, "spanName")
 	assertEqual(t, sentrySpan.Status, sentry.SpanStatusUndefined)
 	assertEqual(t, sentrySpan.Source, sentry.SourceCustom)
 
@@ -230,7 +218,7 @@ func TestOnStartWithExistingParentSpan(t *testing.T) {
 	assertEqual(t, sentryChildSpan.SpanID.String(), otelChildSpan.SpanContext().SpanID().String())
 	assertEqual(t, sentryChildSpan.TraceID.String(), "bc6d53f15eb88f4320054569b8c553d4")
 	assertFalse(t, sentryChildSpan.IsTransaction())
-	assertEqual(t, transactionName(sentryChildSpan), "rootSpan")
+	assertEqual(t, sentryChildSpan.GetTransaction().Name, "rootSpan")
 	assertEqual(t, sentryChildSpan.Op, "childSpan")
 }
 
@@ -338,4 +326,78 @@ func TestOnEndDoesNotFinishSentryRequests(t *testing.T) {
 	sentryTransport := getSentryTransportFromContext(ctx)
 	events := sentryTransport.Events()
 	assertEqual(t, len(events), 0)
+}
+
+func TestParseSpanAttributesHttpClient(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+	ctx, otelRootSpan := tracer.Start(
+		emptyContextWithSentry(),
+		"rootSpan",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(attribute.String("http.method", "GET")),
+		trace.WithAttributes(attribute.String("http.url", "http://localhost:1234/api/checkout1?q1=q2#fragment")),
+	)
+	_, otelChildSpan := tracer.Start(ctx,
+		"childSpan",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(attribute.String("http.method", "POST")),
+		trace.WithAttributes(attribute.String("http.url", "http://localhost:2345/api/checkout2?q1=q2#fragment")),
+	)
+
+	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
+	sentrySpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().SpanID())
+
+	otelChildSpan.End()
+	otelRootSpan.End()
+
+	// Transaction
+	assertEqual(t, sentryTransaction.Name, "GET http://localhost:1234/api/checkout1")
+	assertEqual(t, sentryTransaction.Description, "")
+	assertEqual(t, sentryTransaction.Op, "http.client")
+	assertEqual(t, sentryTransaction.Source, sentry.TransactionSource("url"))
+
+	// Span
+	assertEqual(t, sentrySpan.Name, "")
+	assertEqual(t, sentrySpan.Description, "POST http://localhost:2345/api/checkout2")
+	assertEqual(t, sentrySpan.Op, "http.client")
+	assertEqual(t, sentrySpan.Source, sentry.TransactionSource(""))
+}
+
+func TestParseSpanAttributesHttpServer(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+	ctx, otelRootSpan := tracer.Start(
+		emptyContextWithSentry(),
+		"rootSpan",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(attribute.String("http.method", "GET")),
+		trace.WithAttributes(attribute.String("http.target", "/api/checkout1?k=v")),
+		// We ignore "http.url" if "http.target" is present
+		trace.WithAttributes(attribute.String("http.url", "http://localhost:1234/api/checkout?q1=q2#fragment")),
+	)
+	_, otelChildSpan := tracer.Start(
+		ctx,
+		"span name",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(attribute.String("http.method", "POST")),
+		trace.WithAttributes(attribute.String("http.target", "/api/checkout2?k=v")),
+		// We ignore "http.url" if "http.target" is present
+		trace.WithAttributes(attribute.String("http.url", "http://localhost:2345/api/checkout?q1=q2#fragment")),
+	)
+	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
+	sentrySpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().SpanID())
+
+	otelChildSpan.End()
+	otelRootSpan.End()
+
+	// Transaction
+	assertEqual(t, sentryTransaction.Name, "GET /api/checkout1")
+	assertEqual(t, sentryTransaction.Description, "")
+	assertEqual(t, sentryTransaction.Op, "http.server")
+	assertEqual(t, sentryTransaction.Source, sentry.TransactionSource("url"))
+
+	// Span
+	assertEqual(t, sentrySpan.Name, "")
+	assertEqual(t, sentrySpan.Description, "POST /api/checkout2")
+	assertEqual(t, sentrySpan.Op, "http.server")
+	assertEqual(t, sentrySpan.Source, sentry.TransactionSource(""))
 }

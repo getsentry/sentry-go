@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,6 +27,7 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	TraceID      TraceID                `json:"trace_id"`
 	SpanID       SpanID                 `json:"span_id"`
 	ParentSpanID SpanID                 `json:"parent_span_id"`
+	Name         string                 `json:"name,omitempty"`
 	Op           string                 `json:"op,omitempty"`
 	Description  string                 `json:"description,omitempty"`
 	Status       SpanStatus             `json:"status,omitempty"`
@@ -36,6 +38,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	Sampled      Sampled                `json:"-"`
 	Source       TransactionSource      `json:"-"`
 
+	// mu protects concurrent writes to map fields
+	mu sync.RWMutex
 	// sample rate the span was sampled with.
 	sampleRate float64
 	// ctx is the context where the span was started. Always non-nil.
@@ -52,6 +56,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	isTransaction bool
 	// recorder stores all spans in a transaction. Guaranteed to be non-nil.
 	recorder *spanRecorder
+	// span context, can only be set on transactions
+	contexts map[string]Context
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -108,6 +114,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		parent:        parent,
 		isTransaction: !hasParent,
 	}
+
 	if hasParent {
 		span.TraceID = parent.TraceID
 	} else {
@@ -199,9 +206,6 @@ func (s *Span) Finish() {
 	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
 
 	hub := hubFromContext(s.ctx)
-	if hub.Scope().Transaction() == "" {
-		Logger.Printf("Missing transaction name for span with op = %q", s.Op)
-	}
 	hub.CaptureEvent(event)
 }
 
@@ -220,6 +224,9 @@ func (s *Span) StartChild(operation string, options ...SpanOption) *Span {
 // accessing the tags map directly as SetTag takes care of initializing the map
 // when necessary.
 func (s *Span) SetTag(name, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.Tags == nil {
 		s.Tags = make(map[string]string)
 	}
@@ -230,10 +237,26 @@ func (s *Span) SetTag(name, value string) {
 // accessing the data map directly as SetData takes care of initializing the map
 // when necessary.
 func (s *Span) SetData(name, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.Data == nil {
 		s.Data = make(map[string]interface{})
 	}
 	s.Data[name] = value
+}
+
+// SetContext sets a context on the span. It is recommended to use SetContext instead of
+// accessing the contexts map directly as SetContext takes care of initializing the map
+// when necessary.
+func (s *Span) SetContext(key string, value Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.contexts == nil {
+		s.contexts = make(map[string]Context)
+	}
+	s.contexts[key] = value
 }
 
 // IsTransaction checks if the given span is a transaction.
@@ -412,7 +435,11 @@ func (s *Span) sample() Sampled {
 
 	// #3 use TracesSampler from ClientOptions.
 	sampler := clientOptions.TracesSampler
-	samplingContext := SamplingContext{Span: s, Parent: s.parent}
+	samplingContext := SamplingContext{
+		Span:   s,
+		Parent: s.parent,
+	}
+
 	if sampler != nil {
 		tracesSamplerSampleRate := sampler.Sample(samplingContext)
 		s.sampleRate = tracesSamplerSampleRate
@@ -463,10 +490,12 @@ func (s *Span) sample() Sampled {
 }
 
 func (s *Span) toEvent() *Event {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if !s.isTransaction {
 		return nil // only transactions can be transformed into events
 	}
-	hub := hubFromContext(s.ctx)
 
 	children := s.recorder.children()
 	finished := make([]*Span, 0, len(children))
@@ -484,17 +513,21 @@ func (s *Span) toEvent() *Event {
 		s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(s)
 	}
 
+	contexts := map[string]Context{}
+	for k, v := range s.contexts {
+		contexts[k] = v
+	}
+	contexts["trace"] = s.traceContext().Map()
+
 	return &Event{
 		Type:        transactionType,
-		Transaction: hub.Scope().Transaction(),
-		Contexts: map[string]Context{
-			"trace": s.traceContext().Map(),
-		},
-		Tags:      s.Tags,
-		Extra:     s.Data,
-		Timestamp: s.EndTime,
-		StartTime: s.StartTime,
-		Spans:     finished,
+		Transaction: s.Name,
+		Contexts:    contexts,
+		Tags:        s.Tags,
+		Extra:       s.Data,
+		Timestamp:   s.EndTime,
+		StartTime:   s.StartTime,
+		Spans:       finished,
 		TransactionInfo: &TransactionInfo{
 			Source: s.Source,
 		},
@@ -792,29 +825,60 @@ type SpanOption func(s *Span)
 // A span tree has a single transaction name, therefore using this option when
 // starting a span affects the span tree as a whole, potentially overwriting a
 // name set previously.
+//
+// Deprecated: Use WithTransactionSource() instead.
 func TransactionName(name string) SpanOption {
+	return WithTransactionName(name)
+}
+
+// WithTransactionName option sets the name of the current transaction.
+//
+// A span tree has a single transaction name, therefore using this option when
+// starting a span affects the span tree as a whole, potentially overwriting a
+// name set previously.
+func WithTransactionName(name string) SpanOption {
 	return func(s *Span) {
-		hubFromContext(s.Context()).Scope().SetTransaction(name)
+		s.Name = name
 	}
 }
 
 // OpName sets the operation name for a given span.
+//
+// Deprecated: Use WithOpName() instead.
 func OpName(name string) SpanOption {
+	return WithOpName(name)
+}
+
+// WithOpName sets the operation name for a given span.
+func WithOpName(name string) SpanOption {
 	return func(s *Span) {
 		s.Op = name
 	}
 }
 
 // TransctionSource sets the source of the transaction name.
-// TODO(anton): Fix the typo.
+//
+// Deprecated: Use WithTransactionSource() instead.
 func TransctionSource(source TransactionSource) SpanOption {
+	return WithTransactionSource(source)
+}
+
+// WithTransactionSource sets the source of the transaction name.
+func WithTransactionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
 	}
 }
 
 // SpanSampled updates the sampling flag for a given span.
+//
+// Deprecated: Use WithSpanSampled() instead.
 func SpanSampled(sampled Sampled) SpanOption {
+	return WithSpanSampled(sampled)
+}
+
+// WithSpanSampled updates the sampling flag for a given span.
+func WithSpanSampled(sampled Sampled) SpanOption {
 	return func(s *Span) {
 		s.Sampled = sampled
 	}
@@ -910,7 +974,7 @@ func StartTransaction(ctx context.Context, name string, options ...SpanOption) *
 		return currentTransaction
 	}
 
-	options = append(options, TransactionName(name))
+	options = append(options, WithTransactionName(name))
 	return StartSpan(
 		ctx,
 		"",

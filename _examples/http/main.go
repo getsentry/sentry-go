@@ -70,24 +70,11 @@ func run() error {
 		TracesSampleRate: 1.0,
 		// ... or a TracesSampler
 		TracesSampler: sentry.TracesSampler(func(ctx sentry.SamplingContext) float64 {
-			// As an example, this custom sampler does not send some
-			// transactions to Sentry based on their name.
-			hub := sentry.GetHubFromContext(ctx.Span.Context())
-			name := hub.Scope().Transaction()
-			if name == "GET /favicon.ico" {
+			// Don't sample health checks.
+			if ctx.Span.Name == "GET /health" {
 				return 0.0
 			}
-			if strings.HasPrefix(name, "HEAD") {
-				return 0.0
-			}
-			// As an example, sample some transactions with a uniform rate.
-			if strings.HasPrefix(name, "POST") {
-				return 0.2
-			}
-			// Sample all other transactions for testing. On
-			// production, use TracesSampleRate with a rate adequate
-			// for your traffic, or use the SamplingContext to
-			// customize sampling per-transaction.
+
 			return 1.0
 		}),
 	})
@@ -119,7 +106,7 @@ func run() error {
 
 		// Set a custom transaction name: use "Home" instead of the
 		// default "/" based on r.URL.Path.
-		hub.Scope().SetTransaction("Home")
+		sentry.TransactionFromContext(ctx).Name = "Home"
 
 		// The next block of code shows how to instrument concurrent
 		// tasks.
