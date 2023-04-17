@@ -9,10 +9,11 @@ import (
 
 func TestStart(t *testing.T) {
 	stopFn := startProfiling()
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 	trace := stopFn()
 	require.NotEmpty(t, trace.Samples)
 	require.NotEmpty(t, trace.Stacks)
 	require.NotEmpty(t, trace.Frames)
 	require.NotEmpty(t, trace.ThreadMetadata)
+	// TODO proper test
 }

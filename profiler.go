@@ -15,6 +15,7 @@ func startProfiling() func() *profileTrace {
 		ThreadMetadata: make(map[string]profileThreadMetadata, 10),
 	}
 	profiler := &profileRecorder{
+		startTime:     time.Now(),
 		trace:         trace,
 		recordsBuffer: make([]runtime.StackRecord, runtime.NumGoroutine()+stacksBufferGrow),
 		stackIndexes:  make(map[[32]uintptr]int, cap(trace.Stacks)),

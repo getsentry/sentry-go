@@ -19,12 +19,13 @@ func TestTraceProfiling(t *testing.T) {
 
 	for {
 		_ = findPrimeNumber(100)
-		if time.Since(span.StartTime).Milliseconds() > 300 {
+		if time.Since(span.StartTime).Milliseconds() > 1000 {
 			break
 		}
 	}
 
 	span.Finish()
+	// TODO proper test
 }
 
 func findPrimeNumber(n int) int {

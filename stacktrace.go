@@ -316,10 +316,13 @@ func shouldSkipFrame(module string) bool {
 	return false
 }
 
+// On Windows, GOROOT has backslashes, but we want forward slashes.
+var goRoot = strings.ReplaceAll(build.Default.GOROOT, "\\", "/")
+
 func isInAppFrame(frame Frame) bool {
-	if strings.HasPrefix(frame.AbsPath, build.Default.GOROOT) ||
-		strings.Contains(frame.Module, "vendor") ||
-		strings.Contains(frame.Module, "third_party") {
+	if strings.Contains(frame.Module, "vendor") ||
+		strings.Contains(frame.Module, "third_party") ||
+		strings.HasPrefix(frame.AbsPath, goRoot) {
 		return false
 	}
 
