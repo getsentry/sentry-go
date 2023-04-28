@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -37,6 +38,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	Sampled      Sampled                `json:"-"`
 	Source       TransactionSource      `json:"-"`
 
+	// mu protects concurrent writes to map fields
+	mu sync.RWMutex
 	// sample rate the span was sampled with.
 	sampleRate float64
 	// ctx is the context where the span was started. Always non-nil.
@@ -221,6 +224,9 @@ func (s *Span) StartChild(operation string, options ...SpanOption) *Span {
 // accessing the tags map directly as SetTag takes care of initializing the map
 // when necessary.
 func (s *Span) SetTag(name, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.Tags == nil {
 		s.Tags = make(map[string]string)
 	}
@@ -231,6 +237,9 @@ func (s *Span) SetTag(name, value string) {
 // accessing the data map directly as SetData takes care of initializing the map
 // when necessary.
 func (s *Span) SetData(name, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.Data == nil {
 		s.Data = make(map[string]interface{})
 	}
@@ -241,6 +250,9 @@ func (s *Span) SetData(name, value string) {
 // accessing the contexts map directly as SetContext takes care of initializing the map
 // when necessary.
 func (s *Span) SetContext(key string, value Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.contexts == nil {
 		s.contexts = make(map[string]Context)
 	}
@@ -478,6 +490,9 @@ func (s *Span) sample() Sampled {
 }
 
 func (s *Span) toEvent() *Event {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if !s.isTransaction {
 		return nil // only transactions can be transformed into events
 	}
@@ -772,29 +787,60 @@ type SpanOption func(s *Span)
 // A span tree has a single transaction name, therefore using this option when
 // starting a span affects the span tree as a whole, potentially overwriting a
 // name set previously.
+//
+// Deprecated: Use WithTransactionSource() instead.
 func TransactionName(name string) SpanOption {
+	return WithTransactionName(name)
+}
+
+// WithTransactionName option sets the name of the current transaction.
+//
+// A span tree has a single transaction name, therefore using this option when
+// starting a span affects the span tree as a whole, potentially overwriting a
+// name set previously.
+func WithTransactionName(name string) SpanOption {
 	return func(s *Span) {
 		s.Name = name
 	}
 }
 
 // OpName sets the operation name for a given span.
+//
+// Deprecated: Use WithOpName() instead.
 func OpName(name string) SpanOption {
+	return WithOpName(name)
+}
+
+// WithOpName sets the operation name for a given span.
+func WithOpName(name string) SpanOption {
 	return func(s *Span) {
 		s.Op = name
 	}
 }
 
 // TransctionSource sets the source of the transaction name.
-// TODO(anton): Fix the typo.
+//
+// Deprecated: Use WithTransactionSource() instead.
 func TransctionSource(source TransactionSource) SpanOption {
+	return WithTransactionSource(source)
+}
+
+// WithTransactionSource sets the source of the transaction name.
+func WithTransactionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
 	}
 }
 
 // SpanSampled updates the sampling flag for a given span.
+//
+// Deprecated: Use WithSpanSampled() instead.
 func SpanSampled(sampled Sampled) SpanOption {
+	return WithSpanSampled(sampled)
+}
+
+// WithSpanSampled updates the sampling flag for a given span.
+func WithSpanSampled(sampled Sampled) SpanOption {
 	return func(s *Span) {
 		s.Sampled = sampled
 	}
@@ -890,7 +936,7 @@ func StartTransaction(ctx context.Context, name string, options ...SpanOption) *
 		return currentTransaction
 	}
 
-	options = append(options, TransactionName(name))
+	options = append(options, WithTransactionName(name))
 	return StartSpan(
 		ctx,
 		"",

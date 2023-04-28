@@ -106,7 +106,7 @@ func TestStartSpan(t *testing.T) {
 		"k": "v",
 	}
 	span := StartSpan(ctx, op,
-		TransactionName(transaction),
+		WithTransactionName(transaction),
 		func(s *Span) {
 			s.Description = description
 			s.Status = status
@@ -177,7 +177,7 @@ func TestStartChild(t *testing.T) {
 		TracesSampleRate: 1.0,
 		Transport:        transport,
 	})
-	span := StartSpan(ctx, "top", TransactionName("Test Transaction"))
+	span := StartSpan(ctx, "top", WithTransactionName("Test Transaction"))
 	child := span.StartChild("child")
 	child.Finish()
 	span.Finish()
@@ -476,13 +476,14 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 	tests := []struct {
 		traceStr   string
 		baggageStr string
-		wantSpan   Span
+		// Using a pointer to Span so we don't implicitly copy Span.mu mutex
+		wantSpan *Span
 	}{
 		{
 			// No sentry-trace or baggage => nothing to do, unfrozen DSC
 			traceStr:   "",
 			baggageStr: "",
-			wantSpan: Span{
+			wantSpan: &Span{
 				isTransaction: true,
 				Sampled:       0,
 				dynamicSamplingContext: DynamicSamplingContext{
@@ -495,7 +496,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			// Third-party baggage => nothing to do, unfrozen DSC
 			traceStr:   "",
 			baggageStr: "other-vendor-key1=value1;value2, other-vendor-key2=value3",
-			wantSpan: Span{
+			wantSpan: &Span{
 				isTransaction: true,
 				Sampled:       0,
 				dynamicSamplingContext: DynamicSamplingContext{
@@ -509,7 +510,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			// immediately.
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
 			baggageStr: "",
-			wantSpan: Span{
+			wantSpan: &Span{
 				isTransaction: true,
 				TraceID:       TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
 				ParentSpanID:  SpanIDFromHex("b72fa28504b07285"),
@@ -523,7 +524,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			// sentry-trace and baggage with Sentry values => we freeze immediately.
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
 			baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
-			wantSpan: Span{
+			wantSpan: &Span{
 				isTransaction: true,
 				TraceID:       TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
 				ParentSpanID:  SpanIDFromHex("b72fa28504b07285"),
@@ -541,9 +542,9 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		s := Span{isTransaction: true}
+		s := &Span{isTransaction: true}
 		spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
-		spanOption(&s)
+		spanOption(s)
 
 		assertEqual(t, s, tt.wantSpan)
 	}
@@ -610,7 +611,7 @@ func TestDoubleSampling(t *testing.T) {
 		TracesSampleRate: 1.0,
 		Transport:        transport,
 	})
-	span := StartSpan(ctx, "op", TransactionName("name"))
+	span := StartSpan(ctx, "op", WithTransactionName("name"))
 
 	// CaptureException should not send any event because of SampleRate.
 	GetHubFromContext(ctx).CaptureException(errors.New("ignored"))
@@ -637,7 +638,7 @@ func TestSample(t *testing.T) {
 	ctx = NewTestContext(ClientOptions{
 		EnableTracing: false,
 	})
-	span = StartSpan(ctx, "op", TransactionName("name"))
+	span = StartSpan(ctx, "op", WithTransactionName("name"))
 	if got := span.Sampled; got != SampledFalse {
 		t.Fatalf("got %s, want %s", got, SampledFalse)
 	}
@@ -647,7 +648,7 @@ func TestSample(t *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 0.0,
 	})
-	span = StartSpan(ctx, "op", TransactionName("name"), SpanSampled(SampledTrue))
+	span = StartSpan(ctx, "op", WithTransactionName("name"), WithSpanSampled(SampledTrue))
 	if got := span.Sampled; got != SampledTrue {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
 	}
@@ -659,7 +660,7 @@ func TestSample(t *testing.T) {
 			return 1.0
 		},
 	})
-	span = StartSpan(ctx, "op", TransactionName("name"))
+	span = StartSpan(ctx, "op", WithTransactionName("name"))
 	if got := span.Sampled; got != SampledTrue {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
 	}
@@ -669,7 +670,7 @@ func TestSample(t *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 	})
-	span = StartSpan(ctx, "op", TransactionName("name"))
+	span = StartSpan(ctx, "op", WithTransactionName("name"))
 	childSpan := span.StartChild("child")
 	if got := childSpan.Sampled; got != SampledTrue {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
@@ -680,7 +681,7 @@ func TestSample(t *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 	})
-	span = StartSpan(ctx, "op", TransactionName("name"))
+	span = StartSpan(ctx, "op", WithTransactionName("name"))
 	if got := span.Sampled; got != SampledTrue {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
 	}
@@ -868,4 +869,24 @@ func TestSpanSetContextOverrides(t *testing.T) {
 	transaction.SetContext("a", Context{"foo": 2})
 
 	assertEqual(t, map[string]Context{"a": {"foo": 2}}, transaction.contexts)
+}
+
+// This test should be the only thing to fail when deprecated TransactionName is removed.
+func TestDeprecatedSpanOptionTransactionName(t *testing.T) {
+	StartSpan(context.Background(), "op", TransactionName("name"))
+}
+
+// This test should be the only thing to fail when deprecated OpName is removed.
+func TestDeprecatedSpanOptionOpName(t *testing.T) {
+	StartSpan(context.Background(), "op", OpName("name"))
+}
+
+// This test should be the only thing to fail when deprecated SpanSampled is removed.
+func TestDeprecatedSpanOptionSpanSampled(t *testing.T) {
+	StartSpan(context.Background(), "op", SpanSampled(SampledTrue))
+}
+
+// This test should be the only thing to fail when deprecated TransctionSource is removed.
+func TestDeprecatedSpanOptionTransctionSource(t *testing.T) {
+	StartSpan(context.Background(), "op", TransctionSource("src"))
 }
