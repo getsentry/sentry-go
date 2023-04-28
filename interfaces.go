@@ -314,6 +314,10 @@ type Event struct {
 	sdkMetaData SDKMetaData
 }
 
+// SetException appends the unwrapped errors to the event's exception list.
+//
+// maxErrorDepth is the maximum depth of the error chain we will look
+// into while unwrapping the errors.
 func (e *Event) SetException(exception error, maxErrorDepth int) {
 	err := exception
 	if err == nil {
