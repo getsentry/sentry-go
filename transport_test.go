@@ -150,7 +150,7 @@ func TestTransactionEnvelopeFromBody(t *testing.T) {
 
 	body := json.RawMessage(`{"type":"transaction","fields":"omitted"}`)
 
-	b, err := transactionEnvelopeFromBody(event, dsn, sentAt, body)
+	b, err := envelopeFromBody(event, dsn, sentAt, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestGetRequestFromEvent(t *testing.T) {
 		{
 			testName: "Sample Event",
 			event:    NewEvent(),
-			apiURL:   "https://host/path/api/42/store/",
+			apiURL:   "https://host/path/api/42/envelope/",
 		},
 		{
 			testName: "Transaction",
