@@ -167,14 +167,14 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 	if body == nil {
 		return nil, errors.New("event could not be marshaled")
 	}
-	b, err := envelopeFromBody(event, dsn, time.Now(), body)
+	envelope, err := envelopeFromBody(event, dsn, time.Now(), body)
 	if err != nil {
 		return nil, err
 	}
 	return http.NewRequest(
 		http.MethodPost,
 		dsn.GetAPIURL().String(),
-		b,
+		envelope,
 	)
 }
 
