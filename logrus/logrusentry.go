@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	sentry "github.com/getsentry/sentry-go"
 	"github.com/sirupsen/logrus"
+
+	sentry "github.com/getsentry/sentry-go"
 )
 
 // These default log field keys are used to pass specific metadata in a way that
@@ -37,10 +38,11 @@ const (
 // It is not safe to configure the hook while logging is happening. Please
 // perform all configuration before using it.
 type Hook struct {
-	hub      *sentry.Hub
-	fallback FallbackFunc
-	keys     map[string]string
-	levels   []logrus.Level
+	hub        *sentry.Hub
+	fallback   FallbackFunc
+	contextHub ContextHubFunc
+	keys       map[string]string
+	levels     []logrus.Level
 }
 
 var _ logrus.Hook = &Hook{}
@@ -86,6 +88,18 @@ func (h *Hook) SetFallback(fb FallbackFunc) {
 	h.fallback = fb
 }
 
+// A ContextHubFunc can be used to extract current sentry.Hub from context.
+// It useful when you need capture event with started tracing
+type ContextHubFunc func(*logrus.Entry) *sentry.Hub
+
+// SetContextHub set up a context hub extractor, which will be called in Fire() method.
+// If extractor return non-nil *sentry.Hub, this sentry.Hub will be used for capturing
+// events. It might be used, when you have already filled sentry.Hub, like with set Contexts
+// for distributing tracing
+func (h *Hook) SetContextHub(ch ContextHubFunc) {
+	h.contextHub = ch
+}
+
 // SetKey sets an alternate field key. Use this if the default values conflict
 // with other loggers, for instance. You may pass "" for new, to unset an
 // existing alternate.
@@ -117,7 +131,15 @@ func (h *Hook) Levels() []logrus.Level {
 // Fire sends entry to Sentry.
 func (h *Hook) Fire(entry *logrus.Entry) error {
 	event := h.entryToEvent(entry)
-	if id := h.hub.CaptureEvent(event); id == nil {
+
+	hub := h.hub
+	if h.contextHub != nil {
+		if contextHub := h.contextHub(entry); contextHub != nil {
+			hub = contextHub
+		}
+	}
+
+	if id := hub.CaptureEvent(event); id == nil {
 		if h.fallback != nil {
 			return h.fallback(entry)
 		}
