@@ -27,7 +27,10 @@ func IsSentryRequestSpan(ctx context.Context, s trace.ReadOnlySpan) bool {
 func isSentryRequestUrl(ctx context.Context, url string) bool {
 	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
-		return false
+		hub = sentry.CurrentHub()
+		if hub == nil {
+			return false
+		}
 	}
 
 	client := hub.Client()
@@ -36,5 +39,5 @@ func isSentryRequestUrl(ctx context.Context, url string) bool {
 	}
 
 	dsn, _ := sentry.NewDsn(client.Options().Dsn)
-	return strings.Contains(url, dsn.GetHost())
+	return strings.Contains(url, dsn.GetHost()) && strings.Contains(url, dsn.GetProjectID())
 }
