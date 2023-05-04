@@ -129,7 +129,7 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 
 	var itemType string
 	switch event.Type {
-	case "transaction":
+	case transactionType:
 		itemType = transactionType
 	default:
 		itemType = eventType
