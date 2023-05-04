@@ -127,13 +127,23 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		return nil, err
 	}
 
+	var itemType string
+	switch event.Type {
+	case "transaction":
+		itemType = transactionType
+	default:
+		itemType = eventType
+	}
+
 	// Item header
 	err = enc.Encode(struct {
-		Type   string `json:"type"`
-		Length int    `json:"length"`
+		Type        string `json:"type"`
+		Length      int    `json:"length"`
+		ContentType string `json:"content_type"`
 	}{
-		Type:   transactionType,
-		Length: len(body),
+		Type:        itemType,
+		Length:      len(body),
+		ContentType: "application/json",
 	})
 	if err != nil {
 		return nil, err

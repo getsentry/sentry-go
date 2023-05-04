@@ -180,18 +180,6 @@ func (dsn Dsn) GetProjectID() string {
 	return dsn.projectID
 }
 
-// StoreAPIURL returns the URL of the store endpoint of the project associated
-// with the DSN.
-// func (dsn Dsn) StoreAPIURL() *url.URL {
-// 	return dsn.getAPIURL("store")
-// }
-
-// EnvelopeAPIURL returns the URL of the envelope endpoint of the project
-// associated with the DSN.
-// func (dsn Dsn) EnvelopeAPIURL() *url.URL {
-// 	return dsn.getAPIURL("envelope")
-// }
-
 // GetAPIURL returns the URL of the envelope endpoint of the project
 // associated with the DSN.
 func (dsn Dsn) GetAPIURL() *url.URL {
