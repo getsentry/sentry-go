@@ -15,7 +15,7 @@ Note: this release includes some **deprecations**, which are listed below.
   * It can be used to set or add errors to an existing `Event`.
 
 ### Bug Fixes
-* Protect from concurrent reads/writes to Span data fields ([#609](https://github.com/getsentry/sentry-go/pull/609))
+* Protect from panics while doing concurrent reads/writes to Span data fields ([#609](https://github.com/getsentry/sentry-go/pull/609))
 * [otel] Improve detection of Sentry-related spans ([#632](https://github.com/getsentry/sentry-go/pull/632))
   * Fixes cases when HTTP spans containing requests to Sentry were captured by Sentry ([#627](https://github.com/getsentry/sentry-go/issues/627))
 
