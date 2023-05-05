@@ -46,6 +46,17 @@ func New(options Options) gin.HandlerFunc {
 	}).handle
 }
 
+// NewDefault uses optimized option and returns a function that satisfies gin.HandlerFunc interface
+// It can be used with Use() methods.
+func NewDefault() gin.HandlerFunc {
+	defaultOptions := Options{
+		Repanic:         true,
+		Timeout:         2 * time.Second,
+		WaitForDelivery: false,
+	}
+	return New(defaultOptions)
+}
+
 func (h *handler) handle(ctx *gin.Context) {
 	hub := sentry.GetHubFromContext(ctx.Request.Context())
 	if hub == nil {
