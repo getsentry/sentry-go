@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.21.0
+
+Note: this release includes some **deprecations**, which are listed below.
+
+### Features
+* Rename three span option functions ([#624](https://github.com/getsentry/sentry-go/pull/624))
+  * `SpanSampled` -> `WithSpanSampled`
+  * `OpName` -> `WithOpName`
+  * `TransactionName` -> `WithTransactionName`
+  * Old functions `SpanSampled`, `OpName`, and `TransactionName` are still available but are now **deprecated**, and will be removed in future releases.
+* Make `client.EventFromMessage`, `client.EventFromException` methods public ([#607](https://github.com/getsentry/sentry-go/pull/607))
+* Add `client.SetException` method ([#607](https://github.com/getsentry/sentry-go/pull/607))
+  * It can be used to set or add errors to an existing `Event`.
+
+### Bug Fixes
+* Protect from concurrent reads/writes to Span data fields ([#609](https://github.com/getsentry/sentry-go/pull/609))
+* [otel] Improve detection of Sentry-related spans ([#632](https://github.com/getsentry/sentry-go/pull/632))
+  * Fixes cases when HTTP spans containing requests to Sentry were captured by Sentry ([#627](https://github.com/getsentry/sentry-go/issues/627))
+
+### Misc
+* Drop testing in (legacy) GOPATH mode ([#618](https://github.com/getsentry/sentry-go/pull/618))
+* Remove outdated documentation from https://pkg.go.dev/github.com/getsentry/sentry-go ([#623](https://github.com/getsentry/sentry-go/pull/623))
+
 ## 0.20.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.20.0.
