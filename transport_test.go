@@ -157,7 +157,7 @@ func TestEnvelopeFromErrorBody(t *testing.T) {
 	}
 	got := b.String()
 	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
-{"type":"event","length":35,"content_type":"application/json"}
+{"type":"event","length":35}
 {"type":"event","fields":"omitted"}
 `
 	if diff := cmp.Diff(want, got); diff != "" {
@@ -190,7 +190,7 @@ func TestEnvelopeFromTransactionBody(t *testing.T) {
 	}
 	got := b.String()
 	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
-{"type":"transaction","length":41,"content_type":"application/json"}
+{"type":"transaction","length":41}
 {"type":"transaction","fields":"omitted"}
 `
 	if diff := cmp.Diff(want, got); diff != "" {
