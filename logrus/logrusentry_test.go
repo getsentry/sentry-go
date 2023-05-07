@@ -64,7 +64,7 @@ func TestFire(t *testing.T) {
 	}
 }
 
-func Test_entryToevent(t *testing.T) {
+func Test_entryToEvent(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name  string
