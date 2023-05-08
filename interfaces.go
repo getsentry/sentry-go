@@ -17,6 +17,9 @@ import (
 // transactionType is the type of a transaction event.
 const transactionType = "transaction"
 
+// eventType is the type of an error event.
+const eventType = "event"
+
 // Level marks the severity of the event.
 type Level string
 
