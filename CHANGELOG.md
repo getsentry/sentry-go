@@ -15,19 +15,20 @@ Note: this release includes one **breaking change** and some **deprecations**, w
 
 ### Features
 
-- Rename three span option functions ([#624](https://github.com/getsentry/sentry-go/pull/624))
+- Rename four span option functions ([#611](https://github.com/getsentry/sentry-go/pull/611), [#624](https://github.com/getsentry/sentry-go/pull/624))
+  - `TransctionSource` -> `WithTransactionSource`
   - `SpanSampled` -> `WithSpanSampled`
   - `OpName` -> `WithOpName`
   - `TransactionName` -> `WithTransactionName`
-  - Old functions `SpanSampled`, `OpName`, and `TransactionName` are still available but are now **deprecated** and will be removed in a future release.
-- Make `client.EventFromMessage`, and `client.EventFromException` methods public ([#607](https://github.com/getsentry/sentry-go/pull/607))
+  - Old functions `TransctionSource`, `SpanSampled`, `OpName`, and `TransactionName` are still available but are now **deprecated** and will be removed in a future release.
+- Make `client.EventFromMessage` and `client.EventFromException` methods public ([#607](https://github.com/getsentry/sentry-go/pull/607))
 - Add `client.SetException` method ([#607](https://github.com/getsentry/sentry-go/pull/607))
   - This allows to set or add errors to an existing `Event`.
 
 ### Bug Fixes
 
 - Protect from panics while doing concurrent reads/writes to Span data fields ([#609](https://github.com/getsentry/sentry-go/pull/609))
-- [otel] Improve detection of Sentry-related spans ([#632](https://github.com/getsentry/sentry-go/pull/632)) & ([#636](https://github.com/getsentry/sentry-go/pull/636))
+- [otel] Improve detection of Sentry-related spans ([#632](https://github.com/getsentry/sentry-go/pull/632), [#636](https://github.com/getsentry/sentry-go/pull/636))
   - Fixes cases when HTTP spans containing requests to Sentry were captured by Sentry ([#627](https://github.com/getsentry/sentry-go/issues/627))
 
 ### Misc
