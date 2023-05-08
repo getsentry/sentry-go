@@ -38,6 +38,10 @@ func isSentryRequestUrl(ctx context.Context, url string) bool {
 		return false
 	}
 
-	dsn, _ := sentry.NewDsn(client.Options().Dsn)
-	return strings.Contains(url, dsn.GetHost()) && strings.Contains(url, dsn.GetProjectID())
+	dsn, err := sentry.NewDsn(client.Options().Dsn)
+	if err != nil {
+		return false
+	}
+
+	return strings.Contains(url, dsn.GetAPIURL().String())
 }
