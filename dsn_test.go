@@ -69,13 +69,7 @@ func TestNewDsn(t *testing.T) {
 			if diff := cmp.Diff(tt.dsn, dsn, cmp.AllowUnexported(Dsn{})); diff != "" {
 				t.Errorf("NewDsn() mismatch (-want +got):\n%s", diff)
 			}
-			// Store API URL
-			url := dsn.StoreAPIURL().String()
-			if diff := cmp.Diff(tt.url, url); diff != "" {
-				t.Errorf("dsn.StoreAPIURL() mismatch (-want +got):\n%s", diff)
-			}
-			// Envelope API URL
-			url = dsn.EnvelopeAPIURL().String()
+			url := dsn.GetAPIURL().String()
 			if diff := cmp.Diff(tt.envURL, url); diff != "" {
 				t.Errorf("dsn.EnvelopeAPIURL() mismatch (-want +got):\n%s", diff)
 			}
