@@ -812,7 +812,7 @@ type SpanOption func(s *Span)
 // starting a span affects the span tree as a whole, potentially overwriting a
 // name set previously.
 //
-// Deprecated: Use WithTransactionSource() instead.
+// Deprecated: Use WithTransactionName() instead.
 func TransactionName(name string) SpanOption {
 	return WithTransactionName(name)
 }
@@ -850,6 +850,10 @@ func TransctionSource(source TransactionSource) SpanOption {
 }
 
 // WithTransactionSource sets the source of the transaction name.
+//
+// Note: if the transaction source is not a valid source (as described
+// by the spec https://develop.sentry.dev/sdk/event-payloads/transaction/#transaction-annotations),
+// it will be corrected to "custom" eventually, before the transaction is sent.
 func WithTransactionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
