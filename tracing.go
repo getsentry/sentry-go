@@ -626,7 +626,7 @@ const (
 	SourceTask      TransactionSource = "task"
 )
 
-// A set of all valid transaction sources
+// A set of all valid transaction sources.
 var allTransactionSources = map[TransactionSource]struct{}{
 	SourceCustom:    {},
 	SourceURL:       {},
