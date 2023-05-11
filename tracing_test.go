@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -889,4 +890,39 @@ func TestDeprecatedSpanOptionSpanSampled(t *testing.T) {
 // This test should be the only thing to fail when deprecated TransctionSource is removed.
 func TestDeprecatedSpanOptionTransctionSource(t *testing.T) {
 	StartSpan(context.Background(), "op", TransctionSource("src"))
+}
+
+func TestConcurrentContextAccess(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1,
+	})
+	hub := GetHubFromContext(ctx)
+
+	const writers_num = 200
+	// Unbuffered channel, writing to it will be block if nobody reads
+	c := make(chan *Span)
+	for i := 0; i < writers_num; i++ {
+		go func() {
+			// Every span will be a transaction
+			span := StartSpan(ctx, "test")
+			c <- span
+			hub.Scope().SetContext("device", Context{"test": "bla"})
+		}()
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(writers_num)
+
+	go func() {
+		for span := range c {
+			span := span
+			go func() {
+				span.Finish()
+				wg.Done()
+			}()
+		}
+	}()
+
+	wg.Wait()
 }
