@@ -180,19 +180,9 @@ func (dsn Dsn) GetProjectID() string {
 	return dsn.projectID
 }
 
-// StoreAPIURL returns the URL of the store endpoint of the project associated
-// with the DSN.
-func (dsn Dsn) StoreAPIURL() *url.URL {
-	return dsn.getAPIURL("store")
-}
-
-// EnvelopeAPIURL returns the URL of the envelope endpoint of the project
+// GetAPIURL returns the URL of the envelope endpoint of the project
 // associated with the DSN.
-func (dsn Dsn) EnvelopeAPIURL() *url.URL {
-	return dsn.getAPIURL("envelope")
-}
-
-func (dsn Dsn) getAPIURL(s string) *url.URL {
+func (dsn Dsn) GetAPIURL() *url.URL {
 	var rawURL string
 	rawURL += fmt.Sprintf("%s://%s", dsn.scheme, dsn.host)
 	if dsn.port != dsn.scheme.defaultPort() {
@@ -201,7 +191,7 @@ func (dsn Dsn) getAPIURL(s string) *url.URL {
 	if dsn.path != "" {
 		rawURL += dsn.path
 	}
-	rawURL += fmt.Sprintf("/api/%s/%s/", dsn.projectID, s)
+	rawURL += fmt.Sprintf("/api/%s/%s/", dsn.projectID, "envelope")
 	parsedURL, _ := url.Parse(rawURL)
 	return parsedURL
 }

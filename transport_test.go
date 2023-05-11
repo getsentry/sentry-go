@@ -132,9 +132,43 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 	}
 }
 
-func TestTransactionEnvelopeFromBody(t *testing.T) {
+func TestEnvelopeFromErrorBody(t *testing.T) {
 	const eventID = "b81c5be4d31e48959103a1f878a1efcb"
 	event := NewEvent()
+	event.Type = eventType
+	event.EventID = eventID
+	event.Sdk = SdkInfo{
+		Name:    "sentry.go",
+		Version: "0.0.1",
+	}
+
+	dsn, err := NewDsn("http://public@example.com/sentry/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sentAt := time.Unix(0, 0).UTC()
+
+	body := json.RawMessage(`{"type":"event","fields":"omitted"}`)
+
+	b, err := envelopeFromBody(event, dsn, sentAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
+{"type":"event","length":35}
+{"type":"event","fields":"omitted"}
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestEnvelopeFromTransactionBody(t *testing.T) {
+	const eventID = "b81c5be4d31e48959103a1f878a1efcb"
+	event := NewEvent()
+	event.Type = transactionType
 	event.EventID = eventID
 	event.Sdk = SdkInfo{
 		Name:    "sentry.go",
@@ -150,7 +184,7 @@ func TestTransactionEnvelopeFromBody(t *testing.T) {
 
 	body := json.RawMessage(`{"type":"transaction","fields":"omitted"}`)
 
-	b, err := transactionEnvelopeFromBody(event, dsn, sentAt, body)
+	b, err := envelopeFromBody(event, dsn, sentAt, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +209,7 @@ func TestGetRequestFromEvent(t *testing.T) {
 		{
 			testName: "Sample Event",
 			event:    NewEvent(),
-			apiURL:   "https://host/path/api/42/store/",
+			apiURL:   "https://host/path/api/42/envelope/",
 		},
 		{
 			testName: "Transaction",
