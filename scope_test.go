@@ -618,3 +618,25 @@ func TestEventProcessorsAddEventProcessor(t *testing.T) {
 		t.Error("event should be dropped")
 	}
 }
+
+func TestCloneContext(t *testing.T) {
+	context := Context{
+		"key1": "value1",
+		"key2": []string{"s1", "s2"},
+	}
+
+	clone := cloneContext(context)
+
+	// Value-wise they should be identical
+	assertEqual(t, context, clone)
+	// ..but it shouldn't be the same map
+	if &context == &clone {
+		t.Error("original and cloned context should be different objects")
+	}
+
+	slice_original := context["key2"].([]string)
+	slice_clone := clone["key2"].([]string)
+	if &slice_original[0] != &slice_clone[0] {
+		t.Error("complex values are not supposed to be copied")
+	}
+}

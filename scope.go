@@ -287,7 +287,7 @@ func (scope *Scope) Clone() *Scope {
 		clone.tags[key] = value
 	}
 	for key, value := range scope.contexts {
-		clone.contexts[key] = value
+		clone.contexts[key] = cloneContext(value)
 	}
 	for key, value := range scope.extra {
 		clone.extra[key] = value
@@ -350,7 +350,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 
 			// Ensure we are not overwriting event fields
 			if _, ok := event.Contexts[key]; !ok {
-				event.Contexts[key] = value
+				event.Contexts[key] = cloneContext(value)
 			}
 		}
 	}
@@ -403,4 +403,17 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 	}
 
 	return event
+}
+
+// cloneContext returns a new context with keys and values copied from the passed one.
+//
+// Note: a new Context (map) is returned, but the function does NOT do
+// a proper deep copy: if some context values are pointer types (e.g. maps),
+// they won't be properly copied.
+func cloneContext(c Context) Context {
+	res := Context{}
+	for k, v := range c {
+		res[k] = v
+	}
+	return res
 }
