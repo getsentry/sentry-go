@@ -902,13 +902,13 @@ func TestConcurrentContextAccess(t *testing.T) {
 	})
 	hub := GetHubFromContext(ctx)
 
-	const writers_num = 200
+	const writersNum = 200
 
 	// Unbuffered channel, writing to it will be block if nobody reads
 	c := make(chan *Span)
 
 	// Start writers
-	for i := 0; i < writers_num; i++ {
+	for i := 0; i < writersNum; i++ {
 		go func() {
 			transaction := StartTransaction(ctx, "test")
 			c <- transaction
@@ -917,7 +917,7 @@ func TestConcurrentContextAccess(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(writers_num)
+	wg.Add(writersNum)
 
 	// Start readers
 	go func() {
