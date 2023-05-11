@@ -892,6 +892,9 @@ func TestDeprecatedSpanOptionTransctionSource(t *testing.T) {
 	StartSpan(context.Background(), "op", TransctionSource("src"))
 }
 
+// This test checks that there are no concurrent reads/writes to
+// substructures in scope.contexts.
+// See https://github.com/getsentry/sentry-go/issues/570 for more details.
 func TestConcurrentContextAccess(t *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
@@ -900,13 +903,15 @@ func TestConcurrentContextAccess(t *testing.T) {
 	hub := GetHubFromContext(ctx)
 
 	const writers_num = 200
+
 	// Unbuffered channel, writing to it will be block if nobody reads
 	c := make(chan *Span)
+
+	// Start writers
 	for i := 0; i < writers_num; i++ {
 		go func() {
-			// Every span will be a transaction
-			span := StartSpan(ctx, "test")
-			c <- span
+			transaction := StartTransaction(ctx, "test")
+			c <- transaction
 			hub.Scope().SetContext("device", Context{"test": "bla"})
 		}()
 	}
@@ -914,12 +919,15 @@ func TestConcurrentContextAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(writers_num)
 
+	// Start readers
 	go func() {
-		for span := range c {
-			span := span
+		for transaction := range c {
+			transaction := transaction
 			go func() {
-				span.Finish()
-				wg.Done()
+				defer wg.Done()
+				// While finalizing every transaction, scope.Contexts and Event.Contexts fields
+				// will be accessed, e.g. in environmentIntegration.processor()
+				transaction.Finish()
 			}()
 		}
 	}()
