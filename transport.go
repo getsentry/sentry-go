@@ -110,7 +110,7 @@ func encodeEnvelopeItem(enc *json.Encoder, itemType string, body json.RawMessage
 	return err
 }
 
-func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
+func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 
@@ -143,7 +143,11 @@ func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body 
 		return nil, err
 	}
 
-	err = encodeEnvelopeItem(enc, transactionType, body)
+	if event.Type == transactionType {
+		err = encodeEnvelopeItem(enc, transactionType, body)
+	} else {
+		err = encodeEnvelopeItem(enc, eventType, body)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +159,7 @@ func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body 
 		if err != nil {
 			return nil, err
 		}
-		err = encodeEnvelopeItem(enc, "profile", body)
+		err = encodeEnvelopeItem(enc, profileType, body)
 		if err != nil {
 			return nil, err
 		}
@@ -174,21 +178,14 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 	if body == nil {
 		return nil, errors.New("event could not be marshaled")
 	}
-	if event.Type == transactionType {
-		b, err := transactionEnvelopeFromBody(event, dsn, time.Now(), body)
-		if err != nil {
-			return nil, err
-		}
-		return http.NewRequest(
-			http.MethodPost,
-			dsn.EnvelopeAPIURL().String(),
-			b,
-		)
+	envelope, err := envelopeFromBody(event, dsn, time.Now(), body)
+	if err != nil {
+		return nil, err
 	}
 	return http.NewRequest(
 		http.MethodPost,
-		dsn.StoreAPIURL().String(),
-		bytes.NewReader(body),
+		dsn.GetAPIURL().String(),
+		envelope,
 	)
 }
 

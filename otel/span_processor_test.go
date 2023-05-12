@@ -313,7 +313,7 @@ func TestOnEndDoesNotFinishSentryRequests(t *testing.T) {
 		emptyContextWithSentry(),
 		"POST to Sentry",
 		// Hostname is same as in Sentry DSN
-		trace.WithAttributes(attribute.String("http.url", "https://example.com/sub/route")),
+		trace.WithAttributes(attribute.String("http.url", "https://example.com/api/123/envelope/")),
 	)
 	sentrySpan, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
 	otelSpan.End()
