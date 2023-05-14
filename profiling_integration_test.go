@@ -18,8 +18,8 @@ func TestTraceProfiling(t *testing.T) {
 	span := StartSpan(ctx, "top")
 
 	for {
-		_ = findPrimeNumber(100)
-		if time.Since(span.StartTime).Milliseconds() > 1000 {
+		_ = findPrimeNumber(1000)
+		if time.Since(span.StartTime).Milliseconds() > 350 {
 			break
 		}
 	}

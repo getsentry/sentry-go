@@ -239,7 +239,7 @@ func newFrame(f runtime.Frame, module string, function string) Frame {
 		Function: function,
 	}
 
-	frame.InApp = isInAppFrame(frame)
+	setInAppFrame(&frame)
 
 	return frame
 }
@@ -249,7 +249,9 @@ func newFrame(f runtime.Frame, module string, function string) Frame {
 // runtime.Frame.Function values.
 func splitQualifiedFunctionName(name string) (pkg string, fun string) {
 	pkg = packageName(name)
-	fun = strings.TrimPrefix(name, pkg+".")
+	if len(pkg) > 0 {
+		fun = name[len(pkg)+1:]
+	}
 	return
 }
 
@@ -319,14 +321,14 @@ func shouldSkipFrame(module string) bool {
 // On Windows, GOROOT has backslashes, but we want forward slashes.
 var goRoot = strings.ReplaceAll(build.Default.GOROOT, "\\", "/")
 
-func isInAppFrame(frame Frame) bool {
+func setInAppFrame(frame *Frame) {
 	if strings.Contains(frame.Module, "vendor") ||
 		strings.Contains(frame.Module, "third_party") ||
 		strings.HasPrefix(frame.AbsPath, goRoot) {
-		return false
+		frame.InApp = false
+	} else {
+		frame.InApp = true
 	}
-
-	return true
 }
 
 func callerFunctionName() string {

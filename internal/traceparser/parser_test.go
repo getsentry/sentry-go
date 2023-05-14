@@ -75,7 +75,7 @@ func TestParse(t *testing.T) {
 		var trace = traces.Item(i)
 		require.NotNil(trace)
 		require.Equal(uint64(id), trace.GoID())
-		require.Equal(stack, string(trace.Data))
+		require.Equal(stack, string(trace.UniqueIdentifier()))
 		i++
 	}
 
@@ -131,9 +131,9 @@ func TestFrames(t *testing.T) {
 	var traces = Parse(tracetext)
 	for i := 0; i < traces.Length; i++ {
 		var trace = traces.Item(i)
-		output += fmt.Sprintf("Trace %d: goroutine %d\n", i, trace.GoID())
-
 		var framesIter = trace.FramesReversed()
+		output += fmt.Sprintf("Trace %d: goroutine %d with at most %d frames\n", i, trace.GoID(), framesIter.LengthUpperBound())
+
 		for framesIter.HasNext() {
 			var frame = framesIter.Next()
 			output += fmt.Sprintf("  Func = %s\n", frame.Func())
@@ -144,14 +144,14 @@ func TestFrames(t *testing.T) {
 	}
 
 	var expected = strings.Split(strings.TrimLeft(`
-Trace 0: goroutine 18
+Trace 0: goroutine 18 with at most 2 frames
   Func = time.goFunc
   File = C:/Users/name/scoop/apps/go/current/src/time/sleep.go
   Line = 176
   Func = testing.(*M).startAlarm.func1
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
   Line = 2241
-Trace 1: goroutine 1
+Trace 1: goroutine 1 with at most 6 frames
   Func = main.main
   File = _testmain.go
   Line = 465
@@ -170,7 +170,7 @@ Trace 1: goroutine 1
   Func = testing.(*T).Run
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
   Line = 1630
-Trace 2: goroutine 6
+Trace 2: goroutine 6 with at most 4 frames
   Func = testing.(*T).Run
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
   Line = 1629
@@ -183,7 +183,7 @@ Trace 2: goroutine 6
   Func = github.com/getsentry/sentry-go.startProfiling.func3
   File = c:/dev/sentry-go/profiler.go
   Line = 46
-Trace 3: goroutine 7
+Trace 3: goroutine 7 with at most 4 frames
   Func = github.com/getsentry/sentry-go.startProfiling
   File = c:/dev/sentry-go/profiler.go
   Line = 31
@@ -196,7 +196,7 @@ Trace 3: goroutine 7
   Func = runtime.Stack
   File = C:/Users/name/scoop/apps/go/current/src/runtime/mprof.go
   Line = 1193
-Trace 4: goroutine 19
+Trace 4: goroutine 19 with at most 2 frames
   Func = time.goFunc
   File = C:/Users/name/scoop/apps/go/current/src/time/sleep.go
   Line = 176
@@ -259,7 +259,9 @@ func BenchmarkFullParse(b *testing.B) {
 			var trace = traces.Item(i)
 			_ = trace.GoID()
 
-			for iter := trace.FramesReversed(); iter.HasNext(); {
+			var iter = trace.FramesReversed()
+			_ = iter.LengthUpperBound()
+			for iter.HasNext() {
 				var frame = iter.Next()
 				_ = frame.Func()
 				_, _ = frame.File()
@@ -281,7 +283,7 @@ func BenchmarkSplitOnly(b *testing.B) {
 		var traces = Parse(tracetext)
 		for i := 0; i < traces.Length; i++ {
 			var trace = traces.Item(i)
-			_ = trace.Data
+			_ = trace.UniqueIdentifier()
 		}
 	}
 
