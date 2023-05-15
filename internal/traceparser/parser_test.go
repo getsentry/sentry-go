@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -248,11 +247,8 @@ func BenchmarkEqualPrefix(b *testing.B) {
 }
 
 func BenchmarkFullParse(b *testing.B) {
-	b.ResetTimer()
+	b.SetBytes(int64(len(tracetext)))
 	b.ReportAllocs()
-
-	var start = time.Now()
-	var parsedBytes = len(tracetext) * b.N
 	for i := 0; i < b.N; i++ {
 		var traces = Parse(tracetext)
 		for i := 0; i < traces.Length; i++ {
@@ -268,17 +264,11 @@ func BenchmarkFullParse(b *testing.B) {
 			}
 		}
 	}
-
-	var throughput = float64(parsedBytes) / time.Since(start).Seconds() / 1024 / 1024
-	b.ReportMetric(throughput, "MiB/s")
 }
 
 func BenchmarkSplitOnly(b *testing.B) {
-	b.ResetTimer()
+	b.SetBytes(int64(len(tracetext)))
 	b.ReportAllocs()
-
-	var start = time.Now()
-	var parsedBytes = len(tracetext) * b.N
 	for i := 0; i < b.N; i++ {
 		var traces = Parse(tracetext)
 		for i := 0; i < traces.Length; i++ {
@@ -286,7 +276,4 @@ func BenchmarkSplitOnly(b *testing.B) {
 			_ = trace.UniqueIdentifier()
 		}
 	}
-
-	var throughput = float64(parsedBytes) / time.Since(start).Seconds() / 1024 / 1024
-	b.ReportMetric(throughput, "MiB/s")
 }

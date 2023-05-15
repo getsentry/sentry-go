@@ -10,51 +10,73 @@ import (
 )
 
 // Start collecting profile data and returns a function that stops profiling, producing a Trace.
+// May return nil or an incomplete trace in case of a panic.
 func startProfiling() func() *profileTrace {
-	result := make(chan *profileTrace)
-	stopSignal := make(chan struct{})
+	// buffered channels to handle the recover() case without blocking
+	result := make(chan *profileTrace, 2)
+	stopSignal := make(chan struct{}, 2)
 
-	go func() {
-		// Stop after 30 seconds unless stopped manually.
-		timeout := time.AfterFunc(30*time.Second, func() { stopSignal <- struct{}{} })
-
-		// Periodically collect stacks.
-		collectTicker := time.NewTicker(profilerSamplingRate)
-
-		defer collectTicker.Stop()
-		defer timeout.Stop()
-
-		trace := &profileTrace{
-			Frames:         make([]*Frame, 0, 20),
-			Samples:        make([]profileSample, 0, 100),
-			Stacks:         make([]profileStack, 0, 10),
-			ThreadMetadata: make(map[string]profileThreadMetadata, 10),
-		}
-		profiler := &profileRecorder{
-			startTime:    time.Now(),
-			trace:        trace,
-			stackIndexes: make(map[string]int, cap(trace.Stacks)),
-			frameIndexes: make(map[string]int, cap(trace.Frames)),
-			stacksBuffer: make([]byte, 32*1024),
-		}
-
-		defer func() {
-			result <- trace
-		}()
-
-		for {
-			select {
-			case <-collectTicker.C:
-				profiler.Collect()
-			case <-stopSignal:
-				return
-			}
-		}
-	}()
+	go profilerGoroutine(result, stopSignal)
 
 	return func() *profileTrace {
 		stopSignal <- struct{}{}
 		return <-result
+	}
+}
+
+// This allows us to test whether panic during profiling are handled correctly and don't block execution.
+var testProfilerPanic = 0
+
+func profilerGoroutine(result chan<- *profileTrace, stopSignal chan struct{}) {
+	// We shouldn't panic but let's be super safe.
+	defer func() {
+		recover()
+		// Make sure we don't block the caller of stopFn() even if we panic.
+		result <- nil
+	}()
+
+	// Stop after 30 seconds unless stopped manually.
+	timeout := time.AfterFunc(30*time.Second, func() { stopSignal <- struct{}{} })
+	defer timeout.Stop()
+
+	if testProfilerPanic == 1 {
+		panic("This is an expected panic in profilerGoroutine() during tests")
+	}
+
+	// Periodically collect stacks.
+	collectTicker := time.NewTicker(profilerSamplingRate)
+	defer collectTicker.Stop()
+
+	profiler := newProfiler()
+
+	defer func() {
+		result <- profiler.trace
+	}()
+
+	for {
+		select {
+		case <-collectTicker.C:
+			profiler.OnTick()
+		case <-stopSignal:
+			return
+		}
+	}
+}
+
+func newProfiler() *profileRecorder {
+	trace := &profileTrace{
+		Frames:         make([]*Frame, 0, 20),
+		Samples:        make([]*profileSample, 0, 100),
+		Stacks:         make([]profileStack, 0, 10),
+		ThreadMetadata: make(map[string]profileThreadMetadata, 10),
+	}
+
+	return &profileRecorder{
+		startTime:    time.Now(),
+		trace:        trace,
+		stackIndexes: make(map[string]int, cap(trace.Stacks)),
+		frameIndexes: make(map[string]int, cap(trace.Frames)),
+		stacksBuffer: make([]byte, 32*1024),
 	}
 }
 
@@ -77,8 +99,23 @@ type profileRecorder struct {
 	frameIndexes map[string]int
 }
 
-func (p *profileRecorder) Collect() {
+func (p *profileRecorder) OnTick() {
 	elapsedNs := uint64(time.Since(p.startTime).Nanoseconds())
+
+	records := p.collectRecords()
+	p.processRecords(elapsedNs, records)
+
+	// Free up some memory if we don't need such a large buffer anymore.
+	if len(p.stacksBuffer) > len(records)*3 {
+		p.stacksBuffer = make([]byte, len(records)*3)
+	}
+
+	if testProfilerPanic == 2 && elapsedNs > 10_000_000 {
+		panic("This is an expected panic in Profiler.OnTick() during tests")
+	}
+}
+
+func (p *profileRecorder) collectRecords() []byte {
 	for {
 		// Capture stacks for all existing goroutines.
 		// Note: runtime.GoroutineProfile() would be better but we can't use it at the moment because
@@ -97,14 +134,7 @@ func (p *profileRecorder) Collect() {
 			p.stacksBuffer = make([]byte, newSize)
 
 		} else {
-			p.processRecords(elapsedNs, p.stacksBuffer[0:n])
-
-			// Free up some memory if we don't need such a large buffer anymore.
-			if len(p.stacksBuffer) > n*3 {
-				p.stacksBuffer = make([]byte, n*3)
-			}
-
-			break
+			return p.stacksBuffer[0:n]
 		}
 	}
 }
@@ -119,7 +149,7 @@ func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) 
 			return
 		}
 
-		p.trace.Samples = append(p.trace.Samples, profileSample{
+		p.trace.Samples = append(p.trace.Samples, &profileSample{
 			ElapsedSinceStartNS: elapsedNs,
 			StackID:             stackIndex,
 			ThreadID:            threadIndex,

@@ -50,7 +50,7 @@ type (
 	profileTrace struct {
 		Frames []*Frame `json:"frames"`
 		// QueueMetadata  map[string]QueueMetadata  `json:"queue_metadata"`
-		Samples        []profileSample                  `json:"samples"`
+		Samples        []*profileSample                 `json:"samples"`
 		Stacks         []profileStack                   `json:"stacks"`
 		ThreadMetadata map[string]profileThreadMetadata `json:"thread_metadata"`
 	}
