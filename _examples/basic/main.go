@@ -3,9 +3,9 @@
 //
 // Try it by running:
 //
-// 	go run main.go
-// 	go run main.go https://sentry.io
-// 	go run main.go bad-url
+//	go run main.go
+//	go run main.go https://sentry.io
+//	go run main.go bad-url
 //
 // To actually report events to Sentry, set the DSN either by editing the
 // appropriate line below or setting the environment variable SENTRY_DSN to
