@@ -231,6 +231,7 @@ func TestEventWithExceptionStacktraceMarshalJSON(t *testing.T) {
 		`"vars":{"fooint":25,"foostr":"bar"}` +
 		`},{` +
 		`"symbol":"nativesym",` +
+		`"in_app":false,` +
 		`"package":"my.dylib",` +
 		`"instruction_addr":"0xabcd0010",` +
 		`"addr_mode":"abs",` +
