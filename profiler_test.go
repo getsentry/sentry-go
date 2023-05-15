@@ -18,7 +18,7 @@ func TestProfileCollection(t *testing.T) {
 }
 
 func TestProfilePanicDuringStartup(t *testing.T) {
-	testProfilerPanic = 1
+	testProfilerPanic = -1
 	stopFn := startProfiling()
 	doWorkFor(35 * time.Millisecond)
 	trace := stopFn()
@@ -26,13 +26,27 @@ func TestProfilePanicDuringStartup(t *testing.T) {
 }
 
 func TestProfilePanicOnTick(t *testing.T) {
-	testProfilerPanic = 2
+	testProfilerPanic = 10 * int(time.Millisecond.Seconds())
 	start := time.Now()
 	stopFn := startProfiling()
 	doWorkFor(35 * time.Millisecond)
 	elapsed := time.Since(start)
 	trace := stopFn()
 	validateProfile(t, trace, elapsed)
+}
+
+func TestProfilePanicOnTickDirect(t *testing.T) {
+	var require = require.New(t)
+
+	testProfilerPanic = 1
+	profiler := newProfiler()
+	time.Sleep(time.Millisecond)
+	// This is handled by the profiler goroutine and stops the profiler.
+	require.Panics(profiler.OnTick)
+	require.Empty(profiler.trace.Samples)
+
+	profiler.OnTick()
+	require.NotEmpty(profiler.trace.Samples)
 }
 
 func doWorkFor(duration time.Duration) {

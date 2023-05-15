@@ -39,7 +39,8 @@ func profilerGoroutine(result chan<- *profileTrace, stopSignal chan struct{}) {
 	timeout := time.AfterFunc(30*time.Second, func() { stopSignal <- struct{}{} })
 	defer timeout.Stop()
 
-	if testProfilerPanic == 1 {
+	if testProfilerPanic == -1 {
+		testProfilerPanic = 0
 		panic("This is an expected panic in profilerGoroutine() during tests")
 	}
 
@@ -102,16 +103,17 @@ type profileRecorder struct {
 func (p *profileRecorder) OnTick() {
 	elapsedNs := uint64(time.Since(p.startTime).Nanoseconds())
 
+	if testProfilerPanic != 0 && int(elapsedNs) > testProfilerPanic {
+		testProfilerPanic = 0
+		panic("This is an expected panic in Profiler.OnTick() during tests")
+	}
+
 	records := p.collectRecords()
 	p.processRecords(elapsedNs, records)
 
 	// Free up some memory if we don't need such a large buffer anymore.
 	if len(p.stacksBuffer) > len(records)*3 {
 		p.stacksBuffer = make([]byte, len(records)*3)
-	}
-
-	if testProfilerPanic == 2 && elapsedNs > 10_000_000 {
-		panic("This is an expected panic in Profiler.OnTick() during tests")
 	}
 }
 
