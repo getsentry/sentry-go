@@ -519,6 +519,12 @@ func (s *Span) toEvent() *Event {
 	}
 	contexts["trace"] = s.traceContext().Map()
 
+	// Make sure that the transaction source is valid
+	transactionSource := s.Source
+	if !transactionSource.isValid() {
+		transactionSource = SourceCustom
+	}
+
 	return &Event{
 		Type:        transactionType,
 		Transaction: s.Name,
@@ -529,7 +535,7 @@ func (s *Span) toEvent() *Event {
 		StartTime:   s.StartTime,
 		Spans:       finished,
 		TransactionInfo: &TransactionInfo{
-			Source: s.Source,
+			Source: transactionSource,
 		},
 		sdkMetaData: SDKMetaData{
 			dsc: s.dynamicSamplingContext,
@@ -619,6 +625,24 @@ const (
 	SourceComponent TransactionSource = "component"
 	SourceTask      TransactionSource = "task"
 )
+
+// A set of all valid transaction sources.
+var allTransactionSources = map[TransactionSource]struct{}{
+	SourceCustom:    {},
+	SourceURL:       {},
+	SourceRoute:     {},
+	SourceView:      {},
+	SourceComponent: {},
+	SourceTask:      {},
+}
+
+// isValid returns 'true' if the given transaction source is a valid
+// source as recognized by the envelope protocol:
+// https://develop.sentry.dev/sdk/event-payloads/transaction/#transaction-annotations
+func (ts TransactionSource) isValid() bool {
+	_, found := allTransactionSources[ts]
+	return found
+}
 
 // SpanStatus is the status of a span.
 type SpanStatus uint8
@@ -788,7 +812,7 @@ type SpanOption func(s *Span)
 // starting a span affects the span tree as a whole, potentially overwriting a
 // name set previously.
 //
-// Deprecated: Use WithTransactionSource() instead.
+// Deprecated: Use WithTransactionName() instead.
 func TransactionName(name string) SpanOption {
 	return WithTransactionName(name)
 }
@@ -826,6 +850,10 @@ func TransctionSource(source TransactionSource) SpanOption {
 }
 
 // WithTransactionSource sets the source of the transaction name.
+//
+// Note: if the transaction source is not a valid source (as described
+// by the spec https://develop.sentry.dev/sdk/event-payloads/transaction/#transaction-annotations),
+// it will be corrected to "custom" eventually, before the transaction is sent.
 func WithTransactionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
