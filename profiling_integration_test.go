@@ -16,35 +16,7 @@ func TestTraceProfiling(t *testing.T) {
 		},
 	})
 	span := StartSpan(ctx, "top")
-
-	for {
-		_ = findPrimeNumber(1000)
-		if time.Since(span.StartTime).Milliseconds() > 350 {
-			break
-		}
-	}
-
+	doWorkFor(350 * time.Millisecond)
 	span.Finish()
 	// TODO proper test
-}
-
-func findPrimeNumber(n int) int {
-	count := 0
-	a := 2
-	for count < n {
-		b := 2
-		prime := true // to check if found a prime
-		for b*b <= a {
-			if a%b == 0 {
-				prime = false
-				break
-			}
-			b++
-		}
-		if prime {
-			count++
-		}
-		a++
-	}
-	return a - 1
 }

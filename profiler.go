@@ -14,13 +14,13 @@ func startProfiling() func() *profileTrace {
 	result := make(chan *profileTrace)
 	stopSignal := make(chan struct{})
 
-	// Stop after 30 seconds unless stopped manually.
-	timeout := time.AfterFunc(30*time.Second, func() { stopSignal <- struct{}{} })
-
-	// Periodically collect stacks.
-	collectTicker := time.NewTicker(time.Second / 101) // 101 Hz
-
 	go func() {
+		// Stop after 30 seconds unless stopped manually.
+		timeout := time.AfterFunc(30*time.Second, func() { stopSignal <- struct{}{} })
+
+		// Periodically collect stacks.
+		collectTicker := time.NewTicker(profilerSamplingRate)
+
 		defer collectTicker.Stop()
 		defer timeout.Stop()
 
@@ -58,6 +58,7 @@ func startProfiling() func() *profileTrace {
 	}
 }
 
+const profilerSamplingRate = time.Second / 101 // 101 Hz
 const stackBufferMaxGrowth = 512 * 1024
 const stackBufferLimit = 10 * 1024 * 1024
 
@@ -77,6 +78,7 @@ type profileRecorder struct {
 }
 
 func (p *profileRecorder) Collect() {
+	elapsedNs := uint64(time.Since(p.startTime).Nanoseconds())
 	for {
 		// Capture stacks for all existing goroutines.
 		// Note: runtime.GoroutineProfile() would be better but we can't use it at the moment because
@@ -95,7 +97,7 @@ func (p *profileRecorder) Collect() {
 			p.stacksBuffer = make([]byte, newSize)
 
 		} else {
-			p.processRecords(p.stacksBuffer[0:n])
+			p.processRecords(elapsedNs, p.stacksBuffer[0:n])
 
 			// Free up some memory if we don't need such a large buffer anymore.
 			if len(p.stacksBuffer) > n*3 {
@@ -107,8 +109,7 @@ func (p *profileRecorder) Collect() {
 	}
 }
 
-func (p *profileRecorder) processRecords(stacksBuffer []byte) {
-	elapsedNs := uint64(time.Since(p.startTime).Nanoseconds())
+func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) {
 	var stacks = traceparser.Parse(stacksBuffer)
 	for i := 0; i < stacks.Length; i++ {
 		var stack = stacks.Item(i)
