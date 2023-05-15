@@ -934,3 +934,49 @@ func TestConcurrentContextAccess(t *testing.T) {
 
 	wg.Wait()
 }
+  
+func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
+	tests := []struct {
+		name                   string
+		inputTransactionSource TransactionSource
+		wantTransactionSource  TransactionSource
+	}{
+		{
+			name:                   "Invalid transaction source",
+			inputTransactionSource: "invalidSource",
+			wantTransactionSource:  "custom",
+		},
+		{
+			name:                   "Valid transaction source",
+			inputTransactionSource: SourceTask,
+			wantTransactionSource:  "task",
+		},
+		{
+			name:                   "Empty transaction source",
+			inputTransactionSource: "",
+			wantTransactionSource:  "custom",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &TransportMock{}
+			ctx := NewTestContext(ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 1.0,
+				Transport:        transport,
+			})
+			transaction := StartTransaction(
+				ctx,
+				"Test Transaction",
+				WithTransactionSource(tt.inputTransactionSource),
+			)
+			transaction.Finish()
+
+			event := transport.Events()[0]
+
+			assertEqual(t, event.TransactionInfo.Source, tt.wantTransactionSource)
+		})
+	}
+}
