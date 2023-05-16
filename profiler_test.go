@@ -13,14 +13,18 @@ func TestProfilerCollection(t *testing.T) {
 	stopFn := startProfiling()
 	doWorkFor(35 * time.Millisecond)
 	elapsed := time.Since(start)
-	trace := stopFn()
-	validateProfile(t, trace, elapsed)
+	result := stopFn()
+	require.GreaterOrEqual(t, result.startTime, start)
+	require.Less(t, result.startTime, start.Add(elapsed))
+	validateProfile(t, result.trace, elapsed)
 }
 
 func TestProfilerCollectsOnStart(t *testing.T) {
 	start := time.Now()
-	trace := startProfiling()()
-	validateProfile(t, trace, time.Since(start))
+	result := startProfiling()()
+	require.GreaterOrEqual(t, result.startTime, start)
+	require.LessOrEqual(t, result.startTime, time.Now())
+	validateProfile(t, result.trace, time.Since(start))
 }
 
 func TestProfilerPanicDuringStartup(t *testing.T) {
@@ -28,8 +32,8 @@ func TestProfilerPanicDuringStartup(t *testing.T) {
 	testProfilerPanickedWith = nil
 	stopFn := startProfiling()
 	doWorkFor(35 * time.Millisecond)
-	trace := stopFn()
-	require.Nil(t, trace)
+	result := stopFn()
+	require.Nil(t, result)
 	require.Equal(t, "This is an expected panic in profilerGoroutine() during tests", testProfilerPanickedWith.(string))
 }
 
@@ -40,9 +44,9 @@ func TestProfilerPanicOnTick(t *testing.T) {
 	stopFn := startProfiling()
 	doWorkFor(35 * time.Millisecond)
 	elapsed := time.Since(start)
-	trace := stopFn()
+	result := stopFn()
 	require.Equal(t, "This is an expected panic in Profiler.OnTick() during tests", testProfilerPanickedWith.(string))
-	validateProfile(t, trace, elapsed)
+	validateProfile(t, result.trace, elapsed)
 }
 
 func TestProfilerPanicOnTickDirect(t *testing.T) {
@@ -52,10 +56,10 @@ func TestProfilerPanicOnTickDirect(t *testing.T) {
 	profiler := newProfiler()
 	time.Sleep(time.Millisecond)
 	// This is handled by the profiler goroutine and stops the profiler.
-	require.Panics(profiler.OnTick)
+	require.Panics(profiler.onTick)
 	require.Empty(profiler.trace.Samples)
 
-	profiler.OnTick()
+	profiler.onTick()
 	require.NotEmpty(profiler.trace.Samples)
 }
 
@@ -120,12 +124,12 @@ func TestProfilerSamplingRate(t *testing.T) {
 	stopFn := startProfiling()
 	doWorkFor(500 * time.Millisecond)
 	elapsed := time.Since(start)
-	trace := stopFn()
+	result := stopFn()
 
-	require.NotEmpty(trace.Samples)
+	require.NotEmpty(result.trace.Samples)
 	var samplesByThread = map[uint64]uint64{}
 
-	for _, sample := range trace.Samples {
+	for _, sample := range result.trace.Samples {
 		require.GreaterOrEqual(uint64(elapsed.Nanoseconds()), sample.ElapsedSinceStartNS)
 
 		if prev, ok := samplesByThread[sample.ThreadID]; ok {
@@ -155,7 +159,7 @@ func BenchmarkProfilerOnTick(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		profiler.OnTick()
+		profiler.onTick()
 	}
 }
 

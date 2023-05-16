@@ -4,14 +4,19 @@ import (
 	"time"
 )
 
-type ProfilingIntegration struct{}
-
-func (pi *ProfilingIntegration) Name() string {
-	return "Profiling"
-}
-
-func (pi *ProfilingIntegration) SetupOnce(client *Client) {
+func (client *Client) setupProfiling() {
 	client.profilerFactory = func() transactionProfiler {
+		sampleRate := client.options.ProfilesSampleRate
+		if sampleRate < 0.0 || sampleRate > 1.0 {
+			Logger.Printf("Skipping transaction profiling: ProfilesSampleRate out of range [0.0, 1.0]: %f", sampleRate)
+			return nil
+		}
+
+		if sampleRate == 0.0 || rng.Float64() >= sampleRate {
+			Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f", sampleRate)
+			return nil
+		}
+
 		return &_transactionProfiler{
 			stopFunc: startProfiling(),
 		}
@@ -23,20 +28,20 @@ type transactionProfiler interface {
 }
 
 type _transactionProfiler struct {
-	stopFunc func() *profileTrace
+	stopFunc func() *profilerResult
 }
 
 // Finish implements transactionProfiler
 func (tp *_transactionProfiler) Finish(span *Span, event *Event) *profileInfo {
-	trace := tp.stopFunc()
+	result := tp.stopFunc()
 	info := &profileInfo{
 		Version:     "1",
 		Environment: event.Environment,
 		EventID:     uuid(),
 		Platform:    "go",
 		Release:     event.Release,
-		Timestamp:   span.StartTime, // TODO: use profiler StartTime? Does it make a difference?
-		Trace:       trace,
+		Timestamp:   result.startTime,
+		Trace:       result.trace,
 		Transaction: profileTransaction{
 			ActiveThreadID: 0,
 			DurationNS:     uint64(time.Since(span.StartTime).Nanoseconds()),

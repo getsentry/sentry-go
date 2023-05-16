@@ -11,14 +11,14 @@ import (
 
 // Start collecting profile data and returns a function that stops profiling, producing a Trace.
 // May return nil or an incomplete trace in case of a panic.
-func startProfiling() func() *profileTrace {
+func startProfiling() func() *profilerResult {
 	// buffered channels to handle the recover() case without blocking
-	result := make(chan *profileTrace, 2)
+	result := make(chan *profilerResult, 2)
 	stopSignal := make(chan struct{}, 2)
 
 	go profilerGoroutine(result, stopSignal)
 
-	return func() *profileTrace {
+	return func() *profilerResult {
 		stopSignal <- struct{}{}
 		return <-result
 	}
@@ -28,7 +28,7 @@ func startProfiling() func() *profileTrace {
 var testProfilerPanic = 0
 var testProfilerPanickedWith any
 
-func profilerGoroutine(result chan<- *profileTrace, stopSignal chan struct{}) {
+func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) {
 	// We shouldn't panic but let's be super safe.
 	defer func() {
 		testProfilerPanickedWith = recover()
@@ -48,24 +48,29 @@ func profilerGoroutine(result chan<- *profileTrace, stopSignal chan struct{}) {
 	profiler := newProfiler()
 
 	// Collect the first sample immediately.
-	// profiler.OnTick()
+	profiler.onTick()
 
 	// Periodically collect stacks, starting after profilerSamplingRate has passed.
 	collectTicker := time.NewTicker(profilerSamplingRate)
 	defer collectTicker.Stop()
 
 	defer func() {
-		result <- profiler.trace
+		result <- &profilerResult{profiler.startTime, profiler.trace}
 	}()
 
 	for {
 		select {
 		case <-collectTicker.C:
-			profiler.OnTick()
+			profiler.onTick()
 		case <-stopSignal:
 			return
 		}
 	}
+}
+
+type profilerResult struct {
+	startTime time.Time
+	trace     *profileTrace
 }
 
 func newProfiler() *profileRecorder {
@@ -103,7 +108,7 @@ type profileRecorder struct {
 	frameIndexes map[string]int
 }
 
-func (p *profileRecorder) OnTick() {
+func (p *profileRecorder) onTick() {
 	elapsedNs := uint64(time.Since(p.startTime).Nanoseconds())
 
 	if testProfilerPanic != 0 && int(elapsedNs) > testProfilerPanic {
