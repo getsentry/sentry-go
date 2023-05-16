@@ -26,11 +26,12 @@ func startProfiling() func() *profileTrace {
 
 // This allows us to test whether panic during profiling are handled correctly and don't block execution.
 var testProfilerPanic = 0
+var testProfilerPanickedWith any
 
 func profilerGoroutine(result chan<- *profileTrace, stopSignal chan struct{}) {
 	// We shouldn't panic but let's be super safe.
 	defer func() {
-		recover()
+		testProfilerPanickedWith = recover()
 		// Make sure we don't block the caller of stopFn() even if we panic.
 		result <- nil
 	}()
@@ -44,11 +45,14 @@ func profilerGoroutine(result chan<- *profileTrace, stopSignal chan struct{}) {
 		panic("This is an expected panic in profilerGoroutine() during tests")
 	}
 
-	// Periodically collect stacks.
+	profiler := newProfiler()
+
+	// Collect the first sample immediately.
+	// profiler.OnTick()
+
+	// Periodically collect stacks, starting after profilerSamplingRate has passed.
 	collectTicker := time.NewTicker(profilerSamplingRate)
 	defer collectTicker.Stop()
-
-	profiler := newProfiler()
 
 	defer func() {
 		result <- profiler.trace
@@ -85,7 +89,6 @@ const profilerSamplingRate = time.Second / 101 // 101 Hz
 const stackBufferMaxGrowth = 512 * 1024
 const stackBufferLimit = 10 * 1024 * 1024
 
-// TODO we are be able to cache previously resolved frames, stacks, readBuffer, etc.
 type profileRecorder struct {
 	startTime time.Time
 	trace     *profileTrace

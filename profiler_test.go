@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestProfileCollection(t *testing.T) {
+func TestProfilerCollection(t *testing.T) {
 	start := time.Now()
 	stopFn := startProfiling()
 	doWorkFor(35 * time.Millisecond)
@@ -17,25 +17,35 @@ func TestProfileCollection(t *testing.T) {
 	validateProfile(t, trace, elapsed)
 }
 
-func TestProfilePanicDuringStartup(t *testing.T) {
+func TestProfilerCollectsOnStart(t *testing.T) {
+	start := time.Now()
+	trace := startProfiling()()
+	validateProfile(t, trace, time.Since(start))
+}
+
+func TestProfilerPanicDuringStartup(t *testing.T) {
 	testProfilerPanic = -1
+	testProfilerPanickedWith = nil
 	stopFn := startProfiling()
 	doWorkFor(35 * time.Millisecond)
 	trace := stopFn()
 	require.Nil(t, trace)
+	require.Equal(t, "This is an expected panic in profilerGoroutine() during tests", testProfilerPanickedWith.(string))
 }
 
-func TestProfilePanicOnTick(t *testing.T) {
-	testProfilerPanic = 10 * int(time.Millisecond.Seconds())
+func TestProfilerPanicOnTick(t *testing.T) {
+	testProfilerPanic = 10_000
+	testProfilerPanickedWith = nil
 	start := time.Now()
 	stopFn := startProfiling()
 	doWorkFor(35 * time.Millisecond)
 	elapsed := time.Since(start)
 	trace := stopFn()
+	require.Equal(t, "This is an expected panic in Profiler.OnTick() during tests", testProfilerPanickedWith.(string))
 	validateProfile(t, trace, elapsed)
 }
 
-func TestProfilePanicOnTickDirect(t *testing.T) {
+func TestProfilerPanicOnTickDirect(t *testing.T) {
 	var require = require.New(t)
 
 	testProfilerPanic = 1
@@ -85,8 +95,8 @@ func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) 
 	require.NotEmpty(trace.ThreadMetadata)
 
 	for _, sample := range trace.Samples {
-		require.Greater(sample.ElapsedSinceStartNS, uint64(0))
-		require.Greater(uint64(duration.Nanoseconds()), sample.ElapsedSinceStartNS)
+		require.GreaterOrEqual(sample.ElapsedSinceStartNS, uint64(0))
+		require.GreaterOrEqual(uint64(duration.Nanoseconds()), sample.ElapsedSinceStartNS)
 		require.GreaterOrEqual(sample.StackID, 0)
 		require.Less(sample.StackID, len(trace.Stacks))
 		require.Contains(trace.ThreadMetadata, strconv.Itoa(int(sample.ThreadID)))
@@ -103,7 +113,7 @@ func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) 
 	}
 }
 
-func TestProfileSamplingRate(t *testing.T) {
+func TestProfilerSamplingRate(t *testing.T) {
 	var require = require.New(t)
 
 	start := time.Now()
@@ -116,7 +126,7 @@ func TestProfileSamplingRate(t *testing.T) {
 	var samplesByThread = map[uint64]uint64{}
 
 	for _, sample := range trace.Samples {
-		require.Greater(uint64(elapsed.Nanoseconds()), sample.ElapsedSinceStartNS)
+		require.GreaterOrEqual(uint64(elapsed.Nanoseconds()), sample.ElapsedSinceStartNS)
 
 		if prev, ok := samplesByThread[sample.ThreadID]; ok {
 			// We can only verify the lower bound because the profiler callback may be scheduled less often than
@@ -124,6 +134,9 @@ func TestProfileSamplingRate(t *testing.T) {
 			// See https://stackoverflow.com/questions/70594795/more-accurate-ticker-than-time-newticker-in-go-on-macos
 			// or https://github.com/golang/go/issues/44343
 			require.Greater(sample.ElapsedSinceStartNS, prev)
+		} else {
+			// First sample should come in before the defined sampling rate.
+			require.Less(sample.ElapsedSinceStartNS, uint64(profilerSamplingRate.Nanoseconds()))
 		}
 		samplesByThread[sample.ThreadID] = sample.ElapsedSinceStartNS
 	}
