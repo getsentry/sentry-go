@@ -146,6 +146,20 @@ func TestProfilerSamplingRate(t *testing.T) {
 	}
 }
 
+// Benchmark results (run without executing which mess up results)
+// $ go test -run=^$ -bench "BenchmarkProfiler*"
+//
+// goos: windows
+// goarch: amd64
+// pkg: github.com/getsentry/sentry-go
+// cpu: 12th Gen Intel(R) Core(TM) i7-12700K
+// BenchmarkProfilerStartStop-20                      38008             31072 ns/op           20980 B/op        108 allocs/op
+// BenchmarkProfilerOnTick-20                         65700             18065 ns/op             260 B/op          4 allocs/op
+// BenchmarkProfilerCollect-20                        67063             16907 ns/op               0 B/op          0 allocs/op
+// BenchmarkProfilerProcess-20                      2296788               512.9 ns/op           268 B/op          4 allocs/op
+// BenchmarkProfilerOverheadBaseline-20                 192           6250525 ns/op
+// BenchmarkProfilerOverheadWithProfiler-20             187           6249490 ns/op
+
 func BenchmarkProfilerStartStop(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {

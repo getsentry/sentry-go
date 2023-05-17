@@ -77,9 +77,9 @@ func newProfiler() *profileRecorder {
 	// Other coefficients are just guesses of what might be a good starting point to avoid allocs on short runs.
 	numRoutines := runtime.NumGoroutine()
 	trace := &profileTrace{
-		Frames:         make([]*Frame, 0, numRoutines*8),
+		Frames:         make([]*Frame, 0, 32),
 		Samples:        make([]*profileSample, 0, numRoutines*10), // 100 ms @ 101 Hz
-		Stacks:         make([]profileStack, 0, numRoutines*4),
+		Stacks:         make([]profileStack, 0, 8),
 		ThreadMetadata: make(map[string]profileThreadMetadata, numRoutines),
 	}
 
@@ -88,7 +88,7 @@ func newProfiler() *profileRecorder {
 		trace:        trace,
 		stackIndexes: make(map[string]int, cap(trace.Stacks)),
 		frameIndexes: make(map[string]int, cap(trace.Frames)),
-		// A buffer 2 KiB per stack looks like a good starting point (empirically determined).
+		// A buffer of 2 KiB per stack looks like a good starting point (empirically determined).
 		stacksBuffer: make([]byte, numRoutines*2048),
 	}
 }
@@ -104,10 +104,10 @@ type profileRecorder struct {
 	// Buffer to read current stacks - will grow automatically up to stackBufferLimit.
 	stacksBuffer []byte
 
-	// Map from runtime.StackRecord.Stack0 to an index trace.Stacks
+	// Map from runtime.StackRecord.Stack0 to an index trace.Stacks.
 	stackIndexes map[string]int
 
-	// Map from runtime.Frame.PC to an index trace.Frames
+	// Map from runtime.Frame.PC to an index trace.Frames.
 	frameIndexes map[string]int
 }
 

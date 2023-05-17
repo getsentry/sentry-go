@@ -310,7 +310,8 @@ func createFrames(frames []runtime.Frame) []Frame {
 	return result
 }
 
-// TODO ID: why do we want to do this? I'm not sure I've seen that in other SDKs.
+// TODO ID: why do we want to do this?
+// I'm not aware of other SDKs skipping all Sentry frames, regardless of their position in the stactrace.
 // For example, in the .NET SDK, only the first frames are skipped until the call to the SDK.
 // As is, this will also hide any intermediate frames in the stack and make debugging issues harder.
 func shouldSkipFrame(module string) bool {

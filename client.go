@@ -131,7 +131,7 @@ type ClientOptions struct {
 	// Used to customize the sampling of traces, overrides TracesSampleRate.
 	TracesSampler TracesSampler
 	// The sample rate for profiling traces in the range [0.0, 1.0].
-	// This applied on top of TracesSampleRate - i.e. a ratio of profiled traces out of all sampled traces.
+	// This applies on top of TracesSampleRate - it is a ratio of profiled traces out of all sampled traces.
 	ProfilesSampleRate float64
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
@@ -229,7 +229,7 @@ type Client struct {
 	integrations    []Integration
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
-	Transport       Transport
+	Transport Transport
 }
 
 // NewClient creates and returns an instance of Client configured using
