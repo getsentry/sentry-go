@@ -74,11 +74,14 @@ type profilerResult struct {
 }
 
 func newProfiler() *profileRecorder {
+	// Pre-allocate the profile trace for the currently active number of routines & 100 ms worth of samples.
+	// Other coefficients are just guesses of what might be a good starting point to avoid allocs on short runs.
+	numRoutines := runtime.NumGoroutine()
 	trace := &profileTrace{
-		Frames:         make([]*Frame, 0, 20),
-		Samples:        make([]*profileSample, 0, 100),
-		Stacks:         make([]profileStack, 0, 10),
-		ThreadMetadata: make(map[string]profileThreadMetadata, 10),
+		Frames:         make([]*Frame, 0, numRoutines*8),
+		Samples:        make([]*profileSample, 0, numRoutines*10), // 100 ms @ 101 Hz
+		Stacks:         make([]profileStack, 0, numRoutines*4),
+		ThreadMetadata: make(map[string]profileThreadMetadata, numRoutines),
 	}
 
 	return &profileRecorder{
@@ -86,7 +89,8 @@ func newProfiler() *profileRecorder {
 		trace:        trace,
 		stackIndexes: make(map[string]int, cap(trace.Stacks)),
 		frameIndexes: make(map[string]int, cap(trace.Frames)),
-		stacksBuffer: make([]byte, 32*1024),
+		// A buffer 2 KiB per stack looks like a good starting point (empirically determined).
+		stacksBuffer: make([]byte, numRoutines*2048),
 	}
 }
 

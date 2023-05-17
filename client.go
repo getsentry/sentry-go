@@ -229,10 +229,7 @@ type Client struct {
 	integrations    []Integration
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
-	Transport Transport
-
-	// Transaction (tracing) startProfiling.
-	profilerFactory func() transactionProfiler
+	Transport       Transport
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -310,7 +307,6 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	client.setupTransport()
 	client.setupIntegrations()
-	client.setupProfiling()
 
 	return &client, nil
 }
@@ -378,6 +374,7 @@ func (client *Client) AddEventProcessor(processor EventProcessor) {
 }
 
 // Options return ClientOptions for the current Client.
+// TODO don't access this internally to avoid creating a copy each time.
 func (client Client) Options() ClientOptions {
 	return client.options
 }

@@ -1,23 +1,13 @@
 package sentry
 
-import (
-	"time"
-)
-
-func (client *Client) setupProfiling() {
-	client.profilerFactory = func() transactionProfiler {
-		sampleRate := client.options.ProfilesSampleRate
-		if sampleRate < 0.0 || sampleRate > 1.0 {
-			Logger.Printf("Skipping transaction profiling: ProfilesSampleRate out of range [0.0, 1.0]: %f", sampleRate)
-			return nil
-		}
-
-		if sampleRate == 0.0 || rng.Float64() >= sampleRate {
-			Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f", sampleRate)
-			return nil
-		}
-
-		return &_transactionProfiler{
+func (span *Span) startProfiling() {
+	var sampleRate = span.clientOptions().ProfilesSampleRate
+	if sampleRate < 0.0 || sampleRate > 1.0 {
+		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate out of range [0.0, 1.0]: %f", sampleRate)
+	} else if sampleRate == 0.0 || rng.Float64() >= sampleRate {
+		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f", sampleRate)
+	} else {
+		span.profiler = &_transactionProfiler{
 			stopFunc: startProfiling(),
 		}
 	}
@@ -43,8 +33,11 @@ func (tp *_transactionProfiler) Finish(span *Span, event *Event) *profileInfo {
 		Timestamp:   result.startTime,
 		Trace:       result.trace,
 		Transaction: profileTransaction{
+			// TODO capture the calling goroutine ID. It is currently not exposed by the runtime but we can
+			// use the runtime.Stack() function to get the ID from the stack trace, e.g. by capturing the first sample
+			// synchronously in the calling routine.
 			ActiveThreadID: 0,
-			DurationNS:     uint64(time.Since(span.StartTime).Nanoseconds()),
+			DurationNS:     uint64(span.EndTime.Sub(span.StartTime).Nanoseconds()),
 			ID:             "", // Event ID not available here yet
 			Name:           span.Name,
 			TraceID:        span.TraceID.String(),

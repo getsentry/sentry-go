@@ -189,9 +189,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	// Start profiling only if it's a sampled root transaction.
 	if span.IsTransaction() && span.Sampled.Bool() {
-		if profilerFactory := hub.Client().profilerFactory; profilerFactory != nil {
-			span.profiler = profilerFactory()
-		}
+		span.startProfiling()
 	}
 
 	return &span
@@ -413,14 +411,17 @@ func (s *Span) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (s *Span) sample() Sampled {
-	hub := hubFromContext(s.ctx)
-	var clientOptions ClientOptions
-	client := hub.Client()
+func (s *Span) clientOptions() *ClientOptions {
+	client := hubFromContext(s.ctx).Client()
 	if client != nil {
-		clientOptions = hub.Client().Options()
+		return &client.options
+	} else {
+		return &ClientOptions{}
 	}
+}
 
+func (s *Span) sample() Sampled {
+	clientOptions := s.clientOptions()
 	// https://develop.sentry.dev/sdk/performance/#sampling
 	// #1 tracing is not enabled.
 	if !clientOptions.EnableTracing {

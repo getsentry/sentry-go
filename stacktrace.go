@@ -322,9 +322,9 @@ func shouldSkipFrame(module string) bool {
 var goRoot = strings.ReplaceAll(build.Default.GOROOT, "\\", "/")
 
 func setInAppFrame(frame *Frame) {
-	if strings.Contains(frame.Module, "vendor") ||
-		strings.Contains(frame.Module, "third_party") ||
-		strings.HasPrefix(frame.AbsPath, goRoot) {
+	if strings.HasPrefix(frame.AbsPath, goRoot) ||
+		strings.Contains(frame.Module, "vendor") ||
+		strings.Contains(frame.Module, "third_party") {
 		frame.InApp = false
 	} else {
 		frame.InApp = true

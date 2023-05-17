@@ -47,7 +47,7 @@ func main() {
 			defer span.Finish()
 			for i := 0; i < num; i++ {
 				_ = findPrimeNumber(50000)
-				runtime.Gosched() // we need to manually yield this bussy loop
+				runtime.Gosched() // we need to manually yield this busy loop
 			}
 			fmt.Printf("routine %d done\n", num)
 			wg.Done()
