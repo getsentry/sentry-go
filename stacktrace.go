@@ -2,7 +2,6 @@ package sentry
 
 import (
 	"go/build"
-	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
@@ -199,44 +198,53 @@ func NewFrame(f runtime.Frame) Frame {
 		pkg, function = splitQualifiedFunctionName(function)
 	}
 
-	return newFrame(f, pkg, function)
+	return newFrame(pkg, function, f.File, f.Line)
 }
 
-func newFrame(f runtime.Frame, module string, function string) Frame {
-	var abspath, relpath string
-	// NOTE: f.File paths historically use forward slash as path separator even
-	// on Windows, though this is not yet documented, see
-	// https://golang.org/issues/3335. In any case, filepath.IsAbs can work with
-	// paths with either slash or backslash on Windows.
+// Like filepath.IsAbs() but doesn't care what platform you run this on.
+// I.e. it also recognizies `/path/to/file` when run on Windows.
+func isAbsPath(path string) bool {
+	if len(path) == 0 {
+		return false
+	}
+
+	// If the volume name starts with a double slash, this is an absolute path.
+	if len(path) >= 1 && (path[0] == '/' || path[0] == '\\') {
+		return true
+	}
+
+	// Windows absolute path, see https://learn.microsoft.com/en-us/dotnet/standard/io/file-path-formats
+	if len(path) >= 3 && path[1] == ':' && (path[2] == '/' || path[2] == '\\') {
+		return true
+	}
+
+	return false
+}
+
+func newFrame(module string, function string, file string, line int) Frame {
+	frame := Frame{
+		Lineno:   line,
+		Module:   module,
+		Function: function,
+	}
+
 	switch {
-	case f.File == "":
-		relpath = unknown
-		// Leave abspath as the empty string to be omitted when serializing
-		// event as JSON.
-		abspath = ""
-	case filepath.IsAbs(f.File):
-		abspath = f.File
+	case len(file) == 0:
+		frame.Filename = unknown
+		// Leave abspath as the empty string to be omitted when serializing event as JSON.
+	case isAbsPath(file):
+		frame.AbsPath = file
 		// TODO: in the general case, it is not trivial to come up with a
 		// "project relative" path with the data we have in run time.
 		// We shall not use filepath.Base because it creates ambiguous paths and
 		// affects the "Suspect Commits" feature.
 		// For now, leave relpath empty to be omitted when serializing the event
 		// as JSON. Improve this later.
-		relpath = ""
 	default:
 		// f.File is a relative path. This may happen when the binary is built
 		// with the -trimpath flag.
-		relpath = f.File
+		frame.Filename = file
 		// Omit abspath when serializing the event as JSON.
-		abspath = ""
-	}
-
-	frame := Frame{
-		AbsPath:  abspath,
-		Filename: relpath,
-		Lineno:   f.Line,
-		Module:   module,
-		Function: function,
 	}
 
 	setInAppFrame(&frame)
@@ -295,21 +303,23 @@ func createFrames(frames []runtime.Frame) []Frame {
 		}
 
 		if !shouldSkipFrame(pkg) {
-			result = append(result, newFrame(frame, pkg, function))
+			result = append(result, newFrame(pkg, function, frame.File, frame.Line))
 		}
 	}
 
 	return result
 }
 
+// TODO ID: why do we want to do this? I'm not sure I've seen that in other SDKs.
+// For example, in the .NET SDK, only the first frames are skipped until the call to the SDK.
+// As is, this will also hide any intermediate frames in the stack and make debugging issues harder.
 func shouldSkipFrame(module string) bool {
 	// Skip Go internal frames.
 	if module == "runtime" || module == "testing" {
 		return true
 	}
 
-	// Skip Sentry internal frames, except for frames in _test packages (for
-	// testing).
+	// Skip Sentry internal frames, except for frames in _test packages (for testing).
 	if strings.HasPrefix(module, "github.com/getsentry/sentry-go") &&
 		!strings.HasSuffix(module, "_test") {
 		return true

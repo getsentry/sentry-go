@@ -1,7 +1,6 @@
 package sentry
 
 import (
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"time"
@@ -214,23 +213,9 @@ func (p *profileRecorder) addFrame(capturedFrame traceparser.Frame) int {
 	if !exists {
 		module, function := splitQualifiedFunctionName(string(capturedFrame.Func()))
 		file, line := capturedFrame.File()
-		frame := &Frame{
-			Lineno:   line,
-			Module:   module,
-			Function: function,
-		}
-
-		path := string(file)
-		if filepath.IsAbs(path) {
-			frame.AbsPath = path
-		} else {
-			frame.Filename = path
-		}
-
-		setInAppFrame(frame)
-
+		frame := newFrame(module, function, string(file), line)
 		frameIndex = len(p.trace.Frames)
-		p.trace.Frames = append(p.trace.Frames, frame)
+		p.trace.Frames = append(p.trace.Frames, &frame)
 		p.frameIndexes[string(key)] = frameIndex
 	}
 	return frameIndex
