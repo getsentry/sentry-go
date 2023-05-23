@@ -41,15 +41,10 @@ type (
 		Priority int    `json:"priority,omitempty"`
 	}
 
-	// QueueMetadata struct {
-	// 	Label string `json:"label"`
-	// }
-
 	profileStack []int
 
 	profileTrace struct {
-		Frames []*Frame `json:"frames"`
-		// QueueMetadata  map[string]QueueMetadata  `json:"queue_metadata"`
+		Frames         []*Frame                         `json:"frames"`
 		Samples        []*profileSample                 `json:"samples"`
 		Stacks         []profileStack                   `json:"stacks"`
 		ThreadMetadata map[string]profileThreadMetadata `json:"thread_metadata"`

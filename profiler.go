@@ -145,7 +145,6 @@ func (p *profileRecorder) collectRecords() []byte {
 				newSize = stackBufferLimit
 			}
 			p.stacksBuffer = make([]byte, newSize)
-
 		} else {
 			return p.stacksBuffer[0:n]
 		}

@@ -83,23 +83,23 @@ func TestCreateFrames(t *testing.T) {
 			in: []runtime.Frame{
 				{
 					Function: "runtime.goexit",
-					File:  "/goroot/src/runtime/asm_amd64.s",
+					File:     "/goroot/src/runtime/asm_amd64.s",
 				},
 				{
 					Function: "testing.tRunner",
-					File:  "/goroot/src/testing/testing.go",
+					File:     "/goroot/src/testing/testing.go",
 				},
 				{
 					Function: "github.com/getsentry/sentry-go_test.TestNewStacktrace.func1",
-					File:  "/somewhere/sentry/sentry-go/stacktrace_external_test.go",
+					File:     "/somewhere/sentry/sentry-go/stacktrace_external_test.go",
 				},
 				{
 					Function: "github.com/getsentry/sentry-go.StacktraceTestHelper.NewStacktrace",
-					File:  "/somewhere/sentry/sentry-go/stacktrace_test.go",
+					File:     "/somewhere/sentry/sentry-go/stacktrace_test.go",
 				},
 				{
 					Function: "github.com/getsentry/sentry-go.NewStacktrace",
-					File:  "/somewhere/sentry/sentry-go/stacktrace.go",
+					File:     "/somewhere/sentry/sentry-go/stacktrace.go",
 				},
 			},
 			out: []Frame{
@@ -116,15 +116,15 @@ func TestCreateFrames(t *testing.T) {
 			in: []runtime.Frame{
 				{
 					Function: "github.com/getsentry/sentry-go/http/integration.Example.Integration",
-					File:  "/somewhere/sentry/sentry-go/http/integration/integration.go",
+					File:     "/somewhere/sentry/sentry-go/http/integration/integration.go",
 				},
 				{
 					Function: "github.com/getsentry/sentry-go/http.(*Handler).Handle",
-					File:  "/somewhere/sentry/sentry-go/http/sentryhttp.go",
+					File:     "/somewhere/sentry/sentry-go/http/sentryhttp.go",
 				},
 				{
 					Function: "main.main",
-					File:  "/somewhere/example.com/pkg/main.go",
+					File:     "/somewhere/example.com/pkg/main.go",
 				},
 			},
 			out: []Frame{

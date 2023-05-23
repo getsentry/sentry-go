@@ -2,11 +2,12 @@ package sentry
 
 func (span *Span) startProfiling() {
 	var sampleRate = span.clientOptions().ProfilesSampleRate
-	if sampleRate < 0.0 || sampleRate > 1.0 {
+	switch {
+	case sampleRate < 0.0 || sampleRate > 1.0:
 		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate out of range [0.0, 1.0]: %f", sampleRate)
-	} else if sampleRate == 0.0 || rng.Float64() >= sampleRate {
+	case sampleRate == 0.0 || rng.Float64() >= sampleRate:
 		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f", sampleRate)
-	} else {
+	default:
 		span.profiler = &_transactionProfiler{
 			stopFunc: startProfiling(),
 		}
@@ -21,7 +22,7 @@ type _transactionProfiler struct {
 	stopFunc func() *profilerResult
 }
 
-// Finish implements transactionProfiler
+// Finish implements transactionProfiler.
 func (tp *_transactionProfiler) Finish(span *Span, event *Event) *profileInfo {
 	result := tp.stopFunc()
 	info := &profileInfo{

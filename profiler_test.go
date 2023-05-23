@@ -16,6 +16,7 @@ func TestProfilerCollection(t *testing.T) {
 	result := stopFn()
 	require.GreaterOrEqual(t, result.startTime, start)
 	require.Less(t, result.startTime, start.Add(elapsed))
+	require.NotNil(t, result)
 	validateProfile(t, result.trace, elapsed)
 }
 
@@ -24,6 +25,7 @@ func TestProfilerCollectsOnStart(t *testing.T) {
 	result := startProfiling()()
 	require.GreaterOrEqual(t, result.startTime, start)
 	require.LessOrEqual(t, result.startTime, time.Now())
+	require.NotNil(t, result)
 	validateProfile(t, result.trace, time.Since(start))
 }
 
@@ -46,6 +48,7 @@ func TestProfilerPanicOnTick(t *testing.T) {
 	elapsed := time.Since(start)
 	result := stopFn()
 	require.Equal(t, "This is an expected panic in Profiler.OnTick() during tests", testProfilerPanickedWith.(string))
+	require.NotNil(t, result)
 	validateProfile(t, result.trace, elapsed)
 }
 
@@ -70,6 +73,7 @@ func doWorkFor(duration time.Duration) {
 	}
 }
 
+//nolint:unparam
 func findPrimeNumber(n int) int {
 	count := 0
 	a := 2
@@ -93,6 +97,7 @@ func findPrimeNumber(n int) int {
 
 func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) {
 	var require = require.New(t)
+	require.NotNil(trace)
 	require.NotEmpty(trace.Samples)
 	require.NotEmpty(trace.Stacks)
 	require.NotEmpty(trace.Frames)

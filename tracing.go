@@ -177,7 +177,6 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		span.recorder = parent.spanRecorder()
 	} else {
 		span.recorder = &spanRecorder{}
-
 	}
 	span.recorder.record(&span)
 

@@ -219,7 +219,7 @@ func BenchmarkEqualBytes(b *testing.B) {
 	}
 }
 
-// fastest
+// Benchmark results: this is the best performing implementation.
 func BenchmarkStringEqual(b *testing.B) {
 	lines := bytes.Split(tracetext, lineSeparator)
 	b.ResetTimer()

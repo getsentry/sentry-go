@@ -30,11 +30,12 @@ func (it *TraceCollection) Item(i int) Trace {
 	// The first item may have a leading data separator and the last one may have a trailing one.
 	// Note: Trim() doesn't make a copy for single-character cutset under 0x80. It will just slice the original.
 	var data []byte
-	if i == 0 {
+	switch {
+	case i == 0:
 		data = bytes.TrimLeft(it.blocks[i], "\n")
-	} else if i == len(it.blocks)-1 {
+	case i == len(it.blocks)-1:
 		data = bytes.TrimRight(it.blocks[i], "\n")
-	} else {
+	default:
 		data = it.blocks[i]
 	}
 
@@ -95,12 +96,12 @@ const framesElided = "...additional frames elided..."
 
 func (it *ReverseFrameIterator) popLine() []byte {
 	it.i--
-	if it.i < 0 {
+	switch {
+	case it.i < 0:
 		return nil
-	}
-	if string(it.lines[it.i]) == framesElided {
+	case string(it.lines[it.i]) == framesElided:
 		return it.popLine()
-	} else {
+	default:
 		return it.lines[it.i]
 	}
 }
@@ -123,10 +124,10 @@ type Frame struct {
 }
 
 // UniqueIdentifier can be used as a map key to identify the frame.
-func (t *Frame) UniqueIdentifier() []byte {
+func (f *Frame) UniqueIdentifier() []byte {
 	// line2 contains file path, line number and program-counter offset from the beginning of a function
 	// e.g. C:/Users/name/scoop/apps/go/current/src/testing/testing.go:1906 +0x63a
-	return t.line2
+	return f.line2
 }
 
 var createdByPrefix = []byte("created by ")
