@@ -155,7 +155,7 @@ func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) 
 	var stacks = traceparser.Parse(stacksBuffer)
 	for i := 0; i < stacks.Length; i++ {
 		var stack = stacks.Item(i)
-		threadIndex := p.addThread(int(stack.GoID()))
+		threadIndex := p.addThread(stack.GoID())
 		stackIndex := p.addStackTrace(stack)
 		if stackIndex < 0 {
 			return
@@ -169,14 +169,14 @@ func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) 
 	}
 }
 
-func (p *profileRecorder) addThread(id int) uint64 {
-	index := strconv.Itoa(id)
+func (p *profileRecorder) addThread(id uint64) uint64 {
+	index := strconv.FormatUint(id, 10)
 	if _, exists := p.trace.ThreadMetadata[index]; !exists {
 		p.trace.ThreadMetadata[index] = profileThreadMetadata{
 			Name: "Goroutine " + index,
 		}
 	}
-	return uint64(id)
+	return id
 }
 
 func (p *profileRecorder) addStackTrace(capturedStack traceparser.Trace) int {
