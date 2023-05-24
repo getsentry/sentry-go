@@ -10,7 +10,7 @@ var lineSeparator = []byte("\n")
 
 // Parses multi-stacktrace text dump produced by runtime.Stack([]byte, all=true).
 // The parser prioritizes performance but requires the input to be well-formed in order to return correct data.
-// See https://cs.opensource.google/go/go/+/refs/tags/go1.20.4:src/runtime/mprof.go;l=1191
+// See https://github.com/golang/go/blob/go1.20.4/src/runtime/mprof.go#L1191
 func Parse(data []byte) TraceCollection {
 	var it = TraceCollection{}
 	if len(data) > 0 {
