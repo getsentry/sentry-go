@@ -318,7 +318,6 @@ type Event struct {
 
 	sdkMetaData SDKMetaData
 
-	// TODO remove once https://github.com/getsentry/sentry-go/issues/629 is implemented
 	transactionProfile *profileInfo
 }
 
