@@ -142,7 +142,7 @@ func TestProfilerSamplingRate(t *testing.T) {
 			require.Greater(sample.ElapsedSinceStartNS, prev)
 		}
 
-		next = next + uint64(profilerSamplingRate.Nanoseconds())
+		next += uint64(profilerSamplingRate.Nanoseconds())
 		require.Less(sample.ElapsedSinceStartNS, next)
 
 		samplesByThread[sample.ThreadID] = sample.ElapsedSinceStartNS
