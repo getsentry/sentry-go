@@ -134,21 +134,69 @@ func TestProfilerSamplingRate(t *testing.T) {
 	require.NotEmpty(result.trace.Samples)
 	var samplesByThread = map[uint64]uint64{}
 
+	var next = uint64(0)
 	for _, sample := range result.trace.Samples {
 		require.GreaterOrEqual(uint64(elapsed.Nanoseconds()), sample.ElapsedSinceStartNS)
 
 		if prev, ok := samplesByThread[sample.ThreadID]; ok {
-			// We can only verify the lower bound because the profiler callback may be scheduled less often than
-			// expected, for example due to system ticker accuracy.
-			// See https://stackoverflow.com/questions/70594795/more-accurate-ticker-than-time-newticker-in-go-on-macos
-			// or https://github.com/golang/go/issues/44343
 			require.Greater(sample.ElapsedSinceStartNS, prev)
-		} else {
-			// First sample should come in before the defined sampling rate.
-			require.Less(sample.ElapsedSinceStartNS, uint64(profilerSamplingRate.Nanoseconds()))
 		}
+
+		next = next + uint64(profilerSamplingRate.Nanoseconds())
+		require.Less(sample.ElapsedSinceStartNS, next)
+
 		samplesByThread[sample.ThreadID] = sample.ElapsedSinceStartNS
 	}
+}
+
+func testTick(t *testing.T, count, i int, prevTick time.Time) time.Time {
+	var sinceLastTick = time.Since(prevTick).Microseconds()
+	t.Logf("tick %2d/%d after %d μs", i+1, count, sinceLastTick)
+	return time.Now()
+}
+
+// This test measures the accuracy of time.NewTicker() on the current system.
+func TestTimeTicker(t *testing.T) {
+	onProfilerStart() // This fixes Windows ticker resolution.
+
+	t.Logf("We're expecting a tick once every %d μs", profilerSamplingRate.Microseconds())
+
+	var startTime = time.Now()
+	var ticker = time.NewTicker(profilerSamplingRate)
+	defer ticker.Stop()
+
+	// wait until 10 ticks have passed
+	var count = 10
+	var prevTick = time.Now()
+	for i := 0; i < count; i++ {
+		<-ticker.C
+		prevTick = testTick(t, count, i, prevTick)
+	}
+
+	var elapsed = time.Since(startTime)
+	require.LessOrEqual(t, elapsed.Microseconds(), profilerSamplingRate.Microseconds()*int64(count+1))
+}
+
+// This test measures the accuracy of time.Sleep() on the current system.
+func TestTimeSleep(t *testing.T) {
+	onProfilerStart() // This fixes Windows ticker resolution.
+
+	t.Logf("We're expecting a tick once every %d μs", profilerSamplingRate.Microseconds())
+
+	var startTime = time.Now()
+
+	// wait until 10 ticks have passed
+	var count = 10
+	var prevTick = time.Now()
+	var next = time.Now()
+	for i := 0; i < count; i++ {
+		next = next.Add(profilerSamplingRate)
+		time.Sleep(time.Until(next))
+		prevTick = testTick(t, count, i, prevTick)
+	}
+
+	var elapsed = time.Since(startTime)
+	require.LessOrEqual(t, elapsed.Microseconds(), profilerSamplingRate.Microseconds()*int64(count+1))
 }
 
 // Benchmark results (run without executing which mess up results)

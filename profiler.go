@@ -11,6 +11,8 @@ import (
 // Start collecting profile data and returns a function that stops profiling, producing a Trace.
 // May return nil or an incomplete trace in case of a panic.
 func startProfiling() func() *profilerResult {
+	onProfilerStart()
+
 	// buffered channels to handle the recover() case without blocking
 	result := make(chan *profilerResult, 2)
 	stopSignal := make(chan struct{}, 2)
