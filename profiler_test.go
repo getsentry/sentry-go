@@ -40,8 +40,10 @@ func TestProfilerPanicDuringStartup(t *testing.T) {
 }
 
 func TestProfilerPanicOnTick(t *testing.T) {
-	testProfilerPanic = 10_000
+	// Panic after the first sample is collected.
+	testProfilerPanic = int(profilerSamplingRate.Nanoseconds())
 	testProfilerPanickedWith = nil
+
 	start := time.Now()
 	stopFn := startProfiling()
 	doWorkFor(35 * time.Millisecond)
