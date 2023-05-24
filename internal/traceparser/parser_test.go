@@ -12,8 +12,8 @@ import (
 func TestParseEmpty(t *testing.T) {
 	var require = require.New(t)
 
-	require.Zero(Parse(nil).Length)
-	require.Zero(Parse([]byte{}).Length)
+	require.Zero(Parse(nil).Length())
+	require.Zero(Parse([]byte{}).Length())
 }
 
 var tracetext = []byte(`
@@ -120,7 +120,7 @@ created by github.com/getsentry/sentry-go.startProfiling
 created by time.goFunc
 	C:/Users/name/scoop/apps/go/current/src/time/sleep.go:176 +0x32`)
 
-	require.Equal(traces.Length, i)
+	require.Equal(traces.Length(), i)
 }
 
 func TestFrames(t *testing.T) {
@@ -128,7 +128,7 @@ func TestFrames(t *testing.T) {
 
 	var output = ""
 	var traces = Parse(tracetext)
-	for i := 0; i < traces.Length; i++ {
+	for i := 0; i < traces.Length(); i++ {
 		var trace = traces.Item(i)
 		var framesIter = trace.FramesReversed()
 		output += fmt.Sprintf("Trace %d: goroutine %d with at most %d frames\n", i, trace.GoID(), framesIter.LengthUpperBound())
@@ -251,7 +251,7 @@ func BenchmarkFullParse(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		var traces = Parse(tracetext)
-		for i := 0; i < traces.Length; i++ {
+		for i := traces.Length() - 1; i >= 0; i-- {
 			var trace = traces.Item(i)
 			_ = trace.GoID()
 
@@ -271,7 +271,7 @@ func BenchmarkSplitOnly(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		var traces = Parse(tracetext)
-		for i := 0; i < traces.Length; i++ {
+		for i := traces.Length() - 1; i >= 0; i-- {
 			var trace = traces.Item(i)
 			_ = trace.UniqueIdentifier()
 		}

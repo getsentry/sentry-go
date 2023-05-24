@@ -188,7 +188,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	// Start profiling only if it's a sampled root transaction.
 	if span.IsTransaction() && span.Sampled.Bool() {
-		span.startProfiling()
+		span.maybeProfileTransaction()
 	}
 
 	return &span
@@ -209,10 +209,6 @@ func (s *Span) Finish() {
 	event := s.toEvent()
 	if event == nil {
 		return
-	}
-
-	if s.profiler != nil {
-		event.transactionProfile = s.profiler.Finish(s, event)
 	}
 
 	// TODO(tracing): add breadcrumbs
@@ -513,6 +509,11 @@ func (s *Span) toEvent() *Event {
 		return nil // only transactions can be transformed into events
 	}
 
+	var profile *profileInfo
+	if s.profiler != nil {
+		profile = s.profiler.Finish(s)
+	}
+
 	children := s.recorder.children()
 	finished := make([]*Span, 0, len(children))
 	for _, child := range children {
@@ -556,6 +557,7 @@ func (s *Span) toEvent() *Event {
 		sdkMetaData: SDKMetaData{
 			dsc: s.dynamicSamplingContext,
 		},
+		transactionProfile: profile,
 	}
 }
 

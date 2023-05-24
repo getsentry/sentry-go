@@ -1,6 +1,8 @@
 package sentry
 
-func (span *Span) startProfiling() {
+// Checks whether the transaction should be profiled (according to ProfilesSampleRate)
+// and starts a profiler if so.
+func (span *Span) maybeProfileTransaction() {
 	var sampleRate = span.clientOptions().ProfilesSampleRate
 	switch {
 	case sampleRate < 0.0 || sampleRate > 1.0:
@@ -15,31 +17,26 @@ func (span *Span) startProfiling() {
 }
 
 type transactionProfiler interface {
-	Finish(span *Span, event *Event) *profileInfo
+	Finish(span *Span) *profileInfo
 }
 
 type _transactionProfiler struct {
 	stopFunc func() *profilerResult
 }
 
-// Finish implements transactionProfiler.
-func (tp *_transactionProfiler) Finish(span *Span, event *Event) *profileInfo {
+func (tp *_transactionProfiler) Finish(span *Span) *profileInfo {
 	result := tp.stopFunc()
 	info := &profileInfo{
-		Version:     "1",
-		Environment: event.Environment,
-		EventID:     uuid(),
-		Platform:    "go",
-		Release:     event.Release,
-		Timestamp:   result.startTime,
-		Trace:       result.trace,
+		Version:   "1",
+		EventID:   uuid(),
+		Timestamp: result.startTime,
+		Trace:     result.trace,
 		Transaction: profileTransaction{
 			// TODO capture the calling goroutine ID. It is currently not exposed by the runtime but we can
 			// use the runtime.Stack() function to get the ID from the stack trace, e.g. by capturing the first sample
 			// synchronously in the calling routine.
 			ActiveThreadID: 0,
 			DurationNS:     uint64(span.EndTime.Sub(span.StartTime).Nanoseconds()),
-			ID:             "", // Event ID not available here yet
 			Name:           span.Name,
 			TraceID:        span.TraceID.String(),
 		},
@@ -48,6 +45,16 @@ func (tp *_transactionProfiler) Finish(span *Span, event *Event) *profileInfo {
 		// Name is required by Relay so use the operation name if the span name is empty.
 		info.Transaction.Name = span.Op
 	}
+	return info
+}
+
+func (info *profileInfo) UpdateFromEvent(event *Event) {
+	info.Environment = event.Environment
+	info.Platform = event.Platform
+	info.Release = event.Release
+	info.Dist = event.Dist
+	info.Transaction.ID = event.EventID
+
 	if runtimeContext, ok := event.Contexts["runtime"]; ok {
 		if value, ok := runtimeContext["name"]; !ok {
 			info.Runtime.Name = value.(string)
@@ -66,5 +73,4 @@ func (tp *_transactionProfiler) Finish(span *Span, event *Event) *profileInfo {
 			info.Device.Architecture = value.(string)
 		}
 	}
-	return info
 }

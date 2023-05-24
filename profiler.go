@@ -152,9 +152,9 @@ func (p *profileRecorder) collectRecords() []byte {
 }
 
 func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) {
-	var stacks = traceparser.Parse(stacksBuffer)
-	for i := 0; i < stacks.Length; i++ {
-		var stack = stacks.Item(i)
+	var traces = traceparser.Parse(stacksBuffer)
+	for i := traces.Length() - 1; i >= 0; i-- {
+		var stack = traces.Item(i)
 		threadIndex := p.addThread(stack.GoID())
 		stackIndex := p.addStackTrace(stack)
 		if stackIndex < 0 {

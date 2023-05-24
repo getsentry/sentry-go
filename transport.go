@@ -154,7 +154,6 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 
 	// Profile data
 	if event.transactionProfile != nil {
-		event.transactionProfile.Transaction.ID = string(event.EventID)
 		body, err = json.Marshal(event.transactionProfile)
 		if err != nil {
 			return nil, err

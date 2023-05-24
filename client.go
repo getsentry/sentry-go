@@ -645,6 +645,10 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		}
 	}
 
+	if event.transactionProfile != nil {
+		event.transactionProfile.UpdateFromEvent(event)
+	}
+
 	return event
 }
 

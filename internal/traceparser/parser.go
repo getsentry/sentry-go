@@ -15,14 +15,16 @@ func Parse(data []byte) TraceCollection {
 	var it = TraceCollection{}
 	if len(data) > 0 {
 		it.blocks = bytes.Split(data, blockSeparator)
-		it.Length = len(it.blocks)
 	}
 	return it
 }
 
 type TraceCollection struct {
-	Length int
 	blocks [][]byte
+}
+
+func (it TraceCollection) Length() int {
+	return len(it.blocks)
 }
 
 // Returns the stacktrace item at the given index.
