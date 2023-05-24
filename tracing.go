@@ -410,9 +410,8 @@ func (s *Span) clientOptions() *ClientOptions {
 	client := hubFromContext(s.ctx).Client()
 	if client != nil {
 		return &client.options
-	} else {
-		return &ClientOptions{}
 	}
+	return &ClientOptions{}
 }
 
 func (s *Span) sample() Sampled {
