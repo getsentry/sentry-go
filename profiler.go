@@ -27,12 +27,11 @@ func startProfiling() func() *profilerResult {
 
 // This allows us to test whether panic during profiling are handled correctly and don't block execution.
 var testProfilerPanic = 0
-var testProfilerPanickedWith any
 
 func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) {
 	// We shouldn't panic but let's be super safe.
 	defer func() {
-		testProfilerPanickedWith = recover()
+		_ = recover()
 		// Make sure we don't block the caller of stopFn() even if we panic.
 		result <- nil
 	}()

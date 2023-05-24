@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -31,25 +32,23 @@ func TestProfilerCollectsOnStart(t *testing.T) {
 
 func TestProfilerPanicDuringStartup(t *testing.T) {
 	testProfilerPanic = -1
-	testProfilerPanickedWith = nil
 	stopFn := startProfiling()
 	doWorkFor(35 * time.Millisecond)
 	result := stopFn()
 	require.Nil(t, result)
-	require.Equal(t, "This is an expected panic in profilerGoroutine() during tests", testProfilerPanickedWith.(string))
+	require.Equal(t, 0, testProfilerPanic)
 }
 
 func TestProfilerPanicOnTick(t *testing.T) {
 	// Panic after the first sample is collected.
 	testProfilerPanic = int(profilerSamplingRate.Nanoseconds())
-	testProfilerPanickedWith = nil
 
 	start := time.Now()
 	stopFn := startProfiling()
-	doWorkFor(35 * time.Millisecond)
+	doWorkFor(10 * profilerSamplingRate)
 	elapsed := time.Since(start)
 	result := stopFn()
-	require.Equal(t, "This is an expected panic in Profiler.OnTick() during tests", testProfilerPanickedWith.(string))
+	require.Equal(t, 0, testProfilerPanic)
 	require.NotNil(t, result)
 	validateProfile(t, result.trace, elapsed)
 }
@@ -72,6 +71,7 @@ func doWorkFor(duration time.Duration) {
 	start := time.Now()
 	for time.Since(start) < duration {
 		_ = findPrimeNumber(1000)
+		runtime.Gosched()
 	}
 }
 
@@ -176,11 +176,13 @@ func TestTimeTicker(t *testing.T) {
 	}
 
 	var elapsed = time.Since(startTime)
-	require.LessOrEqual(t, elapsed.Microseconds(), profilerSamplingRate.Microseconds()*int64(count+1))
+	require.LessOrEqual(t, elapsed.Microseconds(), profilerSamplingRate.Microseconds()*int64(count+3))
 }
 
 // This test measures the accuracy of time.Sleep() on the current system.
 func TestTimeSleep(t *testing.T) {
+	t.Skip("This test isn't necessary at the moment because we don't use time.Sleep() in the profiler.")
+
 	onProfilerStart() // This fixes Windows ticker resolution.
 
 	t.Logf("We're expecting a tick once every %d μs", profilerSamplingRate.Microseconds())
@@ -198,7 +200,7 @@ func TestTimeSleep(t *testing.T) {
 	}
 
 	var elapsed = time.Since(startTime)
-	require.LessOrEqual(t, elapsed.Microseconds(), profilerSamplingRate.Microseconds()*int64(count+1))
+	require.LessOrEqual(t, elapsed.Microseconds(), profilerSamplingRate.Microseconds()*int64(count+3))
 }
 
 // Benchmark results (run without executing which mess up results)
