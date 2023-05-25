@@ -27,8 +27,7 @@ func startProfiling() (stopFunc func() *profilerResult) {
 }
 
 // This allows us to test whether panic during profiling are handled correctly and don't block execution.
-var testProfilerPanic = 0
-var testProfilerPanicked atomic.Bool
+var testProfilerPanic int64 = 0
 
 func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) {
 	// We shouldn't panic but let's be super safe.
@@ -38,17 +37,14 @@ func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) 
 		// Make sure we don't block the caller of stopFn() even if we panic.
 		result <- nil
 
-		if testProfilerPanic != 0 {
-			testProfilerPanic = 0
-			testProfilerPanicked.Store(true)
-		}
+		atomic.StoreInt64(&testProfilerPanic, 0)
 	}()
 
 	// Stop after 30 seconds unless stopped manually.
 	timeout := time.AfterFunc(30*time.Second, func() { stopSignal <- struct{}{} })
 	defer timeout.Stop()
 
-	if testProfilerPanic == -1 {
+	if testProfilerPanic < 0 {
 		panic("This is an expected panic in profilerGoroutine() during tests")
 	}
 
@@ -120,14 +116,14 @@ type profileRecorder struct {
 }
 
 func (p *profileRecorder) onTick() {
-	elapsedNs := uint64(time.Since(p.startTime).Nanoseconds())
+	elapsedNs := time.Since(p.startTime).Nanoseconds()
 
-	if testProfilerPanic != 0 && int(elapsedNs) > testProfilerPanic {
+	if 0 < testProfilerPanic && testProfilerPanic < elapsedNs {
 		panic("This is an expected panic in Profiler.OnTick() during tests")
 	}
 
 	records := p.collectRecords()
-	p.processRecords(elapsedNs, records)
+	p.processRecords(uint64(elapsedNs), records)
 
 	// Free up some memory if we don't need such a large buffer anymore.
 	if len(p.stacksBuffer) > len(records)*3 {

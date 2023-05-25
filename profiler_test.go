@@ -4,6 +4,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -31,18 +32,22 @@ func TestProfilerCollectsOnStart(t *testing.T) {
 	validateProfile(t, result.trace, time.Since(start))
 }
 
+func workUntilProfilerPanicked() {
+	for i := 0; i < 100 && atomic.LoadInt64(&testProfilerPanic) != 0; i++ {
+		doWorkFor(10 * time.Millisecond)
+	}
+}
+
 func TestProfilerPanicDuringStartup(t *testing.T) {
 	var require = require.New(t)
 
-	testProfilerPanic = -1
-	testProfilerPanicked.Store(false)
+	atomic.StoreInt64(&testProfilerPanic, -1)
 
 	stopFn := startProfiling()
-	doWorkFor(35 * time.Millisecond)
+	workUntilProfilerPanicked()
 	result := stopFn()
 
-	require.Equal(0, testProfilerPanic)
-	require.Equal(true, testProfilerPanicked.Load())
+	require.Zero(atomic.LoadInt64(&testProfilerPanic))
 	require.Nil(result)
 }
 
@@ -50,19 +55,15 @@ func TestProfilerPanicOnTick(t *testing.T) {
 	var require = require.New(t)
 
 	// Panic after the first sample is collected.
-	testProfilerPanic = int(profilerSamplingRate.Nanoseconds())
-	testProfilerPanicked.Store(false)
+	atomic.StoreInt64(&testProfilerPanic, profilerSamplingRate.Nanoseconds())
 
 	start := time.Now()
 	stopFn := startProfiling()
-	for i := 0; i < 100 && !testProfilerPanicked.Load(); i++ {
-		doWorkFor(10 * time.Millisecond)
-	}
+	workUntilProfilerPanicked()
 	result := stopFn()
 	elapsed := time.Since(start)
 
-	require.Equal(0, testProfilerPanic)
-	require.Equal(true, testProfilerPanicked.Load())
+	require.Zero(atomic.LoadInt64(&testProfilerPanic))
 	require.NotNil(result)
 	validateProfile(t, result.trace, elapsed)
 }
@@ -70,8 +71,7 @@ func TestProfilerPanicOnTick(t *testing.T) {
 func TestProfilerPanicOnTickDirect(t *testing.T) {
 	var require = require.New(t)
 
-	testProfilerPanic = 1
-	testProfilerPanicked.Store(false)
+	atomic.StoreInt64(&testProfilerPanic, 1)
 
 	profiler := newProfiler()
 
@@ -81,9 +81,8 @@ func TestProfilerPanicOnTickDirect(t *testing.T) {
 	require.Panics(profiler.onTick)
 	require.Empty(profiler.trace.Samples)
 
-	require.Equal(1, testProfilerPanic)
-	require.Equal(false, testProfilerPanicked.Load())
-	testProfilerPanic = 0
+	require.Equal(int64(1), atomic.LoadInt64(&testProfilerPanic))
+	atomic.StoreInt64(&testProfilerPanic, 0)
 
 	profiler.onTick()
 	require.NotEmpty(profiler.trace.Samples)
