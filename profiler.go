@@ -27,7 +27,7 @@ func startProfiling() (stopFunc func() *profilerResult) {
 }
 
 // This allows us to test whether panic during profiling are handled correctly and don't block execution.
-var testProfilerPanic int64 = 0
+var testProfilerPanic int64
 
 func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) {
 	// We shouldn't panic but let's be super safe.
