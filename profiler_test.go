@@ -13,21 +13,17 @@ import (
 
 func TestProfilerCollection(t *testing.T) {
 	start := time.Now()
-	stopFn := startProfiling()
+	stopFn := startProfiling(start)
 	doWorkFor(35 * time.Millisecond)
 	result := stopFn()
 	elapsed := time.Since(start)
-	require.GreaterOrEqual(t, result.startTime, start)
-	require.Less(t, result.startTime, start.Add(elapsed))
 	require.NotNil(t, result)
 	validateProfile(t, result.trace, elapsed)
 }
 
 func TestProfilerCollectsOnStart(t *testing.T) {
 	start := time.Now()
-	result := startProfiling()()
-	require.GreaterOrEqual(t, result.startTime, start)
-	require.LessOrEqual(t, result.startTime, time.Now())
+	result := startProfiling(start)()
 	require.NotNil(t, result)
 	validateProfile(t, result.trace, time.Since(start))
 }
@@ -43,7 +39,7 @@ func TestProfilerPanicDuringStartup(t *testing.T) {
 
 	atomic.StoreInt64(&testProfilerPanic, -1)
 
-	stopFn := startProfiling()
+	stopFn := startProfiling(time.Now())
 	workUntilProfilerPanicked()
 	result := stopFn()
 
@@ -58,7 +54,7 @@ func TestProfilerPanicOnTick(t *testing.T) {
 	atomic.StoreInt64(&testProfilerPanic, profilerSamplingRate.Nanoseconds())
 
 	start := time.Now()
-	stopFn := startProfiling()
+	stopFn := startProfiling(start)
 	workUntilProfilerPanicked()
 	result := stopFn()
 	elapsed := time.Since(start)
@@ -73,7 +69,7 @@ func TestProfilerPanicOnTickDirect(t *testing.T) {
 
 	atomic.StoreInt64(&testProfilerPanic, 1)
 
-	profiler := newProfiler()
+	profiler := newProfiler(time.Now())
 
 	time.Sleep(time.Millisecond)
 
@@ -148,7 +144,7 @@ func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) 
 func TestProfilerSamplingRate(t *testing.T) {
 	var require = require.New(t)
 
-	stopFn := startProfiling()
+	stopFn := startProfiling(time.Now())
 	doWorkFor(500 * time.Millisecond)
 	result := stopFn()
 
@@ -254,13 +250,13 @@ func TestProfilerTimeSleep(t *testing.T) {
 func BenchmarkProfilerStartStop(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		stopFn := startProfiling()
+		stopFn := startProfiling(time.Now())
 		_ = stopFn()
 	}
 }
 
 func BenchmarkProfilerOnTick(b *testing.B) {
-	profiler := newProfiler()
+	profiler := newProfiler(time.Now())
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -269,7 +265,7 @@ func BenchmarkProfilerOnTick(b *testing.B) {
 }
 
 func BenchmarkProfilerCollect(b *testing.B) {
-	profiler := newProfiler()
+	profiler := newProfiler(time.Now())
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -278,7 +274,7 @@ func BenchmarkProfilerCollect(b *testing.B) {
 }
 
 func BenchmarkProfilerProcess(b *testing.B) {
-	profiler := newProfiler()
+	profiler := newProfiler(time.Now())
 	records := profiler.collectRecords()
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -298,7 +294,7 @@ func BenchmarkProfilerOverheadBaseline(b *testing.B) {
 }
 
 func BenchmarkProfilerOverheadWithProfiler(b *testing.B) {
-	stopFn := startProfiling()
+	stopFn := startProfiling(time.Now())
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		doHardWork()

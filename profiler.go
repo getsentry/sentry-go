@@ -11,14 +11,14 @@ import (
 
 // Start collecting profile data and returns a function that stops profiling, producing a Trace.
 // The returned stop function May return nil or an incomplete trace in case of a panic.
-func startProfiling() (stopFunc func() *profilerResult) {
+func startProfiling(startTime time.Time) (stopFunc func() *profilerResult) {
 	onProfilerStart()
 
 	// buffered channels to handle the recover() case without blocking
 	result := make(chan *profilerResult, 2)
 	stopSignal := make(chan struct{}, 2)
 
-	go profilerGoroutine(result, stopSignal)
+	go profilerGoroutine(startTime, result, stopSignal)
 
 	return func() *profilerResult {
 		stopSignal <- struct{}{}
@@ -29,7 +29,7 @@ func startProfiling() (stopFunc func() *profilerResult) {
 // This allows us to test whether panic during profiling are handled correctly and don't block execution.
 var testProfilerPanic int64
 
-func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) {
+func profilerGoroutine(startTime time.Time, result chan<- *profilerResult, stopSignal chan struct{}) {
 	// We shouldn't panic but let's be super safe.
 	defer func() {
 		_ = recover()
@@ -48,7 +48,7 @@ func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) 
 		panic("This is an expected panic in profilerGoroutine() during tests")
 	}
 
-	profiler := newProfiler()
+	profiler := newProfiler(startTime)
 
 	// Collect the first sample immediately.
 	profiler.onTick()
@@ -58,7 +58,7 @@ func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) 
 	defer collectTicker.Stop()
 
 	defer func() {
-		result <- &profilerResult{profiler.startTime, profiler.trace}
+		result <- &profilerResult{profiler.trace}
 	}()
 
 	for {
@@ -72,11 +72,10 @@ func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) 
 }
 
 type profilerResult struct {
-	startTime time.Time
-	trace     *profileTrace
+	trace *profileTrace
 }
 
-func newProfiler() *profileRecorder {
+func newProfiler(startTime time.Time) *profileRecorder {
 	// Pre-allocate the profile trace for the currently active number of routines & 100 ms worth of samples.
 	// Other coefficients are just guesses of what might be a good starting point to avoid allocs on short runs.
 	numRoutines := runtime.NumGoroutine()
@@ -88,7 +87,7 @@ func newProfiler() *profileRecorder {
 	}
 
 	return &profileRecorder{
-		startTime:    time.Now(),
+		startTime:    startTime,
 		trace:        trace,
 		stackIndexes: make(map[string]int, cap(trace.Stacks)),
 		frameIndexes: make(map[string]int, cap(trace.Frames)),

@@ -11,7 +11,7 @@ func (span *Span) maybeProfileTransaction() {
 		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f", sampleRate)
 	default:
 		span.profiler = &_transactionProfiler{
-			stopFunc: startProfiling(),
+			stopFunc: startProfiling(span.StartTime),
 		}
 	}
 }
@@ -27,9 +27,10 @@ type _transactionProfiler struct {
 func (tp *_transactionProfiler) Finish(span *Span) *profileInfo {
 	result := tp.stopFunc()
 	info := &profileInfo{
-		Version:   "1",
-		EventID:   uuid(),
-		Timestamp: result.startTime,
+		Version: "1",
+		EventID: uuid(),
+		// See https://github.com/getsentry/sentry-go/pull/626#discussion_r1204870340 for explanation why we use the Transaction time.
+		Timestamp: span.StartTime,
 		Trace:     result.trace,
 		Transaction: profileTransaction{
 			// TODO capture the calling goroutine ID. It is currently not exposed by the runtime but we can
