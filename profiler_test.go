@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"os"
 	"runtime"
 	"strconv"
 	"testing"
@@ -127,28 +128,37 @@ func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) 
 func TestProfilerSamplingRate(t *testing.T) {
 	var require = require.New(t)
 
-	start := time.Now()
 	stopFn := startProfiling()
 	doWorkFor(500 * time.Millisecond)
-	elapsed := time.Since(start)
 	result := stopFn()
 
 	require.NotEmpty(result.trace.Samples)
 	var samplesByThread = map[uint64]uint64{}
-
-	var next = uint64(0)
+	var outliersByThread = map[uint64]uint64{}
+	var outliers = 0
 	for _, sample := range result.trace.Samples {
-		require.GreaterOrEqual(uint64(elapsed.Nanoseconds()), sample.ElapsedSinceStartNS)
+		count := samplesByThread[sample.ThreadID]
 
-		if prev, ok := samplesByThread[sample.ThreadID]; ok {
-			require.Greater(sample.ElapsedSinceStartNS, prev)
+		var lowerBound = count * uint64(profilerSamplingRate.Nanoseconds())
+		var upperBound = (count + 1 + outliersByThread[sample.ThreadID]) * uint64(profilerSamplingRate.Nanoseconds())
+
+		t.Logf("Routine %d, sample %d (%d) should be between %d and %d", sample.ThreadID, count, sample.ElapsedSinceStartNS, lowerBound, upperBound)
+
+		// We can check the lower bound explicitly, but the upper bound is problematic as some samples may get delayed.
+		// Therefore, we collect the number of outliers and check if it's reasonably low.
+		require.GreaterOrEqual(sample.ElapsedSinceStartNS, lowerBound)
+		if sample.ElapsedSinceStartNS > upperBound {
+			// We also increase the count by one to shift the followup samples too.
+			outliersByThread[sample.ThreadID]++
+			if int(outliersByThread[sample.ThreadID]) > outliers {
+				outliers = int(outliersByThread[sample.ThreadID])
+			}
 		}
 
-		next += uint64(profilerSamplingRate.Nanoseconds())
-		require.Less(sample.ElapsedSinceStartNS, next)
-
-		samplesByThread[sample.ThreadID] = sample.ElapsedSinceStartNS
+		samplesByThread[sample.ThreadID] = count + 1
 	}
+
+	require.Less(outliers, len(result.trace.Samples)/10)
 }
 
 func testTick(t *testing.T, count, i int, prevTick time.Time) time.Time {
@@ -158,7 +168,11 @@ func testTick(t *testing.T, count, i int, prevTick time.Time) time.Time {
 }
 
 // This test measures the accuracy of time.NewTicker() on the current system.
-func TestTimeTicker(t *testing.T) {
+func TestProfilerTimeTicker(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping on CI because the machines are too overloaded to provide consistent ticker resolution.")
+	}
+
 	onProfilerStart() // This fixes Windows ticker resolution.
 
 	t.Logf("We're expecting a tick once every %d μs", profilerSamplingRate.Microseconds())
@@ -180,7 +194,7 @@ func TestTimeTicker(t *testing.T) {
 }
 
 // This test measures the accuracy of time.Sleep() on the current system.
-func TestTimeSleep(t *testing.T) {
+func TestProfilerTimeSleep(t *testing.T) {
 	t.Skip("This test isn't necessary at the moment because we don't use time.Sleep() in the profiler.")
 
 	onProfilerStart() // This fixes Windows ticker resolution.
