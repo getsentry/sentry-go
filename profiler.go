@@ -3,14 +3,15 @@ package sentry
 import (
 	"runtime"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/traceparser"
 )
 
 // Start collecting profile data and returns a function that stops profiling, producing a Trace.
-// May return nil or an incomplete trace in case of a panic.
-func startProfiling() func() *profilerResult {
+// The returned stop function May return nil or an incomplete trace in case of a panic.
+func startProfiling() (stopFunc func() *profilerResult) {
 	onProfilerStart()
 
 	// buffered channels to handle the recover() case without blocking
@@ -27,13 +28,20 @@ func startProfiling() func() *profilerResult {
 
 // This allows us to test whether panic during profiling are handled correctly and don't block execution.
 var testProfilerPanic = 0
+var testProfilerPanicked atomic.Bool
 
 func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) {
 	// We shouldn't panic but let's be super safe.
 	defer func() {
 		_ = recover()
+
 		// Make sure we don't block the caller of stopFn() even if we panic.
 		result <- nil
+
+		if testProfilerPanic != 0 {
+			testProfilerPanic = 0
+			testProfilerPanicked.Store(true)
+		}
 	}()
 
 	// Stop after 30 seconds unless stopped manually.
@@ -41,7 +49,6 @@ func profilerGoroutine(result chan<- *profilerResult, stopSignal chan struct{}) 
 	defer timeout.Stop()
 
 	if testProfilerPanic == -1 {
-		testProfilerPanic = 0
 		panic("This is an expected panic in profilerGoroutine() during tests")
 	}
 
@@ -116,7 +123,6 @@ func (p *profileRecorder) onTick() {
 	elapsedNs := uint64(time.Since(p.startTime).Nanoseconds())
 
 	if testProfilerPanic != 0 && int(elapsedNs) > testProfilerPanic {
-		testProfilerPanic = 0
 		panic("This is an expected panic in Profiler.OnTick() during tests")
 	}
 
