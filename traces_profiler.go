@@ -26,6 +26,10 @@ type _transactionProfiler struct {
 
 func (tp *_transactionProfiler) Finish(span *Span) *profileInfo {
 	result := tp.stopFunc()
+	if result == nil || result.trace == nil {
+		return nil
+	}
+
 	info := &profileInfo{
 		Version: "1",
 		EventID: uuid(),
@@ -33,18 +37,17 @@ func (tp *_transactionProfiler) Finish(span *Span) *profileInfo {
 		Timestamp: span.StartTime,
 		Trace:     result.trace,
 		Transaction: profileTransaction{
-			// TODO capture the calling goroutine ID. It is currently not exposed by the runtime but we can
-			// use the runtime.Stack() function to get the ID from the stack trace, e.g. by capturing the first sample
-			// synchronously in the calling routine.
-			ActiveThreadID: 0,
-			DurationNS:     uint64(span.EndTime.Sub(span.StartTime).Nanoseconds()),
-			Name:           span.Name,
-			TraceID:        span.TraceID.String(),
+			DurationNS: uint64(span.EndTime.Sub(span.StartTime).Nanoseconds()),
+			Name:       span.Name,
+			TraceID:    span.TraceID.String(),
 		},
 	}
 	if len(info.Transaction.Name) == 0 {
 		// Name is required by Relay so use the operation name if the span name is empty.
 		info.Transaction.Name = span.Op
+	}
+	if result.callerGoID > 0 {
+		info.Transaction.ActiveThreadID = result.callerGoID
 	}
 	return info
 }

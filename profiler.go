@@ -15,14 +15,20 @@ func startProfiling(startTime time.Time) (stopFunc func() *profilerResult) {
 	onProfilerStart()
 
 	// buffered channels to handle the recover() case without blocking
-	result := make(chan *profilerResult, 2)
+	resultChannel := make(chan *profilerResult, 2)
 	stopSignal := make(chan struct{}, 2)
 
-	go profilerGoroutine(startTime, result, stopSignal)
+	go profilerGoroutine(startTime, resultChannel, stopSignal)
+
+	var goID = getCurrentGoID()
 
 	return func() *profilerResult {
 		stopSignal <- struct{}{}
-		return <-result
+		var result = <-resultChannel
+		if result != nil {
+			result.callerGoID = goID
+		}
+		return result
 	}
 }
 
@@ -58,7 +64,7 @@ func profilerGoroutine(startTime time.Time, result chan<- *profilerResult, stopS
 	defer collectTicker.Stop()
 
 	defer func() {
-		result <- &profilerResult{profiler.trace}
+		result <- &profilerResult{0, profiler.trace}
 	}()
 
 	for {
@@ -72,7 +78,27 @@ func profilerGoroutine(startTime time.Time, result chan<- *profilerResult, stopS
 }
 
 type profilerResult struct {
-	trace *profileTrace
+	callerGoID uint64
+	trace      *profileTrace
+}
+
+func getCurrentGoID() uint64 {
+	// We shouldn't panic but let's be super safe.
+	defer func() {
+		_ = recover()
+	}()
+
+	// Buffer to read the stack trace into. We should be good with a small buffer because we only need the first line.
+	var stacksBuffer = make([]byte, 100)
+	var n = runtime.Stack(stacksBuffer, false)
+	if n > 0 {
+		var traces = traceparser.Parse(stacksBuffer[0:n])
+		if traces.Length() > 0 {
+			var trace = traces.Item(0)
+			return trace.GoID()
+		}
+	}
+	return 0
 }
 
 func newProfiler(startTime time.Time) *profileRecorder {

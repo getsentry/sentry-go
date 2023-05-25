@@ -18,6 +18,7 @@ func TestProfilerCollection(t *testing.T) {
 	result := stopFn()
 	elapsed := time.Since(start)
 	require.NotNil(t, result)
+	require.Greater(t, result.callerGoID, uint64(0))
 	validateProfile(t, result.trace, elapsed)
 }
 

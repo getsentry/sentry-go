@@ -40,6 +40,7 @@ func TestTraceProfiling(t *testing.T) {
 	require.GreaterOrEqual(profileInfo.Timestamp, timeBeforeStarting)
 	require.LessOrEqual(profileInfo.Timestamp, time.Now())
 	require.Equal(event.EventID, profileInfo.Transaction.ID)
+	require.Greater(profileInfo.Transaction.ActiveThreadID, uint64(0))
 	require.Equal(span.TraceID.String(), profileInfo.Transaction.TraceID)
 	validateProfile(t, profileInfo.Trace, span.EndTime.Sub(span.StartTime))
 }
