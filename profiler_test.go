@@ -143,6 +143,10 @@ func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) 
 }
 
 func TestProfilerSamplingRate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping in short mode.")
+	}
+
 	var require = require.New(t)
 
 	stopFn := startProfiling(time.Now())
@@ -201,9 +205,13 @@ func testTick(t *testing.T, count, i int, prevTick time.Time) time.Time {
 	return time.Now()
 }
 
+func isCI() bool {
+	return os.Getenv("CI") != ""
+}
+
 // This test measures the accuracy of time.NewTicker() on the current system.
 func TestProfilerTimeTicker(t *testing.T) {
-	if os.Getenv("CI") != "" {
+	if isCI() {
 		t.Skip("Skipping on CI because the machines are too overloaded to provide consistent ticker resolution.")
 	}
 
@@ -301,22 +309,37 @@ func BenchmarkProfilerProcess(b *testing.B) {
 	}
 }
 
-func doHardWork() {
-	_ = findPrimeNumber(10000)
-}
-
-func BenchmarkProfilerOverheadBaseline(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		doHardWork()
+func profilerBenchmark(b *testing.B, withProfiling bool) {
+	var stopFn func() *profilerResult
+	if withProfiling {
+		stopFn = startProfiling(time.Now())
 	}
-}
-
-func BenchmarkProfilerOverheadWithProfiler(b *testing.B) {
-	stopFn := startProfiling(time.Now())
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		doHardWork()
+		_ = findPrimeNumber(10000)
 	}
 	b.StopTimer()
-	stopFn()
+	if withProfiling {
+		stopFn()
+	}
+}
+
+func TestProfilerOverhead(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping overhead benchmark in short mode.")
+	}
+	var base = testing.Benchmark(func(b *testing.B) { profilerBenchmark(b, false) })
+	var other = testing.Benchmark(func(b *testing.B) { profilerBenchmark(b, true) })
+
+	t.Logf("Without profiling: %v\n", base.String())
+	t.Logf("With profiling:    %v\n", other.String())
+
+	// Note: we may need to tune this to allow for slow CI.
+	var maxOverhead = 5.0
+	if isCI() {
+		maxOverhead = 15.0
+	}
+	var overhead = float64(other.NsPerOp())/float64(base.NsPerOp())*100 - 100
+	t.Logf("Profiling overhead: %f percent\n", overhead)
+	require.Less(t, overhead, maxOverhead)
 }

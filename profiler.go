@@ -247,3 +247,25 @@ func (p *profileRecorder) addFrame(capturedFrame traceparser.Frame) int {
 	}
 	return frameIndex
 }
+
+// A Ticker holds a channel that delivers “ticks” of a clock at intervals.
+type profilerTicker interface {
+	Stop()
+	Channel() <-chan time.Time
+}
+
+type timeTicker struct {
+	*time.Ticker
+}
+
+func (t *timeTicker) Channel() <-chan time.Time {
+	return t.C
+}
+
+func profilerTickerFactoryDefault(d time.Duration) profilerTicker {
+	return &timeTicker{time.NewTicker(d)}
+}
+
+// We allow overriding the ticker for tests. CI is terribly flaky
+// because the time.Ticker doesn't guarantee regular ticks - they may come (a lot) later than the given interval.
+var profilerTickerFactory = profilerTickerFactoryDefault
