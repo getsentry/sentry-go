@@ -178,6 +178,23 @@ func TestProfilerSamplingRate(t *testing.T) {
 	require.Less(outliers, len(result.trace.Samples)/10)
 }
 
+func TestProfilerStackBufferGrowth(t *testing.T) {
+	var require = require.New(t)
+	profiler := newProfiler(time.Now())
+
+	_ = profiler.collectRecords()
+
+	profiler.stacksBuffer = make([]byte, 1)
+	require.Equal(1, len(profiler.stacksBuffer))
+	var bytesWithAutoAlloc = profiler.collectRecords()
+	var lenAfterAutoAlloc = len(profiler.stacksBuffer)
+	require.Greater(lenAfterAutoAlloc, 1)
+	require.Greater(lenAfterAutoAlloc, len(bytesWithAutoAlloc))
+
+	_ = profiler.collectRecords()
+	require.Equal(lenAfterAutoAlloc, len(profiler.stacksBuffer))
+}
+
 func testTick(t *testing.T, count, i int, prevTick time.Time) time.Time {
 	var sinceLastTick = time.Since(prevTick).Microseconds()
 	t.Logf("tick %2d/%d after %d μs", i+1, count, sinceLastTick)
