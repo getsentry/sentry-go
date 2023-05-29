@@ -200,9 +200,16 @@ func (s *Span) Finish() {
 	// TODO(tracing): maybe make Finish run at most once, such that
 	// (incorrectly) calling it twice never double sends to Sentry.
 
+	// For the timing to be correct, the profiler must be stopped before s.EndTime.
+	var profile *profileInfo
+	if s.profiler != nil {
+		profile = s.profiler.Finish(s)
+	}
+
 	if s.EndTime.IsZero() {
 		s.EndTime = monotonicTimeSince(s.StartTime)
 	}
+
 	if !s.Sampled.Bool() {
 		return
 	}
@@ -210,6 +217,8 @@ func (s *Span) Finish() {
 	if event == nil {
 		return
 	}
+
+	event.transactionProfile = profile
 
 	// TODO(tracing): add breadcrumbs
 	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
@@ -508,11 +517,6 @@ func (s *Span) toEvent() *Event {
 		return nil // only transactions can be transformed into events
 	}
 
-	var profile *profileInfo
-	if s.profiler != nil {
-		profile = s.profiler.Finish(s)
-	}
-
 	children := s.recorder.children()
 	finished := make([]*Span, 0, len(children))
 	for _, child := range children {
@@ -556,7 +560,6 @@ func (s *Span) toEvent() *Event {
 		sdkMetaData: SDKMetaData{
 			dsc: s.dynamicSamplingContext,
 		},
-		transactionProfile: profile,
 	}
 }
 

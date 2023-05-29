@@ -22,7 +22,6 @@ func testTraceProfiling(t *testing.T, rate float64) (*Span, *Event) {
 		Dist:               "dist",
 	})
 	span := StartSpan(ctx, "top")
-	time.Sleep(time.Millisecond)
 	ticker.Tick()
 	span.Finish()
 
