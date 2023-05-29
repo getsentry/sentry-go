@@ -11,15 +11,63 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test ticker that ticks on demand instead of relying on go runtime timing.
+type profilerTestTicker struct {
+	c chan time.Time
+}
+
+func (t *profilerTestTicker) Channel() <-chan time.Time {
+	return t.c
+}
+
+func (t *profilerTestTicker) Stop() {}
+
+func (t *profilerTestTicker) Tick() {
+	t.c <- time.Now()
+}
+
+func setupProfilerTestTicker() *profilerTestTicker {
+	ticker := &profilerTestTicker{c: make(chan time.Time, 1)}
+	profilerTickerFactory = func(d time.Duration) profilerTicker { return ticker }
+	return ticker
+}
+
+func restoreProfilerTicker() {
+	profilerTickerFactory = profilerTickerFactoryDefault
+}
+
 func TestProfilerCollection(t *testing.T) {
-	start := time.Now()
-	stopFn := startProfiling(start)
-	doWorkFor(35 * time.Millisecond)
-	result := stopFn()
-	elapsed := time.Since(start)
-	require.NotNil(t, result)
-	require.Greater(t, result.callerGoID, uint64(0))
-	validateProfile(t, result.trace, elapsed)
+	if !isCI() {
+		t.Run("RealTicker", func(t *testing.T) {
+			start := time.Now()
+			stopFn := startProfiling(start)
+			doWorkFor(35 * time.Millisecond)
+			result := stopFn()
+			elapsed := time.Since(start)
+			require.NotNil(t, result)
+			require.Greater(t, result.callerGoID, uint64(0))
+			validateProfile(t, result.trace, elapsed)
+		})
+	}
+
+	t.Run("CustomTicker", func(t *testing.T) {
+		var require = require.New(t)
+
+		ticker := setupProfilerTestTicker()
+		defer restoreProfilerTicker()
+
+		start := time.Now()
+		stopFn := startProfiling(start)
+		time.Sleep(time.Millisecond)
+		ticker.Tick()
+		result := stopFn()
+		elapsed := time.Since(start)
+		require.NotNil(result)
+		require.Greater(result.callerGoID, uint64(0))
+		validateProfile(t, result.trace, elapsed)
+		// We expect exactly two sets of samples being collected: 1 at the beginning and 1 after a tick.
+		require.Equal(len(result.trace.ThreadMetadata)*2, len(result.trace.Samples))
+	})
 }
 
 func TestProfilerCollectsOnStart(t *testing.T) {
@@ -29,19 +77,16 @@ func TestProfilerCollectsOnStart(t *testing.T) {
 	validateProfile(t, result.trace, time.Since(start))
 }
 
-func workUntilProfilerPanicked() {
-	for i := 0; i < 100 && atomic.LoadInt64(&testProfilerPanic) != 0; i++ {
-		doWorkFor(10 * time.Millisecond)
-	}
-}
-
 func TestProfilerPanicDuringStartup(t *testing.T) {
 	var require = require.New(t)
 
 	atomic.StoreInt64(&testProfilerPanic, -1)
 
 	stopFn := startProfiling(time.Now())
-	workUntilProfilerPanicked()
+	// wait until the profiler has panicked
+	for i := 0; i < 100 && atomic.LoadInt64(&testProfilerPanic) != 0; i++ {
+		doWorkFor(10 * time.Millisecond)
+	}
 	result := stopFn()
 
 	require.Zero(atomic.LoadInt64(&testProfilerPanic))
@@ -51,12 +96,15 @@ func TestProfilerPanicDuringStartup(t *testing.T) {
 func TestProfilerPanicOnTick(t *testing.T) {
 	var require = require.New(t)
 
+	ticker := setupProfilerTestTicker()
+	defer restoreProfilerTicker()
+
 	// Panic after the first sample is collected.
-	atomic.StoreInt64(&testProfilerPanic, profilerSamplingRate.Nanoseconds())
+	atomic.StoreInt64(&testProfilerPanic, 1)
 
 	start := time.Now()
 	stopFn := startProfiling(start)
-	workUntilProfilerPanicked()
+	ticker.Tick()
 	result := stopFn()
 	elapsed := time.Since(start)
 
@@ -68,21 +116,26 @@ func TestProfilerPanicOnTick(t *testing.T) {
 func TestProfilerPanicOnTickDirect(t *testing.T) {
 	var require = require.New(t)
 
+	// Panic after the first sample is collected.
 	atomic.StoreInt64(&testProfilerPanic, 1)
 
 	profiler := newProfiler(time.Now())
 
-	time.Sleep(time.Millisecond)
+	// first tick won't panic
+	profiler.onTick()
+	var lenSamples = len(profiler.trace.Samples)
+	require.Greater(lenSamples, 0)
 
 	// This is normally handled by the profiler goroutine and stops the profiler.
 	require.Panics(profiler.onTick)
-	require.Empty(profiler.trace.Samples)
+	require.Equal(lenSamples, len(profiler.trace.Samples))
 
 	require.Equal(int64(1), atomic.LoadInt64(&testProfilerPanic))
 	atomic.StoreInt64(&testProfilerPanic, 0)
 
 	profiler.onTick()
 	require.NotEmpty(profiler.trace.Samples)
+	require.Equal(2*lenSamples, len(profiler.trace.Samples))
 }
 
 func doWorkFor(duration time.Duration) {
@@ -143,6 +196,9 @@ func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) 
 }
 
 func TestProfilerSamplingRate(t *testing.T) {
+	if isCI() {
+		t.Skip("Skipping on CI because the machines are too overloaded to provide consistent ticker resolution.")
+	}
 	if testing.Short() {
 		t.Skip("Skipping in short mode.")
 	}

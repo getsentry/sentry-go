@@ -33,6 +33,8 @@ func startProfiling(startTime time.Time) (stopFunc func() *profilerResult) {
 }
 
 // This allows us to test whether panic during profiling are handled correctly and don't block execution.
+// If the number is lower than 0, profilerGoroutine() will panic immedately.
+// If the number is higher than 0, profiler.onTick() will panic after the given number of samples collected.
 var testProfilerPanic int64
 
 func profilerGoroutine(startTime time.Time, result chan<- *profilerResult, stopSignal chan struct{}) {
@@ -60,8 +62,9 @@ func profilerGoroutine(startTime time.Time, result chan<- *profilerResult, stopS
 	profiler.onTick()
 
 	// Periodically collect stacks, starting after profilerSamplingRate has passed.
-	collectTicker := time.NewTicker(profilerSamplingRate)
+	collectTicker := profilerTickerFactory(profilerSamplingRate)
 	defer collectTicker.Stop()
+	var tickerChannel = collectTicker.Channel()
 
 	defer func() {
 		result <- &profilerResult{0, profiler.trace}
@@ -69,7 +72,7 @@ func profilerGoroutine(startTime time.Time, result chan<- *profilerResult, stopS
 
 	for {
 		select {
-		case <-collectTicker.C:
+		case <-tickerChannel:
 			profiler.onTick()
 		case <-stopSignal:
 			return
@@ -143,7 +146,7 @@ type profileRecorder struct {
 func (p *profileRecorder) onTick() {
 	elapsedNs := time.Since(p.startTime).Nanoseconds()
 
-	if 0 < testProfilerPanic && testProfilerPanic < elapsedNs {
+	if testProfilerPanic > 0 && int64(len(p.trace.Samples)) > testProfilerPanic {
 		panic("This is an expected panic in Profiler.OnTick() during tests")
 	}
 

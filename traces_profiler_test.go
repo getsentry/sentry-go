@@ -8,6 +8,9 @@ import (
 )
 
 func testTraceProfiling(t *testing.T, rate float64) (*Span, *Event) {
+	ticker := setupProfilerTestTicker()
+	defer restoreProfilerTicker()
+
 	transport := &TransportMock{}
 	ctx := NewTestContext(ClientOptions{
 		Transport:          transport,
@@ -19,7 +22,8 @@ func testTraceProfiling(t *testing.T, rate float64) (*Span, *Event) {
 		Dist:               "dist",
 	})
 	span := StartSpan(ctx, "top")
-	doWorkFor(100 * time.Millisecond)
+	time.Sleep(time.Millisecond)
+	ticker.Tick()
 	span.Finish()
 
 	require.Equal(t, 1, len(transport.events))
