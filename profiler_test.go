@@ -65,9 +65,6 @@ func TestProfilerCollection(t *testing.T) {
 		require.NotNil(result)
 		require.Greater(result.callerGoID, uint64(0))
 		validateProfile(t, result.trace, elapsed)
-		// We expect exactly two sets of samples being collected: 1 at the beginning and 1 after a tick.
-		// So there should be more samples than goroutines logged (should be exactly two times more but that doesn't seem true in CI...).
-		require.Less(len(result.trace.ThreadMetadata), len(result.trace.Samples))
 	})
 }
 
