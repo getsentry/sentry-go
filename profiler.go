@@ -52,11 +52,13 @@ func profilerGoroutine(startTime time.Time, result chan<- *profilerResult, stopS
 	timeout := time.AfterFunc(30*time.Second, func() { stopSignal <- struct{}{} })
 	defer timeout.Stop()
 
-	if testProfilerPanic < 0 {
+	var localTestProfilerPanic = atomic.LoadInt64(&testProfilerPanic)
+	if localTestProfilerPanic < 0 {
 		panic("This is an expected panic in profilerGoroutine() during tests")
 	}
 
 	profiler := newProfiler(startTime)
+	profiler.testProfilerPanic = localTestProfilerPanic
 
 	// Collect the first sample immediately.
 	profiler.onTick()
@@ -130,8 +132,9 @@ const stackBufferMaxGrowth = 512 * 1024
 const stackBufferLimit = 10 * 1024 * 1024
 
 type profileRecorder struct {
-	startTime time.Time
-	trace     *profileTrace
+	startTime         time.Time
+	trace             *profileTrace
+	testProfilerPanic int64
 
 	// Buffer to read current stacks - will grow automatically up to stackBufferLimit.
 	stacksBuffer []byte
@@ -146,7 +149,7 @@ type profileRecorder struct {
 func (p *profileRecorder) onTick() {
 	elapsedNs := time.Since(p.startTime).Nanoseconds()
 
-	if testProfilerPanic > 0 && int64(len(p.trace.Samples)) > testProfilerPanic {
+	if p.testProfilerPanic > 0 && int64(len(p.trace.Samples)) > p.testProfilerPanic {
 		panic("This is an expected panic in Profiler.OnTick() during tests")
 	}
 

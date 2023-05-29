@@ -117,10 +117,8 @@ func TestProfilerPanicOnTick(t *testing.T) {
 func TestProfilerPanicOnTickDirect(t *testing.T) {
 	var require = require.New(t)
 
-	// Panic after the first sample is collected.
-	atomic.StoreInt64(&testProfilerPanic, 1)
-
 	profiler := newProfiler(time.Now())
+	profiler.testProfilerPanic = 1
 
 	// first tick won't panic
 	profiler.onTick()
@@ -131,8 +129,7 @@ func TestProfilerPanicOnTickDirect(t *testing.T) {
 	require.Panics(profiler.onTick)
 	require.Equal(lenSamples, len(profiler.trace.Samples))
 
-	require.Equal(int64(1), atomic.LoadInt64(&testProfilerPanic))
-	atomic.StoreInt64(&testProfilerPanic, 0)
+	profiler.testProfilerPanic = 0
 
 	profiler.onTick()
 	require.NotEmpty(profiler.trace.Samples)
