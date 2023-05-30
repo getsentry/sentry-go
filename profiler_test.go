@@ -379,18 +379,18 @@ func TestProfilerOverhead(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping overhead benchmark in short mode.")
 	}
+	if isCI() {
+		t.Skip("Skipping on CI because the machines are too overloaded to run the test properly - they show between 3 and 30 % overhead....")
+	}
+
 	var base = testing.Benchmark(func(b *testing.B) { profilerBenchmark(b, false) })
 	var other = testing.Benchmark(func(b *testing.B) { profilerBenchmark(b, true) })
 
 	t.Logf("Without profiling: %v\n", base.String())
 	t.Logf("With profiling:    %v\n", other.String())
 
-	// Note: we may need to tune this to allow for slow CI.
-	var maxOverhead = 5.0
-	if isCI() {
-		maxOverhead = 30.0
-	}
 	var overhead = float64(other.NsPerOp())/float64(base.NsPerOp())*100 - 100
+	var maxOverhead = 5.0
 	t.Logf("Profiling overhead: %f percent\n", overhead)
 	require.Less(t, overhead, maxOverhead)
 }
