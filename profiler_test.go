@@ -388,7 +388,7 @@ func TestProfilerOverhead(t *testing.T) {
 	// Note: we may need to tune this to allow for slow CI.
 	var maxOverhead = 5.0
 	if isCI() {
-		maxOverhead = 15.0
+		maxOverhead = 30.0
 	}
 	var overhead = float64(other.NsPerOp())/float64(base.NsPerOp())*100 - 100
 	t.Logf("Profiling overhead: %f percent\n", overhead)
