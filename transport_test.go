@@ -132,26 +132,32 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 	}
 }
 
-func TestEnvelopeFromErrorBody(t *testing.T) {
-	const eventID = "b81c5be4d31e48959103a1f878a1efcb"
+func newTestEvent(typ string) *Event {
 	event := NewEvent()
-	event.Type = eventType
-	event.EventID = eventID
+	event.Type = typ
+	event.EventID = "b81c5be4d31e48959103a1f878a1efcb"
 	event.Sdk = SdkInfo{
 		Name:    "sentry.go",
 		Version: "0.0.1",
 	}
+	return event
+}
 
+func newTestDSN(t *testing.T) *Dsn {
 	dsn, err := NewDsn("http://public@example.com/sentry/1")
 	if err != nil {
 		t.Fatal(err)
 	}
+	return dsn
+}
 
+func TestEnvelopeFromErrorBody(t *testing.T) {
+	event := newTestEvent(eventType)
 	sentAt := time.Unix(0, 0).UTC()
 
 	body := json.RawMessage(`{"type":"event","fields":"omitted"}`)
 
-	b, err := envelopeFromBody(event, dsn, sentAt, body)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,25 +172,12 @@ func TestEnvelopeFromErrorBody(t *testing.T) {
 }
 
 func TestEnvelopeFromTransactionBody(t *testing.T) {
-	const eventID = "b81c5be4d31e48959103a1f878a1efcb"
-	event := NewEvent()
-	event.Type = transactionType
-	event.EventID = eventID
-	event.Sdk = SdkInfo{
-		Name:    "sentry.go",
-		Version: "0.0.1",
-	}
-
-	dsn, err := NewDsn("http://public@example.com/sentry/1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	event := newTestEvent(transactionType)
 	sentAt := time.Unix(0, 0).UTC()
 
 	body := json.RawMessage(`{"type":"transaction","fields":"omitted"}`)
 
-	b, err := envelopeFromBody(event, dsn, sentAt, body)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,6 +185,59 @@ func TestEnvelopeFromTransactionBody(t *testing.T) {
 	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
 {"type":"transaction","length":41}
 {"type":"transaction","fields":"omitted"}
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
+	event := newTestEvent(transactionType)
+	event.transactionProfile = &profileInfo{
+		Trace: &profileTrace{
+			Frames: []*Frame{
+				{
+					Function: "func",
+					Module:   "module",
+					Filename: "file.go",
+					Lineno:   42,
+					Colno:    24,
+				},
+			},
+			Samples: []*profileSample{
+				{
+					ElapsedSinceStartNS: 10,
+					StackID:             2,
+					ThreadID:            3,
+				},
+			},
+			Stacks: []profileStack{{0}},
+			ThreadMetadata: map[string]profileThreadMetadata{
+				"1": {Name: "GO 1"},
+			},
+		},
+		Transaction: profileTransaction{
+			ActiveThreadID: 1,
+			DurationNS:     2,
+			ID:             "3",
+			Name:           "tx-name",
+			TraceID:        "trace-id",
+		},
+	}
+	sentAt := time.Unix(0, 0).UTC()
+
+	body := json.RawMessage(`{"type":"transaction","fields":"omitted"}`)
+
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
+{"type":"transaction","length":41}
+{"type":"transaction","fields":"omitted"}
+{"type":"profile","length":618}
+{"device":{"architecture":"","classification":"","locale":"","manufacturer":"","model":""},"event_id":"","os":{"build_number":"","name":"","version":""},"platform":"","release":"","dist":"","runtime":{"name":"","version":""},"timestamp":"0001-01-01T00:00:00Z","profile":{"frames":[{"function":"func","module":"module","filename":"file.go","lineno":42,"colno":24,"in_app":false}],"samples":[{"elapsed_since_start_ns":10,"stack_id":2,"thread_id":3}],"stacks":[[0]],"thread_metadata":{"1":{"name":"GO 1"}}},"transaction":{"active_thread_id":1,"duration_ns":2,"id":"3","name":"tx-name","trace_id":"trace-id"},"version":""}
 `
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
