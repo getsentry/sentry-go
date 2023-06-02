@@ -1,5 +1,11 @@
 # Changelog
 
+## Unrelesed
+
+### Features
+
+- Initial alpha support for profiling [#626](https://github.com/getsentry/sentry-go/pull/626)
+
 ## 0.21.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.21.0.
