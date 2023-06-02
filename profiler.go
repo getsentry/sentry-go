@@ -127,7 +127,7 @@ func newProfiler(startTime time.Time) *profileRecorder {
 	}
 }
 
-const profilerSamplingRate = time.Second / 101 // 101 Hz
+const profilerSamplingRate = time.Second / 101 // 101 Hz; not 100 Hz because of the lockstep sampling (https://stackoverflow.com/a/45471031/1181370)
 const stackBufferMaxGrowth = 512 * 1024
 const stackBufferLimit = 10 * 1024 * 1024
 
