@@ -380,7 +380,7 @@ func TestProfilerOverhead(t *testing.T) {
 		t.Skip("Skipping overhead benchmark in short mode.")
 	}
 	if isCI() {
-		t.Skip("Skipping on CI because the machines are too overloaded to run the test properly - they show between 3 and 30 % overhead....")
+		t.Skip("Skipping on CI because the machines are too overloaded to run the test properly - they show between 3 and 30 %% overhead....")
 	}
 
 	var base = testing.Benchmark(func(b *testing.B) { profilerBenchmark(b, false) })
