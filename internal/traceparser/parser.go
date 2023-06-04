@@ -77,9 +77,53 @@ func (t *Trace) UniqueIdentifier() []byte {
 	return t.data
 }
 
+func (t *Trace) Frames() FrameIterator {
+	var lines = bytes.Split(t.data, lineSeparator)
+	return FrameIterator{lines: lines, i: 0, len: len(lines)}
+}
+
 func (t *Trace) FramesReversed() ReverseFrameIterator {
 	var lines = bytes.Split(t.data, lineSeparator)
 	return ReverseFrameIterator{lines: lines, i: len(lines)}
+}
+
+const framesElided = "...additional frames elided..."
+
+// FrameIterator iterates over stack frames.
+type FrameIterator struct {
+	lines [][]byte
+	i     int
+	len   int
+}
+
+// Next returns the next frame, or nil if there are none.
+func (it *FrameIterator) Next() Frame {
+	return Frame{it.popLine(), it.popLine()}
+}
+
+func (it *FrameIterator) popLine() []byte {
+	switch {
+	case it.i >= it.len:
+		return nil
+	case string(it.lines[it.i]) == framesElided:
+		it.i++
+		return it.popLine()
+	default:
+		it.i++
+		return it.lines[it.i-1]
+	}
+}
+
+// HasNext return true if there are values to be read.
+func (it *FrameIterator) HasNext() bool {
+	return it.i < it.len
+}
+
+// LengthUpperBound returns the maximum number of elements this stacks may contain.
+// The actual number may be lower because of elided frames. As such, the returned value
+// cannot be used to iterate over the frames but may be used to reserve capacity.
+func (it *FrameIterator) LengthUpperBound() int {
+	return it.len / 2
 }
 
 // ReverseFrameIterator iterates over stack frames in reverse order.
@@ -93,8 +137,6 @@ func (it *ReverseFrameIterator) Next() Frame {
 	var line2 = it.popLine()
 	return Frame{it.popLine(), line2}
 }
-
-const framesElided = "...additional frames elided..."
 
 func (it *ReverseFrameIterator) popLine() []byte {
 	it.i--
@@ -113,7 +155,7 @@ func (it *ReverseFrameIterator) HasNext() bool {
 	return it.i > 1
 }
 
-// LengthUpperBound returns the maximum number of elemnt this stacks may contain.
+// LengthUpperBound returns the maximum number of elements this stacks may contain.
 // The actual number may be lower because of elided frames. As such, the returned value
 // cannot be used to iterate over the frames but may be used to reserve capacity.
 func (it *ReverseFrameIterator) LengthUpperBound() int {

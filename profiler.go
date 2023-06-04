@@ -220,7 +220,7 @@ func (p *profileRecorder) addStackTrace(capturedStack traceparser.Trace) int {
 
 	stackIndex, exists := p.stackIndexes[string(key)]
 	if !exists {
-		iter := capturedStack.FramesReversed()
+		iter := capturedStack.Frames()
 		stack := make(profileStack, 0, iter.LengthUpperBound())
 		for iter.HasNext() {
 			var frame = iter.Next()

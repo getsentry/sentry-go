@@ -1,9 +1,11 @@
 package sentry
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -40,19 +42,24 @@ func restoreProfilerTicker() {
 func TestProfilerCollection(t *testing.T) {
 	if !isCI() {
 		t.Run("RealTicker", func(t *testing.T) {
+			var require = require.New(t)
+			var goID = getCurrentGoID()
+
 			start := time.Now()
 			stopFn := startProfiling(start)
 			doWorkFor(35 * time.Millisecond)
 			result := stopFn()
 			elapsed := time.Since(start)
-			require.NotNil(t, result)
-			require.Greater(t, result.callerGoID, uint64(0))
+			require.NotNil(result)
+			require.Greater(result.callerGoID, uint64(0))
+			require.Equal(goID, result.callerGoID)
 			validateProfile(t, result.trace, elapsed)
 		})
 	}
 
 	t.Run("CustomTicker", func(t *testing.T) {
 		var require = require.New(t)
+		var goID = getCurrentGoID()
 
 		ticker := setupProfilerTestTicker()
 		defer restoreProfilerTicker()
@@ -64,8 +71,45 @@ func TestProfilerCollection(t *testing.T) {
 		elapsed := time.Since(start)
 		require.NotNil(result)
 		require.Greater(result.callerGoID, uint64(0))
+		require.Equal(goID, result.callerGoID)
 		validateProfile(t, result.trace, elapsed)
 	})
+}
+
+// Check the order of frames for a known stack trace (i.e. this test case).
+func TestProfilerStackTrace(t *testing.T) {
+	var require = require.New(t)
+
+	ticker := setupProfilerTestTicker()
+	defer restoreProfilerTicker()
+
+	stopFn := startProfiling(time.Now())
+	ticker.Tick()
+	result := stopFn()
+	require.NotNil(result)
+
+	var actual = ""
+	for _, sample := range result.trace.Samples {
+		if sample.ThreadID == result.callerGoID {
+			t.Logf("Found a sample for the calling goroutine ID: %d", result.callerGoID)
+			var stack = result.trace.Stacks[sample.StackID]
+			for _, frameIndex := range stack {
+				var frame = result.trace.Frames[frameIndex]
+				actual += fmt.Sprintf("%s %s\n", frame.Module, frame.Function)
+			}
+			break
+		}
+	}
+	require.NotZero(len(actual))
+	actual = actual[:len(actual)-1] // remove trailing newline
+	t.Log(actual)
+
+	// Note: we can't check the exact stack trace because the profiler runs its own goroutine
+	// And this test goroutine may be interrupted at multiple points.
+	require.True(strings.HasSuffix(actual, `
+github.com/getsentry/sentry-go TestProfilerStackTrace
+testing tRunner
+testing (*T).Run`))
 }
 
 func TestProfilerCollectsOnStart(t *testing.T) {

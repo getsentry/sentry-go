@@ -123,7 +123,92 @@ created by time.goFunc
 	require.Equal(traces.Length(), i)
 }
 
+//nolint:dupl
 func TestFrames(t *testing.T) {
+	var require = require.New(t)
+
+	var output = ""
+	var traces = Parse(tracetext)
+	for i := 0; i < traces.Length(); i++ {
+		var trace = traces.Item(i)
+		var framesIter = trace.Frames()
+		output += fmt.Sprintf("Trace %d: goroutine %d with at most %d frames\n", i, trace.GoID(), framesIter.LengthUpperBound())
+
+		for framesIter.HasNext() {
+			var frame = framesIter.Next()
+			output += fmt.Sprintf("  Func = %s\n", frame.Func())
+			file, line := frame.File()
+			output += fmt.Sprintf("  File = %s\n", file)
+			output += fmt.Sprintf("  Line = %d\n", line)
+		}
+	}
+
+	var expected = strings.Split(strings.TrimLeft(`
+Trace 0: goroutine 18 with at most 2 frames
+  Func = testing.(*M).startAlarm.func1
+  File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
+  Line = 2241
+  Func = time.goFunc
+  File = C:/Users/name/scoop/apps/go/current/src/time/sleep.go
+  Line = 176
+Trace 1: goroutine 1 with at most 6 frames
+  Func = testing.(*T).Run
+  File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
+  Line = 1630
+  Func = testing.runTests.func1
+  File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
+  Line = 2036
+  Func = testing.tRunner
+  File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
+  Line = 1576
+  Func = testing.runTests
+  File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
+  Line = 2034
+  Func = testing.(*M).Run
+  File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
+  Line = 1906
+  Func = main.main
+  File = _testmain.go
+  Line = 465
+Trace 2: goroutine 6 with at most 4 frames
+  Func = github.com/getsentry/sentry-go.startProfiling.func3
+  File = c:/dev/sentry-go/profiler.go
+  Line = 46
+  Func = github.com/getsentry/sentry-go.TestStart
+  File = c:/dev/sentry-go/profiler_test.go
+  Line = 13
+  Func = testing.tRunner
+  File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
+  Line = 1576
+  Func = testing.(*T).Run
+  File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
+  Line = 1629
+Trace 3: goroutine 7 with at most 4 frames
+  Func = runtime.Stack
+  File = C:/Users/name/scoop/apps/go/current/src/runtime/mprof.go
+  Line = 1193
+  Func = github.com/getsentry/sentry-go.(*profileRecorder).Collect
+  File = c:/dev/sentry-go/profiler.go
+  Line = 73
+  Func = github.com/getsentry/sentry-go.startProfiling.func2
+  File = c:/dev/sentry-go/profiler.go
+  Line = 38
+  Func = github.com/getsentry/sentry-go.startProfiling
+  File = c:/dev/sentry-go/profiler.go
+  Line = 31
+Trace 4: goroutine 19 with at most 2 frames
+  Func = github.com/getsentry/sentry-go.startProfiling.func1
+  File = c:/dev/sentry-go/profiler.go
+  Line = 29
+  Func = time.goFunc
+  File = C:/Users/name/scoop/apps/go/current/src/time/sleep.go
+  Line = 176
+`, "\n"), "\n")
+	require.Equal(expected, strings.Split(output, "\n"))
+}
+
+//nolint:dupl
+func TestFramesReversed(t *testing.T) {
 	var require = require.New(t)
 
 	var output = ""
@@ -255,6 +340,42 @@ func BenchmarkFullParse(b *testing.B) {
 			var trace = traces.Item(i)
 			_ = trace.GoID()
 
+			var iter = trace.FramesReversed()
+			_ = iter.LengthUpperBound()
+			for iter.HasNext() {
+				var frame = iter.Next()
+				_ = frame.Func()
+				_, _ = frame.File()
+			}
+		}
+	}
+}
+
+func BenchmarkFramesIterator(b *testing.B) {
+	b.ReportAllocs()
+	var traces = Parse(tracetext)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for i := traces.Length() - 1; i >= 0; i-- {
+			var trace = traces.Item(i)
+			var iter = trace.Frames()
+			_ = iter.LengthUpperBound()
+			for iter.HasNext() {
+				var frame = iter.Next()
+				_ = frame.Func()
+				_, _ = frame.File()
+			}
+		}
+	}
+}
+
+func BenchmarkFramesReversedIterator(b *testing.B) {
+	b.ReportAllocs()
+	var traces = Parse(tracetext)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for i := traces.Length() - 1; i >= 0; i-- {
+			var trace = traces.Item(i)
 			var iter = trace.FramesReversed()
 			_ = iter.LengthUpperBound()
 			for iter.HasNext() {
