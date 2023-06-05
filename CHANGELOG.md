@@ -6,6 +6,10 @@
 
 - Initial alpha support for profiling [#626](https://github.com/getsentry/sentry-go/pull/626)
 
+### Bug fixes
+
+- Fix frames recognized as not being in-app still showing as in-app ([#647](https://github.com/getsentry/sentry-go/pull/647))
+
 ## 0.21.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.21.0.
