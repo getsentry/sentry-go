@@ -181,7 +181,6 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(envelope)
 	return http.NewRequest(
 		http.MethodPost,
 		dsn.GetAPIURL().String(),
