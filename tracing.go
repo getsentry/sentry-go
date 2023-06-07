@@ -972,6 +972,7 @@ func StartTransaction(ctx context.Context, name string, options ...SpanOption) *
 	)
 }
 
+// HTTPtoSpanStatus converts an HTTP status code to a SpanStatus.
 func HTTPtoSpanStatus(code int) SpanStatus {
 	if code < http.StatusBadRequest {
 		return SpanStatusOK
