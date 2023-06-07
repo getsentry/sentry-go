@@ -64,7 +64,10 @@ func (h *handler) handle(c *gin.Context) {
 		fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path),
 		options...,
 	)
-	defer transaction.Finish()
+	defer func() {
+		transaction.Status = sentry.HTTPtoSpanStatus(c.Writer.Status())
+		transaction.Finish()
+	}()
 
 	c.Request = c.Request.WithContext(transaction.Context())
 	hub.Scope().SetRequest(c.Request)
