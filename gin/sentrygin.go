@@ -2,6 +2,7 @@ package sentrygin
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -46,15 +47,33 @@ func New(options Options) gin.HandlerFunc {
 	}).handle
 }
 
-func (h *handler) handle(ctx *gin.Context) {
-	hub := sentry.GetHubFromContext(ctx.Request.Context())
+func (h *handler) handle(c *gin.Context) {
+	ctx := c.Request.Context()
+	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
+		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
-	hub.Scope().SetRequest(ctx.Request)
-	ctx.Set(valuesKey, hub)
-	defer h.recoverWithSentry(hub, ctx.Request)
-	ctx.Next()
+	options := []sentry.SpanOption{
+		sentry.WithOpName("http.server"),
+		sentry.ContinueFromRequest(c.Request),
+		sentry.WithTransactionSource(sentry.SourceURL),
+	}
+
+	transaction := sentry.StartTransaction(ctx,
+		fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path),
+		options...,
+	)
+	defer func() {
+		transaction.Status = sentry.HTTPtoSpanStatus(c.Writer.Status())
+		transaction.Finish()
+	}()
+
+	c.Request = c.Request.WithContext(transaction.Context())
+	hub.Scope().SetRequest(c.Request)
+	c.Set(valuesKey, hub)
+	defer h.recoverWithSentry(hub, c.Request)
+	c.Next()
 }
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
