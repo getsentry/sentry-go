@@ -130,7 +130,7 @@ func (iei *ignoreErrorsIntegration) Name() string {
 }
 
 func (iei *ignoreErrorsIntegration) SetupOnce(client *Client) {
-	iei.ignoreErrors = transformStringsIntoRegexps(client.Options().IgnoreErrors)
+	iei.ignoreErrors = transformStringsIntoRegexps(client.options.IgnoreErrors)
 	client.AddEventProcessor(iei.processor)
 }
 

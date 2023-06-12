@@ -17,7 +17,7 @@ type spanRecorder struct {
 func (r *spanRecorder) record(s *Span) {
 	maxSpans := defaultMaxSpans
 	if client := CurrentHub().Client(); client != nil {
-		maxSpans = client.Options().MaxSpans
+		maxSpans = client.options.MaxSpans
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -240,6 +240,28 @@ type Client struct {
 // single goroutine) or hub methods (for concurrent programs, for example web
 // servers).
 func NewClient(options ClientOptions) (*Client, error) {
+	// The default error event sample rate for all SDKs is 1.0 (send all).
+	//
+	// In Go, the zero value (default) for float64 is 0.0, which means that
+	// constructing a client with NewClient(ClientOptions{}), or, equivalently,
+	// initializing the SDK with Init(ClientOptions{}) without an explicit
+	// SampleRate would drop all events.
+	//
+	// To retain the desired default behavior, we exceptionally flip SampleRate
+	// from 0.0 to 1.0 here. Setting the sample rate to 0.0 is not very useful
+	// anyway, and the same end result can be achieved in many other ways like
+	// not initializing the SDK, setting the DSN to the empty string or using an
+	// event processor that always returns nil.
+	//
+	// An alternative API could be such that default options don't need to be
+	// the same as Go's zero values, for example using the Functional Options
+	// pattern. That would either require a breaking change if we want to reuse
+	// the obvious NewClient name, or a new function as an alternative
+	// constructor.
+	if options.SampleRate == 0.0 {
+		options.SampleRate = 1.0
+	}
+
 	if options.Debug {
 		debugWriter := options.DebugWriter
 		if debugWriter == nil {
@@ -374,8 +396,8 @@ func (client *Client) AddEventProcessor(processor EventProcessor) {
 }
 
 // Options return ClientOptions for the current Client.
-// TODO don't access this internally to avoid creating a copy each time.
 func (client Client) Options() ClientOptions {
+	// Note: internally, use `client.options` instead of `client.Options()` to avoid creating the object copy each time.
 	return client.options
 }
 
@@ -476,7 +498,7 @@ func (client *Client) EventFromMessage(message string, level Level) *Event {
 	event.Level = level
 	event.Message = message
 
-	if client.Options().AttachStacktrace {
+	if client.options.AttachStacktrace {
 		event.Threads = []Thread{{
 			Stacktrace: NewStacktrace(),
 			Crashed:    false,
@@ -516,34 +538,10 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		return client.CaptureException(err, hint, scope)
 	}
 
-	options := client.Options()
-
-	// The default error event sample rate for all SDKs is 1.0 (send all).
-	//
-	// In Go, the zero value (default) for float64 is 0.0, which means that
-	// constructing a client with NewClient(ClientOptions{}), or, equivalently,
-	// initializing the SDK with Init(ClientOptions{}) without an explicit
-	// SampleRate would drop all events.
-	//
-	// To retain the desired default behavior, we exceptionally flip SampleRate
-	// from 0.0 to 1.0 here. Setting the sample rate to 0.0 is not very useful
-	// anyway, and the same end result can be achieved in many other ways like
-	// not initializing the SDK, setting the DSN to the empty string or using an
-	// event processor that always returns nil.
-	//
-	// An alternative API could be such that default options don't need to be
-	// the same as Go's zero values, for example using the Functional Options
-	// pattern. That would either require a breaking change if we want to reuse
-	// the obvious NewClient name, or a new function as an alternative
-	// constructor.
-	if options.SampleRate == 0.0 {
-		options.SampleRate = 1.0
-	}
-
 	// Transactions are sampled by options.TracesSampleRate or
 	// options.TracesSampler when they are started. All other events
 	// (errors, messages) are sampled here.
-	if event.Type != transactionType && !sample(options.SampleRate) {
+	if event.Type != transactionType && !sample(client.options.SampleRate) {
 		Logger.Println("Event dropped due to SampleRate hit.")
 		return nil
 	}
@@ -556,15 +554,15 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	if hint == nil {
 		hint = &EventHint{}
 	}
-	if event.Type == transactionType && options.BeforeSendTransaction != nil {
+	if event.Type == transactionType && client.options.BeforeSendTransaction != nil {
 		// Transaction events
-		if event = options.BeforeSendTransaction(event, hint); event == nil {
+		if event = client.options.BeforeSendTransaction(event, hint); event == nil {
 			Logger.Println("Transaction dropped due to BeforeSendTransaction callback.")
 			return nil
 		}
-	} else if event.Type != transactionType && options.BeforeSend != nil {
+	} else if event.Type != transactionType && client.options.BeforeSend != nil {
 		// All other events
-		if event = options.BeforeSend(event, hint); event == nil {
+		if event = client.options.BeforeSend(event, hint); event == nil {
 			Logger.Println("Event dropped due to BeforeSend callback.")
 			return nil
 		}
@@ -590,7 +588,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if event.ServerName == "" {
-		event.ServerName = client.Options().ServerName
+		event.ServerName = client.options.ServerName
 
 		if event.ServerName == "" {
 			event.ServerName = hostname
@@ -598,15 +596,15 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if event.Release == "" {
-		event.Release = client.Options().Release
+		event.Release = client.options.Release
 	}
 
 	if event.Dist == "" {
-		event.Dist = client.Options().Dist
+		event.Dist = client.options.Dist
 	}
 
 	if event.Environment == "" {
-		event.Environment = client.Options().Environment
+		event.Environment = client.options.Environment
 	}
 
 	event.Platform = "go"
