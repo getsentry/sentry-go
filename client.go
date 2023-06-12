@@ -131,7 +131,7 @@ type ClientOptions struct {
 	// Used to customize the sampling of traces, overrides TracesSampleRate.
 	TracesSampler TracesSampler
 	// The sample rate for profiling traces in the range [0.0, 1.0].
-	// This applies on top of TracesSampleRate - it is a ratio of profiled traces out of all sampled traces.
+	// This is relative to TracesSampleRate - it is a ratio of profiled traces out of all sampled traces.
 	ProfilesSampleRate float64
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
