@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -63,6 +64,15 @@ func defaultRelease() (release string) {
 		if release = os.Getenv(e); release != "" {
 			Logger.Printf("Using release from environment variable %s: %s", e, release)
 			return release
+		}
+	}
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, setting := range info.Settings {
+			if setting.Key == "vcs.revision" && setting.Value != "" {
+				Logger.Printf("Using release from debug info: %s", setting.Value)
+				return setting.Value
+			}
 		}
 	}
 
