@@ -397,7 +397,7 @@ func (client *Client) AddEventProcessor(processor EventProcessor) {
 
 // Options return ClientOptions for the current Client.
 func (client Client) Options() ClientOptions {
-	// Note: internally, use `client.options` instead of `client.Options()` to avoid creating the object copy each time.
+	// Note: internally, consider using `client.options` instead of `client.Options()` to avoid copying the object each time.
 	return client.options
 }
 
