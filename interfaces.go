@@ -239,7 +239,8 @@ type Exception struct {
 // SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
 // but which shouldn't get send to Sentry.
 type SDKMetaData struct {
-	dsc DynamicSamplingContext
+	dsc                DynamicSamplingContext
+	transactionProfile *profileInfo
 }
 
 // Contains information about how the name of the transaction was determined.
@@ -317,8 +318,6 @@ type Event struct {
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
-
-	transactionProfile *profileInfo
 }
 
 // SetException appends the unwrapped errors to the event's exception list.

@@ -645,8 +645,8 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		}
 	}
 
-	if event.transactionProfile != nil {
-		event.transactionProfile.UpdateFromEvent(event)
+	if event.sdkMetaData.transactionProfile != nil {
+		event.sdkMetaData.transactionProfile.UpdateFromEvent(event)
 	}
 
 	return event

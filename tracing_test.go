@@ -156,7 +156,7 @@ func TestStartSpan(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
-			"sdkMetaData", "transactionProfile",
+			"sdkMetaData",
 		),
 		cmpopts.EquateEmpty(),
 	}
@@ -220,7 +220,7 @@ func TestStartChild(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"EventID", "Level", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
-			"sdkMetaData", "transactionProfile",
+			"sdkMetaData",
 		),
 		cmpopts.IgnoreMapEntries(func(k string, v interface{}) bool {
 			return k != "trace"
@@ -301,7 +301,7 @@ func TestStartTransaction(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
-			"sdkMetaData", "transactionProfile",
+			"sdkMetaData",
 		),
 		cmpopts.EquateEmpty(),
 	}

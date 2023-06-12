@@ -34,8 +34,8 @@ func TestTraceProfiling(t *testing.T) {
 	var timeBeforeStarting = time.Now()
 	span, event := testTraceProfiling(t, 1.0)
 	require.Equal(transactionType, event.Type)
-	require.NotNil(event.transactionProfile)
-	var profileInfo = event.transactionProfile
+	require.NotNil(event.sdkMetaData.transactionProfile)
+	var profileInfo = event.sdkMetaData.transactionProfile
 	require.Equal("go", profileInfo.Platform)
 	require.Equal(event.Environment, profileInfo.Environment)
 	require.Equal(event.Release, profileInfo.Release)
@@ -52,5 +52,5 @@ func TestTraceProfilingDisabled(t *testing.T) {
 	var require = require.New(t)
 	_, event := testTraceProfiling(t, 0)
 	require.Equal(transactionType, event.Type)
-	require.Nil(event.transactionProfile)
+	require.Nil(event.sdkMetaData.transactionProfile)
 }

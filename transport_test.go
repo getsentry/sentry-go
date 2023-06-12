@@ -132,9 +132,9 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 	}
 }
 
-func newTestEvent(typ string) *Event {
+func newTestEvent(eventType string) *Event {
 	event := NewEvent()
-	event.Type = typ
+	event.Type = eventType
 	event.EventID = "b81c5be4d31e48959103a1f878a1efcb"
 	event.Sdk = SdkInfo{
 		Name:    "sentry.go",
@@ -193,7 +193,7 @@ func TestEnvelopeFromTransactionBody(t *testing.T) {
 
 func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 	event := newTestEvent(transactionType)
-	event.transactionProfile = &profileInfo{
+	event.sdkMetaData.transactionProfile = &profileInfo{
 		Trace: &profileTrace{
 			Frames: []*Frame{
 				{

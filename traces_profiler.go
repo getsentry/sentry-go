@@ -2,7 +2,7 @@ package sentry
 
 // Checks whether the transaction should be profiled (according to ProfilesSampleRate)
 // and starts a profiler if so.
-func (span *Span) maybeProfileTransaction() {
+func (span *Span) sampleTransactionProfile() {
 	var sampleRate = span.clientOptions().ProfilesSampleRate
 	switch {
 	case sampleRate < 0.0 || sampleRate > 1.0:

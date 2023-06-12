@@ -188,7 +188,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	// Start profiling only if it's a sampled root transaction.
 	if span.IsTransaction() && span.Sampled.Bool() {
-		span.maybeProfileTransaction()
+		span.sampleTransactionProfile()
 	}
 
 	return &span
@@ -218,7 +218,7 @@ func (s *Span) Finish() {
 		return
 	}
 
-	event.transactionProfile = profile
+	event.sdkMetaData.transactionProfile = profile
 
 	// TODO(tracing): add breadcrumbs
 	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
