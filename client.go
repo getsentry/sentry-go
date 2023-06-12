@@ -130,6 +130,9 @@ type ClientOptions struct {
 	TracesSampleRate float64
 	// Used to customize the sampling of traces, overrides TracesSampleRate.
 	TracesSampler TracesSampler
+	// The sample rate for profiling traces in the range [0.0, 1.0].
+	// This is relative to TracesSampleRate - it is a ratio of profiled traces out of all sampled traces.
+	ProfilesSampleRate float64
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
 	// If the match is found, then a whole event will be dropped.
@@ -371,6 +374,7 @@ func (client *Client) AddEventProcessor(processor EventProcessor) {
 }
 
 // Options return ClientOptions for the current Client.
+// TODO don't access this internally to avoid creating a copy each time.
 func (client Client) Options() ClientOptions {
 	return client.options
 }
@@ -573,6 +577,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 
 func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
 	if event.EventID == "" {
+		// TODO set EventID when the event is created, same as in other SDKs. It's necessary for profileTransaction.ID.
 		event.EventID = EventID(uuid())
 	}
 
@@ -638,6 +643,10 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 			Logger.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
 			return nil
 		}
+	}
+
+	if event.sdkMetaData.transactionProfile != nil {
+		event.sdkMetaData.transactionProfile.UpdateFromEvent(event)
 	}
 
 	return event

@@ -3,6 +3,7 @@ package sentry
 import (
 	"encoding/json"
 	"errors"
+	"runtime"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -69,9 +70,9 @@ func TestSplitQualifiedFunctionName(t *testing.T) {
 }
 
 // nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
-func TestFilterFrames(t *testing.T) {
+func TestCreateFrames(t *testing.T) {
 	tests := []struct {
-		in  []Frame
+		in  []runtime.Frame
 		out []Frame
 	}{
 		// sanity check
@@ -79,36 +80,26 @@ func TestFilterFrames(t *testing.T) {
 		// filter out go internals and SDK internals; "sentry-go_test" is
 		// considered outside of the SDK and thus included (useful for testing)
 		{
-			in: []Frame{
+			in: []runtime.Frame{
 				{
-					Function: "goexit",
-					Module:   "runtime",
-					AbsPath:  "/goroot/src/runtime/asm_amd64.s",
-					InApp:    false,
+					Function: "runtime.goexit",
+					File:     "/goroot/src/runtime/asm_amd64.s",
 				},
 				{
-					Function: "tRunner",
-					Module:   "testing",
-					AbsPath:  "/goroot/src/testing/testing.go",
-					InApp:    false,
+					Function: "testing.tRunner",
+					File:     "/goroot/src/testing/testing.go",
 				},
 				{
-					Function: "TestNewStacktrace.func1",
-					Module:   "github.com/getsentry/sentry-go_test",
-					AbsPath:  "/somewhere/sentry/sentry-go/stacktrace_external_test.go",
-					InApp:    true,
+					Function: "github.com/getsentry/sentry-go_test.TestNewStacktrace.func1",
+					File:     "/somewhere/sentry/sentry-go/stacktrace_external_test.go",
 				},
 				{
-					Function: "StacktraceTestHelper.NewStacktrace",
-					Module:   "github.com/getsentry/sentry-go",
-					AbsPath:  "/somewhere/sentry/sentry-go/stacktrace_test.go",
-					InApp:    true,
+					Function: "github.com/getsentry/sentry-go.StacktraceTestHelper.NewStacktrace",
+					File:     "/somewhere/sentry/sentry-go/stacktrace_test.go",
 				},
 				{
-					Function: "NewStacktrace",
-					Module:   "github.com/getsentry/sentry-go",
-					AbsPath:  "/somewhere/sentry/sentry-go/stacktrace.go",
-					InApp:    true,
+					Function: "github.com/getsentry/sentry-go.NewStacktrace",
+					File:     "/somewhere/sentry/sentry-go/stacktrace.go",
 				},
 			},
 			out: []Frame{
@@ -122,24 +113,18 @@ func TestFilterFrames(t *testing.T) {
 		},
 		// filter out integrations; SDK subpackages
 		{
-			in: []Frame{
+			in: []runtime.Frame{
 				{
-					Function: "Example.Integration",
-					Module:   "github.com/getsentry/sentry-go/http/integration",
-					AbsPath:  "/somewhere/sentry/sentry-go/http/integration/integration.go",
-					InApp:    true,
+					Function: "github.com/getsentry/sentry-go/http/integration.Example.Integration",
+					File:     "/somewhere/sentry/sentry-go/http/integration/integration.go",
 				},
 				{
-					Function: "(*Handler).Handle",
-					Module:   "github.com/getsentry/sentry-go/http",
-					AbsPath:  "/somewhere/sentry/sentry-go/http/sentryhttp.go",
-					InApp:    true,
+					Function: "github.com/getsentry/sentry-go/http.(*Handler).Handle",
+					File:     "/somewhere/sentry/sentry-go/http/sentryhttp.go",
 				},
 				{
-					Function: "main",
-					Module:   "main",
-					AbsPath:  "/somewhere/example.com/pkg/main.go",
-					InApp:    true,
+					Function: "main.main",
+					File:     "/somewhere/example.com/pkg/main.go",
 				},
 			},
 			out: []Frame{
@@ -154,7 +139,7 @@ func TestFilterFrames(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			got := filterFrames(tt.in)
+			got := createFrames(tt.in)
 			if diff := cmp.Diff(tt.out, got); diff != "" {
 				t.Errorf("filterFrames() mismatch (-want +got):\n%s", diff)
 			}

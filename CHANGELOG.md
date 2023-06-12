@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## Unrelesed
+
+### Features
+
+- Initial alpha support for profiling [#626](https://github.com/getsentry/sentry-go/pull/626)
 
 ### Bug fixes
 

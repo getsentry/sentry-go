@@ -58,6 +58,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	recorder *spanRecorder
 	// span context, can only be set on transactions
 	contexts map[string]Context
+	// profiler instance if attached, nil otherwise.
+	profiler transactionProfiler
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -178,9 +180,16 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 	}
 	span.recorder.record(&span)
 
+	hub := hubFromContext(ctx)
+
 	// Update scope so that all events include a trace context, allowing
 	// Sentry to correlate errors to transactions/spans.
-	hubFromContext(ctx).Scope().SetContext("trace", span.traceContext().Map())
+	hub.Scope().SetContext("trace", span.traceContext().Map())
+
+	// Start profiling only if it's a sampled root transaction.
+	if span.IsTransaction() && span.Sampled.Bool() {
+		span.sampleTransactionProfile()
+	}
 
 	return &span
 }
@@ -191,9 +200,16 @@ func (s *Span) Finish() {
 	// TODO(tracing): maybe make Finish run at most once, such that
 	// (incorrectly) calling it twice never double sends to Sentry.
 
+	// For the timing to be correct, the profiler must be stopped before s.EndTime.
+	var profile *profileInfo
+	if s.profiler != nil {
+		profile = s.profiler.Finish(s)
+	}
+
 	if s.EndTime.IsZero() {
 		s.EndTime = monotonicTimeSince(s.StartTime)
 	}
+
 	if !s.Sampled.Bool() {
 		return
 	}
@@ -201,6 +217,8 @@ func (s *Span) Finish() {
 	if event == nil {
 		return
 	}
+
+	event.sdkMetaData.transactionProfile = profile
 
 	// TODO(tracing): add breadcrumbs
 	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
@@ -397,14 +415,16 @@ func (s *Span) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (s *Span) sample() Sampled {
-	hub := hubFromContext(s.ctx)
-	var clientOptions ClientOptions
-	client := hub.Client()
+func (s *Span) clientOptions() *ClientOptions {
+	client := hubFromContext(s.ctx).Client()
 	if client != nil {
-		clientOptions = hub.Client().Options()
+		return &client.options
 	}
+	return &ClientOptions{}
+}
 
+func (s *Span) sample() Sampled {
+	clientOptions := s.clientOptions()
 	// https://develop.sentry.dev/sdk/performance/#sampling
 	// #1 tracing is not enabled.
 	if !clientOptions.EnableTracing {

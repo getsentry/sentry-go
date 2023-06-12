@@ -60,6 +60,4 @@ func Example_transportWithHooks() {
 	defer sentry.Flush(2 * time.Second)
 
 	sentry.CaptureMessage("test")
-
-	// Output:
 }

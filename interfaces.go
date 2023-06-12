@@ -20,6 +20,8 @@ const transactionType = "transaction"
 // eventType is the type of an error event.
 const eventType = "event"
 
+const profileType = "profile"
+
 // Level marks the severity of the event.
 type Level string
 
@@ -237,7 +239,8 @@ type Exception struct {
 // SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
 // but which shouldn't get send to Sentry.
 type SDKMetaData struct {
-	dsc DynamicSamplingContext
+	dsc                DynamicSamplingContext
+	transactionProfile *profileInfo
 }
 
 // Contains information about how the name of the transaction was determined.
