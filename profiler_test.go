@@ -40,22 +40,24 @@ func restoreProfilerTicker() {
 }
 
 func TestProfilerCollection(t *testing.T) {
-	if !isCI() {
-		t.Run("RealTicker", func(t *testing.T) {
-			var require = require.New(t)
-			var goID = getCurrentGoID()
+	t.Run("RealTicker", func(t *testing.T) {
+		var require = require.New(t)
+		var goID = getCurrentGoID()
 
-			start := time.Now()
-			stopFn := startProfiling(start)
+		start := time.Now()
+		stopFn := startProfiling(start)
+		if isCI() {
+			doWorkFor(5 * time.Second)
+		} else {
 			doWorkFor(35 * time.Millisecond)
-			result := stopFn()
-			elapsed := time.Since(start)
-			require.NotNil(result)
-			require.Greater(result.callerGoID, uint64(0))
-			require.Equal(goID, result.callerGoID)
-			validateProfile(t, result.trace, elapsed)
-		})
-	}
+		}
+		result := stopFn()
+		elapsed := time.Since(start)
+		require.NotNil(result)
+		require.Greater(result.callerGoID, uint64(0))
+		require.Equal(goID, result.callerGoID)
+		validateProfile(t, result.trace, elapsed)
+	})
 
 	t.Run("CustomTicker", func(t *testing.T) {
 		var require = require.New(t)
