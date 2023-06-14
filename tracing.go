@@ -535,7 +535,7 @@ func (s *Span) toEvent() *Event {
 
 	contexts := map[string]Context{}
 	for k, v := range s.contexts {
-		contexts[k] = v
+		contexts[k] = cloneContext(v)
 	}
 	contexts["trace"] = s.traceContext().Map()
 

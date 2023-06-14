@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -889,6 +890,49 @@ func TestDeprecatedSpanOptionSpanSampled(t *testing.T) {
 // This test should be the only thing to fail when deprecated TransctionSource is removed.
 func TestDeprecatedSpanOptionTransctionSource(t *testing.T) {
 	StartSpan(context.Background(), "op", TransctionSource("src"))
+}
+
+// This test checks that there are no concurrent reads/writes to
+// substructures in scope.contexts.
+// See https://github.com/getsentry/sentry-go/issues/570 for more details.
+func TestConcurrentContextAccess(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1,
+	})
+	hub := GetHubFromContext(ctx)
+
+	const writersNum = 200
+
+	// Unbuffered channel, writing to it will be block if nobody reads
+	c := make(chan *Span)
+
+	// Start writers
+	for i := 0; i < writersNum; i++ {
+		go func() {
+			transaction := StartTransaction(ctx, "test")
+			c <- transaction
+			hub.Scope().SetContext("device", Context{"test": "bla"})
+		}()
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(writersNum)
+
+	// Start readers
+	go func() {
+		for transaction := range c {
+			transaction := transaction
+			go func() {
+				defer wg.Done()
+				// While finalizing every transaction, scope.Contexts and Event.Contexts fields
+				// will be accessed, e.g. in environmentIntegration.processor()
+				transaction.Finish()
+			}()
+		}
+	}()
+
+	wg.Wait()
 }
 
 func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
