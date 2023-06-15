@@ -41,10 +41,10 @@ type (
 	profileStack []int
 
 	profileTrace struct {
-		Frames         []*Frame                         `json:"frames"`
-		Samples        []*profileSample                 `json:"samples"`
-		Stacks         []profileStack                   `json:"stacks"`
-		ThreadMetadata map[string]profileThreadMetadata `json:"thread_metadata"`
+		Frames         []*Frame                          `json:"frames"`
+		Samples        []*profileSample                  `json:"samples"`
+		Stacks         []profileStack                    `json:"stacks"`
+		ThreadMetadata map[string]*profileThreadMetadata `json:"thread_metadata"`
 	}
 
 	profileInfo struct {

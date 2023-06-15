@@ -1,85 +1,31 @@
 package sentry
 
 import (
-	"runtime"
+	"container/ring"
 	"strconv"
+
+	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/traceparser"
 )
 
-// Start collecting profile data and returns a function that stops profiling, producing a Trace.
+// Start a profiler that collects samples continously, with a buffer of up to 30 seconds.
+// Later, you can collect a slice from this buffer, producing a Trace.
 // The returned stop function May return nil or an incomplete trace in case of a panic.
-func startProfiling(startTime time.Time) (stopFunc func() *profilerResult) {
+func startProfiling(startTime time.Time) profiler {
 	onProfilerStart()
 
-	// buffered channels to handle the recover() case without blocking
-	resultChannel := make(chan *profilerResult, 2)
-	stopSignal := make(chan struct{}, 2)
-
-	go profilerGoroutine(startTime, resultChannel, stopSignal)
-
-	var goID = getCurrentGoID()
-
-	return func() *profilerResult {
-		stopSignal <- struct{}{}
-		var result = <-resultChannel
-		if result != nil {
-			result.callerGoID = goID
-		}
-		return result
-	}
+	p := newProfiler(startTime)
+	go p.run()
+	return p
 }
 
-// This allows us to test whether panic during profiling are handled correctly and don't block execution.
-// If the number is lower than 0, profilerGoroutine() will panic immedately.
-// If the number is higher than 0, profiler.onTick() will panic after the given number of samples collected.
-var testProfilerPanic int64
-
-func profilerGoroutine(startTime time.Time, result chan<- *profilerResult, stopSignal chan struct{}) {
-	// We shouldn't panic but let's be super safe.
-	defer func() {
-		_ = recover()
-
-		// Make sure we don't block the caller of stopFn() even if we panic.
-		result <- nil
-
-		atomic.StoreInt64(&testProfilerPanic, 0)
-	}()
-
-	// Stop after 30 seconds unless stopped manually.
-	timeout := time.AfterFunc(30*time.Second, func() { stopSignal <- struct{}{} })
-	defer timeout.Stop()
-
-	var localTestProfilerPanic = atomic.LoadInt64(&testProfilerPanic)
-	if localTestProfilerPanic < 0 {
-		panic("This is an expected panic in profilerGoroutine() during tests")
-	}
-
-	profiler := newProfiler(startTime)
-	profiler.testProfilerPanic = localTestProfilerPanic
-
-	// Collect the first sample immediately.
-	profiler.onTick()
-
-	// Periodically collect stacks, starting after profilerSamplingRate has passed.
-	collectTicker := profilerTickerFactory(profilerSamplingRate)
-	defer collectTicker.Stop()
-	var tickerChannel = collectTicker.Channel()
-
-	defer func() {
-		result <- &profilerResult{0, profiler.trace}
-	}()
-
-	for {
-		select {
-		case <-tickerChannel:
-			profiler.onTick()
-		case <-stopSignal:
-			return
-		}
-	}
+type profiler interface {
+	GetSlice(startTime, endTime time.Time) *profilerResult
+	Stop()
 }
 
 type profilerResult struct {
@@ -109,49 +55,177 @@ func getCurrentGoID() uint64 {
 func newProfiler(startTime time.Time) *profileRecorder {
 	// Pre-allocate the profile trace for the currently active number of routines & 100 ms worth of samples.
 	// Other coefficients are just guesses of what might be a good starting point to avoid allocs on short runs.
-	numRoutines := runtime.NumGoroutine()
-	trace := &profileTrace{
-		Frames:         make([]*Frame, 0, 32),
-		Samples:        make([]*profileSample, 0, numRoutines*10), // 100 ms @ 101 Hz
-		Stacks:         make([]profileStack, 0, 8),
-		ThreadMetadata: make(map[string]profileThreadMetadata, numRoutines),
-	}
-
 	return &profileRecorder{
-		startTime:    startTime,
-		trace:        trace,
-		stackIndexes: make(map[string]int, cap(trace.Stacks)),
-		frameIndexes: make(map[string]int, cap(trace.Frames)),
-		// A buffer of 2 KiB per stack looks like a good starting point (empirically determined).
-		stacksBuffer: make([]byte, numRoutines*2048),
+		startTime:  startTime,
+		stopSignal: make(chan struct{}, 1),
+
+		stackIndexes: make(map[string]int, 32),
+		stacks:       make([]profileStack, 32),
+		newStacks:    make([]profileStack, 32),
+
+		frameIndexes: make(map[string]int, 128),
+		frames:       make([]*Frame, 128),
+		newFrames:    make([]*Frame, 128),
+
+		samplesBucketsHead: ring.New(30 * profilerSamplingRateHz),
+		routines:           make(map[string]*profileThreadMetadata, runtime.NumGoroutine()),
+
+		// A buffer of 2 KiB per goroutine stack looks like a good starting point (empirically determined).
+		stacksBuffer: make([]byte, runtime.NumGoroutine()*2048),
 	}
 }
 
-const profilerSamplingRate = time.Second / 101 // 101 Hz; not 100 Hz because of the lockstep sampling (https://stackoverflow.com/a/45471031/1181370)
+const profilerSamplingRateHz = 101 // 101 Hz; not 100 Hz because of the lockstep sampling (https://stackoverflow.com/a/45471031/1181370)
+const profilerSamplingRate = time.Second / profilerSamplingRateHz
 const stackBufferMaxGrowth = 512 * 1024
 const stackBufferLimit = 10 * 1024 * 1024
 
 type profileRecorder struct {
 	startTime         time.Time
-	trace             *profileTrace
+	stopSignal        chan struct{}
+	mutex             sync.RWMutex
+	routines          map[string]*profileThreadMetadata
 	testProfilerPanic int64
+
+	// Map from runtime.StackRecord.Stack0 to an index in stacks.
+	stackIndexes map[string]int
+	stacks       []profileStack
+	newStacks    []profileStack // New stacks created in the current interation.
+
+	// Map from runtime.Frame.PC to an index in frames.
+	frameIndexes map[string]int
+	frames       []*Frame
+	newFrames    []*Frame // New frames created in the current interation.
+
+	// We keep a ring buffer of 30 seconds worth of samples, so that we can later slice it.
+	// Each item in the array is a slice of samples all taken at the same time.
+	// TODO consider using an array (check performance)
+	// sampleBuckets     [30 * profilerSamplingRateHz]profileSamplesBucket
+	// samplesBucketsHead int
+	samplesBucketsHead *ring.Ring
 
 	// Buffer to read current stacks - will grow automatically up to stackBufferLimit.
 	stacksBuffer []byte
+}
 
-	// Map from runtime.StackRecord.Stack0 to an index trace.Stacks.
-	stackIndexes map[string]int
+// This allows us to test whether panic during profiling are handled correctly and don't block execution.
+// If the number is lower than 0, profilerGoroutine() will panic immedately.
+// If the number is higher than 0, profiler.onTick() will panic after the given number of samples collected.
+var testProfilerPanic int64
 
-	// Map from runtime.Frame.PC to an index trace.Frames.
-	frameIndexes map[string]int
+func (p *profileRecorder) run() {
+	// We shouldn't panic but let's be super safe.
+	defer func() {
+		_ = recover()
+		atomic.StoreInt64(&testProfilerPanic, 0)
+	}()
+
+	var localTestProfilerPanic = atomic.LoadInt64(&testProfilerPanic)
+	if localTestProfilerPanic < 0 {
+		panic("This is an expected panic in profilerGoroutine() during tests")
+	}
+
+	p.testProfilerPanic = localTestProfilerPanic
+
+	// Collect the first sample immediately.
+	p.onTick()
+
+	// Periodically collect stacks, starting after profilerSamplingRate has passed.
+	collectTicker := profilerTickerFactory(profilerSamplingRate)
+	defer collectTicker.Stop()
+	var tickerChannel = collectTicker.Channel()
+
+	for {
+		select {
+		case <-tickerChannel:
+			p.onTick()
+		case <-p.stopSignal:
+			return
+		}
+	}
+}
+
+func (p *profileRecorder) Stop() {
+	p.stopSignal <- struct{}{}
+}
+
+func (p *profileRecorder) GetSlice(startTime, endTime time.Time) *profilerResult {
+	// Unlikely edge cases - profiler wasn't running at all or the given times are invalid in relation to each other.
+	if p.startTime.After(endTime) || startTime.After(endTime) {
+		return nil
+	}
+
+	var relativeStartNS = uint64(0)
+	if p.startTime.Before(startTime) {
+		relativeStartNS = uint64(startTime.Sub(p.startTime).Nanoseconds())
+	}
+	var relativeEndNS = uint64(endTime.Sub(p.startTime).Nanoseconds())
+
+	samplesCount, bucketsReversed, trace := p.getBuckets(relativeStartNS, relativeEndNS)
+	if samplesCount == 0 {
+		return nil
+	}
+
+	var result = &profilerResult{
+		callerGoID: getCurrentGoID(),
+		trace:      trace,
+	}
+
+	// TODO can we implement the serialization without copying all the samples here?
+	trace.Samples = make([]*profileSample, samplesCount)
+	for i := len(bucketsReversed) - 1; i >= 0; i-- {
+		result.trace.Samples = append(result.trace.Samples, bucketsReversed[i]...)
+	}
+
+	return result
+}
+
+// Collect all buckets of samples in the given time range while holding a read lock.
+func (p *profileRecorder) getBuckets(relativeStartNS, relativeEndNS uint64) (samplesCount int, buckets []profileSamplesBucket, trace *profileTrace) {
+	p.mutex.RLock()
+	defer p.mutex.RUnlock()
+
+	// sampleBucketsHead points at the last stored bucket so it's a good starting point to search backwards for the end.
+	var end = p.samplesBucketsHead
+	for end.Value != nil && end.Value.(profileSamplesBucket)[0].ElapsedSinceStartNS > relativeEndNS {
+		end = end.Prev()
+	}
+
+	// Edge case - no items stored before the given endTime.
+	if end.Value == nil {
+		return 0, nil, nil
+	}
+
+	// Search for the first item after the given startTime.
+	var start = end
+	samplesCount = 0
+	buckets = make([]profileSamplesBucket, 0, int64((relativeEndNS-relativeStartNS)/uint64(profilerSamplingRate.Nanoseconds()))+1)
+	for start.Value != nil && start.Value.(profileSamplesBucket)[0].ElapsedSinceStartNS > relativeStartNS {
+		samplesCount += len(start.Value.(profileSamplesBucket))
+		buckets = append(buckets, start.Value.(profileSamplesBucket))
+		start = start.Prev()
+	}
+
+	// Edge case - if the period requested was too short and we haven't collected enough samples.
+	if len(buckets) < 2 {
+		return 0, nil, nil
+	}
+
+	trace = &profileTrace{
+		Frames:         p.frames,
+		Stacks:         p.stacks,
+		ThreadMetadata: p.routines,
+	}
+	return
 }
 
 func (p *profileRecorder) onTick() {
 	elapsedNs := time.Since(p.startTime).Nanoseconds()
 
-	if p.testProfilerPanic > 0 && int64(len(p.trace.Samples)) > p.testProfilerPanic {
-		panic("This is an expected panic in Profiler.OnTick() during tests")
-	}
+	// FIXME or remove
+	// if p.testProfilerPanic > 0 && int64(len(p.trace.Samples)) > p.testProfilerPanic {
+	// 	panic("This is an expected panic in Profiler.OnTick() during tests")
+	// }
 
 	records := p.collectRecords()
 	p.processRecords(uint64(elapsedNs), records)
@@ -187,30 +261,53 @@ func (p *profileRecorder) collectRecords() []byte {
 
 func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) {
 	var traces = traceparser.Parse(stacksBuffer)
+	var bucket = make(profileSamplesBucket, traces.Length())
+
+	// Shouldn't happen but let's be safe and don't store empty buckets
+	if len(bucket) == 0 {
+		return
+	}
+
+	p.newFrames = p.newFrames[:0]
+	p.newStacks = p.newStacks[:0]
+
 	for i := traces.Length() - 1; i >= 0; i-- {
 		var stack = traces.Item(i)
-		threadIndex := p.addThread(stack.GoID())
-		stackIndex := p.addStackTrace(stack)
-		if stackIndex < 0 {
-			return
-		}
-
-		p.trace.Samples = append(p.trace.Samples, &profileSample{
+		var stackIndex = p.addStackTrace(stack)
+		bucket[i] = &profileSample{
 			ElapsedSinceStartNS: elapsedNs,
 			StackID:             stackIndex,
-			ThreadID:            threadIndex,
-		})
+			ThreadID:            stack.GoID(),
+		}
 	}
+
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
+	p.stacks = append(p.stacks, p.newStacks...)
+	p.frames = append(p.frames, p.newFrames...)
+
+	for _, sample := range bucket {
+		p.addRoutine(sample.ThreadID)
+	}
+
+	// FIXME unused code for array-based ring
+	// p.sampleBucketsHead++
+	// if p.sampleBucketsHead >= len(p.sampleBuckets) {
+	// 	p.sampleBucketsHead = 0
+	// }
+	// p.sampleBuckets[p.sampleBucketsHead] = bucket
+	p.samplesBucketsHead = p.samplesBucketsHead.Next()
+	p.samplesBucketsHead.Value = bucket
 }
 
-func (p *profileRecorder) addThread(id uint64) uint64 {
+func (p *profileRecorder) addRoutine(id uint64) {
 	index := strconv.FormatUint(id, 10)
-	if _, exists := p.trace.ThreadMetadata[index]; !exists {
-		p.trace.ThreadMetadata[index] = profileThreadMetadata{
+	if _, exists := p.routines[index]; !exists {
+		p.routines[index] = &profileThreadMetadata{
 			Name: "Goroutine " + index,
 		}
 	}
-	return id
 }
 
 func (p *profileRecorder) addStackTrace(capturedStack traceparser.Trace) int {
@@ -224,14 +321,12 @@ func (p *profileRecorder) addStackTrace(capturedStack traceparser.Trace) int {
 		stack := make(profileStack, 0, iter.LengthUpperBound())
 		for iter.HasNext() {
 			var frame = iter.Next()
-
 			if frameIndex := p.addFrame(frame); frameIndex >= 0 {
 				stack = append(stack, frameIndex)
 			}
 		}
-		stackIndex = len(p.trace.Stacks)
-		p.trace.Stacks = append(p.trace.Stacks, stack)
-		p.stackIndexes[string(key)] = stackIndex
+		stackIndex = len(p.stacks) + len(p.newStacks)
+		p.newStacks = append(p.newStacks, stack)
 	}
 
 	return stackIndex
@@ -247,12 +342,13 @@ func (p *profileRecorder) addFrame(capturedFrame traceparser.Frame) int {
 		module, function := splitQualifiedFunctionName(string(capturedFrame.Func()))
 		file, line := capturedFrame.File()
 		frame := newFrame(module, function, string(file), line)
-		frameIndex = len(p.trace.Frames)
-		p.trace.Frames = append(p.trace.Frames, &frame)
-		p.frameIndexes[string(key)] = frameIndex
+		frameIndex = len(p.frames) + len(p.newFrames)
+		p.newFrames = append(p.newFrames, &frame)
 	}
 	return frameIndex
 }
+
+type profileSamplesBucket []*profileSample
 
 // A Ticker holds a channel that delivers “ticks” of a clock at intervals.
 type profilerTicker interface {
