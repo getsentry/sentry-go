@@ -2,7 +2,7 @@
 
 ## 0.22.0
 
-The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.21.0.
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.22.0.
 
 This release contains initial [profiling](https://docs.sentry.io/product/profiling/) support, as well as a few bug fixes and improvements.
 
