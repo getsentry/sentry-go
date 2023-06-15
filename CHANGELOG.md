@@ -24,7 +24,6 @@ This release contains initial [profiling](https://docs.sentry.io/product/profili
 
   More documentation on profiling and current limitations [can be found here](https://docs.sentry.io/platforms/go/profiling/).
 
-
 - Add transactions/tracing support go the Gin integration ([#644](https://github.com/getsentry/sentry-go/pull/644))
 
 ### Bug fixes
