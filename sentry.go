@@ -9,7 +9,7 @@ import (
 const Version = SDKVersion
 
 // Version is the version of the SDK.
-const SDKVersion = "0.21.0"
+const SDKVersion = "0.22.0"
 
 // The identifier of the SDK.
 const SDKIdentifier = "sentry.go"
