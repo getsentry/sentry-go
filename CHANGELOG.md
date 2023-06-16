@@ -1,13 +1,36 @@
 # Changelog
 
-## Unrelesed
+## 0.22.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.22.0.
+
+This release contains initial [profiling](https://docs.sentry.io/product/profiling/) support, as well as a few bug fixes and improvements.
 
 ### Features
 
-- Initial alpha support for profiling [#626](https://github.com/getsentry/sentry-go/pull/626)
+- Initial (alpha) support for [profiling](https://docs.sentry.io/product/profiling/) ([#626](https://github.com/getsentry/sentry-go/pull/626))
+
+  Profiling is disabled by default. To enable it, configure both `TracesSampleRate` and `ProfilesSampleRate` when initializing the SDK:
+
+  ```go
+  err := sentry.Init(sentry.ClientOptions{
+    Dsn: "__DSN__",
+    EnableTracing: true,
+    TracesSampleRate: 1.0,
+    // The sampling rate for profiling is relative to TracesSampleRate. In this case, we'll capture profiles for 100% of transactions.
+    ProfilesSampleRate: 1.0,
+  })
+  ```
+
+  More documentation on profiling and current limitations [can be found here](https://docs.sentry.io/platforms/go/profiling/).
+
+- Add transactions/tracing support go the Gin integration ([#644](https://github.com/getsentry/sentry-go/pull/644))
 
 ### Bug fixes
 
+- Always set a valid source on transactions ([#637](https://github.com/getsentry/sentry-go/pull/637))
+- Clone scope.Context in more places to avoid panics on concurrent reads and writes ([#638](https://github.com/getsentry/sentry-go/pull/638))
+  - Fixes [#570](https://github.com/getsentry/sentry-go/issues/570)
 - Fix frames recognized as not being in-app still showing as in-app ([#647](https://github.com/getsentry/sentry-go/pull/647))
 
 ## 0.21.0
