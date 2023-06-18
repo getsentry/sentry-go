@@ -12,7 +12,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/traceparser"
 )
 
-// Start a profiler that collects samples continously, with a buffer of up to 30 seconds.
+// Start a profiler that collects samples continuously, with a buffer of up to 30 seconds.
 // Later, you can collect a slice from this buffer, producing a Trace.
 func startProfiling(startTime time.Time) profiler {
 	onProfilerStart()
@@ -227,7 +227,7 @@ func (p *profileRecorder) getBuckets(relativeStartNS, relativeEndNS uint64) (sam
 		Stacks:         p.stacks,
 		ThreadMetadata: p.routines,
 	}
-	return
+	return samplesCount, buckets, trace
 }
 
 func (p *profileRecorder) onTick() {
