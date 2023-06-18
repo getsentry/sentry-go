@@ -1,5 +1,17 @@
 package sentry
 
+import (
+	"sync"
+	"time"
+)
+
+var startProfilerOnce sync.Once
+var globalProfiler profiler
+
+func startGlobalProfiler() {
+	globalProfiler = startProfiling(time.Now())
+}
+
 // Checks whether the transaction should be profiled (according to ProfilesSampleRate)
 // and starts a profiler if so.
 func (span *Span) sampleTransactionProfile() {
@@ -10,9 +22,8 @@ func (span *Span) sampleTransactionProfile() {
 	case sampleRate == 0.0 || rng.Float64() >= sampleRate:
 		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f", sampleRate)
 	default:
-		span.profiler = &_transactionProfiler{
-			stopFunc: startProfiling(span.StartTime),
-		}
+		startProfilerOnce.Do(startGlobalProfiler)
+		span.profiler = __transactionProfiler
 	}
 }
 
@@ -20,12 +31,12 @@ type transactionProfiler interface {
 	Finish(span *Span) *profileInfo
 }
 
-type _transactionProfiler struct {
-	stopFunc func() *profilerResult
-}
+type _transactionProfiler struct{}
 
-func (tp *_transactionProfiler) Finish(span *Span) *profileInfo {
-	result := tp.stopFunc()
+var __transactionProfiler = _transactionProfiler{}
+
+func (_transactionProfiler) Finish(span *Span) *profileInfo {
+	result := globalProfiler.GetSlice(span.StartTime, span.EndTime)
 	if result == nil || result.trace == nil {
 		return nil
 	}

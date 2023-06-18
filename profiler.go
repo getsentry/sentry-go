@@ -14,7 +14,6 @@ import (
 
 // Start a profiler that collects samples continously, with a buffer of up to 30 seconds.
 // Later, you can collect a slice from this buffer, producing a Trace.
-// The returned stop function May return nil or an incomplete trace in case of a panic.
 func startProfiling(startTime time.Time) profiler {
 	onProfilerStart()
 
@@ -25,7 +24,7 @@ func startProfiling(startTime time.Time) profiler {
 
 type profiler interface {
 	GetSlice(startTime, endTime time.Time) *profilerResult
-	Stop()
+	Stop(wait bool)
 }
 
 type profilerResult struct {
@@ -60,12 +59,12 @@ func newProfiler(startTime time.Time) *profileRecorder {
 		stopSignal: make(chan struct{}, 1),
 
 		stackIndexes: make(map[string]int, 32),
-		stacks:       make([]profileStack, 32),
-		newStacks:    make([]profileStack, 32),
+		stacks:       make([]profileStack, 0, 32),
+		newStacks:    make([]profileStack, 0, 32),
 
 		frameIndexes: make(map[string]int, 128),
-		frames:       make([]*Frame, 128),
-		newFrames:    make([]*Frame, 128),
+		frames:       make([]*Frame, 0, 128),
+		newFrames:    make([]*Frame, 0, 128),
 
 		samplesBucketsHead: ring.New(30 * profilerSamplingRateHz),
 		routines:           make(map[string]*profileThreadMetadata, runtime.NumGoroutine()),
@@ -83,6 +82,7 @@ const stackBufferLimit = 10 * 1024 * 1024
 type profileRecorder struct {
 	startTime         time.Time
 	stopSignal        chan struct{}
+	stopped           sync.WaitGroup
 	mutex             sync.RWMutex
 	routines          map[string]*profileThreadMetadata
 	testProfilerPanic int64
@@ -110,7 +110,7 @@ type profileRecorder struct {
 
 // This allows us to test whether panic during profiling are handled correctly and don't block execution.
 // If the number is lower than 0, profilerGoroutine() will panic immedately.
-// If the number is higher than 0, profiler.onTick() will panic after the given number of samples collected.
+// If the number is higher than 0, profiler.onTick() will panic when the given samples-set index is being collected.
 var testProfilerPanic int64
 
 func (p *profileRecorder) run() {
@@ -133,22 +133,29 @@ func (p *profileRecorder) run() {
 	// Periodically collect stacks, starting after profilerSamplingRate has passed.
 	collectTicker := profilerTickerFactory(profilerSamplingRate)
 	defer collectTicker.Stop()
-	var tickerChannel = collectTicker.Channel()
+	var tickerChannel = collectTicker.TickSource()
 
 	for {
 		select {
 		case <-tickerChannel:
 			p.onTick()
+			collectTicker.Ticked()
 		case <-p.stopSignal:
+			p.stopped.Done()
 			return
 		}
 	}
 }
 
-func (p *profileRecorder) Stop() {
+func (p *profileRecorder) Stop(wait bool) {
+	p.stopped.Add(1)
 	p.stopSignal <- struct{}{}
+	if wait {
+		p.stopped.Wait()
+	}
 }
 
+// GetSlice returns a slice of the profiled data between the given times.
 func (p *profileRecorder) GetSlice(startTime, endTime time.Time) *profilerResult {
 	// Unlikely edge cases - profiler wasn't running at all or the given times are invalid in relation to each other.
 	if p.startTime.After(endTime) || startTime.After(endTime) {
@@ -172,7 +179,7 @@ func (p *profileRecorder) GetSlice(startTime, endTime time.Time) *profilerResult
 	}
 
 	// TODO can we implement the serialization without copying all the samples here?
-	trace.Samples = make([]*profileSample, samplesCount)
+	trace.Samples = make([]*profileSample, 0, samplesCount)
 	for i := len(bucketsReversed) - 1; i >= 0; i-- {
 		result.trace.Samples = append(result.trace.Samples, bucketsReversed[i]...)
 	}
@@ -200,9 +207,13 @@ func (p *profileRecorder) getBuckets(relativeStartNS, relativeEndNS uint64) (sam
 	var start = end
 	samplesCount = 0
 	buckets = make([]profileSamplesBucket, 0, int64((relativeEndNS-relativeStartNS)/uint64(profilerSamplingRate.Nanoseconds()))+1)
-	for start.Value != nil && start.Value.(profileSamplesBucket)[0].ElapsedSinceStartNS > relativeStartNS {
-		samplesCount += len(start.Value.(profileSamplesBucket))
-		buckets = append(buckets, start.Value.(profileSamplesBucket))
+	for start.Value != nil {
+		var bucket = start.Value.(profileSamplesBucket)
+		if bucket[0].ElapsedSinceStartNS < relativeStartNS {
+			break
+		}
+		samplesCount += len(bucket)
+		buckets = append(buckets, bucket)
 		start = start.Prev()
 	}
 
@@ -222,10 +233,12 @@ func (p *profileRecorder) getBuckets(relativeStartNS, relativeEndNS uint64) (sam
 func (p *profileRecorder) onTick() {
 	elapsedNs := time.Since(p.startTime).Nanoseconds()
 
-	// FIXME or remove
-	// if p.testProfilerPanic > 0 && int64(len(p.trace.Samples)) > p.testProfilerPanic {
-	// 	panic("This is an expected panic in Profiler.OnTick() during tests")
-	// }
+	if p.testProfilerPanic > 0 {
+		if p.testProfilerPanic == 1 {
+			panic("This is an expected panic in Profiler.OnTick() during tests")
+		}
+		p.testProfilerPanic--
+	}
 
 	records := p.collectRecords()
 	p.processRecords(uint64(elapsedNs), records)
@@ -352,17 +365,25 @@ type profileSamplesBucket []*profileSample
 
 // A Ticker holds a channel that delivers “ticks” of a clock at intervals.
 type profilerTicker interface {
+	// Stop turns off a ticker. After Stop, no more ticks will be sent.
 	Stop()
-	Channel() <-chan time.Time
+
+	// TickSource returns a read-only channel of ticks.
+	TickSource() <-chan time.Time
+
+	// Ticked is called by the Profiler after a tick is processed to notify the ticker. Used for testing.
+	Ticked()
 }
 
 type timeTicker struct {
 	*time.Ticker
 }
 
-func (t *timeTicker) Channel() <-chan time.Time {
+func (t *timeTicker) TickSource() <-chan time.Time {
 	return t.C
 }
+
+func (t *timeTicker) Ticked() {}
 
 func profilerTickerFactoryDefault(d time.Duration) profilerTicker {
 	return &timeTicker{time.NewTicker(d)}

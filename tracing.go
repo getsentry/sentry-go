@@ -200,12 +200,6 @@ func (s *Span) Finish() {
 	// TODO(tracing): maybe make Finish run at most once, such that
 	// (incorrectly) calling it twice never double sends to Sentry.
 
-	// For the timing to be correct, the profiler must be stopped before s.EndTime.
-	var profile *profileInfo
-	if s.profiler != nil {
-		profile = s.profiler.Finish(s)
-	}
-
 	if s.EndTime.IsZero() {
 		s.EndTime = monotonicTimeSince(s.StartTime)
 	}
@@ -218,7 +212,9 @@ func (s *Span) Finish() {
 		return
 	}
 
-	event.sdkMetaData.transactionProfile = profile
+	if s.profiler != nil {
+		event.sdkMetaData.transactionProfile = s.profiler.Finish(s)
+	}
 
 	// TODO(tracing): add breadcrumbs
 	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)

@@ -15,22 +15,41 @@ import (
 
 // Test ticker that ticks on demand instead of relying on go runtime timing.
 type profilerTestTicker struct {
-	c chan time.Time
+	t      *testing.T
+	tick   chan time.Time
+	ticked chan struct{}
 }
 
-func (t *profilerTestTicker) Channel() <-chan time.Time {
-	return t.c
+func (t *profilerTestTicker) TickSource() <-chan time.Time {
+	return t.tick
+}
+
+func (t *profilerTestTicker) Ticked() {
+	t.ticked <- struct{}{}
 }
 
 func (t *profilerTestTicker) Stop() {}
 
-func (t *profilerTestTicker) Tick() {
-	t.c <- time.Now()
-	time.Sleep(time.Millisecond) // Allow the goroutine to pick up the tick from the channel.
+// Sleeps before a tick to emulate a reasonable frequency of ticks, or they may all come at the same relative time.
+// Then, sends a tick and waits for the profiler to process it.
+func (t *profilerTestTicker) Tick() bool {
+	time.Sleep(time.Millisecond)
+	t.tick <- time.Now()
+	select {
+	case <-t.ticked:
+		return true
+	case <-time.After(1 * time.Second):
+		t.t.Log("Timed out waiting for Ticked() to be called.")
+		return false
+	}
 }
 
-func setupProfilerTestTicker() *profilerTestTicker {
-	ticker := &profilerTestTicker{c: make(chan time.Time, 1)}
+func setupProfilerTestTicker(t *testing.T) *profilerTestTicker {
+	ticker := &profilerTestTicker{
+		t:      t,
+		tick:   make(chan time.Time, 1),
+		ticked: make(chan struct{}),
+	}
 	profilerTickerFactory = func(d time.Duration) profilerTicker { return ticker }
 	return ticker
 }
@@ -45,36 +64,38 @@ func TestProfilerCollection(t *testing.T) {
 		var goID = getCurrentGoID()
 
 		start := time.Now()
-		stopFn := startProfiling(start)
+		profiler := startProfiling(start)
+		defer profiler.Stop(false)
 		if isCI() {
 			doWorkFor(5 * time.Second)
 		} else {
 			doWorkFor(35 * time.Millisecond)
 		}
-		result := stopFn()
-		elapsed := time.Since(start)
+		end := time.Now()
+		result := profiler.GetSlice(start, end)
 		require.NotNil(result)
 		require.Greater(result.callerGoID, uint64(0))
 		require.Equal(goID, result.callerGoID)
-		validateProfile(t, result.trace, elapsed)
+		validateProfile(t, result.trace, end.Sub(start))
 	})
 
 	t.Run("CustomTicker", func(t *testing.T) {
 		var require = require.New(t)
 		var goID = getCurrentGoID()
 
-		ticker := setupProfilerTestTicker()
+		ticker := setupProfilerTestTicker(t)
 		defer restoreProfilerTicker()
 
 		start := time.Now()
-		stopFn := startProfiling(start)
-		ticker.Tick()
-		result := stopFn()
-		elapsed := time.Since(start)
+		profiler := startProfiling(start)
+		defer profiler.Stop(false)
+		require.True(ticker.Tick())
+		end := time.Now()
+		result := profiler.GetSlice(start, end)
 		require.NotNil(result)
 		require.Greater(result.callerGoID, uint64(0))
 		require.Equal(goID, result.callerGoID)
-		validateProfile(t, result.trace, elapsed)
+		validateProfile(t, result.trace, end.Sub(start))
 	})
 }
 
@@ -82,12 +103,14 @@ func TestProfilerCollection(t *testing.T) {
 func TestProfilerStackTrace(t *testing.T) {
 	var require = require.New(t)
 
-	ticker := setupProfilerTestTicker()
+	ticker := setupProfilerTestTicker(t)
 	defer restoreProfilerTicker()
 
-	stopFn := startProfiling(time.Now())
-	ticker.Tick()
-	result := stopFn()
+	start := time.Now()
+	profiler := startProfiling(start)
+	defer profiler.Stop(false)
+	require.True(ticker.Tick())
+	result := profiler.GetSlice(start, time.Now())
 	require.NotNil(result)
 
 	var actual = ""
@@ -115,10 +138,15 @@ testing (*T).Run`))
 }
 
 func TestProfilerCollectsOnStart(t *testing.T) {
+	var require = require.New(t)
+
+	setupProfilerTestTicker(t)
+	defer restoreProfilerTicker()
+
 	start := time.Now()
-	result := startProfiling(start)()
-	require.NotNil(t, result)
-	validateProfile(t, result.trace, time.Since(start))
+	profiler := startProfiling(start)
+	profiler.Stop(true)
+	require.NotNil(profiler.(*profileRecorder).samplesBucketsHead.Value)
 }
 
 func TestProfilerPanicDuringStartup(t *testing.T) {
@@ -126,57 +154,66 @@ func TestProfilerPanicDuringStartup(t *testing.T) {
 
 	atomic.StoreInt64(&testProfilerPanic, -1)
 
-	stopFn := startProfiling(time.Now())
+	start := time.Now()
+	profiler := startProfiling(start)
+	defer profiler.Stop(false)
 	// wait until the profiler has panicked
 	for i := 0; i < 100 && atomic.LoadInt64(&testProfilerPanic) != 0; i++ {
 		doWorkFor(10 * time.Millisecond)
 	}
-	result := stopFn()
+	result := profiler.GetSlice(start, time.Now())
 
 	require.Zero(atomic.LoadInt64(&testProfilerPanic))
 	require.Nil(result)
 }
 
 func TestProfilerPanicOnTick(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping in short mode because of the timeout we wait for in Tick() after the panic.")
+	}
+
 	var require = require.New(t)
 
-	ticker := setupProfilerTestTicker()
+	ticker := setupProfilerTestTicker(t)
 	defer restoreProfilerTicker()
 
 	// Panic after the first sample is collected.
-	atomic.StoreInt64(&testProfilerPanic, 1)
+	atomic.StoreInt64(&testProfilerPanic, 3)
 
 	start := time.Now()
-	stopFn := startProfiling(start)
-	ticker.Tick()
-	result := stopFn()
-	elapsed := time.Since(start)
+	profiler := startProfiling(start)
+	defer profiler.Stop(false)
+	require.True(ticker.Tick())
+	require.False(ticker.Tick())
+
+	end := time.Now()
+	result := profiler.GetSlice(start, end)
 
 	require.Zero(atomic.LoadInt64(&testProfilerPanic))
 	require.NotNil(result)
-	validateProfile(t, result.trace, elapsed)
+	validateProfile(t, result.trace, end.Sub(start))
 }
 
 func TestProfilerPanicOnTickDirect(t *testing.T) {
 	var require = require.New(t)
 
 	profiler := newProfiler(time.Now())
-	profiler.testProfilerPanic = 1
+	profiler.testProfilerPanic = 2
 
 	// first tick won't panic
 	profiler.onTick()
-	var lenSamples = len(profiler.trace.Samples)
-	require.Greater(lenSamples, 0)
+	samplesBucket := profiler.samplesBucketsHead.Value
+	require.NotNil(samplesBucket)
 
 	// This is normally handled by the profiler goroutine and stops the profiler.
 	require.Panics(profiler.onTick)
-	require.Equal(lenSamples, len(profiler.trace.Samples))
+	require.Equal(samplesBucket, profiler.samplesBucketsHead.Value)
 
 	profiler.testProfilerPanic = 0
 
 	profiler.onTick()
-	require.NotEmpty(profiler.trace.Samples)
-	require.Less(lenSamples, len(profiler.trace.Samples))
+	require.NotEqual(samplesBucket, profiler.samplesBucketsHead.Value)
+	require.NotNil(profiler.samplesBucketsHead.Value)
 }
 
 func doWorkFor(duration time.Duration) {
@@ -246,9 +283,12 @@ func TestProfilerSamplingRate(t *testing.T) {
 
 	var require = require.New(t)
 
-	stopFn := startProfiling(time.Now())
+	start := time.Now()
+	profiler := startProfiling(start)
+	defer profiler.Stop(false)
 	doWorkFor(500 * time.Millisecond)
-	result := stopFn()
+	end := time.Now()
+	result := profiler.GetSlice(start, end)
 
 	require.NotEmpty(result.trace.Samples)
 	var samplesByThread = map[uint64]uint64{}
@@ -371,11 +411,17 @@ func TestProfilerTimeSleep(t *testing.T) {
 // BenchmarkProfilerOverheadWithProfiler-20             187           6249490 ns/op
 
 func BenchmarkProfilerStartStop(b *testing.B) {
-	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
-		stopFn := startProfiling(time.Now())
-		_ = stopFn()
+	var bench = func(name string, wait bool) {
+		b.Run(name, func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				startProfiling(time.Now()).Stop(wait)
+			}
+		})
 	}
+
+	bench("Wait", true)
+	bench("NoWait", false)
 }
 
 func BenchmarkProfilerOnTick(b *testing.B) {
@@ -407,9 +453,9 @@ func BenchmarkProfilerProcess(b *testing.B) {
 }
 
 func profilerBenchmark(b *testing.B, withProfiling bool) {
-	var stopFn func() *profilerResult
+	var stopFn func(bool)
 	if withProfiling {
-		stopFn = startProfiling(time.Now())
+		stopFn = startProfiling(time.Now()).Stop
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -417,7 +463,7 @@ func profilerBenchmark(b *testing.B, withProfiling bool) {
 	}
 	b.StopTimer()
 	if withProfiling {
-		stopFn()
+		stopFn(true)
 	}
 }
 

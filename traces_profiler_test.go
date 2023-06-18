@@ -8,7 +8,7 @@ import (
 )
 
 func testTraceProfiling(t *testing.T, rate float64) (*Span, *Event) {
-	ticker := setupProfilerTestTicker()
+	ticker := setupProfilerTestTicker(t)
 	defer restoreProfilerTicker()
 
 	transport := &TransportMock{}
@@ -49,6 +49,10 @@ func TestTraceProfiling(t *testing.T) {
 }
 
 func TestTraceProfilingDisabled(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping in short mode because of the timeout we wait for in Tick().")
+	}
+
 	var require = require.New(t)
 	_, event := testTraceProfiling(t, 0)
 	require.Equal(transactionType, event.Type)
