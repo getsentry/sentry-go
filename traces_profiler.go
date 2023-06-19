@@ -5,13 +5,6 @@ import (
 	"time"
 )
 
-var startProfilerOnce sync.Once
-var globalProfiler profiler
-
-func startGlobalProfiler() {
-	globalProfiler = startProfiling(time.Now())
-}
-
 // Checks whether the transaction should be profiled (according to ProfilesSampleRate)
 // and starts a profiler if so.
 func (span *Span) sampleTransactionProfile() {
@@ -23,19 +16,21 @@ func (span *Span) sampleTransactionProfile() {
 		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f", sampleRate)
 	default:
 		startProfilerOnce.Do(startGlobalProfiler)
-		span.profiler = __transactionProfiler
+		span.collectProfile = collectTransactionProfile
 	}
 }
 
-type transactionProfiler interface {
-	Finish(span *Span) *profileInfo
+// transactionProfiler collects a profile for a given span.
+type transactionProfiler func(span *Span) *profileInfo
+
+var startProfilerOnce sync.Once
+var globalProfiler profiler
+
+func startGlobalProfiler() {
+	globalProfiler = startProfiling(time.Now())
 }
 
-type _transactionProfiler struct{}
-
-var __transactionProfiler = _transactionProfiler{}
-
-func (_transactionProfiler) Finish(span *Span) *profileInfo {
+func collectTransactionProfile(span *Span) *profileInfo {
 	result := globalProfiler.GetSlice(span.StartTime, span.EndTime)
 	if result == nil || result.trace == nil {
 		return nil

@@ -294,13 +294,17 @@ func TestProfilerSamplingRate(t *testing.T) {
 	var samplesByThread = map[uint64]uint64{}
 	var outliersByThread = map[uint64]uint64{}
 	var outliers = 0
+	var lastLogTime = uint64(0)
 	for _, sample := range result.trace.Samples {
 		count := samplesByThread[sample.ThreadID]
 
 		var lowerBound = count * uint64(profilerSamplingRate.Nanoseconds())
 		var upperBound = (count + 1 + outliersByThread[sample.ThreadID]) * uint64(profilerSamplingRate.Nanoseconds())
 
-		t.Logf("Routine %2d, sample %d (%d) should be between %d and %d", sample.ThreadID, count, sample.ElapsedSinceStartNS, lowerBound, upperBound)
+		if lastLogTime != sample.ElapsedSinceStartNS {
+			t.Logf("Sample %d (%d) should be between %d and %d", count, sample.ElapsedSinceStartNS, lowerBound, upperBound)
+			lastLogTime = sample.ElapsedSinceStartNS
+		}
 
 		// We can check the lower bound explicitly, but the upper bound is problematic as some samples may get delayed.
 		// Therefore, we collect the number of outliers and check if it's reasonably low.

@@ -58,8 +58,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	recorder *spanRecorder
 	// span context, can only be set on transactions
 	contexts map[string]Context
-	// profiler instance if attached, nil otherwise.
-	profiler transactionProfiler
+	// collectProfile is a function that collects a profile of the current transaction. May be nil.
+	collectProfile transactionProfiler
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -212,8 +212,8 @@ func (s *Span) Finish() {
 		return
 	}
 
-	if s.profiler != nil {
-		event.sdkMetaData.transactionProfile = s.profiler.Finish(s)
+	if s.collectProfile != nil {
+		event.sdkMetaData.transactionProfile = s.collectProfile(s)
 	}
 
 	// TODO(tracing): add breadcrumbs
