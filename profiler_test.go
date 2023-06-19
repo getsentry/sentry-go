@@ -6,10 +6,12 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -340,6 +342,81 @@ func TestProfilerStackBufferGrowth(t *testing.T) {
 	require.Equal(lenAfterAutoAlloc, len(profiler.stacksBuffer))
 }
 
+func countSamples(profiler *profileRecorder) (value int) {
+	profiler.samplesBucketsHead.Do(func(bucket interface{}) {
+		if bucket != nil {
+			value += len(bucket.(profileSamplesBucket))
+		}
+	})
+	return value
+}
+
+// This tests profiler internals and replaces in-code asserts. While this shouldn't generally be done and instead
+// we should test the profiler API only, this is trying to reduce a chance of a broken code that may externally work
+// but has unbounded memory usage or similar performance issue.
+func TestProfilerInternalMaps(t *testing.T) {
+	var assert = assert.New(t)
+
+	profiler := newProfiler(time.Now())
+
+	// The size of the ring buffer is fixed throughout
+	ringBufferSize := 3030
+
+	// First, there is no data.
+	assert.Zero(len(profiler.frames))
+	assert.Zero(len(profiler.frameIndexes))
+	assert.Zero(len(profiler.newFrames))
+	assert.Zero(len(profiler.stacks))
+	assert.Zero(len(profiler.stackIndexes))
+	assert.Zero(len(profiler.newStacks))
+	assert.Zero(len(profiler.routines))
+	assert.Zero(countSamples(profiler))
+	assert.Equal(ringBufferSize, profiler.samplesBucketsHead.Len())
+
+	// After a tick, there is some data.
+	profiler.onTick()
+	assert.NotZero(len(profiler.frames))
+	assert.NotZero(len(profiler.frameIndexes))
+	assert.NotZero(len(profiler.newFrames))
+	assert.NotZero(len(profiler.stacks))
+	assert.NotZero(len(profiler.stackIndexes))
+	assert.NotZero(len(profiler.newStacks))
+	assert.NotZero(len(profiler.routines))
+	assert.NotZero(countSamples(profiler))
+	assert.Equal(ringBufferSize, profiler.samplesBucketsHead.Len())
+
+	framesLen := len(profiler.frames)
+	frameIndexesLen := len(profiler.frameIndexes)
+	stacksLen := len(profiler.stacks)
+	stackIndexesLen := len(profiler.stackIndexes)
+	routinesLen := len(profiler.routines)
+	samplesLen := countSamples(profiler)
+
+	// On another tick, we will have the same data plus one frame and stack representing the profiler.onTick() call on the next line.
+	profiler.onTick()
+	assert.Equal(framesLen+1, len(profiler.frames))
+	assert.Equal(frameIndexesLen+1, len(profiler.frameIndexes))
+	assert.Equal(1, len(profiler.newFrames))
+	assert.Equal(stacksLen+1, len(profiler.stacks))
+	assert.Equal(stackIndexesLen+1, len(profiler.stackIndexes))
+	assert.Equal(1, len(profiler.newStacks))
+	assert.Equal(routinesLen, len(profiler.routines))
+	assert.Equal(samplesLen*2, countSamples(profiler))
+	assert.Equal(ringBufferSize, profiler.samplesBucketsHead.Len())
+
+	// On another tick, we will have the same data plus one frame and stack representing the profiler.onTick() call on the next line.
+	profiler.onTick()
+	assert.Equal(framesLen+2, len(profiler.frames))
+	assert.Equal(frameIndexesLen+2, len(profiler.frameIndexes))
+	assert.Equal(1, len(profiler.newFrames))
+	assert.Equal(stacksLen+2, len(profiler.stacks))
+	assert.Equal(stackIndexesLen+2, len(profiler.stackIndexes))
+	assert.Equal(1, len(profiler.newStacks))
+	assert.Equal(routinesLen, len(profiler.routines))
+	assert.Equal(samplesLen*3, countSamples(profiler))
+	assert.Equal(ringBufferSize, profiler.samplesBucketsHead.Len())
+}
+
 func testTick(t *testing.T, count, i int, prevTick time.Time) time.Time {
 	var sinceLastTick = time.Since(prevTick).Microseconds()
 	t.Logf("tick %2d/%d after %d μs", i+1, count, sinceLastTick)
@@ -456,18 +533,49 @@ func BenchmarkProfilerProcess(b *testing.B) {
 	}
 }
 
-func profilerBenchmark(b *testing.B, withProfiling bool) {
-	var stopFn func(bool)
+func profilerBenchmark(t *testing.T, b *testing.B, withProfiling bool) {
+	var p profiler
 	if withProfiling {
-		stopFn = startProfiling(time.Now()).Stop
+		p = startProfiling(time.Now())
 	}
 	b.ResetTimer()
+
+	const numRoutines = 1000
 	for i := 0; i < b.N; i++ {
-		_ = findPrimeNumber(10000)
+		var wg sync.WaitGroup
+		wg.Add(numRoutines)
+		for j := 0; j < numRoutines; j++ {
+			go func() {
+				_ = findPrimeNumber(10000)
+				wg.Done()
+			}()
+		}
+		wg.Wait()
 	}
+
 	b.StopTimer()
 	if withProfiling {
-		stopFn(true)
+		p.Stop(true)
+		// Let's captured data so we can see what has been profiled if there's an error.
+		// Previously, there have been tests that have started (and left running) global Sentry instance and goroutines.
+		t.Logf("Profiler captured %d goroutines.", len(p.(*profileRecorder).routines))
+		t.Log("Captured frames related to the profiler benchmark:")
+		isRelatedToProfilerBenchmark := func(f *Frame) bool {
+			return strings.Contains(f.AbsPath, "profiler") || strings.Contains(f.AbsPath, "benchmark.go") || strings.Contains(f.AbsPath, "testing.go")
+		}
+		for _, frame := range p.(*profileRecorder).frames {
+			if isRelatedToProfilerBenchmark(frame) {
+				t.Logf("%s %s\tat %s:%d", frame.Module, frame.Function, frame.AbsPath, frame.Lineno)
+			}
+		}
+		t.Log(strings.Repeat("-", 80))
+		t.Log("Unknown frames (these may be a cause of high overhead):")
+		for _, frame := range p.(*profileRecorder).frames {
+			if !isRelatedToProfilerBenchmark(frame) {
+				t.Logf("%s %s\tat %s:%d", frame.Module, frame.Function, frame.AbsPath, frame.Lineno)
+			}
+		}
+		t.Log(strings.Repeat("=", 80))
 	}
 }
 
@@ -479,14 +587,15 @@ func TestProfilerOverhead(t *testing.T) {
 		t.Skip("Skipping on CI because the machines are too overloaded to run the test properly - they show between 3 and 30 %% overhead....")
 	}
 
-	var base = testing.Benchmark(func(b *testing.B) { profilerBenchmark(b, false) })
-	var other = testing.Benchmark(func(b *testing.B) { profilerBenchmark(b, true) })
+	var assert = assert.New(t)
+	var baseline = testing.Benchmark(func(b *testing.B) { profilerBenchmark(t, b, false) })
+	var profiling = testing.Benchmark(func(b *testing.B) { profilerBenchmark(t, b, true) })
 
-	t.Logf("Without profiling: %v\n", base.String())
-	t.Logf("With profiling:    %v\n", other.String())
+	t.Logf("Without profiling: %v\n", baseline.String())
+	t.Logf("With profiling:    %v\n", profiling.String())
 
-	var overhead = float64(other.NsPerOp())/float64(base.NsPerOp())*100 - 100
+	var overhead = float64(profiling.NsPerOp())/float64(baseline.NsPerOp())*100 - 100
 	var maxOverhead = 5.0
 	t.Logf("Profiling overhead: %f percent\n", overhead)
-	require.Less(t, overhead, maxOverhead)
+	assert.Less(overhead, maxOverhead)
 }

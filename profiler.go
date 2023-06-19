@@ -84,7 +84,6 @@ type profileRecorder struct {
 	stopSignal        chan struct{}
 	stopped           sync.WaitGroup
 	mutex             sync.RWMutex
-	routines          map[string]*profileThreadMetadata
 	testProfilerPanic int64
 
 	// Map from runtime.StackRecord.Stack0 to an index in stacks.
@@ -97,11 +96,10 @@ type profileRecorder struct {
 	frames       []*Frame
 	newFrames    []*Frame // New frames created in the current interation.
 
+	routines map[string]*profileThreadMetadata
+
 	// We keep a ring buffer of 30 seconds worth of samples, so that we can later slice it.
-	// Each item in the array is a slice of samples all taken at the same time.
-	// TODO consider using an array (check performance)
-	// sampleBuckets     [30 * profilerSamplingRateHz]profileSamplesBucket
-	// samplesBucketsHead int
+	// Each bucket is a slice of samples all taken at the same time.
 	samplesBucketsHead *ring.Ring
 
 	// Buffer to read current stacks - will grow automatically up to stackBufferLimit.
@@ -112,12 +110,19 @@ type profileRecorder struct {
 // If the number is lower than 0, profilerGoroutine() will panic immedately.
 // If the number is higher than 0, profiler.onTick() will panic when the given samples-set index is being collected.
 var testProfilerPanic int64
+var profilerRunning int64
 
 func (p *profileRecorder) run() {
+	// Code backup for manual test debugging:
+	// if !atomic.CompareAndSwapInt64(&profilerRunning, 0, 1) {
+	// 	panic("Only one profiler can be running at a time")
+	// }
+
 	// We shouldn't panic but let's be super safe.
 	defer func() {
 		_ = recover()
 		atomic.StoreInt64(&testProfilerPanic, 0)
+		atomic.StoreInt64(&profilerRunning, 0)
 	}()
 
 	var localTestProfilerPanic = atomic.LoadInt64(&testProfilerPanic)
@@ -304,12 +309,6 @@ func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) 
 		p.addRoutine(sample.ThreadID)
 	}
 
-	// FIXME unused code for array-based ring
-	// p.sampleBucketsHead++
-	// if p.sampleBucketsHead >= len(p.sampleBuckets) {
-	// 	p.sampleBucketsHead = 0
-	// }
-	// p.sampleBuckets[p.sampleBucketsHead] = bucket
 	p.samplesBucketsHead = p.samplesBucketsHead.Next()
 	p.samplesBucketsHead.Value = bucket
 }
@@ -340,6 +339,7 @@ func (p *profileRecorder) addStackTrace(capturedStack traceparser.Trace) int {
 		}
 		stackIndex = len(p.stacks) + len(p.newStacks)
 		p.newStacks = append(p.newStacks, stack)
+		p.stackIndexes[string(key)] = stackIndex
 	}
 
 	return stackIndex
@@ -357,6 +357,7 @@ func (p *profileRecorder) addFrame(capturedFrame traceparser.Frame) int {
 		frame := newFrame(module, function, string(file), line)
 		frameIndex = len(p.frames) + len(p.newFrames)
 		p.newFrames = append(p.newFrames, &frame)
+		p.frameIndexes[string(key)] = frameIndex
 	}
 	return frameIndex
 }

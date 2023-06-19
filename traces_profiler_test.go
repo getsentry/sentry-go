@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -30,7 +31,17 @@ func testTraceProfiling(t *testing.T, rate float64) (*Span, *Event) {
 }
 
 func TestTraceProfiling(t *testing.T) {
+	// Disable the automatically started global profiler after the test has finished.
+	defer func() {
+		startProfilerOnce = sync.Once{}
+		if globalProfiler != nil {
+			globalProfiler.Stop(true)
+			globalProfiler = nil
+		}
+	}()
+
 	var require = require.New(t)
+	require.Nil(globalProfiler)
 	var timeBeforeStarting = time.Now()
 	span, event := testTraceProfiling(t, 1.0)
 	require.Equal(transactionType, event.Type)
@@ -46,6 +57,7 @@ func TestTraceProfiling(t *testing.T) {
 	require.Greater(profileInfo.Transaction.ActiveThreadID, uint64(0))
 	require.Equal(span.TraceID.String(), profileInfo.Transaction.TraceID)
 	validateProfile(t, profileInfo.Trace, span.EndTime.Sub(span.StartTime))
+	require.NotNil(globalProfiler)
 }
 
 func TestTraceProfilingDisabled(t *testing.T) {
