@@ -23,6 +23,7 @@ func startProfiling(startTime time.Time) profiler {
 }
 
 type profiler interface {
+	// GetSlice returns a slice of the profiled data between the given times.
 	GetSlice(startTime, endTime time.Time) *profilerResult
 	Stop(wait bool)
 }
@@ -160,7 +161,6 @@ func (p *profileRecorder) Stop(wait bool) {
 	}
 }
 
-// GetSlice returns a slice of the profiled data between the given times.
 func (p *profileRecorder) GetSlice(startTime, endTime time.Time) *profilerResult {
 	// Unlikely edge cases - profiler wasn't running at all or the given times are invalid in relation to each other.
 	if p.startTime.After(endTime) || startTime.After(endTime) {

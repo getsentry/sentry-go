@@ -98,6 +98,14 @@ func TestProfilerCollection(t *testing.T) {
 		require.Greater(result.callerGoID, uint64(0))
 		require.Equal(goID, result.callerGoID)
 		validateProfile(t, result.trace, end.Sub(start))
+
+		// Another slice that has start time different than the profiler start time.
+		start = end
+		require.True(ticker.Tick())
+		require.True(ticker.Tick())
+		end = time.Now()
+		result = profiler.GetSlice(start, end)
+		validateProfile(t, result.trace, end.Sub(start))
 	})
 }
 
@@ -533,7 +541,7 @@ func BenchmarkProfilerProcess(b *testing.B) {
 	}
 }
 
-func profilerBenchmark(t *testing.T, b *testing.B, withProfiling bool) {
+func profilerBenchmark(t *testing.T, b *testing.B, withProfiling bool, arg int) {
 	var p profiler
 	if withProfiling {
 		p = startProfiling(time.Now())
@@ -544,14 +552,19 @@ func profilerBenchmark(t *testing.T, b *testing.B, withProfiling bool) {
 	wg.Add(b.N)
 	for i := 0; i < b.N; i++ {
 		go func() {
-			_ = findPrimeNumber(30000)
+			start := time.Now()
+			_ = findPrimeNumber(arg)
+			end := time.Now()
+			if p != nil {
+				_ = p.GetSlice(start, end)
+			}
 			wg.Done()
 		}()
 	}
 	wg.Wait()
 
 	b.StopTimer()
-	if withProfiling {
+	if p != nil {
 		p.Stop(true)
 		// Let's captured data so we can see what has been profiled if there's an error.
 		// Previously, there have been tests that have started (and left running) global Sentry instance and goroutines.
@@ -584,9 +597,22 @@ func TestProfilerOverhead(t *testing.T) {
 		t.Skip("Skipping on CI because the machines are too overloaded to run the test properly - they show between 3 and 30 %% overhead....")
 	}
 
+	// first, find large-enough argument so that findPrimeNumber(arg) takes more than 100ms
+	var arg = 10000
+	for {
+		start := time.Now()
+		_ = findPrimeNumber(arg)
+		end := time.Now()
+		if end.Sub(start) > 100*time.Millisecond {
+			t.Logf("Found arg = %d that takes %d ms to process.", arg, end.Sub(start).Milliseconds())
+			break
+		}
+		arg += 10000
+	}
+
 	var assert = assert.New(t)
-	var baseline = testing.Benchmark(func(b *testing.B) { profilerBenchmark(t, b, false) })
-	var profiling = testing.Benchmark(func(b *testing.B) { profilerBenchmark(t, b, true) })
+	var baseline = testing.Benchmark(func(b *testing.B) { profilerBenchmark(t, b, false, arg) })
+	var profiling = testing.Benchmark(func(b *testing.B) { profilerBenchmark(t, b, true, arg) })
 
 	t.Logf("Without profiling: %v\n", baseline.String())
 	t.Logf("With profiling:    %v\n", profiling.String())
