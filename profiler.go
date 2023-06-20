@@ -183,23 +183,29 @@ func (p *profileRecorder) GetSlice(startTime, endTime time.Time) *profilerResult
 		trace:      trace,
 	}
 
-	// TODO can we implement the serialization without copying all the samples here?
-	trace.Samples = make([]*profileSample, 0, samplesCount)
-	for i := len(bucketsReversed) - 1; i >= 0; i-- {
-		result.trace.Samples = append(result.trace.Samples, bucketsReversed[i]...)
+	trace.Samples = make([]profileSample, samplesCount)
+	var s = samplesCount - 1
+	for _, bucket := range bucketsReversed {
+		var elapsedSinceStartNS = bucket.relativeTimeNS - relativeStartNS
+		for i := 0; i < len(bucket.goIDs); i++ {
+			trace.Samples[s].ElapsedSinceStartNS = elapsedSinceStartNS
+			trace.Samples[s].ThreadID = bucket.goIDs[i]
+			trace.Samples[s].StackID = bucket.stackIDs[i]
+			s--
+		}
 	}
 
 	return result
 }
 
 // Collect all buckets of samples in the given time range while holding a read lock.
-func (p *profileRecorder) getBuckets(relativeStartNS, relativeEndNS uint64) (samplesCount int, buckets []profileSamplesBucket, trace *profileTrace) {
+func (p *profileRecorder) getBuckets(relativeStartNS, relativeEndNS uint64) (samplesCount int, buckets []*profileSamplesBucket, trace *profileTrace) {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 
 	// sampleBucketsHead points at the last stored bucket so it's a good starting point to search backwards for the end.
 	var end = p.samplesBucketsHead
-	for end.Value != nil && end.Value.(profileSamplesBucket)[0].ElapsedSinceStartNS > relativeEndNS {
+	for end.Value != nil && end.Value.(*profileSamplesBucket).relativeTimeNS > relativeEndNS {
 		end = end.Prev()
 	}
 
@@ -211,13 +217,13 @@ func (p *profileRecorder) getBuckets(relativeStartNS, relativeEndNS uint64) (sam
 	// Search for the first item after the given startTime.
 	var start = end
 	samplesCount = 0
-	buckets = make([]profileSamplesBucket, 0, int64((relativeEndNS-relativeStartNS)/uint64(profilerSamplingRate.Nanoseconds()))+1)
+	buckets = make([]*profileSamplesBucket, 0, int64((relativeEndNS-relativeStartNS)/uint64(profilerSamplingRate.Nanoseconds()))+1)
 	for start.Value != nil {
-		var bucket = start.Value.(profileSamplesBucket)
-		if bucket[0].ElapsedSinceStartNS < relativeStartNS {
+		var bucket = start.Value.(*profileSamplesBucket)
+		if bucket.relativeTimeNS < relativeStartNS {
 			break
 		}
-		samplesCount += len(bucket)
+		samplesCount += len(bucket.goIDs)
 		buckets = append(buckets, bucket)
 		start = start.Prev()
 	}
@@ -279,24 +285,28 @@ func (p *profileRecorder) collectRecords() []byte {
 
 func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) {
 	var traces = traceparser.Parse(stacksBuffer)
-	var bucket = make(profileSamplesBucket, traces.Length())
+	var length = traces.Length()
 
-	// Shouldn't happen but let's be safe and don't store empty buckets
-	if len(bucket) == 0 {
+	// Shouldn't happen but let's be safe and don't store empty buckets.
+	if length == 0 {
 		return
 	}
 
+	var bucket = &profileSamplesBucket{
+		relativeTimeNS: elapsedNs,
+		stackIDs:       make([]int, length),
+		goIDs:          make([]uint64, length),
+	}
+
+	// reset buffers
 	p.newFrames = p.newFrames[:0]
 	p.newStacks = p.newStacks[:0]
 
-	for i := traces.Length() - 1; i >= 0; i-- {
+	for i := 0; i < length; i++ {
 		var stack = traces.Item(i)
 		var stackIndex = p.addStackTrace(stack)
-		bucket[i] = &profileSample{
-			ElapsedSinceStartNS: elapsedNs,
-			StackID:             stackIndex,
-			ThreadID:            stack.GoID(),
-		}
+		bucket.stackIDs[i] = stackIndex
+		bucket.goIDs[i] = stack.GoID()
 	}
 
 	p.mutex.Lock()
@@ -305,8 +315,8 @@ func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) 
 	p.stacks = append(p.stacks, p.newStacks...)
 	p.frames = append(p.frames, p.newFrames...)
 
-	for _, sample := range bucket {
-		p.addRoutine(sample.ThreadID)
+	for _, goID := range bucket.goIDs {
+		p.addRoutine(goID)
 	}
 
 	p.samplesBucketsHead = p.samplesBucketsHead.Next()
@@ -362,7 +372,11 @@ func (p *profileRecorder) addFrame(capturedFrame traceparser.Frame) int {
 	return frameIndex
 }
 
-type profileSamplesBucket []*profileSample
+type profileSamplesBucket struct {
+	relativeTimeNS uint64
+	stackIDs       []int
+	goIDs          []uint64
+}
 
 // A Ticker holds a channel that delivers “ticks” of a clock at intervals.
 type profilerTicker interface {

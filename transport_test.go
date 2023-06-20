@@ -204,7 +204,7 @@ func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 					Colno:    24,
 				},
 			},
-			Samples: []*profileSample{
+			Samples: []profileSample{
 				{
 					ElapsedSinceStartNS: 10,
 					StackID:             2,

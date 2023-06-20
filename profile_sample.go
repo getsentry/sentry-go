@@ -41,7 +41,7 @@ type (
 
 	profileTrace struct {
 		Frames         []*Frame                          `json:"frames"`
-		Samples        []*profileSample                  `json:"samples"`
+		Samples        []profileSample                   `json:"samples"`
 		Stacks         []profileStack                    `json:"stacks"`
 		ThreadMetadata map[string]*profileThreadMetadata `json:"thread_metadata"`
 	}

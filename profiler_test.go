@@ -353,7 +353,7 @@ func TestProfilerStackBufferGrowth(t *testing.T) {
 func countSamples(profiler *profileRecorder) (value int) {
 	profiler.samplesBucketsHead.Do(func(bucket interface{}) {
 		if bucket != nil {
-			value += len(bucket.(profileSamplesBucket))
+			value += len(bucket.(*profileSamplesBucket).goIDs)
 		}
 	})
 	return value
@@ -597,7 +597,7 @@ func TestProfilerOverhead(t *testing.T) {
 		t.Skip("Skipping on CI because the machines are too overloaded to run the test properly - they show between 3 and 30 %% overhead....")
 	}
 
-	// first, find large-enough argument so that findPrimeNumber(arg) takes more than 100ms
+	// First, find a large-enough argument so that findPrimeNumber(arg) takes more than 100ms.
 	var arg = 10000
 	for {
 		start := time.Now()
