@@ -28,8 +28,8 @@ type (
 
 	profileSample struct {
 		ElapsedSinceStartNS uint64 `json:"elapsed_since_start_ns"`
-		StackID  int    `json:"stack_id"`
-		ThreadID uint64 `json:"thread_id"`
+		StackID             int    `json:"stack_id"`
+		ThreadID            uint64 `json:"thread_id"`
 	}
 
 	profileThreadMetadata struct {

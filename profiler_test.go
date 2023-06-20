@@ -546,7 +546,7 @@ func profilerBenchmark(t *testing.T, b *testing.B, withProfiling bool) {
 		wg.Add(numRoutines)
 		for j := 0; j < numRoutines; j++ {
 			go func() {
-				_ = findPrimeNumber(10000)
+				_ = findPrimeNumber(30000)
 				wg.Done()
 			}()
 		}
