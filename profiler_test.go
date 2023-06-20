@@ -540,18 +540,15 @@ func profilerBenchmark(t *testing.T, b *testing.B, withProfiling bool) {
 	}
 	b.ResetTimer()
 
-	const numRoutines = 1000
+	var wg sync.WaitGroup
+	wg.Add(b.N)
 	for i := 0; i < b.N; i++ {
-		var wg sync.WaitGroup
-		wg.Add(numRoutines)
-		for j := 0; j < numRoutines; j++ {
-			go func() {
-				_ = findPrimeNumber(30000)
-				wg.Done()
-			}()
-		}
-		wg.Wait()
+		go func() {
+			_ = findPrimeNumber(30000)
+			wg.Done()
+		}()
 	}
+	wg.Wait()
 
 	b.StopTimer()
 	if withProfiling {
