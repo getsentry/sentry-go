@@ -162,6 +162,9 @@ func TestProfilerCollectsOnStart(t *testing.T) {
 func TestProfilerPanicDuringStartup(t *testing.T) {
 	var require = require.New(t)
 
+	_ = setupProfilerTestTicker(t)
+	defer restoreProfilerTicker()
+
 	atomic.StoreInt64(&testProfilerPanic, -1)
 
 	start := time.Now()
