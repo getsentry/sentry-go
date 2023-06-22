@@ -52,33 +52,11 @@ func getCurrentGoID() uint64 {
 	return 0
 }
 
-func newProfiler(startTime time.Time) *profileRecorder {
-	// Pre-allocate the profile trace for the currently active number of routines & 100 ms worth of samples.
-	// Other coefficients are just guesses of what might be a good starting point to avoid allocs on short runs.
-	return &profileRecorder{
-		startTime:  startTime,
-		stopSignal: make(chan struct{}, 1),
-
-		stackIndexes: make(map[string]int, 32),
-		stacks:       make([]profileStack, 0, 32),
-		newStacks:    make([]profileStack, 0, 32),
-
-		frameIndexes: make(map[string]int, 128),
-		frames:       make([]*Frame, 0, 128),
-		newFrames:    make([]*Frame, 0, 128),
-
-		samplesBucketsHead: ring.New(30 * profilerSamplingRateHz),
-		routines:           make(map[string]*profileThreadMetadata, runtime.NumGoroutine()),
-
-		// A buffer of 2 KiB per goroutine stack looks like a good starting point (empirically determined).
-		stacksBuffer: make([]byte, runtime.NumGoroutine()*2048),
-	}
-}
-
 const profilerSamplingRateHz = 101 // 101 Hz; not 100 Hz because of the lockstep sampling (https://stackoverflow.com/a/45471031/1181370)
 const profilerSamplingRate = time.Second / profilerSamplingRateHz
 const stackBufferMaxGrowth = 512 * 1024
 const stackBufferLimit = 10 * 1024 * 1024
+const profilerRuntimeLimit = 30 // seconds
 
 type profileRecorder struct {
 	startTime         time.Time
@@ -105,6 +83,29 @@ type profileRecorder struct {
 
 	// Buffer to read current stacks - will grow automatically up to stackBufferLimit.
 	stacksBuffer []byte
+}
+
+func newProfiler(startTime time.Time) *profileRecorder {
+	// Pre-allocate the profile trace for the currently active number of routines & 100 ms worth of samples.
+	// Other coefficients are just guesses of what might be a good starting point to avoid allocs on short runs.
+	return &profileRecorder{
+		startTime:  startTime,
+		stopSignal: make(chan struct{}, 1),
+
+		stackIndexes: make(map[string]int, 32),
+		stacks:       make([]profileStack, 0, 32),
+		newStacks:    make([]profileStack, 0, 32),
+
+		frameIndexes: make(map[string]int, 128),
+		frames:       make([]*Frame, 0, 128),
+		newFrames:    make([]*Frame, 0, 128),
+
+		samplesBucketsHead: ring.New(profilerRuntimeLimit * profilerSamplingRateHz),
+		routines:           make(map[string]*profileThreadMetadata, runtime.NumGoroutine()),
+
+		// A buffer of 2 KiB per goroutine stack looks like a good starting point (empirically determined).
+		stacksBuffer: make([]byte, runtime.NumGoroutine()*2048),
+	}
 }
 
 // This allows us to test whether panic during profiling are handled correctly and don't block execution.
