@@ -1,0 +1,18 @@
+{
+  "check_in_id": "0cde0b4e725d4504b2d07c303c2a06d5",
+  "monitor_slug": "my-monitor",
+  "status": "ok",
+  "duration": 10,
+  "release": "1.0.0",
+  "environment": "dev",
+  "monitor_config": {
+    "schedule": {
+      "type": "interval",
+      "value": 1,
+      "unit": "day"
+    },
+    "check_in_margin": 5,
+    "max_runtime": 30,
+    "timezone": "America/Los_Angeles"
+  }
+}

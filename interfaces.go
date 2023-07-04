@@ -22,6 +22,9 @@ const eventType = "event"
 
 const profileType = "profile"
 
+// checkInType is the type of a check in event.
+const checkInType = "check_in"
+
 // Level marks the severity of the event.
 type Level string
 
@@ -315,6 +318,12 @@ type Event struct {
 	Spans           []*Span          `json:"spans,omitempty"`
 	TransactionInfo *TransactionInfo `json:"transaction_info,omitempty"`
 
+	// The fields below are only relevant for crons/check ins
+
+	CheckInID     string         `json:"check_in_id,omitempty"`
+	CheckIn       *CheckIn       `json:"check_in,omitempty"`
+	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
+
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
@@ -375,6 +384,8 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 	// and a few type tricks.
 	if e.Type == transactionType {
 		return e.transactionMarshalJSON()
+	} else if e.Type == checkInType {
+		return e.checkInMarshalJSON()
 	}
 	return e.defaultMarshalJSON()
 }
@@ -447,6 +458,28 @@ func (e *Event) transactionMarshalJSON() ([]byte, error) {
 		x.StartTime = b
 	}
 	return json.Marshal(x)
+}
+
+func (e *Event) checkInMarshalJSON() ([]byte, error) {
+	checkIn := serializedCheckIn{
+		CheckInID:     e.CheckInID,
+		MonitorSlug:   e.CheckIn.MonitorSlug,
+		Status:        e.CheckIn.Status,
+		Duration:      e.CheckIn.Duration,
+		Release:       e.Release,
+		Environment:   e.Environment,
+		MonitorConfig: nil,
+	}
+
+	if e.MonitorConfig != nil {
+		checkIn.MonitorConfig = &MonitorConfig{}
+		checkIn.MonitorConfig.Schedule = e.MonitorConfig.Schedule
+		checkIn.MonitorConfig.CheckInMargin = e.MonitorConfig.CheckInMargin
+		checkIn.MonitorConfig.MaxRuntime = e.MonitorConfig.MaxRuntime
+		checkIn.MonitorConfig.Timezone = e.MonitorConfig.Timezone
+	}
+
+	return json.Marshal(checkIn)
 }
 
 // NewEvent creates a new Event.

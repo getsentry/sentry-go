@@ -54,6 +54,12 @@ func CaptureException(exception error) *EventID {
 	return hub.CaptureException(exception)
 }
 
+// CaptureCheckIn captures a check in.
+func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+	hub := CurrentHub()
+	return hub.CaptureCheckIn(checkIn, monitorConfig)
+}
+
 // CaptureEvent captures an event on the currently active client if any.
 //
 // The event must already be assembled. Typically code would instead use
