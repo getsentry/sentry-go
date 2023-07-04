@@ -60,7 +60,7 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	contexts map[string]Context
 	// profiler instance if attached, nil otherwise.
 	profiler transactionProfiler
-	// a Once instance to make sure that Finish() is only called once
+	// a Once instance to make sure that Finish() is only called once.
 	finishOnce sync.Once
 }
 
@@ -196,7 +196,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 	return &span
 }
 
-// doFinish runs the actual Span.Finish() logic
+// doFinish runs the actual Span.Finish() logic.
 func (s *Span) doFinish() {
 	// For the timing to be correct, the profiler must be stopped before s.EndTime.
 	var profile *profileInfo
