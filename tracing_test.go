@@ -980,3 +980,28 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 		})
 	}
 }
+
+// This is a regression test for https://github.com/getsentry/sentry-go/issues/587
+// Without the "spans can be finished only once" fix, this test will fail
+// when run with race detection ("-race").
+func TestSpanFinishConcurrentlyWithoutRaces(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1,
+	})
+	transaction := StartTransaction(ctx, "op")
+
+	go func() {
+		for {
+			transaction.Finish()
+		}
+	}()
+
+	go func() {
+		for {
+			transaction.Finish()
+		}
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+}

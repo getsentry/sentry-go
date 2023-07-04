@@ -60,6 +60,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	contexts map[string]Context
 	// profiler instance if attached, nil otherwise.
 	profiler transactionProfiler
+	// a Once instance to make sure that Finish() is only called once
+	finishOnce sync.Once
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -194,12 +196,8 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 	return &span
 }
 
-// Finish sets the span's end time, unless already set. If the span is the root
-// of a span tree, Finish sends the span tree to Sentry as a transaction.
-func (s *Span) Finish() {
-	// TODO(tracing): maybe make Finish run at most once, such that
-	// (incorrectly) calling it twice never double sends to Sentry.
-
+// doFinish runs the actual Span.Finish() logic
+func (s *Span) doFinish() {
 	// For the timing to be correct, the profiler must be stopped before s.EndTime.
 	var profile *profileInfo
 	if s.profiler != nil {
@@ -225,6 +223,15 @@ func (s *Span) Finish() {
 
 	hub := hubFromContext(s.ctx)
 	hub.CaptureEvent(event)
+}
+
+// Finish sets the span's end time, unless already set. If the span is the root
+// of a span tree, Finish sends the span tree to Sentry as a transaction.
+//
+// The logic is executed at most once per span, so that (incorrectly) calling it twice
+// never double sends to Sentry.
+func (s *Span) Finish() {
+	s.finishOnce.Do(s.doFinish)
 }
 
 // Context returns the context containing the span.
