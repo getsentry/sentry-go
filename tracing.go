@@ -196,35 +196,6 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 	return &span
 }
 
-// doFinish runs the actual Span.Finish() logic.
-func (s *Span) doFinish() {
-	// For the timing to be correct, the profiler must be stopped before s.EndTime.
-	var profile *profileInfo
-	if s.profiler != nil {
-		profile = s.profiler.Finish(s)
-	}
-
-	if s.EndTime.IsZero() {
-		s.EndTime = monotonicTimeSince(s.StartTime)
-	}
-
-	if !s.Sampled.Bool() {
-		return
-	}
-	event := s.toEvent()
-	if event == nil {
-		return
-	}
-
-	event.sdkMetaData.transactionProfile = profile
-
-	// TODO(tracing): add breadcrumbs
-	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
-
-	hub := hubFromContext(s.ctx)
-	hub.CaptureEvent(event)
-}
-
 // Finish sets the span's end time, unless already set. If the span is the root
 // of a span tree, Finish sends the span tree to Sentry as a transaction.
 //
@@ -358,6 +329,35 @@ func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
 	if s.isTransaction {
 		s.dynamicSamplingContext = dsc
 	}
+}
+
+// doFinish runs the actual Span.Finish() logic.
+func (s *Span) doFinish() {
+	// For the timing to be correct, the profiler must be stopped before s.EndTime.
+	var profile *profileInfo
+	if s.profiler != nil {
+		profile = s.profiler.Finish(s)
+	}
+
+	if s.EndTime.IsZero() {
+		s.EndTime = monotonicTimeSince(s.StartTime)
+	}
+
+	if !s.Sampled.Bool() {
+		return
+	}
+	event := s.toEvent()
+	if event == nil {
+		return
+	}
+
+	event.sdkMetaData.transactionProfile = profile
+
+	// TODO(tracing): add breadcrumbs
+	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
+
+	hub := hubFromContext(s.ctx)
+	hub.CaptureEvent(event)
 }
 
 // sentryTracePattern matches either
