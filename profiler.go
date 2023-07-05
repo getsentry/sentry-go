@@ -2,7 +2,9 @@ package sentry
 
 import (
 	"container/ring"
+	"math"
 	"strconv"
+	"strings"
 
 	"runtime"
 	"sync"
@@ -75,7 +77,7 @@ type profileRecorder struct {
 	frames       []*Frame
 	newFrames    []*Frame // New frames created in the current interation.
 
-	routines map[string]*profileThreadMetadata
+	routines map[uint64]*profileThreadMetadata
 
 	// We keep a ring buffer of 30 seconds worth of samples, so that we can later slice it.
 	// Each bucket is a slice of samples all taken at the same time.
@@ -101,7 +103,7 @@ func newProfiler(startTime time.Time) *profileRecorder {
 		newFrames:    make([]*Frame, 0, 128),
 
 		samplesBucketsHead: ring.New(profilerRuntimeLimit * profilerSamplingRateHz),
-		routines:           make(map[string]*profileThreadMetadata, runtime.NumGoroutine()),
+		routines:           make(map[uint64]*profileThreadMetadata, runtime.NumGoroutine()),
 
 		// A buffer of 2 KiB per goroutine stack looks like a good starting point (empirically determined).
 		stacksBuffer: make([]byte, runtime.NumGoroutine()*2048),
@@ -316,41 +318,63 @@ func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) 
 	p.stacks = append(p.stacks, p.newStacks...)
 	p.frames = append(p.frames, p.newFrames...)
 
+	// Add missing goroutines.
 	for _, goID := range bucket.goIDs {
-		p.addRoutine(goID)
+		if routine, exists := p.routines[goID]; !exists {
+			p.routines[goID] = &profileThreadMetadata{
+				Name:          "Goroutine " + strconv.FormatUint(goID, 10),
+				LastUseTimeNS: elapsedNs,
+			}
+		} else {
+			routine.LastUseTimeNS = elapsedNs
+		}
 	}
 
 	p.samplesBucketsHead = p.samplesBucketsHead.Next()
+
+	// Clean up goroutines that have not been encountered recently.
+	// We don't need to iterate over all routines, just the ones refernced by the bucket that's just being removed.
+	// TODO is it OK to do so even though there may be an event currently in transport, referencing this map?
+	if removedBucket, ok := p.samplesBucketsHead.Value.(*profileSamplesBucket); ok {
+		for _, goID := range removedBucket.goIDs {
+			if p.routines[goID].LastUseTimeNS == removedBucket.relativeTimeNS {
+				delete(p.routines, goID)
+			}
+		}
+	}
+
 	p.samplesBucketsHead.Value = bucket
 }
 
-func (p *profileRecorder) addRoutine(id uint64) {
-	index := strconv.FormatUint(id, 10)
-	if _, exists := p.routines[index]; !exists {
-		p.routines[index] = &profileThreadMetadata{
-			Name: "Goroutine " + index,
-		}
-	}
-}
-
 func (p *profileRecorder) addStackTrace(capturedStack traceparser.Trace) int {
-	// NOTE: Don't convert to string yet, it's expensive and compiler can avoid it when
-	//       indexing into a map (only needs a copy when adding a new key to the map).
-	var key = capturedStack.UniqueIdentifier()
+	// Originally, we've used `capturedStack.UniqueIdentifier()` as a key but that was incorrect because it also
+	// contains function arguments and we want to group stacks by function name and file/line only.
+	// Instead, we need to parse frames and we use a list of their indexes as a key.
+	// TODO evaluate performance of other ways to create this index.
+	var sb strings.Builder
 
-	stackIndex, exists := p.stackIndexes[string(key)]
-	if !exists {
-		iter := capturedStack.Frames()
-		stack := make(profileStack, 0, iter.LengthUpperBound())
-		for iter.HasNext() {
-			var frame = iter.Next()
-			if frameIndex := p.addFrame(frame); frameIndex >= 0 {
-				stack = append(stack, frameIndex)
+	iter := capturedStack.Frames()
+	stack := make(profileStack, 0, iter.LengthUpperBound())
+	sb.Grow(cap(stack) * 5)
+	for iter.HasNext() {
+		var frame = iter.Next()
+		if frameIndex := p.addFrame(frame); frameIndex >= 0 {
+			stack = append(stack, frameIndex)
+			sb.WriteByte(' ')
+			if frameIndex < math.MaxInt32 {
+				sb.WriteRune(rune(frameIndex))
+			} else {
+				sb.WriteString(strconv.Itoa(frameIndex))
 			}
 		}
+	}
+
+	var key = sb.String()
+	stackIndex, exists := p.stackIndexes[key]
+	if !exists {
 		stackIndex = len(p.stacks) + len(p.newStacks)
 		p.newStacks = append(p.newStacks, stack)
-		p.stackIndexes[string(key)] = stackIndex
+		p.stackIndexes[key] = stackIndex
 	}
 
 	return stackIndex

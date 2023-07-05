@@ -33,8 +33,9 @@ type (
 	}
 
 	profileThreadMetadata struct {
-		Name     string `json:"name,omitempty"`
-		Priority int    `json:"priority,omitempty"`
+		Name          string `json:"name,omitempty"`
+		Priority      int    `json:"priority,omitempty"`
+		LastUseTimeNS uint64 `json:"-"`
 	}
 
 	profileStack []int
@@ -43,7 +44,7 @@ type (
 		Frames         []*Frame                          `json:"frames"`
 		Samples        []profileSample                   `json:"samples"`
 		Stacks         []profileStack                    `json:"stacks"`
-		ThreadMetadata map[string]*profileThreadMetadata `json:"thread_metadata"`
+		ThreadMetadata map[uint64]*profileThreadMetadata `json:"thread_metadata"`
 	}
 
 	profileInfo struct {

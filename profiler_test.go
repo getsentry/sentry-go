@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -272,7 +271,7 @@ func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) 
 		require.GreaterOrEqual(uint64(duration.Nanoseconds()), sample.ElapsedSinceStartNS)
 		require.GreaterOrEqual(sample.StackID, 0)
 		require.Less(sample.StackID, len(trace.Stacks))
-		require.Contains(trace.ThreadMetadata, strconv.Itoa(int(sample.ThreadID)))
+		require.Contains(trace.ThreadMetadata, sample.ThreadID)
 	}
 
 	for _, thread := range trace.ThreadMetadata {
