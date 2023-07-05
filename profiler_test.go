@@ -379,7 +379,6 @@ func TestProfilerInternalMaps(t *testing.T) {
 	assert.Zero(len(profiler.stacks))
 	assert.Zero(len(profiler.stackIndexes))
 	assert.Zero(len(profiler.newStacks))
-	assert.Zero(len(profiler.routines))
 	assert.Zero(countSamples(profiler))
 	assert.Equal(ringBufferSize, profiler.samplesBucketsHead.Len())
 
@@ -391,7 +390,6 @@ func TestProfilerInternalMaps(t *testing.T) {
 	assert.NotZero(len(profiler.stacks))
 	assert.NotZero(len(profiler.stackIndexes))
 	assert.NotZero(len(profiler.newStacks))
-	assert.NotZero(len(profiler.routines))
 	assert.NotZero(countSamples(profiler))
 	assert.Equal(ringBufferSize, profiler.samplesBucketsHead.Len())
 
@@ -399,7 +397,6 @@ func TestProfilerInternalMaps(t *testing.T) {
 	frameIndexesLen := len(profiler.frameIndexes)
 	stacksLen := len(profiler.stacks)
 	stackIndexesLen := len(profiler.stackIndexes)
-	routinesLen := len(profiler.routines)
 	samplesLen := countSamples(profiler)
 
 	// On another tick, we will have the same data plus one frame and stack representing the profiler.onTick() call on the next line.
@@ -410,7 +407,6 @@ func TestProfilerInternalMaps(t *testing.T) {
 	assert.Equal(stacksLen+1, len(profiler.stacks))
 	assert.Equal(stackIndexesLen+1, len(profiler.stackIndexes))
 	assert.Equal(1, len(profiler.newStacks))
-	assert.Equal(routinesLen, len(profiler.routines))
 	assert.Equal(samplesLen*2, countSamples(profiler))
 	assert.Equal(ringBufferSize, profiler.samplesBucketsHead.Len())
 
@@ -422,7 +418,6 @@ func TestProfilerInternalMaps(t *testing.T) {
 	assert.Equal(stacksLen+2, len(profiler.stacks))
 	assert.Equal(stackIndexesLen+2, len(profiler.stackIndexes))
 	assert.Equal(1, len(profiler.newStacks))
-	assert.Equal(routinesLen, len(profiler.routines))
 	assert.Equal(samplesLen*3, countSamples(profiler))
 	assert.Equal(ringBufferSize, profiler.samplesBucketsHead.Len())
 }
@@ -570,7 +565,6 @@ func profilerBenchmark(t *testing.T, b *testing.B, withProfiling bool, arg int) 
 		p.Stop(true)
 		// Let's captured data so we can see what has been profiled if there's an error.
 		// Previously, there have been tests that have started (and left running) global Sentry instance and goroutines.
-		t.Logf("Profiler captured %d goroutines.", len(p.(*profileRecorder).routines))
 		t.Log("Captured frames related to the profiler benchmark:")
 		isRelatedToProfilerBenchmark := func(f *Frame) bool {
 			return strings.Contains(f.AbsPath, "profiler") || strings.Contains(f.AbsPath, "benchmark.go") || strings.Contains(f.AbsPath, "testing.go")

@@ -77,8 +77,6 @@ type profileRecorder struct {
 	frames       []*Frame
 	newFrames    []*Frame // New frames created in the current interation.
 
-	routines map[uint64]*profileThreadMetadata
-
 	// We keep a ring buffer of 30 seconds worth of samples, so that we can later slice it.
 	// Each bucket is a slice of samples all taken at the same time.
 	samplesBucketsHead *ring.Ring
@@ -103,7 +101,6 @@ func newProfiler(startTime time.Time) *profileRecorder {
 		newFrames:    make([]*Frame, 0, 128),
 
 		samplesBucketsHead: ring.New(profilerRuntimeLimit * profilerSamplingRateHz),
-		routines:           make(map[uint64]*profileThreadMetadata, runtime.NumGoroutine()),
 
 		// A buffer of 2 KiB per goroutine stack looks like a good starting point (empirically determined).
 		stacksBuffer: make([]byte, runtime.NumGoroutine()*2048),
@@ -187,14 +184,22 @@ func (p *profileRecorder) GetSlice(startTime, endTime time.Time) *profilerResult
 	}
 
 	trace.Samples = make([]profileSample, samplesCount)
+	trace.ThreadMetadata = make(map[uint64]*profileThreadMetadata, len(bucketsReversed[0].goIDs))
 	var s = samplesCount - 1
 	for _, bucket := range bucketsReversed {
 		var elapsedSinceStartNS = bucket.relativeTimeNS - relativeStartNS
-		for i := 0; i < len(bucket.goIDs); i++ {
+		for i, goID := range bucket.goIDs {
 			trace.Samples[s].ElapsedSinceStartNS = elapsedSinceStartNS
-			trace.Samples[s].ThreadID = bucket.goIDs[i]
+			trace.Samples[s].ThreadID = goID
 			trace.Samples[s].StackID = bucket.stackIDs[i]
 			s--
+
+			if _, goroutineExists := trace.ThreadMetadata[goID]; !goroutineExists {
+				trace.ThreadMetadata[goID] = &profileThreadMetadata{
+					Name: "Goroutine " + strconv.FormatUint(goID, 10),
+				}
+			}
+
 		}
 	}
 
@@ -237,9 +242,8 @@ func (p *profileRecorder) getBuckets(relativeStartNS, relativeEndNS uint64) (sam
 	}
 
 	trace = &profileTrace{
-		Frames:         p.frames,
-		Stacks:         p.stacks,
-		ThreadMetadata: p.routines,
+		Frames: p.frames,
+		Stacks: p.stacks,
 	}
 	return samplesCount, buckets, trace
 }
@@ -318,31 +322,7 @@ func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) 
 	p.stacks = append(p.stacks, p.newStacks...)
 	p.frames = append(p.frames, p.newFrames...)
 
-	// Add missing goroutines.
-	for _, goID := range bucket.goIDs {
-		if routine, exists := p.routines[goID]; !exists {
-			p.routines[goID] = &profileThreadMetadata{
-				Name:          "Goroutine " + strconv.FormatUint(goID, 10),
-				LastUseTimeNS: elapsedNs,
-			}
-		} else {
-			routine.LastUseTimeNS = elapsedNs
-		}
-	}
-
 	p.samplesBucketsHead = p.samplesBucketsHead.Next()
-
-	// Clean up goroutines that have not been encountered recently.
-	// We don't need to iterate over all routines, just the ones refernced by the bucket that's just being removed.
-	// TODO is it OK to do so even though there may be an event currently in transport, referencing this map?
-	if removedBucket, ok := p.samplesBucketsHead.Value.(*profileSamplesBucket); ok {
-		for _, goID := range removedBucket.goIDs {
-			if p.routines[goID].LastUseTimeNS == removedBucket.relativeTimeNS {
-				delete(p.routines, goID)
-			}
-		}
-	}
-
 	p.samplesBucketsHead.Value = bucket
 }
 

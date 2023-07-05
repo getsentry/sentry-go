@@ -33,9 +33,8 @@ type (
 	}
 
 	profileThreadMetadata struct {
-		Name          string `json:"name,omitempty"`
-		Priority      int    `json:"priority,omitempty"`
-		LastUseTimeNS uint64 `json:"-"`
+		Name     string `json:"name,omitempty"`
+		Priority int    `json:"priority,omitempty"`
 	}
 
 	profileStack []int
