@@ -9,7 +9,7 @@ import (
 )
 
 func testTraceProfiling(t *testing.T, rate float64) (*Span, *Event) {
-	ticker := setupProfilerTestTicker(t)
+	ticker := setupProfilerTestTicker(t.Log)
 	defer restoreProfilerTicker()
 
 	transport := &TransportMock{}

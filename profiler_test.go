@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"runtime"
 	"strings"
@@ -16,9 +17,10 @@ import (
 
 // Test ticker that ticks on demand instead of relying on go runtime timing.
 type profilerTestTicker struct {
-	t      *testing.T
-	tick   chan time.Time
-	ticked chan struct{}
+	logger          func(args ...any)
+	sleepBeforeTick time.Duration
+	tick            chan time.Time
+	ticked          chan struct{}
 }
 
 func (t *profilerTestTicker) TickSource() <-chan time.Time {
@@ -34,22 +36,23 @@ func (t *profilerTestTicker) Stop() {}
 // Sleeps before a tick to emulate a reasonable frequency of ticks, or they may all come at the same relative time.
 // Then, sends a tick and waits for the profiler to process it.
 func (t *profilerTestTicker) Tick() bool {
-	time.Sleep(time.Millisecond)
+	time.Sleep(t.sleepBeforeTick)
 	t.tick <- time.Now()
 	select {
 	case <-t.ticked:
 		return true
 	case <-time.After(1 * time.Second):
-		t.t.Log("Timed out waiting for Ticked() to be called.")
+		t.logger("Timed out waiting for Ticked() to be called.")
 		return false
 	}
 }
 
-func setupProfilerTestTicker(t *testing.T) *profilerTestTicker {
+func setupProfilerTestTicker(logger func(args ...any)) *profilerTestTicker {
 	ticker := &profilerTestTicker{
-		t:      t,
-		tick:   make(chan time.Time, 1),
-		ticked: make(chan struct{}),
+		logger:          logger,
+		sleepBeforeTick: time.Millisecond,
+		tick:            make(chan time.Time, 1),
+		ticked:          make(chan struct{}),
 	}
 	profilerTickerFactory = func(d time.Duration) profilerTicker { return ticker }
 	return ticker
@@ -84,7 +87,7 @@ func TestProfilerCollection(t *testing.T) {
 		var require = require.New(t)
 		var goID = getCurrentGoID()
 
-		ticker := setupProfilerTestTicker(t)
+		ticker := setupProfilerTestTicker(t.Log)
 		defer restoreProfilerTicker()
 
 		start := time.Now()
@@ -112,7 +115,7 @@ func TestProfilerCollection(t *testing.T) {
 func TestProfilerStackTrace(t *testing.T) {
 	var require = require.New(t)
 
-	ticker := setupProfilerTestTicker(t)
+	ticker := setupProfilerTestTicker(t.Log)
 	defer restoreProfilerTicker()
 
 	start := time.Now()
@@ -149,7 +152,7 @@ testing (*T).Run`))
 func TestProfilerCollectsOnStart(t *testing.T) {
 	var require = require.New(t)
 
-	setupProfilerTestTicker(t)
+	setupProfilerTestTicker(t.Log)
 	defer restoreProfilerTicker()
 
 	start := time.Now()
@@ -161,7 +164,7 @@ func TestProfilerCollectsOnStart(t *testing.T) {
 func TestProfilerPanicDuringStartup(t *testing.T) {
 	var require = require.New(t)
 
-	_ = setupProfilerTestTicker(t)
+	_ = setupProfilerTestTicker(t.Log)
 	defer restoreProfilerTicker()
 
 	atomic.StoreInt64(&testProfilerPanic, -1)
@@ -186,7 +189,7 @@ func TestProfilerPanicOnTick(t *testing.T) {
 
 	var require = require.New(t)
 
-	ticker := setupProfilerTestTicker(t)
+	ticker := setupProfilerTestTicker(t.Log)
 	defer restoreProfilerTicker()
 
 	// Panic after the first sample is collected.
@@ -482,19 +485,19 @@ func TestProfilerTimeSleep(t *testing.T) {
 	require.LessOrEqual(t, elapsed.Microseconds(), profilerSamplingRate.Microseconds()*int64(count+3))
 }
 
-// Benchmark results (run without executing which mess up results)
+// Benchmark results (run without executing test which mess up results)
 // $ go test -run=^$ -bench "BenchmarkProfiler*"
 //
 // goos: windows
 // goarch: amd64
 // pkg: github.com/getsentry/sentry-go
 // cpu: 12th Gen Intel(R) Core(TM) i7-12700K
-// BenchmarkProfilerStartStop-20                      38008             31072 ns/op           20980 B/op        108 allocs/op
-// BenchmarkProfilerOnTick-20                         65700             18065 ns/op             260 B/op          4 allocs/op
-// BenchmarkProfilerCollect-20                        67063             16907 ns/op               0 B/op          0 allocs/op
-// BenchmarkProfilerProcess-20                      2296788               512.9 ns/op           268 B/op          4 allocs/op
-// BenchmarkProfilerOverheadBaseline-20                 192           6250525 ns/op
-// BenchmarkProfilerOverheadWithProfiler-20             187           6249490 ns/op
+// BenchmarkProfilerStartStop/Wait-20                 12313            100383 ns/op          130459 B/op       3163 allocs/op
+// BenchmarkProfilerStartStop/NoWait-20                8964            118605 ns/op          130783 B/op       3163 allocs/op
+// BenchmarkProfilerOnTick-20                         61993             18999 ns/op            1088 B/op         10 allocs/op
+// BenchmarkProfilerCollect-20                        61149             18824 ns/op               0 B/op          0 allocs/op
+// BenchmarkProfilerProcess-20                       872079              1195 ns/op            1040 B/op         10 allocs/op
+// BenchmarkProfilerGetSlice-20                       31327             34156 ns/op           79050 B/op         19 allocs/op
 
 func BenchmarkProfilerStartStop(b *testing.B) {
 	var bench = func(name string, wait bool) {
@@ -535,6 +538,84 @@ func BenchmarkProfilerProcess(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		profiler.processRecords(uint64(i), records)
+	}
+}
+
+var profilerSliceBenchmarkData = struct {
+	profiler *profileRecorder
+	spans    []struct {
+		start time.Time
+		end   time.Time
+	}
+}{
+	spans: make([]struct {
+		start time.Time
+		end   time.Time
+	}, 100),
+}
+
+func setupProfilerSliceBenchmark(b *testing.B) {
+	ticker := setupProfilerTestTicker(b.Log)
+	ticker.sleepBeforeTick = time.Microsecond
+
+	start := time.Now()
+	profiler := startProfiling(start).(*profileRecorder)
+
+	// Fill in the profiler circular buffer first
+	for i := 0; i < profiler.samplesBucketsHead.Len(); i++ {
+		if !ticker.Tick() {
+			b.Fatal("Tick() failed")
+		}
+	}
+
+	if profiler.samplesBucketsHead.Next().Value == nil {
+		b.Fatal("Profiler circular buffer is not filled completely")
+	}
+
+	end := time.Now()
+	if end.Compare(start) <= 0 {
+		b.Fatal("Unexpected end time")
+	}
+
+	// Prepare a set of spans we will be collecting.
+	random := rand.New(rand.NewSource(42))
+	collected := 0
+	for i := 0; i < len(profilerSliceBenchmarkData.spans); i++ {
+		spanStart := start.Add(time.Duration(random.Int63n(end.Sub(start).Nanoseconds())))
+		spanEnd := spanStart.Add(time.Duration(random.Int63n(end.Sub(spanStart).Nanoseconds())))
+
+		profilerSliceBenchmarkData.spans[i].start = spanStart
+		profilerSliceBenchmarkData.spans[i].end = spanEnd
+
+		slice := profiler.GetSlice(spanStart, spanEnd)
+		if slice != nil {
+			collected += len(slice.trace.Samples)
+			b.Logf("Picked span: %d ms - %d ms with %d samples.\n", spanStart.Sub(start).Milliseconds(), spanEnd.Sub(start).Milliseconds(), len(slice.trace.Samples))
+		}
+	}
+
+	if collected <= 0 {
+		b.Fatal("Profiler failed to collect data")
+	}
+
+	b.Logf("Preparation took %d ms. Prepared %d samples in %d spans.\n", end.Sub(start).Milliseconds(), collected, len(profilerSliceBenchmarkData.spans))
+
+	defer restoreProfilerTicker()
+	defer profiler.Stop(true)
+
+	profilerSliceBenchmarkData.profiler = profiler
+}
+
+func BenchmarkProfilerGetSlice(b *testing.B) {
+	if profilerSliceBenchmarkData.profiler == nil {
+		setupProfilerSliceBenchmark(b)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		span := profilerSliceBenchmarkData.spans[i%len(profilerSliceBenchmarkData.spans)]
+		_ = profilerSliceBenchmarkData.profiler.GetSlice(span.start, span.end)
 	}
 }
 

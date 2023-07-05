@@ -311,8 +311,7 @@ func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) 
 
 	for i := 0; i < length; i++ {
 		var stack = traces.Item(i)
-		var stackIndex = p.addStackTrace(stack)
-		bucket.stackIDs[i] = stackIndex
+		bucket.stackIDs[i] = p.addStackTrace(stack)
 		bucket.goIDs[i] = stack.GoID()
 	}
 
