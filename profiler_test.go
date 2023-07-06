@@ -573,11 +573,12 @@ func setupProfilerSliceBenchmark(b *testing.B) {
 	}
 
 	end := time.Now()
-	if end.Compare(start) <= 0 {
+	if end.Sub(start) <= 0 {
 		b.Fatal("Unexpected end time")
 	}
 
 	// Prepare a set of spans we will be collecting.
+	//nolint:gosec // We don't need a secure random number generator here.
 	random := rand.New(rand.NewSource(42))
 	collected := 0
 	for i := 0; i < len(profilerSliceBenchmarkData.spans); i++ {

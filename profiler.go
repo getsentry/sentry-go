@@ -199,7 +199,6 @@ func (p *profileRecorder) GetSlice(startTime, endTime time.Time) *profilerResult
 					Name: "Goroutine " + strconv.FormatUint(goID, 10),
 				}
 			}
-
 		}
 	}
 
