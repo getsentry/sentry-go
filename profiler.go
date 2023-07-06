@@ -2,10 +2,7 @@ package sentry
 
 import (
 	"container/ring"
-	"encoding/binary"
-	"math"
 	"strconv"
-	"unicode/utf8"
 
 	"runtime"
 	"sync"
@@ -345,14 +342,16 @@ func (p *profileRecorder) addStackTrace(capturedStack traceparser.Trace) int {
 		var frame = iter.Next()
 		if frameIndex := p.addFrame(frame); frameIndex >= 0 {
 			stack = append(stack, frameIndex)
+
 			p.stackKeyBuffer = append(p.stackKeyBuffer, 0) // space
-			if frameIndex < math.MaxInt32 {
-				// It's worth special-casing this because virtually all frames will have an index smaller than MaxInt32.
-				p.stackKeyBuffer = utf8.AppendRune(p.stackKeyBuffer, rune(frameIndex)+1)
-			} else {
-				// This is here just for completeness, it's unlikely to happen in practice.
-				p.stackKeyBuffer = binary.AppendVarint(p.stackKeyBuffer, int64(frameIndex))
+
+			// The following code is just like binary.AppendUvarint() which isn't yet available in Go 1.18.
+			x := uint64(frameIndex) + 1
+			for x >= 0x80 {
+				p.stackKeyBuffer = append(p.stackKeyBuffer, byte(x)|0x80)
+				x >>= 7
 			}
+			p.stackKeyBuffer = append(p.stackKeyBuffer, byte(x))
 		}
 	}
 
