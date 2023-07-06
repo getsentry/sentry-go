@@ -492,12 +492,12 @@ func TestProfilerTimeSleep(t *testing.T) {
 // goarch: amd64
 // pkg: github.com/getsentry/sentry-go
 // cpu: 12th Gen Intel(R) Core(TM) i7-12700K
-// BenchmarkProfilerStartStop/Wait-20                 12313            100383 ns/op          130459 B/op       3163 allocs/op
-// BenchmarkProfilerStartStop/NoWait-20                8964            118605 ns/op          130783 B/op       3163 allocs/op
-// BenchmarkProfilerOnTick-20                         61993             18999 ns/op            1088 B/op         10 allocs/op
-// BenchmarkProfilerCollect-20                        61149             18824 ns/op               0 B/op          0 allocs/op
-// BenchmarkProfilerProcess-20                       872079              1195 ns/op            1040 B/op         10 allocs/op
-// BenchmarkProfilerGetSlice-20                       31327             34156 ns/op           79050 B/op         19 allocs/op
+// BenchmarkProfilerStartStop/Wait-20                 12507             94991 ns/op          130506 B/op       3166 allocs/op
+// BenchmarkProfilerStartStop/NoWait-20                9600            112354 ns/op          131125 B/op       3166 allocs/op
+// BenchmarkProfilerOnTick-20                         65040             17771 ns/op            1008 B/op          8 allocs/op
+// BenchmarkProfilerCollect-20                        64430             18223 ns/op               0 B/op          0 allocs/op
+// BenchmarkProfilerProcess-20                       972006              1118 ns/op             960 B/op          8 allocs/op
+// BenchmarkProfilerGetSlice-20                       37144             31289 ns/op           75813 B/op         19 allocs/op
 
 func BenchmarkProfilerStartStop(b *testing.B) {
 	var bench = func(name string, wait bool) {

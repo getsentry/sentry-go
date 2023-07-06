@@ -2,9 +2,10 @@ package sentry
 
 import (
 	"container/ring"
+	"encoding/binary"
 	"math"
 	"strconv"
-	"strings"
+	"unicode/utf8"
 
 	"runtime"
 	"sync"
@@ -68,9 +69,10 @@ type profileRecorder struct {
 	testProfilerPanic int64
 
 	// Map from runtime.StackRecord.Stack0 to an index in stacks.
-	stackIndexes map[string]int
-	stacks       []profileStack
-	newStacks    []profileStack // New stacks created in the current interation.
+	stackIndexes   map[string]int
+	stacks         []profileStack
+	newStacks      []profileStack // New stacks created in the current interation.
+	stackKeyBuffer []byte
 
 	// Map from runtime.Frame.PC to an index in frames.
 	frameIndexes map[string]int
@@ -325,34 +327,40 @@ func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) 
 }
 
 func (p *profileRecorder) addStackTrace(capturedStack traceparser.Trace) int {
+	iter := capturedStack.Frames()
+	stack := make(profileStack, 0, iter.LengthUpperBound())
+
 	// Originally, we've used `capturedStack.UniqueIdentifier()` as a key but that was incorrect because it also
 	// contains function arguments and we want to group stacks by function name and file/line only.
 	// Instead, we need to parse frames and we use a list of their indexes as a key.
-	// TODO evaluate performance of other ways to create this index.
-	var sb strings.Builder
+	// We reuse the same buffer for each stack to avoid allocations; this is a hot spot.
+	var expectedBufferLen = cap(stack) * 5 // 4 bytes per frame + 1 byte for space
+	if cap(p.stackKeyBuffer) < expectedBufferLen {
+		p.stackKeyBuffer = make([]byte, 0, expectedBufferLen)
+	} else {
+		p.stackKeyBuffer = p.stackKeyBuffer[:0]
+	}
 
-	iter := capturedStack.Frames()
-	stack := make(profileStack, 0, iter.LengthUpperBound())
-	sb.Grow(cap(stack) * 5)
 	for iter.HasNext() {
 		var frame = iter.Next()
 		if frameIndex := p.addFrame(frame); frameIndex >= 0 {
 			stack = append(stack, frameIndex)
-			sb.WriteByte(' ')
+			p.stackKeyBuffer = append(p.stackKeyBuffer, 0) // space
 			if frameIndex < math.MaxInt32 {
-				sb.WriteRune(rune(frameIndex))
+				// It's worth special-casing this because virtually all frames will have an index smaller than MaxInt32.
+				p.stackKeyBuffer = utf8.AppendRune(p.stackKeyBuffer, rune(frameIndex)+1)
 			} else {
-				sb.WriteString(strconv.Itoa(frameIndex))
+				// This is here just for completeness, it's unlikely to happen in practice.
+				p.stackKeyBuffer = binary.AppendVarint(p.stackKeyBuffer, int64(frameIndex))
 			}
 		}
 	}
 
-	var key = sb.String()
-	stackIndex, exists := p.stackIndexes[key]
+	stackIndex, exists := p.stackIndexes[string(p.stackKeyBuffer)]
 	if !exists {
 		stackIndex = len(p.stacks) + len(p.newStacks)
 		p.newStacks = append(p.newStacks, stack)
-		p.stackIndexes[key] = stackIndex
+		p.stackIndexes[string(p.stackKeyBuffer)] = stackIndex
 	}
 
 	return stackIndex
