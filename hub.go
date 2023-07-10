@@ -267,9 +267,9 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 	return eventID
 }
 
-// CaptureCheckIn calls the method of a same nname on currently bound Client instance
+// CaptureCheckIn calls the method of the same name on currently bound Client instance
 // passing it a top-level Scope.
-// Returns EventID if successfully, or nil if there's no Client available.
+// Returns EventID if the event was captured successfully, or nil otherwise.
 func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 	client, scope := hub.Client(), hub.Scope()
 	if client == nil {
