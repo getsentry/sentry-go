@@ -54,7 +54,7 @@ func CaptureException(exception error) *EventID {
 	return hub.CaptureException(exception)
 }
 
-// CaptureCheckIn captures a check in.
+// CaptureCheckIn captures a (cron) monitor check-in.
 func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 	hub := CurrentHub()
 	return hub.CaptureCheckIn(checkIn, monitorConfig)
