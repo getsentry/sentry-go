@@ -76,7 +76,7 @@ type MonitorConfig struct { //nolint: maligned // prefer readability over optima
 	// The allowed margin of minutes after the expected check-in time that
 	// the monitor will not be considered missed for.
 	CheckInMargin int64 `json:"check_in_margin,omitempty"`
-	// The allowed allowed duration in minutes that the monitor may be `in_progress`
+	// The allowed duration in minutes that the monitor may be `in_progress`
 	// for before being considered failed due to timeout.
 	MaxRuntime int64 `json:"max_runtime,omitempty"`
 	// A tz database string representing the timezone which the monitor's execution schedule is in.
