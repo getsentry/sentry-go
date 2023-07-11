@@ -817,9 +817,9 @@ func TestGetTransactionReturnsNilOnManuallyCreatedSpans(t *testing.T) {
 
 func TestToBaggage(t *testing.T) {
 	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-		SampleRate:    1.0,
-		Release:       "test-release",
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Release:          "test-release",
 	})
 	transaction := StartTransaction(ctx, "transaction-name")
 	transaction.TraceID = TraceIDFromHex("f1a4c5c9071eca1cdf04e4132527ed16")
@@ -827,7 +827,7 @@ func TestToBaggage(t *testing.T) {
 	assertBaggageStringsEqual(
 		t,
 		transaction.ToBaggage(),
-		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name",
+		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name,sentry-sample_rate=1,sentry-sampled=true",
 	)
 
 	// Calling ToBaggage() on a child span should return the same result
@@ -835,7 +835,7 @@ func TestToBaggage(t *testing.T) {
 	assertBaggageStringsEqual(
 		t,
 		child.ToBaggage(),
-		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name",
+		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name,sentry-sample_rate=1,sentry-sampled=true",
 	)
 }
 
