@@ -135,7 +135,7 @@ func TestCheckInEventMarshalJSON(t *testing.T) {
 			CheckIn: &CheckIn{
 				MonitorSlug: "my-monitor",
 				Status:      "ok",
-				Duration:    10,
+				Duration:    time.Second * 10,
 			},
 			MonitorConfig: nil,
 		},
@@ -147,7 +147,7 @@ func TestCheckInEventMarshalJSON(t *testing.T) {
 			CheckIn: &CheckIn{
 				MonitorSlug: "my-monitor",
 				Status:      "ok",
-				Duration:    10,
+				Duration:    time.Second * 10,
 			},
 			MonitorConfig: &MonitorConfig{
 				Schedule: &intervalSchedule{
@@ -168,7 +168,7 @@ func TestCheckInEventMarshalJSON(t *testing.T) {
 			CheckIn: &CheckIn{
 				MonitorSlug: "my-monitor",
 				Status:      "ok",
-				Duration:    10,
+				Duration:    time.Second * 10,
 			},
 			MonitorConfig: &MonitorConfig{
 				Schedule: &crontabSchedule{

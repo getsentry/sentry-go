@@ -342,19 +342,33 @@ func TestCaptureCheckIn(t *testing.T) {
 			checkIn: &CheckIn{
 				MonitorSlug: "cron",
 				Status:      CheckInStatusOK,
-				Duration:    100,
+				Duration:    time.Second * 10,
 			},
 			monitorConfig: nil,
 		},
 		{
-			name: "Normal",
+			name: "IntervalSchedule",
 			checkIn: &CheckIn{
 				MonitorSlug: "cron",
 				Status:      CheckInStatusInProgress,
-				Duration:    100,
+				Duration:    time.Second * 10,
 			},
 			monitorConfig: &MonitorConfig{
 				Schedule:      IntervalSchedule(1, MonitorScheduleUnitHour),
+				CheckInMargin: 10,
+				MaxRuntime:    5000,
+				Timezone:      "Asia/Singapore",
+			},
+		},
+		{
+			name: "CronSchedule",
+			checkIn: &CheckIn{
+				MonitorSlug: "cron",
+				Status:      CheckInStatusInProgress,
+				Duration:    time.Second * 10,
+			},
+			monitorConfig: &MonitorConfig{
+				Schedule:      CrontabSchedule("40 * * * *"),
 				CheckInMargin: 10,
 				MaxRuntime:    5000,
 				Timezone:      "Asia/Singapore",

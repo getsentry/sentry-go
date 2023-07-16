@@ -416,7 +416,7 @@ func (client *Client) CaptureException(exception error, hint *EventHint, scope E
 // CaptureCheckIn captures a check in.
 func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
 	event := client.EventFromCheckIn(checkIn, monitorConfig)
-	return client.processEvent(event, nil, scope)
+	return client.CaptureEvent(event, nil, scope)
 }
 
 // CaptureEvent captures an event on the currently active client if any.

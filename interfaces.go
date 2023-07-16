@@ -465,18 +465,19 @@ func (e *Event) checkInMarshalJSON() ([]byte, error) {
 		CheckInID:     e.CheckInID,
 		MonitorSlug:   e.CheckIn.MonitorSlug,
 		Status:        e.CheckIn.Status,
-		Duration:      e.CheckIn.Duration,
+		Duration:      e.CheckIn.Duration.Seconds(),
 		Release:       e.Release,
 		Environment:   e.Environment,
 		MonitorConfig: nil,
 	}
 
 	if e.MonitorConfig != nil {
-		checkIn.MonitorConfig = &MonitorConfig{}
-		checkIn.MonitorConfig.Schedule = e.MonitorConfig.Schedule
-		checkIn.MonitorConfig.CheckInMargin = e.MonitorConfig.CheckInMargin
-		checkIn.MonitorConfig.MaxRuntime = e.MonitorConfig.MaxRuntime
-		checkIn.MonitorConfig.Timezone = e.MonitorConfig.Timezone
+		checkIn.MonitorConfig = &MonitorConfig{
+			Schedule:      e.MonitorConfig.Schedule,
+			CheckInMargin: e.MonitorConfig.CheckInMargin,
+			MaxRuntime:    e.MonitorConfig.MaxRuntime,
+			Timezone:      e.MonitorConfig.Timezone,
+		}
 	}
 
 	return json.Marshal(checkIn)

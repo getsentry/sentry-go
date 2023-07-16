@@ -1,5 +1,7 @@
 package sentry
 
+import "time"
+
 type CheckInStatus string
 
 const (
@@ -16,6 +18,9 @@ const (
 )
 
 type MonitorSchedule interface {
+	// scheduleType is a private method that must be implemented for monitor schedule
+	// implementation. It should never be called. This method is made for having
+	// specific private implementation of MonitorSchedule interface.
 	scheduleType() checkInScheduleType
 }
 
@@ -89,8 +94,8 @@ type CheckIn struct { //nolint: maligned // prefer readability over optimal memo
 	MonitorSlug string `json:"monitor_slug"`
 	// The status of the check-in.
 	Status CheckInStatus `json:"status"`
-	// The duration of the check-in in seconds. Will only take effect if the status is ok or error.
-	Duration int64 `json:"duration,omitempty"`
+	// The duration of the check-in. Will only take effect if the status is ok or error.
+	Duration time.Duration `json:"duration,omitempty"`
 }
 
 // serializedCheckIn is used by checkInMarshalJSON method on Event struct.
@@ -103,7 +108,7 @@ type serializedCheckIn struct { //nolint: maligned
 	// The status of the check-in.
 	Status CheckInStatus `json:"status"`
 	// The duration of the check-in in seconds. Will only take effect if the status is ok or error.
-	Duration      int64          `json:"duration,omitempty"`
+	Duration      float64        `json:"duration,omitempty"`
 	Release       string         `json:"release,omitempty"`
 	Environment   string         `json:"environment,omitempty"`
 	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
