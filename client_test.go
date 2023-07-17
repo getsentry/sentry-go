@@ -399,6 +399,34 @@ func TestCaptureCheckIn(t *testing.T) {
 	}
 }
 
+func TestCaptureCheckInExistingID(t *testing.T) {
+	client, _, _ := setupClientTest()
+
+	monitorConfig := &MonitorConfig{
+		Schedule:      IntervalSchedule(1, MonitorScheduleUnitDay),
+		CheckInMargin: 30,
+		MaxRuntime:    30,
+		Timezone:      "UTC",
+	}
+
+	checkInID := client.CaptureCheckIn(&CheckIn{
+		MonitorSlug: "cron",
+		Status:      CheckInStatusInProgress,
+		Duration:    time.Second,
+	}, monitorConfig, nil)
+
+	checkInID2 := client.CaptureCheckIn(&CheckIn{
+		ID:          *checkInID,
+		MonitorSlug: "cron",
+		Status:      CheckInStatusOK,
+		Duration:    time.Minute,
+	}, monitorConfig, nil)
+
+	if *checkInID != *checkInID2 {
+		t.Errorf("Expecting equivalent CheckInID: %s and %s", *checkInID, *checkInID2)
+	}
+}
+
 func TestSampleRateCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.options.SampleRate = 0.000000000000001

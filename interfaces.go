@@ -461,7 +461,7 @@ func (e *Event) transactionMarshalJSON() ([]byte, error) {
 
 func (e *Event) checkInMarshalJSON() ([]byte, error) {
 	checkIn := serializedCheckIn{
-		CheckInID:     e.CheckIn.ID,
+		CheckInID:     string(e.CheckIn.ID),
 		MonitorSlug:   e.CheckIn.MonitorSlug,
 		Status:        e.CheckIn.Status,
 		Duration:      e.CheckIn.Duration.Seconds(),
