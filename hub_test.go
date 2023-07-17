@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -190,6 +191,18 @@ func TestLastEventIDUpdatesAfterCaptures(t *testing.T) {
 
 	eventID := hub.CaptureEvent(&Event{Message: "wat"})
 	assertEqual(t, *eventID, hub.LastEventID())
+
+	checkInID := hub.CaptureCheckIn(&CheckIn{
+		MonitorSlug: "job",
+		Status:      CheckInStatusOK,
+		Duration:    time.Second * 10,
+	}, &MonitorConfig{
+		Schedule:      CrontabSchedule("8 * * * *"),
+		CheckInMargin: 100,
+		MaxRuntime:    200,
+		Timezone:      "Asia/Singapore",
+	})
+	assertEqual(t, *checkInID, hub.LastEventID())
 }
 
 func TestLastEventIDNotChangedForTransactions(t *testing.T) {
