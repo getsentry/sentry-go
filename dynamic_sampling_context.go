@@ -82,6 +82,12 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 		entries["user_segment"] = userSegment
 	}
 
+	if span.Sampled.Bool() {
+		entries["sampled"] = "true"
+	} else {
+		entries["sampled"] = "false"
+	}
+
 	return DynamicSamplingContext{
 		Entries: entries,
 		Frozen:  true,

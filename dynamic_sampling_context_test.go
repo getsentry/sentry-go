@@ -82,7 +82,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 			input: func() *Span {
 				ctx := NewTestContext(ClientOptions{
 					EnableTracing:    true,
-					TracesSampleRate: 0.5,
+					TracesSampleRate: 1.0,
 					Dsn:              "http://public@example.com/sentry/1",
 					Release:          "1.0.0",
 					Environment:      "test",
@@ -97,13 +97,14 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 			want: DynamicSamplingContext{
 				Frozen: true,
 				Entries: map[string]string{
-					"sample_rate":  "0.5",
+					"sample_rate":  "1",
 					"trace_id":     "d49d9bf66f13450b81f65bc51cf49c03",
 					"public_key":   "public",
 					"release":      "1.0.0",
 					"environment":  "test",
 					"transaction":  "name",
 					"user_segment": "user_segment",
+					"sampled":      "true",
 				},
 			},
 		},
@@ -112,7 +113,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 			input: func() *Span {
 				ctx := NewTestContext(ClientOptions{
 					EnableTracing:    true,
-					TracesSampleRate: 0.5,
+					TracesSampleRate: 0.0,
 					Dsn:              "http://public@example.com/sentry/1",
 					Release:          "1.0.0",
 				})
@@ -123,10 +124,10 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 			want: DynamicSamplingContext{
 				Frozen: true,
 				Entries: map[string]string{
-					"sample_rate": "0.5",
-					"trace_id":    "d49d9bf66f13450b81f65bc51cf49c03",
-					"public_key":  "public",
-					"release":     "1.0.0",
+					"trace_id":   "d49d9bf66f13450b81f65bc51cf49c03",
+					"public_key": "public",
+					"release":    "1.0.0",
+					"sampled":    "false",
 				},
 			},
 		},
