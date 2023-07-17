@@ -131,8 +131,8 @@ func TestCheckInEventMarshalJSON(t *testing.T) {
 			Release:     "1.0.0",
 			Environment: "dev",
 			Type:        checkInType,
-			CheckInID:   "c2f0ce1334c74564bf6631f6161173f5",
 			CheckIn: &CheckIn{
+				ID:          "c2f0ce1334c74564bf6631f6161173f5",
 				MonitorSlug: "my-monitor",
 				Status:      "ok",
 				Duration:    time.Second * 10,
@@ -143,8 +143,8 @@ func TestCheckInEventMarshalJSON(t *testing.T) {
 			Release:     "1.0.0",
 			Environment: "dev",
 			Type:        checkInType,
-			CheckInID:   "c2f0ce1334c74564bf6631f6161173f5",
 			CheckIn: &CheckIn{
+				ID:          "c2f0ce1334c74564bf6631f6161173f5",
 				MonitorSlug: "my-monitor",
 				Status:      "ok",
 				Duration:    time.Second * 10,
@@ -164,8 +164,8 @@ func TestCheckInEventMarshalJSON(t *testing.T) {
 			Release:     "1.0.0",
 			Environment: "dev",
 			Type:        checkInType,
-			CheckInID:   "c2f0ce1334c74564bf6631f6161173f5",
 			CheckIn: &CheckIn{
+				ID:          "c2f0ce1334c74564bf6631f6161173f5",
 				MonitorSlug: "my-monitor",
 				Status:      "ok",
 				Duration:    time.Second * 10,

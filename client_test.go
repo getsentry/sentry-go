@@ -340,6 +340,7 @@ func TestCaptureCheckIn(t *testing.T) {
 		{
 			name: "Nil MonitorConfig",
 			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
 				MonitorSlug: "cron",
 				Status:      CheckInStatusOK,
 				Duration:    time.Second * 10,
@@ -349,6 +350,7 @@ func TestCaptureCheckIn(t *testing.T) {
 		{
 			name: "IntervalSchedule",
 			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
 				MonitorSlug: "cron",
 				Status:      CheckInStatusInProgress,
 				Duration:    time.Second * 10,
@@ -363,6 +365,7 @@ func TestCaptureCheckIn(t *testing.T) {
 		{
 			name: "CronSchedule",
 			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
 				MonitorSlug: "cron",
 				Status:      CheckInStatusInProgress,
 				Duration:    time.Second * 10,

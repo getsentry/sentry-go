@@ -90,6 +90,8 @@ type MonitorConfig struct { //nolint: maligned // prefer readability over optima
 }
 
 type CheckIn struct { //nolint: maligned // prefer readability over optimal memory layout
+	// Check-In ID (unique and client generated)
+	ID string `json:"check_in_id"`
 	// The distinct slug of the monitor.
 	MonitorSlug string `json:"monitor_slug"`
 	// The status of the check-in.

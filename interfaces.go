@@ -320,7 +320,6 @@ type Event struct {
 
 	// The fields below are only relevant for crons/check ins
 
-	CheckInID     string         `json:"check_in_id,omitempty"`
 	CheckIn       *CheckIn       `json:"check_in,omitempty"`
 	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
 
@@ -462,7 +461,7 @@ func (e *Event) transactionMarshalJSON() ([]byte, error) {
 
 func (e *Event) checkInMarshalJSON() ([]byte, error) {
 	checkIn := serializedCheckIn{
-		CheckInID:     e.CheckInID,
+		CheckInID:     e.CheckIn.ID,
 		MonitorSlug:   e.CheckIn.MonitorSlug,
 		Status:        e.CheckIn.Status,
 		Duration:      e.CheckIn.Duration.Seconds(),

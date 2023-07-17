@@ -533,8 +533,20 @@ func (client *Client) EventFromException(exception error, level Level) *Event {
 // EventFromCheckIn creates a new Sentry event from the given `check_in` instance.
 func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
 	event := NewEvent()
-	event.CheckInID = uuid()
-	event.CheckIn = checkIn
+	if checkIn != nil {
+		checkInID := uuid()
+
+		if checkIn.ID != "" {
+			checkInID = checkIn.ID
+		}
+
+		event.CheckIn = &CheckIn{
+			ID:          checkInID,
+			MonitorSlug: checkIn.MonitorSlug,
+			Status:      checkIn.Status,
+			Duration:    checkIn.Duration,
+		}
+	}
 	event.MonitorConfig = monitorConfig
 
 	return event
