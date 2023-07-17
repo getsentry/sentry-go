@@ -393,7 +393,6 @@ func TestCaptureCheckIn(t *testing.T) {
 				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
 			}
 		})
-
 	}
 }
 
