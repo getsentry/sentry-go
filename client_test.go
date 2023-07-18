@@ -326,6 +326,107 @@ func TestCaptureEventNil(t *testing.T) {
 	}
 }
 
+func TestCaptureCheckIn(t *testing.T) {
+	tests := []struct {
+		name          string
+		checkIn       *CheckIn
+		monitorConfig *MonitorConfig
+	}{
+		{
+			name:          "Nil CheckIn",
+			checkIn:       nil,
+			monitorConfig: nil,
+		},
+		{
+			name: "Nil MonitorConfig",
+			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
+				MonitorSlug: "cron",
+				Status:      CheckInStatusOK,
+				Duration:    time.Second * 10,
+			},
+			monitorConfig: nil,
+		},
+		{
+			name: "IntervalSchedule",
+			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
+				MonitorSlug: "cron",
+				Status:      CheckInStatusInProgress,
+				Duration:    time.Second * 10,
+			},
+			monitorConfig: &MonitorConfig{
+				Schedule:      IntervalSchedule(1, MonitorScheduleUnitHour),
+				CheckInMargin: 10,
+				MaxRuntime:    5000,
+				Timezone:      "Asia/Singapore",
+			},
+		},
+		{
+			name: "CronSchedule",
+			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
+				MonitorSlug: "cron",
+				Status:      CheckInStatusInProgress,
+				Duration:    time.Second * 10,
+			},
+			monitorConfig: &MonitorConfig{
+				Schedule:      CrontabSchedule("40 * * * *"),
+				CheckInMargin: 10,
+				MaxRuntime:    5000,
+				Timezone:      "Asia/Singapore",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			client, _, transport := setupClientTest()
+			client.CaptureCheckIn(tt.checkIn, tt.monitorConfig, nil)
+			if transport.lastEvent == nil {
+				t.Fatal("missing event")
+			}
+
+			if diff := cmp.Diff(transport.lastEvent.CheckIn, tt.checkIn); diff != "" {
+				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
+			}
+
+			if diff := cmp.Diff(transport.lastEvent.MonitorConfig, tt.monitorConfig); diff != "" {
+				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCaptureCheckInExistingID(t *testing.T) {
+	client, _, _ := setupClientTest()
+
+	monitorConfig := &MonitorConfig{
+		Schedule:      IntervalSchedule(1, MonitorScheduleUnitDay),
+		CheckInMargin: 30,
+		MaxRuntime:    30,
+		Timezone:      "UTC",
+	}
+
+	checkInID := client.CaptureCheckIn(&CheckIn{
+		MonitorSlug: "cron",
+		Status:      CheckInStatusInProgress,
+		Duration:    time.Second,
+	}, monitorConfig, nil)
+
+	checkInID2 := client.CaptureCheckIn(&CheckIn{
+		ID:          *checkInID,
+		MonitorSlug: "cron",
+		Status:      CheckInStatusOK,
+		Duration:    time.Minute,
+	}, monitorConfig, nil)
+
+	if *checkInID != *checkInID2 {
+		t.Errorf("Expecting equivalent CheckInID: %s and %s", *checkInID, *checkInID2)
+	}
+}
+
 func TestSampleRateCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.options.SampleRate = 0.000000000000001
