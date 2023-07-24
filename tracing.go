@@ -956,27 +956,9 @@ func TransactionFromContext(ctx context.Context) *Span {
 	return nil
 }
 
-// spanFromContext returns the last span stored in the context or a dummy
+// SpanFromContext returns the last span stored in the context or a dummy
 // non-nil span.
-//
-// TODO(tracing): consider exporting this. Without this, users cannot retrieve a
-// span from a context since spanContextKey is not exported.
-//
-// This can be added retroactively, and in the meantime think better whether it
-// should return nil (like GetHubFromContext), always non-nil (like
-// HubFromContext), or both: two exported functions.
-//
-// Note the equivalence:
-//
-//	SpanFromContext(ctx).StartChild(...) === StartSpan(ctx, ...)
-//
-// So we don't aim spanFromContext at creating spans, but mutating existing
-// spans that you'd have no access otherwise (because it was created in code you
-// do not control, for example SDK auto-instrumentation).
-//
-// For now we provide TransactionFromContext, which solves the more common case
-// of setting tags, etc, on the current transaction.
-func spanFromContext(ctx context.Context) *Span {
+func SpanFromContext(ctx context.Context) *Span {
 	if span, ok := ctx.Value(spanContextKey{}).(*Span); ok {
 		return span
 	}
