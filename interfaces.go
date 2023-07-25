@@ -108,6 +108,14 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 	return json.Marshal((*breadcrumb)(b))
 }
 
+// Attachment allows associating files with your events to aid in investigation.
+// An event may contain one or more attachments.
+type Attachment struct {
+	Filename    string
+	ContentType string
+	Payload     []byte
+}
+
 // User describes the user associated with an Event. If this is used, at least
 // an ID or an IP address should be provided.
 type User struct {
@@ -326,6 +334,7 @@ type Event struct {
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
+	attachments []*Attachment
 }
 
 // SetException appends the unwrapped errors to the event's exception list.

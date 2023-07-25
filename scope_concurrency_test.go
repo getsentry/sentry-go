@@ -54,6 +54,7 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.SetLevel(sentry.LevelDebug)
 	scope.SetFingerprint([]string{"foo"})
 	scope.AddBreadcrumb(&sentry.Breadcrumb{Message: "foo"}, 100)
+	scope.AddAttachment(&sentry.Attachment{Filename: "foo.txt"})
 	scope.SetUser(sentry.User{ID: "foo"})
 	scope.SetRequest(httptest.NewRequest("GET", "/foo", nil))
 
