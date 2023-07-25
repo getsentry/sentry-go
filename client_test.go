@@ -79,7 +79,7 @@ func TestCaptureMessageEmptyString(t *testing.T) {
 	}
 	got := transport.lastEvent
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "attachments"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 			return &Event{
 				Exception: e.Exception,
@@ -286,7 +286,7 @@ func TestCaptureEvent(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "sdkMetaData")}
+	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "sdkMetaData", "attachments")}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
@@ -314,7 +314,7 @@ func TestCaptureEventNil(t *testing.T) {
 	}
 	got := transport.lastEvent
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "attachments"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 			return &Event{
 				Exception: e.Exception,
@@ -652,7 +652,7 @@ func TestRecover(t *testing.T) {
 		}
 		got := events[0]
 		opts := cmp.Options{
-			cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+			cmpopts.IgnoreFields(Event{}, "sdkMetaData", "attachments"),
 			cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 				return &Event{
 					Message:   e.Message,
