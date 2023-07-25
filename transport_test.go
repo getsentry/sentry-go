@@ -191,6 +191,42 @@ func TestEnvelopeFromTransactionBody(t *testing.T) {
 	}
 }
 
+func TestEnvelopeFromEventWithAttachments(t *testing.T) {
+	event := newTestEvent(eventType)
+	event.attachments = []*Attachment{
+		// Empty content-type and payload
+		{
+			Filename: "empty.txt",
+		},
+		// Non-empty content-type and payload
+		{
+			Filename:    "non-empty.txt",
+			ContentType: "text/html",
+			Payload:     []byte("<h1>Look, HTML</h1>"),
+		},
+	}
+	sentAt := time.Unix(0, 0).UTC()
+
+	body := json.RawMessage(`{"type":"event","fields":"omitted"}`)
+
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
+{"type":"event","length":35}
+{"type":"event","fields":"omitted"}
+{"type":"attachment","length":0,"filename":"empty.txt"}
+
+{"type":"attachment","length":19,"filename":"non-empty.txt","content_type":"text/html"}
+<h1>Look, HTML</h1>
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 	event := newTestEvent(transactionType)
 	event.sdkMetaData.transactionProfile = &profileInfo{
