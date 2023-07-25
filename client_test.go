@@ -328,14 +328,16 @@ func TestCaptureEventNil(t *testing.T) {
 
 func TestCaptureCheckIn(t *testing.T) {
 	tests := []struct {
-		name          string
-		checkIn       *CheckIn
-		monitorConfig *MonitorConfig
+		name           string
+		checkIn        *CheckIn
+		monitorConfig  *MonitorConfig
+		expectNilEvent bool
 	}{
 		{
-			name:          "Nil CheckIn",
-			checkIn:       nil,
-			monitorConfig: nil,
+			name:           "Nil CheckIn",
+			checkIn:        nil,
+			monitorConfig:  nil,
+			expectNilEvent: true,
 		},
 		{
 			name: "Nil MonitorConfig",
@@ -384,15 +386,26 @@ func TestCaptureCheckIn(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client, _, transport := setupClientTest()
 			client.CaptureCheckIn(tt.checkIn, tt.monitorConfig, nil)
-			if transport.lastEvent == nil {
+			capturedEvent := transport.lastEvent
+
+			if tt.expectNilEvent && capturedEvent == nil {
+				// Event is nil as expected, nothing else to check
+				return
+			}
+
+			if capturedEvent == nil {
 				t.Fatal("missing event")
 			}
 
-			if diff := cmp.Diff(transport.lastEvent.CheckIn, tt.checkIn); diff != "" {
+			if capturedEvent.Type != checkInType {
+				t.Errorf("Event type mismatch: want %s, got %s", checkInType, capturedEvent.Type)
+			}
+
+			if diff := cmp.Diff(capturedEvent.CheckIn, tt.checkIn); diff != "" {
 				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
 			}
 
-			if diff := cmp.Diff(transport.lastEvent.MonitorConfig, tt.monitorConfig); diff != "" {
+			if diff := cmp.Diff(capturedEvent.MonitorConfig, tt.monitorConfig); diff != "" {
 				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
 			}
 		})
