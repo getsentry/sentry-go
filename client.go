@@ -416,7 +416,12 @@ func (client *Client) CaptureException(exception error, hint *EventHint, scope E
 // CaptureCheckIn captures a check in.
 func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
 	event := client.EventFromCheckIn(checkIn, monitorConfig)
-	return client.CaptureEvent(event, nil, scope)
+	if event != nil && event.CheckIn != nil {
+		client.CaptureEvent(event, nil, scope)
+		return &event.CheckIn.ID
+	} else {
+		return nil
+	}
 }
 
 // CaptureEvent captures an event on the currently active client if any.
@@ -532,24 +537,27 @@ func (client *Client) EventFromException(exception error, level Level) *Event {
 
 // EventFromCheckIn creates a new Sentry event from the given `check_in` instance.
 func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
-	event := NewEvent()
-	checkInID := EventID(uuid())
-	if checkIn != nil {
-		if checkIn.ID != "" {
-			checkInID = checkIn.ID
-		}
+	if checkIn == nil {
+		return nil
+	}
 
-		event.CheckIn = &CheckIn{
-			ID:          checkInID,
-			MonitorSlug: checkIn.MonitorSlug,
-			Status:      checkIn.Status,
-			Duration:    checkIn.Duration,
-		}
+	event := NewEvent()
+	event.Type = checkInType
+
+	var checkInID EventID
+	if checkIn.ID == "" {
+		checkInID = EventID(uuid())
+	} else {
+		checkInID = checkIn.ID
+	}
+
+	event.CheckIn = &CheckIn{
+		ID:          checkInID,
+		MonitorSlug: checkIn.MonitorSlug,
+		Status:      checkIn.Status,
+		Duration:    checkIn.Duration,
 	}
 	event.MonitorConfig = monitorConfig
-
-	// EventID should be equal to CheckInID
-	event.EventID = checkInID
 
 	return event
 }

@@ -143,8 +143,8 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		return nil, err
 	}
 
-	if event.Type == transactionType {
-		err = encodeEnvelopeItem(enc, transactionType, body)
+	if event.Type == transactionType || event.Type == checkInType {
+		err = encodeEnvelopeItem(enc, event.Type, body)
 	} else {
 		err = encodeEnvelopeItem(enc, eventType, body)
 	}
