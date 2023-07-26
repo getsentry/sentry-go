@@ -419,9 +419,8 @@ func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorCon
 	if event != nil && event.CheckIn != nil {
 		client.CaptureEvent(event, nil, scope)
 		return &event.CheckIn.ID
-	} else {
-		return nil
 	}
+	return nil
 }
 
 // CaptureEvent captures an event on the currently active client if any.
