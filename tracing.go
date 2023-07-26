@@ -956,8 +956,8 @@ func TransactionFromContext(ctx context.Context) *Span {
 	return nil
 }
 
-// SpanFromContext returns the last span stored in the context or a dummy
-// non-nil span.
+// SpanFromContext returns the last span stored in the context, or nil if no span
+// is set on the context.
 func SpanFromContext(ctx context.Context) *Span {
 	if span, ok := ctx.Value(spanContextKey{}).(*Span); ok {
 		return span
