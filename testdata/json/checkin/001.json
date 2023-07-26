@@ -11,7 +11,7 @@
       "value": 1,
       "unit": "day"
     },
-    "check_in_margin": 5,
+    "checkin_margin": 5,
     "max_runtime": 30,
     "timezone": "America/Los_Angeles"
   }

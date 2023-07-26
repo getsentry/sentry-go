@@ -280,6 +280,36 @@ func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 	}
 }
 
+func TestEnvelopeFromCheckInEvent(t *testing.T) {
+	event := newTestEvent(checkInType)
+	event.CheckIn = &CheckIn{
+		MonitorSlug: "test-slug",
+		ID:          "123c5be4d31e48959103a1f878a1efcb",
+		Status:      CheckInStatusOK,
+	}
+	event.MonitorConfig = &MonitorConfig{
+		Schedule:      IntervalSchedule(1, MonitorScheduleUnitHour),
+		CheckInMargin: 10,
+		MaxRuntime:    5000,
+		Timezone:      "Asia/Singapore",
+	}
+	sentAt := time.Unix(0, 0).UTC()
+
+	body := getRequestBodyFromEvent(event)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
+{"type":"check_in","length":232}
+{"check_in_id":"123c5be4d31e48959103a1f878a1efcb","monitor_slug":"test-slug","status":"ok","monitor_config":{"schedule":{"type":"interval","value":1,"unit":"hour"},"checkin_margin":10,"max_runtime":5000,"timezone":"Asia/Singapore"}}
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestGetRequestFromEvent(t *testing.T) {
 	testCases := []struct {
 		testName string

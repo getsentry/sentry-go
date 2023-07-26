@@ -80,7 +80,7 @@ type MonitorConfig struct { //nolint: maligned // prefer readability over optima
 	Schedule MonitorSchedule `json:"schedule,omitempty"`
 	// The allowed margin of minutes after the expected check-in time that
 	// the monitor will not be considered missed for.
-	CheckInMargin int64 `json:"check_in_margin,omitempty"`
+	CheckInMargin int64 `json:"checkin_margin,omitempty"`
 	// The allowed duration in minutes that the monitor may be `in_progress`
 	// for before being considered failed due to timeout.
 	MaxRuntime int64 `json:"max_runtime,omitempty"`
