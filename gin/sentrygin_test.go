@@ -314,7 +314,10 @@ func TestIntegration(t *testing.T) {
 		if res.StatusCode != tt.WantStatus {
 			t.Errorf("Status code = %d expected: %d", res.StatusCode, tt.WantStatus)
 		}
-		res.Body.Close()
+		err = res.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if ok := sentry.Flush(time.Second); !ok {
