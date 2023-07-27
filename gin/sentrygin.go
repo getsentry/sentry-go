@@ -2,7 +2,6 @@ package sentrygin
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -61,7 +60,7 @@ func (h *handler) handle(c *gin.Context) {
 	}
 
 	transaction := sentry.StartTransaction(ctx,
-		fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path),
+		c.Request.URL.Path,
 		options...,
 	)
 	defer func() {

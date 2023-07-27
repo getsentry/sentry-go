@@ -31,7 +31,7 @@ func TestIntegration(t *testing.T) {
 		WantTransaction *sentry.Event
 	}{
 		{
-			Path:       "/panic",
+			Path:       "/panic/:id",
 			Method:     "GET",
 			WantStatus: 200,
 			Handler: func(c *gin.Context) {
@@ -40,9 +40,9 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "GET /panic",
+				Transaction: "/panic/:id",
 				Request: &sentry.Request{
-					URL:    "/panic",
+					URL:    "/panic/:id",
 					Method: "GET",
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip",
@@ -55,7 +55,7 @@ func TestIntegration(t *testing.T) {
 				Level:   sentry.LevelFatal,
 				Message: "test",
 				Request: &sentry.Request{
-					URL:    "/panic",
+					URL:    "/panic/:id",
 					Method: "GET",
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip",
@@ -81,7 +81,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "POST /post",
+				Transaction: "/post",
 				Request: &sentry.Request{
 					URL:    "/post",
 					Method: "POST",
@@ -121,7 +121,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "GET /get",
+				Transaction: "/get",
 				Request: &sentry.Request{
 					URL:    "/get",
 					Method: "GET",
@@ -161,7 +161,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "POST /post/large",
+				Transaction: "/post/large",
 				Request: &sentry.Request{
 					URL:    "/post/large",
 					Method: "POST",
@@ -201,7 +201,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "POST /post/body-ignored",
+				Transaction: "/post/body-ignored",
 				Request: &sentry.Request{
 					URL:    "/post/body-ignored",
 					Method: "POST",
@@ -241,7 +241,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "GET /badreq",
+				Transaction: "/badreq",
 				Request: &sentry.Request{
 					URL:    "/badreq",
 					Method: "GET",
