@@ -40,7 +40,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "/panic/:id",
+				Transaction: "GET /panic/:id",
 				Request: &sentry.Request{
 					URL:    "/panic/:id",
 					Method: "GET",
@@ -49,7 +49,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
@@ -81,7 +81,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "/post",
+				Transaction: "POST /post",
 				Request: &sentry.Request{
 					URL:    "/post",
 					Method: "POST",
@@ -92,7 +92,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -121,7 +121,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "/get",
+				Transaction: "GET /get",
 				Request: &sentry.Request{
 					URL:    "/get",
 					Method: "GET",
@@ -130,7 +130,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -161,7 +161,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "/post/large",
+				Transaction: "POST /post/large",
 				Request: &sentry.Request{
 					URL:    "/post/large",
 					Method: "POST",
@@ -171,7 +171,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -201,7 +201,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "/post/body-ignored",
+				Transaction: "POST /post/body-ignored",
 				Request: &sentry.Request{
 					URL:    "/post/body-ignored",
 					Method: "POST",
@@ -213,7 +213,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -241,7 +241,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "/badreq",
+				Transaction: "GET /badreq",
 				Request: &sentry.Request{
 					URL:    "/badreq",
 					Method: "GET",
@@ -250,7 +250,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: nil,
 		},
