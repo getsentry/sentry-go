@@ -60,7 +60,7 @@ func (h *handler) handle(c *gin.Context) {
 	}
 
 	transaction := sentry.StartTransaction(ctx,
-		c.Request.URL.Path,
+		c.FullPath(),
 		options...,
 	)
 	defer func() {
