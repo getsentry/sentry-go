@@ -56,7 +56,7 @@ func (h *handler) handle(c *gin.Context) {
 	options := []sentry.SpanOption{
 		sentry.WithOpName("http.server"),
 		sentry.ContinueFromRequest(c.Request),
-		sentry.WithTransactionSource(sentry.SourceURL),
+		sentry.WithTransactionSource(sentry.SourceRoute),
 	}
 
 	transaction := sentry.StartTransaction(ctx,
