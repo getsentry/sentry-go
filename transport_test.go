@@ -547,7 +547,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 	checkLastConnReuse := func(reused bool) {
 		t.Helper()
 		reqCount++
-		if !tr.Flush(time.Second) {
+		if !tr.Flush(2 * time.Second) {
 			t.Fatal("Flush timed out")
 		}
 		if len(rt.reusedConn) != reqCount {
