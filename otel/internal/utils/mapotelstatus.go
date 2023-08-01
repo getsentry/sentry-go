@@ -51,13 +51,13 @@ func MapOtelStatus(s trace.ReadOnlySpan) sentry.SpanStatus {
 
 	for _, attribute := range s.Attributes() {
 		if attribute.Key == semconv.HTTPStatusCodeKey {
-			if status, ok := canonicalCodesHTTPMap[attribute.Value.AsString()]; ok {
+			if status, ok := canonicalCodesHTTPMap[attribute.Value.Emit()]; ok {
 				return status
 			}
 		}
 
 		if attribute.Key == semconv.RPCGRPCStatusCodeKey {
-			if status, ok := canonicalCodesGrpcMap[attribute.Value.AsString()]; ok {
+			if status, ok := canonicalCodesGrpcMap[attribute.Value.Emit()]; ok {
 				return status
 			}
 		}
