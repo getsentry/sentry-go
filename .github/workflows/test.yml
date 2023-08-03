@@ -40,7 +40,6 @@ jobs:
           key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-${{ matrix.go }}-
-            ${{ runner.os }}-go-
       - name: Build
         run: make build
       - name: Vet
@@ -63,7 +62,7 @@ jobs:
         uses: codecov/codecov-action@v3
         with:
           directory: .coverage
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       matrix:
         go: ["1.20", "1.19", "1.18"]
