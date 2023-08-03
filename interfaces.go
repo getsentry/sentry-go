@@ -22,6 +22,9 @@ const eventType = "event"
 
 const profileType = "profile"
 
+// checkInType is the type of a check in event.
+const checkInType = "check_in"
+
 // Level marks the severity of the event.
 type Level string
 
@@ -103,6 +106,14 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 		}{breadcrumb: (*breadcrumb)(b)})
 	}
 	return json.Marshal((*breadcrumb)(b))
+}
+
+// Attachment allows associating files with your events to aid in investigation.
+// An event may contain one or more attachments.
+type Attachment struct {
+	Filename    string
+	ContentType string
+	Payload     []byte
 }
 
 // User describes the user associated with an Event. If this is used, at least
@@ -315,9 +326,15 @@ type Event struct {
 	Spans           []*Span          `json:"spans,omitempty"`
 	TransactionInfo *TransactionInfo `json:"transaction_info,omitempty"`
 
+	// The fields below are only relevant for crons/check ins
+
+	CheckIn       *CheckIn       `json:"check_in,omitempty"`
+	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
+
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
+	attachments []*Attachment
 }
 
 // SetException appends the unwrapped errors to the event's exception list.
@@ -375,6 +392,8 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 	// and a few type tricks.
 	if e.Type == transactionType {
 		return e.transactionMarshalJSON()
+	} else if e.Type == checkInType {
+		return e.checkInMarshalJSON()
 	}
 	return e.defaultMarshalJSON()
 }
@@ -447,6 +466,29 @@ func (e *Event) transactionMarshalJSON() ([]byte, error) {
 		x.StartTime = b
 	}
 	return json.Marshal(x)
+}
+
+func (e *Event) checkInMarshalJSON() ([]byte, error) {
+	checkIn := serializedCheckIn{
+		CheckInID:     string(e.CheckIn.ID),
+		MonitorSlug:   e.CheckIn.MonitorSlug,
+		Status:        e.CheckIn.Status,
+		Duration:      e.CheckIn.Duration.Seconds(),
+		Release:       e.Release,
+		Environment:   e.Environment,
+		MonitorConfig: nil,
+	}
+
+	if e.MonitorConfig != nil {
+		checkIn.MonitorConfig = &MonitorConfig{
+			Schedule:      e.MonitorConfig.Schedule,
+			CheckInMargin: e.MonitorConfig.CheckInMargin,
+			MaxRuntime:    e.MonitorConfig.MaxRuntime,
+			Timezone:      e.MonitorConfig.Timezone,
+		}
+	}
+
+	return json.Marshal(checkIn)
 }
 
 // NewEvent creates a new Event.

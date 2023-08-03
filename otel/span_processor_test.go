@@ -124,7 +124,7 @@ func TestOnStartRootSpan(t *testing.T) {
 	testutils.AssertBaggageStringsEqual(
 		t,
 		sentrySpan.ToBaggage(),
-		"sentry-transaction=spanName,sentry-environment=testing,sentry-public_key=abc,sentry-release=1.2.3,sentry-sample_rate=1,sentry-trace_id="+otelTraceId.String(),
+		"sentry-transaction=spanName,sentry-environment=testing,sentry-public_key=abc,sentry-release=1.2.3,sentry-sample_rate=1,sentry-sampled=true,sentry-trace_id="+otelTraceId.String(),
 	)
 }
 

@@ -94,6 +94,38 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
+func encodeAttachment(enc *json.Encoder, b io.Writer, attachment *Attachment) error {
+	// Attachment header
+	err := enc.Encode(struct {
+		Type        string `json:"type"`
+		Length      int    `json:"length"`
+		Filename    string `json:"filename"`
+		ContentType string `json:"content_type,omitempty"`
+	}{
+		Type:        "attachment",
+		Length:      len(attachment.Payload),
+		Filename:    attachment.Filename,
+		ContentType: attachment.ContentType,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Attachment payload
+	if _, err = b.Write(attachment.Payload); err != nil {
+		return err
+	}
+
+	// "Envelopes should be terminated with a trailing newline."
+	//
+	// [1]: https://develop.sentry.dev/sdk/envelopes/#envelopes
+	if _, err := b.Write([]byte("\n")); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func encodeEnvelopeItem(enc *json.Encoder, itemType string, body json.RawMessage) error {
 	// Item header
 	err := enc.Encode(struct {
@@ -143,13 +175,20 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		return nil, err
 	}
 
-	if event.Type == transactionType {
-		err = encodeEnvelopeItem(enc, transactionType, body)
+	if event.Type == transactionType || event.Type == checkInType {
+		err = encodeEnvelopeItem(enc, event.Type, body)
 	} else {
 		err = encodeEnvelopeItem(enc, eventType, body)
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// Attachments
+	for _, attachment := range event.attachments {
+		if err := encodeAttachment(enc, &b, attachment); err != nil {
+			return nil, err
+		}
 	}
 
 	// Profile data

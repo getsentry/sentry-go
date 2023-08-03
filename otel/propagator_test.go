@@ -131,7 +131,7 @@ func testInjectUsesSetsValidTrace(t *testing.T, withChildSpan bool) {
 				spanID:  "6e0c63257de34c92",
 				sampled: sentry.SampledTrue,
 			},
-			wantBaggage:     stringPtr("sentry-environment=testing,sentry-release=1.2.3,sentry-transaction=sampled-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b,sentry-sample_rate=1"),
+			wantBaggage:     stringPtr("sentry-environment=testing,sentry-release=1.2.3,sentry-transaction=sampled-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b,sentry-sample_rate=1,sentry-sampled=true"),
 			wantSentryTrace: stringPtr("d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1"),
 		},
 		{
@@ -142,7 +142,7 @@ func testInjectUsesSetsValidTrace(t *testing.T, withChildSpan bool) {
 				spanID:  "6e0c63257de34c92",
 				sampled: sentry.SampledFalse,
 			},
-			wantBaggage:     stringPtr("sentry-environment=testing,sentry-release=1.2.3,sentry-transaction=not-sampled-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b"),
+			wantBaggage:     stringPtr("sentry-environment=testing,sentry-release=1.2.3,sentry-transaction=not-sampled-transaction,sentry-public_key=abc,sentry-trace_id=d4cda95b652f4a1592b449d5929fda1b,sentry-sampled=false"),
 			wantSentryTrace: stringPtr("d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-0"),
 		},
 		{

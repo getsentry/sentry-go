@@ -13,6 +13,12 @@ var testNow = time.Now().UTC()
 
 func fillScopeWithData(scope *Scope) *Scope {
 	scope.breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "scopeBreadcrumbMessage"}}
+	scope.attachments = []*Attachment{
+		{
+			Filename: "scope-attachment.txt",
+			Payload:  []byte("Scope attachment contents."),
+		},
+	}
 	scope.user = User{ID: "1337"}
 	scope.tags = map[string]string{"scopeTagKey": "scopeTagValue"}
 	scope.contexts = map[string]Context{
@@ -28,6 +34,12 @@ func fillScopeWithData(scope *Scope) *Scope {
 
 func fillEventWithData(event *Event) *Event {
 	event.Breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "eventBreadcrumbMessage"}}
+	event.attachments = []*Attachment{
+		{
+			Filename: "event-attachment.txt",
+			Payload:  []byte("Event attachment contents."),
+		},
+	}
 	event.User = User{ID: "42"}
 	event.Tags = map[string]string{"eventTagKey": "eventTagValue"}
 	event.Contexts = map[string]Context{
@@ -357,6 +369,25 @@ func TestAddBreadcrumbAddsTimestamp(t *testing.T) {
 	}
 }
 
+func TestAddAttachmentAddsAttachment(t *testing.T) {
+	scope := NewScope()
+	scope.AddAttachment(&Attachment{Filename: "test.txt", Payload: []byte("Hello, World")})
+	assertEqual(t, []*Attachment{{Filename: "test.txt", Payload: []byte("Hello, World")}}, scope.attachments)
+}
+
+func TestAddAttachmentAppendsAttachment(t *testing.T) {
+	scope := NewScope()
+	scope.AddAttachment(&Attachment{Filename: "test1.txt", Payload: []byte("Hello, World!")})
+	scope.AddAttachment(&Attachment{Filename: "test2.txt", Payload: []byte("Hello, World?")})
+	scope.AddAttachment(&Attachment{Filename: "test3.txt", Payload: []byte("Hello, World.")})
+
+	assertEqual(t, []*Attachment{
+		{Filename: "test1.txt", Payload: []byte("Hello, World!")},
+		{Filename: "test2.txt", Payload: []byte("Hello, World?")},
+		{Filename: "test3.txt", Payload: []byte("Hello, World.")},
+	}, scope.attachments)
+}
+
 func TestScopeBasicInheritance(t *testing.T) {
 	scope := NewScope()
 	scope.SetExtra("a", 1)
@@ -381,6 +412,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone.SetLevel(LevelDebug)
 	clone.SetFingerprint([]string{"foo"})
 	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, maxBreadcrumbs)
+	clone.AddAttachment(&Attachment{Filename: "foo.txt", Payload: []byte("foo")})
 	clone.SetUser(User{ID: "foo"})
 	r1 := httptest.NewRequest("GET", "/foo", nil)
 	clone.SetRequest(r1)
@@ -391,6 +423,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	scope.SetLevel(LevelFatal)
 	scope.SetFingerprint([]string{"bar"})
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"}, maxBreadcrumbs)
+	scope.AddAttachment(&Attachment{Filename: "bar.txt", Payload: []byte("bar")})
 	scope.SetUser(User{ID: "bar"})
 	r2 := httptest.NewRequest("GET", "/bar", nil)
 	scope.SetRequest(r2)
@@ -401,6 +434,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, LevelDebug, clone.level)
 	assertEqual(t, []string{"foo"}, clone.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "foo"}}, clone.breadcrumbs)
+	assertEqual(t, []*Attachment{{Filename: "foo.txt", Payload: []byte("foo")}}, clone.attachments)
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r1, clone.request)
 
@@ -410,6 +444,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, LevelFatal, scope.level)
 	assertEqual(t, []string{"bar"}, scope.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "bar"}}, scope.breadcrumbs)
+	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r2, scope.request)
 }
@@ -423,6 +458,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.SetLevel(LevelFatal)
 	scope.SetFingerprint([]string{"bar"})
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"}, maxBreadcrumbs)
+	scope.AddAttachment(&Attachment{Filename: "bar.txt", Payload: []byte("bar")})
 	scope.SetUser(User{ID: "bar"})
 	r1 := httptest.NewRequest("GET", "/bar", nil)
 	scope.SetRequest(r1)
@@ -437,6 +473,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.SetLevel(LevelDebug)
 	clone.SetFingerprint([]string{"foo"})
 	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, maxBreadcrumbs)
+	clone.AddAttachment(&Attachment{Filename: "foo.txt", Payload: []byte("foo")})
 	clone.SetUser(User{ID: "foo"})
 	r2 := httptest.NewRequest("GET", "/foo", nil)
 	clone.SetRequest(r2)
@@ -453,6 +490,10 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 		{Timestamp: testNow, Message: "bar"},
 		{Timestamp: testNow, Message: "foo"},
 	}, clone.breadcrumbs)
+	assertEqual(t, []*Attachment{
+		{Filename: "bar.txt", Payload: []byte("bar")},
+		{Filename: "foo.txt", Payload: []byte("foo")},
+	}, clone.attachments)
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r2, clone.request)
 
@@ -462,6 +503,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, LevelFatal, scope.level)
 	assertEqual(t, []string{"bar"}, scope.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "bar"}}, scope.breadcrumbs)
+	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r1, scope.request)
 
@@ -474,6 +516,7 @@ func TestClear(t *testing.T) {
 	scope.Clear()
 
 	assertEqual(t, []*Breadcrumb{}, scope.breadcrumbs)
+	assertEqual(t, []*Attachment{}, scope.attachments)
 	assertEqual(t, User{}, scope.user)
 	assertEqual(t, map[string]string{}, scope.tags)
 	assertEqual(t, map[string]Context{}, scope.contexts)
@@ -493,6 +536,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetLevel(LevelDebug)
 	scope.SetFingerprint([]string{"foo"})
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, maxBreadcrumbs)
+	scope.AddAttachment(&Attachment{Filename: "foo.txt", Payload: []byte("foo")})
 	scope.SetUser(User{ID: "foo"})
 	r := httptest.NewRequest("GET", "/foo", nil)
 	scope.SetRequest(r)
@@ -503,6 +547,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, LevelDebug, scope.level)
 	assertEqual(t, []string{"foo"}, scope.fingerprint)
 	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "foo"}}, scope.breadcrumbs)
+	assertEqual(t, []*Attachment{{Filename: "foo.txt", Payload: []byte("foo")}}, scope.attachments)
 	assertEqual(t, User{ID: "foo"}, scope.user)
 	assertEqual(t, r, scope.request)
 }
@@ -514,6 +559,13 @@ func TestClearBreadcrumbs(t *testing.T) {
 	assertEqual(t, []*Breadcrumb{}, scope.breadcrumbs)
 }
 
+func TestClearAttachments(t *testing.T) {
+	scope := fillScopeWithData(NewScope())
+	scope.ClearAttachments()
+
+	assertEqual(t, []*Attachment{}, scope.attachments)
+}
+
 func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := fillEventWithData(NewEvent())
@@ -521,6 +573,7 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	processedEvent := scope.ApplyToEvent(event, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 2, "should merge breadcrumbs")
+	assertEqual(t, len(processedEvent.attachments), 2, "should merge attachments")
 	assertEqual(t, len(processedEvent.Tags), 2, "should merge tags")
 	assertEqual(t, len(processedEvent.Contexts), 3, "should merge contexts")
 	assertEqual(t, event.Contexts[sharedContextsKey], event.Contexts[sharedContextsKey], "should not override event context")
@@ -538,6 +591,7 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 	processedEvent := scope.ApplyToEvent(event, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
+	assertEqual(t, len(processedEvent.attachments), 1, "should use event attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
 	assertEqual(t, len(processedEvent.Contexts), 2, "should use event contexts")
 	assertEqual(t, len(processedEvent.Extra), 1, "should use event extra")
@@ -554,6 +608,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	processedEvent := scope.ApplyToEvent(event, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
+	assertEqual(t, len(processedEvent.attachments), 1, "should use scope attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
 	assertEqual(t, len(processedEvent.Contexts), 2, "should use scope contexts")
 	assertEqual(t, len(processedEvent.Extra), 1, "should use scope extra")

@@ -79,7 +79,7 @@ func TestCaptureMessageEmptyString(t *testing.T) {
 	}
 	got := transport.lastEvent
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "attachments"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 			return &Event{
 				Exception: e.Exception,
@@ -286,7 +286,7 @@ func TestCaptureEvent(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "sdkMetaData")}
+	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "sdkMetaData", "attachments")}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
@@ -314,7 +314,7 @@ func TestCaptureEventNil(t *testing.T) {
 	}
 	got := transport.lastEvent
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "attachments"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 			return &Event{
 				Exception: e.Exception,
@@ -323,6 +323,120 @@ func TestCaptureEventNil(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("(-want +got):\n%s", diff)
+	}
+}
+
+func TestCaptureCheckIn(t *testing.T) {
+	tests := []struct {
+		name           string
+		checkIn        *CheckIn
+		monitorConfig  *MonitorConfig
+		expectNilEvent bool
+	}{
+		{
+			name:           "Nil CheckIn",
+			checkIn:        nil,
+			monitorConfig:  nil,
+			expectNilEvent: true,
+		},
+		{
+			name: "Nil MonitorConfig",
+			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
+				MonitorSlug: "cron",
+				Status:      CheckInStatusOK,
+				Duration:    time.Second * 10,
+			},
+			monitorConfig: nil,
+		},
+		{
+			name: "IntervalSchedule",
+			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
+				MonitorSlug: "cron",
+				Status:      CheckInStatusInProgress,
+				Duration:    time.Second * 10,
+			},
+			monitorConfig: &MonitorConfig{
+				Schedule:      IntervalSchedule(1, MonitorScheduleUnitHour),
+				CheckInMargin: 10,
+				MaxRuntime:    5000,
+				Timezone:      "Asia/Singapore",
+			},
+		},
+		{
+			name: "CronSchedule",
+			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
+				MonitorSlug: "cron",
+				Status:      CheckInStatusInProgress,
+				Duration:    time.Second * 10,
+			},
+			monitorConfig: &MonitorConfig{
+				Schedule:      CrontabSchedule("40 * * * *"),
+				CheckInMargin: 10,
+				MaxRuntime:    5000,
+				Timezone:      "Asia/Singapore",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			client, _, transport := setupClientTest()
+			client.CaptureCheckIn(tt.checkIn, tt.monitorConfig, nil)
+			capturedEvent := transport.lastEvent
+
+			if tt.expectNilEvent && capturedEvent == nil {
+				// Event is nil as expected, nothing else to check
+				return
+			}
+
+			if capturedEvent == nil {
+				t.Fatal("missing event")
+			}
+
+			if capturedEvent.Type != checkInType {
+				t.Errorf("Event type mismatch: want %s, got %s", checkInType, capturedEvent.Type)
+			}
+
+			if diff := cmp.Diff(capturedEvent.CheckIn, tt.checkIn); diff != "" {
+				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
+			}
+
+			if diff := cmp.Diff(capturedEvent.MonitorConfig, tt.monitorConfig); diff != "" {
+				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCaptureCheckInExistingID(t *testing.T) {
+	client, _, _ := setupClientTest()
+
+	monitorConfig := &MonitorConfig{
+		Schedule:      IntervalSchedule(1, MonitorScheduleUnitDay),
+		CheckInMargin: 30,
+		MaxRuntime:    30,
+		Timezone:      "UTC",
+	}
+
+	checkInID := client.CaptureCheckIn(&CheckIn{
+		MonitorSlug: "cron",
+		Status:      CheckInStatusInProgress,
+		Duration:    time.Second,
+	}, monitorConfig, nil)
+
+	checkInID2 := client.CaptureCheckIn(&CheckIn{
+		ID:          *checkInID,
+		MonitorSlug: "cron",
+		Status:      CheckInStatusOK,
+		Duration:    time.Minute,
+	}, monitorConfig, nil)
+
+	if *checkInID != *checkInID2 {
+		t.Errorf("Expecting equivalent CheckInID: %s and %s", *checkInID, *checkInID2)
 	}
 }
 
@@ -538,7 +652,7 @@ func TestRecover(t *testing.T) {
 		}
 		got := events[0]
 		opts := cmp.Options{
-			cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+			cmpopts.IgnoreFields(Event{}, "sdkMetaData", "attachments"),
 			cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 				return &Event{
 					Message:   e.Message,

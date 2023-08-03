@@ -157,7 +157,7 @@ func TestStartSpan(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
-			"sdkMetaData",
+			"sdkMetaData", "attachments",
 		),
 		cmpopts.EquateEmpty(),
 	}
@@ -221,7 +221,7 @@ func TestStartChild(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"EventID", "Level", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
-			"sdkMetaData",
+			"sdkMetaData", "attachments",
 		),
 		cmpopts.IgnoreMapEntries(func(k string, v interface{}) bool {
 			return k != "trace"
@@ -302,7 +302,7 @@ func TestStartTransaction(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
-			"sdkMetaData",
+			"sdkMetaData", "attachments",
 		),
 		cmpopts.EquateEmpty(),
 	}
@@ -389,7 +389,7 @@ func (c SpanCheck) Check(t *testing.T, span *Span) {
 		t.Errorf("original context value lost")
 	}
 	// Invariant: SpanFromContext(span.Context) == span
-	if spanFromContext(gotCtx) != span {
+	if SpanFromContext(gotCtx) != span {
 		t.Errorf("span not in its context")
 	}
 
@@ -586,7 +586,7 @@ func TestSpanFromContext(t *testing.T) {
 	// SpanFromContext(ctx).StartChild(...) === StartSpan(ctx, ...)
 
 	ctx := NewTestContext(ClientOptions{})
-	span := spanFromContext(ctx)
+	span := SpanFromContext(ctx)
 
 	_ = span
 
@@ -817,9 +817,9 @@ func TestGetTransactionReturnsNilOnManuallyCreatedSpans(t *testing.T) {
 
 func TestToBaggage(t *testing.T) {
 	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-		SampleRate:    1.0,
-		Release:       "test-release",
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Release:          "test-release",
 	})
 	transaction := StartTransaction(ctx, "transaction-name")
 	transaction.TraceID = TraceIDFromHex("f1a4c5c9071eca1cdf04e4132527ed16")
@@ -827,7 +827,7 @@ func TestToBaggage(t *testing.T) {
 	assertBaggageStringsEqual(
 		t,
 		transaction.ToBaggage(),
-		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name",
+		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name,sentry-sample_rate=1,sentry-sampled=true",
 	)
 
 	// Calling ToBaggage() on a child span should return the same result
@@ -835,7 +835,7 @@ func TestToBaggage(t *testing.T) {
 	assertBaggageStringsEqual(
 		t,
 		child.ToBaggage(),
-		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name",
+		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name,sentry-sample_rate=1,sentry-sampled=true",
 	)
 }
 

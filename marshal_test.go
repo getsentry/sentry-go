@@ -125,6 +125,87 @@ func TestTransactionEventMarshalJSON(t *testing.T) {
 	}
 }
 
+func TestCheckInEventMarshalJSON(t *testing.T) {
+	tests := []*Event{
+		{
+			Release:     "1.0.0",
+			Environment: "dev",
+			Type:        checkInType,
+			CheckIn: &CheckIn{
+				ID:          "c2f0ce1334c74564bf6631f6161173f5",
+				MonitorSlug: "my-monitor",
+				Status:      "ok",
+				Duration:    time.Second * 10,
+			},
+			MonitorConfig: nil,
+		},
+		{
+			Release:     "1.0.0",
+			Environment: "dev",
+			Type:        checkInType,
+			CheckIn: &CheckIn{
+				ID:          "c2f0ce1334c74564bf6631f6161173f5",
+				MonitorSlug: "my-monitor",
+				Status:      "ok",
+				Duration:    time.Second * 10,
+			},
+			MonitorConfig: &MonitorConfig{
+				Schedule: &intervalSchedule{
+					Type:  "interval",
+					Value: 1,
+					Unit:  "day",
+				},
+				CheckInMargin: 5,
+				MaxRuntime:    30,
+				Timezone:      "America/Los_Angeles",
+			},
+		},
+		{
+			Release:     "1.0.0",
+			Environment: "dev",
+			Type:        checkInType,
+			CheckIn: &CheckIn{
+				ID:          "c2f0ce1334c74564bf6631f6161173f5",
+				MonitorSlug: "my-monitor",
+				Status:      "ok",
+				Duration:    time.Second * 10,
+			},
+			MonitorConfig: &MonitorConfig{
+				Schedule: &crontabSchedule{
+					Type:  "crontab",
+					Value: "0 * * * *",
+				},
+				CheckInMargin: 5,
+				MaxRuntime:    30,
+				Timezone:      "America/Los_Angeles",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetIndent("", "  ")
+	for i, tt := range tests {
+		i, tt := i, tt
+		t.Run("", func(t *testing.T) {
+			defer buf.Reset()
+			err := enc.Encode(tt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join("testdata", "json", "checkin", fmt.Sprintf("%03d.json", i))
+			if *update {
+				WriteGoldenFile(t, path, buf.Bytes())
+			}
+			got := buf.String()
+			want := ReadOrGenerateGoldenFile(t, path, buf.Bytes())
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Fatalf("JSON mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestBreadcrumbMarshalJSON(t *testing.T) {
 	tests := []*Breadcrumb{
 		// complete

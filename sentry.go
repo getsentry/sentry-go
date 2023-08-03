@@ -9,7 +9,7 @@ import (
 const Version = SDKVersion
 
 // Version is the version of the SDK.
-const SDKVersion = "0.22.0"
+const SDKVersion = "0.23.0"
 
 // The identifier of the SDK.
 const SDKIdentifier = "sentry.go"
@@ -52,6 +52,12 @@ func CaptureMessage(message string) *EventID {
 func CaptureException(exception error) *EventID {
 	hub := CurrentHub()
 	return hub.CaptureException(exception)
+}
+
+// CaptureCheckIn captures a (cron) monitor check-in.
+func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+	hub := CurrentHub()
+	return hub.CaptureCheckIn(checkIn, monitorConfig)
 }
 
 // CaptureEvent captures an event on the currently active client if any.

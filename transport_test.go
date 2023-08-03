@@ -191,6 +191,42 @@ func TestEnvelopeFromTransactionBody(t *testing.T) {
 	}
 }
 
+func TestEnvelopeFromEventWithAttachments(t *testing.T) {
+	event := newTestEvent(eventType)
+	event.attachments = []*Attachment{
+		// Empty content-type and payload
+		{
+			Filename: "empty.txt",
+		},
+		// Non-empty content-type and payload
+		{
+			Filename:    "non-empty.txt",
+			ContentType: "text/html",
+			Payload:     []byte("<h1>Look, HTML</h1>"),
+		},
+	}
+	sentAt := time.Unix(0, 0).UTC()
+
+	body := json.RawMessage(`{"type":"event","fields":"omitted"}`)
+
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
+{"type":"event","length":35}
+{"type":"event","fields":"omitted"}
+{"type":"attachment","length":0,"filename":"empty.txt"}
+
+{"type":"attachment","length":19,"filename":"non-empty.txt","content_type":"text/html"}
+<h1>Look, HTML</h1>
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 	event := newTestEvent(transactionType)
 	event.sdkMetaData.transactionProfile = &profileInfo{
@@ -238,6 +274,36 @@ func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 {"type":"transaction","fields":"omitted"}
 {"type":"profile","length":618}
 {"device":{"architecture":"","classification":"","locale":"","manufacturer":"","model":""},"event_id":"","os":{"build_number":"","name":"","version":""},"platform":"","release":"","dist":"","runtime":{"name":"","version":""},"timestamp":"0001-01-01T00:00:00Z","profile":{"frames":[{"function":"func","module":"module","filename":"file.go","lineno":42,"colno":24,"in_app":false}],"samples":[{"elapsed_since_start_ns":10,"stack_id":2,"thread_id":3}],"stacks":[[0]],"thread_metadata":{"1":{"name":"GO 1"}}},"transaction":{"active_thread_id":1,"duration_ns":2,"id":"3","name":"tx-name","trace_id":"trace-id"},"version":""}
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestEnvelopeFromCheckInEvent(t *testing.T) {
+	event := newTestEvent(checkInType)
+	event.CheckIn = &CheckIn{
+		MonitorSlug: "test-slug",
+		ID:          "123c5be4d31e48959103a1f878a1efcb",
+		Status:      CheckInStatusOK,
+	}
+	event.MonitorConfig = &MonitorConfig{
+		Schedule:      IntervalSchedule(1, MonitorScheduleUnitHour),
+		CheckInMargin: 10,
+		MaxRuntime:    5000,
+		Timezone:      "Asia/Singapore",
+	}
+	sentAt := time.Unix(0, 0).UTC()
+
+	body := getRequestBodyFromEvent(event)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
+{"type":"check_in","length":232}
+{"check_in_id":"123c5be4d31e48959103a1f878a1efcb","monitor_slug":"test-slug","status":"ok","monitor_config":{"schedule":{"type":"interval","value":1,"unit":"hour"},"checkin_margin":10,"max_runtime":5000,"timezone":"Asia/Singapore"}}
 `
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
@@ -481,7 +547,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 	checkLastConnReuse := func(reused bool) {
 		t.Helper()
 		reqCount++
-		if !tr.Flush(time.Second) {
+		if !tr.Flush(2 * time.Second) {
 			t.Fatal("Flush timed out")
 		}
 		if len(rt.reusedConn) != reqCount {

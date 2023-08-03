@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.23.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.23.0.
+
+### Features
+- Initial support for [Cron Monitoring](https://docs.sentry.io/product/crons/) ([#661](https://github.com/getsentry/sentry-go/pull/661))
+
+  This is how the basic usage of the feature looks like:
+
+  ```go
+  // 🟡 Notify Sentry your job is running:
+  checkinId := sentry.CaptureCheckIn(
+    &sentry.CheckIn{
+      MonitorSlug: "<monitor-slug>",
+      Status:      sentry.CheckInStatusInProgress,
+    },
+    nil,
+  )
+
+  // Execute your scheduled task here...
+
+  // 🟢 Notify Sentry your job has completed successfully:
+  sentry.CaptureCheckIn(
+    &sentry.CheckIn{
+      ID:          *checkinId,
+      MonitorSlug: "<monitor-slug>",
+      Status:      sentry.CheckInStatusOK,
+    },
+    nil,
+  )
+  ```
+
+  A full example of using Crons Monitoring is available [here](https://github.com/getsentry/sentry-go/blob/dde4d360660838f3c2e0ced8205bc8f7a8d312d9/_examples/crons/main.go).
+
+  More documentation on configuring and using Crons [can be found here](https://docs.sentry.io/platforms/go/crons/).
+
+- Add support for [Event Attachments](https://docs.sentry.io/platforms/go/enriching-events/attachments/) ([#670](https://github.com/getsentry/sentry-go/pull/670))
+
+  It's now possible to add file/binary payloads to Sentry events:
+
+  ```go
+  sentry.ConfigureScope(func(scope *sentry.Scope) {
+    scope.AddAttachment(&Attachment{
+      Filename:    "report.html",
+      ContentType: "text/html",
+      Payload:     []byte("<h1>Look, HTML</h1>"),
+    })
+  })
+  ```
+
+  The attachment will then be accessible on the Issue Details page.
+
+- Add sampling decision to trace envelope header ([#666](https://github.com/getsentry/sentry-go/pull/666))
+- Expose SpanFromContext function ([#672](https://github.com/getsentry/sentry-go/pull/672))
+
+### Bug fixes
+- Make `Span.Finish` a no-op when the span is already finished ([#660](https://github.com/getsentry/sentry-go/pull/660))
+
 ## 0.22.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.22.0.

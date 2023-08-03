@@ -413,6 +413,16 @@ func (client *Client) CaptureException(exception error, hint *EventHint, scope E
 	return client.CaptureEvent(event, hint, scope)
 }
 
+// CaptureCheckIn captures a check in.
+func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
+	event := client.EventFromCheckIn(checkIn, monitorConfig)
+	if event != nil && event.CheckIn != nil {
+		client.CaptureEvent(event, nil, scope)
+		return &event.CheckIn.ID
+	}
+	return nil
+}
+
 // CaptureEvent captures an event on the currently active client if any.
 //
 // The event must already be assembled. Typically code would instead use
@@ -520,6 +530,33 @@ func (client *Client) EventFromException(exception error, level Level) *Event {
 	}
 
 	event.SetException(err, client.options.MaxErrorDepth)
+
+	return event
+}
+
+// EventFromCheckIn creates a new Sentry event from the given `check_in` instance.
+func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
+	if checkIn == nil {
+		return nil
+	}
+
+	event := NewEvent()
+	event.Type = checkInType
+
+	var checkInID EventID
+	if checkIn.ID == "" {
+		checkInID = EventID(uuid())
+	} else {
+		checkInID = checkIn.ID
+	}
+
+	event.CheckIn = &CheckIn{
+		ID:          checkInID,
+		MonitorSlug: checkIn.MonitorSlug,
+		Status:      checkIn.Status,
+		Duration:    checkIn.Duration,
+	}
+	event.MonitorConfig = monitorConfig
 
 	return event
 }
