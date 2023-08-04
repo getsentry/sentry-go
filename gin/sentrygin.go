@@ -16,9 +16,10 @@ import (
 const valuesKey = "sentry"
 
 type handler struct {
-	repanic         bool
-	waitForDelivery bool
-	timeout         time.Duration
+	repanic                  bool
+	waitForDelivery          bool
+	timeout                  time.Duration
+	transactionNameGenerator func(c *gin.Context) string
 }
 
 type Options struct {
@@ -31,6 +32,8 @@ type Options struct {
 	WaitForDelivery bool
 	// Timeout for the event delivery requests.
 	Timeout time.Duration
+	// TransactionNameGenerator generates a descriptive name for a transaction based on the Gin context.
+	TransactionNameGenerator func(c *gin.Context) string
 }
 
 // New returns a function that satisfies gin.HandlerFunc interface
@@ -40,10 +43,17 @@ func New(options Options) gin.HandlerFunc {
 	if timeout == 0 {
 		timeout = 2 * time.Second
 	}
+	transactionNameGenerator := options.TransactionNameGenerator
+	if transactionNameGenerator == nil {
+		transactionNameGenerator = func(c *gin.Context) string {
+			return fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path)
+		}
+	}
 	return (&handler{
-		repanic:         options.Repanic,
-		timeout:         timeout,
-		waitForDelivery: options.WaitForDelivery,
+		repanic:                  options.Repanic,
+		timeout:                  timeout,
+		waitForDelivery:          options.WaitForDelivery,
+		transactionNameGenerator: transactionNameGenerator,
 	}).handle
 }
 
@@ -61,7 +71,7 @@ func (h *handler) handle(c *gin.Context) {
 	}
 
 	transaction := sentry.StartTransaction(ctx,
-		fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path),
+		h.transactionNameGenerator(c),
 		options...,
 	)
 	defer func() {
