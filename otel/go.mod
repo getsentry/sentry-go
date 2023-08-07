@@ -1,4 +1,4 @@
-module github.com/vtfr/sentry-go/otel
+module github.com/getsentry/sentry-go/otel
 
 go 1.18
 
