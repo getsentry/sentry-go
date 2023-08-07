@@ -77,7 +77,6 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 		sentrySpanMap.Delete(otelSpanId)
 		return
 	}
-	sentrySpan.Context()
 
 	processEvents(sentrySpan, s)
 
