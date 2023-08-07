@@ -122,10 +122,10 @@ func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.Read
 	resource := map[attribute.Key]string{}
 
 	for _, kv := range s.Attributes() {
-		attributes[kv.Key] = kv.Value.AsString()
+		attributes[kv.Key] = kv.Value.Emit()
 	}
 	for _, kv := range s.Resource().Attributes() {
-		resource[kv.Key] = kv.Value.AsString()
+		resource[kv.Key] = kv.Value.Emit()
 	}
 
 	transaction.SetContext("otel", map[string]interface{}{
@@ -149,6 +149,6 @@ func updateSpanWithOtelData(span *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
 	span.Description = spanAttributes.Description
 	span.SetData("otel.kind", s.SpanKind().String())
 	for _, kv := range s.Attributes() {
-		span.SetData(string(kv.Key), kv.Value.AsString())
+		span.SetData(string(kv.Key), kv.Value.Emit())
 	}
 }
