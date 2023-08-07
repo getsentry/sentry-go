@@ -4,6 +4,7 @@ package sentryotel
 
 import (
 	"context"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -76,6 +77,9 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 		sentrySpanMap.Delete(otelSpanId)
 		return
 	}
+	sentrySpan.Context()
+
+	processEvents(sentrySpan, s)
 
 	if sentrySpan.IsTransaction() {
 		updateTransactionWithOtelData(sentrySpan, s)
@@ -99,6 +103,57 @@ func (ssp *sentrySpanProcessor) Shutdown(ctx context.Context) error {
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#forceflush-1
 func (ssp *sentrySpanProcessor) ForceFlush(ctx context.Context) error {
 	return flushSpanProcessor(ctx)
+}
+
+func processEvents(sentrySpan *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
+	ctx := sentrySpan.Context()
+
+	hub := sentry.GetHubFromContext(ctx)
+	if hub == nil {
+		hub = sentry.CurrentHub()
+	}
+
+	for _, event := range s.Events() {
+		sentryEvent := sentry.NewEvent()
+		sentryEvent.Timestamp = event.Time
+
+		switch event.Name {
+		case semconv.ExceptionEventName:
+			sentryEvent.Level = sentry.LevelError
+
+			var exceptionType string
+			var exceptionMessage string
+			//var exceptionStacktrace string
+
+			for _, kv := range event.Attributes {
+				switch kv.Key {
+				case semconv.ExceptionTypeKey:
+					exceptionType = kv.Value.Emit()
+				case semconv.ExceptionMessageKey:
+					exceptionMessage = kv.Value.Emit()
+					// case semconv.ExceptionStacktraceKey:
+					// 	exceptionStacktrace = kv.Value.Emit()
+				}
+			}
+
+			// todo(vtfr): Parse the exceptionStacktrace into an []sentry.Exception
+			sentryEvent.Message = exceptionMessage
+			sentryEvent.Exception = []sentry.Exception{
+				{
+					Type:  exceptionType,
+					Value: exceptionMessage,
+				},
+			}
+		default:
+			// todo(vtfr): Check for attributes for setting the level
+			sentryEvent.Level = sentry.LevelInfo
+			sentryEvent.Message = event.Name
+		}
+
+		hub.Client().CaptureEvent(sentryEvent, &sentry.EventHint{
+			Context: ctx,
+		}, nil)
+	}
 }
 
 func flushSpanProcessor(ctx context.Context) error {
