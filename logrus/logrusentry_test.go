@@ -152,7 +152,7 @@ func Test_entryToEvent(t *testing.T) {
 				Level: "fatal",
 				Extra: map[string]interface{}{},
 				Exception: []sentry.Exception{
-					{Type: "error", Value: "things failed"},
+					{Type: "*errors.errorString", Value: "things failed", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 				},
 			},
 		},
@@ -181,7 +181,7 @@ func Test_entryToEvent(t *testing.T) {
 				Level: "fatal",
 				Extra: map[string]interface{}{},
 				Exception: []sentry.Exception{
-					{Type: "error", Value: "failure", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+					{Type: "*errors.withStack", Value: "failure", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 				},
 			},
 		},
@@ -268,28 +268,34 @@ func Test_exceptions(t *testing.T) {
 		want  []sentry.Exception
 	}{
 		{
+			name:  "error is nil",
+			trace: true,
+			err:   nil,
+			want:  nil,
+		},
+		{
 			name:  "std error",
 			trace: true,
 			err:   errors.New("foo"),
 			want: []sentry.Exception{
-				{Type: "error", Value: "foo"},
+				{Type: "*errors.errorString", Value: "foo", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 			},
 		},
 		{
-			name:  "wrapped, no stack",
+			name:  "wrapped error",
 			trace: true,
 			err:   fmt.Errorf("foo: %w", errors.New("bar")),
 			want: []sentry.Exception{
-				{Type: "error", Value: "bar"},
-				{Type: "error", Value: "foo: bar"},
+				{Type: "*errors.errorString", Value: "bar"},
+				{Type: "*fmt.wrapError", Value: "foo: bar", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 			},
 		},
 		{
-			name:  "ignored stack",
+			name:  "missing stack for pkgerr",
 			trace: false,
 			err:   pkgerr.New("foo"),
 			want: []sentry.Exception{
-				{Type: "error", Value: "foo"},
+				{Type: "*errors.fundamental", Value: "foo"},
 			},
 		},
 		{
@@ -297,7 +303,7 @@ func Test_exceptions(t *testing.T) {
 			trace: true,
 			err:   pkgerr.New("foo"),
 			want: []sentry.Exception{
-				{Type: "error", Value: "foo", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+				{Type: "*errors.fundamental", Value: "foo", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 			},
 		},
 		{
@@ -311,11 +317,11 @@ func Test_exceptions(t *testing.T) {
 				return fmt.Errorf("wrapped: %w", err)
 			}(),
 			want: []sentry.Exception{
-				{Type: "error", Value: "original"},
-				{Type: "error", Value: "fmt: original"},
-				{Type: "error", Value: "wrap: fmt: original", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
-				{Type: "error", Value: "wrap: fmt: original", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
-				{Type: "error", Value: "wrapped: wrap: fmt: original"},
+				{Type: "*errors.errorString", Value: "original"},
+				{Type: "*fmt.wrapError", Value: "fmt: original"},
+				{Type: "*errors.withStack", Value: "wrap: fmt: original", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+				{Type: "*errors.withStack", Value: "wrap: fmt: original", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+				{Type: "*fmt.wrapError", Value: "wrapped: wrap: fmt: original", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 			},
 		},
 	}

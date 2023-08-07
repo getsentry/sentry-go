@@ -4,10 +4,12 @@ package sentrylogrus
 import (
 	"errors"
 	"net/http"
+	"reflect"
 	"time"
 
-	sentry "github.com/getsentry/sentry-go"
 	"github.com/sirupsen/logrus"
+
+	sentry "github.com/getsentry/sentry-go"
 )
 
 // These default log field keys are used to pass specific metadata in a way that
@@ -182,17 +184,22 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 }
 
 func (h *Hook) exceptions(err error) []sentry.Exception {
+	if err == nil {
+		return nil
+	}
+
 	if !h.hub.Client().Options().AttachStacktrace {
 		return []sentry.Exception{{
-			Type:  "error",
+			Type:  reflect.TypeOf(err).String(),
 			Value: err.Error(),
 		}}
 	}
+
 	excs := []sentry.Exception{}
 	var last *sentry.Exception
 	for ; err != nil; err = errors.Unwrap(err) {
 		exc := sentry.Exception{
-			Type:       "error",
+			Type:       reflect.TypeOf(err).String(),
 			Value:      err.Error(),
 			Stacktrace: sentry.ExtractStacktrace(err),
 		}
@@ -208,6 +215,13 @@ func (h *Hook) exceptions(err error) []sentry.Exception {
 		excs = append(excs, exc)
 		last = &excs[len(excs)-1]
 	}
+
+	// Add a trace of the current stack to the most recent error in a chain if
+	// it doesn't have a stack trace yet.
+	if excs[0].Stacktrace == nil {
+		excs[0].Stacktrace = sentry.NewStacktrace()
+	}
+
 	// reverse
 	for i, j := 0, len(excs)-1; i < j; i, j = i+1, j-1 {
 		excs[i], excs[j] = excs[j], excs[i]
