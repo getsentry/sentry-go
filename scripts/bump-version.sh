@@ -21,7 +21,10 @@ function replace() {
     grep "$2" $3  # verify that replacement was successful
 }
 
+# SDKVersion is deprecated, remove prior 0.25.0
 replace "const SDKVersion = \"[\w.-]+\"" "const SDKVersion = \"$NEW_VERSION\"" ./sentry.go
+
+replace "const sdkVersion = \"[\w.-]+\"" "const sdkVersion = \"$NEW_VERSION\"" ./client.go
 
 # Replace root module versions in submodules
 GO_MOD_FILES=$(find . -type f -name 'go.mod' -not -path ./go.mod)

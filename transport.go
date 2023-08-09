@@ -209,7 +209,8 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 	defer func() {
 		if r != nil {
-			r.Header.Set("User-Agent", userAgent)
+			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", event.Sdk.Name, event.Sdk.Version))
+			r.Header.Set("Content-Type", "x-sentry-envelope")
 		}
 	}()
 	body := getRequestBodyFromEvent(event)
@@ -346,10 +347,6 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 	request, err := getRequestFromEvent(event, t.dsn)
 	if err != nil {
 		return
-	}
-
-	for headerKey, headerValue := range t.dsn.RequestHeaders() {
-		request.Header.Set(headerKey, headerValue)
 	}
 
 	// <-t.buffer is equivalent to acquiring a lock to access the current batch.
@@ -571,10 +568,6 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 	request, err := getRequestFromEvent(event, t.dsn)
 	if err != nil {
 		return
-	}
-
-	for headerKey, headerValue := range t.dsn.RequestHeaders() {
-		request.Header.Set(headerKey, headerValue)
 	}
 
 	var eventType string

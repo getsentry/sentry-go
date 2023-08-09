@@ -20,6 +20,9 @@ import (
 // The identifier of the SDK.
 var sdkIdentifier = "sentry.go"
 
+// Version is the version of the SDK.
+const sdkVersion = "0.23.0"
+
 // maxErrorDepth is the maximum number of errors reported in a chain of errors.
 // This protects the SDK from an arbitrarily long chain of wrapped errors.
 //
@@ -226,10 +229,13 @@ type ClientOptions struct {
 // Client is the underlying processor that is used by the main API and Hub
 // instances. It must be created with NewClient.
 type Client struct {
+	mu              sync.RWMutex
 	options         ClientOptions
 	dsn             *Dsn
 	eventProcessors []EventProcessor
 	integrations    []Integration
+	sdkIdentifier   string
+	sdkVersion      string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
 	Transport Transport
@@ -326,8 +332,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	client := Client{
-		options: options,
-		dsn:     dsn,
+		options:       options,
+		dsn:           dsn,
+		sdkIdentifier: sdkIdentifier,
+		sdkVersion:    sdkVersion,
 	}
 
 	client.setupTransport()
@@ -565,11 +573,21 @@ func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorC
 }
 
 func (client *Client) SetSDKIdentifier(identifier string) {
-	sdkIdentifier = identifier
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	client.sdkIdentifier = identifier
 }
 
 func (client *Client) GetSDKIdentifier() string {
-	return sdkIdentifier
+	client.mu.RLock()
+	defer client.mu.RUnlock()
+
+	return client.sdkIdentifier
+}
+
+func (client *Client) GetSDKVersion() string {
+	return client.sdkVersion
 }
 
 // reverse reverses the slice a in place.
@@ -658,7 +676,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	event.Platform = "go"
 	event.Sdk = SdkInfo{
 		Name:         client.GetSDKIdentifier(),
-		Version:      SDKVersion,
+		Version:      client.GetSDKVersion(),
 		Integrations: client.listIntegrations(),
 		Packages: []SdkPackage{{
 			Name:    "sentry-go",

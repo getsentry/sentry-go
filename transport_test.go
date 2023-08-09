@@ -356,6 +356,7 @@ func TestGetRequestFromEvent(t *testing.T) {
 				t.Errorf("Incorrect API URL. want: %s, got: %s", test.apiURL, req.URL.String())
 			}
 
+			userAgent := fmt.Sprintf("%s/%s", test.event.Sdk.Name, test.event.Sdk.Version)
 			if ua := req.UserAgent(); ua != userAgent {
 				t.Errorf("got User-Agent = %q, want %q", ua, userAgent)
 			}
