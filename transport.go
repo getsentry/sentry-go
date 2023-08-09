@@ -210,7 +210,7 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 	defer func() {
 		if r != nil {
 			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", event.Sdk.Name, event.Sdk.Version))
-			r.Header.Set("Content-Type", "x-sentry-envelope")
+			r.Header.Set("Content-Type", "application/x-sentry-envelope")
 		}
 	}()
 	body := getRequestBodyFromEvent(event)
