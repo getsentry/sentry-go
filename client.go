@@ -18,7 +18,7 @@ import (
 )
 
 // The identifier of the SDK.
-var sdkIdentifier = "sentry.go"
+const sdkIdentifier = "sentry.go"
 
 // Version is the version of the SDK.
 const sdkVersion = "0.23.0"
