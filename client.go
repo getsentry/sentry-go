@@ -17,6 +17,9 @@ import (
 	"github.com/getsentry/sentry-go/internal/debug"
 )
 
+// The identifier of the SDK.
+var sdkIdentifier = "sentry.go"
+
 // maxErrorDepth is the maximum number of errors reported in a chain of errors.
 // This protects the SDK from an arbitrarily long chain of wrapped errors.
 //
@@ -561,6 +564,14 @@ func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorC
 	return event
 }
 
+func (client *Client) SetSDKIdentifier(identifier string) {
+	sdkIdentifier = identifier
+}
+
+func (client *Client) GetSDKIdentifier() string {
+	return sdkIdentifier
+}
+
 // reverse reverses the slice a in place.
 func reverse(a []Exception) {
 	for i := len(a)/2 - 1; i >= 0; i-- {
@@ -646,7 +657,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 
 	event.Platform = "go"
 	event.Sdk = SdkInfo{
-		Name:         SDKIdentifier,
+		Name:         client.GetSDKIdentifier(),
 		Version:      SDKVersion,
 		Integrations: client.listIntegrations(),
 		Packages: []SdkPackage{{

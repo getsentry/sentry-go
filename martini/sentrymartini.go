@@ -9,6 +9,9 @@ import (
 	"github.com/go-martini/martini"
 )
 
+// The identifier of the Martini SDK.
+const sdkIdentifier = "sentry.go.martini"
+
 type handler struct {
 	repanic         bool
 	waitForDelivery bool
@@ -46,6 +49,9 @@ func (h *handler) handle(rw http.ResponseWriter, r *http.Request, ctx martini.Co
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
 	}
+
+	hub.Client().SetSDKIdentifier(sdkIdentifier)
+
 	hub.Scope().SetRequest(r)
 	ctx.Map(hub)
 	defer h.recoverWithSentry(hub, r)

@@ -12,6 +12,7 @@ const Version = SDKVersion
 const SDKVersion = "0.23.0"
 
 // The identifier of the SDK.
+// Deprecated: Use Client.GetSDKIdentifier() instead.
 const SDKIdentifier = "sentry.go"
 
 // apiVersion is the minimum version of the Sentry API compatible with the
