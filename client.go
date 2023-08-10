@@ -407,7 +407,7 @@ func (client *Client) AddEventProcessor(processor EventProcessor) {
 }
 
 // Options return ClientOptions for the current Client.
-func (client Client) Options() ClientOptions {
+func (client *Client) Options() ClientOptions {
 	// Note: internally, consider using `client.options` instead of `client.Options()` to avoid copying the object each time.
 	return client.options
 }
@@ -716,7 +716,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	return event
 }
 
-func (client Client) listIntegrations() []string {
+func (client *Client) listIntegrations() []string {
 	integrations := make([]string, len(client.integrations))
 	for i, integration := range client.integrations {
 		integrations[i] = integration.Name()
@@ -724,7 +724,7 @@ func (client Client) listIntegrations() []string {
 	return integrations
 }
 
-func (client Client) integrationAlreadyInstalled(name string) bool {
+func (client *Client) integrationAlreadyInstalled(name string) bool {
 	for _, integration := range client.integrations {
 		if integration.Name() == name {
 			return true
