@@ -36,7 +36,9 @@ type profilerResult struct {
 func getCurrentGoID() uint64 {
 	// We shouldn't panic but let's be super safe.
 	defer func() {
-		_ = recover()
+		if err := recover(); err != nil {
+			Logger.Printf("Profiler panic in getCurrentGoID(): %v\n", err)
+		}
 	}()
 
 	// Buffer to read the stack trace into. We should be good with a small buffer because we only need the first line.
@@ -120,7 +122,9 @@ func (p *profileRecorder) run() {
 
 	// We shouldn't panic but let's be super safe.
 	defer func() {
-		_ = recover()
+		if err := recover(); err != nil {
+			Logger.Printf("Profiler panic in run(): %v\n", err)
+		}
 		atomic.StoreInt64(&testProfilerPanic, 0)
 		atomic.StoreInt64(&profilerRunning, 0)
 	}()
