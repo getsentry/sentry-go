@@ -48,7 +48,11 @@ jobs:
         run: make mod-tidy
         if: ${{ matrix.go == '1.20' }}
       - name: Test
-        run: make test
+        run: make test-coverage
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          directory: .coverage
       - name: Test (with race detection)
         run: make test-race
         # The race detector adds considerable runtime overhead. To save time on
@@ -56,12 +60,6 @@ jobs:
         # all other workflow triggers (e.g., pushes to a release branch) run
         # this step for the whole matrix.
         if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.20' && matrix.os == 'ubuntu') }}
-      - name: Collect coverage
-        run: make test-coverage
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          directory: .coverage
     timeout-minutes: 15
     strategy:
       matrix:
