@@ -13,6 +13,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewClientAllowsEmptyDSN(t *testing.T) {
@@ -714,4 +715,12 @@ func TestCustomMaxSpansProperty(t *testing.T) {
 	})
 
 	assertEqual(t, properClient.Options().MaxSpans, 3000)
+}
+
+func TestClientSetsUpTransport(t *testing.T) {
+	client, _ := NewClient(ClientOptions{Dsn: testDsn})
+	require.IsType(t, &HTTPTransport{}, client.Transport)
+
+	client, _ = NewClient(ClientOptions{})
+	require.IsType(t, &noopTransport{}, client.Transport)
 }
