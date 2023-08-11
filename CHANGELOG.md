@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bug fixes
+
+- Fix trace function name parsing in profiler on go1.21+ ([#695](https://github.com/getsentry/sentry-go/pull/695))
+
 ## 0.23.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.23.0.

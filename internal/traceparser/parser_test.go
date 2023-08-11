@@ -3,11 +3,38 @@ package traceparser
 import (
 	"bytes"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestGenerateTrace(t *testing.T) {
+	stacks := make(chan string)
+	go func() {
+		var stacksBuffer = make([]byte, 1000)
+		for {
+			// Capture stacks for all existing goroutines.
+			// Note: runtime.GoroutineProfile() would be better but we can't use it at the moment because
+			//       it doesn't give us `gid` for each routine, see https://github.com/golang/go/issues/59663
+			n := runtime.Stack(stacksBuffer, true)
+
+			// If we couldn't read everything, increase the buffer and try again.
+			if n >= len(stacksBuffer) {
+				stacksBuffer = make([]byte, n*2)
+			} else {
+				stacks <- string(stacksBuffer[0:n])
+				break
+			}
+		}
+	}()
+
+	t.Log(<-stacks)
+
+	// Note: uncomment to show the output so you can update it manually in tests below.
+	// t.Fail()
+}
 
 func TestParseEmpty(t *testing.T) {
 	var require = require.New(t)
@@ -17,11 +44,11 @@ func TestParseEmpty(t *testing.T) {
 }
 
 var tracetext = []byte(`
-goroutine 18 [running]:
-testing.(*M).startAlarm.func1()
-	C:/Users/name/scoop/apps/go/current/src/testing/testing.go:2241 +0x3c5
-created by time.goFunc
-	C:/Users/name/scoop/apps/go/current/src/time/sleep.go:176 +0x32
+goroutine 7 [running]:
+github.com/getsentry/sentry-go/internal/traceparser.TestGenerateTrace.func1()
+	c:/dev/sentry-go/internal/traceparser/parser_test.go:23 +0x6c
+created by github.com/getsentry/sentry-go/internal/traceparser.TestGenerateTrace in goroutine 6
+	c:/dev/sentry-go/internal/traceparser/parser_test.go:17 +0x7f
 
 goroutine 1 [chan receive]:
 testing.(*T).Run(0xc00006f6c0, {0x672288?, 0x180fd3?}, 0x6b5f98)
@@ -78,10 +105,10 @@ func TestParse(t *testing.T) {
 		i++
 	}
 
-	checkTrace(18, `testing.(*M).startAlarm.func1()
-	C:/Users/name/scoop/apps/go/current/src/testing/testing.go:2241 +0x3c5
-created by time.goFunc
-	C:/Users/name/scoop/apps/go/current/src/time/sleep.go:176 +0x32`)
+	checkTrace(7, `github.com/getsentry/sentry-go/internal/traceparser.TestGenerateTrace.func1()
+	c:/dev/sentry-go/internal/traceparser/parser_test.go:23 +0x6c
+created by github.com/getsentry/sentry-go/internal/traceparser.TestGenerateTrace in goroutine 6
+	c:/dev/sentry-go/internal/traceparser/parser_test.go:17 +0x7f`)
 
 	checkTrace(1, `testing.(*T).Run(0xc00006f6c0, {0x672288?, 0x180fd3?}, 0x6b5f98)
 	C:/Users/name/scoop/apps/go/current/src/testing/testing.go:1630 +0x405
@@ -144,13 +171,13 @@ func TestFrames(t *testing.T) {
 	}
 
 	var expected = strings.Split(strings.TrimLeft(`
-Trace 0: goroutine 18 with at most 2 frames
-  Func = testing.(*M).startAlarm.func1
-  File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
-  Line = 2241
-  Func = time.goFunc
-  File = C:/Users/name/scoop/apps/go/current/src/time/sleep.go
-  Line = 176
+Trace 0: goroutine 7 with at most 2 frames
+  Func = github.com/getsentry/sentry-go/internal/traceparser.TestGenerateTrace.func1
+  File = c:/dev/sentry-go/internal/traceparser/parser_test.go
+  Line = 23
+  Func = github.com/getsentry/sentry-go/internal/traceparser.TestGenerateTrace
+  File = c:/dev/sentry-go/internal/traceparser/parser_test.go
+  Line = 17
 Trace 1: goroutine 1 with at most 6 frames
   Func = testing.(*T).Run
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
@@ -228,13 +255,13 @@ func TestFramesReversed(t *testing.T) {
 	}
 
 	var expected = strings.Split(strings.TrimLeft(`
-Trace 0: goroutine 18 with at most 2 frames
-  Func = time.goFunc
-  File = C:/Users/name/scoop/apps/go/current/src/time/sleep.go
-  Line = 176
-  Func = testing.(*M).startAlarm.func1
-  File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
-  Line = 2241
+Trace 0: goroutine 7 with at most 2 frames
+  Func = github.com/getsentry/sentry-go/internal/traceparser.TestGenerateTrace
+  File = c:/dev/sentry-go/internal/traceparser/parser_test.go
+  Line = 17
+  Func = github.com/getsentry/sentry-go/internal/traceparser.TestGenerateTrace.func1
+  File = c:/dev/sentry-go/internal/traceparser/parser_test.go
+  Line = 23
 Trace 1: goroutine 1 with at most 6 frames
   Func = main.main
   File = _testmain.go

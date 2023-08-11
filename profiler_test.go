@@ -231,6 +231,7 @@ func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) 
 
 	for _, frame := range trace.Frames {
 		require.NotEmpty(frame.Function)
+		require.NotContains(frame.Function, " ") // Space in the function name is likely a parsing error
 		require.Greater(len(frame.AbsPath)+len(frame.Filename), 0)
 		require.Greater(frame.Lineno, 0)
 	}
