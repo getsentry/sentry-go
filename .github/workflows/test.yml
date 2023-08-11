@@ -50,7 +50,7 @@ jobs:
       - name: Test
         run: make test-coverage
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # pin@v3
+        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # pin@v3.1.4
         with:
           directory: .coverage
       - name: Test (with race detection)
