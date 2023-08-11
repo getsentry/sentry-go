@@ -187,7 +187,7 @@ func TestProfilerPanicOnTick(t *testing.T) {
 		t.Skip("Skipping in short mode because of the timeout we wait for in Tick() after the panic.")
 	}
 
-	var require = require.New(t)
+	var assert = assert.New(t)
 
 	ticker := setupProfilerTestTicker(t.Log)
 	defer restoreProfilerTicker()
@@ -198,14 +198,14 @@ func TestProfilerPanicOnTick(t *testing.T) {
 	start := time.Now()
 	profiler := startProfiling(start)
 	defer profiler.Stop(false)
-	require.True(ticker.Tick())
-	require.False(ticker.Tick())
+	assert.True(ticker.Tick())
+	assert.False(ticker.Tick())
 
 	end := time.Now()
 	result := profiler.GetSlice(start, end)
 
-	require.Zero(atomic.LoadInt64(&testProfilerPanic))
-	require.NotNil(result)
+	assert.Zero(atomic.LoadInt64(&testProfilerPanic))
+	assert.NotNil(result)
 	validateProfile(t, result.trace, end.Sub(start))
 }
 
