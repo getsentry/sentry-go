@@ -448,8 +448,6 @@ func TestHTTPTransport(t *testing.T) {
 		}
 	}
 
-	// Actual tests
-
 	testSendSingleEvent := func(t *testing.T) {
 		// Sending a single event should increase the server event count by
 		// exactly one.
@@ -467,6 +465,8 @@ func TestHTTPTransport(t *testing.T) {
 		transportMustFlush(t, id)
 		serverEventCountMustBe(t, initialCount+1)
 	}
+
+	// Actual tests
 	t.Run("SendSingleEvent", testSendSingleEvent)
 
 	t.Run("FlushMultipleTimes", func(t *testing.T) {
@@ -485,12 +485,12 @@ func TestHTTPTransport(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
+			defer wg.Done()
 			testSendSingleEvent(t)
-			wg.Done()
 		}()
 		go func() {
+			defer wg.Done()
 			transportMustFlush(t, "from goroutine")
-			wg.Done()
 		}()
 		wg.Wait()
 	})
