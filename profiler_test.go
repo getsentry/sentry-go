@@ -24,25 +24,38 @@ type profilerTestTicker struct {
 }
 
 func (t *profilerTestTicker) TickSource() <-chan time.Time {
+	t.logger("Ticker: tick source requested.")
 	return t.tick
 }
 
 func (t *profilerTestTicker) Ticked() {
+	t.logger("Ticker: tick acknowledged (on the profiler goroutine).")
 	t.ticked <- struct{}{}
 }
 
-func (t *profilerTestTicker) Stop() {}
+func (t *profilerTestTicker) Stop() {
+	// So that the `select` in Tick() is signalled.
+	t.logger("Ticker: stopped.")
+	close(t.ticked)
+}
 
 // Sleeps before a tick to emulate a reasonable frequency of ticks, or they may all come at the same relative time.
 // Then, sends a tick and waits for the profiler to process it.
 func (t *profilerTestTicker) Tick() bool {
 	time.Sleep(t.sleepBeforeTick)
+	t.logger("Ticker: ticking")
 	t.tick <- time.Now()
 	select {
-	case <-t.ticked:
-		return true
+	case _, ok := <-t.ticked:
+		if ok {
+			t.logger("Ticker: tick acknowledged by the profiler.") // logged on the test goroutine
+			return true
+		} else {
+			t.logger("Ticker: tick not acknowledged (ticker stopped).")
+			return false
+		}
 	case <-time.After(1 * time.Second):
-		t.logger("Timed out waiting for Ticked() to be called.")
+		t.logger("Ticker: timed out waiting for Tick ACK.")
 		return false
 	}
 }
@@ -183,10 +196,6 @@ func TestProfilerPanicDuringStartup(t *testing.T) {
 }
 
 func TestProfilerPanicOnTick(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping in short mode because of the timeout we wait for in Tick() after the panic.")
-	}
-
 	var assert = assert.New(t)
 
 	ticker := setupProfilerTestTicker(t.Log)
