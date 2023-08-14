@@ -50,10 +50,9 @@ func (t *profilerTestTicker) Tick() bool {
 		if ok {
 			t.logger("Ticker: tick acknowledged by the profiler.") // logged on the test goroutine
 			return true
-		} else {
-			t.logger("Ticker: tick not acknowledged (ticker stopped).")
-			return false
 		}
+		t.logger("Ticker: tick not acknowledged (ticker stopped).")
+		return false
 	case <-time.After(1 * time.Second):
 		t.logger("Ticker: timed out waiting for Tick ACK.")
 		return false
