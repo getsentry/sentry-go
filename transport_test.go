@@ -433,7 +433,12 @@ func TestHTTPTransport(t *testing.T) {
 	transportMustFlush := func(t *testing.T, id string) {
 		t.Helper()
 
-		ok := transport.Flush(500 * time.Millisecond)
+		timeout := 100 * time.Millisecond
+		if isCI() {
+			// CI is very overloaded so we need to allow for a long wait time.
+			timeout = 5 * time.Second
+		}
+		ok := transport.Flush(timeout)
 		if !ok {
 			t.Fatalf("[CLIENT] {%.4s} Flush() timed out", id)
 		}
