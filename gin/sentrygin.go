@@ -65,6 +65,10 @@ func (h *handler) handle(c *gin.Context) {
 		options...,
 	)
 	defer func() {
+		if c.Writer.Status() == 404 {
+			transaction.Name = fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path)
+			transaction.Source = sentry.SourceURL
+		}
 		transaction.Status = sentry.HTTPtoSpanStatus(c.Writer.Status())
 		transaction.Finish()
 	}()

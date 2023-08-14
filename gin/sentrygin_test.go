@@ -65,6 +65,28 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
+			Path:       "/404/1",
+			Method:     "GET",
+			WantStatus: 404,
+			Handler: func(c *gin.Context) {
+				c.AbortWithStatus(404)
+			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "GET /404/1",
+				Request: &sentry.Request{
+					URL:    "/404/1",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+			},
+		},
+		{
 			Path:       "/post",
 			Method:     "POST",
 			WantStatus: 200,
