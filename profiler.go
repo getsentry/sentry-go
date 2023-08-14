@@ -18,7 +18,13 @@ func startProfiling(startTime time.Time) profiler {
 	onProfilerStart()
 
 	p := newProfiler(startTime)
-	go p.run()
+
+	// Wait for the profiler to finish setting up before returning to the caller.
+	started := &sync.WaitGroup{}
+	started.Add(1)
+	go p.run(started)
+	started.Wait()
+
 	return p
 }
 
@@ -114,7 +120,8 @@ func newProfiler(startTime time.Time) *profileRecorder {
 var testProfilerPanic int64
 var profilerRunning int64
 
-func (p *profileRecorder) run() {
+func (p *profileRecorder) run(started *sync.WaitGroup) {
+	var starting = true
 	// Code backup for manual test debugging:
 	// if !atomic.CompareAndSwapInt64(&profilerRunning, 0, 1) {
 	// 	panic("Only one profiler can be running at a time")
@@ -127,14 +134,18 @@ func (p *profileRecorder) run() {
 		}
 		atomic.StoreInt64(&testProfilerPanic, 0)
 		atomic.StoreInt64(&profilerRunning, 0)
+
+		// if we're still in the startup phase, i.e. `started`` hasn't been signaled, do it now to unblock the caller.
+		// We cannot simply call Done() here - calling it multiple times panics.
+		if starting {
+			started.Done()
+		}
 	}()
 
-	var localTestProfilerPanic = atomic.LoadInt64(&testProfilerPanic)
-	if localTestProfilerPanic < 0 {
+	p.testProfilerPanic = atomic.LoadInt64(&testProfilerPanic)
+	if p.testProfilerPanic < 0 {
 		panic("This is an expected panic in profilerGoroutine() during tests")
 	}
-
-	p.testProfilerPanic = localTestProfilerPanic
 
 	// Collect the first sample immediately.
 	p.onTick()
@@ -143,6 +154,9 @@ func (p *profileRecorder) run() {
 	collectTicker := profilerTickerFactory(profilerSamplingRate)
 	defer collectTicker.Stop()
 	var tickerChannel = collectTicker.TickSource()
+
+	starting = false
+	started.Done()
 
 	for {
 		select {
