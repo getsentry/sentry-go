@@ -43,6 +43,7 @@ func main() {
 	wg.Add(10)
 	for i := 0; i < 10; i++ {
 		go func(num int) {
+			defer wg.Done()
 			span := tx.StartChild(fmt.Sprintf("Goroutine %d", num))
 			defer span.Finish()
 			for i := 0; i < num; i++ {
@@ -50,7 +51,6 @@ func main() {
 				runtime.Gosched() // we need to manually yield this busy loop
 			}
 			fmt.Printf("routine %d done\n", num)
-			wg.Done()
 		}(i)
 	}
 	wg.Wait()
