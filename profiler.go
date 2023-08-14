@@ -20,12 +20,13 @@ func startProfiling(startTime time.Time) profiler {
 	p := newProfiler(startTime)
 
 	// Wait for the profiler to finish setting up before returning to the caller.
-	started := &sync.WaitGroup{}
-	started.Add(1)
+	started := make(chan struct{})
 	go p.run(started)
-	started.Wait()
 
-	return p
+	if _, ok := <-started; ok {
+		return p
+	}
+	return nil
 }
 
 type profiler interface {
@@ -120,8 +121,7 @@ func newProfiler(startTime time.Time) *profileRecorder {
 var testProfilerPanic int64
 var profilerRunning int64
 
-func (p *profileRecorder) run(started *sync.WaitGroup) {
-	var starting = true
+func (p *profileRecorder) run(started chan struct{}) {
 	// Code backup for manual test debugging:
 	// if !atomic.CompareAndSwapInt64(&profilerRunning, 0, 1) {
 	// 	panic("Only one profiler can be running at a time")
@@ -134,12 +134,7 @@ func (p *profileRecorder) run(started *sync.WaitGroup) {
 		}
 		atomic.StoreInt64(&testProfilerPanic, 0)
 		atomic.StoreInt64(&profilerRunning, 0)
-
-		// if we're still in the startup phase, i.e. `started`` hasn't been signaled, do it now to unblock the caller.
-		// We cannot simply call Done() here - calling it multiple times panics.
-		if starting {
-			started.Done()
-		}
+		close(started)
 	}()
 
 	p.testProfilerPanic = atomic.LoadInt64(&testProfilerPanic)
@@ -155,8 +150,7 @@ func (p *profileRecorder) run(started *sync.WaitGroup) {
 	defer collectTicker.Stop()
 	var tickerChannel = collectTicker.TickSource()
 
-	starting = false
-	started.Done()
+	started <- struct{}{}
 
 	for {
 		select {

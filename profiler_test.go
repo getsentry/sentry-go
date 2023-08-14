@@ -184,15 +184,7 @@ func TestProfilerPanicDuringStartup(t *testing.T) {
 
 	start := time.Now()
 	profiler := startProfiling(start)
-	defer profiler.Stop(false)
-	// wait until the profiler has panicked
-	for i := 0; i < 100 && atomic.LoadInt64(&testProfilerPanic) != 0; i++ {
-		doWorkFor(10 * time.Millisecond)
-	}
-	result := profiler.GetSlice(start, time.Now())
-
-	require.Zero(atomic.LoadInt64(&testProfilerPanic))
-	require.Nil(result)
+	require.Nil(profiler)
 }
 
 func TestProfilerPanicOnTick(t *testing.T) {
