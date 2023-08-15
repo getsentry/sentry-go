@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -9,7 +10,7 @@ import (
 )
 
 func testTraceProfiling(t *testing.T, rate float64) (*Span, *Event) {
-	ticker := setupProfilerTestTicker(t.Log)
+	ticker := setupProfilerTestTicker(io.Discard)
 	defer restoreProfilerTicker()
 
 	transport := &TransportMock{}

@@ -139,6 +139,7 @@ func (p *profileRecorder) run(started chan struct{}) {
 
 	p.testProfilerPanic = atomic.LoadInt64(&testProfilerPanic)
 	if p.testProfilerPanic < 0 {
+		Logger.Printf("Profiler panicking during startup because testProfilerPanic == %v\n", p.testProfilerPanic)
 		panic("This is an expected panic in profilerGoroutine() during tests")
 	}
 
@@ -262,7 +263,9 @@ func (p *profileRecorder) onTick() {
 	elapsedNs := time.Since(p.startTime).Nanoseconds()
 
 	if p.testProfilerPanic > 0 {
+		Logger.Printf("Profiler testProfilerPanic == %v\n", p.testProfilerPanic)
 		if p.testProfilerPanic == 1 {
+			Logger.Println("Profiler panicking onTick()")
 			panic("This is an expected panic in Profiler.OnTick() during tests")
 		}
 		p.testProfilerPanic--

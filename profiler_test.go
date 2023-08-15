@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"runtime"
@@ -17,25 +18,24 @@ import (
 
 // Test ticker that ticks on demand instead of relying on go runtime timing.
 type profilerTestTicker struct {
-	logger          func(args ...any)
+	log             func(format string, args ...any)
 	sleepBeforeTick time.Duration
 	tick            chan time.Time
 	ticked          chan struct{}
 }
 
 func (t *profilerTestTicker) TickSource() <-chan time.Time {
-	t.logger("Ticker: tick source requested.")
+	t.log("Ticker: tick source requested.\n")
 	return t.tick
 }
 
 func (t *profilerTestTicker) Ticked() {
-	t.logger("Ticker: tick acknowledged (on the profiler goroutine).")
+	t.log("Ticker: tick acknowledged (on the profiler goroutine).\n")
 	t.ticked <- struct{}{}
 }
 
 func (t *profilerTestTicker) Stop() {
-	// So that the `select` in Tick() is signalled.
-	t.logger("Ticker: stopped.")
+	t.log("Ticker: stopped.\n")
 	close(t.ticked)
 }
 
@@ -43,25 +43,27 @@ func (t *profilerTestTicker) Stop() {
 // Then, sends a tick and waits for the profiler to process it.
 func (t *profilerTestTicker) Tick() bool {
 	time.Sleep(t.sleepBeforeTick)
-	t.logger("Ticker: ticking")
+	t.log("Ticker: ticking\n")
 	t.tick <- time.Now()
 	select {
 	case _, ok := <-t.ticked:
 		if ok {
-			t.logger("Ticker: tick acknowledged by the profiler.") // logged on the test goroutine
+			t.log("Ticker: tick acknowledged by the profiler.\n") // logged on the test goroutine
 			return true
 		}
-		t.logger("Ticker: tick not acknowledged (ticker stopped).")
+		t.log("Ticker: tick not acknowledged (ticker stopped).\n")
 		return false
 	case <-time.After(1 * time.Second):
-		t.logger("Ticker: timed out waiting for Tick ACK.")
+		t.log("Ticker: timed out waiting for Tick ACK.")
 		return false
 	}
 }
 
-func setupProfilerTestTicker(logger func(args ...any)) *profilerTestTicker {
+func setupProfilerTestTicker(logWriter io.Writer) *profilerTestTicker {
 	ticker := &profilerTestTicker{
-		logger:          logger,
+		log: func(format string, args ...any) {
+			fmt.Fprintf(logWriter, format, args...)
+		},
 		sleepBeforeTick: time.Millisecond,
 		tick:            make(chan time.Time, 1),
 		ticked:          make(chan struct{}),
@@ -99,7 +101,7 @@ func TestProfilerCollection(t *testing.T) {
 		var require = require.New(t)
 		var goID = getCurrentGoID()
 
-		ticker := setupProfilerTestTicker(t.Log)
+		ticker := setupProfilerTestTicker(io.Discard)
 		defer restoreProfilerTicker()
 
 		start := time.Now()
@@ -127,7 +129,7 @@ func TestProfilerCollection(t *testing.T) {
 func TestProfilerStackTrace(t *testing.T) {
 	var require = require.New(t)
 
-	ticker := setupProfilerTestTicker(t.Log)
+	ticker := setupProfilerTestTicker(io.Discard)
 	defer restoreProfilerTicker()
 
 	start := time.Now()
@@ -162,9 +164,11 @@ testing (*T).Run`))
 }
 
 func TestProfilerCollectsOnStart(t *testing.T) {
+	Logger.SetOutput(os.Stdout)
+	defer Logger.SetOutput(io.Discard)
 	var require = require.New(t)
 
-	setupProfilerTestTicker(t.Log)
+	setupProfilerTestTicker(io.Discard)
 	defer restoreProfilerTicker()
 
 	start := time.Now()
@@ -174,9 +178,11 @@ func TestProfilerCollectsOnStart(t *testing.T) {
 }
 
 func TestProfilerPanicDuringStartup(t *testing.T) {
+	Logger.SetOutput(os.Stdout)
+	defer Logger.SetOutput(io.Discard)
 	var require = require.New(t)
 
-	_ = setupProfilerTestTicker(t.Log)
+	_ = setupProfilerTestTicker(os.Stdout)
 	defer restoreProfilerTicker()
 
 	atomic.StoreInt64(&testProfilerPanic, -1)
@@ -189,7 +195,7 @@ func TestProfilerPanicDuringStartup(t *testing.T) {
 func TestProfilerPanicOnTick(t *testing.T) {
 	var assert = assert.New(t)
 
-	ticker := setupProfilerTestTicker(t.Log)
+	ticker := setupProfilerTestTicker(os.Stdout)
 	defer restoreProfilerTicker()
 
 	// Panic after the first sample is collected.
@@ -556,7 +562,7 @@ var profilerSliceBenchmarkData = struct {
 }
 
 func setupProfilerSliceBenchmark(b *testing.B) {
-	ticker := setupProfilerTestTicker(b.Log)
+	ticker := setupProfilerTestTicker(io.Discard)
 	ticker.sleepBeforeTick = time.Microsecond
 
 	start := time.Now()

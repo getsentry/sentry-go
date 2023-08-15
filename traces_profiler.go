@@ -11,12 +11,16 @@ func (span *Span) sampleTransactionProfile() {
 	var sampleRate = span.clientOptions().ProfilesSampleRate
 	switch {
 	case sampleRate < 0.0 || sampleRate > 1.0:
-		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate out of range [0.0, 1.0]: %f", sampleRate)
+		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate out of range [0.0, 1.0]: %f\n", sampleRate)
 	case sampleRate == 0.0 || rng.Float64() >= sampleRate:
-		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f", sampleRate)
+		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f\n", sampleRate)
 	default:
 		startProfilerOnce.Do(startGlobalProfiler)
-		span.collectProfile = collectTransactionProfile
+		if globalProfiler == nil {
+			Logger.Println("Skipping transaction profiling: the profiler couldn't be started")
+		} else {
+			span.collectProfile = collectTransactionProfile
+		}
 	}
 }
 
