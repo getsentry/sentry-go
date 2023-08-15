@@ -70,7 +70,7 @@ const profilerRuntimeLimit = 30 // seconds
 type profileRecorder struct {
 	startTime         time.Time
 	stopSignal        chan struct{}
-	stopped           sync.WaitGroup
+	stopped           int64
 	mutex             sync.RWMutex
 	testProfilerPanic int64
 
@@ -133,8 +133,10 @@ func (p *profileRecorder) run(started chan struct{}) {
 			Logger.Printf("Profiler panic in run(): %v\n", err)
 		}
 		atomic.StoreInt64(&testProfilerPanic, 0)
-		atomic.StoreInt64(&profilerRunning, 0)
 		close(started)
+		p.stopSignal <- struct{}{}
+		atomic.StoreInt64(&p.stopped, 1)
+		atomic.StoreInt64(&profilerRunning, 0)
 	}()
 
 	p.testProfilerPanic = atomic.LoadInt64(&testProfilerPanic)
@@ -159,17 +161,18 @@ func (p *profileRecorder) run(started chan struct{}) {
 			p.onTick()
 			collectTicker.Ticked()
 		case <-p.stopSignal:
-			p.stopped.Done()
 			return
 		}
 	}
 }
 
 func (p *profileRecorder) Stop(wait bool) {
-	p.stopped.Add(1)
+	if atomic.LoadInt64(&p.stopped) == 1 {
+		return
+	}
 	p.stopSignal <- struct{}{}
 	if wait {
-		p.stopped.Wait()
+		<-p.stopSignal
 	}
 }
 

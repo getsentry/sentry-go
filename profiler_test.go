@@ -35,7 +35,7 @@ func (t *profilerTestTicker) Ticked() {
 }
 
 func (t *profilerTestTicker) Stop() {
-	t.log("Ticker: stopped.\n")
+	t.log("Ticker: stopping.\n")
 	close(t.ticked)
 }
 
@@ -48,7 +48,7 @@ func (t *profilerTestTicker) Tick() bool {
 	select {
 	case _, ok := <-t.ticked:
 		if ok {
-			t.log("Ticker: tick acknowledged by the profiler.\n") // logged on the test goroutine
+			t.log("Ticker: tick acknowledged (received on the test goroutine).\n") // logged on the test goroutine
 			return true
 		}
 		t.log("Ticker: tick not acknowledged (ticker stopped).\n")
@@ -83,7 +83,7 @@ func TestProfilerCollection(t *testing.T) {
 
 		start := time.Now()
 		profiler := startProfiling(start)
-		defer profiler.Stop(false)
+		defer profiler.Stop(true)
 		if isCI() {
 			doWorkFor(5 * time.Second)
 		} else {
@@ -106,7 +106,7 @@ func TestProfilerCollection(t *testing.T) {
 
 		start := time.Now()
 		profiler := startProfiling(start)
-		defer profiler.Stop(false)
+		defer profiler.Stop(true)
 		require.True(ticker.Tick())
 		end := time.Now()
 		result := profiler.GetSlice(start, end)
@@ -134,7 +134,7 @@ func TestProfilerStackTrace(t *testing.T) {
 
 	start := time.Now()
 	profiler := startProfiling(start)
-	defer profiler.Stop(false)
+	defer profiler.Stop(true)
 	require.True(ticker.Tick())
 	result := profiler.GetSlice(start, time.Now())
 	require.NotNil(result)
@@ -203,7 +203,7 @@ func TestProfilerPanicOnTick(t *testing.T) {
 
 	start := time.Now()
 	profiler := startProfiling(start)
-	defer profiler.Stop(false)
+	defer profiler.Stop(true)
 	assert.True(ticker.Tick())
 	assert.False(ticker.Tick())
 
@@ -307,7 +307,7 @@ func TestProfilerSamplingRate(t *testing.T) {
 
 	start := time.Now()
 	profiler := startProfiling(start)
-	defer profiler.Stop(false)
+	defer profiler.Stop(true)
 	doWorkFor(500 * time.Millisecond)
 	end := time.Now()
 	result := profiler.GetSlice(start, end)
