@@ -3,7 +3,7 @@ module github.com/getsentry/sentry-go
 go 1.18
 
 require (
-	github.com/gin-gonic/gin v1.8.1
+	github.com/gin-gonic/gin v1.9.0
 	github.com/go-errors/errors v1.4.2
 	github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab
 	github.com/google/go-cmp v0.5.9
