@@ -2,7 +2,6 @@ package sentry
 
 import (
 	"fmt"
-	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,7 +46,7 @@ func TestProfilerCollection(t *testing.T) {
 
 		start := time.Now()
 		stopFn := startProfiling(start)
-		if isCI() {
+		if testutils.IsCI() {
 			doWorkFor(5 * time.Second)
 		} else {
 			doWorkFor(35 * time.Millisecond)
@@ -238,7 +238,7 @@ func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) 
 }
 
 func TestProfilerSamplingRate(t *testing.T) {
-	if isCI() {
+	if testutils.IsCI() {
 		t.Skip("Skipping on CI because the machines are too overloaded to provide consistent ticker resolution.")
 	}
 	if testing.Short() {
@@ -303,13 +303,9 @@ func testTick(t *testing.T, count, i int, prevTick time.Time) time.Time {
 	return time.Now()
 }
 
-func isCI() bool {
-	return os.Getenv("CI") != ""
-}
-
 // This test measures the accuracy of time.NewTicker() on the current system.
 func TestProfilerTimeTicker(t *testing.T) {
-	if isCI() {
+	if testutils.IsCI() {
 		t.Skip("Skipping on CI because the machines are too overloaded to provide consistent ticker resolution.")
 	}
 
@@ -426,7 +422,7 @@ func TestProfilerOverhead(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping overhead benchmark in short mode.")
 	}
-	if isCI() {
+	if testutils.IsCI() {
 		t.Skip("Skipping on CI because the machines are too overloaded to run the test properly - they show between 3 and 30 %% overhead....")
 	}
 
