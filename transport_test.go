@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -432,13 +433,7 @@ func TestHTTPTransport(t *testing.T) {
 
 	transportMustFlush := func(t *testing.T, id string) {
 		t.Helper()
-
-		timeout := 100 * time.Millisecond
-		if isCI() {
-			// CI is very overloaded so we need to allow for a long wait time.
-			timeout = 5 * time.Second
-		}
-		ok := transport.Flush(timeout)
+		ok := transport.Flush(testutils.FlushTimeout())
 		if !ok {
 			t.Fatalf("[CLIENT] {%.4s} Flush() timed out", id)
 		}
@@ -552,7 +547,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 	checkLastConnReuse := func(reused bool) {
 		t.Helper()
 		reqCount++
-		if !tr.Flush(2 * time.Second) {
+		if !tr.Flush(testutils.FlushTimeout()) {
 			t.Fatal("Flush timed out")
 		}
 		if len(rt.reusedConn) != reqCount {
@@ -666,7 +661,7 @@ func testRateLimiting(t *testing.T, tr Transport) {
 	}()
 	wg.Wait()
 
-	if !tr.Flush(time.Second) {
+	if !tr.Flush(testutils.FlushTimeout()) {
 		t.Fatal("Flush timed out")
 	}
 
