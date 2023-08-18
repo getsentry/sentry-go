@@ -241,7 +241,7 @@ func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 					Colno:    24,
 				},
 			},
-			Samples: []*profileSample{
+			Samples: []profileSample{
 				{
 					ElapsedSinceStartNS: 10,
 					StackID:             2,
@@ -249,8 +249,8 @@ func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 				},
 			},
 			Stacks: []profileStack{{0}},
-			ThreadMetadata: map[string]profileThreadMetadata{
-				"1": {Name: "GO 1"},
+			ThreadMetadata: map[uint64]*profileThreadMetadata{
+				1: {Name: "GO 1"},
 			},
 		},
 		Transaction: profileTransaction{
