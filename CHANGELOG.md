@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Features
+
+- Run single profiler even when profiling from multiple parallel goroutines ([#655](https://github.com/getsentry/sentry-go/pull/655))
+
 ### Bug fixes
 
 - Fix trace function name parsing in profiler on go1.21+ ([#695](https://github.com/getsentry/sentry-go/pull/695))
@@ -11,6 +15,7 @@
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.23.0.
 
 ### Features
+
 - Initial support for [Cron Monitoring](https://docs.sentry.io/product/crons/) ([#661](https://github.com/getsentry/sentry-go/pull/661))
 
   This is how the basic usage of the feature looks like:
@@ -62,6 +67,7 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 - Expose SpanFromContext function ([#672](https://github.com/getsentry/sentry-go/pull/672))
 
 ### Bug fixes
+
 - Make `Span.Finish` a no-op when the span is already finished ([#660](https://github.com/getsentry/sentry-go/pull/660))
 
 ## 0.22.0
