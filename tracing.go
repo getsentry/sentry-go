@@ -58,8 +58,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	recorder *spanRecorder
 	// span context, can only be set on transactions
 	contexts map[string]Context
-	// profiler instance if attached, nil otherwise.
-	profiler transactionProfiler
+	// collectProfile is a function that collects a profile of the current transaction. May be nil.
+	collectProfile transactionProfiler
 	// a Once instance to make sure that Finish() is only called once.
 	finishOnce sync.Once
 }
@@ -333,12 +333,6 @@ func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
 
 // doFinish runs the actual Span.Finish() logic.
 func (s *Span) doFinish() {
-	// For the timing to be correct, the profiler must be stopped before s.EndTime.
-	var profile *profileInfo
-	if s.profiler != nil {
-		profile = s.profiler.Finish(s)
-	}
-
 	if s.EndTime.IsZero() {
 		s.EndTime = monotonicTimeSince(s.StartTime)
 	}
@@ -351,7 +345,9 @@ func (s *Span) doFinish() {
 		return
 	}
 
-	event.sdkMetaData.transactionProfile = profile
+	if s.collectProfile != nil {
+		event.sdkMetaData.transactionProfile = s.collectProfile(s)
+	}
 
 	// TODO(tracing): add breadcrumbs
 	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)

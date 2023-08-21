@@ -362,6 +362,9 @@ type testContextKey struct{}
 type testContextValue struct{}
 
 func NewTestContext(options ClientOptions) context.Context {
+	if options.Transport == nil {
+		options.Transport = &TransportMock{}
+	}
 	client, err := NewClient(options)
 	if err != nil {
 		panic(err)
