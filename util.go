@@ -68,11 +68,9 @@ func defaultRelease() (release string) {
 	}
 
 	if info, ok := debug.ReadBuildInfo(); ok {
-		for _, setting := range info.Settings {
-			if setting.Key == "vcs.revision" && setting.Value != "" {
-				Logger.Printf("Using release from debug info: %s", setting.Value)
-				return setting.Value
-			}
+		buildInfoVcsRevision := revisionFromBuildInfo(info)
+		if len(buildInfoVcsRevision) > 0 {
+			return buildInfoVcsRevision
 		}
 	}
 
@@ -98,4 +96,15 @@ func defaultRelease() (release string) {
 	release = strings.TrimSpace(string(b))
 	Logger.Printf("Using release from Git: %s", release)
 	return release
+}
+
+func revisionFromBuildInfo(info *debug.BuildInfo) string {
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" && setting.Value != "" {
+			Logger.Printf("Using release from debug info: %s", setting.Value)
+			return setting.Value
+		}
+	}
+
+	return ""
 }
