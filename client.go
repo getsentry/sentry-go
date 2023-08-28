@@ -20,9 +20,6 @@ import (
 // The identifier of the SDK.
 const sdkIdentifier = "sentry.go"
 
-// Version is the version of the SDK.
-const sdkVersion = "0.23.0"
-
 // maxErrorDepth is the maximum number of errors reported in a chain of errors.
 // This protects the SDK from an arbitrarily long chain of wrapped errors.
 //
@@ -335,7 +332,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		options:       options,
 		dsn:           dsn,
 		sdkIdentifier: sdkIdentifier,
-		sdkVersion:    sdkVersion,
+		sdkVersion:    SDKVersion,
 	}
 
 	client.setupTransport()
@@ -586,10 +583,6 @@ func (client *Client) GetSDKIdentifier() string {
 	return client.sdkIdentifier
 }
 
-func (client *Client) GetSDKVersion() string {
-	return client.sdkVersion
-}
-
 // reverse reverses the slice a in place.
 func reverse(a []Exception) {
 	for i := len(a)/2 - 1; i >= 0; i-- {
@@ -676,7 +669,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	event.Platform = "go"
 	event.Sdk = SdkInfo{
 		Name:         client.GetSDKIdentifier(),
-		Version:      client.GetSDKVersion(),
+		Version:      SDKVersion,
 		Integrations: client.listIntegrations(),
 		Packages: []SdkPackage{{
 			Name:    "sentry-go",

@@ -6,11 +6,10 @@ import (
 )
 
 // The version of the SDK.
-// Deprecated: To be removed in 0.25.0. Use Client.GetSDKVersion() instead.
+// Deprecated: To be removed in 0.25.0. Use SDKVersion instead.
 const Version = SDKVersion
 
 // The version of the SDK.
-// Deprecated: To be removed in 0.25.0. Use Client.GetSDKVersion() instead.
 const SDKVersion = "0.23.0"
 
 // The identifier of the SDK.
