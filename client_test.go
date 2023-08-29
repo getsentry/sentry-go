@@ -717,6 +717,14 @@ func TestCustomMaxSpansProperty(t *testing.T) {
 	assertEqual(t, properClient.Options().MaxSpans, 3000)
 }
 
+func TestSDKIdentifier(t *testing.T) {
+	client, _, _ := setupClientTest()
+	assertEqual(t, client.GetSDKIdentifier(), "sentry.go")
+
+	client.SetSDKIdentifier("sentry.go.test")
+	assertEqual(t, client.GetSDKIdentifier(), "sentry.go.test")
+}
+
 func TestClientSetsUpTransport(t *testing.T) {
 	client, _ := NewClient(ClientOptions{Dsn: testDsn})
 	require.IsType(t, &HTTPTransport{}, client.Transport)

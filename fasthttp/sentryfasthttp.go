@@ -13,6 +13,9 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// The identifier of the FastHTTP SDK.
+const sdkIdentifier = "sentry.go.fasthttp"
+
 type contextKey int
 
 const ContextKey = contextKey(1)
@@ -58,6 +61,9 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 		// standard net/http.Request and because fasthttp.RequestCtx implements
 		// context.Context but requires string keys.
 		hub := sentry.CurrentHub().Clone()
+
+		hub.Client().SetSDKIdentifier(sdkIdentifier)
+
 		scope := hub.Scope()
 		scope.SetRequest(convert(ctx))
 		scope.SetRequestBody(ctx.Request.Body())
