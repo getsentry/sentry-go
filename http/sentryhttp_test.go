@@ -11,6 +11,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryhttp "github.com/getsentry/sentry-go/http"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -197,7 +198,7 @@ func TestIntegration(t *testing.T) {
 		res.Body.Close()
 	}
 
-	if ok := sentry.Flush(time.Second); !ok {
+	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(eventsCh)

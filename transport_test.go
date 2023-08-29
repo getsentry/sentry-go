@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -240,7 +241,7 @@ func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 					Colno:    24,
 				},
 			},
-			Samples: []*profileSample{
+			Samples: []profileSample{
 				{
 					ElapsedSinceStartNS: 10,
 					StackID:             2,
@@ -248,8 +249,8 @@ func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 				},
 			},
 			Stacks: []profileStack{{0}},
-			ThreadMetadata: map[string]profileThreadMetadata{
-				"1": {Name: "GO 1"},
+			ThreadMetadata: map[uint64]*profileThreadMetadata{
+				1: {Name: "GO 1"},
 			},
 		},
 		Transaction: profileTransaction{
@@ -433,8 +434,7 @@ func TestHTTPTransport(t *testing.T) {
 
 	transportMustFlush := func(t *testing.T, id string) {
 		t.Helper()
-
-		ok := transport.Flush(500 * time.Millisecond)
+		ok := transport.Flush(testutils.FlushTimeout())
 		if !ok {
 			t.Fatalf("[CLIENT] {%.4s} Flush() timed out", id)
 		}
@@ -448,8 +448,6 @@ func TestHTTPTransport(t *testing.T) {
 			t.Fatalf("[SERVER] event count = %d, want %d", count, n)
 		}
 	}
-
-	// Actual tests
 
 	testSendSingleEvent := func(t *testing.T) {
 		// Sending a single event should increase the server event count by
@@ -468,6 +466,8 @@ func TestHTTPTransport(t *testing.T) {
 		transportMustFlush(t, id)
 		serverEventCountMustBe(t, initialCount+1)
 	}
+
+	// Actual tests
 	t.Run("SendSingleEvent", testSendSingleEvent)
 
 	t.Run("FlushMultipleTimes", func(t *testing.T) {
@@ -486,12 +486,12 @@ func TestHTTPTransport(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
+			defer wg.Done()
 			testSendSingleEvent(t)
-			wg.Done()
 		}()
 		go func() {
+			defer wg.Done()
 			transportMustFlush(t, "from goroutine")
-			wg.Done()
 		}()
 		wg.Wait()
 	})
@@ -548,7 +548,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 	checkLastConnReuse := func(reused bool) {
 		t.Helper()
 		reqCount++
-		if !tr.Flush(2 * time.Second) {
+		if !tr.Flush(testutils.FlushTimeout()) {
 			t.Fatal("Flush timed out")
 		}
 		if len(rt.reusedConn) != reqCount {
@@ -662,7 +662,7 @@ func testRateLimiting(t *testing.T, tr Transport) {
 	}()
 	wg.Wait()
 
-	if !tr.Flush(time.Second) {
+	if !tr.Flush(testutils.FlushTimeout()) {
 		t.Fatal("Flush timed out")
 	}
 
