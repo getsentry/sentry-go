@@ -31,25 +31,17 @@ func TestFileExistsReturnsFalseForNonExistingFiles(t *testing.T) {
 
 func TestDefaultReleaseSentryReleaseEnvvar(t *testing.T) {
 	releaseVersion := "1.2.3"
-	cleanup := envSetter(map[string]string{
-		"SENTRY_RELEASE": releaseVersion,
-	})
+	t.Setenv("SENTRY_RELEASE", releaseVersion)
 
 	assertEqual(t, defaultRelease(), releaseVersion)
-
-	t.Cleanup(cleanup)
 }
 
 func TestDefaultReleaseSentryReleaseEnvvarPrecedence(t *testing.T) {
 	releaseVersion := "1.2.3"
-	cleanup := envSetter(map[string]string{
-		"SOURCE_VERSION": "3.2.1",
-		"SENTRY_RELEASE": releaseVersion,
-	})
+	t.Setenv("SOURCE_VERSION", "3.2.1")
+	t.Setenv("SENTRY_RELEASE", releaseVersion)
 
 	assertEqual(t, defaultRelease(), releaseVersion)
-
-	t.Cleanup(cleanup)
 }
 
 func TestRevisionFromBuildInfo(t *testing.T) {
@@ -76,11 +68,8 @@ func TestRevisionFromBuildInfo(t *testing.T) {
 			},
 		},
 	}
-	cleanup := envSetter(map[string]string{})
 
 	assertEqual(t, revisionFromBuildInfo(info), releaseVersion)
-
-	t.Cleanup(cleanup)
 }
 
 func TestRevisionFromBuildInfoNoVcsInformation(t *testing.T) {
@@ -99,9 +88,6 @@ func TestRevisionFromBuildInfoNoVcsInformation(t *testing.T) {
 			},
 		},
 	}
-	cleanup := envSetter(map[string]string{})
 
 	assertEqual(t, revisionFromBuildInfo(info), "")
-
-	t.Cleanup(cleanup)
 }
