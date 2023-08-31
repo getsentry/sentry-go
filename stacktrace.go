@@ -1,6 +1,8 @@
 package sentry
 
 import (
+	"errors"
+	"fmt"
 	"go/build"
 	"reflect"
 	"runtime"
@@ -350,14 +352,44 @@ func callerFunctionName() string {
 	return baseName(callerFrame.Function)
 }
 
+func goMajorMinorVersion() (major, minor int, err error) {
+	releaseTags := build.Default.ReleaseTags
+	if len(releaseTags) == 0 {
+		return -1, -1, errors.New("no release tags")
+	}
+
+	// The last release tag is presumed to be the current release. The current
+	// release will be in the form 'go1.2.3'.
+	//
+	// See https://pkg.go.dev/go/build#Context
+	if _, err := fmt.Sscanf(releaseTags[len(releaseTags)-1], "go%d.%d", &major, &minor); err != nil {
+		return -1, -1, fmt.Errorf("sscanf: %w", err)
+	}
+
+	return major, minor, nil
+}
+
 // packageName returns the package part of the symbol name, or the empty string
 // if there is none.
 // It replicates https://golang.org/pkg/debug/gosym/#Sym.PackageName, avoiding a
 // dependency on debug/gosym.
 func packageName(name string) string {
-	// A prefix of "type." and "go." is a compiler-generated symbol that doesn't belong to any package.
-	// See variable reservedimports in cmd/compile/internal/gc/subr.go
-	if strings.HasPrefix(name, "go.") || strings.HasPrefix(name, "type.") {
+	// Since go1.20, a prefix of "type:" and "go:" is a compiler-generated symbol,
+	// they do not belong to any package.
+	//
+	// See cmd/compile/internal/base/link.go:ReservedImports variable.
+	major, minor, err := goMajorMinorVersion()
+	if err != nil {
+		return ""
+	}
+	goVersionGreaterThanOrEqualTo120 := major > 1 || (major == 1 && minor >= 20)
+
+	if goVersionGreaterThanOrEqualTo120 && (strings.HasPrefix(name, "go:") || strings.HasPrefix(name, "type:")) {
+		return ""
+	}
+
+	// For go1.18 and below, the prefix are "type." and "go." instead.
+	if !goVersionGreaterThanOrEqualTo120 && (strings.HasPrefix(name, "go.") || strings.HasPrefix(name, "type.")) {
 		return ""
 	}
 
