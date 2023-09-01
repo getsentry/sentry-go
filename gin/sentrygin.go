@@ -54,21 +54,29 @@ func (h *handler) handle(c *gin.Context) {
 		hub = sentry.CurrentHub().Clone()
 		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
+
+	var transactionName string
+	var transactionSource sentry.TransactionSource
+
+	if c.FullPath() != "" {
+		transactionName = c.FullPath()
+		transactionSource = sentry.SourceRoute
+	} else {
+		transactionName = c.Request.URL.Path
+		transactionSource = sentry.SourceURL
+	}
+
 	options := []sentry.SpanOption{
 		sentry.WithOpName("http.server"),
 		sentry.ContinueFromRequest(c.Request),
-		sentry.WithTransactionSource(sentry.SourceRoute),
+		sentry.WithTransactionSource(transactionSource),
 	}
 
 	transaction := sentry.StartTransaction(ctx,
-		fmt.Sprintf("%s %s", c.Request.Method, c.FullPath()),
+		fmt.Sprintf("%s %s", c.Request.Method, transactionName),
 		options...,
 	)
 	defer func() {
-		if c.Writer.Status() == 404 {
-			transaction.Name = fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path)
-			transaction.Source = sentry.SourceURL
-		}
 		transaction.Status = sentry.HTTPtoSpanStatus(c.Writer.Status())
 		transaction.Finish()
 	}()

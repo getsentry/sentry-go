@@ -69,7 +69,7 @@ func TestIntegration(t *testing.T) {
 		},
 		{
 			RequestPath: "/404/1",
-			RoutePath:   "/some-other-route",
+			RoutePath:   "",
 			Method:      "GET",
 			WantStatus:  404,
 			Handler:     nil,
