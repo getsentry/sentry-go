@@ -13,6 +13,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// The identifier of the Gin SDK.
+const sdkIdentifier = "sentry.go.gin"
+
 const valuesKey = "sentry"
 
 type handler struct {
@@ -54,6 +57,8 @@ func (h *handler) handle(c *gin.Context) {
 		hub = sentry.CurrentHub().Clone()
 		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
+
+	hub.Client().SetSDKIdentifier(sdkIdentifier)
 
 	var transactionName string
 	var transactionSource sentry.TransactionSource

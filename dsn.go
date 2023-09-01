@@ -197,6 +197,7 @@ func (dsn Dsn) GetAPIURL() *url.URL {
 }
 
 // RequestHeaders returns all the necessary headers that have to be used in the transport.
+// Deprecated: To be removed after 0.25.0, but no earlier than December 1, 2023. Requests to /envelope are authenticated using the DSN in the envelope header itself.
 func (dsn Dsn) RequestHeaders() map[string]string {
 	auth := fmt.Sprintf("Sentry sentry_version=%s, sentry_timestamp=%d, "+
 		"sentry_client=sentry.go/%s, sentry_key=%s", apiVersion, time.Now().Unix(), Version, dsn.publicKey)

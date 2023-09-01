@@ -11,6 +11,9 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
+// The identifier of the Gin SDK.
+const sdkIdentifier = "sentry.go.http"
+
 // A Handler is an HTTP middleware factory that provides integration with
 // Sentry.
 type Handler struct {
@@ -86,6 +89,9 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			hub = sentry.CurrentHub().Clone()
 			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
+
+		hub.Client().SetSDKIdentifier(sdkIdentifier)
+
 		options := []sentry.SpanOption{
 			sentry.WithOpName("http.server"),
 			sentry.ContinueFromRequest(r),
