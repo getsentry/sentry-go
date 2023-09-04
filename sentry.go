@@ -18,7 +18,6 @@ const SDKIdentifier = "sentry.go"
 
 // apiVersion is the minimum version of the Sentry API compatible with the
 // sentry-go SDK.
-// Deprecated: To be removed in 0.25.0.
 const apiVersion = "7"
 
 // Init initializes the SDK with options. The returned error is non-nil if
