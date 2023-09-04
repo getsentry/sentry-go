@@ -321,18 +321,13 @@ func TestGetRequestFromEvent(t *testing.T) {
 	}{
 		{
 			testName: "Sample Event",
-			event:    NewEvent(),
+			event:    newTestEvent(eventType),
 			apiURL:   "https://host/path/api/42/envelope/",
 		},
 		{
 			testName: "Transaction",
-			event: func() *Event {
-				event := NewEvent()
-				event.Type = transactionType
-
-				return event
-			}(),
-			apiURL: "https://host/path/api/42/envelope/",
+			event:    newTestEvent(transactionType),
+			apiURL:   "https://host/path/api/42/envelope/",
 		},
 	}
 
@@ -360,6 +355,16 @@ func TestGetRequestFromEvent(t *testing.T) {
 			userAgent := fmt.Sprintf("%s/%s", test.event.Sdk.Name, test.event.Sdk.Version)
 			if ua := req.UserAgent(); ua != userAgent {
 				t.Errorf("got User-Agent = %q, want %q", ua, userAgent)
+			}
+
+			contentType := "application/x-sentry-envelope"
+			if ct := req.Header.Get("Content-Type"); ct != contentType {
+				t.Errorf("got Content-Type = %q, want %q", ct, contentType)
+			}
+
+			xSentryAuth := "Sentry sentry_version=7, sentry_client=sentry.go/0.0.1, sentry_key=key"
+			if auth := req.Header.Get("X-Sentry-Auth"); !strings.HasPrefix(auth, xSentryAuth) {
+				t.Errorf("got X-Sentry-Auth = %q, want %q", auth, xSentryAuth)
 			}
 		})
 	}
