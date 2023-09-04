@@ -22,41 +22,43 @@ func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
 
 	tests := []struct {
-		Path       string
-		Method     string
-		WantStatus int
-		Body       string
-		Handler    gin.HandlerFunc
+		RequestPath string
+		RoutePath   string
+		Method      string
+		WantStatus  int
+		Body        string
+		Handler     gin.HandlerFunc
 
 		WantEvent       *sentry.Event
 		WantTransaction *sentry.Event
 	}{
 		{
-			Path:       "/panic",
-			Method:     "GET",
-			WantStatus: 200,
+			RequestPath: "/panic/1",
+			RoutePath:   "/panic/:id",
+			Method:      "GET",
+			WantStatus:  200,
 			Handler: func(c *gin.Context) {
 				panic("test")
 			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "GET /panic",
+				Transaction: "GET /panic/:id",
 				Request: &sentry.Request{
-					URL:    "/panic",
+					URL:    "/panic/1",
 					Method: "GET",
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip",
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
 				Message: "test",
 				Request: &sentry.Request{
-					URL:    "/panic",
+					URL:    "/panic/1",
 					Method: "GET",
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip",
@@ -66,10 +68,33 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:       "/post",
-			Method:     "POST",
-			WantStatus: 200,
-			Body:       "payload",
+			RequestPath: "/404/1",
+			RoutePath:   "",
+			Method:      "GET",
+			WantStatus:  404,
+			Handler:     nil,
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "GET /404/1",
+				Request: &sentry.Request{
+					URL:    "/404/1",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+			},
+			WantEvent: nil,
+		},
+		{
+			RequestPath: "/post",
+			RoutePath:   "/post",
+			Method:      "POST",
+			WantStatus:  200,
+			Body:        "payload",
 			Handler: func(c *gin.Context) {
 				hub := sentry.GetHubFromContext(c.Request.Context())
 				body, err := io.ReadAll(c.Request.Body)
@@ -93,7 +118,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -111,9 +136,10 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:       "/get",
-			Method:     "GET",
-			WantStatus: 200,
+			RequestPath: "/get",
+			RoutePath:   "/get",
+			Method:      "GET",
+			WantStatus:  200,
 			Handler: func(c *gin.Context) {
 				hub := sentry.GetHubFromContext(c.Request.Context())
 				hub.CaptureMessage("get")
@@ -131,7 +157,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -147,10 +173,11 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:       "/post/large",
-			Method:     "POST",
-			WantStatus: 200,
-			Body:       largePayload,
+			RequestPath: "/post/large",
+			RoutePath:   "/post/large",
+			Method:      "POST",
+			WantStatus:  200,
+			Body:        largePayload,
 			Handler: func(c *gin.Context) {
 				hub := sentry.GetHubFromContext(c.Request.Context())
 				body, err := io.ReadAll(c.Request.Body)
@@ -172,7 +199,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -191,10 +218,11 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:       "/post/body-ignored",
-			Method:     "POST",
-			WantStatus: 200,
-			Body:       "client sends, server ignores, SDK doesn't read",
+			RequestPath: "/post/body-ignored",
+			RoutePath:   "/post/body-ignored",
+			Method:      "POST",
+			WantStatus:  200,
+			Body:        "client sends, server ignores, SDK doesn't read",
 			Handler: func(c *gin.Context) {
 				hub := sentry.GetHubFromContext(c.Request.Context())
 				hub.CaptureMessage("body ignored")
@@ -214,7 +242,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -233,9 +261,10 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:       "/badreq",
-			Method:     "GET",
-			WantStatus: 400,
+			RequestPath: "/badreq",
+			RoutePath:   "/badreq",
+			Method:      "GET",
+			WantStatus:  400,
 			Handler: func(c *gin.Context) {
 				c.JSON(http.StatusBadRequest, gin.H{"status": "bad_request"})
 			},
@@ -251,7 +280,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 			WantEvent: nil,
 		},
@@ -279,7 +308,7 @@ func TestIntegration(t *testing.T) {
 	router.Use(sentrygin.New(sentrygin.Options{}))
 
 	for _, tt := range tests {
-		router.Handle(tt.Method, tt.Path, tt.Handler)
+		router.Handle(tt.Method, tt.RoutePath, tt.Handler)
 	}
 
 	srv := httptest.NewServer(router)
@@ -304,7 +333,7 @@ func TestIntegration(t *testing.T) {
 		wanttrans = append(wanttrans, tt.WantTransaction)
 		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
 
-		req, err := http.NewRequest(tt.Method, srv.URL+tt.Path, strings.NewReader(tt.Body))
+		req, err := http.NewRequest(tt.Method, srv.URL+tt.RequestPath, strings.NewReader(tt.Body))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -315,7 +344,10 @@ func TestIntegration(t *testing.T) {
 		if res.StatusCode != tt.WantStatus {
 			t.Errorf("Status code = %d expected: %d", res.StatusCode, tt.WantStatus)
 		}
-		res.Body.Close()
+		err = res.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {

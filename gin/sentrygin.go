@@ -60,14 +60,25 @@ func (h *handler) handle(c *gin.Context) {
 
 	hub.Client().SetSDKIdentifier(sdkIdentifier)
 
+	var transactionName string
+	var transactionSource sentry.TransactionSource
+
+	if c.FullPath() != "" {
+		transactionName = c.FullPath()
+		transactionSource = sentry.SourceRoute
+	} else {
+		transactionName = c.Request.URL.Path
+		transactionSource = sentry.SourceURL
+	}
+
 	options := []sentry.SpanOption{
 		sentry.WithOpName("http.server"),
 		sentry.ContinueFromRequest(c.Request),
-		sentry.WithTransactionSource(sentry.SourceURL),
+		sentry.WithTransactionSource(transactionSource),
 	}
 
 	transaction := sentry.StartTransaction(ctx,
-		fmt.Sprintf("%s %s", c.Request.Method, c.Request.URL.Path),
+		fmt.Sprintf("%s %s", c.Request.Method, transactionName),
 		options...,
 	)
 	defer func() {
