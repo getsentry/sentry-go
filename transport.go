@@ -215,6 +215,9 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 			auth := fmt.Sprintf("Sentry sentry_version=%s, "+
 				"sentry_client=%s/%s, sentry_key=%s", apiVersion, event.Sdk.Name, event.Sdk.Version, dsn.publicKey)
 
+			// The key sentry_secret is effectively deprecated and no longer needs to be set.
+			// However, since it was required in self-hosted older versions,
+			// it should still passed through to Sentry if set.
 			if dsn.secretKey != "" {
 				auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.secretKey)
 			}
