@@ -1,14 +1,25 @@
 # Changelog
 
-## Unreleased
+## 0.24.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.24.0.
 
 ### Features
 
 - Run single profiler even when profiling from multiple parallel goroutines ([#655](https://github.com/getsentry/sentry-go/pull/655))
+- Use route paths as transaction names when using Gin integration ([#675](https://github.com/getsentry/sentry-go/pull/675))
+- Set SDK name accordingly when a framework is used ([#694](https://github.com/getsentry/sentry-go/pull/694))
+- Read release information (VCS revision) from `debug.ReadBuildInfo` ([#704](https://github.com/getsentry/sentry-go/pull/704))
 
 ### Bug fixes
 
+- [otel] Fix incorrect usage of `attributes.Value.AsString` ([#684](https://github.com/getsentry/sentry-go/pull/684))
 - Fix trace function name parsing in profiler on go1.21+ ([#695](https://github.com/getsentry/sentry-go/pull/695))
+
+### Misc
+
+- Test against Go 1.21 ([#695](https://github.com/getsentry/sentry-go/pull/695))
+- Make tests more robust ([#698](https://github.com/getsentry/sentry-go/pull/698), [#699](https://github.com/getsentry/sentry-go/pull/699), [#700](https://github.com/getsentry/sentry-go/pull/700), [#702](https://github.com/getsentry/sentry-go/pull/702))
 
 ## 0.23.0
 
