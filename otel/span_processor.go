@@ -103,6 +103,10 @@ func (ssp *sentrySpanProcessor) ForceFlush(ctx context.Context) error {
 
 func flushSpanProcessor(ctx context.Context) error {
 	hub := sentry.GetHubFromContext(ctx)
+	if hub == nil {
+		hub = sentry.CurrentHub()
+	}
+
 	// TODO(michi) should we make this configurable?
 	defer hub.Flush(2 * time.Second)
 	return nil
