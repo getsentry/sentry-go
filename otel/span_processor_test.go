@@ -72,7 +72,7 @@ func TestNewSentrySpanProcessor(t *testing.T) {
 
 func TestSpanProcessorShutdown(t *testing.T) {
 	spanProcessor, _, tracer := setupSpanProcessorTest()
-	ctx := emptyContextWithSentry()
+	ctx := context.Background()
 	tracer.Start(emptyContextWithSentry(), "spanName")
 
 	assertEqual(t, sentrySpanMap.Len(), 1)
