@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -136,10 +137,13 @@ type ClientOptions struct {
 	// The sample rate for profiling traces in the range [0.0, 1.0].
 	// This is relative to TracesSampleRate - it is a ratio of profiled traces out of all sampled traces.
 	ProfilesSampleRate float64
-	// List of regexp strings that will be used to match against event's message
-	// and if applicable, caught errors type and value.
-	// If the match is found, then a whole event will be dropped.
+	// List of regexp strings that will be used to match against an event's
+	// message and if applicable, the caught error's type and value.  If a match
+	// is found, then the whole event will be dropped.
 	IgnoreErrors []string
+	// List of regexp strings that will be used to match against a transaction's
+	// name.  If a match is found, then the transaction  will be dropped.
+	IgnoreTransactions []string
 	// If this flag is enabled, certain personally identifiable information (PII) is added by active integrations.
 	// By default, no such data is sent.
 	SendDefaultPII bool
@@ -226,13 +230,15 @@ type ClientOptions struct {
 // Client is the underlying processor that is used by the main API and Hub
 // instances. It must be created with NewClient.
 type Client struct {
-	mu              sync.RWMutex
-	options         ClientOptions
-	dsn             *Dsn
-	eventProcessors []EventProcessor
-	integrations    []Integration
-	sdkIdentifier   string
-	sdkVersion      string
+	mu                 sync.RWMutex
+	options            ClientOptions
+	dsn                *Dsn
+	eventProcessors    []EventProcessor
+	integrations       []Integration
+	sdkIdentifier      string
+	sdkVersion         string
+	ignoreErrors       []*regexp.Regexp
+	ignoreTransactions []*regexp.Regexp
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
 	Transport Transport
@@ -328,11 +334,31 @@ func NewClient(options ClientOptions) (*Client, error) {
 		}
 	}
 
+	ignoreErrorsRegexes := make([]*regexp.Regexp, len(options.IgnoreErrors))
+	for i, re := range options.IgnoreErrors {
+		compiled, err := regexp.Compile(re)
+		if err != nil {
+			return nil, err
+		}
+		ignoreErrorsRegexes[i] = compiled
+	}
+
+	ignoreTransactionsRegexes := make([]*regexp.Regexp, len(options.IgnoreTransactions))
+	for i, re := range options.IgnoreTransactions {
+		compiled, err := regexp.Compile(re)
+		if err != nil {
+			return nil, err
+		}
+		ignoreTransactionsRegexes[i] = compiled
+	}
+
 	client := Client{
-		options:       options,
-		dsn:           dsn,
-		sdkIdentifier: sdkIdentifier,
-		sdkVersion:    SDKVersion,
+		options:            options,
+		dsn:                dsn,
+		sdkIdentifier:      sdkIdentifier,
+		sdkVersion:         SDKVersion,
+		ignoreErrors:       ignoreErrorsRegexes,
+		ignoreTransactions: ignoreTransactionsRegexes,
 	}
 
 	client.setupTransport()
@@ -624,6 +650,22 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		if event = client.options.BeforeSend(event, hint); event == nil {
 			Logger.Println("Event dropped due to BeforeSend callback.")
 			return nil
+		}
+	}
+
+	if event.Type == transactionType {
+		for _, re := range client.ignoreTransactions {
+			if re.MatchString(event.Transaction) {
+				Logger.Println("Transaction dropped due to IgnoreTransactions match.")
+				return nil
+			}
+		}
+	} else {
+		for _, re := range client.ignoreErrors {
+			if re.MatchString(event.Message) {
+				Logger.Println("Event dropped due to IgnoreErrors match.")
+				return nil
+			}
 		}
 	}
 
