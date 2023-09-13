@@ -51,7 +51,9 @@ func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.H
 		hub = sentry.CurrentHub().Clone()
 	}
 
-	hub.Client().SetSDKIdentifier(sdkIdentifier)
+	if client := hub.Client(); client == nil {
+		client.SetSDKIdentifier(sdkIdentifier)
+	}
 
 	hub.Scope().SetRequest(r)
 	ctx = sentry.SetHubOnContext(
