@@ -58,7 +58,9 @@ func (h *handler) handle(c *gin.Context) {
 		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
 
-	hub.Client().SetSDKIdentifier(sdkIdentifier)
+	if client := hub.Client(); client != nil {
+		client.SetSDKIdentifier(sdkIdentifier)
+	}
 
 	var transactionName string
 	var transactionSource sentry.TransactionSource

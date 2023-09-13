@@ -90,7 +90,9 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
 
-		hub.Client().SetSDKIdentifier(sdkIdentifier)
+		if client := hub.Client(); client != nil {
+			client.SetSDKIdentifier(sdkIdentifier)
+		}
 
 		options := []sentry.SpanOption{
 			sentry.WithOpName("http.server"),

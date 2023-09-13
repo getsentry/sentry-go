@@ -53,7 +53,9 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			hub = sentry.CurrentHub().Clone()
 		}
 
-		hub.Client().SetSDKIdentifier(sdkIdentifier)
+		if client := hub.Client(); client != nil {
+			client.SetSDKIdentifier(sdkIdentifier)
+		}
 
 		hub.Scope().SetRequest(ctx.Request())
 		ctx.Set(valuesKey, hub)
