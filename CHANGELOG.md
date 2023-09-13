@@ -1,8 +1,23 @@
 # Changelog
 
+## 0.24.1
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.24.1.
+
+### Bug fixes
+
+- Prevent a panic in `sentryotel.flushSpanProcessor()` ([(#711)](https://github.com/getsentry/sentry-go/pull/711))
+- Prevent a panic when setting the SDK identifier ([#715](https://github.com/getsentry/sentry-go/pull/715))
+
 ## 0.24.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.24.0.
+
+### Deprecations
+
+- `sentry.Version` to be removed in 0.25.0. Use `sentry.SDKVersion` instead.
+- `sentry.SDKIdentifier` to be removed in 0.25.0. Use `Client.GetSDKIdentifier()` instead.
+- `dsn.RequestHeaders()` to be removed after 0.25.0, but no earlier than December 1, 2023. Requests to the `/envelope` endpoint are authenticated using the DSN in the envelope header.
 
 ### Features
 
