@@ -10,7 +10,7 @@ import (
 const Version = SDKVersion
 
 // The version of the SDK.
-const SDKVersion = "0.24.0"
+const SDKVersion = "0.24.1"
 
 // The identifier of the SDK.
 // Deprecated: To be removed in 0.25.0. Use Client.GetSDKIdentifier() instead.
