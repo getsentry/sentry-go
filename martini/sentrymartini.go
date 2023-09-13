@@ -50,7 +50,7 @@ func (h *handler) handle(rw http.ResponseWriter, r *http.Request, ctx martini.Co
 		hub = sentry.CurrentHub().Clone()
 	}
 
-	if client := hub.Client(); client == nil {
+	if client := hub.Client(); client != nil {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 

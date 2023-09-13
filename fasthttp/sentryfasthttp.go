@@ -62,7 +62,7 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 		// context.Context but requires string keys.
 		hub := sentry.CurrentHub().Clone()
 
-		if client := hub.Client(); client == nil {
+		if client := hub.Client(); client != nil {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 

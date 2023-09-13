@@ -58,7 +58,7 @@ func (h *handler) handle(c *gin.Context) {
 		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
 
-	if client := hub.Client(); client == nil {
+	if client := hub.Client(); client != nil {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 

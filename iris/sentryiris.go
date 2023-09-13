@@ -55,7 +55,7 @@ func (h *handler) handle(ctx iris.Context) {
 		hub = sentry.CurrentHub().Clone()
 	}
 
-	if client := hub.Client(); client == nil {
+	if client := hub.Client(); client != nil {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
