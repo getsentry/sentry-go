@@ -659,7 +659,6 @@ func TestIgnoreTransactions(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestSampleRate(t *testing.T) {
