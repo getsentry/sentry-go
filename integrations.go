@@ -178,6 +178,40 @@ func getIgnoreErrorsSuspects(event *Event) []string {
 }
 
 // ================================
+// Ignore Transactions Integration
+// ================================
+
+type ignoreTransactionsIntegration struct {
+	ignoreTransactions []*regexp.Regexp
+}
+
+func (iei *ignoreTransactionsIntegration) Name() string {
+	return "IgnoreTransactions"
+}
+
+func (iei *ignoreTransactionsIntegration) SetupOnce(client *Client) {
+	iei.ignoreTransactions = transformStringsIntoRegexps(client.options.IgnoreTransactions)
+	client.AddEventProcessor(iei.processor)
+}
+
+func (iei *ignoreTransactionsIntegration) processor(event *Event, hint *EventHint) *Event {
+	suspect := event.Transaction
+	if suspect == "" {
+		return event
+	}
+
+	for _, pattern := range iei.ignoreTransactions {
+		if pattern.Match([]byte(suspect)) {
+			Logger.Printf("Transaction dropped due to being matched by `IgnoreTransactions` option."+
+				"| Value matched: %s | Filter used: %s", suspect, pattern)
+			return nil
+		}
+	}
+
+	return event
+}
+
+// ================================
 // Contextify Frames Integration
 // ================================
 
