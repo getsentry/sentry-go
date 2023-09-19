@@ -349,6 +349,10 @@ func (ti *globalTagsIntegration) SetupOnce(client *Client) {
 }
 
 func (ti *globalTagsIntegration) processor(event *Event, hint *EventHint) *Event {
+	if len(ti.tags) == 0 && len(ti.envTags) == 0 {
+		return event
+	}
+
 	if event.Tags == nil {
 		event.Tags = make(map[string]string, len(ti.tags)+len(ti.envTags))
 	}
