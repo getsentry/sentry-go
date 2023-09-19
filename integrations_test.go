@@ -461,11 +461,11 @@ func TestGlobalTagsIntegration(t *testing.T) {
 	assertEqual(t,
 		transport.lastEvent.Tags["bar"],
 		"bar_value_env",
-		"env tag present if not overriden by scope or client options tags",
+		"env tag present if not overridden by scope or client options tags",
 	)
 	assertEqual(t,
 		transport.lastEvent.Tags["baz"],
 		"baz_value_client_options",
-		"client options tag present if not overriden by scope and overrides env tag",
+		"client options tag present if not overridden by scope and overrides env tag",
 	)
 }
