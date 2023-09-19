@@ -224,7 +224,7 @@ type ClientOptions struct {
 	// is not optimized for long chains either. The top-level error together with a
 	// stack trace is often the most useful information.
 	MaxErrorDepth int
-	// Optional global tags
+	// Default event tags. These are overriden by tags set on a scope.
 	Tags map[string]string
 }
 
