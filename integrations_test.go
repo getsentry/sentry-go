@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -420,4 +421,51 @@ func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
 	if contexts["custom"]["key"] != "value" {
 		t.Errorf(`contexts["custom"]["key"] = %#v, want "value"`, contexts["custom"]["key"])
 	}
+}
+
+func TestGlobalTagsIntegration(t *testing.T) {
+	os.Setenv("SENTRY_TAGS_FOO", "foo_value_env")
+	os.Setenv("SENTRY_TAGS_BAR", "bar_value_env")
+	os.Setenv("SENTRY_TAGS_BAZ", "baz_value_env")
+	defer os.Unsetenv("SENTRY_TAGS_FOO")
+	defer os.Unsetenv("SENTRY_TAGS_BAR")
+	defer os.Unsetenv("SENTRY_TAGS_BAZ")
+
+	transport := &TransportMock{}
+	client, err := NewClient(ClientOptions{
+		Transport: transport,
+		Tags: map[string]string{
+			"foo": "foo_value_client_options",
+			"baz": "baz_value_client_options",
+		},
+		Integrations: func([]Integration) []Integration {
+			return []Integration{new(globalTagsIntegration)}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scope := NewScope()
+	scope.SetTags(map[string]string{"foo": "foo_value_scope"})
+
+	event := NewEvent()
+	event.Message = "event message"
+	client.CaptureEvent(event, nil, scope)
+
+	assertEqual(t,
+		transport.lastEvent.Tags["foo"],
+		"foo_value_scope",
+		"scope tag should override any global tag",
+	)
+	assertEqual(t,
+		transport.lastEvent.Tags["bar"],
+		"bar_value_env",
+		"env tag present if not overriden by scope or client options tags",
+	)
+	assertEqual(t,
+		transport.lastEvent.Tags["baz"],
+		"baz_value_client_options",
+		"client options tag present if not overriden by scope and overrides env tag",
+	)
 }

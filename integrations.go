@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"runtime"
 	"runtime/debug"
@@ -324,4 +325,59 @@ func (cfi *contextifyFramesIntegration) addContextLinesToFrame(frame Frame, line
 		}
 	}
 	return frame
+}
+
+// ================================
+// Global Tags Integration
+// ================================
+
+const envTagsPrefix = "SENTRY_TAGS_"
+
+type globalTagsIntegration struct {
+	tags    map[string]string
+	envTags map[string]string
+}
+
+func (ti *globalTagsIntegration) Name() string {
+	return "GlobalTags"
+}
+
+func (ti *globalTagsIntegration) SetupOnce(client *Client) {
+	ti.tags = client.options.Tags
+	ti.envTags = loadEnvTags()
+	client.AddEventProcessor(ti.processor)
+}
+
+func (ti *globalTagsIntegration) processor(event *Event, hint *EventHint) *Event {
+	if event.Tags == nil {
+		event.Tags = make(map[string]string, len(ti.tags)+len(ti.envTags))
+	}
+
+	for k, v := range ti.tags {
+		if _, ok := event.Tags[k]; !ok {
+			event.Tags[k] = v
+		}
+	}
+
+	for k, v := range ti.envTags {
+		if _, ok := event.Tags[k]; !ok {
+			event.Tags[k] = v
+		}
+	}
+
+	return event
+}
+
+func loadEnvTags() map[string]string {
+	tags := map[string]string{}
+	for _, pair := range os.Environ() {
+		parts := strings.Split(pair, "=")
+		if !strings.HasPrefix(parts[0], envTagsPrefix) {
+			continue
+		}
+		tag := strings.TrimPrefix(parts[0], envTagsPrefix)
+		tag = strings.ToLower(tag)
+		tags[tag] = parts[1]
+	}
+	return tags
 }
