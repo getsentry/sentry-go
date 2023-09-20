@@ -173,6 +173,39 @@ func TestIgnoreErrorsIntegration(t *testing.T) {
 	}
 }
 
+func TestIgnoreTransactionsIntegration(t *testing.T) {
+	iei := ignoreTransactionsIntegration{
+		ignoreTransactions: []*regexp.Regexp{
+			regexp.MustCompile("foo"),
+			regexp.MustCompile("(?i)bar"),
+		},
+	}
+
+	dropped := &Event{
+		Transaction: "foo",
+	}
+
+	alsoDropped := &Event{
+		Transaction: "Bar",
+	}
+
+	notDropped := &Event{
+		Transaction: "dont",
+	}
+
+	if iei.processor(dropped, &EventHint{}) != nil {
+		t.Error("Transaction should be dropped")
+	}
+
+	if iei.processor(alsoDropped, &EventHint{}) != nil {
+		t.Error("Transaction should be dropped")
+	}
+
+	if iei.processor(notDropped, &EventHint{}) == nil {
+		t.Error("Transaction should not be dropped")
+	}
+}
+
 func TestContextifyFrames(t *testing.T) {
 	cfi := contextifyFramesIntegration{
 		sr:           newSourceReader(),
