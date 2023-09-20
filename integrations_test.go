@@ -424,12 +424,12 @@ func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
 }
 
 func TestGlobalTagsIntegration(t *testing.T) {
-	os.Setenv("SENTRY_TAGS_FOO", "foo_value_env")
-	os.Setenv("SENTRY_TAGS_BAR", "bar_value_env")
-	os.Setenv("SENTRY_TAGS_BAZ", "baz_value_env")
-	defer os.Unsetenv("SENTRY_TAGS_FOO")
-	defer os.Unsetenv("SENTRY_TAGS_BAR")
-	defer os.Unsetenv("SENTRY_TAGS_BAZ")
+	os.Setenv("SENTRY_TAGS_foo", "foo_value_env")
+	os.Setenv("SENTRY_TAGS_bar", "bar_value_env")
+	os.Setenv("SENTRY_TAGS_baz", "baz_value_env")
+	defer os.Unsetenv("SENTRY_TAGS_foo")
+	defer os.Unsetenv("SENTRY_TAGS_bar")
+	defer os.Unsetenv("SENTRY_TAGS_baz")
 
 	transport := &TransportMock{}
 	client, err := NewClient(ClientOptions{

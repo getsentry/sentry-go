@@ -385,7 +385,6 @@ func loadEnvTags() map[string]string {
 			continue
 		}
 		tag := strings.TrimPrefix(parts[0], envTagsPrefix)
-		tag = strings.ToLower(tag)
 		tags[tag] = parts[1]
 	}
 	return tags
