@@ -343,8 +343,13 @@ func (ti *globalTagsIntegration) Name() string {
 }
 
 func (ti *globalTagsIntegration) SetupOnce(client *Client) {
-	ti.tags = client.options.Tags
+	ti.tags = make(map[string]string, len(client.options.Tags))
+	for k, v := range client.options.Tags {
+		ti.tags[k] = v
+	}
+
 	ti.envTags = loadEnvTags()
+
 	client.AddEventProcessor(ti.processor)
 }
 
