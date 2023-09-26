@@ -224,6 +224,8 @@ type ClientOptions struct {
 	// is not optimized for long chains either. The top-level error together with a
 	// stack trace is often the most useful information.
 	MaxErrorDepth int
+	// Default event tags. These are overridden by tags set on a scope.
+	Tags map[string]string
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -375,6 +377,7 @@ func (client *Client) setupIntegrations() {
 		new(modulesIntegration),
 		new(ignoreErrorsIntegration),
 		new(ignoreTransactionsIntegration),
+		new(globalTagsIntegration),
 	}
 
 	if client.options.Integrations != nil {
