@@ -835,7 +835,7 @@ type SpanOption func(s *Span)
 // starting a span affects the span tree as a whole, potentially overwriting a
 // name set previously.
 //
-// Deprecated: Use WithTransactionName() instead.
+// Deprecated: To be removed in 0.26.0. Use WithTransactionName() instead.
 func TransactionName(name string) SpanOption {
 	return WithTransactionName(name)
 }
@@ -853,7 +853,7 @@ func WithTransactionName(name string) SpanOption {
 
 // OpName sets the operation name for a given span.
 //
-// Deprecated: Use WithOpName() instead.
+// Deprecated: To be removed in 0.26.0. Use WithOpName() instead.
 func OpName(name string) SpanOption {
 	return WithOpName(name)
 }
@@ -867,7 +867,7 @@ func WithOpName(name string) SpanOption {
 
 // TransctionSource sets the source of the transaction name.
 //
-// Deprecated: Use WithTransactionSource() instead.
+// Deprecated: To be removed in 0.26.0. Use WithTransactionSource() instead.
 func TransctionSource(source TransactionSource) SpanOption {
 	return WithTransactionSource(source)
 }
@@ -885,7 +885,7 @@ func WithTransactionSource(source TransactionSource) SpanOption {
 
 // SpanSampled updates the sampling flag for a given span.
 //
-// Deprecated: Use WithSpanSampled() instead.
+// Deprecated: To be removed in 0.26.0. Use WithSpanSampled() instead.
 func SpanSampled(sampled Sampled) SpanOption {
 	return WithSpanSampled(sampled)
 }
