@@ -59,18 +59,8 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
-		var transactionName string
-		var transactionSource sentry.TransactionSource
-
-		if ctx.Path() != "" {
-			transactionName = ctx.Path()
-			transactionSource = sentry.SourceRoute
-		} else {
-			// ctx.Path() is never empty, but this should still be here
-			// for handling edge cases that ctx.Path() is empty.
-			transactionName = ctx.Request().URL.Path
-			transactionSource = sentry.SourceURL
-		}
+		var transactionName = ctx.Path()
+		var transactionSource = sentry.SourceRoute
 
 		options := []sentry.SpanOption{
 			sentry.WithOpName("http.server"),

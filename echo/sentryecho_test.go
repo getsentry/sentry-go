@@ -288,6 +288,40 @@ func TestIntegration(t *testing.T) {
 			},
 			WantEvent: nil,
 		},
+		{
+			RequestPath: "/more-traces",
+			RoutePath:   "/more-traces",
+			Method:      "GET",
+			WantStatus:  200,
+			Body:        "",
+			Handler: func(c echo.Context) error {
+				span := sentryecho.GetTransactionFromContext(c)
+				child := span.StartChild("first_task")
+				time.Sleep(time.Microsecond)
+				child.Finish()
+
+				child = span.StartChild("second_task")
+				time.Sleep(time.Microsecond)
+				child.Finish()
+
+				return c.NoContent(http.StatusOK)
+			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "GET /more-traces",
+				Request: &sentry.Request{
+					URL:    "/more-traces",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+			},
+			WantEvent: nil,
+		},
 	}
 
 	eventsCh := make(chan *sentry.Event, len(tests))
@@ -408,32 +442,66 @@ func TestIntegration(t *testing.T) {
 }
 
 func TestGetTransactionFromContext(t *testing.T) {
-	eventsCh := make(chan *sentry.Event, 1)
-	transactionsCh := make(chan *sentry.Event, 1)
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			eventsCh <- event
-			return event
-		},
-		BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			transactionsCh <- tx
-			return tx
-		},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	router := echo.New()
-	router.Use(sentryecho.New(sentryecho.Options{}))
-	router.GET("/", func(c echo.Context) error {
-		return c.JSON(200, echo.Map{"hello": "world"})
+	router.GET("/no-transaction", func(c echo.Context) error {
+		transaction := sentryecho.GetTransactionFromContext(c)
+		if transaction != nil {
+			t.Error("expecting transaction to be nil")
+		}
+		return c.NoContent(http.StatusOK)
 	})
+	router.GET("/with-transaction", func(c echo.Context) error {
+		transaction := sentryecho.GetTransactionFromContext(c)
+		if transaction == nil {
+			t.Error("expecting transaction to be not nil")
+		}
+		return c.NoContent(http.StatusOK)
+	}, sentryecho.New(sentryecho.Options{}))
+
 	srv := httptest.NewServer(router)
 	defer srv.Close()
 
 	c := srv.Client()
+
+	tests := []struct {
+		RequestPath string
+	}{
+		{
+			RequestPath: "/no-transaction",
+		},
+		{
+			RequestPath: "/with-transaction",
+		},
+	}
 	c.Timeout = time.Second
+
+	for _, tt := range tests {
+		req, err := http.NewRequest("GET", srv.URL+tt.RequestPath, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.StatusCode != 200 {
+			t.Errorf("Status code = %d expected: %d", res.StatusCode, 200)
+		}
+		err = res.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+			t.Fatal("sentry.Flush timed out")
+		}
+	}
 }
