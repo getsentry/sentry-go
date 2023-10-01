@@ -2,6 +2,7 @@ package sentryecho
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 const sdkIdentifier = "sentry.go.echo"
 
 const valuesKey = "sentry"
+const transactionKey = "sentry_transaction"
 
 type handler struct {
 	repanic         bool
@@ -22,7 +24,7 @@ type handler struct {
 
 type Options struct {
 	// Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to true,
-	// as echo includes it's own Recover middleware what handles http responses.
+	// as echo includes its own Recover middleware what handles http responses.
 	Repanic bool
 	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
 	// Because Echo's Recover handler doesn't restart the application,
@@ -57,8 +59,41 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
+		var transactionName string
+		var transactionSource sentry.TransactionSource
+
+		if ctx.Path() != "" {
+			transactionName = ctx.Path()
+			transactionSource = sentry.SourceRoute
+		} else {
+			// ctx.Path() is never empty, but this should still be here
+			// for handling edge cases that ctx.Path() is empty.
+			transactionName = ctx.Request().URL.Path
+			transactionSource = sentry.SourceURL
+		}
+
+		options := []sentry.SpanOption{
+			sentry.WithOpName("http.server"),
+			sentry.ContinueFromRequest(ctx.Request()),
+			sentry.WithTransactionSource(transactionSource),
+		}
+
+		transaction := sentry.StartTransaction(
+			sentry.SetHubOnContext(ctx.Request().Context(), hub),
+			fmt.Sprintf("%s %s", ctx.Request().Method, transactionName),
+			options...,
+		)
+		defer func() {
+			// TODO: For nil handler (or not found routes), ctx.Response().Status will always be 200
+			// instead of 404.
+			transaction.Status = sentry.HTTPtoSpanStatus(ctx.Response().Status)
+			transaction.Finish()
+		}()
+
+		// We can't reassign `ctx.Request()`, so we'd need to put it inside echo.Context
 		hub.Scope().SetRequest(ctx.Request())
 		ctx.Set(valuesKey, hub)
+		ctx.Set(transactionKey, transaction)
 		defer h.recoverWithSentry(hub, ctx.Request())
 		return next(ctx)
 	}
@@ -83,6 +118,15 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 func GetHubFromContext(ctx echo.Context) *sentry.Hub {
 	if hub, ok := ctx.Get(valuesKey).(*sentry.Hub); ok {
 		return hub
+	}
+	return nil
+}
+
+// GetTransactionFromContext retrieves attached *sentry.Span instance from echo.Context.
+// If there is no transaction on echo.Context, it will return nil.
+func GetTransactionFromContext(ctx echo.Context) *sentry.Span {
+	if span, ok := ctx.Get(transactionKey).(*sentry.Span); ok {
+		return span
 	}
 	return nil
 }
