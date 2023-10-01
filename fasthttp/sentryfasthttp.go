@@ -20,6 +20,7 @@ type contextKey int
 
 const ContextKey = contextKey(1)
 const valuesKey = "sentry"
+const transactionKey = "sentry_transaction"
 
 type Handler struct {
 	repanic         bool
@@ -66,10 +67,28 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
+		convertedHttpRequest := convert(ctx)
+
+		options := []sentry.SpanOption{
+			sentry.WithOpName("http.server"),
+			sentry.ContinueFromRequest(convertedHttpRequest),
+			sentry.WithTransactionSource(sentry.SourceRoute),
+		}
+		transaction := sentry.StartTransaction(
+			sentry.SetHubOnContext(ctx, hub),
+			fmt.Sprintf("%s %s", string(ctx.Method()), string(ctx.Path())),
+			options...,
+		)
+		defer func() {
+			transaction.Status = sentry.HTTPtoSpanStatus(ctx.Response.StatusCode())
+			transaction.Finish()
+		}()
+
 		scope := hub.Scope()
-		scope.SetRequest(convert(ctx))
+		scope.SetRequest(convertedHttpRequest)
 		scope.SetRequestBody(ctx.Request.Body())
 		ctx.SetUserValue(valuesKey, hub)
+		ctx.SetUserValue(transactionKey, transaction)
 		defer h.recoverWithSentry(hub, ctx)
 		handler(ctx)
 	}
@@ -95,6 +114,15 @@ func GetHubFromContext(ctx *fasthttp.RequestCtx) *sentry.Hub {
 	hub := ctx.UserValue(valuesKey)
 	if hub, ok := hub.(*sentry.Hub); ok {
 		return hub
+	}
+	return nil
+}
+
+// GetTransactionFromContext retrieves attached *sentry.Span instance from *fasthttp.RequestCtx.
+// If there is no transaction on *fasthttp.RequestCtx, it will return nil.
+func GetTransactionFromContext(ctx *fasthttp.RequestCtx) *sentry.Span {
+	if span, ok := ctx.UserValue(transactionKey).(*sentry.Span); ok {
+		return span
 	}
 	return nil
 }
