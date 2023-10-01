@@ -67,11 +67,11 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
-		convertedHttpRequest := convert(ctx)
+		convertedHTTPRequest := convert(ctx)
 
 		options := []sentry.SpanOption{
 			sentry.WithOpName("http.server"),
-			sentry.ContinueFromRequest(convertedHttpRequest),
+			sentry.ContinueFromRequest(convertedHTTPRequest),
 			sentry.WithTransactionSource(sentry.SourceRoute),
 		}
 		transaction := sentry.StartTransaction(
@@ -85,7 +85,7 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 		}()
 
 		scope := hub.Scope()
-		scope.SetRequest(convertedHttpRequest)
+		scope.SetRequest(convertedHTTPRequest)
 		scope.SetRequestBody(ctx.Request.Body())
 		ctx.SetUserValue(valuesKey, hub)
 		ctx.SetUserValue(transactionKey, transaction)
