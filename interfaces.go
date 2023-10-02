@@ -335,6 +335,13 @@ type Event struct {
 
 	sdkMetaData SDKMetaData
 	attachments []*Attachment
+	sampleRate  float64 `json:"-"`
+}
+
+// SetSampleRate allows setting a per event sample rate that takes
+// precendence over the global sample rate.
+func (e *Event) SetSampleRate(r float64) {
+	e.sampleRate = r
 }
 
 // SetException appends the unwrapped errors to the event's exception list.
@@ -494,10 +501,11 @@ func (e *Event) checkInMarshalJSON() ([]byte, error) {
 // NewEvent creates a new Event.
 func NewEvent() *Event {
 	event := Event{
-		Contexts: make(map[string]Context),
-		Extra:    make(map[string]interface{}),
-		Tags:     make(map[string]string),
-		Modules:  make(map[string]string),
+		sampleRate: -1.0,
+		Contexts:   make(map[string]Context),
+		Extra:      make(map[string]interface{}),
+		Tags:       make(map[string]string),
+		Modules:    make(map[string]string),
 	}
 	return &event
 }

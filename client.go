@@ -607,7 +607,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	// Transactions are sampled by options.TracesSampleRate or
 	// options.TracesSampler when they are started. All other events
 	// (errors, messages) are sampled here.
-	if event.Type != transactionType && !sample(client.options.SampleRate) {
+	if event.Type != transactionType && !sample(firstNonNegativeRate(event.sampleRate, client.options.SampleRate)) {
 		Logger.Println("Event dropped due to SampleRate hit.")
 		return nil
 	}
@@ -737,4 +737,14 @@ func (client *Client) integrationAlreadyInstalled(name string) bool {
 // [0.0, 1.0].
 func sample(probability float64) bool {
 	return rng.Float64() < probability
+}
+
+func firstNonNegativeRate(rates ...float64) float64 {
+	for _, r := range rates {
+		if r >= 0.0 {
+			return r
+		}
+	}
+
+	return 0.0
 }
