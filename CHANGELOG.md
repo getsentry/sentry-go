@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Bug fixes
+
+- Profiler infinite loop after a transaction longer than the limit of 30 seconds ([#725](https://github.com/getsentry/sentry-go/pull/725))
+
 ## 0.24.1
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.24.1.
