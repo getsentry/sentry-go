@@ -138,7 +138,7 @@ func TestProfilerRingBufferOverflow(t *testing.T) {
 	profiler := startProfiling(time.Now())
 	defer profiler.Stop(true)
 
-	// skip a few ticks to emulate profiler running before a transaction starts
+	// Skip a few ticks to emulate the profiler already running before a transaction starts
 	for i := 0; i < 100; i++ {
 		require.True(ticker.Tick())
 	}
@@ -152,7 +152,8 @@ func TestProfilerRingBufferOverflow(t *testing.T) {
 		require.True(ticker.Tick())
 	}
 
-	// Add a few more ticks after the transaction ends but before collecting. This emulates how the SDK normally works.
+	// Add a few more ticks after the transaction ends but prior collecting it.
+	// This emulates how the SDK normally behaves.
 	const ticksAfterEnd = 5
 	end := time.Now()
 	for i := 0; i < ticksAfterEnd; i++ {

@@ -244,14 +244,14 @@ func (p *profileRecorder) getBuckets(relativeStartNS, relativeEndNS uint64) (sam
 		for start.Value != nil {
 			var bucket = start.Value.(*profileSamplesBucket)
 
-			// If this bucket time is before requestes start time, don't collect it (and stop iterating further).
+			// If this bucket's time is before the requests start time, don't collect it (and stop iterating further).
 			if bucket.relativeTimeNS < relativeStartNS {
 				break
 			}
 
-			// If this bucket time is greater than previous bucket's time, we have exhausted the whole ring buffer
-			// before we were able to find the start time. That means, the start time is not present and we must break.
-			// This happens if the slice duration is greater than the ring buffer capacity.
+			// If this bucket time is greater than previous the bucket's time, we have exhausted the whole ring buffer
+			// before we were able to find the start time. That means the start time is not present and we must break.
+			// This happens if the slice duration exceeds the ring buffer capacity.
 			if prevBucket != nil && bucket.relativeTimeNS > prevBucket.relativeTimeNS {
 				break
 			}

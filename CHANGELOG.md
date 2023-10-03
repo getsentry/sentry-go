@@ -4,7 +4,7 @@
 
 ### Bug fixes
 
-- Profiler infinite loop after a transaction longer than the limit of 30 seconds ([#725](https://github.com/getsentry/sentry-go/pull/725))
+- Fix an infinite loop in the profiler if a transaction's duration is longer than 30 seconds ([#725](https://github.com/getsentry/sentry-go/pull/725))
 
 ## 0.24.1
 
