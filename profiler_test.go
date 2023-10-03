@@ -126,6 +126,53 @@ func TestProfilerCollection(t *testing.T) {
 	})
 }
 
+func TestProfilerRingBufferOverflow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping in short mode.")
+	}
+
+	var require = require.New(t)
+	ticker := setupProfilerTestTicker(io.Discard)
+	defer restoreProfilerTicker()
+
+	profiler := startProfiling(time.Now())
+	defer profiler.Stop(true)
+
+	// Skip a few ticks to emulate the profiler already running before a transaction starts
+	for i := 0; i < 100; i++ {
+		require.True(ticker.Tick())
+	}
+	start := time.Now()
+
+	// Emulate a transaction running for longer than the limit (30 seconds).
+	// The buffer should be 3030 items long, i.e. 30 seconds * 101 samples per second.
+	recorder := profiler.(*profileRecorder)
+	require.Equal(3030, recorder.samplesBucketsHead.Len())
+	for i := 0; i < recorder.samplesBucketsHead.Len(); i++ {
+		require.True(ticker.Tick())
+	}
+
+	// Add a few more ticks after the transaction ends but prior collecting it.
+	// This emulates how the SDK normally behaves.
+	const ticksAfterEnd = 5
+	end := time.Now()
+	for i := 0; i < ticksAfterEnd; i++ {
+		require.True(ticker.Tick())
+	}
+
+	result := profiler.GetSlice(start, end)
+	require.NotNil(result)
+	validateProfile(t, result.trace, end.Sub(start))
+
+	// Calculate the number of buckets (profiler internal representation).
+	// It should be the same as the length of the ring buffer minus ticksAfterEnd.
+	buckets := make(map[uint64]bool)
+	for _, sample := range result.trace.Samples {
+		buckets[sample.ElapsedSinceStartNS] = true
+	}
+	require.Equal(recorder.samplesBucketsHead.Len()-ticksAfterEnd, len(buckets))
+}
+
 // Check the order of frames for a known stack trace (i.e. this test case).
 func TestProfilerStackTrace(t *testing.T) {
 	var require = require.New(t)
