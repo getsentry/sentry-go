@@ -4,7 +4,7 @@
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.25.0.
 
-### Deprecations
+### Breaking Changes
 
 As previously announced, this release removes two global constants from the SDK.
 
