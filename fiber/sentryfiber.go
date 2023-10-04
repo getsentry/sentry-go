@@ -74,26 +74,28 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),
 	}
 
-	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(ctx.Context(), hub),
-		fmt.Sprintf("%s %s", method, transactionName),
-		options...,
-	)
+	if hub.Client().Options().Instrumenter == "sentry" {
+		transaction := sentry.StartTransaction(
+			sentry.SetHubOnContext(ctx.Context(), hub),
+			fmt.Sprintf("%s %s", method, transactionName),
+			options...,
+		)
 
-	defer func() {
-		status := ctx.Response().StatusCode()
-		transaction.Status = sentry.HTTPtoSpanStatus(status)
-		transaction.SetData("http.response.status_code", status)
-		transaction.Finish()
-	}()
+		defer func() {
+			status := ctx.Response().StatusCode()
+			transaction.Status = sentry.HTTPtoSpanStatus(status)
+			transaction.SetData("http.response.status_code", status)
+			transaction.Finish()
+		}()
 
-	transaction.SetData("http.request.method", method)
+		transaction.SetData("http.request.method", method)
+		ctx.Locals(transactionKey, transaction)
+	}
 
 	scope := hub.Scope()
 	scope.SetRequest(convertedHTTPRequest)
 	scope.SetRequestBody(ctx.Request().Body())
 	ctx.Locals(valuesKey, hub)
-	ctx.Locals(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, ctx)
 	return ctx.Next()
 }
