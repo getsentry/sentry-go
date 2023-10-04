@@ -1,10 +1,28 @@
 # Changelog
 
-## Unreleased
+## 0.25.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.25.0.
+
+### Deprecations
+
+As previously announced, this release removes two global constants from the SDK.
+
+- `sentry.Version` was removed. Use `sentry.SDKVersion` instead ([#727](https://github.com/getsentry/sentry-go/pull/727))
+- `sentry.SDKIdentifier` was removed. Use `Client.GetSDKIdentifier()` instead ([#727](https://github.com/getsentry/sentry-go/pull/727))
+
+### Features
+
+- Add `ClientOptions.IgnoreTransactions`, which allows you to ignore specific transactions based on their name ([#717](https://github.com/getsentry/sentry-go/pull/717))
+- Add `ClientOptions.Tags`, which allows you to set global tags that are applied to all events. You can also define tags by setting `SENTRY_TAGS_` environment variables ([#718](https://github.com/getsentry/sentry-go/pull/718))
 
 ### Bug fixes
 
-- Fix an infinite loop in the profiler if a transaction's duration is longer than 30 seconds ([#725](https://github.com/getsentry/sentry-go/pull/725))
+- Fix an issue in the profiler that would cause an infinite loop if the duration of a transaction is longer than 30 seconds ([#724](https://github.com/getsentry/sentry-go/issues/724))
+
+### Misc
+
+- `dsn.RequestHeaders()` is not to be removed, though it is still considered deprecated and should only be used when using a custom transport that sends events to the `/store` endpoint ([#720](https://github.com/getsentry/sentry-go/pull/720))
 
 ## 0.24.1
 
