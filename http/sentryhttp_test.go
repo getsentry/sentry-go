@@ -14,6 +14,8 @@ import (
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIntegration(t *testing.T) {
@@ -354,5 +356,60 @@ func TestIntegration(t *testing.T) {
 
 	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestInstrumenters(t *testing.T) {
+	tests := []struct {
+		instrumenter   string
+		expectedEvents int
+	}{
+		{
+			instrumenter:   "sentry",
+			expectedEvents: 1,
+		},
+		{
+			instrumenter:   "otel",
+			expectedEvents: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.instrumenter, func(t *testing.T) {
+			sentEvents := make(map[string]struct{})
+			err := sentry.Init(sentry.ClientOptions{
+				Dsn:              "http://example@example.com/123",
+				Debug:            true,
+				EnableTracing:    true,
+				TracesSampleRate: 1.0,
+				Instrumenter:     tt.instrumenter,
+				BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+					sentEvents[string(event.EventID)] = struct{}{}
+					return event
+				},
+			})
+			require.NoError(t, err)
+
+			sentryHandler := sentryhttp.New(sentryhttp.Options{})
+			noopHandler := func(w http.ResponseWriter, r *http.Request) {}
+			srv := httptest.NewServer(sentryHandler.HandleFunc(noopHandler))
+			defer srv.Close()
+
+			c := srv.Client()
+			c.Timeout = time.Second
+
+			req, err := http.NewRequest("GET", srv.URL, http.NoBody)
+			require.NoError(t, err)
+
+			resp, err := c.Do(req)
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+				t.Fatal("sentry.Flush timed out")
+			}
+
+			assert.Equal(t, tt.expectedEvents, len(sentEvents), "wrong number of sent events")
+		})
 	}
 }
