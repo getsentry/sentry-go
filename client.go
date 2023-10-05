@@ -307,12 +307,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 	switch options.Instrumenter {
 	case "":
 		options.Instrumenter = "sentry"
-	case "sentry":
-		// noop
-	case "otel":
-		// sampling is performed by the OpenTelemetry SDK
-		options.TracesSampleRate = 1.0
-		options.TracesSampler = nil
+	case "sentry", "otel": // noop
 	default:
 		return nil, fmt.Errorf("invalid value for TracesInstrumenter (supported are 'sentry' and 'otel'): %q", options.Instrumenter)
 	}
