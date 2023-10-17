@@ -253,9 +253,8 @@ func (s *Span) SetContext(key string, value Context) {
 func (s *Span) IsTransaction() bool {
 	if s.recorder != nil {
 		return s == s.recorder.root()
-	} else {
-		return false
 	}
+	return false
 }
 
 // GetTransaction returns the transaction that contains this span.
