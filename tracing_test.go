@@ -875,26 +875,6 @@ func TestSpanSetContextOverrides(t *testing.T) {
 	assertEqual(t, map[string]Context{"a": {"foo": 2}}, transaction.contexts)
 }
 
-// This test should be the only thing to fail when deprecated TransactionName is removed.
-func TestDeprecatedSpanOptionTransactionName(t *testing.T) {
-	StartSpan(context.Background(), "op", TransactionName("name"))
-}
-
-// This test should be the only thing to fail when deprecated OpName is removed.
-func TestDeprecatedSpanOptionOpName(t *testing.T) {
-	StartSpan(context.Background(), "op", OpName("name"))
-}
-
-// This test should be the only thing to fail when deprecated SpanSampled is removed.
-func TestDeprecatedSpanOptionSpanSampled(t *testing.T) {
-	StartSpan(context.Background(), "op", SpanSampled(SampledTrue))
-}
-
-// This test should be the only thing to fail when deprecated TransctionSource is removed.
-func TestDeprecatedSpanOptionTransctionSource(t *testing.T) {
-	StartSpan(context.Background(), "op", TransctionSource("src"))
-}
-
 // This test checks that there are no concurrent reads/writes to
 // substructures in scope.contexts.
 // See https://github.com/getsentry/sentry-go/issues/570 for more details.
