@@ -551,7 +551,6 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 
 		assertEqual(t, s, tt.wantSpan)
 	}
-
 }
 
 func TestContinueSpanFromTrace(t *testing.T) {
