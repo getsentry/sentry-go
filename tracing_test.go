@@ -488,8 +488,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			traceStr:   "",
 			baggageStr: "",
 			wantSpan: &Span{
-				isTransaction: true,
-				Sampled:       0,
+				Sampled: 0,
 				dynamicSamplingContext: DynamicSamplingContext{
 					Frozen:  false,
 					Entries: nil,
@@ -501,8 +500,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			traceStr:   "",
 			baggageStr: "other-vendor-key1=value1;value2, other-vendor-key2=value3",
 			wantSpan: &Span{
-				isTransaction: true,
-				Sampled:       0,
+				Sampled: 0,
 				dynamicSamplingContext: DynamicSamplingContext{
 					Frozen:  false,
 					Entries: map[string]string{},
@@ -515,10 +513,9 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
 			baggageStr: "",
 			wantSpan: &Span{
-				isTransaction: true,
-				TraceID:       TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
-				ParentSpanID:  SpanIDFromHex("b72fa28504b07285"),
-				Sampled:       1,
+				TraceID:      TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
+				ParentSpanID: SpanIDFromHex("b72fa28504b07285"),
+				Sampled:      1,
 				dynamicSamplingContext: DynamicSamplingContext{
 					Frozen: true,
 				},
@@ -529,10 +526,9 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
 			baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
 			wantSpan: &Span{
-				isTransaction: true,
-				TraceID:       TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
-				ParentSpanID:  SpanIDFromHex("b72fa28504b07285"),
-				Sampled:       1,
+				TraceID:      TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
+				ParentSpanID: SpanIDFromHex("b72fa28504b07285"),
+				Sampled:      1,
 				dynamicSamplingContext: DynamicSamplingContext{
 					Frozen: true,
 					Entries: map[string]string{
@@ -546,12 +542,16 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		s := &Span{isTransaction: true}
+		s := &Span{}
+		s.recorder = &spanRecorder{}
+		s.recorder.record(s)
+		tt.wantSpan.recorder = s.recorder
 		spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
 		spanOption(s)
 
 		assertEqual(t, s, tt.wantSpan)
 	}
+
 }
 
 func TestContinueSpanFromTrace(t *testing.T) {
@@ -702,9 +702,11 @@ func TestDoesNotCrashWithEmptyContext(t *testing.T) {
 
 func TestSetDynamicSamplingContextWorksOnTransaction(t *testing.T) {
 	s := Span{
-		isTransaction:          true,
 		dynamicSamplingContext: DynamicSamplingContext{Frozen: false},
 	}
+	s.recorder = &spanRecorder{}
+	s.recorder.record(&s)
+
 	newDsc := DynamicSamplingContext{
 		Entries: map[string]string{"environment": "dev"},
 		Frozen:  true,
@@ -720,7 +722,6 @@ func TestSetDynamicSamplingContextWorksOnTransaction(t *testing.T) {
 func TestSetDynamicSamplingContextDoesNothingOnSpan(t *testing.T) {
 	// SetDynamicSamplingContext should do nothing on non-transaction spans
 	s := Span{
-		isTransaction:          false,
 		dynamicSamplingContext: DynamicSamplingContext{},
 	}
 	newDsc := DynamicSamplingContext{
@@ -812,7 +813,7 @@ func TestGetTransactionReturnsNilOnManuallyCreatedSpans(t *testing.T) {
 		t.Errorf("GetTransaction() should return nil on manually created Spans")
 	}
 
-	span2 := Span{isTransaction: true}
+	span2 := Span{}
 	if span2.GetTransaction() != nil {
 		t.Errorf("GetTransaction() should return nil on manually created Spans")
 	}
