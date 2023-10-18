@@ -829,17 +829,6 @@ func (s Sampled) Bool() bool {
 // A SpanOption is a function that can modify the properties of a span.
 type SpanOption func(s *Span)
 
-// The TransactionName option sets the name of the current transaction.
-//
-// A span tree has a single transaction name, therefore using this option when
-// starting a span affects the span tree as a whole, potentially overwriting a
-// name set previously.
-//
-// Deprecated: To be removed in 0.26.0. Use WithTransactionName() instead.
-func TransactionName(name string) SpanOption {
-	return WithTransactionName(name)
-}
-
 // WithTransactionName option sets the name of the current transaction.
 //
 // A span tree has a single transaction name, therefore using this option when
@@ -851,25 +840,11 @@ func WithTransactionName(name string) SpanOption {
 	}
 }
 
-// OpName sets the operation name for a given span.
-//
-// Deprecated: To be removed in 0.26.0. Use WithOpName() instead.
-func OpName(name string) SpanOption {
-	return WithOpName(name)
-}
-
 // WithOpName sets the operation name for a given span.
 func WithOpName(name string) SpanOption {
 	return func(s *Span) {
 		s.Op = name
 	}
-}
-
-// TransctionSource sets the source of the transaction name.
-//
-// Deprecated: To be removed in 0.26.0. Use WithTransactionSource() instead.
-func TransctionSource(source TransactionSource) SpanOption {
-	return WithTransactionSource(source)
 }
 
 // WithTransactionSource sets the source of the transaction name.
@@ -881,13 +856,6 @@ func WithTransactionSource(source TransactionSource) SpanOption {
 	return func(s *Span) {
 		s.Source = source
 	}
-}
-
-// SpanSampled updates the sampling flag for a given span.
-//
-// Deprecated: To be removed in 0.26.0. Use WithSpanSampled() instead.
-func SpanSampled(sampled Sampled) SpanOption {
-	return WithSpanSampled(sampled)
 }
 
 // WithSpanSampled updates the sampling flag for a given span.
