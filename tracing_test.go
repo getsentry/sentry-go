@@ -543,9 +543,6 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 
 	for _, tt := range tests {
 		s := &Span{}
-		s.recorder = &spanRecorder{}
-		s.recorder.record(s)
-		tt.wantSpan.recorder = s.recorder
 		spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
 		spanOption(s)
 
@@ -703,8 +700,6 @@ func TestSetDynamicSamplingContextWorksOnTransaction(t *testing.T) {
 	s := Span{
 		dynamicSamplingContext: DynamicSamplingContext{Frozen: false},
 	}
-	s.recorder = &spanRecorder{}
-	s.recorder.record(&s)
 
 	newDsc := DynamicSamplingContext{
 		Entries: map[string]string{"environment": "dev"},
@@ -721,6 +716,7 @@ func TestSetDynamicSamplingContextWorksOnTransaction(t *testing.T) {
 func TestSetDynamicSamplingContextDoesNothingOnSpan(t *testing.T) {
 	// SetDynamicSamplingContext should do nothing on non-transaction spans
 	s := Span{
+		parent:                 &Span{},
 		dynamicSamplingContext: DynamicSamplingContext{},
 	}
 	newDsc := DynamicSamplingContext{
