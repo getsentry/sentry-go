@@ -338,7 +338,7 @@ func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) 
 	}
 
 	for i, frame := range trace.Frames {
-		if jsonData, e := json.Marshal(frame); e == nil {
+		if jsonData, err := json.Marshal(frame); err == nil {
 			t.Logf("Frame %d: %v", i, string(jsonData))
 		}
 
