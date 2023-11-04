@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/rand"
@@ -317,29 +318,34 @@ func findPrimeNumber(n int) int {
 
 func validateProfile(t *testing.T, trace *profileTrace, duration time.Duration) {
 	var require = require.New(t)
+	var assert = assert.New(t)
 	require.NotNil(trace)
-	require.NotEmpty(trace.Samples)
-	require.NotEmpty(trace.Stacks)
-	require.NotEmpty(trace.Frames)
-	require.NotEmpty(trace.ThreadMetadata)
+	assert.NotEmpty(trace.Samples)
+	assert.NotEmpty(trace.Stacks)
+	assert.NotEmpty(trace.Frames)
+	assert.NotEmpty(trace.ThreadMetadata)
 
 	for _, sample := range trace.Samples {
-		require.GreaterOrEqual(sample.ElapsedSinceStartNS, uint64(0))
-		require.GreaterOrEqual(uint64(duration.Nanoseconds()), sample.ElapsedSinceStartNS)
-		require.GreaterOrEqual(sample.StackID, 0)
-		require.Less(sample.StackID, len(trace.Stacks))
-		require.Contains(trace.ThreadMetadata, sample.ThreadID)
+		assert.GreaterOrEqual(sample.ElapsedSinceStartNS, uint64(0))
+		assert.GreaterOrEqual(uint64(duration.Nanoseconds()), sample.ElapsedSinceStartNS)
+		assert.GreaterOrEqual(sample.StackID, 0)
+		assert.Less(sample.StackID, len(trace.Stacks))
+		assert.Contains(trace.ThreadMetadata, sample.ThreadID)
 	}
 
 	for _, thread := range trace.ThreadMetadata {
-		require.NotEmpty(thread.Name)
+		assert.NotEmpty(thread.Name)
 	}
 
-	for _, frame := range trace.Frames {
-		require.NotEmpty(frame.Function)
-		require.NotContains(frame.Function, " ") // Space in the function name is likely a parsing error
-		require.Greater(len(frame.AbsPath)+len(frame.Filename), 0)
-		require.Greater(frame.Lineno, 0)
+	for i, frame := range trace.Frames {
+		if jsonData, err := json.Marshal(frame); err == nil {
+			t.Logf("Frame %d: %v", i, string(jsonData))
+		}
+
+		assert.NotEmpty(frame.Function)
+		assert.NotContains(frame.Function, " ") // Space in the function name is likely a parsing error
+		assert.Greater(len(frame.AbsPath)+len(frame.Filename), 0)
+		assert.Greater(frame.Lineno, 0)
 	}
 }
 
@@ -423,6 +429,10 @@ func countSamples(profiler *profileRecorder) (value int) {
 // we should test the profiler API only, this is trying to reduce a chance of a broken code that may externally work
 // but has unbounded memory usage or similar performance issue.
 func TestProfilerInternalMaps(t *testing.T) {
+	if testutils.IsCI() && testutils.IsRaceTest() {
+		t.Skip("This is too flaky on slow CI when run with other goroutines in parallel " +
+			" (there are multiple instances of HTTPTransport.worker() when the whole test suite is run).")
+	}
 	var assert = assert.New(t)
 
 	profiler := newProfiler(time.Now())
