@@ -51,8 +51,6 @@ func NewPropagationContext() PropagationContext {
 		panic(err)
 	}
 
-	p.DynamicSamplingContext = DynamicSamplingContext{}
-
 	return p
 }
 
