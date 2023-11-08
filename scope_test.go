@@ -416,6 +416,8 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone.SetUser(User{ID: "foo"})
 	r1 := httptest.NewRequest("GET", "/foo", nil)
 	clone.SetRequest(r1)
+	p1 := NewPropagationContext()
+	clone.SetPropagationContext(p1)
 
 	scope.SetTag("foo", "baz")
 	scope.SetContext("foo", Context{"foo": "baz"})
@@ -427,6 +429,8 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	scope.SetUser(User{ID: "bar"})
 	r2 := httptest.NewRequest("GET", "/bar", nil)
 	scope.SetRequest(r2)
+	p2 := NewPropagationContext()
+	scope.SetPropagationContext(p2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, clone.contexts)
@@ -437,6 +441,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "foo.txt", Payload: []byte("foo")}}, clone.attachments)
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r1, clone.request)
+	assertEqual(t, p1, clone.propagationContext)
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -447,6 +452,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r2, scope.request)
+	assertEqual(t, p2, scope.propagationContext)
 }
 
 func TestScopeChildOverrideInheritance(t *testing.T) {
@@ -465,6 +471,8 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
 		return event
 	})
+	p1 := NewPropagationContext()
+	scope.SetPropagationContext(p1)
 
 	clone := scope.Clone()
 	clone.SetTag("foo", "bar")
@@ -480,6 +488,8 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
 		return event
 	})
+	p2 := NewPropagationContext()
+	clone.SetPropagationContext(p2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, clone.contexts)
@@ -496,6 +506,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	}, clone.attachments)
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r2, clone.request)
+	assertEqual(t, p2, clone.propagationContext)
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -506,6 +517,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r1, scope.request)
+	assertEqual(t, p1, scope.propagationContext)
 
 	assertEqual(t, len(scope.eventProcessors), 1)
 	assertEqual(t, len(clone.eventProcessors), 2)
@@ -524,6 +536,7 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, (*http.Request)(nil), scope.request)
+	assertEqual(t, PropagationContext{}, scope.propagationContext)
 }
 
 func TestClearAndReconfigure(t *testing.T) {
@@ -540,6 +553,8 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetUser(User{ID: "foo"})
 	r := httptest.NewRequest("GET", "/foo", nil)
 	scope.SetRequest(r)
+	p := NewPropagationContext()
+	scope.SetPropagationContext(p)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, scope.contexts)
@@ -550,6 +565,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "foo.txt", Payload: []byte("foo")}}, scope.attachments)
 	assertEqual(t, User{ID: "foo"}, scope.user)
 	assertEqual(t, r, scope.request)
+	assertEqual(t, p, scope.propagationContext)
 }
 
 func TestClearBreadcrumbs(t *testing.T) {
@@ -694,4 +710,12 @@ func TestCloneContext(t *testing.T) {
 	if &sliceOriginal[0] != &sliceClone[0] {
 		t.Error("complex values are not supposed to be copied")
 	}
+}
+
+func TestScopeSetPropagationContext(t *testing.T) {
+	scope := NewScope()
+	p := NewPropagationContext()
+	scope.SetPropagationContext(p)
+
+	assertEqual(t, scope.propagationContext, p)
 }
