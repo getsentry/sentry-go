@@ -309,7 +309,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		options.Instrumenter = "sentry"
 	case "sentry", "otel": // noop
 	default:
-		return nil, fmt.Errorf("invalid value for TracesInstrumenter (supported are 'sentry' and 'otel'): %q", options.Instrumenter)
+		return nil, fmt.Errorf("invalid value for Instrumenter (supported are 'sentry' and 'otel'): %q", options.Instrumenter)
 	}
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
