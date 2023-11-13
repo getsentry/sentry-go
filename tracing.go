@@ -49,11 +49,6 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	// parent refers to the immediate local parent span. A remote parent span is
 	// only referenced by setting ParentSpanID.
 	parent *Span
-	// isTransaction is true only for the root span of a local span tree. The
-	// root span is the first span started in a context. Note that a local root
-	// span may have a remote parent belonging to the same trace, therefore
-	// isTransaction depends on ctx and not on parent.
-	isTransaction bool
 	// recorder stores all spans in a transaction. Guaranteed to be non-nil.
 	recorder *spanRecorder
 	// span context, can only be set on transactions
@@ -114,9 +109,8 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		StartTime: time.Now(),
 		Sampled:   SampledUndefined,
 
-		ctx:           context.WithValue(ctx, spanContextKey{}, &span),
-		parent:        parent,
-		isTransaction: !hasParent,
+		ctx:    context.WithValue(ctx, spanContextKey{}, &span),
+		parent: parent,
 	}
 
 	if hasParent {
@@ -257,7 +251,7 @@ func (s *Span) SetContext(key string, value Context) {
 
 // IsTransaction checks if the given span is a transaction.
 func (s *Span) IsTransaction() bool {
-	return s.isTransaction
+	return s.parent == nil
 }
 
 // GetTransaction returns the transaction that contains this span.
@@ -326,7 +320,7 @@ func (s *Span) ToBaggage() string {
 // SetDynamicSamplingContext sets the given dynamic sampling context on the
 // current transaction.
 func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
-	if s.isTransaction {
+	if s.IsTransaction() {
 		s.dynamicSamplingContext = dsc
 	}
 }
@@ -391,7 +385,7 @@ func (s *Span) updateFromSentryTrace(header []byte) (updated bool) {
 }
 
 func (s *Span) updateFromBaggage(header []byte) {
-	if s.isTransaction {
+	if s.IsTransaction() {
 		dsc, err := DynamicSamplingContextFromHeader(header)
 		if err != nil {
 			return
@@ -452,7 +446,7 @@ func (s *Span) sample() Sampled {
 	// Note: non-transaction should always have a parent, but we check both
 	// conditions anyway -- the first for semantic meaning, the second to
 	// avoid a nil pointer dereference.
-	if !s.isTransaction && s.parent != nil {
+	if !s.IsTransaction() && s.parent != nil {
 		return s.parent.Sampled
 	}
 
@@ -516,7 +510,7 @@ func (s *Span) toEvent() *Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.isTransaction {
+	if !s.IsTransaction() {
 		return nil // only transactions can be transformed into events
 	}
 
