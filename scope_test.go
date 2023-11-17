@@ -29,6 +29,7 @@ func fillScopeWithData(scope *Scope) *Scope {
 	scope.fingerprint = []string{"scopeFingerprintOne", "scopeFingerprintTwo"}
 	scope.level = LevelDebug
 	scope.request = httptest.NewRequest("GET", "/wat", nil)
+	scope.propagationContext = NewPropagationContext()
 	return scope
 }
 
