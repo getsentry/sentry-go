@@ -337,6 +337,18 @@ type Event struct {
 	attachments []*Attachment
 }
 
+// AddAttachment adds an Event-specific Attachment
+//
+// Scope attachments will still be added to this event
+func (e *Event) AddAttachment(attachment *Attachment) {
+	e.attachments = append(e.attachments, attachment)
+}
+
+// ClearAttachments clears all Event-specific attachments from the event.
+func (e *Event) ClearAttachments() {
+	e.attachments = []*Attachment{}
+}
+
 // SetException appends the unwrapped errors to the event's exception list.
 //
 // maxErrorDepth is the maximum depth of the error chain we will look
