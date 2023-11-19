@@ -13,7 +13,8 @@ func (span *Span) sampleTransactionProfile() {
 	case sampleRate < 0.0 || sampleRate > 1.0:
 		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate out of range [0.0, 1.0]: %f\n", sampleRate)
 	case sampleRate == 0.0 || rng.Float64() >= sampleRate:
-		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f\n", sampleRate)
+		// Skip silently, this can flood logs with high TracesSampleRate
+		// Logger.Printf("Skipping transaction profiling: ProfilesSampleRate is: %f\n", sampleRate)
 	default:
 		startProfilerOnce.Do(startGlobalProfiler)
 		if globalProfiler == nil {
@@ -37,8 +38,11 @@ func startGlobalProfiler() {
 func collectTransactionProfile(span *Span) *profileInfo {
 	result := globalProfiler.GetSlice(span.StartTime, span.EndTime)
 	if result == nil || result.trace == nil {
+		Logger.Printf("No profile collected for span '%s'\n", span.Name)
 		return nil
 	}
+	Logger.Printf("Collected profile for span '%s' with %d samples, %d routines, %d stacks, %d frames\n", span.Name,
+		len(result.trace.Samples), len(result.trace.ThreadMetadata), len(result.trace.Stacks), len(result.trace.Frames))
 
 	info := &profileInfo{
 		Version: "1",
