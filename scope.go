@@ -43,6 +43,8 @@ type Scope struct {
 		Overflow() bool
 	}
 	eventProcessors []EventProcessor
+
+	propagationContext PropagationContext
 }
 
 // NewScope creates a new Scope.
@@ -292,6 +294,14 @@ func (scope *Scope) SetLevel(level Level) {
 	scope.level = level
 }
 
+// SetPropagationContext sets the propagation context for the current scope.
+func (scope *Scope) SetPropagationContext(propagationContext PropagationContext) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
+	scope.propagationContext = propagationContext
+}
+
 // Clone returns a copy of the current scope with all data copied over.
 func (scope *Scope) Clone() *Scope {
 	scope.mu.RLock()
@@ -318,6 +328,7 @@ func (scope *Scope) Clone() *Scope {
 	clone.request = scope.request
 	clone.requestBody = scope.requestBody
 	clone.eventProcessors = scope.eventProcessors
+	clone.propagationContext = scope.propagationContext
 	return clone
 }
 

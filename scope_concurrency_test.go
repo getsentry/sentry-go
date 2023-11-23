@@ -57,6 +57,7 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.AddAttachment(&sentry.Attachment{Filename: "foo.txt"})
 	scope.SetUser(sentry.User{ID: "foo"})
 	scope.SetRequest(httptest.NewRequest("GET", "/foo", nil))
+	scope.SetPropagationContext(sentry.NewPropagationContext())
 
 	sentry.CaptureException(fmt.Errorf("error %d", x))
 
