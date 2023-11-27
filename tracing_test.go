@@ -345,7 +345,7 @@ func TestWithDescription(t *testing.T) {
 		EnableTracing: true,
 	})
 	span := StartSpan(ctx, "Test Span", WithDescription("span desc"))
-	if (span.Description!= "span desc") {
+	if span.Description != "span desc" {
 		t.Fatalf("Description mismatch, expected span desc, got %v", span.Description)
 	}
 }
