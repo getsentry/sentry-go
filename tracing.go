@@ -834,6 +834,13 @@ func WithTransactionName(name string) SpanOption {
 	}
 }
 
+// WithDescription sets the description of a span.
+func WithDescription(description string) SpanOption {
+	return func(s *Span) {
+		s.Description = description
+	}
+}
+
 // WithOpName sets the operation name for a given span.
 func WithOpName(name string) SpanOption {
 	return func(s *Span) {
