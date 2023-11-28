@@ -340,6 +340,16 @@ func TestSetData(t *testing.T) {
 	}
 }
 
+func TestWithDescription(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	span := StartSpan(ctx, "Test Span", WithDescription("span desc"))
+	if span.Description != "span desc" {
+		t.Fatalf("Description mismatch, got %v", span.Description)
+	}
+}
+
 func TestIsTransaction(t *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing: true,
