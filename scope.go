@@ -45,6 +45,7 @@ type Scope struct {
 	eventProcessors []EventProcessor
 
 	propagationContext PropagationContext
+	span               *Span
 }
 
 // NewScope creates a new Scope.
@@ -302,6 +303,14 @@ func (scope *Scope) SetPropagationContext(propagationContext PropagationContext)
 	scope.propagationContext = propagationContext
 }
 
+// SetSpan sets a span for the current scope.
+func (scope *Scope) SetSpan(span *Span) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
+	scope.span = span
+}
+
 // Clone returns a copy of the current scope with all data copied over.
 func (scope *Scope) Clone() *Scope {
 	scope.mu.RLock()
@@ -329,6 +338,7 @@ func (scope *Scope) Clone() *Scope {
 	clone.requestBody = scope.requestBody
 	clone.eventProcessors = scope.eventProcessors
 	clone.propagationContext = scope.propagationContext
+	clone.span = scope.span
 	return clone
 }
 
