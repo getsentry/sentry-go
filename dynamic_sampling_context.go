@@ -121,3 +121,47 @@ func (d DynamicSamplingContext) String() string {
 
 	return ""
 }
+
+// Constructs a new DynamicSamplingContext using a scope and client. Accessing
+// fields on the scope are not thread safe, and this function should only be
+// called within scope methods.
+func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSamplingContext {
+	entries := map[string]string{}
+
+	if client == nil || scope == nil {
+		return DynamicSamplingContext{
+			Entries: map[string]string{},
+			Frozen:  false,
+		}
+	}
+
+	propagationContext := scope.propagationContext
+
+	if traceID := propagationContext.TraceID.String(); traceID != "" {
+		entries["trace_id"] = traceID
+	}
+	if sampleRate := client.options.TracesSampleRate; sampleRate != 0 {
+		entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
+	}
+
+	if dsn := client.dsn; dsn != nil {
+		if publicKey := dsn.publicKey; publicKey != "" {
+			entries["public_key"] = publicKey
+		}
+	}
+	if release := client.options.Release; release != "" {
+		entries["release"] = release
+	}
+	if environment := client.options.Environment; environment != "" {
+		entries["environment"] = environment
+	}
+
+	if userSegment := scope.user.Segment; userSegment != "" {
+		entries["user_segment"] = userSegment
+	}
+
+	return DynamicSamplingContext{
+		Entries: entries,
+		Frozen:  true,
+	}
+}

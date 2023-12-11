@@ -365,6 +365,24 @@ func (hub *Hub) Flush(timeout time.Duration) bool {
 	return client.Flush(timeout)
 }
 
+// Continue a trace based on HTTP header values. If performance is enabled this
+// returns a SpanOption that can be used to start a transaction, otherwise nil.
+func (hub *Hub) ContinueTrace(trace, baggage string) (SpanOption, error) {
+	scope := hub.Scope()
+	propagationContext, err := PropagationContextFromHeaders(trace, baggage)
+	if err != nil {
+		return nil, err
+	}
+	scope.SetPropagationContext(propagationContext)
+
+	client := hub.Client()
+	if client != nil && client.options.EnableTracing {
+		return ContinueFromHeaders(trace, baggage), nil
+	}
+
+	return nil, nil
+}
+
 // HasHubOnContext checks whether Hub instance is bound to a given Context struct.
 func HasHubOnContext(ctx context.Context) bool {
 	_, ok := ctx.Value(HubContextKey).(*Hub)

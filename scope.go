@@ -51,12 +51,13 @@ type Scope struct {
 // NewScope creates a new Scope.
 func NewScope() *Scope {
 	scope := Scope{
-		breadcrumbs: make([]*Breadcrumb, 0),
-		attachments: make([]*Attachment, 0),
-		tags:        make(map[string]string),
-		contexts:    make(map[string]Context),
-		extra:       make(map[string]interface{}),
-		fingerprint: make([]string, 0),
+		breadcrumbs:        make([]*Breadcrumb, 0),
+		attachments:        make([]*Attachment, 0),
+		tags:               make(map[string]string),
+		contexts:           make(map[string]Context),
+		extra:              make(map[string]interface{}),
+		fingerprint:        make([]string, 0),
+		propagationContext: NewPropagationContext(),
 	}
 
 	return &scope
@@ -356,7 +357,7 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 }
 
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
-func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
+func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
@@ -397,6 +398,31 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 			if _, ok := event.Contexts[key]; !ok {
 				event.Contexts[key] = cloneContext(value)
 			}
+		}
+	}
+
+	// Apply the trace context to errors if there is a Span on the scope. If
+	// there isn't then fall back to the propagation context.
+	if event.Type != transactionType {
+		if event.Contexts == nil {
+			event.Contexts = make(map[string]Context)
+		}
+
+		if scope.span != nil {
+			event.Contexts["trace"] = scope.span.traceContext().Map()
+
+			transaction := scope.span.GetTransaction()
+			if transaction != nil {
+				event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
+			}
+		} else {
+			event.Contexts["trace"] = scope.propagationContext.Map()
+
+			dsc := scope.propagationContext.DynamicSamplingContext
+			if !dsc.HasEntries() && client != nil {
+				dsc = DynamicSamplingContextFromScope(scope, client)
+			}
+			event.sdkMetaData.dsc = dsc
 		}
 	}
 
