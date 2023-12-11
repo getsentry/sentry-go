@@ -548,7 +548,6 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, (*http.Request)(nil), scope.request)
-	assertEqual(t, PropagationContext{}, scope.propagationContext)
 	assertEqual(t, (*Span)(nil), scope.span)
 }
 
@@ -602,12 +601,11 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := fillEventWithData(NewEvent())
 
-	processedEvent := scope.ApplyToEvent(event, nil)
-
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 	assertEqual(t, len(processedEvent.Breadcrumbs), 2, "should merge breadcrumbs")
 	assertEqual(t, len(processedEvent.attachments), 2, "should merge attachments")
 	assertEqual(t, len(processedEvent.Tags), 2, "should merge tags")
-	assertEqual(t, len(processedEvent.Contexts), 3, "should merge contexts")
+	assertEqual(t, len(processedEvent.Contexts), 4, "should merge contexts")
 	assertEqual(t, event.Contexts[sharedContextsKey], event.Contexts[sharedContextsKey], "should not override event context")
 	assertEqual(t, len(processedEvent.Extra), 2, "should merge extra")
 	assertEqual(t, processedEvent.Level, scope.level, "should use scope level if its set")
@@ -620,12 +618,12 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 	scope := NewScope()
 	event := fillEventWithData(NewEvent())
 
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
 	assertEqual(t, len(processedEvent.attachments), 1, "should use event attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
-	assertEqual(t, len(processedEvent.Contexts), 2, "should use event contexts")
+	assertEqual(t, len(processedEvent.Contexts), 3, "should use event contexts")
 	assertEqual(t, len(processedEvent.Extra), 1, "should use event extra")
 	assertNotEqual(t, processedEvent.User, scope.user, "should use event user")
 	assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprint")
@@ -637,12 +635,12 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := NewEvent()
 
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
 	assertEqual(t, len(processedEvent.attachments), 1, "should use scope attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
-	assertEqual(t, len(processedEvent.Contexts), 2, "should use scope contexts")
+	assertEqual(t, len(processedEvent.Contexts), 3, "should use scope contexts")
 	assertEqual(t, len(processedEvent.Extra), 1, "should use scope extra")
 	assertEqual(t, processedEvent.User, scope.user, "should use scope user")
 	assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
@@ -663,7 +661,7 @@ func TestEventProcessorsModifiesEvent(t *testing.T) {
 			return event
 		},
 	}
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 
 	if processedEvent == nil {
 		t.Fatal("event should not be dropped")
@@ -680,7 +678,7 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 			return nil
 		},
 	}
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 
 	if processedEvent != nil {
 		t.Error("event should be dropped")
@@ -690,7 +688,7 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 func TestEventProcessorsAddEventProcessor(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 
 	if processedEvent == nil {
 		t.Error("event should not be dropped")
@@ -699,7 +697,7 @@ func TestEventProcessorsAddEventProcessor(t *testing.T) {
 	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
 		return nil
 	})
-	processedEvent = scope.ApplyToEvent(event, nil)
+	processedEvent = scope.ApplyToEvent(event, nil, nil)
 
 	if processedEvent != nil {
 		t.Error("event should be dropped")
