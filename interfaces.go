@@ -11,15 +11,14 @@ import (
 	"time"
 )
 
-// Protocol Docs (kinda)
-// https://github.com/getsentry/rust-sentry-types/blob/master/src/protocol/v7.rs
+// eventType is the type of an error event.
+const eventType = "event"
 
 // transactionType is the type of a transaction event.
 const transactionType = "transaction"
 
-// eventType is the type of an error event.
-const eventType = "event"
-
+// profileType is the type of a profile event.
+// currently, profiles are always sent as part of a transaction event.
 const profileType = "profile"
 
 // checkInType is the type of a check in event.
