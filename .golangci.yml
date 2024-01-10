@@ -2,7 +2,7 @@ linters:
   disable-all: true
   enable:
     - bodyclose
-    #- depguard
+    - depguard
     - dogsled
     - dupl
     - errcheck
