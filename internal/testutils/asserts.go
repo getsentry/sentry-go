@@ -74,7 +74,7 @@ func formatUnequalValues(got, want interface{}) string {
 	return fmt.Sprintf("\ngot: %s\nwant: %s", a, b)
 }
 
-func AssertBaggageStringsEqual(t *testing.T, got, want string, userMessage ...interface{}) {
+func AssertBaggageStringsEqual(t *testing.T, got, want string) {
 	t.Helper()
 
 	baggageGot, err := baggage.Parse(got)
