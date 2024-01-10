@@ -587,7 +587,7 @@ func TestContinueSpanFromTrace(t *testing.T) {
 	}
 }
 
-func TestSpanFromContext(t *testing.T) {
+func TestSpanFromContext(_ *testing.T) {
 	// SpanFromContext always returns a non-nil value, such that you can use
 	// it without nil checks.
 	// When no span was in the context, the returned value is a no-op.
@@ -697,7 +697,7 @@ func TestSample(t *testing.T) {
 	}
 }
 
-func TestDoesNotCrashWithEmptyContext(t *testing.T) {
+func TestDoesNotCrashWithEmptyContext(_ *testing.T) {
 	// This test makes sure that we can still start and finish transactions
 	// with empty context (for example, when Sentry SDK is not initialized)
 	ctx := context.Background()
@@ -884,7 +884,7 @@ func TestSpanSetContextOverrides(t *testing.T) {
 // This test checks that there are no concurrent reads/writes to
 // substructures in scope.contexts.
 // See https://github.com/getsentry/sentry-go/issues/570 for more details.
-func TestConcurrentContextAccess(t *testing.T) {
+func TestConcurrentContextAccess(_ *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1,
@@ -973,7 +973,7 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 // This is a regression test for https://github.com/getsentry/sentry-go/issues/587
 // Without the "spans can be finished only once" fix, this test will fail
 // when run with race detection ("-race").
-func TestSpanFinishConcurrentlyWithoutRaces(t *testing.T) {
+func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1,

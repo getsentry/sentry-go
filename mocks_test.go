@@ -10,11 +10,11 @@ type ScopeMock struct {
 	shouldDropEvent bool
 }
 
-func (scope *ScopeMock) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
+func (scope *ScopeMock) AddBreadcrumb(breadcrumb *Breadcrumb, _ int) {
 	scope.breadcrumb = breadcrumb
 }
 
-func (scope *ScopeMock) ApplyToEvent(event *Event, hint *EventHint) *Event {
+func (scope *ScopeMock) ApplyToEvent(event *Event, _ *EventHint) *Event {
 	if scope.shouldDropEvent {
 		return nil
 	}
@@ -27,14 +27,14 @@ type TransportMock struct {
 	lastEvent *Event
 }
 
-func (t *TransportMock) Configure(options ClientOptions) {}
+func (t *TransportMock) Configure(_ ClientOptions) {}
 func (t *TransportMock) SendEvent(event *Event) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.events = append(t.events, event)
 	t.lastEvent = event
 }
-func (t *TransportMock) Flush(timeout time.Duration) bool {
+func (t *TransportMock) Flush(_ time.Duration) bool {
 	return true
 }
 func (t *TransportMock) Events() []*Event {
