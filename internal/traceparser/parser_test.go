@@ -167,6 +167,7 @@ func TestFrames(t *testing.T) {
 			file, line := frame.File()
 			output += fmt.Sprintf("  File = %s\n", file)
 			output += fmt.Sprintf("  Line = %d\n", line)
+			output += fmt.Sprintf("  CreatedBy = %d\n", frame.CreatedByGoID())
 		}
 	}
 
@@ -175,61 +176,79 @@ Trace 0: goroutine 7 with at most 2 frames
   Func = github.com/getsentry/sentry-go/internal/traceparser.TestGenerateTrace.func1
   File = c:/dev/sentry-go/internal/traceparser/parser_test.go
   Line = 23
+  CreatedBy = 0
   Func = github.com/getsentry/sentry-go/internal/traceparser.TestGenerateTrace
   File = c:/dev/sentry-go/internal/traceparser/parser_test.go
   Line = 17
+  CreatedBy = 6
 Trace 1: goroutine 1 with at most 6 frames
   Func = testing.(*T).Run
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
   Line = 1630
+  CreatedBy = 0
   Func = testing.runTests.func1
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
   Line = 2036
+  CreatedBy = 0
   Func = testing.tRunner
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
   Line = 1576
+  CreatedBy = 0
   Func = testing.runTests
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
   Line = 2034
+  CreatedBy = 0
   Func = testing.(*M).Run
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
   Line = 1906
+  CreatedBy = 0
   Func = main.main
   File = _testmain.go
   Line = 465
+  CreatedBy = 0
 Trace 2: goroutine 6 with at most 4 frames
   Func = github.com/getsentry/sentry-go.startProfiling.func3
   File = c:/dev/sentry-go/profiler.go
   Line = 46
+  CreatedBy = 0
   Func = github.com/getsentry/sentry-go.TestStart
   File = c:/dev/sentry-go/profiler_test.go
   Line = 13
+  CreatedBy = 0
   Func = testing.tRunner
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
   Line = 1576
+  CreatedBy = 0
   Func = testing.(*T).Run
   File = C:/Users/name/scoop/apps/go/current/src/testing/testing.go
   Line = 1629
+  CreatedBy = 0
 Trace 3: goroutine 7 with at most 4 frames
   Func = runtime.Stack
   File = C:/Users/name/scoop/apps/go/current/src/runtime/mprof.go
   Line = 1193
+  CreatedBy = 0
   Func = github.com/getsentry/sentry-go.(*profileRecorder).Collect
   File = c:/dev/sentry-go/profiler.go
   Line = 73
+  CreatedBy = 0
   Func = github.com/getsentry/sentry-go.startProfiling.func2
   File = c:/dev/sentry-go/profiler.go
   Line = 38
+  CreatedBy = 0
   Func = github.com/getsentry/sentry-go.startProfiling
   File = c:/dev/sentry-go/profiler.go
   Line = 31
+  CreatedBy = 0
 Trace 4: goroutine 19 with at most 2 frames
   Func = github.com/getsentry/sentry-go.startProfiling.func1
   File = c:/dev/sentry-go/profiler.go
   Line = 29
+  CreatedBy = 0
   Func = time.goFunc
   File = C:/Users/name/scoop/apps/go/current/src/time/sleep.go
   Line = 176
+  CreatedBy = 0
 `, "\n"), "\n")
 	require.Equal(expected, strings.Split(output, "\n"))
 }
@@ -373,6 +392,7 @@ func BenchmarkFullParse(b *testing.B) {
 				var frame = iter.Next()
 				_ = frame.Func()
 				_, _ = frame.File()
+				_ = frame.CreatedByGoID()
 			}
 		}
 	}
@@ -391,6 +411,7 @@ func BenchmarkFramesIterator(b *testing.B) {
 				var frame = iter.Next()
 				_ = frame.Func()
 				_, _ = frame.File()
+				_ = frame.CreatedByGoID()
 			}
 		}
 	}
@@ -409,6 +430,7 @@ func BenchmarkFramesReversedIterator(b *testing.B) {
 				var frame = iter.Next()
 				_ = frame.Func()
 				_, _ = frame.File()
+				_ = frame.CreatedByGoID()
 			}
 		}
 	}

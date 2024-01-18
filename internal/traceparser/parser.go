@@ -98,7 +98,7 @@ type FrameIterator struct {
 
 // Next returns the next frame, or nil if there are none.
 func (it *FrameIterator) Next() Frame {
-	return Frame{it.popLine(), it.popLine()}
+	return Frame{it.popLine(), it.popLine(), -1}
 }
 
 func (it *FrameIterator) popLine() []byte {
@@ -135,7 +135,7 @@ type ReverseFrameIterator struct {
 // Next returns the next frame, or nil if there are none.
 func (it *ReverseFrameIterator) Next() Frame {
 	var line2 = it.popLine()
-	return Frame{it.popLine(), line2}
+	return Frame{it.popLine(), line2, -1}
 }
 
 func (it *ReverseFrameIterator) popLine() []byte {
@@ -163,8 +163,9 @@ func (it *ReverseFrameIterator) LengthUpperBound() int {
 }
 
 type Frame struct {
-	line1 []byte
-	line2 []byte
+	line1         []byte
+	line2         []byte
+	createdByGoID int64
 }
 
 // UniqueIdentifier can be used as a map key to identify the frame.
@@ -175,6 +176,7 @@ func (f *Frame) UniqueIdentifier() []byte {
 }
 
 var createdByPrefix = []byte("created by ")
+var inGoroutineInfix = []byte(" in goroutine ")
 
 func (f *Frame) Func() []byte {
 	if bytes.HasPrefix(f.line1, createdByPrefix) {
@@ -185,6 +187,10 @@ func (f *Frame) Func() []byte {
 		if spaceAt < 0 {
 			return line
 		}
+
+		// Parse the goroutine ID
+		f.createdByGoID, _ = strconv.ParseInt(string(line[spaceAt+len(inGoroutineInfix):]), 10, 64)
+
 		return line[:spaceAt]
 	}
 
@@ -214,4 +220,19 @@ func (f *Frame) File() (path []byte, lineNumber int) {
 
 	lineNumber, _ = strconv.Atoi(string(line[splitAt+1:]))
 	return line[:splitAt], lineNumber
+}
+
+// CreatedByGoID returns the ID of the goroutine that created this one, or 0 if it's not known.
+func (f *Frame) CreatedByGoID() (id uint64) {
+	if f.createdByGoID < 0 {
+		// Func() has side-effect of setting the createdByGoID if it's present in the frame.
+		_ = f.Func()
+
+		// If it's not present, set a default value so we don't try again.
+		if f.createdByGoID < 0 {
+			f.createdByGoID = 0
+		}
+	}
+
+	return uint64(f.createdByGoID)
 }
