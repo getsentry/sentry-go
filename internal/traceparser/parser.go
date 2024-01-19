@@ -56,6 +56,7 @@ func (it *TraceCollection) Item(i int) Trace {
 type Trace struct {
 	header []byte
 	data   []byte
+	lines  [][]byte
 }
 
 var goroutinePrefix = []byte("goroutine ")
@@ -72,19 +73,35 @@ func (t *Trace) GoID() (id uint64) {
 	return id
 }
 
+// CreatedByGoID returns the ID of the goroutine that created this one, or 0 if it's not known or it's the main routine.
+func (t *Trace) CreatedByGoID() (id uint64) {
+	t.splitLines()
+	if len(t.lines) < 2 {
+		return 0
+	}
+	var _, goID = splitFrameFuncLine(t.lines[len(t.lines)-2])
+	return goID
+}
+
 // UniqueIdentifier can be used as a map key to identify the trace.
 func (t *Trace) UniqueIdentifier() []byte {
 	return t.data
 }
 
+func (t *Trace) splitLines() {
+	if t.lines == nil {
+		t.lines = bytes.Split(t.data, lineSeparator)
+	}
+}
+
 func (t *Trace) Frames() FrameIterator {
-	var lines = bytes.Split(t.data, lineSeparator)
-	return FrameIterator{lines: lines, i: 0, len: len(lines)}
+	t.splitLines()
+	return FrameIterator{lines: t.lines, i: 0, len: len(t.lines)}
 }
 
 func (t *Trace) FramesReversed() ReverseFrameIterator {
-	var lines = bytes.Split(t.data, lineSeparator)
-	return ReverseFrameIterator{lines: lines, i: len(lines)}
+	t.splitLines()
+	return ReverseFrameIterator{lines: t.lines, i: len(t.lines)}
 }
 
 const framesElided = "...additional frames elided..."
@@ -98,7 +115,7 @@ type FrameIterator struct {
 
 // Next returns the next frame, or nil if there are none.
 func (it *FrameIterator) Next() Frame {
-	return Frame{it.popLine(), it.popLine(), -1}
+	return Frame{it.popLine(), it.popLine()}
 }
 
 func (it *FrameIterator) popLine() []byte {
@@ -135,7 +152,7 @@ type ReverseFrameIterator struct {
 // Next returns the next frame, or nil if there are none.
 func (it *ReverseFrameIterator) Next() Frame {
 	var line2 = it.popLine()
-	return Frame{it.popLine(), line2, -1}
+	return Frame{it.popLine(), line2}
 }
 
 func (it *ReverseFrameIterator) popLine() []byte {
@@ -163,9 +180,8 @@ func (it *ReverseFrameIterator) LengthUpperBound() int {
 }
 
 type Frame struct {
-	line1         []byte
-	line2         []byte
-	createdByGoID int64
+	line1 []byte
+	line2 []byte
 }
 
 // UniqueIdentifier can be used as a map key to identify the frame.
@@ -179,27 +195,31 @@ var createdByPrefix = []byte("created by ")
 var inGoroutineInfix = []byte(" in goroutine ")
 
 func (f *Frame) Func() []byte {
-	if bytes.HasPrefix(f.line1, createdByPrefix) {
-		// Since go1.21, the line ends with " in goroutine X", saying which goroutine created this one.
-		// We currently don't have use for that so just remove it.
-		var line = f.line1[len(createdByPrefix):]
+	var funcName, _ = splitFrameFuncLine(f.line1)
+	return funcName
+}
+
+func splitFrameFuncLine(line []byte) (funcName []byte, createdByGoID uint64) {
+	// Root stack frame may have a "created by" prefix before the function name, indicating the caaller goroutine.
+	if bytes.HasPrefix(line, createdByPrefix) {
+		var line = line[len(createdByPrefix):]
 		var spaceAt = bytes.IndexByte(line, ' ')
 		if spaceAt < 0 {
-			return line
+			return line, createdByGoID
 		}
 
-		// Parse the goroutine ID
-		f.createdByGoID, _ = strconv.ParseInt(string(line[spaceAt+len(inGoroutineInfix):]), 10, 64)
+		// Since go1.21, the line ends with " in goroutine X", saying which goroutine ID created this one.
+		createdByGoID, _ = strconv.ParseUint(string(line[spaceAt+len(inGoroutineInfix):]), 10, 64)
 
-		return line[:spaceAt]
+		return line[:spaceAt], createdByGoID
 	}
 
-	var end = bytes.LastIndexByte(f.line1, '(')
+	var end = bytes.LastIndexByte(line, '(')
 	if end >= 0 {
-		return f.line1[:end]
+		return line[:end], createdByGoID
 	}
 
-	return f.line1
+	return line, createdByGoID
 }
 
 func (f *Frame) File() (path []byte, lineNumber int) {
@@ -220,19 +240,4 @@ func (f *Frame) File() (path []byte, lineNumber int) {
 
 	lineNumber, _ = strconv.Atoi(string(line[splitAt+1:]))
 	return line[:splitAt], lineNumber
-}
-
-// CreatedByGoID returns the ID of the goroutine that created this one, or 0 if it's not known.
-func (f *Frame) CreatedByGoID() (id uint64) {
-	if f.createdByGoID < 0 {
-		// Func() has side-effect of setting the createdByGoID if it's present in the frame.
-		_ = f.Func()
-
-		// If it's not present, set a default value so we don't try again.
-		if f.createdByGoID < 0 {
-			f.createdByGoID = 0
-		}
-	}
-
-	return uint64(f.createdByGoID)
 }
