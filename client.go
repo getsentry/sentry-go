@@ -673,19 +673,15 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		event.Environment = client.options.Environment
 	}
 
-	if event.Platform == "" {
-		event.Platform = "go"
-	}
-	if event.Sdk.Name == "" {
-		event.Sdk = SdkInfo{
-			Name:         client.GetSDKIdentifier(),
-			Version:      SDKVersion,
-			Integrations: client.listIntegrations(),
-			Packages: []SdkPackage{{
-				Name:    "sentry-go",
-				Version: SDKVersion,
-			}},
-		}
+	event.Platform = "go"
+	event.Sdk = SdkInfo{
+		Name:         client.GetSDKIdentifier(),
+		Version:      SDKVersion,
+		Integrations: client.listIntegrations(),
+		Packages: []SdkPackage{{
+			Name:    "sentry-go",
+			Version: SDKVersion,
+		}},
 	}
 
 	if scope != nil {
