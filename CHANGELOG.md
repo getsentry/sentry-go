@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.27.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.27.0.
+
+### Breaking Changes
+
+- `Exception.ThreadId` is now typed as `uint64`. It was wrongly typed as `string` before. ([#770](https://github.com/getsentry/sentry-go/pull/770))
+
+### Misc
+
+- Export `Event.Attachments` ([#771](https://github.com/getsentry/sentry-go/pull/771))
+
 ## 0.26.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.26.0.
