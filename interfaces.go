@@ -241,7 +241,7 @@ type Exception struct {
 	Type       string      `json:"type,omitempty"`  // used as the main issue title
 	Value      string      `json:"value,omitempty"` // used as the main issue subtitle
 	Module     string      `json:"module,omitempty"`
-	ThreadID   string      `json:"thread_id,omitempty"`
+	ThreadID   uint64      `json:"thread_id,omitempty"`
 	Stacktrace *Stacktrace `json:"stacktrace,omitempty"`
 	Mechanism  *Mechanism  `json:"mechanism,omitempty"`
 }
