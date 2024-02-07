@@ -317,6 +317,7 @@ type Event struct {
 	Request     *Request               `json:"request,omitempty"`
 	Exception   []Exception            `json:"exception,omitempty"`
 	DebugMeta   *DebugMeta             `json:"debug_meta,omitempty"`
+	Attachments []*Attachment          `json:"-"`
 
 	// The fields below are only relevant for transactions.
 
@@ -333,7 +334,6 @@ type Event struct {
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
-	attachments []*Attachment
 }
 
 // SetException appends the unwrapped errors to the event's exception list.

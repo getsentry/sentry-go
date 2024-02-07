@@ -34,7 +34,7 @@ func fillScopeWithData(scope *Scope) *Scope {
 
 func fillEventWithData(event *Event) *Event {
 	event.Breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "eventBreadcrumbMessage"}}
-	event.attachments = []*Attachment{
+	event.Attachments = []*Attachment{
 		{
 			Filename: "event-attachment.txt",
 			Payload:  []byte("Event attachment contents."),
@@ -573,7 +573,7 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	processedEvent := scope.ApplyToEvent(event, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 2, "should merge breadcrumbs")
-	assertEqual(t, len(processedEvent.attachments), 2, "should merge attachments")
+	assertEqual(t, len(processedEvent.Attachments), 2, "should merge attachments")
 	assertEqual(t, len(processedEvent.Tags), 2, "should merge tags")
 	assertEqual(t, len(processedEvent.Contexts), 3, "should merge contexts")
 	assertEqual(t, event.Contexts[sharedContextsKey], event.Contexts[sharedContextsKey], "should not override event context")
@@ -591,7 +591,7 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 	processedEvent := scope.ApplyToEvent(event, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
-	assertEqual(t, len(processedEvent.attachments), 1, "should use event attachments")
+	assertEqual(t, len(processedEvent.Attachments), 1, "should use event attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
 	assertEqual(t, len(processedEvent.Contexts), 2, "should use event contexts")
 	assertEqual(t, len(processedEvent.Extra), 1, "should use event extra")
@@ -608,7 +608,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	processedEvent := scope.ApplyToEvent(event, nil)
 
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
-	assertEqual(t, len(processedEvent.attachments), 1, "should use scope attachments")
+	assertEqual(t, len(processedEvent.Attachments), 1, "should use scope attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
 	assertEqual(t, len(processedEvent.Contexts), 2, "should use scope contexts")
 	assertEqual(t, len(processedEvent.Extra), 1, "should use scope extra")

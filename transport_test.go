@@ -194,7 +194,7 @@ func TestEnvelopeFromTransactionBody(t *testing.T) {
 
 func TestEnvelopeFromEventWithAttachments(t *testing.T) {
 	event := newTestEvent(eventType)
-	event.attachments = []*Attachment{
+	event.Attachments = []*Attachment{
 		// Empty content-type and payload
 		{
 			Filename: "empty.txt",
