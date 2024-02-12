@@ -21,7 +21,7 @@ jobs:
       GO111MODULE: "on"
       GOFLAGS: "-mod=readonly"
     steps:
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
       - uses: actions/checkout@v4
