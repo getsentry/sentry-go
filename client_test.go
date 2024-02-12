@@ -383,10 +383,12 @@ func TestCaptureCheckIn(t *testing.T) {
 				Duration:    time.Second * 10,
 			},
 			monitorConfig: &MonitorConfig{
-				Schedule:      IntervalSchedule(1, MonitorScheduleUnitHour),
-				CheckInMargin: 10,
-				MaxRuntime:    5000,
-				Timezone:      "Asia/Singapore",
+				Schedule:              IntervalSchedule(1, MonitorScheduleUnitHour),
+				CheckInMargin:         10,
+				MaxRuntime:            5000,
+				Timezone:              "Asia/Singapore",
+				FailureIssueThreshold: 5,
+				RecoveryThreshold:     10,
 			},
 		},
 		{
@@ -398,10 +400,12 @@ func TestCaptureCheckIn(t *testing.T) {
 				Duration:    time.Second * 10,
 			},
 			monitorConfig: &MonitorConfig{
-				Schedule:      CrontabSchedule("40 * * * *"),
-				CheckInMargin: 10,
-				MaxRuntime:    5000,
-				Timezone:      "Asia/Singapore",
+				Schedule:              CrontabSchedule("40 * * * *"),
+				CheckInMargin:         10,
+				MaxRuntime:            5000,
+				Timezone:              "Asia/Singapore",
+				FailureIssueThreshold: 5,
+				RecoveryThreshold:     10,
 			},
 		},
 	}
