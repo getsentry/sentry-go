@@ -226,7 +226,11 @@ func (s *Span) SetTag(name, value string) {
 // SetData sets a data on the span. It is recommended to use SetData instead of
 // accessing the data map directly as SetData takes care of initializing the map
 // when necessary.
-func (s *Span) SetData(name, value string) {
+func (s *Span) SetData(name string, value interface{}) {
+	if value == nil {
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
