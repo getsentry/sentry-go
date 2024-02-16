@@ -11,7 +11,7 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-// The identifier of the Gin SDK.
+// The identifier of the HTTP SDK.
 const sdkIdentifier = "sentry.go.http"
 
 // A Handler is an HTTP middleware factory that provides integration with
