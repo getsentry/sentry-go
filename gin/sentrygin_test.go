@@ -53,6 +53,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]interface{}{"http.request.method": string("GET")},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
@@ -86,6 +87,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				Extra:           map[string]interface{}{"http.request.method": string("GET")},
 			},
 			WantEvent: nil,
 		},
@@ -119,6 +121,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]interface{}{"http.request.method": string("POST")},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -158,6 +161,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]interface{}{"http.request.method": string("GET")},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -200,6 +204,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]interface{}{"http.request.method": string("POST")},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -243,6 +248,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]interface{}{"http.request.method": string("POST")},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -281,6 +287,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]interface{}{"http.request.method": string("GET")},
 			},
 			WantEvent: nil,
 		},
