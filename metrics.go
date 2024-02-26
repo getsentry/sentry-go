@@ -22,7 +22,7 @@ var (
 )
 
 const (
-	// Duration units
+	// Duration units.
 	NanoSecond MetricUnit = iota
 	MicroSecond
 	MilliSecond
@@ -31,7 +31,7 @@ const (
 	Hour
 	Day
 	Week
-	// Information units
+	// Information units.
 	Bit
 	Byte
 	KiloByte
@@ -46,7 +46,7 @@ const (
 	PebiByte
 	ExaByte
 	ExbiByte
-	// Fractions units
+	// Fractions units.
 	Ratio
 	Percent
 )
@@ -138,9 +138,7 @@ func (am abstractMetric) GetTimestamp() int {
 	return am.timestamp
 }
 
-// ////////////////////////
-// Counter Metric
-// ////////////////////////
+// Counter Metric.
 type CounterMetric struct {
 	value float64
 	abstractMetric
@@ -172,9 +170,7 @@ func NewCounterMetric(key string, unit MetricUnit, tags map[string]string, times
 	}
 }
 
-// ////////////////////////
-// Distribution Metric
-// ////////////////////////
+// Distribution Metric.
 type DistributionMetric struct {
 	values []float64
 	abstractMetric
@@ -210,9 +206,7 @@ func NewDistributionMetric(key string, unit MetricUnit, tags map[string]string, 
 	}
 }
 
-// ////////////////////////
-// Gauge Metric
-// ////////////////////////
+// Gauge Metric.
 type GaugeMetric struct {
 	last  float64
 	min   float64
@@ -226,8 +220,8 @@ func (g *GaugeMetric) Add(value float64) {
 	g.last = value
 	g.min = math.Min(g.min, value)
 	g.max = math.Max(g.max, value)
-	g.sum = g.sum + value
-	g.count += 1
+	g.sum += value
+	g.count++
 }
 
 func (g GaugeMetric) GetType() string {
@@ -256,9 +250,7 @@ func NewGaugeMetric(key string, unit MetricUnit, tags map[string]string, timesta
 	}
 }
 
-// ////////////////////////
-// Set Metric
-// ////////////////////////
+// Set Metric.
 type SetMetric[T NumberOrString] struct {
 	values map[T]void
 	abstractMetric
@@ -273,13 +265,12 @@ func (s SetMetric[T]) GetType() string {
 }
 
 func (s SetMetric[T]) SerializeValue() string {
-
 	_hash := func(s string) uint32 {
 		return crc32.ChecksumIEEE([]byte(s))
 	}
 
 	var sb strings.Builder
-	for el, _ := range s.values {
+	for el := range s.values {
 		switch any(el).(type) {
 		case int:
 			sb.WriteString(fmt.Sprintf(":%v", el))
