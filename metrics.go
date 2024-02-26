@@ -191,8 +191,7 @@ func (d DistributionMetric) GetType() string {
 func (d DistributionMetric) SerializeValue() string {
 	var sb strings.Builder
 	for _, el := range d.values {
-		sb.WriteString(":")
-		sb.WriteString(fmt.Sprintf("%f", el))
+		sb.WriteString(fmt.Sprintf(":%f", el))
 	}
 	return sb.String()
 }
