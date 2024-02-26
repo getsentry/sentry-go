@@ -1,6 +1,11 @@
 package sentry
 
-import "math"
+import (
+	"fmt"
+	"hash/crc32"
+	"math"
+	"strings"
+)
 
 type (
 	MetricUnit int
@@ -52,6 +57,7 @@ type Metric interface {
 	GetKey() string
 	GetUnit() string
 	GetTimestamp() int
+	SerializeValue() string
 }
 
 func (m MetricUnit) toString() string {
@@ -148,6 +154,10 @@ func (c CounterMetric) GetType() string {
 	return "c"
 }
 
+func (c CounterMetric) SerializeValue() string {
+	return fmt.Sprintf("%f", c.value)
+}
+
 func NewCounterMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) CounterMetric {
 	am := abstractMetric{
 		key,
@@ -176,6 +186,15 @@ func (d *DistributionMetric) Add(value float64) {
 
 func (d DistributionMetric) GetType() string {
 	return "d"
+}
+
+func (d DistributionMetric) SerializeValue() string {
+	var sb strings.Builder
+	for _, el := range d.values {
+		sb.WriteString(":")
+		sb.WriteString(fmt.Sprintf("%f", el))
+	}
+	return sb.String()
 }
 
 func NewDistributionMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) DistributionMetric {
@@ -216,6 +235,10 @@ func (g GaugeMetric) GetType() string {
 	return "g"
 }
 
+func (g GaugeMetric) SerializeValue() string {
+	return fmt.Sprintf("%f,%f,%f,%f,%f,", g.last, g.min, g.max, g.sum, g.count)
+}
+
 func NewGaugeMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) GaugeMetric {
 	am := abstractMetric{
 		key,
@@ -250,6 +273,26 @@ func (s SetMetric[T]) GetType() string {
 	return "s"
 }
 
+func (s SetMetric[T]) SerializeValue() string {
+
+	_hash := func(s string) uint32 {
+		return crc32.ChecksumIEEE([]byte(s))
+	}
+
+	var sb strings.Builder
+	for el, _ := range s.values {
+		switch any(el).(type) {
+		case int:
+			sb.WriteString(fmt.Sprintf(":%v", el))
+		case string:
+			s := fmt.Sprintf("%v", el)
+			sb.WriteString(fmt.Sprintf(":%d", _hash(s)))
+		}
+	}
+
+	return sb.String()
+}
+
 func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string]string, timestamp int, value T) SetMetric[T] {
 	am := abstractMetric{
 		key,
@@ -259,9 +302,9 @@ func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string
 	}
 
 	return SetMetric[T]{
-		values: map[T]void{
+		map[T]void{
 			value: member,
 		},
-		abstractMetric: am,
+		am,
 	}
 }
