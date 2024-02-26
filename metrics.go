@@ -235,7 +235,7 @@ func (g GaugeMetric) GetType() string {
 }
 
 func (g GaugeMetric) SerializeValue() string {
-	return fmt.Sprintf("%f,%f,%f,%f,%f,", g.last, g.min, g.max, g.sum, g.count)
+	return fmt.Sprintf("%f:%f:%f:%f:%f", g.last, g.min, g.max, g.sum, g.count)
 }
 
 func NewGaugeMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) GaugeMetric {
