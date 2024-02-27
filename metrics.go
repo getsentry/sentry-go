@@ -142,9 +142,16 @@ func (am abstractMetric) GetTimestamp() int {
 
 func (am abstractMetric) serializeTags() string {
 	var sb strings.Builder
-	for key, val := range am.tags {
+
+	values := make([]string, 0, len(am.tags))
+	for k := range am.tags {
+		values = append(values, k)
+	}
+	sortSlice(values)
+
+	for _, key := range values {
+		val := sanitizeValue(am.tags[key])
 		key = sanitizeKey(key)
-		val = sanitizeValue(val)
 		sb.WriteString(fmt.Sprintf("%s:%s,", key, val))
 	}
 	s := sb.String()
