@@ -97,3 +97,59 @@ func TestSerializeTags(t *testing.T) {
 		})
 	}
 }
+
+func TestSerializeValue(t *testing.T) {
+	tests := []struct {
+		name   string
+		metric Metric
+		want   string
+	}{
+		{
+			name: "distribution metric",
+			metric: DistributionMetric{
+				values: []float64{2, 4, 3, 6},
+			},
+			want: ":2:4:3:6",
+		},
+		{
+			name: "gauge metric",
+			metric: GaugeMetric{
+				last:  1,
+				min:   1,
+				max:   1,
+				sum:   1,
+				count: 1,
+			},
+			want: ":1:1:1:1:1",
+		},
+		{
+			name: "set metric with strings",
+			metric: SetMetric[string]{
+				values: map[string]void{"Hello": member, "World": member},
+			},
+			want: ":4157704578:4223024711",
+		},
+		{
+			name: "set metric with integers",
+			metric: SetMetric[int]{
+				values: map[int]void{1: member, 2: member},
+			},
+			want: ":1:2",
+		},
+		{
+			name: "counter metric",
+			metric: CounterMetric{
+				value: 2,
+			},
+			want: "2",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if diff := cmp.Diff(test.metric.SerializeValue(), test.want); diff != "" {
+				t.Errorf("Context mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}

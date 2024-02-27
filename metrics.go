@@ -168,7 +168,7 @@ func (c CounterMetric) GetType() string {
 }
 
 func (c CounterMetric) SerializeValue() string {
-	return fmt.Sprintf("%f", c.value)
+	return fmt.Sprintf("%v", c.value)
 }
 
 func NewCounterMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) CounterMetric {
@@ -202,7 +202,7 @@ func (d DistributionMetric) GetType() string {
 func (d DistributionMetric) SerializeValue() string {
 	var sb strings.Builder
 	for _, el := range d.values {
-		sb.WriteString(fmt.Sprintf(":%f", el))
+		sb.WriteString(fmt.Sprintf(":%v", el))
 	}
 	return sb.String()
 }
@@ -244,7 +244,7 @@ func (g GaugeMetric) GetType() string {
 }
 
 func (g GaugeMetric) SerializeValue() string {
-	return fmt.Sprintf("%f:%f:%f:%f:%f", g.last, g.min, g.max, g.sum, g.count)
+	return fmt.Sprintf(":%v:%v:%v:%v:%v", g.last, g.min, g.max, g.sum, g.count)
 }
 
 func NewGaugeMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) GaugeMetric {
