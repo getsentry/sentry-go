@@ -5,6 +5,7 @@ import (
 	"hash/crc32"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -284,8 +285,14 @@ func (s SetMetric[T]) SerializeValue() string {
 		return crc32.ChecksumIEEE([]byte(s))
 	}
 
+	values := make([]T, 0, len(s.values))
+	for k := range s.values {
+		values = append(values, k)
+	}
+	slices.Sort(values)
+
 	var sb strings.Builder
-	for el := range s.values {
+	for _, el := range values {
 		switch any(el).(type) {
 		case int:
 			sb.WriteString(fmt.Sprintf(":%v", el))
