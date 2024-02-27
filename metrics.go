@@ -5,9 +5,8 @@ import (
 	"hash/crc32"
 	"math"
 	"regexp"
+	"sort"
 	"strings"
-
-	"golang.org/x/exp/slices"
 )
 
 type (
@@ -290,7 +289,7 @@ func (s SetMetric[T]) SerializeValue() string {
 	for k := range s.values {
 		values = append(values, k)
 	}
-	slices.Sort(values)
+	sortSlice(values)
 
 	var sb strings.Builder
 	for _, el := range values {
@@ -330,4 +329,14 @@ func sanitizeKey(s string) string {
 func sanitizeValue(s string) string {
 	re := regexp.MustCompile(`[^\w\d_:/@\.{}\[\]$-]+`)
 	return re.ReplaceAllString(s, "_")
+}
+
+type Ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr | ~float32 | ~float64 | ~string
+}
+
+func sortSlice[T Ordered](s []T) {
+	sort.Slice(s, func(i, j int) bool {
+		return s[i] < s[j]
+	})
 }
