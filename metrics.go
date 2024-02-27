@@ -5,8 +5,9 @@ import (
 	"hash/crc32"
 	"math"
 	"regexp"
-	"slices"
 	"strings"
+
+	"golang.org/x/exp/slices"
 )
 
 type (
