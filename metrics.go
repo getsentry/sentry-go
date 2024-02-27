@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"math"
+	"regexp"
 	"strings"
 )
 
@@ -297,4 +298,14 @@ func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string
 		},
 		am,
 	}
+}
+
+func sanitizeKey(s string) string {
+	re := regexp.MustCompile(`[^a-zA-Z0-9_/.-]+`)
+	return re.ReplaceAllString(s, "_")
+}
+
+func sanitizeValue(s string) string {
+	re := regexp.MustCompile(`[^\w\d_:/@\.{}\[\]$-]+`)
+	return re.ReplaceAllString(s, "_")
 }
