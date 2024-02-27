@@ -139,6 +139,20 @@ func (am abstractMetric) GetTimestamp() int {
 	return am.timestamp
 }
 
+func (am abstractMetric) serializeTags() string {
+	var sb strings.Builder
+	for key, val := range am.tags {
+		key = sanitizeKey(key)
+		val = sanitizeValue(val)
+		sb.WriteString(fmt.Sprintf("%s:%s,", key, val))
+	}
+	s := sb.String()
+	if len(s) > 0 {
+		s = s[:len(s)-1]
+	}
+	return s
+}
+
 // Counter Metric.
 type CounterMetric struct {
 	value float64

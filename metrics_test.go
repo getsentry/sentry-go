@@ -59,3 +59,41 @@ func TestSanitizeValue(t *testing.T) {
 		})
 	}
 }
+
+func TestSerializeTags(t *testing.T) {
+	tests := []struct {
+		name   string
+		metric abstractMetric
+		want   string
+	}{
+		{
+			name: "normal tags",
+			metric: abstractMetric{
+				tags: map[string]string{"tag1": "val1", "tag2": "val2"},
+			},
+			want: "tag1:val1,tag2:val2",
+		},
+		{
+			name: "empty tags",
+			metric: abstractMetric{
+				tags: map[string]string{},
+			},
+			want: "",
+		},
+		{
+			name: "un-sanitized tags",
+			metric: abstractMetric{
+				tags: map[string]string{"@env": "pro+d", "vers^^ion": `\release@`},
+			},
+			want: "_env:pro_d,vers_ion:_release@",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if diff := cmp.Diff(test.metric.serializeTags(), test.want); diff != "" {
+				t.Errorf("Context mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
