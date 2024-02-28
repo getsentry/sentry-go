@@ -146,7 +146,7 @@ func TestSerializeValue(t *testing.T) {
 			metric: CounterMetric{
 				value: 2,
 			},
-			want: "2",
+			want: ":2",
 		},
 	}
 
