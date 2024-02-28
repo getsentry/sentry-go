@@ -47,7 +47,12 @@ func TestSanitizeValue(t *testing.T) {
 		{
 			name:  "forbidden characters",
 			value: "@test.me^tri'+@c-1{}[]",
-			want:  "@test.me_tri_@c-1{}[]",
+			want:  "@test.metri@c-1{}[]",
+		},
+		{
+			name:  "allow empty character",
+			value: "@route /test",
+			want:  "@route /test",
 		},
 	}
 
@@ -85,13 +90,13 @@ func TestSerializeTags(t *testing.T) {
 			metric: abstractMetric{
 				tags: map[string]string{"@env": "pro+d", "vers^^ion": `\release@`},
 			},
-			want: "_env:pro_d,vers_ion:_release@",
+			want: "_env:prod,vers_ion:release@",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if diff := cmp.Diff(test.metric.serializeTags(), test.want); diff != "" {
+			if diff := cmp.Diff(test.metric.SerializeTags(), test.want); diff != "" {
 				t.Errorf("Context mismatch (-want +got):\n%s", diff)
 			}
 		})

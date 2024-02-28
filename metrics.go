@@ -51,6 +51,8 @@ const (
 	// Fractions units.
 	Ratio
 	Percent
+	// None
+	None
 )
 
 type Metric interface {
@@ -60,6 +62,7 @@ type Metric interface {
 	GetUnit() string
 	GetTimestamp() int
 	SerializeValue() string
+	SerializeTags() string
 }
 
 func (m MetricUnit) toString() string {
@@ -112,6 +115,8 @@ func (m MetricUnit) toString() string {
 		return "ratio"
 	case Percent:
 		return "percent"
+	case None:
+		return ""
 	default:
 		return "error"
 	}
@@ -140,7 +145,7 @@ func (am abstractMetric) GetTimestamp() int {
 	return am.timestamp
 }
 
-func (am abstractMetric) serializeTags() string {
+func (am abstractMetric) SerializeTags() string {
 	var sb strings.Builder
 
 	values := make([]string, 0, len(am.tags))
@@ -334,8 +339,8 @@ func sanitizeKey(s string) string {
 }
 
 func sanitizeValue(s string) string {
-	re := regexp.MustCompile(`[^\w\d_:/@\.{}\[\]$-]+`)
-	return re.ReplaceAllString(s, "_")
+	re := regexp.MustCompile(`[^\w\d\s_:/@\.{}\[\]$-]+`)
+	return re.ReplaceAllString(s, "")
 }
 
 type Ordered interface {
