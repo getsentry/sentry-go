@@ -181,7 +181,7 @@ func (c CounterMetric) GetType() string {
 }
 
 func (c CounterMetric) SerializeValue() string {
-	return fmt.Sprintf("%v", c.value)
+	return fmt.Sprintf(":%v", c.value)
 }
 
 func NewCounterMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) CounterMetric {

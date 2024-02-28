@@ -377,3 +377,40 @@ func TestStructSnapshots(t *testing.T) {
 		})
 	}
 }
+
+func TestMetricMarshalJSON(t *testing.T) {
+	tests := []struct {
+		name  string
+		event Event
+		want  string
+	}{
+		{
+			name: "allowed characters",
+			event: Event{
+				Metrics: []Metric{
+					NewCounterMetric("counter", Second, map[string]string{"foo": "bar", "route": "GET /foo"}, 1597790835, 1),
+					NewDistributionMetric("distribution", Second, map[string]string{"$foo$": "%bar%"}, 1597790835, 1.0),
+					NewGaugeMetric("gauge", Second, map[string]string{"föö": "bär"}, 1597790835, 1.0),
+					NewSetMetric[int]("set", Second, map[string]string{"%{key}": "$value$"}, 1597790835, 1),
+					NewCounterMetric("no_tags", Second, nil, 1597790835, 1),
+				},
+			},
+			want: strings.Join([]string{
+				"counter@second:1|c|#foo:bar,route:GET /foo|T1597790835",
+				"distribution@second:1|d|#_foo_:bar|T1597790835",
+				"gauge@second:1:1:1:1:1|g|#f_:br|T1597790835",
+				"set@second:1|s|#_key_:$value$|T1597790835",
+				"no_tags@second:1|c|T1597790835",
+			}, "\n"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			serializedMetric, _ := test.event.metricMarshalJSON()
+			if diff := cmp.Diff(string(serializedMetric), test.want); diff != "" {
+				t.Errorf("Context mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
