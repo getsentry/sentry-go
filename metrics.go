@@ -51,7 +51,7 @@ const (
 	// Fractions units.
 	Ratio
 	Percent
-	// None
+	// None.
 	None
 )
 
