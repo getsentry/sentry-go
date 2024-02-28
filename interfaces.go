@@ -398,6 +398,8 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 		return e.transactionMarshalJSON()
 	} else if e.Type == checkInType {
 		return e.checkInMarshalJSON()
+	} else if e.Type == metricType {
+		return e.metricMarshalJSON()
 	}
 	return e.defaultMarshalJSON()
 }
