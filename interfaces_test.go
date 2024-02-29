@@ -387,11 +387,11 @@ func TestMarshalMetrics(t *testing.T) {
 		{
 			name: "allowed characters",
 			metrics: []Metric{
-				NewCounterMetric("counter", Second(), map[string]string{"foo": "bar", "route": "GET /foo"}, 1597790835, 1),
+				NewCounterMetric("counter", Second(), map[string]string{"foo": "bar", "route": "GET /foo"}, 1597790835, 1.0),
 				NewDistributionMetric("distribution", Second(), map[string]string{"$foo$": "%bar%"}, 1597790835, 1.0),
 				NewGaugeMetric("gauge", Second(), map[string]string{"föö": "bär"}, 1597790835, 1.0),
 				NewSetMetric[int]("set", Second(), map[string]string{"%{key}": "$value$"}, 1597790835, 1),
-				NewCounterMetric("no_tags", Second(), nil, 1597790835, 1),
+				NewCounterMetric("no_tags", Second(), nil, 1597790835, 1.0),
 			},
 
 			want: strings.Join([]string{

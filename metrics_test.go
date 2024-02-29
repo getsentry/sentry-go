@@ -112,18 +112,18 @@ func TestSerializeValue(t *testing.T) {
 		{
 			name: "distribution metric",
 			metric: DistributionMetric{
-				values: []float64{2, 4, 3, 6},
+				values: []float64{2.0, 4.0, 3.0, 6.0},
 			},
 			want: ":2:4:3:6",
 		},
 		{
 			name: "gauge metric",
 			metric: GaugeMetric{
-				last:  1,
-				min:   1,
-				max:   1,
-				sum:   1,
-				count: 1,
+				last:  1.0,
+				min:   1.0,
+				max:   1.0,
+				sum:   1.0,
+				count: 1.0,
 			},
 			want: ":1:1:1:1:1",
 		},
@@ -144,7 +144,7 @@ func TestSerializeValue(t *testing.T) {
 		{
 			name: "counter metric",
 			metric: CounterMetric{
-				value: 2,
+				value: 2.0,
 			},
 			want: ":2",
 		},

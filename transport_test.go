@@ -684,11 +684,11 @@ func testRateLimiting(t *testing.T, tr Transport) {
 func TestEnvelopeFromMetricBody(t *testing.T) {
 	event := newTestEvent(metricType)
 	event.Metrics = append(event.Metrics,
-		NewCounterMetric("counter", Second(), map[string]string{"foo": "bar", "route": "GET /foo"}, 1597790835, 1),
+		NewCounterMetric("counter", Second(), map[string]string{"foo": "bar", "route": "GET /foo"}, 1597790835, 1.0),
 		NewDistributionMetric("distribution", Second(), map[string]string{"$foo$": "%bar%"}, 1597790835, 1.0),
 		NewGaugeMetric("gauge", Second(), map[string]string{"föö": "bär"}, 1597790835, 1.0),
 		NewSetMetric[int]("set", Second(), map[string]string{"%{key}": "$value$"}, 1597790835, 1),
-		NewCounterMetric("no_tags", Second(), nil, 1597790835, 1),
+		NewCounterMetric("no_tags", Second(), nil, 1597790835, 1.0),
 	)
 	sentAt := time.Unix(0, 0).UTC()
 
