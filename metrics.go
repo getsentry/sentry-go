@@ -21,155 +21,155 @@ var (
 	member void
 )
 
-type metricUnit struct {
+type MetricUnit struct {
 	unit string
 }
 
-func (m metricUnit) toString() string {
+func (m MetricUnit) toString() string {
 	return m.unit
 }
 
-func MicroSecond() metricUnit {
-	return metricUnit{
+func MicroSecond() MetricUnit {
+	return MetricUnit{
 		"microsecond",
 	}
 }
 
-func MilliSecond() metricUnit {
-	return metricUnit{
+func MilliSecond() MetricUnit {
+	return MetricUnit{
 		"millisecond",
 	}
 }
 
-func Second() metricUnit {
-	return metricUnit{
+func Second() MetricUnit {
+	return MetricUnit{
 		"second",
 	}
 }
 
-func Minute() metricUnit {
-	return metricUnit{
+func Minute() MetricUnit {
+	return MetricUnit{
 		"minute",
 	}
 }
 
-func Hour() metricUnit {
-	return metricUnit{
+func Hour() MetricUnit {
+	return MetricUnit{
 		"hour",
 	}
 }
 
-func Day() metricUnit {
-	return metricUnit{
+func Day() MetricUnit {
+	return MetricUnit{
 		"day",
 	}
 }
 
-func Week() metricUnit {
-	return metricUnit{
+func Week() MetricUnit {
+	return MetricUnit{
 		"week",
 	}
 }
 
-func Bit() metricUnit {
-	return metricUnit{
+func Bit() MetricUnit {
+	return MetricUnit{
 		"bit",
 	}
 }
 
-func Byte() metricUnit {
-	return metricUnit{
+func Byte() MetricUnit {
+	return MetricUnit{
 		"byte",
 	}
 }
 
-func KiloByte() metricUnit {
-	return metricUnit{
+func KiloByte() MetricUnit {
+	return MetricUnit{
 		"kilobyte",
 	}
 }
 
-func KibiByte() metricUnit {
-	return metricUnit{
+func KibiByte() MetricUnit {
+	return MetricUnit{
 		"kibibyte",
 	}
 }
 
-func MegaByte() metricUnit {
-	return metricUnit{
+func MegaByte() MetricUnit {
+	return MetricUnit{
 		"megabyte",
 	}
 }
 
-func MebiByte() metricUnit {
-	return metricUnit{
+func MebiByte() MetricUnit {
+	return MetricUnit{
 		"mebibyte",
 	}
 }
 
-func GigaByte() metricUnit {
-	return metricUnit{
+func GigaByte() MetricUnit {
+	return MetricUnit{
 		"gigabyte",
 	}
 }
 
-func GibiByte() metricUnit {
-	return metricUnit{
+func GibiByte() MetricUnit {
+	return MetricUnit{
 		"gibibyte",
 	}
 }
 
-func TeraByte() metricUnit {
-	return metricUnit{
+func TeraByte() MetricUnit {
+	return MetricUnit{
 		"terabyte",
 	}
 }
 
-func TebiByte() metricUnit {
-	return metricUnit{
+func TebiByte() MetricUnit {
+	return MetricUnit{
 		"tebibyte",
 	}
 }
 
-func PetaByte() metricUnit {
-	return metricUnit{
+func PetaByte() MetricUnit {
+	return MetricUnit{
 		"petabyte",
 	}
 }
 
-func PebiByte() metricUnit {
-	return metricUnit{
+func PebiByte() MetricUnit {
+	return MetricUnit{
 		"pebibyte",
 	}
 }
 
-func ExaByte() metricUnit {
-	return metricUnit{
+func ExaByte() MetricUnit {
+	return MetricUnit{
 		"exabyte",
 	}
 }
 
-func ExbiByte() metricUnit {
-	return metricUnit{
+func ExbiByte() MetricUnit {
+	return MetricUnit{
 		"exbibyte",
 	}
 }
 
-func Ratio() metricUnit {
-	return metricUnit{
+func Ratio() MetricUnit {
+	return MetricUnit{
 		"ratio",
 	}
 }
 
-func Percent() metricUnit {
-	return metricUnit{
+func Percent() MetricUnit {
+	return MetricUnit{
 		"percent",
 	}
 }
 
-func CustomUnit(unit string) metricUnit {
+func CustomUnit(unit string) MetricUnit {
 	re := regexp.MustCompile(`[^a-z]+`)
-	return metricUnit{
+	return MetricUnit{
 		re.ReplaceAllString(unit, ""),
 	}
 }
@@ -186,7 +186,7 @@ type Metric interface {
 
 type abstractMetric struct {
 	key       string
-	unit      metricUnit
+	unit      MetricUnit
 	tags      map[string]string
 	timestamp int
 }
@@ -246,7 +246,7 @@ func (c CounterMetric) SerializeValue() string {
 	return fmt.Sprintf(":%v", c.value)
 }
 
-func NewCounterMetric(key string, unit metricUnit, tags map[string]string, timestamp int, value float64) CounterMetric {
+func NewCounterMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) CounterMetric {
 	am := abstractMetric{
 		key,
 		unit,
@@ -282,7 +282,7 @@ func (d DistributionMetric) SerializeValue() string {
 	return sb.String()
 }
 
-func NewDistributionMetric(key string, unit metricUnit, tags map[string]string, timestamp int, value float64) DistributionMetric {
+func NewDistributionMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) DistributionMetric {
 	am := abstractMetric{
 		key,
 		unit,
@@ -322,7 +322,7 @@ func (g GaugeMetric) SerializeValue() string {
 	return fmt.Sprintf(":%v:%v:%v:%v:%v", g.last, g.min, g.max, g.sum, g.count)
 }
 
-func NewGaugeMetric(key string, unit metricUnit, tags map[string]string, timestamp int, value float64) GaugeMetric {
+func NewGaugeMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) GaugeMetric {
 	am := abstractMetric{
 		key,
 		unit,
@@ -379,7 +379,7 @@ func (s SetMetric[T]) SerializeValue() string {
 	return sb.String()
 }
 
-func NewSetMetric[T NumberOrString](key string, unit metricUnit, tags map[string]string, timestamp int, value T) SetMetric[T] {
+func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string]string, timestamp int, value T) SetMetric[T] {
 	am := abstractMetric{
 		key,
 		unit,
