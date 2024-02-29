@@ -710,5 +710,4 @@ no_tags@second:1|c|T1597790835
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
 	}
-	fmt.Println(got)
 }
