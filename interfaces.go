@@ -1,7 +1,6 @@
 package sentry
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,7 +25,7 @@ const profileType = "profile"
 const checkInType = "check_in"
 
 // metricType is the type of a metric event.
-const metricType = "metric"
+const metricType = "statsd"
 
 // Level marks the severity of the event.
 type Level string
@@ -398,8 +397,6 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 		return e.transactionMarshalJSON()
 	} else if e.Type == checkInType {
 		return e.checkInMarshalJSON()
-	} else if e.Type == metricType {
-		return e.metricMarshalJSON()
 	}
 	return e.defaultMarshalJSON()
 }
@@ -495,26 +492,6 @@ func (e *Event) checkInMarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(checkIn)
-}
-
-func (e *Event) metricMarshalJSON() ([]byte, error) {
-	var b bytes.Buffer
-	for i, metric := range e.Metrics {
-		b.WriteString(metric.GetKey())
-		if unit := metric.GetUnit(); unit != "" {
-			b.WriteString(fmt.Sprintf("@%s", unit))
-		}
-		b.WriteString(fmt.Sprintf("%s|%s", metric.SerializeValue(), metric.GetType()))
-		if serializedTags := metric.SerializeTags(); serializedTags != "" {
-			b.WriteString(fmt.Sprintf("|#%s", serializedTags))
-		}
-		b.WriteString(fmt.Sprintf("|T%d", metric.GetTimestamp()))
-
-		if i < len(e.Metrics)-1 {
-			b.WriteString("\n")
-		}
-	}
-	return b.Bytes(), nil
 }
 
 // NewEvent creates a new Event.
