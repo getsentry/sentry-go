@@ -529,6 +529,13 @@ func (t *HTTPTransport) worker() {
 				Logger.Printf("There was an issue with sending an event: %v", err)
 				continue
 			}
+			if response.StatusCode >= 400 && response.StatusCode <= 599 {
+				b, err := io.ReadAll(response.Body)
+				if err != nil {
+					Logger.Printf("Error while reading response code: %v", err)
+				}
+				Logger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+			}
 			t.mu.Lock()
 			t.limits.Merge(ratelimit.FromResponse(response))
 			t.mu.Unlock()
