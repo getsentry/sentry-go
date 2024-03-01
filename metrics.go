@@ -181,16 +181,17 @@ type Metric interface {
 	GetTags() map[string]string
 	GetKey() string
 	GetUnit() string
-	GetTimestamp() int
+	GetTimestamp() int64
 	SerializeValue() string
 	SerializeTags() string
 }
 
 type abstractMetric struct {
-	key       string
-	unit      MetricUnit
-	tags      map[string]string
-	timestamp int
+	key  string
+	unit MetricUnit
+	tags map[string]string
+	// A unix timestamp (full seconds elapsed since 1970-01-01 00:00 UTC).
+	timestamp int64
 }
 
 func (am abstractMetric) GetTags() map[string]string {
@@ -205,7 +206,7 @@ func (am abstractMetric) GetUnit() string {
 	return am.unit.toString()
 }
 
-func (am abstractMetric) GetTimestamp() int {
+func (am abstractMetric) GetTimestamp() int64 {
 	return am.timestamp
 }
 
@@ -248,7 +249,8 @@ func (c CounterMetric) SerializeValue() string {
 	return fmt.Sprintf(":%v", c.value)
 }
 
-func NewCounterMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) CounterMetric {
+// timestamp: A unix timestamp (full seconds elapsed since 1970-01-01 00:00 UTC).
+func NewCounterMetric(key string, unit MetricUnit, tags map[string]string, timestamp int64, value float64) CounterMetric {
 	am := abstractMetric{
 		key,
 		unit,
@@ -284,7 +286,8 @@ func (d DistributionMetric) SerializeValue() string {
 	return sb.String()
 }
 
-func NewDistributionMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) DistributionMetric {
+// timestamp: A unix timestamp (full seconds elapsed since 1970-01-01 00:00 UTC).
+func NewDistributionMetric(key string, unit MetricUnit, tags map[string]string, timestamp int64, value float64) DistributionMetric {
 	am := abstractMetric{
 		key,
 		unit,
@@ -324,7 +327,8 @@ func (g GaugeMetric) SerializeValue() string {
 	return fmt.Sprintf(":%v:%v:%v:%v:%v", g.last, g.min, g.max, g.sum, g.count)
 }
 
-func NewGaugeMetric(key string, unit MetricUnit, tags map[string]string, timestamp int, value float64) GaugeMetric {
+// timestamp: A unix timestamp (full seconds elapsed since 1970-01-01 00:00 UTC).
+func NewGaugeMetric(key string, unit MetricUnit, tags map[string]string, timestamp int64, value float64) GaugeMetric {
 	am := abstractMetric{
 		key,
 		unit,
@@ -381,7 +385,8 @@ func (s SetMetric[T]) SerializeValue() string {
 	return sb.String()
 }
 
-func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string]string, timestamp int, value T) SetMetric[T] {
+// timestamp: A unix timestamp (full seconds elapsed since 1970-01-01 00:00 UTC).
+func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string]string, timestamp int64, value T) SetMetric[T] {
 	am := abstractMetric{
 		key,
 		unit,
