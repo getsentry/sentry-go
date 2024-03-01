@@ -636,6 +636,8 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 	var eventType string
 	if event.Type == transactionType {
 		eventType = "transaction"
+	} else if event.Type == metricType {
+		eventType = metricType
 	} else {
 		eventType = fmt.Sprintf("%s event", event.Level)
 	}
@@ -652,6 +654,14 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		Logger.Printf("There was an issue with sending an event: %v", err)
 		return
 	}
+	if response.StatusCode >= 400 && response.StatusCode <= 599 {
+		b, err := io.ReadAll(response.Body)
+		if err != nil {
+			Logger.Printf("Error while reading response code: %v", err)
+		}
+		Logger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+	}
+
 	t.mu.Lock()
 	t.limits.Merge(ratelimit.FromResponse(response))
 	t.mu.Unlock()
