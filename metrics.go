@@ -18,7 +18,10 @@ type (
 )
 
 var (
-	member void
+	member     void
+	keyRegex   = regexp.MustCompile(`[^a-zA-Z0-9_/.-]+`)
+	valueRegex = regexp.MustCompile(`[^\w\d\s_:/@\.{}\[\]$-]+`)
+	unitRegex  = regexp.MustCompile(`[^a-z]+`)
 )
 
 type MetricUnit struct {
@@ -168,9 +171,8 @@ func Percent() MetricUnit {
 }
 
 func CustomUnit(unit string) MetricUnit {
-	re := regexp.MustCompile(`[^a-z]+`)
 	return MetricUnit{
-		re.ReplaceAllString(unit, ""),
+		unitRegex.ReplaceAllString(unit, ""),
 	}
 }
 
@@ -396,13 +398,11 @@ func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string
 }
 
 func sanitizeKey(s string) string {
-	re := regexp.MustCompile(`[^a-zA-Z0-9_/.-]+`)
-	return re.ReplaceAllString(s, "_")
+	return keyRegex.ReplaceAllString(s, "_")
 }
 
 func sanitizeValue(s string) string {
-	re := regexp.MustCompile(`[^\w\d\s_:/@\.{}\[\]$-]+`)
-	return re.ReplaceAllString(s, "")
+	return valueRegex.ReplaceAllString(s, "")
 }
 
 type Ordered interface {
