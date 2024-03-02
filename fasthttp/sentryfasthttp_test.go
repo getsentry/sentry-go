@@ -358,7 +358,7 @@ func TestGetTransactionFromContext(t *testing.T) {
 		sentryHandler := sentryfasthttp.New(sentryfasthttp.Options{})
 		ln := fasthttputil.NewInmemoryListener()
 		handler := func(ctx *fasthttp.RequestCtx) {
-			span := sentryfasthttp.GetTransactionFromContext(ctx)
+			span := sentryfasthttp.GetSpanFromContext(ctx)
 			if span == nil {
 				t.Error("expecting span to be not nil")
 			}
@@ -399,7 +399,7 @@ func TestGetTransactionFromContext(t *testing.T) {
 	t.Run("Without Transaction", func(t *testing.T) {
 		ln := fasthttputil.NewInmemoryListener()
 		handler := func(ctx *fasthttp.RequestCtx) {
-			span := sentryfasthttp.GetTransactionFromContext(ctx)
+			span := sentryfasthttp.GetSpanFromContext(ctx)
 			if span != nil {
 				t.Error("expecting span to be nil")
 			}

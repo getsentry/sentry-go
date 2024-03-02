@@ -118,9 +118,9 @@ func GetHubFromContext(ctx *fasthttp.RequestCtx) *sentry.Hub {
 	return nil
 }
 
-// GetTransactionFromContext retrieves attached *sentry.Span instance from *fasthttp.RequestCtx.
+// GetSpanFromContext retrieves attached *sentry.Span instance from *fasthttp.RequestCtx.
 // If there is no transaction on *fasthttp.RequestCtx, it will return nil.
-func GetTransactionFromContext(ctx *fasthttp.RequestCtx) *sentry.Span {
+func GetSpanFromContext(ctx *fasthttp.RequestCtx) *sentry.Span {
 	if span, ok := ctx.UserValue(transactionKey).(*sentry.Span); ok {
 		return span
 	}
