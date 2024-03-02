@@ -208,7 +208,7 @@ func TestIntegration(t *testing.T) {
 			sentry.Event{},
 			"Contexts", "EventID", "Extra", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
-			"sdkMetaData", "attachments",
+			"sdkMetaData",
 		),
 		cmpopts.IgnoreMapEntries(func(k string, v string) bool {
 			// fasthttp changed Content-Length behavior in

@@ -257,10 +257,10 @@ func TestOnEndWithTransaction(t *testing.T) {
 		t,
 		otelContextGot,
 		map[string]interface{}{
-			"attributes": map[attribute.Key]string{
+			"attributes": map[attribute.Key]interface{}{
 				"key1": "value1",
 			},
-			"resource": map[attribute.Key]string{
+			"resource": map[attribute.Key]interface{}{
 				"service.name": "test-otel",
 			},
 		},
