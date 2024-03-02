@@ -320,7 +320,7 @@ func TestIntegration(t *testing.T) {
 			sentry.Event{},
 			"Contexts", "EventID", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp",
-			"sdkMetaData", "StartTime", "Spans", "attachments",
+			"sdkMetaData", "StartTime", "Spans",
 		),
 		cmpopts.IgnoreFields(
 			sentry.Request{},
