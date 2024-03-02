@@ -295,7 +295,7 @@ func TestIntegration(t *testing.T) {
 			WantStatus:  200,
 			Body:        "",
 			Handler: func(c echo.Context) error {
-				span := sentryecho.GetTransactionFromContext(c)
+				span := sentryecho.GetSpanFromContext(c)
 				child := span.StartChild("first_task")
 				time.Sleep(time.Microsecond)
 				child.Finish()
@@ -452,14 +452,14 @@ func TestGetTransactionFromContext(t *testing.T) {
 
 	router := echo.New()
 	router.GET("/no-transaction", func(c echo.Context) error {
-		transaction := sentryecho.GetTransactionFromContext(c)
+		transaction := sentryecho.GetSpanFromContext(c)
 		if transaction != nil {
 			t.Error("expecting transaction to be nil")
 		}
 		return c.NoContent(http.StatusOK)
 	})
 	router.GET("/with-transaction", func(c echo.Context) error {
-		transaction := sentryecho.GetTransactionFromContext(c)
+		transaction := sentryecho.GetSpanFromContext(c)
 		if transaction == nil {
 			t.Error("expecting transaction to be not nil")
 		}

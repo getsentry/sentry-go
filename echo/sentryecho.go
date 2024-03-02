@@ -112,9 +112,9 @@ func GetHubFromContext(ctx echo.Context) *sentry.Hub {
 	return nil
 }
 
-// GetTransactionFromContext retrieves attached *sentry.Span instance from echo.Context.
+// GetSpanFromContext retrieves attached *sentry.Span instance from echo.Context.
 // If there is no transaction on echo.Context, it will return nil.
-func GetTransactionFromContext(ctx echo.Context) *sentry.Span {
+func GetSpanFromContext(ctx echo.Context) *sentry.Span {
 	if span, ok := ctx.Get(transactionKey).(*sentry.Span); ok {
 		return span
 	}

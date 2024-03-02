@@ -22,7 +22,7 @@ func ExampleGetTransactionFromContext() {
 
 		// Acquire transaction on current hub that's created by the SDK.
 		// Be careful, it might be a nil value if you didn't set up sentryecho middleware.
-		sentrySpan := sentryecho.GetTransactionFromContext(c)
+		sentrySpan := sentryecho.GetSpanFromContext(c)
 		// Pass in the `.Context()` method from `*sentry.Span` struct.
 		// The `context.Context` instance inherits the context from `echo.Context`.
 		err := expensiveThing(sentrySpan.Context())
