@@ -9,7 +9,7 @@ import (
 )
 
 func Test_spanRecorder_record(t *testing.T) {
-	testRootSpan := StartSpan(context.Background(), "test", TransactionName("test transaction"))
+	testRootSpan := StartSpan(context.Background(), "test", WithTransactionName("test transaction"))
 
 	for _, tt := range []struct {
 		name           string

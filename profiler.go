@@ -236,18 +236,32 @@ func (p *profileRecorder) getBuckets(relativeStartNS, relativeEndNS uint64) (sam
 		return 0, nil, nil
 	}
 
-	// Search for the first item after the given startTime.
-	var start = end
-	samplesCount = 0
-	buckets = make([]*profileSamplesBucket, 0, int64((relativeEndNS-relativeStartNS)/uint64(profilerSamplingRate.Nanoseconds()))+1)
-	for start.Value != nil {
-		var bucket = start.Value.(*profileSamplesBucket)
-		if bucket.relativeTimeNS < relativeStartNS {
-			break
+	{ // Find the first item after the given startTime.
+		var start = end
+		var prevBucket *profileSamplesBucket
+		samplesCount = 0
+		buckets = make([]*profileSamplesBucket, 0, int64((relativeEndNS-relativeStartNS)/uint64(profilerSamplingRate.Nanoseconds()))+1)
+		for start.Value != nil {
+			var bucket = start.Value.(*profileSamplesBucket)
+
+			// If this bucket's time is before the requests start time, don't collect it (and stop iterating further).
+			if bucket.relativeTimeNS < relativeStartNS {
+				break
+			}
+
+			// If this bucket time is greater than previous the bucket's time, we have exhausted the whole ring buffer
+			// before we were able to find the start time. That means the start time is not present and we must break.
+			// This happens if the slice duration exceeds the ring buffer capacity.
+			if prevBucket != nil && bucket.relativeTimeNS > prevBucket.relativeTimeNS {
+				break
+			}
+
+			samplesCount += len(bucket.goIDs)
+			buckets = append(buckets, bucket)
+
+			start = start.Prev()
+			prevBucket = bucket
 		}
-		samplesCount += len(bucket.goIDs)
-		buckets = append(buckets, bucket)
-		start = start.Prev()
 	}
 
 	// Edge case - if the period requested was too short and we haven't collected enough samples.

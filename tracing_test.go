@@ -157,7 +157,7 @@ func TestStartSpan(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
-			"sdkMetaData", "attachments",
+			"sdkMetaData",
 		),
 		cmpopts.EquateEmpty(),
 	}
@@ -221,7 +221,7 @@ func TestStartChild(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"EventID", "Level", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
-			"sdkMetaData", "attachments",
+			"sdkMetaData",
 		),
 		cmpopts.IgnoreMapEntries(func(k string, v interface{}) bool {
 			return k != "trace"
@@ -302,7 +302,7 @@ func TestStartTransaction(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
-			"sdkMetaData", "attachments",
+			"sdkMetaData",
 		),
 		cmpopts.EquateEmpty(),
 	}
@@ -334,9 +334,22 @@ func TestSetData(t *testing.T) {
 	})
 	span := StartSpan(ctx, "Test Span")
 	span.SetData("key", "value")
-
-	if (span.Data == nil) || (span.Data["key"] != "value") {
+	span.SetData("key.nil", nil)
+	span.SetData("key.number", 123)
+	span.SetData("key.bool", true)
+	span.SetData("key.slice", []string{"foo", "bar"})
+	if (span.Data == nil) || (span.Data["key"] != "value") || (span.Data["key.number"] != 123) || (span.Data["key.bool"] != true) || !reflect.DeepEqual(span.Data["key.slice"], []string{"foo", "bar"}) {
 		t.Fatalf("Data mismatch, got %v", span.Data)
+	}
+}
+
+func TestWithDescription(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	span := StartSpan(ctx, "Test Span", WithDescription("span desc"))
+	if span.Description != "span desc" {
+		t.Fatalf("Description mismatch, got %v", span.Description)
 	}
 }
 
@@ -488,8 +501,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			traceStr:   "",
 			baggageStr: "",
 			wantSpan: &Span{
-				isTransaction: true,
-				Sampled:       0,
+				Sampled: 0,
 				dynamicSamplingContext: DynamicSamplingContext{
 					Frozen:  false,
 					Entries: nil,
@@ -501,8 +513,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			traceStr:   "",
 			baggageStr: "other-vendor-key1=value1;value2, other-vendor-key2=value3",
 			wantSpan: &Span{
-				isTransaction: true,
-				Sampled:       0,
+				Sampled: 0,
 				dynamicSamplingContext: DynamicSamplingContext{
 					Frozen:  false,
 					Entries: map[string]string{},
@@ -515,10 +526,9 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
 			baggageStr: "",
 			wantSpan: &Span{
-				isTransaction: true,
-				TraceID:       TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
-				ParentSpanID:  SpanIDFromHex("b72fa28504b07285"),
-				Sampled:       1,
+				TraceID:      TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
+				ParentSpanID: SpanIDFromHex("b72fa28504b07285"),
+				Sampled:      1,
 				dynamicSamplingContext: DynamicSamplingContext{
 					Frozen: true,
 				},
@@ -529,10 +539,9 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
 			baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
 			wantSpan: &Span{
-				isTransaction: true,
-				TraceID:       TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
-				ParentSpanID:  SpanIDFromHex("b72fa28504b07285"),
-				Sampled:       1,
+				TraceID:      TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
+				ParentSpanID: SpanIDFromHex("b72fa28504b07285"),
+				Sampled:      1,
 				dynamicSamplingContext: DynamicSamplingContext{
 					Frozen: true,
 					Entries: map[string]string{
@@ -546,7 +555,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		s := &Span{isTransaction: true}
+		s := &Span{}
 		spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
 		spanOption(s)
 
@@ -581,7 +590,7 @@ func TestContinueSpanFromTrace(t *testing.T) {
 	}
 }
 
-func TestSpanFromContext(t *testing.T) {
+func TestSpanFromContext(_ *testing.T) {
 	// SpanFromContext always returns a non-nil value, such that you can use
 	// it without nil checks.
 	// When no span was in the context, the returned value is a no-op.
@@ -691,7 +700,7 @@ func TestSample(t *testing.T) {
 	}
 }
 
-func TestDoesNotCrashWithEmptyContext(t *testing.T) {
+func TestDoesNotCrashWithEmptyContext(_ *testing.T) {
 	// This test makes sure that we can still start and finish transactions
 	// with empty context (for example, when Sentry SDK is not initialized)
 	ctx := context.Background()
@@ -702,9 +711,9 @@ func TestDoesNotCrashWithEmptyContext(t *testing.T) {
 
 func TestSetDynamicSamplingContextWorksOnTransaction(t *testing.T) {
 	s := Span{
-		isTransaction:          true,
 		dynamicSamplingContext: DynamicSamplingContext{Frozen: false},
 	}
+
 	newDsc := DynamicSamplingContext{
 		Entries: map[string]string{"environment": "dev"},
 		Frozen:  true,
@@ -720,7 +729,7 @@ func TestSetDynamicSamplingContextWorksOnTransaction(t *testing.T) {
 func TestSetDynamicSamplingContextDoesNothingOnSpan(t *testing.T) {
 	// SetDynamicSamplingContext should do nothing on non-transaction spans
 	s := Span{
-		isTransaction:          false,
+		parent:                 &Span{},
 		dynamicSamplingContext: DynamicSamplingContext{},
 	}
 	newDsc := DynamicSamplingContext{
@@ -812,7 +821,7 @@ func TestGetTransactionReturnsNilOnManuallyCreatedSpans(t *testing.T) {
 		t.Errorf("GetTransaction() should return nil on manually created Spans")
 	}
 
-	span2 := Span{isTransaction: true}
+	span2 := Span{}
 	if span2.GetTransaction() != nil {
 		t.Errorf("GetTransaction() should return nil on manually created Spans")
 	}
@@ -875,30 +884,10 @@ func TestSpanSetContextOverrides(t *testing.T) {
 	assertEqual(t, map[string]Context{"a": {"foo": 2}}, transaction.contexts)
 }
 
-// This test should be the only thing to fail when deprecated TransactionName is removed.
-func TestDeprecatedSpanOptionTransactionName(t *testing.T) {
-	StartSpan(context.Background(), "op", TransactionName("name"))
-}
-
-// This test should be the only thing to fail when deprecated OpName is removed.
-func TestDeprecatedSpanOptionOpName(t *testing.T) {
-	StartSpan(context.Background(), "op", OpName("name"))
-}
-
-// This test should be the only thing to fail when deprecated SpanSampled is removed.
-func TestDeprecatedSpanOptionSpanSampled(t *testing.T) {
-	StartSpan(context.Background(), "op", SpanSampled(SampledTrue))
-}
-
-// This test should be the only thing to fail when deprecated TransctionSource is removed.
-func TestDeprecatedSpanOptionTransctionSource(t *testing.T) {
-	StartSpan(context.Background(), "op", TransctionSource("src"))
-}
-
 // This test checks that there are no concurrent reads/writes to
 // substructures in scope.contexts.
 // See https://github.com/getsentry/sentry-go/issues/570 for more details.
-func TestConcurrentContextAccess(t *testing.T) {
+func TestConcurrentContextAccess(_ *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1,
@@ -987,7 +976,7 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 // This is a regression test for https://github.com/getsentry/sentry-go/issues/587
 // Without the "spans can be finished only once" fix, this test will fail
 // when run with race detection ("-race").
-func TestSpanFinishConcurrentlyWithoutRaces(t *testing.T) {
+func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1,

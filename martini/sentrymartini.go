@@ -44,7 +44,7 @@ func New(options Options) martini.Handler {
 	}).handle
 }
 
-func (h *handler) handle(rw http.ResponseWriter, r *http.Request, ctx martini.Context) {
+func (h *handler) handle(_ http.ResponseWriter, r *http.Request, ctx martini.Context) {
 	hub := sentry.GetHubFromContext(r.Context())
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
