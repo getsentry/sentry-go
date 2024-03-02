@@ -9,7 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func ExampleGetTransactionFromContext() {
+func ExampleGetSpanFromContext() {
 	router := echo.New()
 	router.Use(sentryecho.New(sentryecho.Options{}))
 	router.GET("/", func(c echo.Context) error {
