@@ -32,6 +32,12 @@ func (m MetricUnit) toString() string {
 	return m.unit
 }
 
+func NanoSecond() MetricUnit {
+	return MetricUnit{
+		"nanosecond",
+	}
+}
+
 func MicroSecond() MetricUnit {
 	return MetricUnit{
 		"microsecond",
