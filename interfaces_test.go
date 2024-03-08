@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http/httptest"
@@ -212,6 +213,129 @@ func TestEventWithDebugMetaMarshalJSON(t *testing.T) {
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
+	}
+}
+
+type withCause struct {
+	msg   string
+	cause error
+}
+
+func (w *withCause) Error() string { return w.msg }
+func (w *withCause) Cause() error  { return w.cause }
+
+type customError struct {
+	message string
+}
+
+func (e *customError) Error() string {
+	return e.message
+}
+
+func pointerToInt(i int) *int {
+	return &i
+}
+
+func TestSetException(t *testing.T) {
+	testCases := map[string]struct {
+		exception     error
+		maxErrorDepth int
+		expected      []Exception
+	}{
+		"Single error without unwrap": {
+			exception:     errors.New("simple error"),
+			maxErrorDepth: 1,
+			expected: []Exception{
+				{
+					Value:       "simple error",
+					Type:        "*errors.errorString",
+					Stacktrace:  &Stacktrace{Frames: []Frame{}},
+					ExceptionID: 0,
+				},
+			},
+		},
+		"Nested errors with Unwrap": {
+			exception:     fmt.Errorf("level 2: %w", fmt.Errorf("level 1: %w", errors.New("base error"))),
+			maxErrorDepth: 3,
+			expected: []Exception{
+				{
+					Value:       "base error",
+					Type:        "*errors.errorString",
+					ExceptionID: 0,
+				},
+				{
+					Value:       "level 1: base error",
+					Type:        "*fmt.wrapError",
+					ExceptionID: 1,
+					ParentID:    pointerToInt(0),
+				},
+				{
+					Value:       "level 2: level 1: base error",
+					Type:        "*fmt.wrapError",
+					Stacktrace:  &Stacktrace{Frames: []Frame{}},
+					ExceptionID: 2,
+					ParentID:    pointerToInt(1),
+				},
+			},
+		},
+		"Custom error types": {
+			exception: &customError{
+				message: "custom error message",
+			},
+			maxErrorDepth: 1,
+			expected: []Exception{
+				{
+					Value:       "custom error message",
+					Type:        "*sentry.customError",
+					Stacktrace:  &Stacktrace{Frames: []Frame{}},
+					ExceptionID: 0,
+				},
+			},
+		},
+		"Combination of Unwrap and Cause": {
+			exception: fmt.Errorf("outer error: %w", &withCause{
+				msg:   "error with cause",
+				cause: errors.New("the cause"),
+			}),
+			maxErrorDepth: 3,
+			expected: []Exception{
+				{
+					Value:       "the cause",
+					Type:        "*errors.errorString",
+					ExceptionID: 0,
+				},
+				{
+					Value:       "error with cause",
+					Type:        "*sentry.withCause",
+					ExceptionID: 1,
+					ParentID:    pointerToInt(0),
+				},
+				{
+					Value:       "outer error: error with cause",
+					Type:        "*fmt.wrapError",
+					Stacktrace:  &Stacktrace{Frames: []Frame{}},
+					ExceptionID: 2,
+					ParentID:    pointerToInt(1),
+				},
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			e := &Event{}
+			e.SetException(tc.exception, tc.maxErrorDepth)
+
+			if len(e.Exception) != len(tc.expected) {
+				t.Fatalf("Expected %d exceptions, got %d", len(tc.expected), len(e.Exception))
+			}
+
+			for i, exp := range tc.expected {
+				if diff := cmp.Diff(exp, e.Exception[i]); diff != "" {
+					t.Errorf("Event mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
 	}
 }
 

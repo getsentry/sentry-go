@@ -3,6 +3,7 @@ package sentry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -238,12 +239,15 @@ func (m *Mechanism) SetUnhandled() {
 
 // Exception specifies an error that occurred.
 type Exception struct {
-	Type       string      `json:"type,omitempty"`  // used as the main issue title
-	Value      string      `json:"value,omitempty"` // used as the main issue subtitle
-	Module     string      `json:"module,omitempty"`
-	ThreadID   uint64      `json:"thread_id,omitempty"`
-	Stacktrace *Stacktrace `json:"stacktrace,omitempty"`
-	Mechanism  *Mechanism  `json:"mechanism,omitempty"`
+	Type             string      `json:"type,omitempty"`  // used as the main issue title
+	Value            string      `json:"value,omitempty"` // used as the main issue subtitle
+	Module           string      `json:"module,omitempty"`
+	ThreadID         uint64      `json:"thread_id,omitempty"`
+	IsExceptionGroup bool        `json:"is_exception_group,omitempty"`
+	ExceptionID      int         `json:"exception_id"`
+	ParentID         *int        `json:"parent_id,omitempty"`
+	Stacktrace       *Stacktrace `json:"stacktrace,omitempty"`
+	Mechanism        *Mechanism  `json:"mechanism,omitempty"`
 }
 
 // SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
@@ -341,25 +345,40 @@ type Event struct {
 // maxErrorDepth is the maximum depth of the error chain we will look
 // into while unwrapping the errors.
 func (e *Event) SetException(exception error, maxErrorDepth int) {
-	err := exception
-	if err == nil {
+	if exception == nil {
 		return
 	}
 
-	for i := 0; i < maxErrorDepth && err != nil; i++ {
+	err := exception
+
+	for i := 0; err != nil && i < maxErrorDepth; i++ {
+		// Add the current error to the exception slice with its details
 		e.Exception = append(e.Exception, Exception{
 			Value:      err.Error(),
 			Type:       reflect.TypeOf(err).String(),
 			Stacktrace: ExtractStacktrace(err),
 		})
-		switch previous := err.(type) {
-		case interface{ Unwrap() error }:
-			err = previous.Unwrap()
-		case interface{ Cause() error }:
-			err = previous.Cause()
-		default:
-			err = nil
+
+		// Attempt to unwrap the error using the standard library's Unwrap method.
+		// If errors.Unwrap returns nil, it means either there is no error to unwrap,
+		// or the error does not implement the Unwrap method.
+		unwrappedErr := errors.Unwrap(err)
+
+		if unwrappedErr != nil {
+			// The error was successfully unwrapped using the standard library's Unwrap method.
+			err = unwrappedErr
+			continue
 		}
+
+		causer, ok := err.(interface{ Cause() error })
+		if !ok {
+			// We cannot unwrap the error further.
+			break
+		}
+
+		// The error implements the Cause method, indicating it may have been wrapped
+		// using the github.com/pkg/errors package.
+		err = causer.Cause()
 	}
 
 	// Add a trace of the current stack to the most recent error in a chain if
@@ -372,6 +391,14 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 
 	// event.Exception should be sorted such that the most recent error is last.
 	reverse(e.Exception)
+
+	for i := range e.Exception {
+		if i == 0 {
+			continue
+		}
+		e.Exception[i].ExceptionID = i
+		e.Exception[i].ParentID = &e.Exception[i-1].ExceptionID
+	}
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
