@@ -264,5 +264,4 @@ func TestIntegration(t *testing.T) {
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Fatalf("Events mismatch (-want +got):\n%s", diff)
 	}
-
 }
