@@ -214,7 +214,6 @@ func TestIntegration(t *testing.T) {
 	c.Timeout = time.Second
 
 	var want []*sentry.Event
-	var wantCodes []sentry.SpanStatus
 	for _, tt := range tests {
 		if tt.WantEvent != nil && tt.WantEvent.Request != nil {
 			wantRequest := tt.WantEvent.Request
@@ -222,7 +221,6 @@ func TestIntegration(t *testing.T) {
 			wantRequest.Headers["Host"] = srv.Listener.Addr().String()
 			want = append(want, tt.WantEvent)
 		}
-		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
 
 		req, err := http.NewRequest(tt.Method, srv.URL+tt.RequestPath, strings.NewReader(tt.Body))
 		if err != nil {
