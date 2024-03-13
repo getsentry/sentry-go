@@ -162,18 +162,19 @@ func TestCaptureException(t *testing.T) {
 			err:  pkgErrors.WithStack(&customErr{}),
 			want: []Exception{
 				{
-					Type:  "*sentry.customErr",
-					Value: "wat",
-					// No Stacktrace, because we can't tell where the error came
-					// from and because we have a stack trace in the most recent
-					// error in the chain.
+					Type:      "*sentry.customErr",
+					Value:     "wat",
+					Mechanism: &Mechanism{IsExceptionGroup: true},
 				},
 				{
-					Type:        "*errors.withStack",
-					Value:       "wat",
-					Stacktrace:  &Stacktrace{Frames: []Frame{}},
-					ExceptionID: 1,
-					ParentID:    pointerToInt(0),
+					Type:       "*errors.withStack",
+					Value:      "wat",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						ExceptionID:      1,
+						IsExceptionGroup: true,
+						ParentID:         pointerToInt(0),
+					},
 				},
 			},
 		},
@@ -195,13 +196,19 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:  "*sentry.customErr",
 					Value: "wat",
+					Mechanism: &Mechanism{
+						IsExceptionGroup: true,
+					},
 				},
 				{
-					Type:        "*sentry.customErrWithCause",
-					Value:       "err",
-					Stacktrace:  &Stacktrace{Frames: []Frame{}},
-					ExceptionID: 1,
-					ParentID:    pointerToInt(0),
+					Type:       "*sentry.customErrWithCause",
+					Value:      "err",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						ExceptionID:      1,
+						IsExceptionGroup: true,
+						ParentID:         pointerToInt(0),
+					},
 				},
 			},
 		},
@@ -212,13 +219,19 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:  "*errors.errorString",
 					Value: "original",
+					Mechanism: &Mechanism{
+						IsExceptionGroup: true,
+					},
 				},
 				{
-					Type:        "sentry.wrappedError",
-					Value:       "wrapped: original",
-					Stacktrace:  &Stacktrace{Frames: []Frame{}},
-					ExceptionID: 1,
-					ParentID:    pointerToInt(0),
+					Type:       "sentry.wrappedError",
+					Value:      "wrapped: original",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						ExceptionID:      1,
+						IsExceptionGroup: true,
+						ParentID:         pointerToInt(0),
+					},
 				},
 			},
 		},

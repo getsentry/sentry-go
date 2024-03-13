@@ -223,11 +223,15 @@ func NewRequest(r *http.Request) *Request {
 
 // Mechanism is the mechanism by which an exception was generated and handled.
 type Mechanism struct {
-	Type        string                 `json:"type,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	HelpLink    string                 `json:"help_link,omitempty"`
-	Handled     *bool                  `json:"handled,omitempty"`
-	Data        map[string]interface{} `json:"data,omitempty"`
+	Type             string         `json:"type,omitempty"`
+	Description      string         `json:"description,omitempty"`
+	HelpLink         string         `json:"help_link,omitempty"`
+	Source           string         `json:"source,omitempty"`
+	Handled          *bool          `json:"handled,omitempty"`
+	ExceptionID      int            `json:"exception_id"`
+	ParentID         *int           `json:"parent_id,omitempty"`
+	IsExceptionGroup bool           `json:"is_exception_group,omitempty"`
+	Data             map[string]any `json:"data,omitempty"`
 }
 
 // SetUnhandled indicates that the exception is an unhandled exception, i.e.
@@ -239,15 +243,12 @@ func (m *Mechanism) SetUnhandled() {
 
 // Exception specifies an error that occurred.
 type Exception struct {
-	Type             string      `json:"type,omitempty"`  // used as the main issue title
-	Value            string      `json:"value,omitempty"` // used as the main issue subtitle
-	Module           string      `json:"module,omitempty"`
-	ThreadID         uint64      `json:"thread_id,omitempty"`
-	IsExceptionGroup bool        `json:"is_exception_group,omitempty"`
-	ExceptionID      int         `json:"exception_id"`
-	ParentID         *int        `json:"parent_id,omitempty"`
-	Stacktrace       *Stacktrace `json:"stacktrace,omitempty"`
-	Mechanism        *Mechanism  `json:"mechanism,omitempty"`
+	Type       string      `json:"type,omitempty"`  // used as the main issue title
+	Value      string      `json:"value,omitempty"` // used as the main issue subtitle
+	Module     string      `json:"module,omitempty"`
+	ThreadID   uint64      `json:"thread_id,omitempty"`
+	Stacktrace *Stacktrace `json:"stacktrace,omitempty"`
+	Mechanism  *Mechanism  `json:"mechanism,omitempty"`
 }
 
 // SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
@@ -393,11 +394,14 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 	reverse(e.Exception)
 
 	for i := range e.Exception {
+		if len(e.Exception) > 1 {
+			e.Exception[i].Mechanism = &Mechanism{IsExceptionGroup: true}
+		}
 		if i == 0 {
 			continue
 		}
-		e.Exception[i].ExceptionID = i
-		e.Exception[i].ParentID = &e.Exception[i-1].ExceptionID
+		e.Exception[i].Mechanism.ExceptionID = i
+		e.Exception[i].Mechanism.ParentID = Pointer(i - 1)
 	}
 }
 

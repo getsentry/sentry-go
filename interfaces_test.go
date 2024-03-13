@@ -247,10 +247,9 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 1,
 			expected: []Exception{
 				{
-					Value:       "simple error",
-					Type:        "*errors.errorString",
-					Stacktrace:  &Stacktrace{Frames: []Frame{}},
-					ExceptionID: 0,
+					Value:      "simple error",
+					Type:       "*errors.errorString",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 				},
 			},
 		},
@@ -259,22 +258,31 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 3,
 			expected: []Exception{
 				{
-					Value:       "base error",
-					Type:        "*errors.errorString",
-					ExceptionID: 0,
+					Value: "base error",
+					Type:  "*errors.errorString",
+					Mechanism: &Mechanism{
+						ExceptionID:      0,
+						IsExceptionGroup: true,
+					},
 				},
 				{
-					Value:       "level 1: base error",
-					Type:        "*fmt.wrapError",
-					ExceptionID: 1,
-					ParentID:    pointerToInt(0),
+					Value: "level 1: base error",
+					Type:  "*fmt.wrapError",
+					Mechanism: &Mechanism{
+						ExceptionID:      1,
+						IsExceptionGroup: true,
+						ParentID:         pointerToInt(0),
+					},
 				},
 				{
-					Value:       "level 2: level 1: base error",
-					Type:        "*fmt.wrapError",
-					Stacktrace:  &Stacktrace{Frames: []Frame{}},
-					ExceptionID: 2,
-					ParentID:    pointerToInt(1),
+					Value:      "level 2: level 1: base error",
+					Type:       "*fmt.wrapError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						ExceptionID:      2,
+						IsExceptionGroup: true,
+						ParentID:         pointerToInt(1),
+					},
 				},
 			},
 		},
@@ -285,10 +293,9 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 1,
 			expected: []Exception{
 				{
-					Value:       "custom error message",
-					Type:        "*sentry.customError",
-					Stacktrace:  &Stacktrace{Frames: []Frame{}},
-					ExceptionID: 0,
+					Value:      "custom error message",
+					Type:       "*sentry.customError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 				},
 			},
 		},
@@ -300,22 +307,31 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 3,
 			expected: []Exception{
 				{
-					Value:       "the cause",
-					Type:        "*errors.errorString",
-					ExceptionID: 0,
+					Value: "the cause",
+					Type:  "*errors.errorString",
+					Mechanism: &Mechanism{
+						ExceptionID:      0,
+						IsExceptionGroup: true,
+					},
 				},
 				{
-					Value:       "error with cause",
-					Type:        "*sentry.withCause",
-					ExceptionID: 1,
-					ParentID:    pointerToInt(0),
+					Value: "error with cause",
+					Type:  "*sentry.withCause",
+					Mechanism: &Mechanism{
+						ExceptionID:      1,
+						IsExceptionGroup: true,
+						ParentID:         pointerToInt(0),
+					},
 				},
 				{
-					Value:       "outer error: error with cause",
-					Type:        "*fmt.wrapError",
-					Stacktrace:  &Stacktrace{Frames: []Frame{}},
-					ExceptionID: 2,
-					ParentID:    pointerToInt(1),
+					Value:      "outer error: error with cause",
+					Type:       "*fmt.wrapError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						ExceptionID:      2,
+						IsExceptionGroup: true,
+						ParentID:         pointerToInt(1),
+					},
 				},
 			},
 		},
@@ -355,7 +371,7 @@ func TestMechanismMarshalJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := `{"type":"some type","description":"some description","help_link":"some help link",` +
+	want := `{"type":"some type","description":"some description","help_link":"some help link","exception_id":0,` +
 		`"data":{"some data":"some value","some numeric data":12345}}`
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
@@ -381,7 +397,7 @@ func TestMechanismMarshalJSON_withHandled(t *testing.T) {
 	}
 
 	want := `{"type":"some type","description":"some description","help_link":"some help link",` +
-		`"handled":false,"data":{"some data":"some value","some numeric data":12345}}`
+		`"handled":false,"exception_id":0,"data":{"some data":"some value","some numeric data":12345}}`
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)

@@ -200,7 +200,7 @@ func TestEventWithExceptionStacktraceMarshalJSON(t *testing.T) {
 	}
 
 	want := `{"sdk":{},"user":{},` +
-		`"exception":[{"exception_id":0,"stacktrace":{"frames":[` +
+		`"exception":[{"stacktrace":{"frames":[` +
 		`{"function":"gofunc",` +
 		`"symbol":"gosym",` +
 		`"module":"gopkg/gopath",` +
