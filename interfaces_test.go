@@ -232,10 +232,6 @@ func (e *customError) Error() string {
 	return e.message
 }
 
-func pointerToInt(i int) *int {
-	return &i
-}
-
 func TestSetException(t *testing.T) {
 	testCases := map[string]struct {
 		exception     error
@@ -271,7 +267,7 @@ func TestSetException(t *testing.T) {
 					Mechanism: &Mechanism{
 						ExceptionID:      1,
 						IsExceptionGroup: true,
-						ParentID:         pointerToInt(0),
+						ParentID:         Pointer(0),
 					},
 				},
 				{
@@ -281,7 +277,7 @@ func TestSetException(t *testing.T) {
 					Mechanism: &Mechanism{
 						ExceptionID:      2,
 						IsExceptionGroup: true,
-						ParentID:         pointerToInt(1),
+						ParentID:         Pointer(1),
 					},
 				},
 			},
@@ -320,7 +316,7 @@ func TestSetException(t *testing.T) {
 					Mechanism: &Mechanism{
 						ExceptionID:      1,
 						IsExceptionGroup: true,
-						ParentID:         pointerToInt(0),
+						ParentID:         Pointer(0),
 					},
 				},
 				{
@@ -330,7 +326,7 @@ func TestSetException(t *testing.T) {
 					Mechanism: &Mechanism{
 						ExceptionID:      2,
 						IsExceptionGroup: true,
-						ParentID:         pointerToInt(1),
+						ParentID:         Pointer(1),
 					},
 				},
 			},

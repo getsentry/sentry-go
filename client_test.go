@@ -173,7 +173,7 @@ func TestCaptureException(t *testing.T) {
 					Mechanism: &Mechanism{
 						ExceptionID:      1,
 						IsExceptionGroup: true,
-						ParentID:         pointerToInt(0),
+						ParentID:         Pointer(0),
 					},
 				},
 			},
@@ -207,7 +207,7 @@ func TestCaptureException(t *testing.T) {
 					Mechanism: &Mechanism{
 						ExceptionID:      1,
 						IsExceptionGroup: true,
-						ParentID:         pointerToInt(0),
+						ParentID:         Pointer(0),
 					},
 				},
 			},
@@ -230,7 +230,7 @@ func TestCaptureException(t *testing.T) {
 					Mechanism: &Mechanism{
 						ExceptionID:      1,
 						IsExceptionGroup: true,
-						ParentID:         pointerToInt(0),
+						ParentID:         Pointer(0),
 					},
 				},
 			},
