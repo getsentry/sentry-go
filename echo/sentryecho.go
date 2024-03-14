@@ -9,6 +9,9 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// The identifier of the Echo SDK.
+const sdkIdentifier = "sentry.go.echo"
+
 const valuesKey = "sentry"
 
 type handler struct {
@@ -49,6 +52,11 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
 		}
+
+		if client := hub.Client(); client != nil {
+			client.SetSDKIdentifier(sdkIdentifier)
+		}
+
 		hub.Scope().SetRequest(ctx.Request())
 		ctx.Set(valuesKey, hub)
 		defer h.recoverWithSentry(hub, ctx.Request())

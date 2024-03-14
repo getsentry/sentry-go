@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -193,7 +194,7 @@ func TestEnvelopeFromTransactionBody(t *testing.T) {
 
 func TestEnvelopeFromEventWithAttachments(t *testing.T) {
 	event := newTestEvent(eventType)
-	event.attachments = []*Attachment{
+	event.Attachments = []*Attachment{
 		// Empty content-type and payload
 		{
 			Filename: "empty.txt",
@@ -240,7 +241,7 @@ func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 					Colno:    24,
 				},
 			},
-			Samples: []*profileSample{
+			Samples: []profileSample{
 				{
 					ElapsedSinceStartNS: 10,
 					StackID:             2,
@@ -248,8 +249,8 @@ func TestEnvelopeFromTransactionWithProfile(t *testing.T) {
 				},
 			},
 			Stacks: []profileStack{{0}},
-			ThreadMetadata: map[string]profileThreadMetadata{
-				"1": {Name: "GO 1"},
+			ThreadMetadata: map[uint64]*profileThreadMetadata{
+				1: {Name: "GO 1"},
 			},
 		},
 		Transaction: profileTransaction{
@@ -320,18 +321,13 @@ func TestGetRequestFromEvent(t *testing.T) {
 	}{
 		{
 			testName: "Sample Event",
-			event:    NewEvent(),
+			event:    newTestEvent(eventType),
 			apiURL:   "https://host/path/api/42/envelope/",
 		},
 		{
 			testName: "Transaction",
-			event: func() *Event {
-				event := NewEvent()
-				event.Type = transactionType
-
-				return event
-			}(),
-			apiURL: "https://host/path/api/42/envelope/",
+			event:    newTestEvent(transactionType),
+			apiURL:   "https://host/path/api/42/envelope/",
 		},
 	}
 
@@ -356,8 +352,19 @@ func TestGetRequestFromEvent(t *testing.T) {
 				t.Errorf("Incorrect API URL. want: %s, got: %s", test.apiURL, req.URL.String())
 			}
 
+			userAgent := fmt.Sprintf("%s/%s", test.event.Sdk.Name, test.event.Sdk.Version)
 			if ua := req.UserAgent(); ua != userAgent {
 				t.Errorf("got User-Agent = %q, want %q", ua, userAgent)
+			}
+
+			contentType := "application/x-sentry-envelope"
+			if ct := req.Header.Get("Content-Type"); ct != contentType {
+				t.Errorf("got Content-Type = %q, want %q", ct, contentType)
+			}
+
+			xSentryAuth := "Sentry sentry_version=7, sentry_client=sentry.go/0.0.1, sentry_key=key"
+			if auth := req.Header.Get("X-Sentry-Auth"); !strings.HasPrefix(auth, xSentryAuth) {
+				t.Errorf("got X-Sentry-Auth = %q, want %q", auth, xSentryAuth)
 			}
 		})
 	}
@@ -432,8 +439,7 @@ func TestHTTPTransport(t *testing.T) {
 
 	transportMustFlush := func(t *testing.T, id string) {
 		t.Helper()
-
-		ok := transport.Flush(500 * time.Millisecond)
+		ok := transport.Flush(testutils.FlushTimeout())
 		if !ok {
 			t.Fatalf("[CLIENT] {%.4s} Flush() timed out", id)
 		}
@@ -447,8 +453,6 @@ func TestHTTPTransport(t *testing.T) {
 			t.Fatalf("[SERVER] event count = %d, want %d", count, n)
 		}
 	}
-
-	// Actual tests
 
 	testSendSingleEvent := func(t *testing.T) {
 		// Sending a single event should increase the server event count by
@@ -467,6 +471,8 @@ func TestHTTPTransport(t *testing.T) {
 		transportMustFlush(t, id)
 		serverEventCountMustBe(t, initialCount+1)
 	}
+
+	// Actual tests
 	t.Run("SendSingleEvent", testSendSingleEvent)
 
 	t.Run("FlushMultipleTimes", func(t *testing.T) {
@@ -485,12 +491,12 @@ func TestHTTPTransport(t *testing.T) {
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() {
+			defer wg.Done()
 			testSendSingleEvent(t)
-			wg.Done()
 		}()
 		go func() {
+			defer wg.Done()
 			transportMustFlush(t, "from goroutine")
-			wg.Done()
 		}()
 		wg.Wait()
 	})
@@ -547,7 +553,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 	checkLastConnReuse := func(reused bool) {
 		t.Helper()
 		reqCount++
-		if !tr.Flush(2 * time.Second) {
+		if !tr.Flush(testutils.FlushTimeout()) {
 			t.Fatal("Flush timed out")
 		}
 		if len(rt.reusedConn) != reqCount {
@@ -661,7 +667,7 @@ func testRateLimiting(t *testing.T, tr Transport) {
 	}()
 	wg.Wait()
 
-	if !tr.Flush(time.Second) {
+	if !tr.Flush(testutils.FlushTimeout()) {
 		t.Fatal("Flush timed out")
 	}
 

@@ -12,6 +12,9 @@ import (
 	sentry "github.com/getsentry/sentry-go"
 )
 
+// The identifier of the Logrus SDK.
+const sdkIdentifier = "sentry.go.logrus"
+
 // These default log field keys are used to pass specific metadata in a way that
 // Sentry understands. If they are found in the log fields, and the value is of
 // the expected datatype, it will be converted from a generic field, into Sentry
@@ -54,6 +57,9 @@ func New(levels []logrus.Level, opts sentry.ClientOptions) (*Hook, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	client.SetSDKIdentifier(sdkIdentifier)
+
 	return NewFromClient(levels, client), nil
 }
 

@@ -1,4 +1,4 @@
-package sentryhttp_test
+package sentryecho_test
 
 import (
 	"fmt"
@@ -10,34 +10,39 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	sentryhttp "github.com/getsentry/sentry-go/http"
+	sentryecho "github.com/getsentry/sentry-go/echo"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/labstack/echo/v4"
 )
 
 func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
 
 	tests := []struct {
-		Path    string
-		Method  string
-		Body    string
-		Handler http.Handler
+		RequestPath string
+		RoutePath   string
+		Method      string
+		WantStatus  int
+		Body        string
+		Handler     echo.HandlerFunc
 
 		WantEvent *sentry.Event
 	}{
 		{
-			Path: "/panic",
-			Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			RequestPath: "/panic/1",
+			RoutePath:   "/panic/:id",
+			Method:      "GET",
+			WantStatus:  200,
+			Handler: func(c echo.Context) error {
 				panic("test")
-			}),
-
+			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
 				Message: "test",
 				Request: &sentry.Request{
-					URL:    "/panic",
+					URL:    "/panic/1",
 					Method: "GET",
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip",
@@ -47,18 +52,28 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:   "/post",
-			Method: "POST",
-			Body:   "payload",
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
-				body, err := io.ReadAll(r.Body)
+			RequestPath: "/404/1",
+			RoutePath:   "",
+			Method:      "GET",
+			WantStatus:  404,
+			Handler:     nil,
+			WantEvent:   nil,
+		},
+		{
+			RequestPath: "/post",
+			RoutePath:   "/post",
+			Method:      "POST",
+			WantStatus:  200,
+			Body:        "payload",
+			Handler: func(c echo.Context) error {
+				hub := sentryecho.GetHubFromContext(c)
+				body, err := io.ReadAll(c.Request().Body)
 				if err != nil {
 					t.Error(err)
 				}
 				hub.CaptureMessage("post: " + string(body))
-			}),
-
+				return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "post: payload",
@@ -75,12 +90,15 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path: "/get",
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
+			RequestPath: "/get",
+			RoutePath:   "/get",
+			Method:      "GET",
+			WantStatus:  200,
+			Handler: func(c echo.Context) error {
+				hub := sentryecho.GetHubFromContext(c)
 				hub.CaptureMessage("get")
-			}),
-
+				return c.JSON(http.StatusOK, map[string]string{"status": "get"})
+			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "get",
@@ -95,18 +113,20 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:   "/post/large",
-			Method: "POST",
-			Body:   largePayload,
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
-				body, err := io.ReadAll(r.Body)
+			RequestPath: "/post/large",
+			RoutePath:   "/post/large",
+			Method:      "POST",
+			WantStatus:  200,
+			Body:        largePayload,
+			Handler: func(c echo.Context) error {
+				hub := sentryecho.GetHubFromContext(c)
+				body, err := io.ReadAll(c.Request().Body)
 				if err != nil {
 					t.Error(err)
 				}
 				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(body)/1024))
-			}),
-
+				return nil
+			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "post: 15 KB",
@@ -124,14 +144,16 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:   "/post/body-ignored",
-			Method: "POST",
-			Body:   "client sends, server ignores, SDK doesn't read",
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
+			RequestPath: "/post/body-ignored",
+			RoutePath:   "/post/body-ignored",
+			Method:      "POST",
+			WantStatus:  200,
+			Body:        "client sends, server ignores, SDK doesn't read",
+			Handler: func(c echo.Context) error {
+				hub := sentryecho.GetHubFromContext(c)
 				hub.CaptureMessage("body ignored")
-			}),
-
+				return nil
+			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "body ignored",
@@ -148,10 +170,22 @@ func TestIntegration(t *testing.T) {
 				},
 			},
 		},
+		{
+			RequestPath: "/badreq",
+			RoutePath:   "/badreq",
+			Method:      "GET",
+			WantStatus:  400,
+			Handler: func(c echo.Context) error {
+				return c.JSON(http.StatusBadRequest, map[string]string{"status": "bad_request"})
+			},
+			WantEvent: nil,
+		},
 	}
 
 	eventsCh := make(chan *sentry.Event, len(tests))
 	err := sentry.Init(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
@@ -161,17 +195,19 @@ func TestIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sentryHandler := sentryhttp.New(sentryhttp.Options{})
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		for _, tt := range tests {
-			if r.URL.Path == tt.Path {
-				tt.Handler.ServeHTTP(w, r)
-				return
-			}
+	router := echo.New()
+	router.Use(sentryecho.New(sentryecho.Options{}))
+
+	for _, tt := range tests {
+		switch tt.Method {
+		case http.MethodGet:
+			router.GET(tt.RoutePath, tt.Handler)
+		case http.MethodPost:
+			router.POST(tt.RoutePath, tt.Handler)
 		}
-		t.Errorf("Unhandled request: %#v", r)
 	}
-	srv := httptest.NewServer(sentryHandler.HandleFunc(handler))
+
+	srv := httptest.NewServer(router)
 	defer srv.Close()
 
 	c := srv.Client()
@@ -179,12 +215,14 @@ func TestIntegration(t *testing.T) {
 
 	var want []*sentry.Event
 	for _, tt := range tests {
-		wantRequest := tt.WantEvent.Request
-		wantRequest.URL = srv.URL + wantRequest.URL
-		wantRequest.Headers["Host"] = srv.Listener.Addr().String()
-		want = append(want, tt.WantEvent)
+		if tt.WantEvent != nil && tt.WantEvent.Request != nil {
+			wantRequest := tt.WantEvent.Request
+			wantRequest.URL = srv.URL + wantRequest.URL
+			wantRequest.Headers["Host"] = srv.Listener.Addr().String()
+			want = append(want, tt.WantEvent)
+		}
 
-		req, err := http.NewRequest(tt.Method, srv.URL+tt.Path, strings.NewReader(tt.Body))
+		req, err := http.NewRequest(tt.Method, srv.URL+tt.RequestPath, strings.NewReader(tt.Body))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -192,10 +230,13 @@ func TestIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if res.StatusCode != http.StatusOK {
-			t.Errorf("Status code = %d", res.StatusCode)
+		if res.StatusCode != tt.WantStatus {
+			t.Errorf("Status code = %d expected: %d", res.StatusCode, tt.WantStatus)
 		}
-		res.Body.Close()
+		err = res.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {

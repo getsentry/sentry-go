@@ -13,6 +13,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewClientAllowsEmptyDSN(t *testing.T) {
@@ -79,7 +80,7 @@ func TestCaptureMessageEmptyString(t *testing.T) {
 	}
 	got := transport.lastEvent
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "attachments"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 			return &Event{
 				Exception: e.Exception,
@@ -286,7 +287,7 @@ func TestCaptureEvent(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "sdkMetaData", "attachments")}
+	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "sdkMetaData")}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
@@ -314,7 +315,7 @@ func TestCaptureEventNil(t *testing.T) {
 	}
 	got := transport.lastEvent
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "attachments"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 			return &Event{
 				Exception: e.Exception,
@@ -551,6 +552,115 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 	assertEqual(t, lastEvent.Contexts["trace"]["span_id"], transaction.SpanID)
 }
 
+func TestIgnoreErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		ignoreErrors []string
+		message      string
+		expectDrop   bool
+	}{
+		{
+			name:         "No Match",
+			message:      "Foo",
+			ignoreErrors: []string{"Bar", "Baz"},
+			expectDrop:   false,
+		},
+		{
+			name:         "Partial Match",
+			message:      "FooBar",
+			ignoreErrors: []string{"Foo", "Baz"},
+			expectDrop:   true,
+		},
+		{
+			name:         "Exact Match",
+			message:      "Foo Bar",
+			ignoreErrors: []string{"\\bFoo\\b", "Baz"},
+			expectDrop:   true,
+		},
+		{
+			name:         "Wildcard Match",
+			message:      "Foo",
+			ignoreErrors: []string{"F*", "Bar"},
+			expectDrop:   true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scope := &ScopeMock{}
+			transport := &TransportMock{}
+			client, err := NewClient(ClientOptions{
+				Transport:    transport,
+				IgnoreErrors: tt.ignoreErrors,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			client.CaptureMessage(tt.message, nil, scope)
+
+			dropped := transport.lastEvent == nil
+			if !(tt.expectDrop == dropped) {
+				t.Error("expected event to be dropped")
+			}
+		})
+	}
+}
+
+func TestIgnoreTransactions(t *testing.T) {
+	tests := []struct {
+		name               string
+		ignoreTransactions []string
+		transaction        string
+		expectDrop         bool
+	}{
+		{
+			name:               "No Match",
+			transaction:        "Foo",
+			ignoreTransactions: []string{"Bar", "Baz"},
+			expectDrop:         false,
+		},
+		{
+			name:               "Partial Match",
+			transaction:        "FooBar",
+			ignoreTransactions: []string{"Foo", "Baz"},
+			expectDrop:         true,
+		},
+		{
+			name:               "Exact Match",
+			transaction:        "Foo Bar",
+			ignoreTransactions: []string{"\\bFoo\\b", "Baz"},
+			expectDrop:         true,
+		},
+		{
+			name:               "Wildcard Match",
+			transaction:        "Foo",
+			ignoreTransactions: []string{"F*", "Bar"},
+			expectDrop:         true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &TransportMock{}
+			ctx := NewTestContext(ClientOptions{
+				EnableTracing:      true,
+				TracesSampleRate:   1.0,
+				Transport:          transport,
+				IgnoreTransactions: tt.ignoreTransactions,
+			})
+
+			transaction := StartTransaction(ctx,
+				tt.transaction,
+			)
+			transaction.Finish()
+
+			dropped := transport.lastEvent == nil
+			if !(tt.expectDrop == dropped) {
+				t.Error("expected event to be dropped")
+			}
+		})
+	}
+}
+
 func TestSampleRate(t *testing.T) {
 	tests := []struct {
 		SampleRate float64
@@ -609,6 +719,7 @@ func TestSampleRate(t *testing.T) {
 func BenchmarkProcessEvent(b *testing.B) {
 	c, err := NewClient(ClientOptions{
 		SampleRate: 0.25,
+		Transport:  &TransportMock{},
 	})
 	if err != nil {
 		b.Fatal(err)
@@ -652,7 +763,7 @@ func TestRecover(t *testing.T) {
 		}
 		got := events[0]
 		opts := cmp.Options{
-			cmpopts.IgnoreFields(Event{}, "sdkMetaData", "attachments"),
+			cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
 			cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 				return &Event{
 					Message:   e.Message,
@@ -708,8 +819,25 @@ func TestCustomMaxSpansProperty(t *testing.T) {
 	assertEqual(t, client.Options().MaxSpans, 2000)
 
 	properClient, _ := NewClient(ClientOptions{
-		MaxSpans: 3000,
+		MaxSpans:  3000,
+		Transport: &TransportMock{},
 	})
 
 	assertEqual(t, properClient.Options().MaxSpans, 3000)
+}
+
+func TestSDKIdentifier(t *testing.T) {
+	client, _, _ := setupClientTest()
+	assertEqual(t, client.GetSDKIdentifier(), "sentry.go")
+
+	client.SetSDKIdentifier("sentry.go.test")
+	assertEqual(t, client.GetSDKIdentifier(), "sentry.go.test")
+}
+
+func TestClientSetsUpTransport(t *testing.T) {
+	client, _ := NewClient(ClientOptions{Dsn: testDsn})
+	require.IsType(t, &HTTPTransport{}, client.Transport)
+
+	client, _ = NewClient(ClientOptions{})
+	require.IsType(t, &noopTransport{}, client.Transport)
 }

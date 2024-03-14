@@ -103,6 +103,10 @@ func (ssp *sentrySpanProcessor) ForceFlush(ctx context.Context) error {
 
 func flushSpanProcessor(ctx context.Context) error {
 	hub := sentry.GetHubFromContext(ctx)
+	if hub == nil {
+		hub = sentry.CurrentHub()
+	}
+
 	// TODO(michi) should we make this configurable?
 	defer hub.Flush(2 * time.Second)
 	return nil
@@ -118,14 +122,14 @@ func getTraceParentContext(ctx context.Context) sentry.TraceParentContext {
 
 func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
 	// TODO(michi) This is crazy inefficient
-	attributes := map[attribute.Key]string{}
-	resource := map[attribute.Key]string{}
+	attributes := map[attribute.Key]interface{}{}
+	resource := map[attribute.Key]interface{}{}
 
 	for _, kv := range s.Attributes() {
-		attributes[kv.Key] = kv.Value.Emit()
+		attributes[kv.Key] = kv.Value.AsInterface()
 	}
 	for _, kv := range s.Resource().Attributes() {
-		resource[kv.Key] = kv.Value.Emit()
+		resource[kv.Key] = kv.Value.AsInterface()
 	}
 
 	transaction.SetContext("otel", map[string]interface{}{
@@ -149,6 +153,6 @@ func updateSpanWithOtelData(span *sentry.Span, s otelSdkTrace.ReadOnlySpan) {
 	span.Description = spanAttributes.Description
 	span.SetData("otel.kind", s.SpanKind().String())
 	for _, kv := range s.Attributes() {
-		span.SetData(string(kv.Key), kv.Value.Emit())
+		span.SetData(string(kv.Key), kv.Value.AsInterface())
 	}
 }

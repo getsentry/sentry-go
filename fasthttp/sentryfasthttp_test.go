@@ -10,6 +10,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryfasthttp "github.com/getsentry/sentry-go/fasthttp"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/valyala/fasthttp"
@@ -194,7 +195,7 @@ func TestIntegration(t *testing.T) {
 		}
 	}
 
-	if ok := sentry.Flush(time.Second); !ok {
+	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(eventsCh)
@@ -207,7 +208,7 @@ func TestIntegration(t *testing.T) {
 			sentry.Event{},
 			"Contexts", "EventID", "Extra", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
-			"sdkMetaData", "attachments",
+			"sdkMetaData",
 		),
 		cmpopts.IgnoreMapEntries(func(k string, v string) bool {
 			// fasthttp changed Content-Length behavior in

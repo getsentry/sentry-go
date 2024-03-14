@@ -15,6 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/testutils"
 )
 
 func TestNew(t *testing.T) {
@@ -36,7 +37,7 @@ func TestNew(t *testing.T) {
 		if id := h.hub.CaptureEvent(&sentry.Event{}); id == nil {
 			t.Error("CaptureEvent failed")
 		}
-		if !h.Flush(5 * time.Second) {
+		if !h.Flush(testutils.FlushTimeout()) {
 			t.Error("flush failed")
 		}
 	})
@@ -59,7 +60,7 @@ func TestFire(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !hook.Flush(5 * time.Second) {
+	if !hook.Flush(testutils.FlushTimeout()) {
 		t.Error("flush failed")
 	}
 }
@@ -249,7 +250,7 @@ func Test_entryToEvent(t *testing.T) {
 			got := h.entryToEvent(tt.entry)
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(sentry.Event{},
-					"sdkMetaData", "attachments",
+					"sdkMetaData",
 				),
 			}
 			if d := cmp.Diff(tt.want, got, opts); d != "" {

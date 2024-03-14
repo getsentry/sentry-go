@@ -72,7 +72,7 @@ func TestNewSentrySpanProcessor(t *testing.T) {
 
 func TestSpanProcessorShutdown(t *testing.T) {
 	spanProcessor, _, tracer := setupSpanProcessorTest()
-	ctx := emptyContextWithSentry()
+	ctx := context.Background()
 	tracer.Start(emptyContextWithSentry(), "spanName")
 
 	assertEqual(t, sentrySpanMap.Len(), 1)
@@ -257,10 +257,10 @@ func TestOnEndWithTransaction(t *testing.T) {
 		t,
 		otelContextGot,
 		map[string]interface{}{
-			"attributes": map[attribute.Key]string{
+			"attributes": map[attribute.Key]interface{}{
 				"key1": "value1",
 			},
-			"resource": map[attribute.Key]string{
+			"resource": map[attribute.Key]interface{}{
 				"service.name": "test-otel",
 			},
 		},

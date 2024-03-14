@@ -12,6 +12,9 @@ import (
 	"github.com/kataras/iris/v12"
 )
 
+// The identifier of the Iris SDK.
+const sdkIdentifier = "sentry.go.iris"
+
 const valuesKey = "sentry"
 
 type handler struct {
@@ -51,6 +54,11 @@ func (h *handler) handle(ctx iris.Context) {
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
 	}
+
+	if client := hub.Client(); client != nil {
+		client.SetSDKIdentifier(sdkIdentifier)
+	}
+
 	hub.Scope().SetRequest(ctx.Request())
 	ctx.Values().Set(valuesKey, hub)
 	defer h.recoverWithSentry(hub, ctx.Request())

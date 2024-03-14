@@ -9,6 +9,9 @@ import (
 	"github.com/urfave/negroni"
 )
 
+// The identifier of the Negroni SDK.
+const sdkIdentifier = "sentry.go.negroni"
+
 type handler struct {
 	repanic         bool
 	waitForDelivery bool
@@ -47,6 +50,11 @@ func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.H
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
 	}
+
+	if client := hub.Client(); client != nil {
+		client.SetSDKIdentifier(sdkIdentifier)
+	}
+
 	hub.Scope().SetRequest(r)
 	ctx = sentry.SetHubOnContext(
 		context.WithValue(ctx, sentry.RequestContextKey, r),
