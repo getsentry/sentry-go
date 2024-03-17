@@ -201,25 +201,25 @@ func (h *Hook) exceptions(err error) []sentry.Exception {
 		}}
 	}
 
-	excs := []sentry.Exception{}
-	var last *sentry.Exception
-	for ; err != nil; err = errors.Unwrap(err) {
-		exc := sentry.Exception{
-			Type:       reflect.TypeOf(err).String(),
+	var excs []sentry.Exception
+	for err != nil {
+		// Add the current error to the exception slice with its details
+		excs = append(excs, sentry.Exception{
 			Value:      err.Error(),
+			Type:       reflect.TypeOf(err).String(),
 			Stacktrace: sentry.ExtractStacktrace(err),
+		})
+
+		// Attempt to unwrap the error using the standard library's Unwrap method.
+		// If errors.Unwrap returns nil, it means either there is no error to unwrap,
+		// or the error does not implement the Unwrap method.
+		unwrappedErr := errors.Unwrap(err)
+
+		if unwrappedErr == nil {
+			break
 		}
-		if last != nil && exc.Value == last.Value {
-			if last.Stacktrace == nil {
-				last.Stacktrace = exc.Stacktrace
-				continue
-			}
-			if exc.Stacktrace == nil {
-				continue
-			}
-		}
-		excs = append(excs, exc)
-		last = &excs[len(excs)-1]
+
+		err = unwrappedErr
 	}
 
 	// Add a trace of the current stack to the most recent error in a chain if
@@ -228,10 +228,28 @@ func (h *Hook) exceptions(err error) []sentry.Exception {
 		excs[0].Stacktrace = sentry.NewStacktrace()
 	}
 
+	if len(excs) <= 1 {
+		return excs
+	}
+
 	// reverse
 	for i, j := 0, len(excs)-1; i < j; i, j = i+1, j-1 {
 		excs[i], excs[j] = excs[j], excs[i]
 	}
+
+	for i := range excs {
+		excs[i].Mechanism = &sentry.Mechanism{
+			Data: map[string]any{
+				"is_exception_group": true,
+				"exception_id":       i,
+			},
+		}
+		if i == 0 {
+			continue
+		}
+		excs[i].Mechanism.Data["parent_id"] = i - 1
+	}
+
 	return excs
 }
 

@@ -67,74 +67,67 @@ func TestFire(t *testing.T) {
 
 func Test_entryToEvent(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name  string
+	tests := map[string]struct {
 		entry *logrus.Entry
 		want  *sentry.Event
 	}{
-		{
-			name:  "empty entry",
+		"empty entry": {
 			entry: &logrus.Entry{},
 			want: &sentry.Event{
 				Level: "fatal",
-				Extra: map[string]interface{}{},
+				Extra: map[string]any{},
 			},
 		},
-		{
-			name: "data fields",
+		"data fields": {
 			entry: &logrus.Entry{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"foo": 123.4,
 					"bar": "oink",
 				},
 			},
 			want: &sentry.Event{
 				Level: "fatal",
-				Extra: map[string]interface{}{"bar": "oink", "foo": 123.4},
+				Extra: map[string]any{"bar": "oink", "foo": 123.4},
 			},
 		},
-		{
-			name: "info level",
+		"info level": {
 			entry: &logrus.Entry{
 				Level: logrus.InfoLevel,
 			},
 			want: &sentry.Event{
 				Level: "info",
-				Extra: map[string]interface{}{},
+				Extra: map[string]any{},
 			},
 		},
-		{
-			name: "message",
+		"message": {
 			entry: &logrus.Entry{
 				Message: "the only thing we have to fear is fear itself",
 			},
 			want: &sentry.Event{
 				Level:   "fatal",
-				Extra:   map[string]interface{}{},
+				Extra:   map[string]any{},
 				Message: "the only thing we have to fear is fear itself",
 			},
 		},
-		{
-			name: "timestamp",
+		"timestamp": {
 			entry: &logrus.Entry{
 				Time: time.Unix(1, 2).UTC(),
 			},
 			want: &sentry.Event{
 				Level:     "fatal",
-				Extra:     map[string]interface{}{},
+				Extra:     map[string]any{},
 				Timestamp: time.Unix(1, 2).UTC(),
 			},
 		},
-		{
-			name: "http request",
+		"http request": {
 			entry: &logrus.Entry{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					FieldRequest: httptest.NewRequest("GET", "/", nil),
 				},
 			},
 			want: &sentry.Event{
 				Level: "fatal",
-				Extra: map[string]interface{}{},
+				Extra: map[string]any{},
 				Request: &sentry.Request{
 					URL:     "http://example.com/",
 					Method:  http.MethodGet,
@@ -142,54 +135,73 @@ func Test_entryToEvent(t *testing.T) {
 				},
 			},
 		},
-		{
-			name: "error",
+		"error": {
 			entry: &logrus.Entry{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					logrus.ErrorKey: errors.New("things failed"),
 				},
 			},
 			want: &sentry.Event{
 				Level: "fatal",
-				Extra: map[string]interface{}{},
+				Extra: map[string]any{},
 				Exception: []sentry.Exception{
 					{Type: "*errors.errorString", Value: "things failed", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 				},
 			},
 		},
-		{
-			name: "non-error",
+		"non-error": {
 			entry: &logrus.Entry{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					logrus.ErrorKey: "this isn't really an error",
 				},
 			},
 			want: &sentry.Event{
 				Level: "fatal",
-				Extra: map[string]interface{}{
+				Extra: map[string]any{
 					"error": "this isn't really an error",
 				},
 			},
 		},
-		{
-			name: "error with stack trace",
+		"error with stack trace": {
 			entry: &logrus.Entry{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					logrus.ErrorKey: pkgerr.WithStack(errors.New("failure")),
 				},
 			},
 			want: &sentry.Event{
 				Level: "fatal",
-				Extra: map[string]interface{}{},
+				Extra: map[string]any{},
 				Exception: []sentry.Exception{
-					{Type: "*errors.withStack", Value: "failure", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+					{
+						Type:  "*errors.errorString",
+						Value: "failure",
+						Mechanism: &sentry.Mechanism{
+							Data: map[string]any{
+								"exception_id":       0,
+								"is_exception_group": true,
+							},
+						},
+					},
+					{
+						Type:  "*errors.withStack",
+						Value: "failure",
+						Stacktrace: &sentry.Stacktrace{
+							Frames: []sentry.Frame{},
+						},
+						Mechanism: &sentry.Mechanism{
+							Data: map[string]any{
+								"exception_id":       1,
+								"is_exception_group": true,
+								"parent_id":          0,
+							},
+						},
+					},
 				},
 			},
 		},
-		{
-			name: "user",
+		"user": {
 			entry: &logrus.Entry{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					FieldUser: sentry.User{
 						ID: "bob",
 					},
@@ -197,16 +209,15 @@ func Test_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level: "fatal",
-				Extra: map[string]interface{}{},
+				Extra: map[string]any{},
 				User: sentry.User{
 					ID: "bob",
 				},
 			},
 		},
-		{
-			name: "user pointer",
+		"user pointer": {
 			entry: &logrus.Entry{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					FieldUser: &sentry.User{
 						ID: "alice",
 					},
@@ -214,22 +225,21 @@ func Test_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level: "fatal",
-				Extra: map[string]interface{}{},
+				Extra: map[string]any{},
 				User: sentry.User{
 					ID: "alice",
 				},
 			},
 		},
-		{
-			name: "non-user",
+		"non-user": {
 			entry: &logrus.Entry{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					FieldUser: "just say no to drugs",
 				},
 			},
 			want: &sentry.Event{
 				Level: "fatal",
-				Extra: map[string]interface{}{
+				Extra: map[string]any{
 					"user": "just say no to drugs",
 				},
 			},
@@ -243,15 +253,13 @@ func Test_entryToEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, tt := range tests {
+	for name, tt := range tests {
 		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			got := h.entryToEvent(tt.entry)
 			opts := cmp.Options{
-				cmpopts.IgnoreFields(sentry.Event{},
-					"sdkMetaData",
-				),
+				cmpopts.IgnoreFields(sentry.Event{}, "sdkMetaData"),
 			}
 			if d := cmp.Diff(tt.want, got, opts); d != "" {
 				t.Error(d)
@@ -262,53 +270,72 @@ func Test_entryToEvent(t *testing.T) {
 
 func Test_exceptions(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name  string
+	tests := map[string]struct {
 		trace bool
 		err   error
 		want  []sentry.Exception
 	}{
-		{
-			name:  "error is nil",
+		"error is nil": {
 			trace: true,
 			err:   nil,
 			want:  nil,
 		},
-		{
-			name:  "std error",
+		"std error": {
 			trace: true,
 			err:   errors.New("foo"),
 			want: []sentry.Exception{
-				{Type: "*errors.errorString", Value: "foo", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+				{
+					Type:       "*errors.errorString",
+					Value:      "foo",
+					Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}},
+				},
 			},
 		},
-		{
-			name:  "wrapped error",
+		"wrapped error": {
 			trace: true,
 			err:   fmt.Errorf("foo: %w", errors.New("bar")),
 			want: []sentry.Exception{
-				{Type: "*errors.errorString", Value: "bar"},
-				{Type: "*fmt.wrapError", Value: "foo: bar", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+				{
+					Type:  "*errors.errorString",
+					Value: "bar",
+					Mechanism: &sentry.Mechanism{
+						Data: map[string]any{
+							"exception_id":       0,
+							"is_exception_group": true,
+						},
+					},
+				},
+				{
+					Type:  "*fmt.wrapError",
+					Value: "foo: bar",
+					Stacktrace: &sentry.Stacktrace{
+						Frames: []sentry.Frame{},
+					},
+					Mechanism: &sentry.Mechanism{
+						Data: map[string]any{
+							"exception_id":       1,
+							"is_exception_group": true,
+							"parent_id":          0,
+						},
+					},
+				},
 			},
 		},
-		{
-			name:  "missing stack for pkgerr",
+		"missing stack for pkgerr": {
 			trace: false,
 			err:   pkgerr.New("foo"),
 			want: []sentry.Exception{
 				{Type: "*errors.fundamental", Value: "foo"},
 			},
 		},
-		{
-			name:  "stack",
+		"stack": {
 			trace: true,
 			err:   pkgerr.New("foo"),
 			want: []sentry.Exception{
 				{Type: "*errors.fundamental", Value: "foo", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 			},
 		},
-		{
-			name:  "multi-wrapped error",
+		"multi-wrapped error": {
 			trace: true,
 			err: func() error {
 				err := errors.New("original")
@@ -318,25 +345,89 @@ func Test_exceptions(t *testing.T) {
 				return fmt.Errorf("wrapped: %w", err)
 			}(),
 			want: []sentry.Exception{
-				{Type: "*errors.errorString", Value: "original"},
-				{Type: "*fmt.wrapError", Value: "fmt: original"},
-				{Type: "*errors.withStack", Value: "wrap: fmt: original", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
-				{Type: "*errors.withStack", Value: "wrap: fmt: original", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
-				{Type: "*fmt.wrapError", Value: "wrapped: wrap: fmt: original", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+				{
+					Type:  "*errors.errorString",
+					Value: "original",
+					Mechanism: &sentry.Mechanism{
+						Data: map[string]any{
+							"exception_id":       0,
+							"is_exception_group": true,
+						},
+					},
+				},
+				{
+					Type:  "*fmt.wrapError",
+					Value: "fmt: original",
+					Mechanism: &sentry.Mechanism{
+						Data: map[string]any{
+							"exception_id":       1,
+							"is_exception_group": true,
+							"parent_id":          0,
+						},
+					},
+				},
+				{
+					Type:  "*errors.withMessage",
+					Value: "wrap: fmt: original",
+					Mechanism: &sentry.Mechanism{
+						Data: map[string]any{
+							"exception_id":       2,
+							"is_exception_group": true,
+							"parent_id":          1,
+						},
+					},
+				},
+				{
+					Type:  "*errors.withStack",
+					Value: "wrap: fmt: original",
+					Mechanism: &sentry.Mechanism{
+						Data: map[string]any{
+							"exception_id":       3,
+							"is_exception_group": true,
+							"parent_id":          2,
+						},
+					},
+					Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}},
+				},
+				{
+					Type:       "*errors.withStack",
+					Value:      "wrap: fmt: original",
+					Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}},
+					Mechanism: &sentry.Mechanism{
+						Data: map[string]any{
+							"exception_id":       4,
+							"is_exception_group": true,
+							"parent_id":          3,
+						},
+					},
+				},
+				{
+					Type:  "*fmt.wrapError",
+					Value: "wrapped: wrap: fmt: original",
+					Stacktrace: &sentry.Stacktrace{
+						Frames: []sentry.Frame{},
+					},
+					Mechanism: &sentry.Mechanism{
+						Data: map[string]any{
+							"exception_id":       5,
+							"is_exception_group": true,
+							"parent_id":          4,
+						},
+					},
+				},
 			},
 		},
 	}
 
-	for _, tt := range tests {
+	for name, tt := range tests {
 		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			h, err := New(nil, sentry.ClientOptions{AttachStacktrace: tt.trace})
 			if err != nil {
 				t.Fatal(err)
 			}
 			got := h.exceptions(tt.err)
-
 			if d := cmp.Diff(tt.want, got); d != "" {
 				t.Error(d)
 			}
