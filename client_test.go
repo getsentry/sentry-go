@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewClientAllowsEmptyDSN(t *testing.T) {
@@ -43,7 +45,7 @@ func setupClientTest() (*Client, *ScopeMock, *TransportMock) {
 	scope := &ScopeMock{}
 	transport := &TransportMock{}
 	client, _ := NewClient(ClientOptions{
-		Dsn:       "http://whatever@really.com/1337",
+		Dsn:       "http://whatever@example.com/1337",
 		Transport: transport,
 		Integrations: func(i []Integration) []Integration {
 			return []Integration{}
@@ -77,11 +79,15 @@ func TestCaptureMessageEmptyString(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
-		return &Event{
-			Exception: e.Exception,
-		}
-	})
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
+			return &Event{
+				Exception: e.Exception,
+			}
+		}),
+	}
+
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("(-want +got):\n%s", diff)
 	}
@@ -265,14 +271,14 @@ func TestCaptureEvent(t *testing.T) {
 		Platform:   "go",
 		Sdk: SdkInfo{
 			Name:         "sentry.go",
-			Version:      Version,
+			Version:      SDKVersion,
 			Integrations: []string{},
 			Packages: []SdkPackage{
 				{
 					// FIXME: name format doesn't follow spec in
 					// https://docs.sentry.io/development/sdk-dev/event-payloads/sdk/
 					Name:    "sentry-go",
-					Version: Version,
+					Version: SDKVersion,
 				},
 				// TODO: perhaps the list of packages is incomplete or there
 				// should not be any package at all. We may include references
@@ -281,12 +287,13 @@ func TestCaptureEvent(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	if diff := cmp.Diff(want, got); diff != "" {
+	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "sdkMetaData")}
+	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
 }
 
-func TestCaptureEventShouldSendEventWithProvidedError(t *testing.T) {
+func TestCaptureEventShouldSendEventWithMessage(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	event := NewEvent()
 	event.Message = "event message"
@@ -307,13 +314,130 @@ func TestCaptureEventNil(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
-		return &Event{
-			Exception: e.Exception,
-		}
-	})
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
+			return &Event{
+				Exception: e.Exception,
+			}
+		}),
+	}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("(-want +got):\n%s", diff)
+	}
+}
+
+func TestCaptureCheckIn(t *testing.T) {
+	tests := []struct {
+		name           string
+		checkIn        *CheckIn
+		monitorConfig  *MonitorConfig
+		expectNilEvent bool
+	}{
+		{
+			name:           "Nil CheckIn",
+			checkIn:        nil,
+			monitorConfig:  nil,
+			expectNilEvent: true,
+		},
+		{
+			name: "Nil MonitorConfig",
+			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
+				MonitorSlug: "cron",
+				Status:      CheckInStatusOK,
+				Duration:    time.Second * 10,
+			},
+			monitorConfig: nil,
+		},
+		{
+			name: "IntervalSchedule",
+			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
+				MonitorSlug: "cron",
+				Status:      CheckInStatusInProgress,
+				Duration:    time.Second * 10,
+			},
+			monitorConfig: &MonitorConfig{
+				Schedule:      IntervalSchedule(1, MonitorScheduleUnitHour),
+				CheckInMargin: 10,
+				MaxRuntime:    5000,
+				Timezone:      "Asia/Singapore",
+			},
+		},
+		{
+			name: "CronSchedule",
+			checkIn: &CheckIn{
+				ID:          "66e1a05b182346f2aee5fd7f0dc9b44e",
+				MonitorSlug: "cron",
+				Status:      CheckInStatusInProgress,
+				Duration:    time.Second * 10,
+			},
+			monitorConfig: &MonitorConfig{
+				Schedule:      CrontabSchedule("40 * * * *"),
+				CheckInMargin: 10,
+				MaxRuntime:    5000,
+				Timezone:      "Asia/Singapore",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			client, _, transport := setupClientTest()
+			client.CaptureCheckIn(tt.checkIn, tt.monitorConfig, nil)
+			capturedEvent := transport.lastEvent
+
+			if tt.expectNilEvent && capturedEvent == nil {
+				// Event is nil as expected, nothing else to check
+				return
+			}
+
+			if capturedEvent == nil {
+				t.Fatal("missing event")
+			}
+
+			if capturedEvent.Type != checkInType {
+				t.Errorf("Event type mismatch: want %s, got %s", checkInType, capturedEvent.Type)
+			}
+
+			if diff := cmp.Diff(capturedEvent.CheckIn, tt.checkIn); diff != "" {
+				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
+			}
+
+			if diff := cmp.Diff(capturedEvent.MonitorConfig, tt.monitorConfig); diff != "" {
+				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCaptureCheckInExistingID(t *testing.T) {
+	client, _, _ := setupClientTest()
+
+	monitorConfig := &MonitorConfig{
+		Schedule:      IntervalSchedule(1, MonitorScheduleUnitDay),
+		CheckInMargin: 30,
+		MaxRuntime:    30,
+		Timezone:      "UTC",
+	}
+
+	checkInID := client.CaptureCheckIn(&CheckIn{
+		MonitorSlug: "cron",
+		Status:      CheckInStatusInProgress,
+		Duration:    time.Second,
+	}, monitorConfig, nil)
+
+	checkInID2 := client.CaptureCheckIn(&CheckIn{
+		ID:          *checkInID,
+		MonitorSlug: "cron",
+		Status:      CheckInStatusOK,
+		Duration:    time.Minute,
+	}, monitorConfig, nil)
+
+	if *checkInID != *checkInID2 {
+		t.Errorf("Expecting equivalent CheckInID: %s and %s", *checkInID, *checkInID2)
 	}
 }
 
@@ -374,13 +498,176 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
 }
 
+func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+		BeforeSend: func(event *Event, hint *EventHint) *Event {
+			t.Error("beforeSend should not be called")
+			return event
+		},
+		BeforeSendTransaction: func(event *Event, hint *EventHint) *Event {
+			assertEqual(t, event.Transaction, "Foo")
+			return nil
+		},
+	})
+
+	transaction := StartTransaction(ctx,
+		"Foo",
+	)
+	transaction.Finish()
+
+	if transport.lastEvent != nil {
+		t.Error("expected event to be dropped")
+	}
+}
+
+func TestBeforeSendTransactionIsCalled(t *testing.T) {
+	transport := &TransportMock{}
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+		BeforeSend: func(event *Event, hint *EventHint) *Event {
+			t.Error("beforeSend should not be called")
+			return event
+		},
+		BeforeSendTransaction: func(event *Event, hint *EventHint) *Event {
+			assertEqual(t, event.Transaction, "Foo")
+			event.Transaction = "Bar"
+			return event
+		},
+	})
+
+	transaction := StartTransaction(ctx,
+		"Foo",
+	)
+	transaction.Finish()
+
+	lastEvent := transport.lastEvent
+	assertEqual(t, lastEvent.Transaction, "Bar")
+	// Make sure it's the same span
+	assertEqual(t, lastEvent.Contexts["trace"]["span_id"], transaction.SpanID)
+}
+
+func TestIgnoreErrors(t *testing.T) {
+	tests := []struct {
+		name         string
+		ignoreErrors []string
+		message      string
+		expectDrop   bool
+	}{
+		{
+			name:         "No Match",
+			message:      "Foo",
+			ignoreErrors: []string{"Bar", "Baz"},
+			expectDrop:   false,
+		},
+		{
+			name:         "Partial Match",
+			message:      "FooBar",
+			ignoreErrors: []string{"Foo", "Baz"},
+			expectDrop:   true,
+		},
+		{
+			name:         "Exact Match",
+			message:      "Foo Bar",
+			ignoreErrors: []string{"\\bFoo\\b", "Baz"},
+			expectDrop:   true,
+		},
+		{
+			name:         "Wildcard Match",
+			message:      "Foo",
+			ignoreErrors: []string{"F*", "Bar"},
+			expectDrop:   true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scope := &ScopeMock{}
+			transport := &TransportMock{}
+			client, err := NewClient(ClientOptions{
+				Transport:    transport,
+				IgnoreErrors: tt.ignoreErrors,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			client.CaptureMessage(tt.message, nil, scope)
+
+			dropped := transport.lastEvent == nil
+			if !(tt.expectDrop == dropped) {
+				t.Error("expected event to be dropped")
+			}
+		})
+	}
+}
+
+func TestIgnoreTransactions(t *testing.T) {
+	tests := []struct {
+		name               string
+		ignoreTransactions []string
+		transaction        string
+		expectDrop         bool
+	}{
+		{
+			name:               "No Match",
+			transaction:        "Foo",
+			ignoreTransactions: []string{"Bar", "Baz"},
+			expectDrop:         false,
+		},
+		{
+			name:               "Partial Match",
+			transaction:        "FooBar",
+			ignoreTransactions: []string{"Foo", "Baz"},
+			expectDrop:         true,
+		},
+		{
+			name:               "Exact Match",
+			transaction:        "Foo Bar",
+			ignoreTransactions: []string{"\\bFoo\\b", "Baz"},
+			expectDrop:         true,
+		},
+		{
+			name:               "Wildcard Match",
+			transaction:        "Foo",
+			ignoreTransactions: []string{"F*", "Bar"},
+			expectDrop:         true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &TransportMock{}
+			ctx := NewTestContext(ClientOptions{
+				EnableTracing:      true,
+				TracesSampleRate:   1.0,
+				Transport:          transport,
+				IgnoreTransactions: tt.ignoreTransactions,
+			})
+
+			transaction := StartTransaction(ctx,
+				tt.transaction,
+			)
+			transaction.Finish()
+
+			dropped := transport.lastEvent == nil
+			if !(tt.expectDrop == dropped) {
+				t.Error("expected event to be dropped")
+			}
+		})
+	}
+}
+
 func TestSampleRate(t *testing.T) {
 	tests := []struct {
 		SampleRate float64
 		// tolerated range is [SampleRate-MaxDelta, SampleRate+MaxDelta]
 		MaxDelta float64
 	}{
-		// {0.00, 0.0}, // oddly, sample rate = 0.0 means 1.0, skip test for now.
+		{0.00, 0.0},
 		{0.25, 0.2},
 		{0.50, 0.2},
 		{0.75, 0.2},
@@ -390,41 +677,40 @@ func TestSampleRate(t *testing.T) {
 		tt := tt
 		t.Run(fmt.Sprint(tt.SampleRate), func(t *testing.T) {
 			var (
-				captureMessageCount uint64
-				beforeSendCount     uint64
+				total   uint64
+				sampled uint64
 			)
-			c, err := NewClient(ClientOptions{
-				SampleRate: tt.SampleRate,
-				BeforeSend: func(event *Event, hint *EventHint) *Event {
-					atomic.AddUint64(&beforeSendCount, 1)
-					return event
-				},
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// Simulate using client from multiple hubs/goroutines to cover data
-			// races.
+			// Call sample from multiple goroutines just like multiple hubs
+			// sharing a client would. This should help uncover data races.
 			var wg sync.WaitGroup
-			mainHub := NewHub(c, NewScope())
 			for i := 0; i < 4; i++ {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					// hub shares the client with mainHub.
-					hub := mainHub.Clone()
 					for j := 0; j < 10000; j++ {
-						atomic.AddUint64(&captureMessageCount, 1)
-						hub.CaptureMessage("test")
+						atomic.AddUint64(&total, 1)
+						s := sample(tt.SampleRate)
+						switch tt.SampleRate {
+						case 0:
+							if s {
+								panic("sampled true when rate is 0")
+							}
+						case 1:
+							if !s {
+								panic("sampled false when rate is 1")
+							}
+						}
+						if s {
+							atomic.AddUint64(&sampled, 1)
+						}
 					}
 				}()
 			}
 			wg.Wait()
 
-			eventRate := float64(beforeSendCount) / float64(captureMessageCount)
-			if eventRate < tt.SampleRate-tt.MaxDelta || eventRate > tt.SampleRate+tt.MaxDelta {
-				t.Errorf("effective sample rate was %f, want %f±%f", eventRate, tt.SampleRate, tt.MaxDelta)
+			rate := float64(sampled) / float64(total)
+			if !(tt.SampleRate-tt.MaxDelta <= rate && rate <= tt.SampleRate+tt.MaxDelta) {
+				t.Errorf("effective sample rate was %f, want %f±%f", rate, tt.SampleRate, tt.MaxDelta)
 			}
 		})
 	}
@@ -433,6 +719,7 @@ func TestSampleRate(t *testing.T) {
 func BenchmarkProcessEvent(b *testing.B) {
 	c, err := NewClient(ClientOptions{
 		SampleRate: 0.25,
+		Transport:  &TransportMock{},
 	})
 	if err != nil {
 		b.Fatal(err)
@@ -475,13 +762,17 @@ func TestRecover(t *testing.T) {
 			t.Fatalf("events = %s\ngot %d events, want 1", b, len(events))
 		}
 		got := events[0]
-		opts := cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
-			return &Event{
-				Message:   e.Message,
-				Exception: e.Exception,
-				Level:     e.Level,
-			}
-		})
+		opts := cmp.Options{
+			cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+			cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
+				return &Event{
+					Message:   e.Message,
+					Exception: e.Exception,
+					Level:     e.Level,
+				}
+			}),
+		}
+
 		if diff := cmp.Diff(want, got, opts); diff != "" {
 			t.Errorf("(-want +got):\n%s", diff)
 		}
@@ -518,4 +809,35 @@ func TestRecover(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCustomMaxSpansProperty(t *testing.T) {
+	client, _, _ := setupClientTest()
+	assertEqual(t, client.Options().MaxSpans, defaultMaxSpans)
+
+	client.options.MaxSpans = 2000
+	assertEqual(t, client.Options().MaxSpans, 2000)
+
+	properClient, _ := NewClient(ClientOptions{
+		MaxSpans:  3000,
+		Transport: &TransportMock{},
+	})
+
+	assertEqual(t, properClient.Options().MaxSpans, 3000)
+}
+
+func TestSDKIdentifier(t *testing.T) {
+	client, _, _ := setupClientTest()
+	assertEqual(t, client.GetSDKIdentifier(), "sentry.go")
+
+	client.SetSDKIdentifier("sentry.go.test")
+	assertEqual(t, client.GetSDKIdentifier(), "sentry.go.test")
+}
+
+func TestClientSetsUpTransport(t *testing.T) {
+	client, _ := NewClient(ClientOptions{Dsn: testDsn})
+	require.IsType(t, &HTTPTransport{}, client.Transport)
+
+	client, _ = NewClient(ClientOptions{})
+	require.IsType(t, &noopTransport{}, client.Transport)
 }

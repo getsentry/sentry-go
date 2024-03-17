@@ -26,7 +26,7 @@ var dsnTests = map[string]DsnTest{
 			host:      "domain",
 			port:      8888,
 			path:      "/foo/bar",
-			projectID: 42,
+			projectID: "42",
 		},
 		url:    "https://domain:8888/foo/bar/api/42/store/",
 		envURL: "https://domain:8888/foo/bar/api/42/envelope/",
@@ -38,7 +38,7 @@ var dsnTests = map[string]DsnTest{
 			publicKey: "public",
 			host:      "domain",
 			port:      443,
-			projectID: 42,
+			projectID: "42",
 		},
 		url:    "https://domain/api/42/store/",
 		envURL: "https://domain/api/42/envelope/",
@@ -50,14 +50,14 @@ var dsnTests = map[string]DsnTest{
 			publicKey: "public",
 			host:      "domain",
 			port:      80,
-			projectID: 42,
+			projectID: "42",
 		},
 		url:    "http://domain/api/42/store/",
 		envURL: "http://domain/api/42/envelope/",
 	},
 }
 
-//nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
+// nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestNewDsn(t *testing.T) {
 	for name, tt := range dsnTests {
 		t.Run(name, func(t *testing.T) {
@@ -69,13 +69,7 @@ func TestNewDsn(t *testing.T) {
 			if diff := cmp.Diff(tt.dsn, dsn, cmp.AllowUnexported(Dsn{})); diff != "" {
 				t.Errorf("NewDsn() mismatch (-want +got):\n%s", diff)
 			}
-			// Store API URL
-			url := dsn.StoreAPIURL().String()
-			if diff := cmp.Diff(tt.url, url); diff != "" {
-				t.Errorf("dsn.StoreAPIURL() mismatch (-want +got):\n%s", diff)
-			}
-			// Envelope API URL
-			url = dsn.EnvelopeAPIURL().String()
+			url := dsn.GetAPIURL().String()
 			if diff := cmp.Diff(tt.envURL, url); diff != "" {
 				t.Errorf("dsn.EnvelopeAPIURL() mismatch (-want +got):\n%s", diff)
 			}
@@ -100,12 +94,11 @@ var invalidDsnTests = map[string]invalidDsnTest{
 	"NoProjectID2":  {"https://public:secret@domain:8888", "empty project id"},
 	"BadURL":        {"!@#$%^&*()", "invalid url"},
 	"BadScheme":     {"ftp://public:secret@domain:8888/1", "invalid scheme"},
-	"BadProjectID":  {"https://public:secret@domain:8888/wbvdf7^W#$", "invalid project id"},
 	"BadPort":       {"https://public:secret@domain:wat/42", "invalid port"},
-	"TrailingSlash": {"https://public:secret@domain:8888/42/", "invalid project id"},
+	"TrailingSlash": {"https://public:secret@domain:8888/42/", "empty project id"},
 }
 
-//nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
+// nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestNewDsnInvalidInput(t *testing.T) {
 	for name, tt := range invalidDsnTests {
 		t.Run(name, func(t *testing.T) {
@@ -189,5 +182,122 @@ func TestRequestHeadersWithSecretKey(t *testing.T) {
 	assertEqual(t, "application/json", headers["Content-Type"])
 	if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
 		t.Error("expected auth header to fulfill provided pattern")
+	}
+}
+
+func TestGetScheme(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"http://public:secret@domain/42", "http"},
+		{"https://public:secret@domain/42", "https"},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetScheme(), tt.want)
+	}
+}
+
+func TestGetPublicKey(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"https://public:secret@domain/42", "public"},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetPublicKey(), tt.want)
+	}
+}
+
+func TestGetSecretKey(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"https://public:secret@domain/42", "secret"},
+		{"https://public@domain/42", ""},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetSecretKey(), tt.want)
+	}
+}
+
+func TestGetHost(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"http://public:secret@domain/42", "domain"},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetHost(), tt.want)
+	}
+}
+
+func TestGetPort(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want int
+	}{
+		{"https://public:secret@domain/42", 443},
+		{"http://public:secret@domain/42", 80},
+		{"https://public:secret@domain:3000/42", 3000},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetPort(), tt.want)
+	}
+}
+
+func TestGetPath(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"https://public:secret@domain/42", ""},
+		{"https://public:secret@domain/foo/bar/42", "/foo/bar"},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetPath(), tt.want)
+	}
+}
+
+func TestGetProjectID(t *testing.T) {
+	tests := []struct {
+		dsn  string
+		want string
+	}{
+		{"https://public:secret@domain/42", "42"},
+	}
+	for _, tt := range tests {
+		dsn, err := NewDsn(tt.dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assertEqual(t, dsn.GetProjectID(), tt.want)
 	}
 }

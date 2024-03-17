@@ -3,6 +3,7 @@ package sentryfiber_test
 import (
 	"errors"
 	"fmt"
+	"github.com/gofiber/fiber/v2"
 	"net/http"
 	"reflect"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
-	"github.com/gofiber/fiber/v2"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -76,9 +76,8 @@ func TestIntegration(t *testing.T) {
 					URL:    "http://example.com/panic",
 					Method: "GET",
 					Headers: map[string]string{
-						"Content-Length": "0",
-						"Host":           "example.com",
-						"User-Agent":     "fiber",
+						"Host":       "example.com",
+						"User-Agent": "fiber",
 					},
 				},
 			},
@@ -114,9 +113,8 @@ func TestIntegration(t *testing.T) {
 					URL:    "http://example.com/get",
 					Method: "GET",
 					Headers: map[string]string{
-						"Content-Length": "0",
-						"Host":           "example.com",
-						"User-Agent":     "fiber",
+						"Host":       "example.com",
+						"User-Agent": "fiber",
 					},
 				},
 			},
@@ -226,11 +224,22 @@ func TestIntegration(t *testing.T) {
 	for e := range eventsCh {
 		got = append(got, e)
 	}
-	opt := cmpopts.IgnoreFields(
-		sentry.Event{},
-		"Contexts", "EventID", "Extra", "Platform",
-		"Sdk", "ServerName", "Tags", "Timestamp", "Exception",
-	)
+	opt := cmp.Options{
+		cmpopts.IgnoreFields(
+			sentry.Event{},
+			"Contexts", "EventID", "Extra", "Platform", "Modules",
+			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
+			"sdkMetaData",
+		),
+		cmpopts.IgnoreFields(
+			sentry.Request{},
+			"Env",
+		),
+		cmpopts.IgnoreFields(
+			sentry.Exception{},
+			"Stacktrace",
+		),
+	}
 	if diff := cmp.Diff(want, got, opt); diff != "" {
 		t.Fatalf("Events mismatch (-want +got):\n%s", diff)
 	}

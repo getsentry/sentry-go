@@ -20,13 +20,16 @@ go get github.com/getsentry/sentry-go/fiber
 ```go
 import (
 	"fmt"
-
-    "github.com/gofiber/fiber"
+	"github.com/gofiber/fiber/v2"
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
+	"github.com/gofiber/fiber/v2/utils"
 )
+```
 
-// To initialize Sentry's handler, you need to initialize Sentry itself beforehand
+To initialize Sentry's handler, you need to initialize Sentry itself beforehand
+
+```go
 if err := sentry.Init(sentry.ClientOptions{
 	Dsn: "your-public-dsn",
 }); err != nil {
@@ -42,7 +45,7 @@ app := fiber.New()
 app.Use(sentryHandler)
 
 // And run it
-app.Listen(3000)
+app.Listen(":3000")
 ```
 
 ## Configuration
@@ -72,7 +75,6 @@ And it should be used instead of the global `sentry.CaptureMessage`, `sentry.Cap
 **Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentryfiber`!**
 
 ```go
-
 // Later in the code
 sentryHandler := sentryfiber.New(sentryfiber.Options{
     Repanic:         true,
@@ -104,7 +106,7 @@ app.All("/", func(ctx *fiber.Ctx) {
     ctx.Status(fiber.StatusOK)
 })
 
-app.Listen(3000)
+app.Listen(":3000")
 ```
 
 ### Accessing Context in `BeforeSend` callback

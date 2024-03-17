@@ -7,7 +7,9 @@
         }
     ],
     "contexts": {
-        "context_key": "context_val"
+        "context_key": {
+            "context_key": "context_val"
+        }
     },
     "environment": "production",
     "event_id": "0123456789abcdef",

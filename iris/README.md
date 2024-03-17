@@ -9,7 +9,7 @@
 
 **Godoc:** https://godoc.org/github.com/getsentry/sentry-go/iris
 
-**Example:** https://github.com/getsentry/sentry-go/tree/master/example/iris
+**Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/iris
 
 ## Installation
 

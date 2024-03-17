@@ -9,6 +9,9 @@ import (
 	"github.com/go-martini/martini"
 )
 
+// The identifier of the Martini SDK.
+const sdkIdentifier = "sentry.go.martini"
+
 type handler struct {
 	repanic         bool
 	waitForDelivery bool
@@ -30,32 +33,27 @@ type Options struct {
 // New returns a function that satisfies martini.Handler interface
 // It can be used with Use() or Handlers() methods.
 func New(options Options) martini.Handler {
-	handler := handler{
-		repanic:         false,
-		timeout:         time.Second * 2,
-		waitForDelivery: false,
+	timeout := options.Timeout
+	if timeout == 0 {
+		timeout = 2 * time.Second
 	}
-
-	if options.Repanic {
-		handler.repanic = true
-	}
-
-	if options.Timeout != 0 {
-		handler.timeout = options.Timeout
-	}
-
-	if options.WaitForDelivery {
-		handler.waitForDelivery = true
-	}
-
-	return handler.handle
+	return (&handler{
+		repanic:         options.Repanic,
+		timeout:         timeout,
+		waitForDelivery: options.WaitForDelivery,
+	}).handle
 }
 
-func (h *handler) handle(rw http.ResponseWriter, r *http.Request, ctx martini.Context) {
+func (h *handler) handle(_ http.ResponseWriter, r *http.Request, ctx martini.Context) {
 	hub := sentry.GetHubFromContext(r.Context())
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
 	}
+
+	if client := hub.Client(); client != nil {
+		client.SetSDKIdentifier(sdkIdentifier)
+	}
+
 	hub.Scope().SetRequest(r)
 	ctx.Map(hub)
 	defer h.recoverWithSentry(hub, r)

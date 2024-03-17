@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/utils"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/utils"
 )
 
 const valuesKey = "sentry"
@@ -36,21 +36,13 @@ type Options struct {
 
 func New(options Options) fiber.Handler {
 	handler := handler{
-		repanic:         false,
+		repanic:         options.Repanic,
 		timeout:         time.Second * 2,
-		waitForDelivery: false,
-	}
-
-	if options.Repanic {
-		handler.repanic = true
+		waitForDelivery: options.WaitForDelivery,
 	}
 
 	if options.Timeout != 0 {
 		handler.timeout = options.Timeout
-	}
-
-	if options.WaitForDelivery {
-		handler.waitForDelivery = true
 	}
 
 	return handler.handle
@@ -98,7 +90,7 @@ func convert(ctx *fiber.Ctx) *http.Request {
 
 	r := new(http.Request)
 
-	r.Method = utils.ImmutableString(ctx.Method())
+	r.Method = utils.CopyString(ctx.Method())
 	uri := ctx.Request().URI()
 	r.URL, _ = url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
 
@@ -107,7 +99,7 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	ctx.Request().Header.VisitAll(func(key, value []byte) {
 		r.Header.Add(string(key), string(value))
 	})
-	r.Host = utils.ImmutableString(ctx.Hostname())
+	r.Host = utils.CopyString(ctx.Hostname())
 
 	// Cookies
 	ctx.Request().Header.VisitAllCookie(func(key, value []byte) {
@@ -121,7 +113,7 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	r.URL.RawQuery = string(ctx.Request().URI().QueryString())
 
 	// Body
-	r.Body = ioutil.NopCloser(bytes.NewReader(ctx.Request().Body()))
+	r.Body = io.NopCloser(bytes.NewReader(ctx.Request().Body()))
 
 	return r
 }

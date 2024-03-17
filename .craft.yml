@@ -1,19 +1,13 @@
-minVersion: '0.9.2'
-github:
-  owner: getsentry
-  repo: sentry-go
-preReleaseCommand: bash scripts/craft-pre-release.sh
+minVersion: 0.35.0
 changelogPolicy: simple
-statusProvider:
-  name: github
-  config:
-    contexts:
-      - Travis CI - Branch
+artifactProvider:
+  name: none
 targets:
   - name: github
-    includeNames: /none/
     tagPrefix: v
+  - name: github
+    tagPrefix: otel/v
+    tagOnly: true
   - name: registry
-    type: sdk
-    config:
-      canonical: "github:getsentry/sentry-go"
+    sdks:
+      github:getsentry/sentry-go:

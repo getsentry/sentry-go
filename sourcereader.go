@@ -2,7 +2,7 @@ package sentry
 
 import (
 	"bytes"
-	"io/ioutil"
+	"os"
 	"sync"
 )
 
@@ -24,7 +24,7 @@ func (sr *sourceReader) readContextLines(filename string, line, context int) ([]
 	lines, ok := sr.cache[filename]
 
 	if !ok {
-		data, err := ioutil.ReadFile(filename)
+		data, err := os.ReadFile(filename)
 		if err != nil {
 			sr.cache[filename] = nil
 			return nil, 0

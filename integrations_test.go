@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
@@ -170,6 +171,39 @@ func TestIgnoreErrorsIntegration(t *testing.T) {
 
 	if iei.processor(alsoNotDropped, &EventHint{}) == nil {
 		t.Error("Event should not be dropped")
+	}
+}
+
+func TestIgnoreTransactionsIntegration(t *testing.T) {
+	iei := ignoreTransactionsIntegration{
+		ignoreTransactions: []*regexp.Regexp{
+			regexp.MustCompile("foo"),
+			regexp.MustCompile("(?i)bar"),
+		},
+	}
+
+	dropped := &Event{
+		Transaction: "foo",
+	}
+
+	alsoDropped := &Event{
+		Transaction: "Bar",
+	}
+
+	notDropped := &Event{
+		Transaction: "dont",
+	}
+
+	if iei.processor(dropped, &EventHint{}) != nil {
+		t.Error("Transaction should be dropped")
+	}
+
+	if iei.processor(alsoDropped, &EventHint{}) != nil {
+		t.Error("Transaction should be dropped")
+	}
+
+	if iei.processor(notDropped, &EventHint{}) == nil {
+		t.Error("Transaction should not be dropped")
 	}
 }
 
@@ -357,13 +391,13 @@ func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
 	}
 	scope := NewScope()
 
-	scope.contexts["device"] = map[string]interface{}{
+	scope.contexts["device"] = Context{
 		"foo": "bar",
 	}
-	scope.contexts["os"] = map[string]interface{}{
+	scope.contexts["os"] = Context{
 		"name": "test",
 	}
-	scope.contexts["custom"] = "value"
+	scope.contexts["custom"] = Context{"key": "value"}
 	hub := NewHub(client, scope)
 	hub.CaptureMessage("test event")
 
@@ -378,13 +412,60 @@ func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
 
 	contexts := events[0].Contexts
 
-	if contexts["device"].(map[string]interface{})["foo"] != "bar" {
+	if contexts["device"]["foo"] != "bar" {
 		t.Errorf(`contexts["device"] = %#v, want contexts["device"]["foo"] == "bar"`, contexts["device"])
 	}
-	if contexts["os"].(map[string]interface{})["name"] != "test" {
+	if contexts["os"]["name"] != "test" {
 		t.Errorf(`contexts["os"] = %#v, want contexts["os"]["name"] == "test"`, contexts["os"])
 	}
-	if contexts["custom"] != "value" {
-		t.Errorf(`contexts["custom"] = %#v, want "value"`, contexts["custom"])
+	if contexts["custom"]["key"] != "value" {
+		t.Errorf(`contexts["custom"]["key"] = %#v, want "value"`, contexts["custom"]["key"])
 	}
+}
+
+func TestGlobalTagsIntegration(t *testing.T) {
+	os.Setenv("SENTRY_TAGS_foo", "foo_value_env")
+	os.Setenv("SENTRY_TAGS_bar", "bar_value_env")
+	os.Setenv("SENTRY_TAGS_baz", "baz_value_env")
+	defer os.Unsetenv("SENTRY_TAGS_foo")
+	defer os.Unsetenv("SENTRY_TAGS_bar")
+	defer os.Unsetenv("SENTRY_TAGS_baz")
+
+	transport := &TransportMock{}
+	client, err := NewClient(ClientOptions{
+		Transport: transport,
+		Tags: map[string]string{
+			"foo": "foo_value_client_options",
+			"baz": "baz_value_client_options",
+		},
+		Integrations: func([]Integration) []Integration {
+			return []Integration{new(globalTagsIntegration)}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scope := NewScope()
+	scope.SetTags(map[string]string{"foo": "foo_value_scope"})
+
+	event := NewEvent()
+	event.Message = "event message"
+	client.CaptureEvent(event, nil, scope)
+
+	assertEqual(t,
+		transport.lastEvent.Tags["foo"],
+		"foo_value_scope",
+		"scope tag should override any global tag",
+	)
+	assertEqual(t,
+		transport.lastEvent.Tags["bar"],
+		"bar_value_env",
+		"env tag present if not overridden by scope or client options tags",
+	)
+	assertEqual(t,
+		transport.lastEvent.Tags["baz"],
+		"baz_value_client_options",
+		"client options tag present if not overridden by scope and overrides env tag",
+	)
 }

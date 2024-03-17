@@ -10,6 +10,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryfasthttp "github.com/getsentry/sentry-go/fasthttp"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/valyala/fasthttp"
@@ -40,9 +41,8 @@ func TestIntegration(t *testing.T) {
 					URL:    "http://example.com/panic",
 					Method: "GET",
 					Headers: map[string]string{
-						"Content-Length": "0",
-						"Host":           "example.com",
-						"User-Agent":     "fasthttp",
+						"Host":       "example.com",
+						"User-Agent": "fasthttp",
 					},
 				},
 			},
@@ -64,10 +64,8 @@ func TestIntegration(t *testing.T) {
 					Method: "POST",
 					Data:   "payload",
 					Headers: map[string]string{
-						"Content-Length": "7",
-						"Content-Type":   "application/x-www-form-urlencoded",
-						"Host":           "example.com",
-						"User-Agent":     "fasthttp",
+						"Host":       "example.com",
+						"User-Agent": "fasthttp",
 					},
 				},
 			},
@@ -86,9 +84,8 @@ func TestIntegration(t *testing.T) {
 					URL:    "http://example.com/get",
 					Method: "GET",
 					Headers: map[string]string{
-						"Content-Length": "0",
-						"Host":           "example.com",
-						"User-Agent":     "fasthttp",
+						"Host":       "example.com",
+						"User-Agent": "fasthttp",
 					},
 				},
 			},
@@ -111,10 +108,8 @@ func TestIntegration(t *testing.T) {
 					// Actual request body omitted because too large.
 					Data: "",
 					Headers: map[string]string{
-						"Content-Length": "15360",
-						"Content-Type":   "application/x-www-form-urlencoded",
-						"Host":           "example.com",
-						"User-Agent":     "fasthttp",
+						"Host":       "example.com",
+						"User-Agent": "fasthttp",
 					},
 				},
 			},
@@ -138,10 +133,8 @@ func TestIntegration(t *testing.T) {
 					// reads full request body.
 					Data: "client sends, fasthttp always reads, SDK reports",
 					Headers: map[string]string{
-						"Content-Length": "48",
-						"Content-Type":   "application/x-www-form-urlencoded",
-						"Host":           "example.com",
-						"User-Agent":     "fasthttp",
+						"Host":       "example.com",
+						"User-Agent": "fasthttp",
 					},
 				},
 			},
@@ -202,7 +195,7 @@ func TestIntegration(t *testing.T) {
 		}
 	}
 
-	if ok := sentry.Flush(time.Second); !ok {
+	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(eventsCh)
@@ -210,12 +203,25 @@ func TestIntegration(t *testing.T) {
 	for e := range eventsCh {
 		got = append(got, e)
 	}
-	opt := cmpopts.IgnoreFields(
-		sentry.Event{},
-		"Contexts", "EventID", "Extra", "Platform",
-		"Sdk", "ServerName", "Tags", "Timestamp",
-	)
-	if diff := cmp.Diff(want, got, opt); diff != "" {
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(
+			sentry.Event{},
+			"Contexts", "EventID", "Extra", "Platform", "Modules",
+			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
+			"sdkMetaData",
+		),
+		cmpopts.IgnoreMapEntries(func(k string, v string) bool {
+			// fasthttp changed Content-Length behavior in
+			// https://github.com/valyala/fasthttp/commit/097fa05a697fc638624a14ab294f1336da9c29b0.
+			// fasthttp changed Content-Type behavior in
+			// https://github.com/valyala/fasthttp/commit/ffa0cabed8199819e372ebd2c739998914150ff2.
+			// Since the specific values of those headers are not
+			// important from the perspective of sentry-go, we
+			// ignore them.
+			return k == "Content-Length" || k == "Content-Type"
+		}),
+	}
+	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Fatalf("Events mismatch (-want +got):\n%s", diff)
 	}
 

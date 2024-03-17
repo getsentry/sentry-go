@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -12,6 +12,9 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/valyala/fasthttp"
 )
+
+// The identifier of the FastHTTP SDK.
+const sdkIdentifier = "sentry.go.fasthttp"
 
 type contextKey int
 
@@ -39,25 +42,15 @@ type Options struct {
 // New returns a struct that provides Handle method
 // that satisfy fasthttp.RequestHandler interface.
 func New(options Options) *Handler {
-	handler := Handler{
-		repanic:         false,
-		timeout:         time.Second * 2,
-		waitForDelivery: false,
+	timeout := options.Timeout
+	if timeout == 0 {
+		timeout = 2 * time.Second
 	}
-
-	if options.Repanic {
-		handler.repanic = true
+	return &Handler{
+		repanic:         options.Repanic,
+		timeout:         timeout,
+		waitForDelivery: options.WaitForDelivery,
 	}
-
-	if options.Timeout != 0 {
-		handler.timeout = options.Timeout
-	}
-
-	if options.WaitForDelivery {
-		handler.waitForDelivery = true
-	}
-
-	return &handler
 }
 
 // Handle wraps fasthttp.RequestHandler and recovers from caught panics.
@@ -68,6 +61,11 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 		// standard net/http.Request and because fasthttp.RequestCtx implements
 		// context.Context but requires string keys.
 		hub := sentry.CurrentHub().Clone()
+
+		if client := hub.Client(); client != nil {
+			client.SetSDKIdentifier(sdkIdentifier)
+		}
+
 		scope := hub.Scope()
 		scope.SetRequest(convert(ctx))
 		scope.SetRequestBody(ctx.Request.Body())
@@ -135,7 +133,7 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 	r.URL.RawQuery = string(ctx.URI().QueryString())
 
 	// Body
-	r.Body = ioutil.NopCloser(bytes.NewReader(ctx.Request.Body()))
+	r.Body = io.NopCloser(bytes.NewReader(ctx.Request.Body()))
 
 	return r
 }

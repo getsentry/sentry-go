@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// Version is the version of the SDK.
-const Version = "0.7.0"
+// The version of the SDK.
+const SDKVersion = "0.27.0"
 
 // apiVersion is the minimum version of the Sentry API compatible with the
 // sentry-go SDK.
@@ -43,6 +43,12 @@ func CaptureMessage(message string) *EventID {
 func CaptureException(exception error) *EventID {
 	hub := CurrentHub()
 	return hub.CaptureException(exception)
+}
+
+// CaptureCheckIn captures a (cron) monitor check-in.
+func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+	hub := CurrentHub()
+	return hub.CaptureCheckIn(checkIn, monitorConfig)
 }
 
 // CaptureEvent captures an event on the currently active client if any.
@@ -92,7 +98,7 @@ func ConfigureScope(f func(scope *Scope)) {
 	hub.ConfigureScope(f)
 }
 
-// PushScope is a shorthand for CurrentHub().PushPushScope.
+// PushScope is a shorthand for CurrentHub().PushScope.
 func PushScope() {
 	hub := CurrentHub()
 	hub.PushScope()

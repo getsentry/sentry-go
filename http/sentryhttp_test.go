@@ -2,7 +2,7 @@ package sentryhttp_test
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryhttp "github.com/getsentry/sentry-go/http"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -51,7 +52,7 @@ func TestIntegration(t *testing.T) {
 			Body:   "payload",
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				hub := sentry.GetHubFromContext(r.Context())
-				body, err := ioutil.ReadAll(r.Body)
+				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
@@ -99,7 +100,7 @@ func TestIntegration(t *testing.T) {
 			Body:   largePayload,
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				hub := sentry.GetHubFromContext(r.Context())
-				body, err := ioutil.ReadAll(r.Body)
+				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
@@ -197,7 +198,7 @@ func TestIntegration(t *testing.T) {
 		res.Body.Close()
 	}
 
-	if ok := sentry.Flush(time.Second); !ok {
+	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(eventsCh)
@@ -208,8 +209,9 @@ func TestIntegration(t *testing.T) {
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(
 			sentry.Event{},
-			"Contexts", "EventID", "Extra", "Platform",
-			"Sdk", "ServerName", "Tags", "Timestamp",
+			"Contexts", "EventID", "Extra", "Platform", "Modules",
+			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
+			"sdkMetaData",
 		),
 		cmpopts.IgnoreFields(
 			sentry.Request{},
