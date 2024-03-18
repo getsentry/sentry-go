@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
 	"github.com/gofiber/fiber/v2"

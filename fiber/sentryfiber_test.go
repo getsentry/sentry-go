@@ -3,12 +3,13 @@ package sentryfiber_test
 import (
 	"errors"
 	"fmt"
-	"github.com/gofiber/fiber/v2"
 	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gofiber/fiber/v2"
 
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
