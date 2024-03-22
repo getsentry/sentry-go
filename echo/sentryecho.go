@@ -10,10 +10,14 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// The identifier of the Echo SDK.
-const sdkIdentifier = "sentry.go.echo"
+const (
+	// The identifier of the Echo SDK.
+	sdkIdentifier = "sentry.go.echo"
 
-const valuesKey = "sentry"
+	valuesKey = "sentry"
+
+	transactionKey = "sentry_transaction"
+)
 
 type handler struct {
 	repanic         bool
@@ -88,6 +92,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		r = r.WithContext(transaction.Context())
 		hub.Scope().SetRequest(r)
 		ctx.Set(valuesKey, hub)
+		ctx.Set(transactionKey, transaction)
 		defer h.recoverWithSentry(hub, r)
 		return next(ctx)
 	}
@@ -112,6 +117,15 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 func GetHubFromContext(ctx echo.Context) *sentry.Hub {
 	if hub, ok := ctx.Get(valuesKey).(*sentry.Hub); ok {
 		return hub
+	}
+	return nil
+}
+
+// GetSpanFromContext retrieves attached *sentry.Span instance from echo.Context.
+// If there is no transaction on echo.Context, it will return nil.
+func GetSpanFromContext(ctx echo.Context) *sentry.Span {
+	if span, ok := ctx.Get(transactionKey).(*sentry.Span); ok {
+		return span
 	}
 	return nil
 }
