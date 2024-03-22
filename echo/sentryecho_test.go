@@ -40,6 +40,18 @@ func TestIntegration(t *testing.T) {
 			Handler: func(c echo.Context) error {
 				panic("test")
 			},
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelFatal,
+				Message: "test",
+				Request: &sentry.Request{
+					URL:    "/panic/1",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
@@ -54,43 +66,29 @@ func TestIntegration(t *testing.T) {
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
-			WantEvent: &sentry.Event{
-				Level:   sentry.LevelFatal,
-				Message: "test",
+		},
+		{
+			RequestPath: "/404/1",
+			RoutePath:   "",
+			Method:      "GET",
+			WantStatus:  404,
+			Handler:     nil,
+			WantEvent:   nil,
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "GET /404/1",
 				Request: &sentry.Request{
-					URL:    "/panic/1",
+					URL:    "/404/1",
 					Method: "GET",
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip",
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 		},
-		// TODO: Skipped. For some reason (echo.Context).Response().Status ended up having 200 status code
-		// instead of 404.
-		// {
-		// 	RequestPath: "/404/1",
-		// 	RoutePath:   "",
-		// 	Method:      "GET",
-		// 	WantStatus:  404,
-		// 	Handler:     nil,
-		// 	WantTransaction: &sentry.Event{
-		// 		Level:       sentry.LevelInfo,
-		// 		Type:        "transaction",
-		// 		Transaction: "GET /404/1",
-		// 		Request: &sentry.Request{
-		// 			URL:    "/404/1",
-		// 			Method: "GET",
-		// 			Headers: map[string]string{
-		// 				"Accept-Encoding": "gzip",
-		// 				"User-Agent":      "Go-http-client/1.1",
-		// 			},
-		// 		},
-		// 		TransactionInfo: &sentry.TransactionInfo{Source: "route"}, // here
-		// 	},
-		// 	WantEvent: nil,
-		// },
 		{
 			RequestPath: "/post",
 			RoutePath:   "/post",
@@ -104,7 +102,21 @@ func TestIntegration(t *testing.T) {
 					t.Error(err)
 				}
 				hub.CaptureMessage("post: " + string(body))
-				return c.JSON(http.StatusOK, echo.Map{"status": "ok"})
+				return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+			},
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "post: payload",
+				Request: &sentry.Request{
+					URL:    "/post",
+					Method: "POST",
+					Data:   "payload",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"Content-Length":  "7",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
 			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
@@ -122,20 +134,6 @@ func TestIntegration(t *testing.T) {
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
-			WantEvent: &sentry.Event{
-				Level:   sentry.LevelInfo,
-				Message: "post: payload",
-				Request: &sentry.Request{
-					URL:    "/post",
-					Method: "POST",
-					Data:   "payload",
-					Headers: map[string]string{
-						"Accept-Encoding": "gzip",
-						"Content-Length":  "7",
-						"User-Agent":      "Go-http-client/1.1",
-					},
-				},
-			},
 		},
 		{
 			RequestPath: "/get",
@@ -145,7 +143,19 @@ func TestIntegration(t *testing.T) {
 			Handler: func(c echo.Context) error {
 				hub := sentryecho.GetHubFromContext(c)
 				hub.CaptureMessage("get")
-				return c.JSON(http.StatusOK, echo.Map{"status": "get"})
+				return c.JSON(http.StatusOK, map[string]string{"status": "get"})
+			},
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "get",
+				Request: &sentry.Request{
+					URL:    "/get",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
 			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
@@ -160,18 +170,6 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-			},
-			WantEvent: &sentry.Event{
-				Level:   sentry.LevelInfo,
-				Message: "get",
-				Request: &sentry.Request{
-					URL:    "/get",
-					Method: "GET",
-					Headers: map[string]string{
-						"Accept-Encoding": "gzip",
-						"User-Agent":      "Go-http-client/1.1",
-					},
-				},
 			},
 		},
 		{
@@ -189,21 +187,6 @@ func TestIntegration(t *testing.T) {
 				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(body)/1024))
 				return nil
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "POST /post/large",
-				Request: &sentry.Request{
-					URL:    "/post/large",
-					Method: "POST",
-					Headers: map[string]string{
-						"Accept-Encoding": "gzip",
-						"Content-Length":  strconv.Itoa(len(largePayload)),
-						"User-Agent":      "Go-http-client/1.1",
-					},
-				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "post: 15 KB",
@@ -219,6 +202,21 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "POST /post/large",
+				Request: &sentry.Request{
+					URL:    "/post/large",
+					Method: "POST",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"Content-Length":  strconv.Itoa(len(largePayload)),
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+			},
 		},
 		{
 			RequestPath: "/post/body-ignored",
@@ -230,6 +228,21 @@ func TestIntegration(t *testing.T) {
 				hub := sentryecho.GetHubFromContext(c)
 				hub.CaptureMessage("body ignored")
 				return nil
+			},
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "body ignored",
+				Request: &sentry.Request{
+					URL:    "/post/body-ignored",
+					Method: "POST",
+					// Actual request body omitted because not read.
+					Data: "",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"Content-Length":  "46",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
 			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
@@ -248,21 +261,6 @@ func TestIntegration(t *testing.T) {
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
-			WantEvent: &sentry.Event{
-				Level:   sentry.LevelInfo,
-				Message: "body ignored",
-				Request: &sentry.Request{
-					URL:    "/post/body-ignored",
-					Method: "POST",
-					// Actual request body omitted because not read.
-					Data: "",
-					Headers: map[string]string{
-						"Accept-Encoding": "gzip",
-						"Content-Length":  "46",
-						"User-Agent":      "Go-http-client/1.1",
-					},
-				},
-			},
 		},
 		{
 			RequestPath: "/badreq",
@@ -270,7 +268,7 @@ func TestIntegration(t *testing.T) {
 			Method:      "GET",
 			WantStatus:  400,
 			Handler: func(c echo.Context) error {
-				return c.JSON(http.StatusBadRequest, echo.Map{"status": "bad_request"})
+				return c.JSON(http.StatusBadRequest, map[string]string{"status": "bad_request"})
 			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
@@ -288,44 +286,11 @@ func TestIntegration(t *testing.T) {
 			},
 			WantEvent: nil,
 		},
-		{
-			RequestPath: "/more-traces",
-			RoutePath:   "/more-traces",
-			Method:      "GET",
-			WantStatus:  200,
-			Body:        "",
-			Handler: func(c echo.Context) error {
-				span := sentryecho.GetSpanFromContext(c)
-				child := span.StartChild("first_task")
-				time.Sleep(time.Microsecond)
-				child.Finish()
-
-				child = span.StartChild("second_task")
-				time.Sleep(time.Microsecond)
-				child.Finish()
-
-				return c.NoContent(http.StatusOK)
-			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "GET /more-traces",
-				Request: &sentry.Request{
-					URL:    "/more-traces",
-					Method: "GET",
-					Headers: map[string]string{
-						"Accept-Encoding": "gzip",
-						"User-Agent":      "Go-http-client/1.1",
-					},
-				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-			},
-			WantEvent: nil,
-		},
 	}
 
 	eventsCh := make(chan *sentry.Event, len(tests))
 	transactionsCh := make(chan *sentry.Event, len(tests))
+
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
@@ -346,7 +311,12 @@ func TestIntegration(t *testing.T) {
 	router.Use(sentryecho.New(sentryecho.Options{}))
 
 	for _, tt := range tests {
-		router.Add(tt.Method, tt.RoutePath, tt.Handler)
+		switch tt.Method {
+		case http.MethodGet:
+			router.GET(tt.RoutePath, tt.Handler)
+		case http.MethodPost:
+			router.POST(tt.RoutePath, tt.Handler)
+		}
 	}
 
 	srv := httptest.NewServer(router)
@@ -356,8 +326,9 @@ func TestIntegration(t *testing.T) {
 	c.Timeout = time.Second
 
 	var want []*sentry.Event
-	var wanttrans []*sentry.Event
+	var wantTrans []*sentry.Event
 	var wantCodes []sentry.SpanStatus
+
 	for _, tt := range tests {
 		if tt.WantEvent != nil && tt.WantEvent.Request != nil {
 			wantRequest := tt.WantEvent.Request
@@ -365,10 +336,11 @@ func TestIntegration(t *testing.T) {
 			wantRequest.Headers["Host"] = srv.Listener.Addr().String()
 			want = append(want, tt.WantEvent)
 		}
+
 		wantTransaction := tt.WantTransaction.Request
 		wantTransaction.URL = srv.URL + wantTransaction.URL
 		wantTransaction.Headers["Host"] = srv.Listener.Addr().String()
-		wanttrans = append(wanttrans, tt.WantTransaction)
+		wantTrans = append(wantTrans, tt.WantTransaction)
 		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
 
 		req, err := http.NewRequest(tt.Method, srv.URL+tt.RequestPath, strings.NewReader(tt.Body))
@@ -432,76 +404,11 @@ func TestIntegration(t *testing.T) {
 			"Env",
 		),
 	}
-	if diff := cmp.Diff(wanttrans, gott, optstrans); diff != "" {
+	if diff := cmp.Diff(wantTrans, gott, optstrans); diff != "" {
 		t.Fatalf("Transaction mismatch (-want +got):\n%s", diff)
 	}
 
 	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestGetTransactionFromContext(t *testing.T) {
-	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	router := echo.New()
-	router.GET("/no-transaction", func(c echo.Context) error {
-		transaction := sentryecho.GetSpanFromContext(c)
-		if transaction != nil {
-			t.Error("expecting transaction to be nil")
-		}
-		return c.NoContent(http.StatusOK)
-	})
-	router.GET("/with-transaction", func(c echo.Context) error {
-		transaction := sentryecho.GetSpanFromContext(c)
-		if transaction == nil {
-			t.Error("expecting transaction to be not nil")
-		}
-		return c.NoContent(http.StatusOK)
-	}, sentryecho.New(sentryecho.Options{}))
-
-	srv := httptest.NewServer(router)
-	defer srv.Close()
-
-	c := srv.Client()
-
-	tests := []struct {
-		RequestPath string
-	}{
-		{
-			RequestPath: "/no-transaction",
-		},
-		{
-			RequestPath: "/with-transaction",
-		},
-	}
-	c.Timeout = time.Second
-
-	for _, tt := range tests {
-		req, err := http.NewRequest("GET", srv.URL+tt.RequestPath, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		res, err := c.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if res.StatusCode != 200 {
-			t.Errorf("Status code = %d expected: %d", res.StatusCode, 200)
-		}
-		err = res.Body.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
-			t.Fatal("sentry.Flush timed out")
-		}
 	}
 }

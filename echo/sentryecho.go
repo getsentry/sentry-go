@@ -59,33 +59,51 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
-		var transactionName = ctx.Path()
-		var transactionSource = sentry.SourceRoute
+		r := ctx.Request()
+
+		transactionName := r.URL.Path
+		transactionSource := sentry.SourceURL
+
+		if path := ctx.Path(); path != "" {
+			transactionName = path
+			transactionSource = sentry.SourceRoute
+		}
 
 		options := []sentry.SpanOption{
 			sentry.WithOpName("http.server"),
-			sentry.ContinueFromRequest(ctx.Request()),
+			sentry.ContinueFromRequest(r),
 			sentry.WithTransactionSource(transactionSource),
 		}
 
 		transaction := sentry.StartTransaction(
-			sentry.SetHubOnContext(ctx.Request().Context(), hub),
-			fmt.Sprintf("%s %s", ctx.Request().Method, transactionName),
+			sentry.SetHubOnContext(r.Context(), hub),
+			fmt.Sprintf("%s %s", r.Method, transactionName),
 			options...,
 		)
+
 		defer func() {
-			// TODO: For nil handler (or not found routes), ctx.Response().Status will always be 200
-			// instead of 404.
-			transaction.Status = sentry.HTTPtoSpanStatus(ctx.Response().Status)
+			if err := ctx.Get("error"); err != nil {
+				if httpError, ok := err.(*echo.HTTPError); ok {
+					transaction.Status = sentry.HTTPtoSpanStatus(httpError.Code)
+				}
+			} else {
+				transaction.Status = sentry.HTTPtoSpanStatus(ctx.Response().Status)
+			}
 			transaction.Finish()
 		}()
 
-		// We can't reassign `ctx.Request()`, so we'd need to put it inside echo.Context
-		hub.Scope().SetRequest(ctx.Request())
+		hub.Scope().SetRequest(r)
 		ctx.Set(valuesKey, hub)
 		ctx.Set(transactionKey, transaction)
-		defer h.recoverWithSentry(hub, ctx.Request())
-		return next(ctx)
+		defer h.recoverWithSentry(hub, r)
+
+		err := next(ctx)
+		if err != nil {
+			// Store the error so it can be used in the deferred function
+			ctx.Set("error", err)
+		}
+
+		return err
 	}
 }
 
