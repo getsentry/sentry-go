@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +29,8 @@ func TestIntegration(t *testing.T) {
 		Body        string
 		Handler     echo.HandlerFunc
 
-		WantEvent *sentry.Event
+		WantEvent       *sentry.Event
+		WantTransaction *sentry.Event
 	}{
 		{
 			RequestPath: "/panic/1",
@@ -50,6 +52,20 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "GET /panic/:id",
+				Request: &sentry.Request{
+					URL:    "/panic",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+			},
 		},
 		{
 			RequestPath: "/404/1",
@@ -58,6 +74,20 @@ func TestIntegration(t *testing.T) {
 			WantStatus:  404,
 			Handler:     nil,
 			WantEvent:   nil,
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "GET /404/1",
+				Request: &sentry.Request{
+					URL:    "/404/1",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+			},
 		},
 		{
 			RequestPath: "/post",
@@ -88,6 +118,22 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "POST /post",
+				Request: &sentry.Request{
+					URL:    "/post",
+					Method: "POST",
+					Data:   "payload",
+					Headers: map[string]string{
+						"Content-Length":  "7",
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+			},
 		},
 		{
 			RequestPath: "/get",
@@ -110,6 +156,20 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
+			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "GET /get",
+				Request: &sentry.Request{
+					URL:    "/get",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 			},
 		},
 		{
@@ -142,6 +202,21 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "POST /post/large",
+				Request: &sentry.Request{
+					URL:    "/post/large",
+					Method: "POST",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"Content-Length":  strconv.Itoa(len(largePayload)),
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+			},
 		},
 		{
 			RequestPath: "/post/body-ignored",
@@ -169,6 +244,23 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "POST /post/body-ignored",
+				Request: &sentry.Request{
+					URL:    "/post/body-ignored",
+					Method: "POST",
+					// Actual request body omitted because not read.
+					Data: "",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"Content-Length":  strconv.Itoa(len("client sends, server ignores, SDK doesn't read")),
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+			},
 		},
 		{
 			RequestPath: "/badreq",
@@ -178,17 +270,37 @@ func TestIntegration(t *testing.T) {
 			Handler: func(c echo.Context) error {
 				return c.JSON(http.StatusBadRequest, map[string]string{"status": "bad_request"})
 			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "GET /badreq",
+				Request: &sentry.Request{
+					URL:    "/badreq",
+					Method: "GET",
+					Headers: map[string]string{
+						"Accept-Encoding": "gzip",
+						"User-Agent":      "Go-http-client/1.1",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+			},
 			WantEvent: nil,
 		},
 	}
 
 	eventsCh := make(chan *sentry.Event, len(tests))
+	transactionsCh := make(chan *sentry.Event, len(tests))
+
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
+		},
+		BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			transactionsCh <- tx
+			return tx
 		},
 	})
 	if err != nil {
@@ -214,6 +326,9 @@ func TestIntegration(t *testing.T) {
 	c.Timeout = time.Second
 
 	var want []*sentry.Event
+	var wantTrans []*sentry.Event
+	var wantCodes []sentry.SpanStatus
+
 	for _, tt := range tests {
 		if tt.WantEvent != nil && tt.WantEvent.Request != nil {
 			wantRequest := tt.WantEvent.Request
@@ -221,6 +336,12 @@ func TestIntegration(t *testing.T) {
 			wantRequest.Headers["Host"] = srv.Listener.Addr().String()
 			want = append(want, tt.WantEvent)
 		}
+
+		wantTransaction := tt.WantTransaction.Request
+		wantTransaction.URL = srv.URL + wantTransaction.URL
+		wantTransaction.Headers["Host"] = srv.Listener.Addr().String()
+		wantTrans = append(wantTrans, tt.WantTransaction)
+		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
 
 		req, err := http.NewRequest(tt.Method, srv.URL+tt.RequestPath, strings.NewReader(tt.Body))
 		if err != nil {
@@ -261,5 +382,33 @@ func TestIntegration(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Fatalf("Events mismatch (-want +got):\n%s", diff)
+	}
+
+	close(transactionsCh)
+	var gott []*sentry.Event
+	var statusCodes []sentry.SpanStatus
+	for e := range transactionsCh {
+		gott = append(gott, e)
+		statusCodes = append(statusCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
+	}
+
+	optstrans := cmp.Options{
+		cmpopts.IgnoreFields(
+			sentry.Event{},
+			"Contexts", "EventID", "Platform", "Modules",
+			"Release", "Sdk", "ServerName", "Timestamp",
+			"sdkMetaData", "StartTime", "Spans",
+		),
+		cmpopts.IgnoreFields(
+			sentry.Request{},
+			"Env",
+		),
+	}
+	if diff := cmp.Diff(wantTrans, gott, optstrans); diff != "" {
+		t.Fatalf("Transaction mismatch (-want +got):\n%s", diff)
+	}
+
+	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
+		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
 	}
 }

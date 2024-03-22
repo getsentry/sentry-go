@@ -2,6 +2,7 @@ package sentryecho
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -48,18 +49,46 @@ func New(options Options) echo.MiddlewareFunc {
 
 func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		hub := sentry.GetHubFromContext(ctx.Request().Context())
+		r := ctx.Request()
+		stdCtx := r.Context()
+
+		hub := sentry.GetHubFromContext(r.Context())
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
+			stdCtx = sentry.SetHubOnContext(stdCtx, hub)
 		}
 
 		if client := hub.Client(); client != nil {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
-		hub.Scope().SetRequest(ctx.Request())
+		transactionName := r.URL.Path
+		transactionSource := sentry.SourceURL
+
+		if path := ctx.Path(); path != "" {
+			transactionName = path
+			transactionSource = sentry.SourceRoute
+		}
+
+		options := []sentry.SpanOption{
+			sentry.WithOpName("http.server"),
+			sentry.ContinueFromRequest(r),
+			sentry.WithTransactionSource(transactionSource),
+		}
+
+		transaction := sentry.StartTransaction(stdCtx,
+			fmt.Sprintf("%s %s", r.Method, transactionName),
+			options...,
+		)
+		defer func() {
+			transaction.Status = sentry.HTTPtoSpanStatus(ctx.Response().Status)
+			transaction.Finish()
+		}()
+
+		r = r.WithContext(transaction.Context())
+		hub.Scope().SetRequest(r)
 		ctx.Set(valuesKey, hub)
-		defer h.recoverWithSentry(hub, ctx.Request())
+		defer h.recoverWithSentry(hub, r)
 		return next(ctx)
 	}
 }
