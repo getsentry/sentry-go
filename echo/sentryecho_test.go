@@ -412,3 +412,68 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestGetTransactionFromContext(t *testing.T) {
+	err := sentry.Init(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	router := echo.New()
+	router.GET("/no-transaction", func(c echo.Context) error {
+		transaction := sentryecho.GetSpanFromContext(c)
+		if transaction != nil {
+			t.Error("expecting transaction to be nil")
+		}
+		return c.NoContent(http.StatusOK)
+	})
+	router.GET("/with-transaction", func(c echo.Context) error {
+		transaction := sentryecho.GetSpanFromContext(c)
+		if transaction == nil {
+			t.Error("expecting transaction to be not nil")
+		}
+		return c.NoContent(http.StatusOK)
+	}, sentryecho.New(sentryecho.Options{}))
+
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	c := srv.Client()
+
+	tests := []struct {
+		RequestPath string
+	}{
+		{
+			RequestPath: "/no-transaction",
+		},
+		{
+			RequestPath: "/with-transaction",
+		},
+	}
+	c.Timeout = time.Second
+
+	for _, tt := range tests {
+		req, err := http.NewRequest("GET", srv.URL+tt.RequestPath, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.StatusCode != 200 {
+			t.Errorf("Status code = %d expected: %d", res.StatusCode, 200)
+		}
+		err = res.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+			t.Fatal("sentry.Flush timed out")
+		}
+	}
+}
