@@ -21,11 +21,10 @@ func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
 
 	tests := []struct {
-		Path    string
-		Method  string
-		Body    string
-		Handler fasthttp.RequestHandler
-
+		Path            string
+		Method          string
+		Body            string
+		Handler         fasthttp.RequestHandler
 		WantEvent       *sentry.Event
 		WantTransaction *sentry.Event
 	}{
@@ -34,13 +33,12 @@ func TestIntegration(t *testing.T) {
 			Handler: func(*fasthttp.RequestCtx) {
 				panic("test")
 			},
-
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
 				Message: "test",
 				Request: &sentry.Request{
 					URL:    "http://example.com/panic",
-					Method: "GET",
+					Method: http.MethodGet,
 					Headers: map[string]string{
 						"Host":       "example.com",
 						"User-Agent": "fasthttp",
@@ -53,30 +51,30 @@ func TestIntegration(t *testing.T) {
 				Transaction: "GET /panic",
 				Request: &sentry.Request{
 					URL:    "http://example.com/panic",
-					Method: "GET",
+					Method: http.MethodGet,
 					Headers: map[string]string{
 						"Host":       "example.com",
 						"User-Agent": "fasthttp",
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": http.MethodGet},
 			},
 		},
 		{
 			Path:   "/post",
-			Method: "POST",
+			Method: http.MethodPost,
 			Body:   "payload",
 			Handler: func(ctx *fasthttp.RequestCtx) {
 				hub := sentryfasthttp.GetHubFromContext(ctx)
 				hub.CaptureMessage("post: " + string(ctx.Request.Body()))
 			},
-
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "post: payload",
 				Request: &sentry.Request{
 					URL:    "http://example.com/post",
-					Method: "POST",
+					Method: http.MethodPost,
 					Data:   "payload",
 					Headers: map[string]string{
 						"Host":       "example.com",
@@ -90,7 +88,7 @@ func TestIntegration(t *testing.T) {
 				Transaction: "POST /post",
 				Request: &sentry.Request{
 					URL:    "http://example.com/post",
-					Method: "POST",
+					Method: http.MethodPost,
 					Data:   "payload",
 					Headers: map[string]string{
 						"Host":       "example.com",
@@ -98,21 +96,21 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": http.MethodPost},
 			},
 		},
 		{
 			Path: "/get",
 			Handler: func(ctx *fasthttp.RequestCtx) {
 				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureMessage("get")
+				hub.CaptureMessage(http.MethodGet)
 			},
-
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
-				Message: "get",
+				Message: http.MethodGet,
 				Request: &sentry.Request{
 					URL:    "http://example.com/get",
-					Method: "GET",
+					Method: http.MethodGet,
 					Headers: map[string]string{
 						"Host":       "example.com",
 						"User-Agent": "fasthttp",
@@ -125,30 +123,30 @@ func TestIntegration(t *testing.T) {
 				Transaction: "GET /get",
 				Request: &sentry.Request{
 					URL:    "http://example.com/get",
-					Method: "GET",
+					Method: http.MethodGet,
 					Headers: map[string]string{
 						"Host":       "example.com",
 						"User-Agent": "fasthttp",
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": http.MethodGet},
 			},
 		},
 		{
 			Path:   "/post/large",
-			Method: "POST",
+			Method: http.MethodPost,
 			Body:   largePayload,
 			Handler: func(ctx *fasthttp.RequestCtx) {
 				hub := sentryfasthttp.GetHubFromContext(ctx)
 				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(ctx.Request.Body())/1024))
 			},
-
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "post: 15 KB",
 				Request: &sentry.Request{
 					URL:    "http://example.com/post/large",
-					Method: "POST",
+					Method: http.MethodPost,
 					// Actual request body omitted because too large.
 					Data: "",
 					Headers: map[string]string{
@@ -163,7 +161,7 @@ func TestIntegration(t *testing.T) {
 				Transaction: "POST /post/large",
 				Request: &sentry.Request{
 					URL:    "http://example.com/post/large",
-					Method: "POST",
+					Method: http.MethodPost,
 					Data:   "",
 					Headers: map[string]string{
 						"Host":       "example.com",
@@ -171,23 +169,23 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": http.MethodPost},
 			},
 		},
 		{
 			Path:   "/post/body-ignored",
-			Method: "POST",
+			Method: http.MethodPost,
 			Body:   "client sends, fasthttp always reads, SDK reports",
 			Handler: func(ctx *fasthttp.RequestCtx) {
 				hub := sentryfasthttp.GetHubFromContext(ctx)
 				hub.CaptureMessage("body ignored")
 			},
-
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "body ignored",
 				Request: &sentry.Request{
 					URL:    "http://example.com/post/body-ignored",
-					Method: "POST",
+					Method: http.MethodPost,
 					// Actual request body included because fasthttp always
 					// reads full request body.
 					Data: "client sends, fasthttp always reads, SDK reports",
@@ -203,7 +201,7 @@ func TestIntegration(t *testing.T) {
 				Transaction: "POST /post/body-ignored",
 				Request: &sentry.Request{
 					URL:    "http://example.com/post/body-ignored",
-					Method: "POST",
+					Method: http.MethodPost,
 					Data:   "client sends, fasthttp always reads, SDK reports",
 					Headers: map[string]string{
 						"Host":       "example.com",
@@ -211,6 +209,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": http.MethodPost},
 			},
 		},
 	}
@@ -384,7 +383,7 @@ func TestGetTransactionFromContext(t *testing.T) {
 		req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
 		req.SetHost("example.com")
 		req.URI().SetPath("/")
-		req.Header.SetMethod("GET")
+		req.Header.SetMethod(http.MethodGet)
 		if err := c.Do(req, res); err != nil {
 			t.Fatalf("Request failed: %s", err)
 		}
@@ -425,7 +424,7 @@ func TestGetTransactionFromContext(t *testing.T) {
 		req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
 		req.SetHost("example.com")
 		req.URI().SetPath("/")
-		req.Header.SetMethod("GET")
+		req.Header.SetMethod(http.MethodGet)
 		if err := c.Do(req, res); err != nil {
 			t.Fatalf("Request failed: %s", err)
 		}

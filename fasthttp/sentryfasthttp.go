@@ -13,14 +13,15 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// The identifier of the FastHTTP SDK.
-const sdkIdentifier = "sentry.go.fasthttp"
-
 type contextKey int
 
-const ContextKey = contextKey(1)
-const valuesKey = "sentry"
-const transactionKey = "sentry_transaction"
+const (
+	ContextKey = contextKey(1)
+	// The identifier of the FastHTTP SDK.
+	sdkIdentifier  = "sentry.go.fasthttp"
+	valuesKey      = "sentry"
+	transactionKey = "sentry_transaction"
+)
 
 type Handler struct {
 	repanic         bool
@@ -74,15 +75,20 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			sentry.ContinueFromRequest(convertedHTTPRequest),
 			sentry.WithTransactionSource(sentry.SourceRoute),
 		}
+
+		method := string(ctx.Method())
+
 		transaction := sentry.StartTransaction(
 			sentry.SetHubOnContext(ctx, hub),
-			fmt.Sprintf("%s %s", string(ctx.Method()), string(ctx.Path())),
+			fmt.Sprintf("%s %s", method, string(ctx.Path())),
 			options...,
 		)
 		defer func() {
 			transaction.Status = sentry.HTTPtoSpanStatus(ctx.Response.StatusCode())
 			transaction.Finish()
 		}()
+
+		transaction.SetData("http.request.method", method)
 
 		scope := hub.Scope()
 		scope.SetRequest(convertedHTTPRequest)
