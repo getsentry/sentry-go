@@ -91,10 +91,3 @@ func TestRevisionFromBuildInfoNoVcsInformation(t *testing.T) {
 
 	assertEqual(t, revisionFromBuildInfo(info), "")
 }
-
-func PointerTest(t *testing.T) {
-	x := new(int)
-	*x = 10
-	y := Pointer(10)
-	assertEqual(t, *x, *y)
-}
