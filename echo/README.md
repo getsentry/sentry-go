@@ -7,7 +7,7 @@
 
 # Official Sentry Echo Handler for Sentry-go SDK
 
-**Godoc:** https://pkg.go.dev/github.com/getsentry/sentry-go/echo
+**go.dev:** https://pkg.go.dev/github.com/getsentry/sentry-go/echo
 
 **Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/echo
 

@@ -7,7 +7,7 @@
 
 # Official Sentry [Iris](https://github.com/kataras/iris) Handler for Sentry-go SDK
 
-**Godoc:** https://pkg.go.dev/github.com/getsentry/sentry-go/iris
+**go.dev:** https://pkg.go.dev/github.com/getsentry/sentry-go/iris
 
 **Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/iris
 

@@ -7,7 +7,7 @@
 
 # Official Sentry Gin Handler for Sentry-go SDK
 
-**Godoc:** https://pkg.go.dev/github.com/getsentry/sentry-go/gin
+**go.dev:** https://pkg.go.dev/github.com/getsentry/sentry-go/gin
 
 **Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/gin
 

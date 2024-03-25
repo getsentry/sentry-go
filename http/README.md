@@ -7,7 +7,7 @@
 
 # Official Sentry net/http Handler for Sentry-go SDK
 
-**Godoc:** https://pkg.go.dev/github.com/getsentry/sentry-go/http
+**go.dev:** https://pkg.go.dev/github.com/getsentry/sentry-go/http
 
 **Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/http
 
