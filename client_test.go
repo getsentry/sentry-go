@@ -164,14 +164,24 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:  "*sentry.customErr",
 					Value: "wat",
-					// No Stacktrace, because we can't tell where the error came
-					// from and because we have a stack trace in the most recent
-					// error in the chain.
+					Mechanism: &Mechanism{
+						Data: map[string]any{
+							"is_exception_group": true,
+							"exception_id":       0,
+						},
+					},
 				},
 				{
 					Type:       "*errors.withStack",
 					Value:      "wat",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						Data: map[string]any{
+							"exception_id":       1,
+							"is_exception_group": true,
+							"parent_id":          0,
+						},
+					},
 				},
 			},
 		},
@@ -193,11 +203,24 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:  "*sentry.customErr",
 					Value: "wat",
+					Mechanism: &Mechanism{
+						Data: map[string]any{
+							"is_exception_group": true,
+							"exception_id":       0,
+						},
+					},
 				},
 				{
 					Type:       "*sentry.customErrWithCause",
 					Value:      "err",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						Data: map[string]any{
+							"exception_id":       1,
+							"is_exception_group": true,
+							"parent_id":          0,
+						},
+					},
 				},
 			},
 		},
@@ -208,11 +231,24 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:  "*errors.errorString",
 					Value: "original",
+					Mechanism: &Mechanism{
+						Data: map[string]any{
+							"is_exception_group": true,
+							"exception_id":       0,
+						},
+					},
 				},
 				{
 					Type:       "sentry.wrappedError",
 					Value:      "wrapped: original",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						Data: map[string]any{
+							"exception_id":       1,
+							"is_exception_group": true,
+							"parent_id":          0,
+						},
+					},
 				},
 			},
 		},

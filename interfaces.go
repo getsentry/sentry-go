@@ -3,6 +3,7 @@ package sentry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -222,11 +223,12 @@ func NewRequest(r *http.Request) *Request {
 
 // Mechanism is the mechanism by which an exception was generated and handled.
 type Mechanism struct {
-	Type        string                 `json:"type,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	HelpLink    string                 `json:"help_link,omitempty"`
-	Handled     *bool                  `json:"handled,omitempty"`
-	Data        map[string]interface{} `json:"data,omitempty"`
+	Type        string         `json:"type,omitempty"`
+	Description string         `json:"description,omitempty"`
+	HelpLink    string         `json:"help_link,omitempty"`
+	Source      string         `json:"source,omitempty"`
+	Handled     *bool          `json:"handled,omitempty"`
+	Data        map[string]any `json:"data,omitempty"`
 }
 
 // SetUnhandled indicates that the exception is an unhandled exception, i.e.
@@ -341,25 +343,40 @@ type Event struct {
 // maxErrorDepth is the maximum depth of the error chain we will look
 // into while unwrapping the errors.
 func (e *Event) SetException(exception error, maxErrorDepth int) {
-	err := exception
-	if err == nil {
+	if exception == nil {
 		return
 	}
 
-	for i := 0; i < maxErrorDepth && err != nil; i++ {
+	err := exception
+
+	for i := 0; err != nil && i < maxErrorDepth; i++ {
+		// Add the current error to the exception slice with its details
 		e.Exception = append(e.Exception, Exception{
 			Value:      err.Error(),
 			Type:       reflect.TypeOf(err).String(),
 			Stacktrace: ExtractStacktrace(err),
 		})
-		switch previous := err.(type) {
-		case interface{ Unwrap() error }:
-			err = previous.Unwrap()
-		case interface{ Cause() error }:
-			err = previous.Cause()
-		default:
-			err = nil
+
+		// Attempt to unwrap the error using the standard library's Unwrap method.
+		// If errors.Unwrap returns nil, it means either there is no error to unwrap,
+		// or the error does not implement the Unwrap method.
+		unwrappedErr := errors.Unwrap(err)
+
+		if unwrappedErr != nil {
+			// The error was successfully unwrapped using the standard library's Unwrap method.
+			err = unwrappedErr
+			continue
 		}
+
+		cause, ok := err.(interface{ Cause() error })
+		if !ok {
+			// We cannot unwrap the error further.
+			break
+		}
+
+		// The error implements the Cause method, indicating it may have been wrapped
+		// using the github.com/pkg/errors package.
+		err = cause.Cause()
 	}
 
 	// Add a trace of the current stack to the most recent error in a chain if
@@ -370,8 +387,25 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 		e.Exception[0].Stacktrace = NewStacktrace()
 	}
 
+	if len(e.Exception) <= 1 {
+		return
+	}
+
 	// event.Exception should be sorted such that the most recent error is last.
 	reverse(e.Exception)
+
+	for i := range e.Exception {
+		e.Exception[i].Mechanism = &Mechanism{
+			Data: map[string]any{
+				"is_exception_group": true,
+				"exception_id":       i,
+			},
+		}
+		if i == 0 {
+			continue
+		}
+		e.Exception[i].Mechanism.Data["parent_id"] = i - 1
+	}
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
