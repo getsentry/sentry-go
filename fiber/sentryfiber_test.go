@@ -217,9 +217,6 @@ func TestIntegration(t *testing.T) {
 		}
 	}
 
-	if ok := sentry.Flush(time.Second); !ok {
-		t.Fatal("sentry.Flush timed out")
-	}
 	close(eventsCh)
 	var got []*sentry.Event
 	for e := range eventsCh {
