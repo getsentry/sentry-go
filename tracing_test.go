@@ -334,8 +334,11 @@ func TestSetData(t *testing.T) {
 	})
 	span := StartSpan(ctx, "Test Span")
 	span.SetData("key", "value")
-
-	if (span.Data == nil) || (span.Data["key"] != "value") {
+	span.SetData("key.nil", nil)
+	span.SetData("key.number", 123)
+	span.SetData("key.bool", true)
+	span.SetData("key.slice", []string{"foo", "bar"})
+	if (span.Data == nil) || (span.Data["key"] != "value") || (span.Data["key.number"] != 123) || (span.Data["key.bool"] != true) || !reflect.DeepEqual(span.Data["key.slice"], []string{"foo", "bar"}) {
 		t.Fatalf("Data mismatch, got %v", span.Data)
 	}
 }
