@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -52,6 +53,24 @@ func main() {
 				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 			})
 		}
+
+		expensiveThing := func(ctx context.Context) error {
+			span := sentry.StartTransaction(ctx, "expensive_thing")
+			defer span.Finish()
+			// do resource intensive thing
+			return nil
+		}
+
+		// Acquire transaction on current hub that's created by the SDK.
+		// Be careful, it might be a nil value if you didn't set up sentryecho middleware.
+		sentrySpan := sentryecho.GetSpanFromContext(ctx)
+		// Pass in the `.Context()` method from `*sentry.Span` struct.
+		// The `context.Context` instance inherits the context from `echo.Context`.
+		err := expensiveThing(sentrySpan.Context())
+		if err != nil {
+			return err
+		}
+
 		return ctx.String(http.StatusOK, "Hello, World!")
 	})
 
