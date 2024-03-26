@@ -8,6 +8,7 @@
 - Automatic transactions for Echo integration ([#722](https://github.com/getsentry/sentry-go/pull/722))
 - Automatic transactions for Fasthttp integration ([#732](https://github.com/getsentry/sentry-go/pull/723))
 - Add `Fiber` integration ([#795](https://github.com/getsentry/sentry-go/pull/795))
+- Add support for errors.Unwrap() when unwrapping exceptions and new exception mechanism fields from [RFC-0079](https://github.com/getsentry/rfcs/blob/main/text/0079-exception-groups.md#new-mechanism-fields) ([#792](https://github.com/getsentry/sentry-go/pull/792))
 
 ## 0.27.0
 
