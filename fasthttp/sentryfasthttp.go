@@ -58,10 +58,6 @@ func New(options Options) *Handler {
 // Handle wraps fasthttp.RequestHandler and recovers from caught panics.
 func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		// Unlike for other integrations, we don't support getting an existing
-		// hub from the current request context because fasthttp doesn't use the
-		// standard net/http.Request and because fasthttp.RequestCtx implements
-		// context.Context but requires string keys.
 		hub := sentry.CurrentHub().Clone()
 
 		if client := hub.Client(); client != nil {
