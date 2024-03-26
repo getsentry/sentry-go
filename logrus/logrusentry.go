@@ -4,7 +4,6 @@ package sentrylogrus
 import (
 	"errors"
 	"net/http"
-	"reflect"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -162,8 +161,7 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 	}
 	if err, ok := s.Extra[logrus.ErrorKey].(error); ok {
 		delete(s.Extra, logrus.ErrorKey)
-		ex := h.exceptions(err)
-		s.Exception = ex
+		s.SetException(err, -1)
 	}
 	key = h.key(FieldUser)
 	if user, ok := s.Extra[key].(sentry.User); ok {
@@ -187,70 +185,6 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 	delete(s.Extra, FieldGoVersion)
 	delete(s.Extra, FieldMaxProcs)
 	return s
-}
-
-func (h *Hook) exceptions(err error) []sentry.Exception {
-	if err == nil {
-		return nil
-	}
-
-	if !h.hub.Client().Options().AttachStacktrace {
-		return []sentry.Exception{{
-			Type:  reflect.TypeOf(err).String(),
-			Value: err.Error(),
-		}}
-	}
-
-	var excs []sentry.Exception
-	for err != nil {
-		// Add the current error to the exception slice with its details
-		excs = append(excs, sentry.Exception{
-			Value:      err.Error(),
-			Type:       reflect.TypeOf(err).String(),
-			Stacktrace: sentry.ExtractStacktrace(err),
-		})
-
-		// Attempt to unwrap the error using the standard library's Unwrap method.
-		// If errors.Unwrap returns nil, it means either there is no error to unwrap,
-		// or the error does not implement the Unwrap method.
-		unwrappedErr := errors.Unwrap(err)
-
-		if unwrappedErr == nil {
-			break
-		}
-
-		err = unwrappedErr
-	}
-
-	// Add a trace of the current stack to the most recent error in a chain if
-	// it doesn't have a stack trace yet.
-	if excs[0].Stacktrace == nil {
-		excs[0].Stacktrace = sentry.NewStacktrace()
-	}
-
-	if len(excs) <= 1 {
-		return excs
-	}
-
-	// reverse
-	for i, j := 0, len(excs)-1; i < j; i, j = i+1, j-1 {
-		excs[i], excs[j] = excs[j], excs[i]
-	}
-
-	for i := range excs {
-		excs[i].Mechanism = &sentry.Mechanism{
-			Data: map[string]any{
-				"is_exception_group": true,
-				"exception_id":       i,
-			},
-		}
-		if i == 0 {
-			continue
-		}
-		excs[i].Mechanism.Data["parent_id"] = i - 1
-	}
-
-	return excs
 }
 
 // Flush waits until the underlying Sentry transport sends any buffered events,
