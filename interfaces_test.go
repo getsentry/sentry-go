@@ -368,7 +368,7 @@ func TestMechanismMarshalJSON(t *testing.T) {
 	}
 
 	want := `{"type":"some type","description":"some description","help_link":"some help link",` +
-		`"data":{"some data":"some value","some numeric data":12345}}`
+		`"exception_id":0,"data":{"some data":"some value","some numeric data":12345}}`
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
@@ -393,7 +393,7 @@ func TestMechanismMarshalJSON_withHandled(t *testing.T) {
 	}
 
 	want := `{"type":"some type","description":"some description","help_link":"some help link",` +
-		`"handled":false,"data":{"some data":"some value","some numeric data":12345}}`
+		`"handled":false,"exception_id":0,"data":{"some data":"some value","some numeric data":12345}}`
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
