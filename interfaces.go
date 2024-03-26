@@ -223,12 +223,15 @@ func NewRequest(r *http.Request) *Request {
 
 // Mechanism is the mechanism by which an exception was generated and handled.
 type Mechanism struct {
-	Type        string         `json:"type,omitempty"`
-	Description string         `json:"description,omitempty"`
-	HelpLink    string         `json:"help_link,omitempty"`
-	Source      string         `json:"source,omitempty"`
-	Handled     *bool          `json:"handled,omitempty"`
-	Data        map[string]any `json:"data,omitempty"`
+	Type             string         `json:"type,omitempty"`
+	Description      string         `json:"description,omitempty"`
+	HelpLink         string         `json:"help_link,omitempty"`
+	Source           string         `json:"source,omitempty"`
+	Handled          *bool          `json:"handled,omitempty"`
+	ParentID         *int           `json:"parent_id,omitempty"`
+	ExceptionID      int            `json:"exception_id,omitempty"`
+	IsExceptionGroup bool           `json:"is_exception_group,omitempty"`
+	Data             map[string]any `json:"data,omitempty"`
 }
 
 // SetUnhandled indicates that the exception is an unhandled exception, i.e.
@@ -396,15 +399,13 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 
 	for i := range e.Exception {
 		e.Exception[i].Mechanism = &Mechanism{
-			Data: map[string]any{
-				"is_exception_group": true,
-				"exception_id":       i,
-			},
+			IsExceptionGroup: true,
+			ExceptionID:      i,
 		}
 		if i == 0 {
 			continue
 		}
-		e.Exception[i].Mechanism.Data["parent_id"] = i - 1
+		e.Exception[i].Mechanism.ParentID = &e.Exception[i-1].Mechanism.ExceptionID
 	}
 }
 
