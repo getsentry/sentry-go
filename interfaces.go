@@ -368,7 +368,7 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 			continue
 		}
 
-		causer, ok := err.(interface{ Cause() error })
+		cause, ok := err.(interface{ Cause() error })
 		if !ok {
 			// We cannot unwrap the error further.
 			break
@@ -376,7 +376,7 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 
 		// The error implements the Cause method, indicating it may have been wrapped
 		// using the github.com/pkg/errors package.
-		err = causer.Cause()
+		err = cause.Cause()
 	}
 
 	// Add a trace of the current stack to the most recent error in a chain if
