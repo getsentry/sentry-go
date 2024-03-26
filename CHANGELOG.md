@@ -7,6 +7,7 @@
 - Accept `interface{}` for span data values ([#784](https://github.com/getsentry/sentry-go/pull/784))
 - Automatic transactions for Echo integration ([#722](https://github.com/getsentry/sentry-go/pull/722))
 - Add `http.request.method` attribute for performance span data ([#786](https://github.com/getsentry/sentry-go/pull/786))
+- Automatic transactions for Fasthttp integration ([#732](https://github.com/getsentry/sentry-go/pull/723))
 
 ## 0.27.0
 
