@@ -7,7 +7,7 @@
 
 # Official Sentry net/http Handler for Sentry-go SDK
 
-**Godoc:** https://godoc.org/github.com/getsentry/sentry-go/http
+**go.dev:** https://pkg.go.dev/github.com/getsentry/sentry-go/http
 
 **Example:** https://github.com/getsentry/sentry-go/tree/master/_examples/http
 
@@ -69,7 +69,7 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentryhttp` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the request's context, which makes it available throughout the rest of the request's lifetime.
+`sentryhttp` attaches an instance of `*sentry.Hub` (https://pkg.go.dev/github.com/getsentry/sentry-go#Hub) to the request's context, which makes it available throughout the rest of the request's lifetime.
 You can access it by using the `sentry.GetHubFromContext()` method on the request itself in any of your proceeding middleware and routes.
 And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
 
