@@ -105,6 +105,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			fmt.Sprintf("%s %s", r.Method, r.URL.Path),
 			options...,
 		)
+		transaction.SetData("http.request.method", r.Method)
 		defer transaction.Finish()
 		// TODO(tracing): if the next handler.ServeHTTP panics, store
 		// information on the transaction accordingly (status, tag,
