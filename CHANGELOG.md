@@ -8,6 +8,7 @@
 - Automatic transactions for Echo integration ([#722](https://github.com/getsentry/sentry-go/pull/722))
 - Add `http.request.method` attribute for performance span data ([#786](https://github.com/getsentry/sentry-go/pull/786))
 - Automatic transactions for Fasthttp integration ([#732](https://github.com/getsentry/sentry-go/pull/723))
+- Add `Fiber` integration ([#795](https://github.com/getsentry/sentry-go/pull/795))
 
 ## 0.27.0
 
