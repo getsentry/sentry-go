@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- accept `interface{}` for span data values ([#784](https://github.com/getsentry/sentry-go/pull/784))
+
 ## 0.27.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.27.0.
