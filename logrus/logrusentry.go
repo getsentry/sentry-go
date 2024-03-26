@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	sentry "github.com/getsentry/sentry-go"
 	"github.com/sirupsen/logrus"
+
+	sentry "github.com/getsentry/sentry-go"
 )
 
 // The identifier of the Logrus SDK.
@@ -160,8 +161,7 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 	}
 	if err, ok := s.Extra[logrus.ErrorKey].(error); ok {
 		delete(s.Extra, logrus.ErrorKey)
-		ex := h.exceptions(err)
-		s.Exception = ex
+		s.SetException(err, -1)
 	}
 	key = h.key(FieldUser)
 	if user, ok := s.Extra[key].(sentry.User); ok {
@@ -185,40 +185,6 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 	delete(s.Extra, FieldGoVersion)
 	delete(s.Extra, FieldMaxProcs)
 	return s
-}
-
-func (h *Hook) exceptions(err error) []sentry.Exception {
-	if !h.hub.Client().Options().AttachStacktrace {
-		return []sentry.Exception{{
-			Type:  "error",
-			Value: err.Error(),
-		}}
-	}
-	excs := []sentry.Exception{}
-	var last *sentry.Exception
-	for ; err != nil; err = errors.Unwrap(err) {
-		exc := sentry.Exception{
-			Type:       "error",
-			Value:      err.Error(),
-			Stacktrace: sentry.ExtractStacktrace(err),
-		}
-		if last != nil && exc.Value == last.Value {
-			if last.Stacktrace == nil {
-				last.Stacktrace = exc.Stacktrace
-				continue
-			}
-			if exc.Stacktrace == nil {
-				continue
-			}
-		}
-		excs = append(excs, exc)
-		last = &excs[len(excs)-1]
-	}
-	// reverse
-	for i, j := 0, len(excs)-1; i < j; i, j = i+1, j-1 {
-		excs[i], excs[j] = excs[j], excs[i]
-	}
-	return excs
 }
 
 // Flush waits until the underlying Sentry transport sends any buffered events,
