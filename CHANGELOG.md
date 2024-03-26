@@ -4,7 +4,8 @@
 
 ### Features
 
-- accept `interface{}` for span data values ([#784](https://github.com/getsentry/sentry-go/pull/784))
+- Accept `interface{}` for span data values ([#784](https://github.com/getsentry/sentry-go/pull/784))
+- Automatic transactions for Echo integration ([#722](https://github.com/getsentry/sentry-go/pull/722))
 
 ## 0.27.0
 
