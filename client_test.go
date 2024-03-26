@@ -165,10 +165,8 @@ func TestCaptureException(t *testing.T) {
 					Type:  "*sentry.customErr",
 					Value: "wat",
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"is_exception_group": true,
-							"exception_id":       0,
-						},
+						ExceptionID:      0,
+						IsExceptionGroup: true,
 					},
 				},
 				{
@@ -176,11 +174,9 @@ func TestCaptureException(t *testing.T) {
 					Value:      "wat",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"exception_id":       1,
-							"is_exception_group": true,
-							"parent_id":          0,
-						},
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: true,
 					},
 				},
 			},
@@ -204,10 +200,8 @@ func TestCaptureException(t *testing.T) {
 					Type:  "*sentry.customErr",
 					Value: "wat",
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"is_exception_group": true,
-							"exception_id":       0,
-						},
+						ExceptionID:      0,
+						IsExceptionGroup: true,
 					},
 				},
 				{
@@ -215,11 +209,9 @@ func TestCaptureException(t *testing.T) {
 					Value:      "err",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"exception_id":       1,
-							"is_exception_group": true,
-							"parent_id":          0,
-						},
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: true,
 					},
 				},
 			},
@@ -232,10 +224,8 @@ func TestCaptureException(t *testing.T) {
 					Type:  "*errors.errorString",
 					Value: "original",
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"is_exception_group": true,
-							"exception_id":       0,
-						},
+						ExceptionID:      0,
+						IsExceptionGroup: true,
 					},
 				},
 				{
@@ -243,11 +233,9 @@ func TestCaptureException(t *testing.T) {
 					Value:      "wrapped: original",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"exception_id":       1,
-							"is_exception_group": true,
-							"parent_id":          0,
-						},
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: true,
 					},
 				},
 			},

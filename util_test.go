@@ -91,3 +91,9 @@ func TestRevisionFromBuildInfoNoVcsInformation(t *testing.T) {
 
 	assertEqual(t, revisionFromBuildInfo(info), "")
 }
+
+func TestPointer(t *testing.T) {
+	i := 5
+	v := Pointer(i)
+	assertEqual(t, *v, i)
+}
