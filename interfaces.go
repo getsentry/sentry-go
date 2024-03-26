@@ -405,7 +405,7 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 		if i == 0 {
 			continue
 		}
-		e.Exception[i].Mechanism.ParentID = &e.Exception[i-1].Mechanism.ExceptionID
+		e.Exception[i].Mechanism.ParentID = Pointer(i - 1)
 	}
 }
 
