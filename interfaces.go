@@ -229,7 +229,7 @@ type Mechanism struct {
 	Source           string         `json:"source,omitempty"`
 	Handled          *bool          `json:"handled,omitempty"`
 	ParentID         *int           `json:"parent_id,omitempty"`
-	ExceptionID      int            `json:"exception_id,omitempty"`
+	ExceptionID      int            `json:"exception_id"`
 	IsExceptionGroup bool           `json:"is_exception_group,omitempty"`
 	Data             map[string]any `json:"data,omitempty"`
 }
