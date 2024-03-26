@@ -79,16 +79,18 @@ func (h *handler) handle(c *gin.Context) {
 		sentry.WithTransactionSource(transactionSource),
 	}
 
-	transaction := sentry.StartTransaction(ctx,
-		fmt.Sprintf("%s %s", c.Request.Method, transactionName),
-		options...,
-	)
-	defer func() {
-		transaction.Status = sentry.HTTPtoSpanStatus(c.Writer.Status())
-		transaction.Finish()
-	}()
+	if hub.Client().Options().Instrumenter == "sentry" {
+		transaction := sentry.StartTransaction(ctx,
+			fmt.Sprintf("%s %s", c.Request.Method, transactionName),
+			options...,
+		)
+		defer func() {
+			transaction.Status = sentry.HTTPtoSpanStatus(c.Writer.Status())
+			transaction.Finish()
+		}()
+		c.Request = c.Request.WithContext(transaction.Context())
+	}
 
-	c.Request = c.Request.WithContext(transaction.Context())
 	hub.Scope().SetRequest(c.Request)
 	c.Set(valuesKey, hub)
 	defer h.recoverWithSentry(hub, c.Request)

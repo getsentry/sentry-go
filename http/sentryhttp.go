@@ -99,17 +99,20 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			sentry.ContinueFromRequest(r),
 			sentry.WithTransactionSource(sentry.SourceURL),
 		}
-		// We don't mind getting an existing transaction back so we don't need to
-		// check if it is.
-		transaction := sentry.StartTransaction(ctx,
-			fmt.Sprintf("%s %s", r.Method, r.URL.Path),
-			options...,
-		)
-		defer transaction.Finish()
-		// TODO(tracing): if the next handler.ServeHTTP panics, store
-		// information on the transaction accordingly (status, tag,
-		// level?, ...).
-		r = r.WithContext(transaction.Context())
+
+		if hub.Client().Options().Instrumenter == "sentry" {
+			// We don't mind getting an existing transaction back so we don't need to
+			// check if it is.
+			transaction := sentry.StartTransaction(ctx,
+				fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+				options...,
+			)
+			defer transaction.Finish()
+			// TODO(tracing): if the next handler.ServeHTTP panics, store
+			// information on the transaction accordingly (status, tag,
+			// level?, ...).
+			r = r.WithContext(transaction.Context())
+		}
 		hub.Scope().SetRequest(r)
 		defer h.recoverWithSentry(hub, r)
 		// TODO(tracing): use custom response writer to intercept
