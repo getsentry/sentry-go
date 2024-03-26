@@ -52,6 +52,7 @@ func New(options Options) fiber.Handler {
 func (h *handler) handle(ctx *fiber.Ctx) error {
 	hub := sentry.CurrentHub().Clone()
 	scope := hub.Scope()
+
 	scope.SetRequest(convert(ctx))
 	scope.SetRequestBody(ctx.Request().Body())
 	ctx.Locals(valuesKey, hub)
@@ -100,11 +101,6 @@ func convert(ctx *fiber.Ctx) *http.Request {
 		r.Header.Add(string(key), string(value))
 	})
 	r.Host = utils.CopyString(ctx.Hostname())
-
-	// Cookies
-	ctx.Request().Header.VisitAllCookie(func(key, value []byte) {
-		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
-	})
 
 	// Env
 	r.RemoteAddr = ctx.Context().RemoteAddr().String()

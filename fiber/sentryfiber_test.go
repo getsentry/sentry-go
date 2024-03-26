@@ -19,7 +19,7 @@ import (
 
 func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
-	sentryHandler := sentryfiber.New(sentryfiber.Options{})
+	sentryHandler := sentryfiber.New(sentryfiber.Options{Timeout: 3 * time.Second, WaitForDelivery: true})
 	exception := errors.New("unknown error")
 
 	app := fiber.New(fiber.Config{
