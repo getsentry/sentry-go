@@ -75,8 +75,7 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
 }
 
 func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
-	hub := ctx.Locals(valuesKey)
-	if hub, ok := hub.(*sentry.Hub); ok {
+	if hub, ok := ctx.Locals(valuesKey).(*sentry.Hub); ok {
 		return hub
 	}
 	return nil
