@@ -37,15 +37,6 @@ const (
 	LevelFatal   Level = "fatal"
 )
 
-func getSensitiveHeaders() map[string]bool {
-	return map[string]bool{
-		"Authorization":   true,
-		"Cookie":          true,
-		"X-Forwarded-For": true,
-		"X-Real-Ip":       true,
-	}
-}
-
 // SdkInfo contains all metadata about about the SDK being used.
 type SdkInfo struct {
 	Name         string       `json:"name,omitempty"`
@@ -171,6 +162,13 @@ type Request struct {
 	Env         map[string]string `json:"env,omitempty"`
 }
 
+var sensitiveHeaders = map[string]struct{}{
+	"Authorization":   {},
+	"Cookie":          {},
+	"X-Forwarded-For": {},
+	"X-Real-Ip":       {},
+}
+
 // NewRequest returns a new Sentry Request from the given http.Request.
 //
 // NewRequest avoids operations that depend on network access. In particular, it
@@ -201,7 +199,6 @@ func NewRequest(r *http.Request) *Request {
 			env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
 		}
 	} else {
-		sensitiveHeaders := getSensitiveHeaders()
 		for k, v := range r.Header {
 			if _, ok := sensitiveHeaders[k]; !ok {
 				headers[k] = strings.Join(v, ",")
