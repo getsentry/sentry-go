@@ -1,16 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Features
-
-- Accept `interface{}` for span data values ([#784](https://github.com/getsentry/sentry-go/pull/784))
-- Automatic transactions for Echo integration ([#722](https://github.com/getsentry/sentry-go/pull/722))
-- Add `http.request.method` attribute for performance span data ([#786](https://github.com/getsentry/sentry-go/pull/786))
-- Automatic transactions for Fasthttp integration ([#732](https://github.com/getsentry/sentry-go/pull/723))
-- Add `Fiber` integration ([#795](https://github.com/getsentry/sentry-go/pull/795))
-- Use `errors.Unwrap()` to create exception groups ([#792](https://github.com/getsentry/sentry-go/pull/792))
-
 ## 0.27.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.27.0.
