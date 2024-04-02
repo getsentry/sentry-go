@@ -68,11 +68,11 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 		sentry.WithTransactionSource(sentry.SourceRoute),
 	}
 
-	method := string(ctx.Method())
+	method := ctx.Method()
 
 	transaction := sentry.StartTransaction(
 		sentry.SetHubOnContext(ctx.Context(), hub),
-		fmt.Sprintf("%s %s", method, string(ctx.Path())),
+		fmt.Sprintf("%s %s", method, ctx.Path()),
 		options...,
 	)
 
