@@ -1,5 +1,5 @@
 minVersion: 0.35.0
-changelogPolicy: auto
+changelogPolicy: simple
 artifactProvider:
   name: none
 targets:
