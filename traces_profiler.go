@@ -7,8 +7,8 @@ import (
 
 // Checks whether the transaction should be profiled (according to ProfilesSampleRate)
 // and starts a profiler if so.
-func (span *Span) sampleTransactionProfile() {
-	var sampleRate = span.clientOptions().ProfilesSampleRate
+func (s *Span) sampleTransactionProfile() {
+	var sampleRate = s.clientOptions().ProfilesSampleRate
 	switch {
 	case sampleRate < 0.0 || sampleRate > 1.0:
 		Logger.Printf("Skipping transaction profiling: ProfilesSampleRate out of range [0.0, 1.0]: %f\n", sampleRate)
@@ -19,7 +19,7 @@ func (span *Span) sampleTransactionProfile() {
 		if globalProfiler == nil {
 			Logger.Println("Skipping transaction profiling: the profiler couldn't be started")
 		} else {
-			span.collectProfile = collectTransactionProfile
+			s.collectProfile = collectTransactionProfile
 		}
 	}
 }

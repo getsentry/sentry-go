@@ -169,11 +169,11 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	span.Sampled = span.sample()
 
+	span.recorder = &spanRecorder{}
 	if hasParent {
 		span.recorder = parent.spanRecorder()
-	} else {
-		span.recorder = &spanRecorder{}
 	}
+
 	span.recorder.record(&span)
 
 	hub := hubFromContext(ctx)

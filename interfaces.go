@@ -523,13 +523,12 @@ func (e *Event) checkInMarshalJSON() ([]byte, error) {
 
 // NewEvent creates a new Event.
 func NewEvent() *Event {
-	event := Event{
+	return &Event{
 		Contexts: make(map[string]Context),
 		Extra:    make(map[string]interface{}),
 		Tags:     make(map[string]string),
 		Modules:  make(map[string]string),
 	}
-	return &event
 }
 
 // Thread specifies threads that were running at the time of an event.
