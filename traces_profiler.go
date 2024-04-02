@@ -70,20 +70,20 @@ func (info *profileInfo) UpdateFromEvent(event *Event) {
 	info.Transaction.ID = event.EventID
 
 	if runtimeContext, ok := event.Contexts["runtime"]; ok {
-		if value, ok := runtimeContext["name"]; !ok {
+		if value, ok := runtimeContext["name"]; ok {
 			info.Runtime.Name = value.(string)
 		}
-		if value, ok := runtimeContext["version"]; !ok {
+		if value, ok := runtimeContext["version"]; ok {
 			info.Runtime.Version = value.(string)
 		}
 	}
 	if osContext, ok := event.Contexts["os"]; ok {
-		if value, ok := osContext["name"]; !ok {
+		if value, ok := osContext["name"]; ok {
 			info.OS.Name = value.(string)
 		}
 	}
 	if deviceContext, ok := event.Contexts["device"]; ok {
-		if value, ok := deviceContext["arch"]; !ok {
+		if value, ok := deviceContext["arch"]; ok {
 			info.Device.Architecture = value.(string)
 		}
 	}
