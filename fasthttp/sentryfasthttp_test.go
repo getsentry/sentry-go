@@ -1,9 +1,11 @@
 package sentryfasthttp_test
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -20,10 +22,13 @@ import (
 func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
 
+	exception := errors.New("unknown error")
+
 	tests := []struct {
 		Path            string
 		Method          string
 		Body            string
+		WantStatus      int
 		Handler         fasthttp.RequestHandler
 		WantEvent       *sentry.Event
 		WantTransaction *sentry.Event
@@ -33,6 +38,7 @@ func TestIntegration(t *testing.T) {
 			Handler: func(*fasthttp.RequestCtx) {
 				panic("test")
 			},
+			WantStatus: 200,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
 				Message: "test",
@@ -62,9 +68,10 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:   "/post",
-			Method: http.MethodPost,
-			Body:   "payload",
+			Path:       "/post",
+			Method:     http.MethodPost,
+			WantStatus: 200,
+			Body:       "payload",
 			Handler: func(ctx *fasthttp.RequestCtx) {
 				hub := sentryfasthttp.GetHubFromContext(ctx)
 				hub.CaptureMessage("post: " + string(ctx.Request.Body()))
@@ -105,6 +112,7 @@ func TestIntegration(t *testing.T) {
 				hub := sentryfasthttp.GetHubFromContext(ctx)
 				hub.CaptureMessage(http.MethodGet)
 			},
+			WantStatus: 200,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: http.MethodGet,
@@ -134,9 +142,10 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:   "/post/large",
-			Method: http.MethodPost,
-			Body:   largePayload,
+			Path:       "/post/large",
+			Method:     http.MethodPost,
+			Body:       largePayload,
+			WantStatus: 200,
 			Handler: func(ctx *fasthttp.RequestCtx) {
 				hub := sentryfasthttp.GetHubFromContext(ctx)
 				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(ctx.Request.Body())/1024))
@@ -173,9 +182,10 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:   "/post/body-ignored",
-			Method: http.MethodPost,
-			Body:   "client sends, fasthttp always reads, SDK reports",
+			Path:       "/post/body-ignored",
+			Method:     http.MethodPost,
+			Body:       "client sends, fasthttp always reads, SDK reports",
+			WantStatus: 200,
 			Handler: func(ctx *fasthttp.RequestCtx) {
 				hub := sentryfasthttp.GetHubFromContext(ctx)
 				hub.CaptureMessage("body ignored")
@@ -206,6 +216,49 @@ func TestIntegration(t *testing.T) {
 					Headers: map[string]string{
 						"Host":       "example.com",
 						"User-Agent": "fasthttp",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": http.MethodPost},
+			},
+		},
+		{
+			Path:   "/post/error-handler",
+			Method: "POST",
+			Handler: func(ctx *fasthttp.RequestCtx) {
+				hub := sentryfasthttp.GetHubFromContext(ctx)
+				hub.CaptureException(exception)
+			},
+			WantStatus: 200,
+			WantEvent: &sentry.Event{
+				Level: sentry.LevelError,
+				Exception: []sentry.Exception{
+					{
+						Value: exception.Error(),
+						Type:  reflect.TypeOf(exception).String(),
+					},
+				},
+				Request: &sentry.Request{
+					URL:    "http://example.com/post/error-handler",
+					Method: "POST",
+					Headers: map[string]string{
+						"Content-Length": "0",
+						"Host":           "example.com",
+						"User-Agent":     "fasthttp",
+					},
+				},
+			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "POST /post/error-handler",
+				Request: &sentry.Request{
+					URL:    "http://example.com/post/error-handler",
+					Method: http.MethodPost,
+					Headers: map[string]string{
+						"Host":           "example.com",
+						"User-Agent":     "fasthttp",
+						"Content-Length": "0",
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
@@ -261,9 +314,11 @@ func TestIntegration(t *testing.T) {
 
 	var wantEvents []*sentry.Event
 	var wantTransactions []*sentry.Event
+	var wantCodes []sentry.SpanStatus
 	for _, tt := range tests {
 		wantEvents = append(wantEvents, tt.WantEvent)
 		wantTransactions = append(wantTransactions, tt.WantTransaction)
+		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
 		req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
 		req.SetHost("example.com")
 		req.URI().SetPath(tt.Path)
@@ -294,6 +349,10 @@ func TestIntegration(t *testing.T) {
 			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
 			"sdkMetaData",
 		),
+		cmpopts.IgnoreFields(
+			sentry.Exception{},
+			"Stacktrace",
+		),
 		cmpopts.IgnoreMapEntries(func(k string, v string) bool {
 			// fasthttp changed Content-Length behavior in
 			// https://github.com/valyala/fasthttp/commit/097fa05a697fc638624a14ab294f1336da9c29b0.
@@ -311,8 +370,11 @@ func TestIntegration(t *testing.T) {
 
 	close(transactionsCh)
 	var gotTransactions []*sentry.Event
+	var statusCodes []sentry.SpanStatus
+
 	for e := range transactionsCh {
 		gotTransactions = append(gotTransactions, e)
+		statusCodes = append(statusCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
 	}
 	optstrans := cmp.Options{
 		cmpopts.IgnoreFields(
@@ -324,6 +386,10 @@ func TestIntegration(t *testing.T) {
 		cmpopts.IgnoreFields(
 			sentry.Request{},
 			"Env",
+		),
+		cmpopts.IgnoreFields(
+			sentry.Exception{},
+			"Stacktrace",
 		),
 		cmpopts.IgnoreMapEntries(func(k string, v string) bool {
 			// fasthttp changed Content-Length behavior in
@@ -340,6 +406,10 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("Transactions mismatch (-want +gotEvents):\n%s", diff)
 	}
 
+	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
+		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
+	}
+
 	ln.Close()
 	<-done
 }
@@ -353,86 +423,71 @@ func TestGetTransactionFromContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Run("With Transaction", func(t *testing.T) {
-		sentryHandler := sentryfasthttp.New(sentryfasthttp.Options{})
-		ln := fasthttputil.NewInmemoryListener()
-		handler := func(ctx *fasthttp.RequestCtx) {
-			span := sentryfasthttp.GetSpanFromContext(ctx)
-			if span == nil {
-				t.Error("expecting span to be not nil")
+	tests := map[string]struct {
+		useSentry bool
+	}{
+		"With Transaction":    {useSentry: true},
+		"Without Transaction": {useSentry: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			ln := fasthttputil.NewInmemoryListener()
+			defer ln.Close()
+
+			handler := func(ctx *fasthttp.RequestCtx) {
+				span := sentryfasthttp.GetSpanFromContext(ctx)
+				if tc.useSentry && span == nil {
+					t.Error("expecting span not to be nil")
+				}
+				if !tc.useSentry && span != nil {
+					t.Error("expecting span to be nil")
+				}
+				ctx.SetStatusCode(200)
 			}
 
-			ctx.SetStatusCode(200)
-		}
-		done := make(chan struct{})
-		go func() {
-			if err := fasthttp.Serve(ln, sentryHandler.Handle(handler)); err != nil {
-				t.Errorf("error in Serve: %s", err)
-			}
-			close(done)
-		}()
-
-		c := &fasthttp.Client{
-			Dial: func(addr string) (net.Conn, error) {
-				return ln.Dial()
-			},
-			ReadTimeout:  time.Second,
-			WriteTimeout: time.Second,
-		}
-
-		req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
-		req.SetHost("example.com")
-		req.URI().SetPath("/")
-		req.Header.SetMethod(http.MethodGet)
-		if err := c.Do(req, res); err != nil {
-			t.Fatalf("Request failed: %s", err)
-		}
-		if res.StatusCode() != http.StatusOK {
-			t.Errorf("Status code = %d", res.StatusCode())
-		}
-
-		ln.Close()
-		<-done
-	})
-
-	t.Run("Without Transaction", func(t *testing.T) {
-		ln := fasthttputil.NewInmemoryListener()
-		handler := func(ctx *fasthttp.RequestCtx) {
-			span := sentryfasthttp.GetSpanFromContext(ctx)
-			if span != nil {
-				t.Error("expecting span to be nil")
+			var finalHandler fasthttp.RequestHandler
+			if tc.useSentry {
+				sentryHandler := sentryfasthttp.New(sentryfasthttp.Options{})
+				finalHandler = sentryHandler.Handle(handler)
+			} else {
+				finalHandler = handler
 			}
 
-			ctx.SetStatusCode(200)
-		}
-		done := make(chan struct{})
-		go func() {
-			if err := fasthttp.Serve(ln, handler); err != nil {
-				t.Errorf("error in Serve: %s", err)
+			done := make(chan struct{})
+			go func() {
+				if err := fasthttp.Serve(ln, finalHandler); err != nil {
+					t.Errorf("error in Serve: %s", err)
+				}
+				close(done)
+			}()
+
+			c := &fasthttp.Client{
+				Dial: func(addr string) (net.Conn, error) {
+					return ln.Dial()
+				},
+				ReadTimeout:  time.Second,
+				WriteTimeout: time.Second,
 			}
-			close(done)
-		}()
 
-		c := &fasthttp.Client{
-			Dial: func(addr string) (net.Conn, error) {
-				return ln.Dial()
-			},
-			ReadTimeout:  time.Second,
-			WriteTimeout: time.Second,
-		}
+			req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
+			req.SetHost("example.com")
+			req.URI().SetPath("/")
+			req.Header.SetMethod(http.MethodGet)
 
-		req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
-		req.SetHost("example.com")
-		req.URI().SetPath("/")
-		req.Header.SetMethod(http.MethodGet)
-		if err := c.Do(req, res); err != nil {
-			t.Fatalf("Request failed: %s", err)
-		}
-		if res.StatusCode() != http.StatusOK {
-			t.Errorf("Status code = %d", res.StatusCode())
-		}
+			if err := c.Do(req, res); err != nil {
+				t.Fatalf("Request failed: %s", err)
+			}
+			if res.StatusCode() != http.StatusOK {
+				t.Errorf("Status code = %d", res.StatusCode())
+			}
 
-		ln.Close()
-		<-done
-	})
+			// Cleanup
+			fasthttp.ReleaseRequest(req)
+			fasthttp.ReleaseResponse(res)
+
+			ln.Close()
+			<-done
+		})
+	}
 }
