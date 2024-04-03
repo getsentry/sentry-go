@@ -2,6 +2,7 @@ package sentrynegroni
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -60,6 +61,25 @@ func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.H
 		context.WithValue(ctx, sentry.RequestContextKey, r),
 		hub,
 	)
+
+	options := []sentry.SpanOption{
+		sentry.WithOpName("http.server"),
+		sentry.ContinueFromRequest(r),
+		sentry.WithTransactionSource(sentry.SourceURL),
+	}
+	// We don't mind getting an existing transaction back so we don't need to
+	// check if it is.
+	transaction := sentry.StartTransaction(ctx,
+		fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+		options...,
+	)
+	transaction.SetData("http.request.method", r.Method)
+	defer transaction.Finish()
+	// TODO(tracing): if the next handler.ServeHTTP panics, store
+	// information on the transaction accordingly (status, tag,
+	// level?, ...).
+	r = r.WithContext(transaction.Context())
+	hub.Scope().SetRequest(r)
 	defer h.recoverWithSentry(hub, r)
 	next(rw, r.WithContext(ctx))
 }
