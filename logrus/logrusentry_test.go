@@ -175,10 +175,8 @@ func Test_entryToEvent(t *testing.T) {
 						Type:  "*errors.errorString",
 						Value: "failure",
 						Mechanism: &sentry.Mechanism{
-							Data: map[string]any{
-								"exception_id":       0,
-								"is_exception_group": true,
-							},
+							ExceptionID:      0,
+							IsExceptionGroup: true,
 						},
 					},
 					{
@@ -188,11 +186,9 @@ func Test_entryToEvent(t *testing.T) {
 							Frames: []sentry.Frame{},
 						},
 						Mechanism: &sentry.Mechanism{
-							Data: map[string]any{
-								"exception_id":       1,
-								"is_exception_group": true,
-								"parent_id":          0,
-							},
+							ExceptionID:      1,
+							IsExceptionGroup: true,
+							ParentID:         sentry.Pointer(0),
 						},
 					},
 				},

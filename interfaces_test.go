@@ -257,21 +257,17 @@ func TestSetException(t *testing.T) {
 					Value: "base error",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"is_exception_group": true,
-							"exception_id":       0,
-						},
+						ExceptionID:      0,
+						IsExceptionGroup: true,
 					},
 				},
 				{
 					Value: "level 1: base error",
 					Type:  "*fmt.wrapError",
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"exception_id":       1,
-							"is_exception_group": true,
-							"parent_id":          0,
-						},
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: true,
 					},
 				},
 				{
@@ -279,11 +275,9 @@ func TestSetException(t *testing.T) {
 					Type:       "*fmt.wrapError",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"exception_id":       2,
-							"is_exception_group": true,
-							"parent_id":          1,
-						},
+						ExceptionID:      2,
+						ParentID:         Pointer(1),
+						IsExceptionGroup: true,
 					},
 				},
 			},
@@ -312,21 +306,17 @@ func TestSetException(t *testing.T) {
 					Value: "the cause",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"is_exception_group": true,
-							"exception_id":       0,
-						},
+						ExceptionID:      0,
+						IsExceptionGroup: true,
 					},
 				},
 				{
 					Value: "error with cause",
 					Type:  "*sentry.withCause",
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"exception_id":       1,
-							"is_exception_group": true,
-							"parent_id":          0,
-						},
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: true,
 					},
 				},
 				{
@@ -334,11 +324,9 @@ func TestSetException(t *testing.T) {
 					Type:       "*fmt.wrapError",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
-						Data: map[string]any{
-							"exception_id":       2,
-							"is_exception_group": true,
-							"parent_id":          1,
-						},
+						ExceptionID:      2,
+						ParentID:         Pointer(1),
+						IsExceptionGroup: true,
 					},
 				},
 			},
@@ -380,7 +368,7 @@ func TestMechanismMarshalJSON(t *testing.T) {
 	}
 
 	want := `{"type":"some type","description":"some description","help_link":"some help link",` +
-		`"data":{"some data":"some value","some numeric data":12345}}`
+		`"exception_id":0,"data":{"some data":"some value","some numeric data":12345}}`
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
@@ -405,7 +393,7 @@ func TestMechanismMarshalJSON_withHandled(t *testing.T) {
 	}
 
 	want := `{"type":"some type","description":"some description","help_link":"some help link",` +
-		`"handled":false,"data":{"some data":"some value","some numeric data":12345}}`
+		`"handled":false,"exception_id":0,"data":{"some data":"some value","some numeric data":12345}}`
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
