@@ -71,3 +71,86 @@ func TestTraceProfilingDisabled(t *testing.T) {
 	require.Equal(transactionType, event.Type)
 	require.Nil(event.sdkMetaData.transactionProfile)
 }
+func TestUpdateFromEvent(t *testing.T) {
+	var require = require.New(t)
+
+	t.Parallel()
+
+	cases := map[string]struct {
+		event    *Event
+		original *profileInfo
+		expected *profileInfo
+	}{
+		"basic": {
+			event: &Event{
+				Environment: "test",
+				Platform:    "go",
+				Release:     "v1.0.0",
+				Dist:        "dist",
+				EventID:     "12345",
+				Contexts: map[string]Context{
+					"runtime": map[string]any{"name": "go", "version": "1.16"},
+					"os":      map[string]any{"name": "linux"},
+					"device":  map[string]any{"arch": "x86_64"},
+				},
+			},
+			expected: &profileInfo{
+				Environment: "test",
+				Platform:    "go",
+				Release:     "v1.0.0",
+				Dist:        "dist",
+				Transaction: profileTransaction{ID: "12345"},
+				Runtime:     profileRuntime{Name: "go", Version: "1.16"},
+				OS:          profileOS{Name: "linux"},
+				Device:      profileDevice{Architecture: "x86_64"},
+			},
+		},
+		"values from original": {
+			event: &Event{
+				Environment: "test",
+				Platform:    "go",
+				Release:     "v1.0.0",
+				Dist:        "dist",
+				EventID:     "12345",
+				Contexts: map[string]Context{
+					"runtime": map[string]any{"name": "go"},
+					"os":      map[string]any{"name": "linux"},
+					"device":  map[string]any{"arch": 86},
+				},
+			},
+			original: &profileInfo{
+				Environment: "original",
+				Platform:    "original",
+				Release:     "original",
+				Dist:        "original",
+				Transaction: profileTransaction{ID: "original"},
+				Runtime:     profileRuntime{Name: "original", Version: "original"},
+				OS:          profileOS{Name: "original"},
+				Device:      profileDevice{Architecture: "original"},
+			},
+			expected: &profileInfo{
+				Environment: "test",
+				Platform:    "go",
+				Release:     "v1.0.0",
+				Dist:        "dist",
+				Transaction: profileTransaction{ID: "12345"},
+				Runtime:     profileRuntime{Name: "go", Version: "original"},
+				OS:          profileOS{Name: "linux"},
+				Device:      profileDevice{Architecture: "original"},
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		tc := tc
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			info := tc.original
+			if info == nil {
+				info = &profileInfo{}
+			}
+			info.UpdateFromEvent(tc.event)
+			require.Equal(tc.expected, info)
+		})
+	}
+}
