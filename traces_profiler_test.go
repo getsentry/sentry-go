@@ -104,6 +104,7 @@ func TestUpdateFromEvent(t *testing.T) {
 				OS:          profileOS{Name: "linux"},
 				Device:      profileDevice{Architecture: "x86_64"},
 			},
+			original: &profileInfo{},
 		},
 		"values from original": {
 			event: &Event{
@@ -146,9 +147,6 @@ func TestUpdateFromEvent(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			info := tc.original
-			if info == nil {
-				info = &profileInfo{}
-			}
 			info.UpdateFromEvent(tc.event)
 			require.Equal(tc.expected, info)
 		})
