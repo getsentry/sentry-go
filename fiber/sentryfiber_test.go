@@ -105,7 +105,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodGet,
 					"http.response.status_code": 200,
@@ -145,7 +145,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":     "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodPost,
 					"http.response.status_code": 200,
@@ -181,7 +181,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodGet,
 					"http.response.status_code": 200,
@@ -207,7 +207,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "GET /get/:id",
+				Transaction: "GET /get/123",
 				Request: &sentry.Request{
 					URL:    "http://example.com/get/123",
 					Method: http.MethodGet,
@@ -216,7 +216,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodGet,
 					"http.response.status_code": 200,
@@ -257,7 +257,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":     "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodPost,
 					"http.response.status_code": 200,
@@ -298,7 +298,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":     "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodPost,
 					"http.response.status_code": 200,
@@ -341,7 +341,7 @@ func TestIntegration(t *testing.T) {
 						"Content-Length": "0",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodPost,
 					"http.response.status_code": 200,
