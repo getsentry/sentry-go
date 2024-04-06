@@ -62,15 +62,12 @@ func (h *handler) handle(c *gin.Context) {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
-	var transactionName string
-	var transactionSource sentry.TransactionSource
+	transactionName := c.Request.URL.Path
+	transactionSource := sentry.SourceURL
 
-	if c.FullPath() != "" {
-		transactionName = c.FullPath()
+	if fp := c.FullPath(); fp != "" {
+		transactionName = fp
 		transactionSource = sentry.SourceRoute
-	} else {
-		transactionName = c.Request.URL.Path
-		transactionSource = sentry.SourceURL
 	}
 
 	options := []sentry.SpanOption{

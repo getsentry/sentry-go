@@ -41,11 +41,19 @@ func TestIntegration(t *testing.T) {
 		hub.CaptureMessage("post: " + string(c.Body()))
 		return nil
 	})
+
 	app.Get("/get", func(c *fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage("get")
 		return nil
 	})
+
+	app.Get("/get/:id", func(c *fiber.Ctx) error {
+		hub := sentryfiber.GetHubFromContext(c)
+		hub.CaptureMessage(fmt.Sprintf("get: %s", c.Params("id")))
+		return nil
+	})
+
 	app.Post("/post/large", func(c *fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(c.Body())/1024))
@@ -98,7 +106,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodGet},
+				Extra: map[string]any{
+					"http.request.method":       http.MethodGet,
+					"http.response.status_code": 200,
+				},
 			},
 		},
 		{
@@ -135,7 +146,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodPost},
+				Extra: map[string]any{
+					"http.request.method":       http.MethodPost,
+					"http.response.status_code": 200,
+				},
 			},
 		},
 		{
@@ -168,7 +182,45 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodGet},
+				Extra: map[string]any{
+					"http.request.method":       http.MethodGet,
+					"http.response.status_code": 200,
+				},
+			},
+		},
+		{
+			Path:       "/get/123",
+			Method:     "GET",
+			WantStatus: 200,
+			WantEvent: &sentry.Event{
+				Level:   sentry.LevelInfo,
+				Message: "get: 123",
+				Request: &sentry.Request{
+					URL:    "http://example.com/get/123",
+					Method: "GET",
+					Headers: map[string]string{
+						"Host":       "example.com",
+						"User-Agent": "fiber",
+					},
+				},
+			},
+			WantTransaction: &sentry.Event{
+				Level:       sentry.LevelInfo,
+				Type:        "transaction",
+				Transaction: "GET /get/:id",
+				Request: &sentry.Request{
+					URL:    "http://example.com/get/123",
+					Method: http.MethodGet,
+					Headers: map[string]string{
+						"Host":       "example.com",
+						"User-Agent": "fiber",
+					},
+				},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra: map[string]any{
+					"http.request.method":       http.MethodGet,
+					"http.response.status_code": 200,
+				},
 			},
 		},
 		{
@@ -176,7 +228,6 @@ func TestIntegration(t *testing.T) {
 			Method:     "POST",
 			WantStatus: 200,
 			Body:       largePayload,
-
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "post: 15 KB",
@@ -207,7 +258,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodPost},
+				Extra: map[string]any{
+					"http.request.method":       http.MethodPost,
+					"http.response.status_code": 200,
+				},
 			},
 		},
 		{
@@ -245,7 +299,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodPost},
+				Extra: map[string]any{
+					"http.request.method":       http.MethodPost,
+					"http.response.status_code": 200,
+				},
 			},
 		},
 		{
@@ -285,7 +342,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodPost},
+				Extra: map[string]any{
+					"http.request.method":       http.MethodPost,
+					"http.response.status_code": 200,
+				},
 			},
 		},
 	}

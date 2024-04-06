@@ -62,22 +62,31 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	convertedHTTPRequest := convert(ctx)
 
+	method := ctx.Method()
+
+	var transactionName string
+	var transactionSource sentry.TransactionSource
+
+	fmt.Printf("%#v", ctx.Route())
+	fmt.Println(ctx.Route().Name)
+	fmt.Println(ctx.Route().Params)
+
 	options := []sentry.SpanOption{
 		sentry.WithOpName("http.server"),
 		sentry.ContinueFromRequest(convertedHTTPRequest),
-		sentry.WithTransactionSource(sentry.SourceRoute),
+		sentry.WithTransactionSource(transactionSource),
 	}
-
-	method := ctx.Method()
 
 	transaction := sentry.StartTransaction(
 		sentry.SetHubOnContext(ctx.Context(), hub),
-		fmt.Sprintf("%s %s", method, ctx.Path()),
+		fmt.Sprintf("%s %s", method, transactionName),
 		options...,
 	)
 
 	defer func() {
-		transaction.Status = sentry.HTTPtoSpanStatus(ctx.Response().StatusCode())
+		status := ctx.Response().StatusCode()
+		transaction.Status = sentry.HTTPtoSpanStatus(status)
+		transaction.SetData("http.response.status_code", status)
 		transaction.Finish()
 	}()
 
