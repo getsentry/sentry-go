@@ -77,12 +77,12 @@ func (h *handler) handle(ctx iris.Context) {
 	)
 
 	defer func() {
-		hub.Scope().SetExtra("http.response.status_code", ctx.GetStatusCode())
+		transaction.SetData("http.response.status_code", ctx.GetStatusCode())
 		transaction.Status = sentry.HTTPtoSpanStatus(ctx.GetStatusCode())
 		transaction.Finish()
 	}()
 
-	hub.Scope().SetExtra("http.request.method", ctx.Request().Method)
+	transaction.SetData("http.request.method", ctx.Request().Method)
 
 	hub.Scope().SetRequest(ctx.Request())
 	ctx.Values().Set(valuesKey, hub)
