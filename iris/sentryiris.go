@@ -77,6 +77,7 @@ func (h *handler) handle(ctx iris.Context) {
 	)
 
 	defer func() {
+		hub.Scope().SetExtra("http.response.status_code", ctx.GetStatusCode())
 		transaction.Status = sentry.HTTPtoSpanStatus(ctx.GetStatusCode())
 		transaction.Finish()
 	}()

@@ -52,7 +52,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("GET")},
+				Extra: map[string]interface{}{
+					"http.request.method":       string("GET"),
+					"http.response.status_code": int(200),
+				},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
@@ -122,7 +125,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("POST")},
+				Extra: map[string]interface{}{
+					"http.request.method":       string("POST"),
+					"http.response.status_code": int(200),
+				},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -163,7 +169,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("GET")},
+				Extra: map[string]interface{}{
+					"http.request.method":       string("GET"),
+					"http.response.status_code": int(200),
+				},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -206,7 +215,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("POST")},
+				Extra: map[string]interface{}{
+					"http.request.method":       string("POST"),
+					"http.response.status_code": int(200),
+				},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -250,7 +262,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("POST")},
+				Extra: map[string]interface{}{
+					"http.request.method":       string("POST"),
+					"http.response.status_code": int(200),
+				},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -290,7 +305,10 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("GET")},
+				Extra: map[string]interface{}{
+					"http.request.method":       string("GET"),
+					"http.response.status_code": int(400),
+				},
 			},
 			WantEvent: nil,
 		},
