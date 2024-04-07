@@ -64,10 +64,8 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	method := ctx.Method()
 
-	transactionName := string(ctx.Path())
+	transactionName := ctx.Path()
 	transactionSource := sentry.SourceURL
-
-	// Find a way to get route name
 
 	options := []sentry.SpanOption{
 		sentry.WithOpName("http.server"),
