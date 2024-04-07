@@ -81,14 +81,18 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			options...,
 		)
 
+		transaction.SetData("http.request.method", ctx.Request().Method)
+
 		defer func() {
+			status := ctx.Response().Status
 			if err := ctx.Get("error"); err != nil {
 				if httpError, ok := err.(*echo.HTTPError); ok {
-					transaction.Status = sentry.HTTPtoSpanStatus(httpError.Code)
+					status = httpError.Code
 				}
-			} else {
-				transaction.Status = sentry.HTTPtoSpanStatus(ctx.Response().Status)
 			}
+
+			transaction.Status = sentry.HTTPtoSpanStatus(status)
+			transaction.SetData("http.response.status_code", status)
 			transaction.Finish()
 		}()
 

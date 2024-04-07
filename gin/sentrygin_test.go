@@ -53,7 +53,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("GET")},
+				Extra:           map[string]any{"http.request.method": string("GET"), "http.response.status_code": http.StatusOK},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
@@ -87,7 +87,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Extra:           map[string]interface{}{"http.request.method": string("GET")},
+				Extra:           map[string]any{"http.request.method": string("GET"), "http.response.status_code": 404},
 			},
 			WantEvent: nil,
 		},
@@ -121,7 +121,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("POST")},
+				Extra:           map[string]any{"http.request.method": string("POST"), "http.response.status_code": http.StatusOK},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -161,7 +161,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("GET")},
+				Extra:           map[string]any{"http.request.method": string("GET"), "http.response.status_code": http.StatusOK},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -204,7 +204,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("POST")},
+				Extra:           map[string]any{"http.request.method": string("POST"), "http.response.status_code": http.StatusOK},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -248,7 +248,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("POST")},
+				Extra:           map[string]any{"http.request.method": string("POST"), "http.response.status_code": http.StatusOK},
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -287,7 +287,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]interface{}{"http.request.method": string("GET")},
+				Extra:           map[string]any{"http.request.method": string("GET"), "http.response.status_code": 400},
 			},
 			WantEvent: nil,
 		},
@@ -303,6 +303,7 @@ func TestIntegration(t *testing.T) {
 			return event
 		},
 		BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			fmt.Println("BeforeSendTransaction")
 			transactionsCh <- tx
 			return tx
 		},

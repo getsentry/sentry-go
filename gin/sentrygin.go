@@ -85,7 +85,9 @@ func (h *handler) handle(c *gin.Context) {
 	)
 	transaction.SetData("http.request.method", c.Request.Method)
 	defer func() {
-		transaction.Status = sentry.HTTPtoSpanStatus(c.Writer.Status())
+		status := c.Writer.Status()
+		transaction.Status = sentry.HTTPtoSpanStatus(status)
+		transaction.SetData("http.response.status_code", status)
 		transaction.Finish()
 	}()
 
