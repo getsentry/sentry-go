@@ -13,11 +13,10 @@ func ExampleGetSpanFromContext() {
 	app := iris.New()
 	app.Use(sentryiris.New(sentryiris.Options{}))
 	app.Get("/", func(ctx iris.Context) {
-		expensiveThing := func(ctx context.Context) error {
+		expensiveThing := func(ctx context.Context) {
 			span := sentry.StartSpan(ctx, "expensive_thing")
 			defer span.Finish()
 			// do resource intensive thing
-			return nil
 		}
 
 		// Acquire transaction on current hub that's created by the SDK.
@@ -25,12 +24,7 @@ func ExampleGetSpanFromContext() {
 		sentrySpan := sentryiris.GetSpanFromContext(ctx)
 		// Pass in the `.Context()` method from `*sentry.Span` struct.
 		// The `context.Context` instance inherits the context from `iris.Context`.
-		err := expensiveThing(sentrySpan.Context())
-		if err != nil {
-			// Handle your error
-			ctx.StatusCode(http.StatusInternalServerError)
-			return
-		}
+		expensiveThing(sentrySpan.Context())
 
 		ctx.StatusCode(http.StatusOK)
 	})
