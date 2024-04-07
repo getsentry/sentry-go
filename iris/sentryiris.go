@@ -68,9 +68,11 @@ func (h *handler) handle(ctx iris.Context) {
 		sentry.WithTransactionSource(sentry.SourceRoute),
 	}
 
+	currentRoute := ctx.GetCurrentRoute()
+
 	transaction := sentry.StartTransaction(
 		sentry.SetHubOnContext(ctx, hub),
-		fmt.Sprintf("%s %s", ctx.Method(), ctx.RequestPath(false)),
+		fmt.Sprintf("%s %s", currentRoute.Method(), currentRoute.Path()),
 		options...,
 	)
 
@@ -78,6 +80,8 @@ func (h *handler) handle(ctx iris.Context) {
 		transaction.Status = sentry.HTTPtoSpanStatus(ctx.GetStatusCode())
 		transaction.Finish()
 	}()
+
+	hub.Scope().SetExtra("http.request.method", ctx.Request().Method)
 
 	hub.Scope().SetRequest(ctx.Request())
 	ctx.Values().Set(valuesKey, hub)
