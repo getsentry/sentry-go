@@ -108,7 +108,7 @@ func TestIntegration(t *testing.T) {
 				}
 				hub.CaptureMessage("post: " + string(body))
 				ctx.StatusCode(http.StatusOK)
-				ctx.JSON(map[string]any{"status": "ok"})
+				_ = ctx.JSON(map[string]any{"status": "ok"})
 			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
@@ -154,7 +154,7 @@ func TestIntegration(t *testing.T) {
 				hub := sentryiris.GetHubFromContext(ctx)
 				hub.CaptureMessage("get")
 				ctx.StatusCode(http.StatusOK)
-				ctx.JSON(map[string]any{"status": "get"})
+				_ = ctx.JSON(map[string]any{"status": "get"})
 			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
@@ -290,7 +290,7 @@ func TestIntegration(t *testing.T) {
 			WantStatus:  400,
 			Handler: func(ctx iris.Context) {
 				ctx.StatusCode(http.StatusBadRequest)
-				ctx.JSON(map[string]any{"status": "bad_request"})
+				_ = ctx.JSON(map[string]any{"status": "bad_request"})
 			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
