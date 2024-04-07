@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -49,6 +50,27 @@ func main() {
 				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 			})
 		}
+
+		expensiveThing := func(ctx context.Context) error {
+			span := sentry.StartSpan(ctx, "expensive_thing")
+			defer span.Finish()
+			// do resource intensive thing
+			return nil
+		}
+
+		// Acquire transaction on current hub that's created by the SDK.
+		// Be careful, it might be a nil value if you didn't set up sentryiris middleware.
+		sentrySpan := sentryiris.GetSpanFromContext(ctx)
+		// Pass in the `.Context()` method from `*sentry.Span` struct.
+		// The `context.Context` instance inherits the context from `iris.Context`.
+		err := expensiveThing(sentrySpan.Context())
+		if err != nil {
+			// Handle your error
+			ctx.StatusCode(http.StatusInternalServerError)
+			return
+		}
+
+		ctx.StatusCode(http.StatusOK)
 	})
 
 	app.Get("/foo", func(ctx iris.Context) {
