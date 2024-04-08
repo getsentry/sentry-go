@@ -433,7 +433,7 @@ func TestGetSpanFromContext(t *testing.T) {
 	router.GET("/with-span", func(c echo.Context) error {
 		span := sentryecho.GetSpanFromContext(c)
 		if span == nil {
-			t.Error("expecting span to be not nil")
+			t.Error("expecting span to not be nil")
 		}
 		return c.NoContent(http.StatusOK)
 	}, sentryecho.New(sentryecho.Options{}))
