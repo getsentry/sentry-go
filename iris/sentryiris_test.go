@@ -54,7 +54,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Extra: map[string]interface{}{
 					"http.request.method":       string("GET"),
-					"http.response.status_code": int(200),
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 			WantEvent: &sentry.Event{
@@ -127,7 +127,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Extra: map[string]interface{}{
 					"http.request.method":       string("POST"),
-					"http.response.status_code": int(200),
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 			WantEvent: &sentry.Event{
@@ -171,7 +171,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Extra: map[string]interface{}{
 					"http.request.method":       string("GET"),
-					"http.response.status_code": int(200),
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 			WantEvent: &sentry.Event{
@@ -217,7 +217,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Extra: map[string]interface{}{
 					"http.request.method":       string("POST"),
-					"http.response.status_code": int(200),
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 			WantEvent: &sentry.Event{
@@ -264,7 +264,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Extra: map[string]interface{}{
 					"http.request.method":       string("POST"),
-					"http.response.status_code": int(200),
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 			WantEvent: &sentry.Event{
@@ -307,7 +307,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Extra: map[string]interface{}{
 					"http.request.method":       string("GET"),
-					"http.response.status_code": int(400),
+					"http.response.status_code": http.StatusBadRequest,
 				},
 			},
 			WantEvent: nil,
