@@ -1,10 +1,12 @@
 package sentryfiber_test
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -361,7 +363,16 @@ func TestIntegration(t *testing.T) {
 			return event
 		},
 		BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			transactionsCh <- tx
+			// Deep copy the transaction
+			jsonStr, err := json.Marshal(tx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var cpTx sentry.Event
+			if err := json.Unmarshal(jsonStr, &cpTx); err != nil {
+				t.Fatal(err)
+			}
+			transactionsCh <- &cpTx
 			return tx
 		},
 	})
@@ -426,8 +437,16 @@ func TestIntegration(t *testing.T) {
 	close(transactionsCh)
 
 	for e := range transactionsCh {
+		for k, v := range e.Extra {
+			if k != "http.response.status_code" {
+				continue
+			}
+			f, _ := v.(float64)
+			e.Extra[k] = int(f)
+		}
 		gotTransactions = append(gotTransactions, e)
-		gotCodes = append(gotCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
+		gotCode, _ := strconv.Atoi(e.Contexts["trace"]["status"].(string))
+		gotCodes = append(gotCodes, sentry.HTTPtoSpanStatus(gotCode))
 	}
 
 	optstrans := cmp.Options{
