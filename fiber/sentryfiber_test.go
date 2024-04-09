@@ -80,7 +80,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path:       "/panic",
 			Method:     "GET",
-			WantStatus: 200,
+			WantStatus: http.StatusOK,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
 				Message: "test",
@@ -108,7 +108,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodGet,
-					"http.response.status_code": 200,
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 		},
@@ -116,7 +116,7 @@ func TestIntegration(t *testing.T) {
 			Path:       "/post",
 			Method:     "POST",
 			Body:       "payload",
-			WantStatus: 200,
+			WantStatus: http.StatusOK,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "post: payload",
@@ -148,14 +148,14 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodPost,
-					"http.response.status_code": 200,
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 		},
 		{
 			Path:       "/get",
 			Method:     "GET",
-			WantStatus: 200,
+			WantStatus: http.StatusOK,
 
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -184,14 +184,14 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodGet,
-					"http.response.status_code": 200,
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 		},
 		{
 			Path:       "/get/123",
 			Method:     "GET",
-			WantStatus: 200,
+			WantStatus: http.StatusOK,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "get: 123",
@@ -219,14 +219,14 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodGet,
-					"http.response.status_code": 200,
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 		},
 		{
 			Path:       "/post/large",
 			Method:     "POST",
-			WantStatus: 200,
+			WantStatus: http.StatusOK,
 			Body:       largePayload,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -260,13 +260,13 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodPost,
-					"http.response.status_code": 200,
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 		},
 		{
 			Path:       "/post/body-ignored",
-			WantStatus: 200,
+			WantStatus: http.StatusOK,
 			Method:     "POST",
 			Body:       "client sends, fiber always reads, SDK reports",
 
@@ -301,14 +301,14 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodPost,
-					"http.response.status_code": 200,
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 		},
 		{
 			Path:       "/post/error-handler",
 			Method:     "POST",
-			WantStatus: 200,
+			WantStatus: http.StatusOK,
 
 			WantEvent: &sentry.Event{
 				Level: sentry.LevelError,
@@ -344,7 +344,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Extra: map[string]any{
 					"http.request.method":       http.MethodPost,
-					"http.response.status_code": 200,
+					"http.response.status_code": http.StatusOK,
 				},
 			},
 		},
@@ -369,12 +369,12 @@ func TestIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var want []*sentry.Event
-	var wantTransactions []*sentry.Event
-	var wantCodes []sentry.SpanStatus
+	var wantEvents, gotEvents []*sentry.Event
+	var wantTransactions, gotTransactions []*sentry.Event
+	var wantCodes, gotCodes []sentry.SpanStatus
 
 	for _, tt := range tests {
-		want = append(want, tt.WantEvent)
+		wantEvents = append(wantEvents, tt.WantEvent)
 		wantTransactions = append(wantTransactions, tt.WantTransaction)
 
 		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
@@ -399,7 +399,6 @@ func TestIntegration(t *testing.T) {
 	}
 
 	close(eventsCh)
-	var gotEvents []*sentry.Event
 	for e := range eventsCh {
 		gotEvents = append(gotEvents, e)
 	}
@@ -420,17 +419,15 @@ func TestIntegration(t *testing.T) {
 			"Stacktrace",
 		),
 	}
-	if diff := cmp.Diff(want, gotEvents, opt); diff != "" {
+	if diff := cmp.Diff(wantEvents, gotEvents, opt); diff != "" {
 		t.Fatalf("Events mismatch (-want +got):\n%s", diff)
 	}
 
 	close(transactionsCh)
-	var gotTransactions []*sentry.Event
-	var statusCodes []sentry.SpanStatus
 
 	for e := range transactionsCh {
 		gotTransactions = append(gotTransactions, e)
-		statusCodes = append(statusCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
+		gotCodes = append(gotCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
 	}
 
 	optstrans := cmp.Options{
@@ -454,7 +451,7 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("Transactions mismatch (-want +gotEvents):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
+	if diff := cmp.Diff(wantCodes, gotCodes, cmp.Options{}); diff != "" {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
 	}
 }
