@@ -413,7 +413,7 @@ func TestIntegration(t *testing.T) {
 	}
 }
 
-func TestGetTransactionFromContext(t *testing.T) {
+func TestGetSpanFromContext(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
@@ -423,17 +423,17 @@ func TestGetTransactionFromContext(t *testing.T) {
 	}
 
 	router := echo.New()
-	router.GET("/no-transaction", func(c echo.Context) error {
-		transaction := sentryecho.GetSpanFromContext(c)
-		if transaction != nil {
-			t.Error("expecting transaction to be nil")
+	router.GET("/no-span", func(c echo.Context) error {
+		span := sentryecho.GetSpanFromContext(c)
+		if span != nil {
+			t.Error("expecting span to be nil")
 		}
 		return c.NoContent(http.StatusOK)
 	})
-	router.GET("/with-transaction", func(c echo.Context) error {
-		transaction := sentryecho.GetSpanFromContext(c)
-		if transaction == nil {
-			t.Error("expecting transaction to be not nil")
+	router.GET("/with-span", func(c echo.Context) error {
+		span := sentryecho.GetSpanFromContext(c)
+		if span == nil {
+			t.Error("expecting span to not be nil")
 		}
 		return c.NoContent(http.StatusOK)
 	}, sentryecho.New(sentryecho.Options{}))
@@ -447,10 +447,10 @@ func TestGetTransactionFromContext(t *testing.T) {
 		RequestPath string
 	}{
 		{
-			RequestPath: "/no-transaction",
+			RequestPath: "/no-span",
 		},
 		{
-			RequestPath: "/with-transaction",
+			RequestPath: "/with-span",
 		},
 	}
 	c.Timeout = time.Second
