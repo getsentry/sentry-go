@@ -5,6 +5,7 @@ package sentryiris
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -13,9 +14,11 @@ import (
 )
 
 // The identifier of the Iris SDK.
-const sdkIdentifier = "sentry.go.iris"
-
-const valuesKey = "sentry"
+const (
+	sdkIdentifier  = "sentry.go.iris"
+	valuesKey      = "sentry"
+	transactionKey = "sentry_transaction"
+)
 
 type handler struct {
 	repanic         bool
@@ -59,8 +62,31 @@ func (h *handler) handle(ctx iris.Context) {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
+	options := []sentry.SpanOption{
+		sentry.WithOpName("http.server"),
+		sentry.ContinueFromRequest(ctx.Request()),
+		sentry.WithTransactionSource(sentry.SourceRoute),
+	}
+
+	currentRoute := ctx.GetCurrentRoute()
+
+	transaction := sentry.StartTransaction(
+		sentry.SetHubOnContext(ctx, hub),
+		fmt.Sprintf("%s %s", currentRoute.Method(), currentRoute.Path()),
+		options...,
+	)
+
+	defer func() {
+		transaction.SetData("http.response.status_code", ctx.GetStatusCode())
+		transaction.Status = sentry.HTTPtoSpanStatus(ctx.GetStatusCode())
+		transaction.Finish()
+	}()
+
+	transaction.SetData("http.request.method", ctx.Request().Method)
+
 	hub.Scope().SetRequest(ctx.Request())
 	ctx.Values().Set(valuesKey, hub)
+	ctx.Values().Set(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, ctx.Request())
 	ctx.Next()
 }
@@ -85,5 +111,15 @@ func GetHubFromContext(ctx iris.Context) *sentry.Hub {
 	if hub, ok := ctx.Values().Get(valuesKey).(*sentry.Hub); ok {
 		return hub
 	}
+	return nil
+}
+
+// GetSpanFromContext retrieves attached *sentry.Span instance from iris.Context.
+// If there is no transaction on iris.Context, it will return nil.
+func GetSpanFromContext(ctx iris.Context) *sentry.Span {
+	if span, ok := ctx.Values().Get(transactionKey).(*sentry.Span); ok {
+		return span
+	}
+
 	return nil
 }
