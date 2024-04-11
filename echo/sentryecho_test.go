@@ -65,6 +65,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": "GET", "http.response.status_code": http.StatusOK},
 			},
 		},
 		{
@@ -87,6 +88,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": "GET", "http.response.status_code": 404},
 			},
 		},
 		{
@@ -133,6 +135,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": "POST", "http.response.status_code": http.StatusOK},
 			},
 		},
 		{
@@ -170,6 +173,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": "GET", "http.response.status_code": http.StatusOK},
 			},
 		},
 		{
@@ -216,6 +220,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": "POST", "http.response.status_code": http.StatusOK},
 			},
 		},
 		{
@@ -260,6 +265,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": "POST", "http.response.status_code": http.StatusOK},
 			},
 		},
 		{
@@ -283,6 +289,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				Extra:           map[string]any{"http.request.method": "GET", "http.response.status_code": 400},
 			},
 			WantEvent: nil,
 		},

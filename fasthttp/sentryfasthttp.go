@@ -80,7 +80,9 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			options...,
 		)
 		defer func() {
-			transaction.Status = sentry.HTTPtoSpanStatus(ctx.Response.StatusCode())
+			status := ctx.Response.StatusCode()
+			transaction.Status = sentry.HTTPtoSpanStatus(status)
+			transaction.SetData("http.response.status_code", status)
 			transaction.Finish()
 		}()
 
