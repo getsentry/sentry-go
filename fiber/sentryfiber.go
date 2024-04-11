@@ -15,7 +15,11 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-const valuesKey = "sentry"
+const (
+	valuesKey      = "sentry"
+	sdkIdentifier  = "sentry.go.fiber"
+	transactionKey = "sentry_transaction"
+)
 
 type handler struct {
 	repanic         bool
@@ -51,11 +55,44 @@ func New(options Options) fiber.Handler {
 
 func (h *handler) handle(ctx *fiber.Ctx) error {
 	hub := sentry.CurrentHub().Clone()
-	scope := hub.Scope()
 
-	scope.SetRequest(convert(ctx))
+	if client := hub.Client(); client != nil {
+		client.SetSDKIdentifier(sdkIdentifier)
+	}
+
+	convertedHTTPRequest := convert(ctx)
+
+	method := ctx.Method()
+
+	transactionName := ctx.Path()
+	transactionSource := sentry.SourceURL
+
+	options := []sentry.SpanOption{
+		sentry.WithOpName("http.server"),
+		sentry.ContinueFromRequest(convertedHTTPRequest),
+		sentry.WithTransactionSource(transactionSource),
+	}
+
+	transaction := sentry.StartTransaction(
+		sentry.SetHubOnContext(ctx.Context(), hub),
+		fmt.Sprintf("%s %s", method, transactionName),
+		options...,
+	)
+
+	defer func() {
+		status := ctx.Response().StatusCode()
+		transaction.Status = sentry.HTTPtoSpanStatus(status)
+		transaction.SetData("http.response.status_code", status)
+		transaction.Finish()
+	}()
+
+	transaction.SetData("http.request.method", method)
+
+	scope := hub.Scope()
+	scope.SetRequest(convertedHTTPRequest)
 	scope.SetRequestBody(ctx.Request().Body())
 	ctx.Locals(valuesKey, hub)
+	ctx.Locals(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, ctx)
 	return ctx.Next()
 }
@@ -78,6 +115,13 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
 func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
 	if hub, ok := ctx.Locals(valuesKey).(*sentry.Hub); ok {
 		return hub
+	}
+	return nil
+}
+
+func GetSpanFromContext(ctx *fiber.Ctx) *sentry.Span {
+	if span, ok := ctx.Locals(transactionKey).(*sentry.Span); ok {
+		return span
 	}
 	return nil
 }
