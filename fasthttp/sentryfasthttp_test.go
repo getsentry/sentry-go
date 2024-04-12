@@ -262,7 +262,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodPost},
+				Extra:           map[string]any{"http.request.method": http.MethodPost, "http.response.status_code": http.StatusOK},
 			},
 		},
 	}
