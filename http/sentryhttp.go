@@ -99,7 +99,6 @@ func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		ctx := r.Context()
 		hub := sentry.GetHubFromContext(ctx)
 		if hub == nil {
