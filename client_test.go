@@ -581,39 +581,40 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 }
 
 func TestIgnoreErrors(t *testing.T) {
-	tests := []struct {
-		name         string
+	tests := map[string]struct {
 		ignoreErrors []string
 		message      string
 		expectDrop   bool
 	}{
-		{
-			name:         "No Match",
+		"No Match": {
 			message:      "Foo",
 			ignoreErrors: []string{"Bar", "Baz"},
 			expectDrop:   false,
 		},
-		{
-			name:         "Partial Match",
+		"Partial Match": {
 			message:      "FooBar",
 			ignoreErrors: []string{"Foo", "Baz"},
 			expectDrop:   true,
 		},
-		{
-			name:         "Exact Match",
+		"Exact Match": {
 			message:      "Foo Bar",
 			ignoreErrors: []string{"\\bFoo\\b", "Baz"},
 			expectDrop:   true,
 		},
-		{
-			name:         "Wildcard Match",
+		"Wildcard Match": {
 			message:      "Foo",
 			ignoreErrors: []string{"F*", "Bar"},
 			expectDrop:   true,
 		},
+		"Match string but not pattern": {
+			message:      "(Foo)",
+			ignoreErrors: []string{"(Foo)"},
+			expectDrop:   true,
+		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
 			scope := &ScopeMock{}
 			transport := &TransportMock{}
 			client, err := NewClient(ClientOptions{
@@ -628,46 +629,47 @@ func TestIgnoreErrors(t *testing.T) {
 
 			dropped := transport.lastEvent == nil
 			if !(tt.expectDrop == dropped) {
-				t.Error("expected event to be dropped")
+				t.Errorf("expected event to be dropped")
 			}
 		})
 	}
 }
 
 func TestIgnoreTransactions(t *testing.T) {
-	tests := []struct {
-		name               string
+	tests := map[string]struct {
 		ignoreTransactions []string
 		transaction        string
 		expectDrop         bool
 	}{
-		{
-			name:               "No Match",
+		"No Match": {
 			transaction:        "Foo",
 			ignoreTransactions: []string{"Bar", "Baz"},
 			expectDrop:         false,
 		},
-		{
-			name:               "Partial Match",
+		"Partial Match": {
 			transaction:        "FooBar",
 			ignoreTransactions: []string{"Foo", "Baz"},
 			expectDrop:         true,
 		},
-		{
-			name:               "Exact Match",
+		"Exact Match": {
 			transaction:        "Foo Bar",
 			ignoreTransactions: []string{"\\bFoo\\b", "Baz"},
 			expectDrop:         true,
 		},
-		{
-			name:               "Wildcard Match",
+		"Wildcard Match": {
 			transaction:        "Foo",
 			ignoreTransactions: []string{"F*", "Bar"},
 			expectDrop:         true,
 		},
+		"Match string but not pattern": {
+			transaction:        "(Foo)",
+			ignoreTransactions: []string{"(Foo)"},
+			expectDrop:         true,
+		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
 			transport := &TransportMock{}
 			ctx := NewTestContext(ClientOptions{
 				EnableTracing:      true,
@@ -683,7 +685,7 @@ func TestIgnoreTransactions(t *testing.T) {
 
 			dropped := transport.lastEvent == nil
 			if !(tt.expectDrop == dropped) {
-				t.Error("expected event to be dropped")
+				t.Errorf("expected event to be dropped")
 			}
 		})
 	}

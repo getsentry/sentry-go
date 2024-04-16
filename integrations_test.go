@@ -123,6 +123,7 @@ func TestIgnoreErrorsIntegration(t *testing.T) {
 		ignoreErrors: []*regexp.Regexp{
 			regexp.MustCompile("foo"),
 			regexp.MustCompile("(?i)bar"),
+			regexp.MustCompile("(hello)"),
 		},
 	}
 
@@ -153,6 +154,12 @@ func TestIgnoreErrorsIntegration(t *testing.T) {
 		}},
 	}
 
+	toDrop := &Event{
+		Exception: []Exception{{
+			Value: "(hello)",
+		}},
+	}
+
 	if iei.processor(dropped, &EventHint{}) != nil {
 		t.Error("Event should be dropped")
 	}
@@ -172,6 +179,10 @@ func TestIgnoreErrorsIntegration(t *testing.T) {
 	if iei.processor(alsoNotDropped, &EventHint{}) == nil {
 		t.Error("Event should not be dropped")
 	}
+
+	if iei.processor(toDrop, &EventHint{}) != nil {
+		t.Error("Event should be dropped")
+	}
 }
 
 func TestIgnoreTransactionsIntegration(t *testing.T) {
@@ -179,6 +190,7 @@ func TestIgnoreTransactionsIntegration(t *testing.T) {
 		ignoreTransactions: []*regexp.Regexp{
 			regexp.MustCompile("foo"),
 			regexp.MustCompile("(?i)bar"),
+			regexp.MustCompile("(hello)"),
 		},
 	}
 
@@ -194,6 +206,10 @@ func TestIgnoreTransactionsIntegration(t *testing.T) {
 		Transaction: "dont",
 	}
 
+	thisDroppedAsWell := &Event{
+		Transaction: "(hello)",
+	}
+
 	if iei.processor(dropped, &EventHint{}) != nil {
 		t.Error("Transaction should be dropped")
 	}
@@ -204,6 +220,10 @@ func TestIgnoreTransactionsIntegration(t *testing.T) {
 
 	if iei.processor(notDropped, &EventHint{}) == nil {
 		t.Error("Transaction should not be dropped")
+	}
+
+	if iei.processor(thisDroppedAsWell, &EventHint{}) != nil {
+		t.Error("Transaction should be dropped")
 	}
 }
 
