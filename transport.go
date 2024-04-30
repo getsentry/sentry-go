@@ -94,6 +94,55 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
+func marshalMetrics(metrics []Metric) []byte {
+	var b bytes.Buffer
+	for i, metric := range metrics {
+		b.WriteString(metric.GetKey())
+		if unit := metric.GetUnit(); unit != "" {
+			b.WriteString(fmt.Sprintf("@%s", unit))
+		}
+		b.WriteString(fmt.Sprintf("%s|%s", metric.SerializeValue(), metric.GetType()))
+		if serializedTags := metric.SerializeTags(); serializedTags != "" {
+			b.WriteString(fmt.Sprintf("|#%s", serializedTags))
+		}
+		b.WriteString(fmt.Sprintf("|T%d", metric.GetTimestamp()))
+
+		if i < len(metrics)-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.Bytes()
+}
+
+func encodeMetric(enc *json.Encoder, b io.Writer, metrics []Metric) error {
+	body := marshalMetrics(metrics)
+	// Item header
+	err := enc.Encode(struct {
+		Type   string `json:"type"`
+		Length int    `json:"length"`
+	}{
+		Type:   metricType,
+		Length: len(body),
+	})
+	if err != nil {
+		return err
+	}
+
+	// metric payload
+	if _, err = b.Write(body); err != nil {
+		return err
+	}
+
+	// "Envelopes should be terminated with a trailing newline."
+	//
+	// [1]: https://develop.sentry.dev/sdk/envelopes/#envelopes
+	if _, err := b.Write([]byte("\n")); err != nil {
+		return err
+	}
+
+	return err
+}
+
 func encodeAttachment(enc *json.Encoder, b io.Writer, attachment *Attachment) error {
 	// Attachment header
 	err := enc.Encode(struct {
@@ -177,6 +226,8 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 
 	if event.Type == transactionType || event.Type == checkInType {
 		err = encodeEnvelopeItem(enc, event.Type, body)
+	} else if event.Type == metricType {
+		err = encodeMetric(enc, &b, event.Metrics)
 	} else {
 		err = encodeEnvelopeItem(enc, eventType, body)
 	}
@@ -478,6 +529,13 @@ func (t *HTTPTransport) worker() {
 				Logger.Printf("There was an issue with sending an event: %v", err)
 				continue
 			}
+			if response.StatusCode >= 400 && response.StatusCode <= 599 {
+				b, err := io.ReadAll(response.Body)
+				if err != nil {
+					Logger.Printf("Error while reading response code: %v", err)
+				}
+				Logger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+			}
 			t.mu.Lock()
 			t.limits.Merge(ratelimit.FromResponse(response))
 			t.mu.Unlock()
@@ -585,6 +643,8 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 	var eventType string
 	if event.Type == transactionType {
 		eventType = "transaction"
+	} else if event.Type == metricType {
+		eventType = metricType
 	} else {
 		eventType = fmt.Sprintf("%s event", event.Level)
 	}
@@ -601,6 +661,14 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		Logger.Printf("There was an issue with sending an event: %v", err)
 		return
 	}
+	if response.StatusCode >= 400 && response.StatusCode <= 599 {
+		b, err := io.ReadAll(response.Body)
+		if err != nil {
+			Logger.Printf("Error while reading response code: %v", err)
+		}
+		Logger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+	}
+
 	t.mu.Lock()
 	t.limits.Merge(ratelimit.FromResponse(response))
 	t.mu.Unlock()
