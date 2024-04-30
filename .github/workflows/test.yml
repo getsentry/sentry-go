@@ -50,9 +50,10 @@ jobs:
       - name: Test
         run: make test-coverage
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@eaaf4bedf32dbdc6b720b63067d99c4d77d6047d # pin@v3.1.4
+        uses: codecov/codecov-action@7afa10ed9b269c561c2336fd862446844e0cbf71 # pin@v4.2.0
         with:
           directory: .coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
       - name: Test (with race detection)
         run: make test-race
         # The race detector adds considerable runtime overhead. To save time on

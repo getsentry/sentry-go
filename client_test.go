@@ -164,14 +164,20 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:  "*sentry.customErr",
 					Value: "wat",
-					// No Stacktrace, because we can't tell where the error came
-					// from and because we have a stack trace in the most recent
-					// error in the chain.
+					Mechanism: &Mechanism{
+						ExceptionID:      0,
+						IsExceptionGroup: true,
+					},
 				},
 				{
 					Type:       "*errors.withStack",
 					Value:      "wat",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: true,
+					},
 				},
 			},
 		},
@@ -193,11 +199,20 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:  "*sentry.customErr",
 					Value: "wat",
+					Mechanism: &Mechanism{
+						ExceptionID:      0,
+						IsExceptionGroup: true,
+					},
 				},
 				{
 					Type:       "*sentry.customErrWithCause",
 					Value:      "err",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: true,
+					},
 				},
 			},
 		},
@@ -208,11 +223,20 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:  "*errors.errorString",
 					Value: "original",
+					Mechanism: &Mechanism{
+						ExceptionID:      0,
+						IsExceptionGroup: true,
+					},
 				},
 				{
 					Type:       "sentry.wrappedError",
 					Value:      "wrapped: original",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: true,
+					},
 				},
 			},
 		},
@@ -359,10 +383,12 @@ func TestCaptureCheckIn(t *testing.T) {
 				Duration:    time.Second * 10,
 			},
 			monitorConfig: &MonitorConfig{
-				Schedule:      IntervalSchedule(1, MonitorScheduleUnitHour),
-				CheckInMargin: 10,
-				MaxRuntime:    5000,
-				Timezone:      "Asia/Singapore",
+				Schedule:              IntervalSchedule(1, MonitorScheduleUnitHour),
+				CheckInMargin:         10,
+				MaxRuntime:            5000,
+				Timezone:              "Asia/Singapore",
+				FailureIssueThreshold: 5,
+				RecoveryThreshold:     10,
 			},
 		},
 		{
@@ -374,10 +400,12 @@ func TestCaptureCheckIn(t *testing.T) {
 				Duration:    time.Second * 10,
 			},
 			monitorConfig: &MonitorConfig{
-				Schedule:      CrontabSchedule("40 * * * *"),
-				CheckInMargin: 10,
-				MaxRuntime:    5000,
-				Timezone:      "Asia/Singapore",
+				Schedule:              CrontabSchedule("40 * * * *"),
+				CheckInMargin:         10,
+				MaxRuntime:            5000,
+				Timezone:              "Asia/Singapore",
+				FailureIssueThreshold: 5,
+				RecoveryThreshold:     10,
 			},
 		},
 	}
@@ -553,39 +581,40 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 }
 
 func TestIgnoreErrors(t *testing.T) {
-	tests := []struct {
-		name         string
+	tests := map[string]struct {
 		ignoreErrors []string
 		message      string
 		expectDrop   bool
 	}{
-		{
-			name:         "No Match",
+		"No Match": {
 			message:      "Foo",
 			ignoreErrors: []string{"Bar", "Baz"},
 			expectDrop:   false,
 		},
-		{
-			name:         "Partial Match",
+		"Partial Match": {
 			message:      "FooBar",
 			ignoreErrors: []string{"Foo", "Baz"},
 			expectDrop:   true,
 		},
-		{
-			name:         "Exact Match",
+		"Exact Match": {
 			message:      "Foo Bar",
 			ignoreErrors: []string{"\\bFoo\\b", "Baz"},
 			expectDrop:   true,
 		},
-		{
-			name:         "Wildcard Match",
+		"Wildcard Match": {
 			message:      "Foo",
 			ignoreErrors: []string{"F*", "Bar"},
 			expectDrop:   true,
 		},
+		"Match string but not pattern": {
+			message:      "(Foo)",
+			ignoreErrors: []string{"(Foo)"},
+			expectDrop:   true,
+		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
 			scope := &ScopeMock{}
 			transport := &TransportMock{}
 			client, err := NewClient(ClientOptions{
@@ -600,46 +629,47 @@ func TestIgnoreErrors(t *testing.T) {
 
 			dropped := transport.lastEvent == nil
 			if !(tt.expectDrop == dropped) {
-				t.Error("expected event to be dropped")
+				t.Errorf("expected event to be dropped")
 			}
 		})
 	}
 }
 
 func TestIgnoreTransactions(t *testing.T) {
-	tests := []struct {
-		name               string
+	tests := map[string]struct {
 		ignoreTransactions []string
 		transaction        string
 		expectDrop         bool
 	}{
-		{
-			name:               "No Match",
+		"No Match": {
 			transaction:        "Foo",
 			ignoreTransactions: []string{"Bar", "Baz"},
 			expectDrop:         false,
 		},
-		{
-			name:               "Partial Match",
+		"Partial Match": {
 			transaction:        "FooBar",
 			ignoreTransactions: []string{"Foo", "Baz"},
 			expectDrop:         true,
 		},
-		{
-			name:               "Exact Match",
+		"Exact Match": {
 			transaction:        "Foo Bar",
 			ignoreTransactions: []string{"\\bFoo\\b", "Baz"},
 			expectDrop:         true,
 		},
-		{
-			name:               "Wildcard Match",
+		"Wildcard Match": {
 			transaction:        "Foo",
 			ignoreTransactions: []string{"F*", "Bar"},
 			expectDrop:         true,
 		},
+		"Match string but not pattern": {
+			transaction:        "(Foo)",
+			ignoreTransactions: []string{"(Foo)"},
+			expectDrop:         true,
+		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
 			transport := &TransportMock{}
 			ctx := NewTestContext(ClientOptions{
 				EnableTracing:      true,
@@ -655,7 +685,7 @@ func TestIgnoreTransactions(t *testing.T) {
 
 			dropped := transport.lastEvent == nil
 			if !(tt.expectDrop == dropped) {
-				t.Error("expected event to be dropped")
+				t.Errorf("expected event to be dropped")
 			}
 		})
 	}

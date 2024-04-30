@@ -2,6 +2,7 @@ package sentrynegroni
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -44,7 +45,23 @@ func New(options Options) negroni.Handler {
 	}
 }
 
-func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+// responseWriter is a wrapper around http.ResponseWriter that captures the status code.
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+// WriteHeader captures the status code and calls the original WriteHeader method.
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func newResponseWriter(w http.ResponseWriter) *responseWriter {
+	return &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+}
+
+func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ctx := r.Context()
 	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
@@ -60,6 +77,32 @@ func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.H
 		context.WithValue(ctx, sentry.RequestContextKey, r),
 		hub,
 	)
+
+	options := []sentry.SpanOption{
+		sentry.WithOpName("http.server"),
+		sentry.ContinueFromRequest(r),
+		sentry.WithTransactionSource(sentry.SourceURL),
+	}
+	// We don't mind getting an existing transaction back so we don't need to
+	// check if it is.
+	transaction := sentry.StartTransaction(ctx,
+		fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+		options...,
+	)
+	transaction.SetData("http.request.method", r.Method)
+	rw := newResponseWriter(w)
+
+	defer func() {
+		status := rw.statusCode
+		transaction.Status = sentry.HTTPtoSpanStatus(status)
+		transaction.SetData("http.response.status_code", status)
+		transaction.Finish()
+	}()
+	// TODO(tracing): if the next handler.ServeHTTP panics, store
+	// information on the transaction accordingly (status, tag,
+	// level?, ...).
+	r = r.WithContext(transaction.Context())
+	hub.Scope().SetRequest(r)
 	defer h.recoverWithSentry(hub, r)
 	next(rw, r.WithContext(ctx))
 }
