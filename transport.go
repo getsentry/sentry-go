@@ -258,7 +258,7 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	return &b, nil
 }
 
-func getRequestFromEvent(event *Event, dsn *Dsn, ctx context.Context) (r *http.Request, err error) {
+func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (r *http.Request, err error) {
 	defer func() {
 		if r != nil {
 			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", event.Sdk.Name, event.Sdk.Version))
@@ -406,11 +406,11 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 
 // SendEvent assembles a new packet out of Event and sends it to remote server.
 func (t *HTTPTransport) SendEvent(event *Event) {
-	t.SendEventWithContext(event, nil)
+	t.SendEventWithContext(context.TODO(), event)
 }
 
 // SendEvent assembles a new packet out of Event and sends it to remote server.
-func (t *HTTPTransport) SendEventWithContext(event *Event, ctx context.Context) {
+func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) {
 	if t.dsn == nil {
 		return
 	}
@@ -421,7 +421,7 @@ func (t *HTTPTransport) SendEventWithContext(event *Event, ctx context.Context) 
 		return
 	}
 
-	request, err := getRequestFromEvent(event, t.dsn, ctx)
+	request, err := getRequestFromEvent(ctx, event, t.dsn)
 	if err != nil {
 		return
 	}
@@ -641,11 +641,11 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 
 // SendEvent assembles a new packet out of Event and sends it to remote server.
 func (t *HTTPSyncTransport) SendEvent(event *Event) {
-	t.SendEventWithContext(event, nil)
+	t.SendEventWithContext(context.TODO(), event)
 }
 
 // SendEvent assembles a new packet out of Event and sends it to remote server.
-func (t *HTTPSyncTransport) SendEventWithContext(event *Event, ctx context.Context) {
+func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Event) {
 	if t.dsn == nil {
 		return
 	}
@@ -654,7 +654,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(event *Event, ctx context.Conte
 		return
 	}
 
-	request, err := getRequestFromEvent(event, t.dsn, ctx)
+	request, err := getRequestFromEvent(ctx, event, t.dsn)
 	if err != nil {
 		return
 	}
