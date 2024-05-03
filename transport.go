@@ -402,12 +402,12 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 	})
 }
 
-// SendEvent assembles a new packet out of Event and sends it to remote server.
+// SendEvent assembles a new packet out of Event and sends it to the remote server.
 func (t *HTTPTransport) SendEvent(event *Event) {
 	t.SendEventWithContext(context.Background(), event)
 }
 
-// SendEvent assembles a new packet out of Event and sends it to remote server.
+// SendEventWithContext assembles a new packet out of Event and sends it to the remote server.
 func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) {
 	if t.dsn == nil {
 		return
@@ -637,12 +637,12 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	}
 }
 
-// SendEvent assembles a new packet out of Event and sends it to remote server.
+// SendEvent assembles a new packet out of Event and sends it to the remote server.
 func (t *HTTPSyncTransport) SendEvent(event *Event) {
 	t.SendEventWithContext(context.Background(), event)
 }
 
-// SendEvent assembles a new packet out of Event and sends it to remote server.
+// SendEventWithContext assembles a new packet out of Event and sends it to the remote server.
 func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Event) {
 	if t.dsn == nil {
 		return
