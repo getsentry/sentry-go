@@ -285,15 +285,9 @@ func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (r *http.R
 	if err != nil {
 		return nil, err
 	}
-	if ctx != nil {
-		return http.NewRequestWithContext(
-			ctx,
-			http.MethodPost,
-			dsn.GetAPIURL().String(),
-			envelope,
-		)
-	}
-	return http.NewRequest(
+
+	return http.NewRequestWithContext(
+		ctx,
 		http.MethodPost,
 		dsn.GetAPIURL().String(),
 		envelope,
