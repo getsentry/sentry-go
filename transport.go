@@ -286,6 +286,10 @@ func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (r *http.R
 		return nil, err
 	}
 
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	return http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
@@ -400,7 +404,7 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 
 // SendEvent assembles a new packet out of Event and sends it to remote server.
 func (t *HTTPTransport) SendEvent(event *Event) {
-	t.SendEventWithContext(context.TODO(), event)
+	t.SendEventWithContext(context.Background(), event)
 }
 
 // SendEvent assembles a new packet out of Event and sends it to remote server.
@@ -635,7 +639,7 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 
 // SendEvent assembles a new packet out of Event and sends it to remote server.
 func (t *HTTPSyncTransport) SendEvent(event *Event) {
-	t.SendEventWithContext(context.TODO(), event)
+	t.SendEventWithContext(context.Background(), event)
 }
 
 // SendEvent assembles a new packet out of Event and sends it to remote server.
