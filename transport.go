@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -257,7 +258,7 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	return &b, nil
 }
 
-func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
+func getRequestFromEvent(event *Event, dsn *Dsn, ctx context.Context) (r *http.Request, err error) {
 	defer func() {
 		if r != nil {
 			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", event.Sdk.Name, event.Sdk.Version))
@@ -283,6 +284,14 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 	envelope, err := envelopeFromBody(event, dsn, time.Now(), body)
 	if err != nil {
 		return nil, err
+	}
+	if ctx != nil {
+		return http.NewRequestWithContext(
+			ctx,
+			http.MethodPost,
+			dsn.GetAPIURL().String(),
+			envelope,
+		)
 	}
 	return http.NewRequest(
 		http.MethodPost,
@@ -397,6 +406,11 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 
 // SendEvent assembles a new packet out of Event and sends it to remote server.
 func (t *HTTPTransport) SendEvent(event *Event) {
+	t.SendEventWithContext(event, nil)
+}
+
+// SendEvent assembles a new packet out of Event and sends it to remote server.
+func (t *HTTPTransport) SendEventWithContext(event *Event, ctx context.Context) {
 	if t.dsn == nil {
 		return
 	}
@@ -407,7 +421,7 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		return
 	}
 
-	request, err := getRequestFromEvent(event, t.dsn)
+	request, err := getRequestFromEvent(event, t.dsn, ctx)
 	if err != nil {
 		return
 	}
@@ -627,6 +641,11 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 
 // SendEvent assembles a new packet out of Event and sends it to remote server.
 func (t *HTTPSyncTransport) SendEvent(event *Event) {
+	t.SendEventWithContext(event, nil)
+}
+
+// SendEvent assembles a new packet out of Event and sends it to remote server.
+func (t *HTTPSyncTransport) SendEventWithContext(event *Event, ctx context.Context) {
 	if t.dsn == nil {
 		return
 	}
@@ -635,7 +654,7 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		return
 	}
 
-	request, err := getRequestFromEvent(event, t.dsn)
+	request, err := getRequestFromEvent(event, t.dsn, ctx)
 	if err != nil {
 		return
 	}

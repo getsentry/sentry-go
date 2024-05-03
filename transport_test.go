@@ -339,7 +339,7 @@ func TestGetRequestFromEvent(t *testing.T) {
 		}
 
 		t.Run(test.testName, func(t *testing.T) {
-			req, err := getRequestFromEvent(test.event, dsn)
+			req, err := getRequestFromEvent(test.event, dsn, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
