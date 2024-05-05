@@ -78,15 +78,7 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 		}
 	}
 
-	if userSegment := scope.user.Segment; userSegment != "" {
-		entries["user_segment"] = userSegment
-	}
-
-	if span.Sampled.Bool() {
-		entries["sampled"] = "true"
-	} else {
-		entries["sampled"] = "false"
-	}
+	entries["sampled"] = strconv.FormatBool(span.Sampled.Bool())
 
 	return DynamicSamplingContext{
 		Entries: entries,
@@ -130,7 +122,7 @@ func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSampli
 
 	if client == nil || scope == nil {
 		return DynamicSamplingContext{
-			Entries: map[string]string{},
+			Entries: entries,
 			Frozen:  false,
 		}
 	}
@@ -154,10 +146,6 @@ func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSampli
 	}
 	if environment := client.options.Environment; environment != "" {
 		entries["environment"] = environment
-	}
-
-	if userSegment := scope.user.Segment; userSegment != "" {
-		entries["user_segment"] = userSegment
 	}
 
 	return DynamicSamplingContext{
