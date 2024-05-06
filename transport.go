@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -257,7 +258,7 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	return &b, nil
 }
 
-func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
+func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (r *http.Request, err error) {
 	defer func() {
 		if r != nil {
 			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", event.Sdk.Name, event.Sdk.Version))
@@ -284,7 +285,13 @@ func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return http.NewRequest(
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	return http.NewRequestWithContext(
+		ctx,
 		http.MethodPost,
 		dsn.GetAPIURL().String(),
 		envelope,
@@ -395,8 +402,13 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 	})
 }
 
-// SendEvent assembles a new packet out of Event and sends it to remote server.
+// SendEvent assembles a new packet out of Event and sends it to the remote server.
 func (t *HTTPTransport) SendEvent(event *Event) {
+	t.SendEventWithContext(context.Background(), event)
+}
+
+// SendEventWithContext assembles a new packet out of Event and sends it to the remote server.
+func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) {
 	if t.dsn == nil {
 		return
 	}
@@ -407,7 +419,7 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 		return
 	}
 
-	request, err := getRequestFromEvent(event, t.dsn)
+	request, err := getRequestFromEvent(ctx, event, t.dsn)
 	if err != nil {
 		return
 	}
@@ -625,8 +637,13 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	}
 }
 
-// SendEvent assembles a new packet out of Event and sends it to remote server.
+// SendEvent assembles a new packet out of Event and sends it to the remote server.
 func (t *HTTPSyncTransport) SendEvent(event *Event) {
+	t.SendEventWithContext(context.Background(), event)
+}
+
+// SendEventWithContext assembles a new packet out of Event and sends it to the remote server.
+func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Event) {
 	if t.dsn == nil {
 		return
 	}
@@ -635,7 +652,7 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 		return
 	}
 
-	request, err := getRequestFromEvent(event, t.dsn)
+	request, err := getRequestFromEvent(ctx, event, t.dsn)
 	if err != nil {
 		return
 	}

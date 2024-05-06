@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -339,7 +340,7 @@ func TestGetRequestFromEvent(t *testing.T) {
 		}
 
 		t.Run(test.testName, func(t *testing.T) {
-			req, err := getRequestFromEvent(test.event, dsn)
+			req, err := getRequestFromEvent(context.TODO(), test.event, dsn)
 			if err != nil {
 				t.Fatal(err)
 			}
