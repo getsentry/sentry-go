@@ -226,10 +226,10 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	}
 
 	switch event.Type {
+	case transactionType, checkInType:
+		err = encodeEnvelopeItem(enc, event.Type, body)
 	case metricType:
 		err = encodeMetric(enc, &b, event.Metrics)
-	case transactionType:
-	case checkInType:
 	default:
 		err = encodeEnvelopeItem(enc, eventType, body)
 	}
