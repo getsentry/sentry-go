@@ -225,13 +225,15 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		return nil, err
 	}
 
-	if event.Type == transactionType || event.Type == checkInType {
-		err = encodeEnvelopeItem(enc, event.Type, body)
-	} else if event.Type == metricType {
+	switch event.Type {
+	case metricType:
 		err = encodeMetric(enc, &b, event.Metrics)
-	} else {
+	case transactionType:
+	case checkInType:
+	default:
 		err = encodeEnvelopeItem(enc, eventType, body)
 	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -658,11 +660,12 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	}
 
 	var eventType string
-	if event.Type == transactionType {
+	switch {
+	case event.Type == transactionType:
 		eventType = "transaction"
-	} else if event.Type == metricType {
+	case event.Type == metricType:
 		eventType = metricType
-	} else {
+	default:
 		eventType = fmt.Sprintf("%s event", event.Level)
 	}
 	Logger.Printf(
