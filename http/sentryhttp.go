@@ -111,6 +111,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		// level?, ...).
 		r = r.WithContext(transaction.Context())
 		hub.Scope().SetRequest(r)
+
 		defer h.recoverWithSentry(hub, r)
 		// TODO(tracing): use custom response writer to intercept
 		// response. Use HTTP status to add tag to transaction; set span

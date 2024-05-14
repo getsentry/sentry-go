@@ -866,6 +866,22 @@ func WithSpanSampled(sampled Sampled) SpanOption {
 	}
 }
 
+func GetTraceHeader(s *Scope) string {
+	if s.span != nil {
+		return s.span.ToSentryTrace()
+	}
+
+	return fmt.Sprintf("%s-%s", s.propagationContext.TraceID, s.propagationContext.SpanID)
+}
+
+func GetBaggageHeader(s *Scope) string {
+	if s.span != nil {
+		return s.span.ToBaggage()
+	}
+
+	return s.propagationContext.DynamicSamplingContext.String()
+}
+
 // ContinueFromRequest returns a span option that updates the span to continue
 // an existing trace. If it cannot detect an existing trace in the request, the
 // span will be left unchanged.

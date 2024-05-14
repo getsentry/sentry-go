@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -50,6 +51,7 @@ type Scope struct {
 
 // NewScope creates a new Scope.
 func NewScope() *Scope {
+	fmt.Println("Creating new scope")
 	scope := Scope{
 		breadcrumbs:        make([]*Breadcrumb, 0),
 		attachments:        make([]*Attachment, 0),
@@ -136,6 +138,10 @@ func (scope *Scope) SetRequest(r *http.Request) {
 		Closer: r.Body,
 	}
 	scope.requestBody = buf
+
+	if scope.span != nil {
+		return
+	}
 }
 
 // SetRequestBody sets the request body for the current scope.
@@ -416,6 +422,9 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 				event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
 			}
 		} else {
+			fmt.Println("Scope propagation context: ", scope.propagationContext.Map())
+			fmt.Println("Scope context: ", scope.contexts["trace"])
+
 			event.Contexts["trace"] = scope.propagationContext.Map()
 
 			dsc := scope.propagationContext.DynamicSamplingContext

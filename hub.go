@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -373,12 +374,19 @@ func (hub *Hub) ContinueTrace(trace, baggage string) (SpanOption, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	fmt.Printf("Propagation context ContinueTrace: %v \n", propagationContext.Map())
+
 	scope.SetPropagationContext(propagationContext)
 
 	client := hub.Client()
 	if client != nil && client.options.EnableTracing {
 		return ContinueFromHeaders(trace, baggage), nil
 	}
+
+	scope.SetContext("trace", propagationContext.Map())
+
+	fmt.Println("Scope context in ContinueTrace: ", scope.contexts["trace"])
 
 	return nil, nil
 }
