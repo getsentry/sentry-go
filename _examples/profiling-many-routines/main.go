@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"time"
@@ -22,15 +24,19 @@ const restAmount = 20000
 const workAmount = 10000
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	err := sentry.Init(sentry.ClientOptions{
 		// Either set your DSN here or set the SENTRY_DSN environment variable.
-		Dsn: "",
+		Dsn: "", // "https://3c3fd18b3fd44566aeab11385f391a48@o447951.ingest.us.sentry.io/5774600",
 		// Enable printing of SDK debug messages.
 		// Useful when getting started or trying to figure something out.
-		Debug:              true,
+		Debug:              false,
 		EnableTracing:      true,
 		TracesSampleRate:   1.0,
-		ProfilesSampleRate: 0.05,
+		ProfilesSampleRate: 1.00,
 	})
 
 	if err != nil {

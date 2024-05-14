@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"container/ring"
+	"encoding/binary"
 	"strconv"
 
 	"runtime"
@@ -63,8 +64,7 @@ func getCurrentGoID() uint64 {
 
 const profilerSamplingRateHz = 101 // 101 Hz; not 100 Hz because of the lockstep sampling (https://stackoverflow.com/a/45471031/1181370)
 const profilerSamplingRate = time.Second / profilerSamplingRateHz
-const stackBufferMaxGrowth = 512 * 1024
-const stackBufferLimit = 10 * 1024 * 1024
+const stackBufferMaxGrowth = 100
 const profilerRuntimeLimit = 30 // seconds
 
 type profileRecorder struct {
@@ -81,7 +81,7 @@ type profileRecorder struct {
 	stackKeyBuffer []byte
 
 	// Map from runtime.Frame.PC to an index in frames.
-	frameIndexes map[string]int
+	frameIndexes map[uintptr]int
 	frames       []*Frame
 	newFrames    []*Frame // New frames created in the current interation.
 
@@ -89,8 +89,8 @@ type profileRecorder struct {
 	// Each bucket is a slice of samples all taken at the same time.
 	samplesBucketsHead *ring.Ring
 
-	// Buffer to read current stacks - will grow automatically up to stackBufferLimit.
-	stacksBuffer []byte
+	// Buffer to read current stacks - will grow automatically.
+	stacksBuffer []runtime.StackRecord
 }
 
 func newProfiler(startTime time.Time) *profileRecorder {
@@ -104,14 +104,13 @@ func newProfiler(startTime time.Time) *profileRecorder {
 		stacks:       make([]profileStack, 0, 32),
 		newStacks:    make([]profileStack, 0, 32),
 
-		frameIndexes: make(map[string]int, 128),
+		frameIndexes: make(map[uintptr]int, 128),
 		frames:       make([]*Frame, 0, 128),
 		newFrames:    make([]*Frame, 0, 128),
 
 		samplesBucketsHead: ring.New(profilerRuntimeLimit * profilerSamplingRateHz),
 
-		// A buffer of 2 KiB per goroutine stack looks like a good starting point (empirically determined).
-		stacksBuffer: make([]byte, runtime.NumGoroutine()*2048),
+		stacksBuffer: make([]runtime.StackRecord, runtime.NumGoroutine()+stackBufferMaxGrowth),
 	}
 }
 
@@ -293,54 +292,38 @@ func (p *profileRecorder) onTick() {
 
 	// Free up some memory if we don't need such a large buffer anymore.
 	if len(p.stacksBuffer) > len(records)*3 {
-		p.stacksBuffer = make([]byte, len(records)*3)
+		p.stacksBuffer = make([]runtime.StackRecord, len(records)*3)
 	}
 }
 
-func (p *profileRecorder) collectRecords() []byte {
+func (p *profileRecorder) collectRecords() []runtime.StackRecord {
 	for {
-		// Capture stacks for all existing goroutines.
-		// Note: runtime.GoroutineProfile() would be better but we can't use it at the moment because
-		//       it doesn't give us `gid` for each routine, see https://github.com/golang/go/issues/59663
-		n := runtime.Stack(p.stacksBuffer, true)
-
-		// If we couldn't read everything, increase the buffer and try again.
-		if n >= len(p.stacksBuffer) && n < stackBufferLimit {
-			var newSize = n * 2
-			if newSize > n+stackBufferMaxGrowth {
-				newSize = n + stackBufferMaxGrowth
-			}
-			if newSize > stackBufferLimit {
-				newSize = stackBufferLimit
-			}
-			p.stacksBuffer = make([]byte, newSize)
-		} else {
+		if n, ok := runtime.GoroutineProfile(p.stacksBuffer); ok {
 			return p.stacksBuffer[0:n]
+		} else {
+			// Increase by a margin so we don't have to reallocate too often.
+			p.stacksBuffer = make([]runtime.StackRecord, n+stackBufferMaxGrowth)
 		}
 	}
 }
 
-func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) {
-	var traces = traceparser.Parse(stacksBuffer)
-	var length = traces.Length()
-
+func (p *profileRecorder) processRecords(elapsedNs uint64, traces []runtime.StackRecord) {
 	// Shouldn't happen but let's be safe and don't store empty buckets.
-	if length == 0 {
+	if len(traces) == 0 {
 		return
 	}
 
 	var bucket = &profileSamplesBucket{
 		relativeTimeNS: elapsedNs,
-		stackIDs:       make([]int, length),
-		goIDs:          make([]uint64, length),
+		stackIDs:       make([]int, len(traces)),
+		goIDs:          make([]uint64, len(traces)),
 	}
 
 	// reset buffers
 	p.newFrames = p.newFrames[:0]
 	p.newStacks = p.newStacks[:0]
 
-	for i := 0; i < length; i++ {
-		var stack = traces.Item(i)
+	for i, stack := range traces {
 		bucket.stackIDs[i] = p.addStackTrace(stack)
 		bucket.goIDs[i] = stack.GoID()
 	}
@@ -355,40 +338,27 @@ func (p *profileRecorder) processRecords(elapsedNs uint64, stacksBuffer []byte) 
 	p.samplesBucketsHead.Value = bucket
 }
 
-func (p *profileRecorder) addStackTrace(capturedStack traceparser.Trace) int {
-	iter := capturedStack.Frames()
-	stack := make(profileStack, 0, iter.LengthUpperBound())
+func (p *profileRecorder) addStackTrace(record runtime.StackRecord) int {
+	capturedStack := record.Stack()
 
-	// Originally, we've used `capturedStack.UniqueIdentifier()` as a key but that was incorrect because it also
-	// contains function arguments and we want to group stacks by function name and file/line only.
-	// Instead, we need to parse frames and we use a list of their indexes as a key.
-	// We reuse the same buffer for each stack to avoid allocations; this is a hot spot.
-	var expectedBufferLen = cap(stack) * 5 // 4 bytes per frame + 1 byte for space
+	var expectedBufferLen = len(capturedStack) * 8 // sizeof(uintptr)
 	if cap(p.stackKeyBuffer) < expectedBufferLen {
 		p.stackKeyBuffer = make([]byte, 0, expectedBufferLen)
 	} else {
 		p.stackKeyBuffer = p.stackKeyBuffer[:0]
 	}
 
-	for iter.HasNext() {
-		var frame = iter.Next()
-		if frameIndex := p.addFrame(frame); frameIndex >= 0 {
-			stack = append(stack, frameIndex)
-
-			p.stackKeyBuffer = append(p.stackKeyBuffer, 0) // space
-
-			// The following code is just like binary.AppendUvarint() which isn't yet available in Go 1.18.
-			x := uint64(frameIndex) + 1
-			for x >= 0x80 {
-				p.stackKeyBuffer = append(p.stackKeyBuffer, byte(x)|0x80)
-				x >>= 7
-			}
-			p.stackKeyBuffer = append(p.stackKeyBuffer, byte(x))
-		}
+	for _, frame := range capturedStack {
+		p.stackKeyBuffer = binary.LittleEndian.AppendUint64(p.stackKeyBuffer, uint64(frame))
 	}
 
 	stackIndex, exists := p.stackIndexes[string(p.stackKeyBuffer)]
 	if !exists {
+		runtimeFrames := extractFrames(capturedStack)
+		stack := make(profileStack, 0, len(runtimeFrames))
+		for _, frame := range runtimeFrames {
+			stack = append(stack, p.addFrame(frame))
+		}
 		stackIndex = len(p.stacks) + len(p.newStacks)
 		p.newStacks = append(p.newStacks, stack)
 		p.stackIndexes[string(p.stackKeyBuffer)] = stackIndex
@@ -397,19 +367,14 @@ func (p *profileRecorder) addStackTrace(capturedStack traceparser.Trace) int {
 	return stackIndex
 }
 
-func (p *profileRecorder) addFrame(capturedFrame traceparser.Frame) int {
-	// NOTE: Don't convert to string yet, it's expensive and compiler can avoid it when
-	//       indexing into a map (only needs a copy when adding a new key to the map).
-	var key = capturedFrame.UniqueIdentifier()
-
-	frameIndex, exists := p.frameIndexes[string(key)]
+func (p *profileRecorder) addFrame(runtimeFrame runtime.Frame) int {
+	// TODO check if we can use PC as a key - it can be reused because of inlining.
+	frameIndex, exists := p.frameIndexes[runtimeFrame.PC]
 	if !exists {
-		module, function := splitQualifiedFunctionName(string(capturedFrame.Func()))
-		file, line := capturedFrame.File()
-		frame := newFrame(module, function, string(file), line)
+		frame := NewFrame(runtimeFrame)
 		frameIndex = len(p.frames) + len(p.newFrames)
 		p.newFrames = append(p.newFrames, &frame)
-		p.frameIndexes[string(key)] = frameIndex
+		p.frameIndexes[runtimeFrame.PC] = frameIndex
 	}
 	return frameIndex
 }

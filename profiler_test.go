@@ -405,7 +405,7 @@ func TestProfilerStackBufferGrowth(t *testing.T) {
 
 	_ = profiler.collectRecords()
 
-	profiler.stacksBuffer = make([]byte, 1)
+	profiler.stacksBuffer = make([]runtime.StackRecord, 1)
 	require.Equal(1, len(profiler.stacksBuffer))
 	var bytesWithAutoAlloc = profiler.collectRecords()
 	var lenAfterAutoAlloc = len(profiler.stacksBuffer)
