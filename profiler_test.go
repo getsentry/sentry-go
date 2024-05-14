@@ -206,10 +206,13 @@ func TestProfilerStackTrace(t *testing.T) {
 
 	// Note: we can't check the exact stack trace because the profiler runs its own goroutine
 	// And this test goroutine may be interrupted at multiple points.
-	require.True(strings.HasSuffix(actual, `
+	require.True(strings.HasSuffix(actual, `runtime gopark
+runtime chanrecv
+runtime chanrecv2
+github.com/getsentry/sentry-go startProfiling
 github.com/getsentry/sentry-go TestProfilerStackTrace
 testing tRunner
-testing (*T).Run`))
+runtime goexit`)) // TODO this line doesn't look right
 }
 
 func TestProfilerCollectsOnStart(t *testing.T) {

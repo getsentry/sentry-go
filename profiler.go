@@ -354,11 +354,17 @@ func (p *profileRecorder) addStackTrace(record runtime.StackRecord) int {
 
 	stackIndex, exists := p.stackIndexes[string(p.stackKeyBuffer)]
 	if !exists {
-		runtimeFrames := extractFrames(capturedStack)
-		stack := make(profileStack, 0, len(runtimeFrames))
-		for _, frame := range runtimeFrames {
-			stack = append(stack, p.addFrame(frame))
+		stack := make(profileStack, 0, len(capturedStack))
+		callersFrames := runtime.CallersFrames(capturedStack)
+
+		for {
+			callerFrame, more := callersFrames.Next()
+			stack = append(stack, p.addFrame(callerFrame))
+			if !more {
+				break
+			}
 		}
+
 		stackIndex = len(p.stacks) + len(p.newStacks)
 		p.newStacks = append(p.newStacks, stack)
 		p.stackIndexes[string(p.stackKeyBuffer)] = stackIndex
