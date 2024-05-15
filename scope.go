@@ -2,7 +2,6 @@ package sentry
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -51,7 +50,6 @@ type Scope struct {
 
 // NewScope creates a new Scope.
 func NewScope() *Scope {
-	fmt.Println("Creating new scope")
 	scope := Scope{
 		breadcrumbs:        make([]*Breadcrumb, 0),
 		attachments:        make([]*Attachment, 0),
