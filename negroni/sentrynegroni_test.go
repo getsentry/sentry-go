@@ -1,4 +1,4 @@
-package sentryhttp_test
+package sentrynegroni_test
 
 import (
 	"fmt"
@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	sentrynegroni "github.com/getsentry/sentry-go/negroni"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/urfave/negroni"
 )
 
 func TestIntegration(t *testing.T) {
@@ -258,17 +259,21 @@ func TestIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sentryHandler := sentryhttp.New(sentryhttp.Options{})
-	handler := func(w http.ResponseWriter, r *http.Request) {
-		for _, tt := range tests {
-			if r.URL.Path == tt.Path {
-				tt.Handler.ServeHTTP(w, r)
-				return
-			}
-		}
-		t.Errorf("Unhandled request: %#v", r)
+	mux := http.NewServeMux()
+
+	for _, tt := range tests {
+		mux.Handle(tt.Path, tt.Handler)
 	}
-	srv := httptest.NewServer(sentryHandler.HandleFunc(handler))
+
+	recovery := negroni.NewRecovery()
+	recovery.PanicHandlerFunc = sentrynegroni.PanicHandlerFunc
+
+	router := negroni.Classic()
+	router.Use(recovery)
+	router.Use(sentrynegroni.New(sentrynegroni.Options{}))
+	router.UseHandler(mux)
+
+	srv := httptest.NewServer(router)
 	defer srv.Close()
 
 	c := srv.Client()

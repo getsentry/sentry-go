@@ -157,7 +157,7 @@ func TestStartSpan(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
-			"sdkMetaData", "attachments",
+			"sdkMetaData",
 		),
 		cmpopts.EquateEmpty(),
 	}
@@ -221,7 +221,7 @@ func TestStartChild(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"EventID", "Level", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
-			"sdkMetaData", "attachments",
+			"sdkMetaData",
 		),
 		cmpopts.IgnoreMapEntries(func(k string, v interface{}) bool {
 			return k != "trace"
@@ -302,7 +302,7 @@ func TestStartTransaction(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
-			"sdkMetaData", "attachments",
+			"sdkMetaData",
 		),
 		cmpopts.EquateEmpty(),
 	}
@@ -334,8 +334,11 @@ func TestSetData(t *testing.T) {
 	})
 	span := StartSpan(ctx, "Test Span")
 	span.SetData("key", "value")
-
-	if (span.Data == nil) || (span.Data["key"] != "value") {
+	span.SetData("key.nil", nil)
+	span.SetData("key.number", 123)
+	span.SetData("key.bool", true)
+	span.SetData("key.slice", []string{"foo", "bar"})
+	if (span.Data == nil) || (span.Data["key"] != "value") || (span.Data["key.number"] != 123) || (span.Data["key.bool"] != true) || !reflect.DeepEqual(span.Data["key.slice"], []string{"foo", "bar"}) {
 		t.Fatalf("Data mismatch, got %v", span.Data)
 	}
 }
@@ -587,7 +590,7 @@ func TestContinueSpanFromTrace(t *testing.T) {
 	}
 }
 
-func TestSpanFromContext(t *testing.T) {
+func TestSpanFromContext(_ *testing.T) {
 	// SpanFromContext always returns a non-nil value, such that you can use
 	// it without nil checks.
 	// When no span was in the context, the returned value is a no-op.
@@ -697,7 +700,7 @@ func TestSample(t *testing.T) {
 	}
 }
 
-func TestDoesNotCrashWithEmptyContext(t *testing.T) {
+func TestDoesNotCrashWithEmptyContext(_ *testing.T) {
 	// This test makes sure that we can still start and finish transactions
 	// with empty context (for example, when Sentry SDK is not initialized)
 	ctx := context.Background()
@@ -884,7 +887,7 @@ func TestSpanSetContextOverrides(t *testing.T) {
 // This test checks that there are no concurrent reads/writes to
 // substructures in scope.contexts.
 // See https://github.com/getsentry/sentry-go/issues/570 for more details.
-func TestConcurrentContextAccess(t *testing.T) {
+func TestConcurrentContextAccess(_ *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1,
@@ -973,7 +976,7 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 // This is a regression test for https://github.com/getsentry/sentry-go/issues/587
 // Without the "spans can be finished only once" fix, this test will fail
 // when run with race detection ("-race").
-func TestSpanFinishConcurrentlyWithoutRaces(t *testing.T) {
+func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1,

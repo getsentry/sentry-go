@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -194,7 +195,7 @@ func TestEnvelopeFromTransactionBody(t *testing.T) {
 
 func TestEnvelopeFromEventWithAttachments(t *testing.T) {
 	event := newTestEvent(eventType)
-	event.attachments = []*Attachment{
+	event.Attachments = []*Attachment{
 		// Empty content-type and payload
 		{
 			Filename: "empty.txt",
@@ -339,7 +340,7 @@ func TestGetRequestFromEvent(t *testing.T) {
 		}
 
 		t.Run(test.testName, func(t *testing.T) {
-			req, err := getRequestFromEvent(test.event, dsn)
+			req, err := getRequestFromEvent(context.TODO(), test.event, dsn)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -678,5 +679,36 @@ func testRateLimiting(t *testing.T, tr Transport) {
 	}
 	if n := atomic.LoadUint64(&transactionEventCount); n != 1 {
 		t.Errorf("got transactionEvent = %d, want %d", n, 1)
+	}
+}
+
+func TestEnvelopeFromMetricBody(t *testing.T) {
+	event := newTestEvent(metricType)
+	event.Metrics = append(event.Metrics,
+		NewCounterMetric("counter", Second(), map[string]string{"foo": "bar", "route": "GET /foo"}, 1597790835, 1.0),
+		NewDistributionMetric("distribution", Second(), map[string]string{"$foo$": "%bar%"}, 1597790835, 1.0),
+		NewGaugeMetric("gauge", Second(), map[string]string{"föö": "bär"}, 1597790835, 1.0),
+		NewSetMetric[int]("set", Second(), map[string]string{"%{key}": "$value$"}, 1597790835, 1),
+		NewCounterMetric("no_tags", Second(), nil, 1597790835, 1.0),
+	)
+	sentAt := time.Unix(0, 0).UTC()
+
+	body := getRequestBodyFromEvent(event)
+
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
+{"type":"statsd","length":218}
+counter@second:1|c|#foo:bar,route:GET /foo|T1597790835
+distribution@second:1|d|#_foo_:bar|T1597790835
+gauge@second:1:1:1:1:1|g|#f_:br|T1597790835
+set@second:1|s|#_key_:$value$|T1597790835
+no_tags@second:1|c|T1597790835
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
 	}
 }

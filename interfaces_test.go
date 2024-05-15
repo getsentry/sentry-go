@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http/httptest"
@@ -215,6 +216,141 @@ func TestEventWithDebugMetaMarshalJSON(t *testing.T) {
 	}
 }
 
+type withCause struct {
+	msg   string
+	cause error
+}
+
+func (w *withCause) Error() string { return w.msg }
+func (w *withCause) Cause() error  { return w.cause }
+
+type customError struct {
+	message string
+}
+
+func (e *customError) Error() string {
+	return e.message
+}
+
+func TestSetException(t *testing.T) {
+	testCases := map[string]struct {
+		exception     error
+		maxErrorDepth int
+		expected      []Exception
+	}{
+		"Single error without unwrap": {
+			exception:     errors.New("simple error"),
+			maxErrorDepth: 1,
+			expected: []Exception{
+				{
+					Value:      "simple error",
+					Type:       "*errors.errorString",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+				},
+			},
+		},
+		"Nested errors with Unwrap": {
+			exception:     fmt.Errorf("level 2: %w", fmt.Errorf("level 1: %w", errors.New("base error"))),
+			maxErrorDepth: 3,
+			expected: []Exception{
+				{
+					Value: "base error",
+					Type:  "*errors.errorString",
+					Mechanism: &Mechanism{
+						ExceptionID:      0,
+						IsExceptionGroup: true,
+					},
+				},
+				{
+					Value: "level 1: base error",
+					Type:  "*fmt.wrapError",
+					Mechanism: &Mechanism{
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: true,
+					},
+				},
+				{
+					Value:      "level 2: level 1: base error",
+					Type:       "*fmt.wrapError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						ExceptionID:      2,
+						ParentID:         Pointer(1),
+						IsExceptionGroup: true,
+					},
+				},
+			},
+		},
+		"Custom error types": {
+			exception: &customError{
+				message: "custom error message",
+			},
+			maxErrorDepth: 1,
+			expected: []Exception{
+				{
+					Value:      "custom error message",
+					Type:       "*sentry.customError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+				},
+			},
+		},
+		"Combination of Unwrap and Cause": {
+			exception: fmt.Errorf("outer error: %w", &withCause{
+				msg:   "error with cause",
+				cause: errors.New("the cause"),
+			}),
+			maxErrorDepth: 3,
+			expected: []Exception{
+				{
+					Value: "the cause",
+					Type:  "*errors.errorString",
+					Mechanism: &Mechanism{
+						ExceptionID:      0,
+						IsExceptionGroup: true,
+					},
+				},
+				{
+					Value: "error with cause",
+					Type:  "*sentry.withCause",
+					Mechanism: &Mechanism{
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: true,
+					},
+				},
+				{
+					Value:      "outer error: error with cause",
+					Type:       "*fmt.wrapError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						ExceptionID:      2,
+						ParentID:         Pointer(1),
+						IsExceptionGroup: true,
+					},
+				},
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			e := &Event{}
+			e.SetException(tc.exception, tc.maxErrorDepth)
+
+			if len(e.Exception) != len(tc.expected) {
+				t.Fatalf("Expected %d exceptions, got %d", len(tc.expected), len(e.Exception))
+			}
+
+			for i, exp := range tc.expected {
+				if diff := cmp.Diff(exp, e.Exception[i]); diff != "" {
+					t.Errorf("Event mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
 func TestMechanismMarshalJSON(t *testing.T) {
 	mechanism := &Mechanism{
 		Type:        "some type",
@@ -232,7 +368,7 @@ func TestMechanismMarshalJSON(t *testing.T) {
 	}
 
 	want := `{"type":"some type","description":"some description","help_link":"some help link",` +
-		`"data":{"some data":"some value","some numeric data":12345}}`
+		`"exception_id":0,"data":{"some data":"some value","some numeric data":12345}}`
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
@@ -257,7 +393,7 @@ func TestMechanismMarshalJSON_withHandled(t *testing.T) {
 	}
 
 	want := `{"type":"some type","description":"some description","help_link":"some help link",` +
-		`"handled":false,"data":{"some data":"some value","some numeric data":12345}}`
+		`"handled":false,"exception_id":0,"data":{"some data":"some value","some numeric data":12345}}`
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
@@ -373,6 +509,42 @@ func TestStructSnapshots(t *testing.T) {
 
 			if diff := cmp.Diff(want, got); diff != "" {
 				t.Errorf("struct %s mismatch (-want +got):\n%s", test.testName, diff)
+			}
+		})
+	}
+}
+
+func TestMarshalMetrics(t *testing.T) {
+	tests := []struct {
+		name    string
+		metrics []Metric
+		want    string
+	}{
+		{
+			name: "allowed characters",
+			metrics: []Metric{
+				NewCounterMetric("counter", Second(), map[string]string{"foo": "bar", "route": "GET /foo"}, 1597790835, 1.0),
+				NewDistributionMetric("distribution", Second(), map[string]string{"$foo$": "%bar%"}, 1597790835, 1.0),
+				NewGaugeMetric("gauge", Second(), map[string]string{"föö": "bär"}, 1597790835, 1.0),
+				NewSetMetric[int]("set", Second(), map[string]string{"%{key}": "$value$"}, 1597790835, 1),
+				NewCounterMetric("no_tags", Second(), nil, 1597790835, 1.0),
+			},
+
+			want: strings.Join([]string{
+				"counter@second:1|c|#foo:bar,route:GET /foo|T1597790835",
+				"distribution@second:1|d|#_foo_:bar|T1597790835",
+				"gauge@second:1:1:1:1:1|g|#f_:br|T1597790835",
+				"set@second:1|s|#_key_:$value$|T1597790835",
+				"no_tags@second:1|c|T1597790835",
+			}, "\n"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			serializedMetric := marshalMetrics(test.metrics)
+			if diff := cmp.Diff(string(serializedMetric), test.want); diff != "" {
+				t.Errorf("Context mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

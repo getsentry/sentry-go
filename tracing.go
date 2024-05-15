@@ -169,11 +169,11 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	span.Sampled = span.sample()
 
+	span.recorder = &spanRecorder{}
 	if hasParent {
 		span.recorder = parent.spanRecorder()
-	} else {
-		span.recorder = &spanRecorder{}
 	}
+
 	span.recorder.record(&span)
 
 	hub := hubFromContext(ctx)
@@ -226,7 +226,11 @@ func (s *Span) SetTag(name, value string) {
 // SetData sets a data on the span. It is recommended to use SetData instead of
 // accessing the data map directly as SetData takes care of initializing the map
 // when necessary.
-func (s *Span) SetData(name, value string) {
+func (s *Span) SetData(name string, value interface{}) {
+	if value == nil {
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -283,7 +287,7 @@ func (s *Span) GetTransaction() *Span {
 // func (s *Span) TransactionName() string
 // func (s *Span) SetTransactionName(name string)
 
-// ToSentryTrace returns the seralized TraceParentContext from a transaction/sapn.
+// ToSentryTrace returns the seralized TraceParentContext from a transaction/span.
 // Use this function to propagate the TraceParentContext to a downstream SDK,
 // either as the value of the "sentry-trace" HTTP header, or as an html "sentry-trace" meta tag.
 func (s *Span) ToSentryTrace() string {

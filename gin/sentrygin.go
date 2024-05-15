@@ -62,15 +62,12 @@ func (h *handler) handle(c *gin.Context) {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
-	var transactionName string
-	var transactionSource sentry.TransactionSource
+	transactionName := c.Request.URL.Path
+	transactionSource := sentry.SourceURL
 
-	if c.FullPath() != "" {
-		transactionName = c.FullPath()
+	if fp := c.FullPath(); fp != "" {
+		transactionName = fp
 		transactionSource = sentry.SourceRoute
-	} else {
-		transactionName = c.Request.URL.Path
-		transactionSource = sentry.SourceURL
 	}
 
 	options := []sentry.SpanOption{
@@ -83,8 +80,11 @@ func (h *handler) handle(c *gin.Context) {
 		fmt.Sprintf("%s %s", c.Request.Method, transactionName),
 		options...,
 	)
+	transaction.SetData("http.request.method", c.Request.Method)
 	defer func() {
-		transaction.Status = sentry.HTTPtoSpanStatus(c.Writer.Status())
+		status := c.Writer.Status()
+		transaction.Status = sentry.HTTPtoSpanStatus(status)
+		transaction.SetData("http.response.status_code", status)
 		transaction.Finish()
 	}()
 

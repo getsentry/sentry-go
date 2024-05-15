@@ -11,7 +11,7 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-// The identifier of the Gin SDK.
+// The identifier of the HTTP SDK.
 const sdkIdentifier = "sentry.go.http"
 
 // A Handler is an HTTP middleware factory that provides integration with
@@ -63,6 +63,22 @@ func New(options Options) *Handler {
 	}
 }
 
+// responseWriter is a wrapper around http.ResponseWriter that captures the status code.
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+// WriteHeader captures the status code and calls the original WriteHeader method.
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func newResponseWriter(w http.ResponseWriter) *responseWriter {
+	return &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+}
+
 // Handle works as a middleware that wraps an existing http.Handler. A wrapped
 // handler will recover from and report panics to Sentry, and provide access to
 // a request-specific hub to report messages and errors.
@@ -99,13 +115,22 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			sentry.ContinueFromRequest(r),
 			sentry.WithTransactionSource(sentry.SourceURL),
 		}
-		// We don't mind getting an existing transaction back so we don't need to
-		// check if it is.
+
 		transaction := sentry.StartTransaction(ctx,
 			fmt.Sprintf("%s %s", r.Method, r.URL.Path),
 			options...,
 		)
-		defer transaction.Finish()
+		transaction.SetData("http.request.method", r.Method)
+
+		rw := newResponseWriter(w)
+
+		defer func() {
+			status := rw.statusCode
+			transaction.Status = sentry.HTTPtoSpanStatus(status)
+			transaction.SetData("http.response.status_code", status)
+			transaction.Finish()
+		}()
+
 		// TODO(tracing): if the next handler.ServeHTTP panics, store
 		// information on the transaction accordingly (status, tag,
 		// level?, ...).
@@ -113,10 +138,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		hub.Scope().SetRequest(r)
 
 		defer h.recoverWithSentry(hub, r)
-		// TODO(tracing): use custom response writer to intercept
-		// response. Use HTTP status to add tag to transaction; set span
-		// status.
-		handler.ServeHTTP(w, r)
+		handler.ServeHTTP(rw, r)
 	}
 }
 

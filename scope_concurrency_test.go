@@ -9,7 +9,7 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-func TestConcurrentScopeUsage(t *testing.T) {
+func TestConcurrentScopeUsage(_ *testing.T) {
 	var wg sync.WaitGroup
 
 	for i := 0; i < 10; i++ {
