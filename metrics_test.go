@@ -111,14 +111,14 @@ func TestSerializeValue(t *testing.T) {
 	}{
 		{
 			name: "distribution metric",
-			metric: DistributionMetric{
+			metric: &DistributionMetric{
 				values: []float64{2.0, 4.0, 3.0, 6.0},
 			},
 			want: ":2:4:3:6",
 		},
 		{
 			name: "gauge metric",
-			metric: GaugeMetric{
+			metric: &GaugeMetric{
 				last:  1.0,
 				min:   1.0,
 				max:   1.0,
@@ -129,21 +129,21 @@ func TestSerializeValue(t *testing.T) {
 		},
 		{
 			name: "set metric with strings",
-			metric: SetMetric[string]{
+			metric: &SetMetric[string]{
 				values: map[string]void{"Hello": member, "World": member},
 			},
 			want: ":4157704578:4223024711",
 		},
 		{
 			name: "set metric with integers",
-			metric: SetMetric[int]{
+			metric: &SetMetric[int]{
 				values: map[int]void{1: member, 2: member},
 			},
 			want: ":1:2",
 		},
 		{
 			name: "counter metric",
-			metric: CounterMetric{
+			metric: &CounterMetric{
 				value: 2.0,
 			},
 			want: ":2",
@@ -153,6 +153,62 @@ func TestSerializeValue(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			if diff := cmp.Diff(test.metric.SerializeValue(), test.want); diff != "" {
+				t.Errorf("Context mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestMetricsWeight(t *testing.T) {
+	tests := []struct {
+		name   string
+		metric Metric
+		want   int
+	}{
+		{
+			name: "distribution metric",
+			metric: &DistributionMetric{
+				values: []float64{2.0, 4.0, 3.0, 6.0},
+			},
+			want: 4,
+		},
+		{
+			name: "gauge metric",
+			metric: &GaugeMetric{
+				last:  1.0,
+				min:   1.0,
+				max:   1.0,
+				sum:   1.0,
+				count: 1.0,
+			},
+			want: 5,
+		},
+		{
+			name: "set metric with strings",
+			metric: &SetMetric[string]{
+				values: map[string]void{"Hello": member, "World": member},
+			},
+			want: 2,
+		},
+		{
+			name: "set metric with integers",
+			metric: &SetMetric[int]{
+				values: map[int]void{1: member, 2: member},
+			},
+			want: 2,
+		},
+		{
+			name: "counter metric",
+			metric: &CounterMetric{
+				value: 2.0,
+			},
+			want: 1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if diff := cmp.Diff(test.metric.GetWeight(), test.want); diff != "" {
 				t.Errorf("Context mismatch (-want +got):\n%s", diff)
 			}
 		})
