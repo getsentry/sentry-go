@@ -38,18 +38,17 @@ func (ma *MetricsAggregator) add(
 	bucketTimestamp := (timestamp.Unix() / ma.rollupInSeconds)
 	serializedTags := ma.serializeTags(ctx, tags)
 	h := md5.New()
-	io.WriteString(h, ty)
-	io.WriteString(h, unit.unit)
-	io.WriteString(h, serializedTags)
+	_, _ = io.WriteString(h, ty)
+	_, _ = io.WriteString(h, unit.unit)
+	_, _ = io.WriteString(h, serializedTags)
 	bucketKey := hex.EncodeToString(h.Sum(nil))
 
 	if localBucket, ok := ma.buckets[bucketTimestamp]; !ok {
 		m, err := buildMetric(ty, key, unit, tags, timestamp, value)
 		if err != nil {
 			return err
-		} else {
-			ma.buckets[bucketTimestamp][bucketKey] = m
 		}
+		ma.buckets[bucketTimestamp][bucketKey] = m
 	} else {
 		if m, ok := localBucket[bucketKey]; ok {
 			m.Add(value)
@@ -58,10 +57,9 @@ func (ma *MetricsAggregator) add(
 			m, err := buildMetric(ty, key, unit, tags, timestamp, value)
 			if err != nil {
 				return err
-			} else {
-				localBucket[bucketKey] = m
-				// TODO: set weight
 			}
+			localBucket[bucketKey] = m
+			// TODO: set weight
 		}
 		fmt.Println(localBucket)
 	}
@@ -98,7 +96,6 @@ func buildMetric(
 	tags map[string]string,
 	timestamp *time.Time,
 	value interface{}) (Metric, error) {
-
 	f64, _ := value.(float64)
 	switch ty {
 	case "c":
@@ -133,8 +130,8 @@ type MetricSummary struct {
 func (ms *MetricSummary) Add(value float64) {
 	ms.min = math.Min(ms.min, value)
 	ms.max = math.Max(ms.max, value)
-	ms.sum = ms.sum + value
-	ms.count = ms.count + 1
+	ms.sum += value
+	ms.count++
 }
 
 type LocalAggregator struct {
@@ -155,7 +152,6 @@ func (la *LocalAggregator) Add(
 	tags map[string]string,
 	value interface{},
 ) {
-
 	mri := fmt.Sprintf("%s:%s:%s", ty, key, unit.unit)
 	bucketKey := fmt.Sprintf("%s%s", mri, serializeTags(tags))
 	var val float64
