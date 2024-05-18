@@ -180,3 +180,68 @@ func TestString(t *testing.T) {
 	}
 	testutils.AssertBaggageStringsEqual(t, dsc.String(), "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1")
 }
+
+func TestDynamicSamplingContextFromScope(t *testing.T) {
+	tests := map[string]struct {
+		scope    *Scope
+		client   *Client
+		expected DynamicSamplingContext
+	}{
+		"Valid input": {
+			scope: &Scope{
+				propagationContext: PropagationContext{
+					TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
+				},
+			},
+			client: func() *Client {
+				dsn, _ := NewDsn("http://public@example.com/sentry/1")
+				return &Client{
+					options: ClientOptions{
+						Dsn:         dsn.String(),
+						Release:     "1.0.0",
+						Environment: "production",
+					},
+					dsn: dsn,
+				}
+			}(),
+			expected: DynamicSamplingContext{
+				Entries: map[string]string{
+					"trace_id":    "d49d9bf66f13450b81f65bc51cf49c03",
+					"public_key":  "public",
+					"release":     "1.0.0",
+					"environment": "production",
+				},
+				Frozen: true,
+			},
+		},
+		"Nil client": {
+			scope: &Scope{
+				propagationContext: PropagationContext{
+					TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
+				},
+			},
+			client: nil,
+			expected: DynamicSamplingContext{
+				Entries: map[string]string{},
+				Frozen:  false,
+			},
+		},
+		"Nil scope": {
+			scope:  nil,
+			client: &Client{},
+			expected: DynamicSamplingContext{
+				Entries: map[string]string{},
+				Frozen:  false,
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := DynamicSamplingContextFromScope(tt.scope, tt.client)
+			assertEqual(t, tt.expected, result)
+		})
+	}
+}

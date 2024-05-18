@@ -50,7 +50,7 @@ type Scope struct {
 
 // NewScope creates a new Scope.
 func NewScope() *Scope {
-	scope := Scope{
+	return &Scope{
 		breadcrumbs:        make([]*Breadcrumb, 0),
 		attachments:        make([]*Attachment, 0),
 		tags:               make(map[string]string),
@@ -59,8 +59,6 @@ func NewScope() *Scope {
 		fingerprint:        make([]string, 0),
 		propagationContext: NewPropagationContext(),
 	}
-
-	return &scope
 }
 
 // AddBreadcrumb adds new breadcrumb to the current scope
@@ -136,10 +134,6 @@ func (scope *Scope) SetRequest(r *http.Request) {
 		Closer: r.Body,
 	}
 	scope.requestBody = buf
-
-	if scope.span != nil {
-		return
-	}
 }
 
 // SetRequestBody sets the request body for the current scope.

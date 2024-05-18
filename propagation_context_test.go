@@ -3,6 +3,7 @@ package sentry
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -130,4 +131,15 @@ func TestPropagationContextFromHeaders(t *testing.T) {
 
 		assertEqual(t, p.DynamicSamplingContext, tt.want.DynamicSamplingContext)
 	}
+}
+
+// Test for NewPropagationContext
+func TestNewPropagationContext(t *testing.T) {
+	context := NewPropagationContext()
+
+	// Ensure TraceID is not empty
+	assert.NotEmpty(t, context.TraceID, "TraceID should not be empty")
+
+	// Ensure SpanID is not empty
+	assert.NotEmpty(t, context.SpanID, "SpanID should not be empty")
 }
