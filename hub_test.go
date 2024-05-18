@@ -389,13 +389,13 @@ func TestHub_ContinueTrace(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			opt, err := tt.hub.ContinueTrace(tt.trace, tt.baggage)
 
-			// Check for expected error
-			if tt.expectedErr != nil && err == nil {
+			switch {
+			case tt.expectedErr != nil && err == nil:
 				t.Errorf("expected error %v, got nil", tt.expectedErr)
-			} else if tt.expectedErr == nil && err != nil {
+			case tt.expectedErr == nil && err != nil:
 				t.Errorf("expected no error, got %v", err)
-			} else if tt.expectedErr != nil && err != nil {
-				assert.Equal(t, tt.expectedErr.Error(), err.Error())
+			case tt.expectedErr != nil && err != nil:
+				assertEqual(t, tt.expectedErr.Error(), err.Error())
 			}
 
 			// Check for expected SpanOption
