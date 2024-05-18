@@ -326,7 +326,7 @@ func TestHasHubOnContextReturnsFalseIfHubIsNotThere(t *testing.T) {
 	assertEqual(t, false, HasHubOnContext(ctx))
 }
 
-func TestContinueTrace(t *testing.T) {
+func TestHub_ContinueTrace(t *testing.T) {
 	// Helper to initialize Scope with non-nil context
 	newScope := func() *Scope {
 		return &Scope{contexts: make(map[string]Context)}
