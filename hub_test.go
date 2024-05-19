@@ -327,7 +327,6 @@ func TestHasHubOnContextReturnsFalseIfHubIsNotThere(t *testing.T) {
 }
 
 func TestHub_ContinueTrace(t *testing.T) {
-	// Helper to initialize Scope with non-nil context
 	newScope := func() *Scope {
 		return &Scope{contexts: make(map[string]Context)}
 	}
@@ -389,20 +388,18 @@ func TestHub_ContinueTrace(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			opt, err := tt.hub.ContinueTrace(tt.trace, tt.baggage)
 
-			switch {
-			case tt.expectedErr != nil && err == nil:
-				t.Errorf("expected error %v, got nil", tt.expectedErr)
-			case tt.expectedErr == nil && err != nil:
-				t.Errorf("expected no error, got %v", err)
-			case tt.expectedErr != nil && err != nil:
-				assertEqual(t, tt.expectedErr.Error(), err.Error())
+			if tt.expectedErr != nil {
+				assert.Error(t, err, "expected error, got nil")
+				assert.Equal(t, tt.expectedErr.Error(), err.Error())
+			} else {
+				assert.NoError(t, err, "expected no error, got one")
 			}
 
 			// Check for expected SpanOption
-			if tt.expectedSpan && opt == nil {
-				t.Error("expected SpanOption, got nil")
-			} else if !tt.expectedSpan && opt != nil {
-				t.Error("expected no SpanOption, got one")
+			if tt.expectedSpan {
+				assert.NotNil(t, opt, "expected SpanOption, got nil")
+			} else {
+				assert.Nil(t, opt, "expected no SpanOption, got one")
 			}
 
 			// Additional checks on the scope
