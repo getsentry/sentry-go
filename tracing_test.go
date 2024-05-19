@@ -10,6 +10,8 @@ import (
 	"math"
 	"net/http"
 	"reflect"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -517,14 +519,16 @@ func TestGetBaggageHeader(t *testing.T) {
 				}
 				return s
 			}(),
-			expected: "sentry-release=1.0.0,sentry-environment=production",
+			expected: "sentry-environment=production,sentry-release=1.0.0",
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			result := GetBaggageHeader(tt.scope)
-			assertEqual(t, tt.expected, result)
+			res := strings.Split(result, ",")
+			slices.Sort(res)
+			assertEqual(t, tt.expected, strings.Join(res, ","))
 		})
 	}
 }
