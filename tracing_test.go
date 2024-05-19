@@ -10,7 +10,6 @@ import (
 	"math"
 	"net/http"
 	"reflect"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -527,7 +526,7 @@ func TestGetBaggageHeader(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			result := GetBaggageHeader(tt.scope)
 			res := strings.Split(result, ",")
-			slices.Sort(res)
+			sortSlice(res)
 			assertEqual(t, tt.expected, strings.Join(res, ","))
 		})
 	}
