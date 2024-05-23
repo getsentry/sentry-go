@@ -353,30 +353,26 @@ func NewGaugeMetric(key string, unit MetricUnit, tags map[string]string, timesta
 }
 
 // Set Metric.
-type SetMetric[T NumberOrString] struct {
-	values map[T]void
+type SetMetric struct {
+	values map[int]void
 	abstractMetric
 }
 
-func (s *SetMetric[T]) Add(value interface{}) {
-	v := value.(T)
+func (s *SetMetric) Add(value interface{}) {
+	v := value.(int)
 	s.values[v] = member
 }
 
-func (s *SetMetric[T]) GetType() string {
+func (s *SetMetric) GetType() string {
 	return "s"
 }
 
-func (s *SetMetric[T]) GetWeight() int {
+func (s *SetMetric) GetWeight() int {
 	return len(s.values)
 }
 
-func (s *SetMetric[T]) SerializeValue() string {
-	_hash := func(s string) uint32 {
-		return crc32.ChecksumIEEE([]byte(s))
-	}
-
-	values := make([]T, 0, len(s.values))
+func (s *SetMetric) SerializeValue() string {
+	values := make([]int, 0, len(s.values))
 	for k := range s.values {
 		values = append(values, k)
 	}
@@ -384,20 +380,18 @@ func (s *SetMetric[T]) SerializeValue() string {
 
 	var sb strings.Builder
 	for _, el := range values {
-		switch any(el).(type) {
-		case int:
-			sb.WriteString(fmt.Sprintf(":%v", el))
-		case string:
-			s := fmt.Sprintf("%v", el)
-			sb.WriteString(fmt.Sprintf(":%d", _hash(s)))
-		}
+		sb.WriteString(fmt.Sprintf(":%v", el))
 	}
 
 	return sb.String()
 }
 
+func setStringKeyToInt(s string) uint32 {
+	return crc32.ChecksumIEEE([]byte(s))
+}
+
 // timestamp: A unix timestamp (full seconds elapsed since 1970-01-01 00:00 UTC).
-func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string]string, timestamp int64, value T) *SetMetric[T] {
+func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string]string, timestamp int64, value int) *SetMetric {
 	am := abstractMetric{
 		key,
 		unit,
@@ -405,8 +399,8 @@ func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string
 		timestamp,
 	}
 
-	return &SetMetric[T]{
-		map[T]void{
+	return &SetMetric{
+		map[int]void{
 			value: member,
 		},
 		am,

@@ -108,7 +108,7 @@ func buildMetric(
 		if v, ok := value.(int); ok {
 			return NewSetMetric[int](key, unit, tags, timestamp.Unix(), v), nil
 		} else if v, ok := value.(string); ok {
-			return NewSetMetric[string](key, unit, tags, timestamp.Unix(), v), nil
+			return NewSetMetric[string](key, unit, tags, timestamp.Unix(), int(setStringKeyToInt(v))), nil
 		} else {
 			return nil, errors.New("set metric only accept string or int values")
 		}

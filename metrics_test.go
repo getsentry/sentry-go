@@ -103,6 +103,32 @@ func TestSerializeTags(t *testing.T) {
 	}
 }
 
+func TestSetStringKeyToInt(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+		want uint32
+	}{
+		{
+			name: "test 1",
+			key:  "Hello",
+			want: 4157704578,
+		},
+		{
+			name: "Test 2",
+			key:  "World",
+			want: 4223024711,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if diff := cmp.Diff(setStringKeyToInt(test.key), test.want); diff != "" {
+				t.Errorf("Context mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestSerializeValue(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -128,15 +154,8 @@ func TestSerializeValue(t *testing.T) {
 			want: ":1:1:1:1:1",
 		},
 		{
-			name: "set metric with strings",
-			metric: &SetMetric[string]{
-				values: map[string]void{"Hello": member, "World": member},
-			},
-			want: ":4157704578:4223024711",
-		},
-		{
 			name: "set metric with integers",
-			metric: &SetMetric[int]{
+			metric: &SetMetric{
 				values: map[int]void{1: member, 2: member},
 			},
 			want: ":1:2",
@@ -184,15 +203,8 @@ func TestMetricsWeight(t *testing.T) {
 			want: 5,
 		},
 		{
-			name: "set metric with strings",
-			metric: &SetMetric[string]{
-				values: map[string]void{"Hello": member, "World": member},
-			},
-			want: 2,
-		},
-		{
 			name: "set metric with integers",
-			metric: &SetMetric[int]{
+			metric: &SetMetric{
 				values: map[int]void{1: member, 2: member},
 			},
 			want: 2,
