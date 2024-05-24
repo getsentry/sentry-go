@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -121,27 +122,28 @@ func buildMetric(
 }
 
 type MetricSummary struct {
-	min   float64
-	max   float64
-	sum   float64
-	count float64
+	Min   float64           `json:"min"`
+	Max   float64           `json:"max"`
+	Sum   float64           `json:"sum"`
+	Count float64           `json:"count"`
+	Tags  map[string]string `json:"tags"`
 }
 
 func (ms *MetricSummary) Add(value float64) {
-	ms.min = math.Min(ms.min, value)
-	ms.max = math.Max(ms.max, value)
-	ms.sum += value
-	ms.count++
+	ms.Min = math.Min(ms.Min, value)
+	ms.Max = math.Max(ms.Max, value)
+	ms.Sum += value
+	ms.Count++
 }
 
 type LocalAggregator struct {
 	// [mri --> [bucket_key --> metric_summary]]
-	metricsSummary map[string]map[string]MetricSummary
+	MetricsSummary map[string]map[string]MetricSummary
 }
 
 func NewLocalAggregator() LocalAggregator {
 	return LocalAggregator{
-		metricsSummary: make(map[string]map[string]MetricSummary),
+		MetricsSummary: make(map[string]map[string]MetricSummary),
 	}
 }
 
@@ -152,11 +154,11 @@ func (la *LocalAggregator) Add(
 	tags map[string]string,
 	value interface{},
 ) {
-	mri := fmt.Sprintf("%s:%s:%s", ty, key, unit.unit)
+	mri := fmt.Sprintf("%s:%s@%s", ty, key, unit.unit)
 	bucketKey := fmt.Sprintf("%s%s", mri, serializeTags(tags))
 	var val float64
 
-	if mriBucket, ok := la.metricsSummary[mri]; ok {
+	if mriBucket, ok := la.MetricsSummary[mri]; ok {
 		if metricSummary, ok := mriBucket[bucketKey]; ok {
 			switch ty {
 			case "s":
@@ -165,13 +167,13 @@ func (la *LocalAggregator) Add(
 				val = value.(float64)
 			}
 			metricSummary.Add(val)
-			la.metricsSummary[mri][bucketKey] = metricSummary
+			la.MetricsSummary[mri][bucketKey] = metricSummary
 			return
 		}
 	}
 	// else if the bucket does not exist, initialize it
-	if la.metricsSummary[mri] == nil {
-		la.metricsSummary[mri] = make(map[string]MetricSummary)
+	if la.MetricsSummary[mri] == nil {
+		la.MetricsSummary[mri] = make(map[string]MetricSummary)
 	}
 	switch ty {
 	case "s":
@@ -179,10 +181,26 @@ func (la *LocalAggregator) Add(
 	default:
 		val = value.(float64)
 	}
-	la.metricsSummary[mri][bucketKey] = MetricSummary{
-		min:   val,
-		max:   val,
-		sum:   val,
-		count: 1,
+	la.MetricsSummary[mri][bucketKey] = MetricSummary{
+		Min:   val,
+		Max:   val,
+		Sum:   val,
+		Count: 1,
+		Tags:  tags,
 	}
+}
+
+func (la LocalAggregator) MarshalJSON() ([]byte, error) {
+	summary := make(map[string][]MetricSummary)
+
+	for mri, metricSummaries := range la.MetricsSummary {
+		for _, metricSummary := range metricSummaries {
+			if _, ok := summary[mri]; !ok {
+				summary[mri] = make([]MetricSummary, 0, len(metricSummaries))
+			}
+			summary[mri] = append(summary[mri], metricSummary)
+		}
+	}
+
+	return json.Marshal(summary)
 }
