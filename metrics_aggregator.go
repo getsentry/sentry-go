@@ -97,22 +97,16 @@ func buildMetric(
 	tags map[string]string,
 	timestamp *time.Time,
 	value interface{}) (Metric, error) {
-	f64, _ := value.(float64)
+
 	switch ty {
 	case "c":
-		return NewCounterMetric(key, unit, tags, timestamp.Unix(), f64), nil
+		return NewCounterMetric(key, unit, tags, timestamp.Unix(), value.(float64)), nil
 	case "d":
-		return NewDistributionMetric(key, unit, tags, timestamp.Unix(), f64), nil
+		return NewDistributionMetric(key, unit, tags, timestamp.Unix(), value.(float64)), nil
 	case "g":
-		return NewGaugeMetric(key, unit, tags, timestamp.Unix(), f64), nil
+		return NewGaugeMetric(key, unit, tags, timestamp.Unix(), value.(float64)), nil
 	case "s":
-		if v, ok := value.(int); ok {
-			return NewSetMetric[int](key, unit, tags, timestamp.Unix(), v), nil
-		} else if v, ok := value.(string); ok {
-			return NewSetMetric[string](key, unit, tags, timestamp.Unix(), int(setStringKeyToInt(v))), nil
-		} else {
-			return nil, errors.New("set metric only accept string or int values")
-		}
+		return NewSetMetric(key, unit, tags, timestamp.Unix(), value.(int)), nil
 	default:
 		// we should never end up in this branch as buildMetric is called by the higher
 		// level APIs. Still, golang requires us to be exhaustive so a default case
@@ -203,4 +197,40 @@ func (la LocalAggregator) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(summary)
+}
+
+func Increment(ctx context.Context, key string, value float64, unit MetricUnit, tags map[string]string, timestamp *time.Time) {
+	client := CurrentHub().Client()
+	if client != nil && client.metricsAggregator != nil {
+		client.metricsAggregator.add(ctx, "c", key, unit, tags, timestamp, value)
+	}
+}
+
+func Distribution(ctx context.Context, key string, value float64, unit MetricUnit, tags map[string]string, timestamp *time.Time) {
+	client := CurrentHub().Client()
+	if client != nil && client.metricsAggregator != nil {
+		client.metricsAggregator.add(ctx, "d", key, unit, tags, timestamp, value)
+	}
+}
+
+func Gauge(ctx context.Context, key string, value float64, unit MetricUnit, tags map[string]string, timestamp *time.Time) {
+	client := CurrentHub().Client()
+	if client != nil && client.metricsAggregator != nil {
+		client.metricsAggregator.add(ctx, "g", key, unit, tags, timestamp, value)
+	}
+}
+
+func Set(ctx context.Context, key string, value int, unit MetricUnit, tags map[string]string, timestamp *time.Time) {
+	client := CurrentHub().Client()
+	if client != nil && client.metricsAggregator != nil {
+		client.metricsAggregator.add(ctx, "s", key, unit, tags, timestamp, value)
+	}
+}
+
+func SetString(ctx context.Context, key string, value string, unit MetricUnit, tags map[string]string, timestamp *time.Time) {
+	client := CurrentHub().Client()
+	if client != nil && client.metricsAggregator != nil {
+		v := int(setStringKeyToInt(value))
+		client.metricsAggregator.add(ctx, "s", key, unit, tags, timestamp, v)
+	}
 }

@@ -391,7 +391,7 @@ func setStringKeyToInt(s string) uint32 {
 }
 
 // timestamp: A unix timestamp (full seconds elapsed since 1970-01-01 00:00 UTC).
-func NewSetMetric[T NumberOrString](key string, unit MetricUnit, tags map[string]string, timestamp int64, value int) *SetMetric {
+func NewSetMetric(key string, unit MetricUnit, tags map[string]string, timestamp int64, value int) *SetMetric {
 	am := abstractMetric{
 		key,
 		unit,

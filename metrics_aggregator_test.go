@@ -16,18 +16,20 @@ func TestLocalAggregator(t *testing.T) {
 	la.Add("d", "function", MilliSecond(), map[string]string{"foo": "bar", "route": "/test", "env": "dev"}, 3.0)
 
 	want := map[string]map[string]MetricSummary{
-		"d:function:millisecond": {
-			"d:function:millisecondfoo:bar,route:/test": {
+		"d:function@millisecond": {
+			"d:function@millisecondfoo:bar,route:/test": {
 				Min:   2,
 				Max:   5,
 				Sum:   7,
 				Count: 2,
+				Tags:  map[string]string{"foo": "bar", "route": "/test"},
 			},
-			"d:function:millisecondenv:dev,foo:bar,route:/test": {
+			"d:function@millisecondenv:dev,foo:bar,route:/test": {
 				Min:   3,
 				Max:   3,
 				Sum:   3,
 				Count: 1,
+				Tags:  map[string]string{"foo": "bar", "route": "/test", "env": "dev"},
 			},
 		},
 	}

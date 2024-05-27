@@ -240,7 +240,8 @@ type Client struct {
 	sdkVersion      string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
-	Transport Transport
+	Transport         Transport
+	metricsAggregator *MetricsAggregator
 }
 
 // NewClient creates and returns an instance of Client configured using
