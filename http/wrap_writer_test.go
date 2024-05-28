@@ -55,6 +55,46 @@ func TestHttp2FancyWriterRemembersWroteHeaderWhenFlushed(t *testing.T) {
 	}
 }
 
+func TestBytesWritten(t *testing.T) {
+	rec := httptest.NewRecorder()
+	bw := &basicWriter{ResponseWriter: rec}
+
+	body := []byte("Hello, BytesWritten!")
+	_, err := bw.Write(body)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if bw.BytesWritten() != len(body) {
+		t.Fatalf("expected %v bytes written, got %v", len(body), bw.BytesWritten())
+	}
+}
+
+func TestUnwrap(t *testing.T) {
+	rec := httptest.NewRecorder()
+	bw := &basicWriter{ResponseWriter: rec}
+
+	if bw.Unwrap() != rec {
+		t.Fatal("expected Unwrap to return the original ResponseWriter")
+	}
+}
+
+func TestNewWrapResponseWriter(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	// HTTP/1.1 request
+	w1 := NewWrapResponseWriter(rec, 1)
+	if _, ok := w1.(*flushWriter); !ok {
+		t.Fatalf("expected flushWriter, got %T", w1)
+	}
+
+	// HTTP/2 request
+	customRec := &CustomResponseWriter{httptest.NewRecorder()}
+	w2 := NewWrapResponseWriter(customRec, 2)
+	if _, ok := w2.(*http2FancyWriter); !ok {
+		t.Fatalf("expected http2FancyWriter, got %T", w2)
+	}
+}
+
 func TestBasicWriterWriteHeader(t *testing.T) {
 	rec := httptest.NewRecorder()
 	bw := &basicWriter{ResponseWriter: rec}
