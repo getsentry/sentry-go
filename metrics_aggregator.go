@@ -95,6 +95,27 @@ func (ma *MetricsAggregator) add(
 	added := metric.GetWeight() - previousWeight
 	ma.bucketsTotalWeight += uint(added)
 
+	// If a span exists for the current context, the metric shall be attached to the
+	// determined span as a local summary (a form of gauge).
+	// https://develop.sentry.dev/sdk/metrics/#span-seeking-and-span-creating-mode
+	if span := SpanFromContext(ctx); span != nil {
+		var val float64
+		// For sets, we only record that a value has been added to the set but not which one.
+		// See develop docs: https://develop.sentry.dev/sdk/metrics/#sets
+		if ty == "s" {
+			val = float64(added)
+		} else {
+			val = value.(float64)
+		}
+
+		if span.LocalAggregator != nil {
+			span.LocalAggregator.Add(ty, key, unit, tags, val)
+		} else {
+			la := NewLocalAggregator()
+			la.Add(ty, key, unit, tags, val)
+		}
+	}
+
 	return nil
 }
 
@@ -175,15 +196,14 @@ func (la *LocalAggregator) Add(
 	key string,
 	unit MetricUnit,
 	tags map[string]string,
-	value interface{},
+	value float64,
 ) {
 	mri := fmt.Sprintf("%s:%s@%s", ty, key, unit.unit)
 	bucketKey := fmt.Sprintf("%s%s", mri, serializeTags(tags))
-	val := value.(float64)
 
 	if mriBucket, ok := la.MetricsSummary[mri]; ok {
 		if metricSummary, ok := mriBucket[bucketKey]; ok {
-			metricSummary.Add(val)
+			metricSummary.Add(value)
 			la.MetricsSummary[mri][bucketKey] = metricSummary
 			return
 		}
@@ -193,9 +213,9 @@ func (la *LocalAggregator) Add(
 		la.MetricsSummary[mri] = make(map[string]MetricSummary)
 	}
 	la.MetricsSummary[mri][bucketKey] = MetricSummary{
-		Min:   val,
-		Max:   val,
-		Sum:   val,
+		Min:   value,
+		Max:   value,
+		Sum:   value,
 		Count: 1,
 		Tags:  tags,
 	}
