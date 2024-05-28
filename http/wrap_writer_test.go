@@ -20,7 +20,7 @@ func (c *CustomResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return nil, nil, errors.New("hijack not supported in tests")
 }
 
-func (c *CustomResponseWriter) Push(target string, opts *http.PushOptions) error {
+func (c *CustomResponseWriter) Push(string, *http.PushOptions) error {
 	return nil
 }
 
