@@ -14,7 +14,7 @@ import (
 func NewWrapResponseWriter(w http.ResponseWriter, protoMajor int) WrapResponseWriter {
 	_, fl := w.(http.Flusher)
 
-	bw := basicWriter{ResponseWriter: w}
+	bw := basicWriter{ResponseWriter: w, code: http.StatusOK}
 
 	if protoMajor == 2 {
 		_, ps := w.(http.Pusher)
@@ -39,7 +39,7 @@ func NewWrapResponseWriter(w http.ResponseWriter, protoMajor int) WrapResponseWr
 // into various parts of the response process.
 type WrapResponseWriter interface {
 	http.ResponseWriter
-	// Status returns the HTTP status of the request, or 0 if one has not
+	// Status returns the HTTP status of the request, or 200 if one has not
 	// yet been sent.
 	Status() int
 	// BytesWritten returns the total number of bytes sent to the client.
