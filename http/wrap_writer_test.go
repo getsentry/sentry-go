@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// CustomResponseWriter for testing http.Hijacker and http.Pusher
+// CustomResponseWriter for testing http.Hijacker and http.Pusher.
 type CustomResponseWriter struct {
 	*httptest.ResponseRecorder
 }
