@@ -63,22 +63,6 @@ func New(options Options) *Handler {
 	}
 }
 
-// responseWriter is a wrapper around http.ResponseWriter that captures the status code.
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-// WriteHeader captures the status code and calls the original WriteHeader method.
-func (rw *responseWriter) WriteHeader(code int) {
-	rw.statusCode = code
-	rw.ResponseWriter.WriteHeader(code)
-}
-
-func newResponseWriter(w http.ResponseWriter) *responseWriter {
-	return &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-}
-
 // Handle works as a middleware that wraps an existing http.Handler. A wrapped
 // handler will recover from and report panics to Sentry, and provide access to
 // a request-specific hub to report messages and errors.
@@ -122,10 +106,10 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		)
 		transaction.SetData("http.request.method", r.Method)
 
-		rw := newResponseWriter(w)
+		rw := NewWrapResponseWriter(w, r.ProtoMajor)
 
 		defer func() {
-			status := rw.statusCode
+			status := rw.Status()
 			transaction.Status = sentry.HTTPtoSpanStatus(status)
 			transaction.SetData("http.response.status_code", status)
 			transaction.Finish()
