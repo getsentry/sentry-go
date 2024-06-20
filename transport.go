@@ -689,6 +689,10 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		Logger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
 	}
 
+	if t.limits == nil {
+		t.limits = make(ratelimit.Map)
+	}
+
 	t.mu.Lock()
 	t.limits.Merge(ratelimit.FromResponse(response))
 	t.mu.Unlock()
