@@ -23,7 +23,7 @@ jobs:
           go-version: "1.22"
       - uses: actions/checkout@v4
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@3cfe3a4abbb849e10058ce4af15d205b6da42804 # pin@v4.0.0
+        uses: golangci/golangci-lint-action@a4f60bb28d35aeee14e6880718e0c85ff1882e64 # pin@v6.0.1
         with:
           version: v1.54
           only-new-issues: true
