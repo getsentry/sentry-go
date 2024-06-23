@@ -29,6 +29,7 @@ func fillScopeWithData(scope *Scope) *Scope {
 	scope.fingerprint = []string{"scopeFingerprintOne", "scopeFingerprintTwo"}
 	scope.level = LevelDebug
 	scope.request = httptest.NewRequest("GET", "/wat", nil)
+	scope.propagationContext = NewPropagationContext()
 	return scope
 }
 
@@ -416,6 +417,10 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone.SetUser(User{ID: "foo"})
 	r1 := httptest.NewRequest("GET", "/foo", nil)
 	clone.SetRequest(r1)
+	p1 := NewPropagationContext()
+	clone.SetPropagationContext(p1)
+	s1 := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
+	clone.SetSpan(s1)
 
 	scope.SetTag("foo", "baz")
 	scope.SetContext("foo", Context{"foo": "baz"})
@@ -427,6 +432,10 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	scope.SetUser(User{ID: "bar"})
 	r2 := httptest.NewRequest("GET", "/bar", nil)
 	scope.SetRequest(r2)
+	p2 := NewPropagationContext()
+	scope.SetPropagationContext(p2)
+	s2 := &Span{TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")}
+	scope.SetSpan(s2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, clone.contexts)
@@ -437,6 +446,8 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "foo.txt", Payload: []byte("foo")}}, clone.attachments)
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r1, clone.request)
+	assertEqual(t, p1, clone.propagationContext)
+	assertEqual(t, s1, clone.span)
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -447,6 +458,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r2, scope.request)
+	assertEqual(t, s2, scope.span)
 }
 
 func TestScopeChildOverrideInheritance(t *testing.T) {
@@ -465,6 +477,10 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
 		return event
 	})
+	p1 := NewPropagationContext()
+	scope.SetPropagationContext(p1)
+	s1 := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
+	scope.SetSpan(s1)
 
 	clone := scope.Clone()
 	clone.SetTag("foo", "bar")
@@ -480,6 +496,10 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
 		return event
 	})
+	p2 := NewPropagationContext()
+	clone.SetPropagationContext(p2)
+	s2 := &Span{TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")}
+	clone.SetSpan(s2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, clone.contexts)
@@ -496,6 +516,8 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	}, clone.attachments)
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r2, clone.request)
+	assertEqual(t, p2, clone.propagationContext)
+	assertEqual(t, s2, clone.span)
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -506,6 +528,8 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r1, scope.request)
+	assertEqual(t, p1, scope.propagationContext)
+	assertEqual(t, s1, scope.span)
 
 	assertEqual(t, len(scope.eventProcessors), 1)
 	assertEqual(t, len(clone.eventProcessors), 2)
@@ -524,6 +548,7 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, (*http.Request)(nil), scope.request)
+	assertEqual(t, (*Span)(nil), scope.span)
 }
 
 func TestClearAndReconfigure(t *testing.T) {
@@ -540,6 +565,10 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetUser(User{ID: "foo"})
 	r := httptest.NewRequest("GET", "/foo", nil)
 	scope.SetRequest(r)
+	p := NewPropagationContext()
+	scope.SetPropagationContext(p)
+	s := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
+	scope.SetSpan(s)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, scope.contexts)
@@ -550,6 +579,8 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "foo.txt", Payload: []byte("foo")}}, scope.attachments)
 	assertEqual(t, User{ID: "foo"}, scope.user)
 	assertEqual(t, r, scope.request)
+	assertEqual(t, p, scope.propagationContext)
+	assertEqual(t, s, scope.span)
 }
 
 func TestClearBreadcrumbs(t *testing.T) {
@@ -570,47 +601,48 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := fillEventWithData(NewEvent())
 
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 
-	assertEqual(t, len(processedEvent.Breadcrumbs), 2, "should merge breadcrumbs")
-	assertEqual(t, len(processedEvent.Attachments), 2, "should merge attachments")
-	assertEqual(t, len(processedEvent.Tags), 2, "should merge tags")
-	assertEqual(t, len(processedEvent.Contexts), 3, "should merge contexts")
-	assertEqual(t, event.Contexts[sharedContextsKey], event.Contexts[sharedContextsKey], "should not override event context")
-	assertEqual(t, len(processedEvent.Extra), 2, "should merge extra")
-	assertEqual(t, processedEvent.Level, scope.level, "should use scope level if its set")
-	assertNotEqual(t, processedEvent.User, scope.user, "should use event user if one exist")
-	assertNotEqual(t, processedEvent.Request, scope.request, "should use event request if one exist")
-	assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprints if they exist")
+	assertEqual(t, 2, len(processedEvent.Breadcrumbs), "should merge breadcrumbs")
+	assertEqual(t, 2, len(processedEvent.Attachments), "should merge attachments")
+	assertEqual(t, 2, len(processedEvent.Tags), "should merge tags")
+	assertEqual(t, 4, len(processedEvent.Contexts), "should merge contexts")
+	assertEqual(t, event.Contexts[sharedContextsKey], processedEvent.Contexts[sharedContextsKey], "should not override event trace context")
+	assertEqual(t, 2, len(processedEvent.Extra), "should merge extra")
+	assertEqual(t, LevelDebug, processedEvent.Level, "should use event level if set")
+	assertEqual(t, event.User, processedEvent.User, "should use event user if one exists")
+	assertEqual(t, event.Request, processedEvent.Request, "should use event request if one exists")
+	assertEqual(t, event.Fingerprint, processedEvent.Fingerprint, "should use event fingerprints if they exist")
+	assertNotEqual(t, scope.user, processedEvent.User, "should not use scope user if event user exists")
+	assertNotEqual(t, scope.request, processedEvent.Request, "should not use scope request if event request exists")
+	assertNotEqual(t, scope.fingerprint, processedEvent.Fingerprint, "should not use scope fingerprint if event fingerprint exists")
 }
 
 func TestApplyToEventUsingEmptyScope(t *testing.T) {
 	scope := NewScope()
 	event := fillEventWithData(NewEvent())
 
-	processedEvent := scope.ApplyToEvent(event, nil)
-
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
 	assertEqual(t, len(processedEvent.Attachments), 1, "should use event attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
-	assertEqual(t, len(processedEvent.Contexts), 2, "should use event contexts")
+	assertEqual(t, len(processedEvent.Contexts), 3, "should use event contexts")
 	assertEqual(t, len(processedEvent.Extra), 1, "should use event extra")
-	assertNotEqual(t, processedEvent.User, scope.user, "should use event user")
-	assertNotEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use event fingerprint")
-	assertNotEqual(t, processedEvent.Level, scope.level, "should use event level")
-	assertNotEqual(t, processedEvent.Request, scope.request, "should use event request")
+	assertEqual(t, processedEvent.User, event.User, "should use event user")
+	assertEqual(t, processedEvent.Fingerprint, event.Fingerprint, "should use event fingerprint")
+	assertEqual(t, processedEvent.Level, event.Level, "should use event level")
+	assertEqual(t, processedEvent.Request, event.Request, "should use event request")
 }
 
 func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := NewEvent()
 
-	processedEvent := scope.ApplyToEvent(event, nil)
-
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
 	assertEqual(t, len(processedEvent.Attachments), 1, "should use scope attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
-	assertEqual(t, len(processedEvent.Contexts), 2, "should use scope contexts")
+	assertEqual(t, len(processedEvent.Contexts), 3, "should use scope contexts")
 	assertEqual(t, len(processedEvent.Extra), 1, "should use scope extra")
 	assertEqual(t, processedEvent.User, scope.user, "should use scope user")
 	assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
@@ -631,7 +663,7 @@ func TestEventProcessorsModifiesEvent(t *testing.T) {
 			return event
 		},
 	}
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 
 	if processedEvent == nil {
 		t.Fatal("event should not be dropped")
@@ -648,7 +680,7 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 			return nil
 		},
 	}
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 
 	if processedEvent != nil {
 		t.Error("event should be dropped")
@@ -658,7 +690,7 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 func TestEventProcessorsAddEventProcessor(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
-	processedEvent := scope.ApplyToEvent(event, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, nil)
 
 	if processedEvent == nil {
 		t.Error("event should not be dropped")
@@ -667,7 +699,7 @@ func TestEventProcessorsAddEventProcessor(t *testing.T) {
 	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
 		return nil
 	})
-	processedEvent = scope.ApplyToEvent(event, nil)
+	processedEvent = scope.ApplyToEvent(event, nil, nil)
 
 	if processedEvent != nil {
 		t.Error("event should be dropped")
@@ -694,4 +726,20 @@ func TestCloneContext(t *testing.T) {
 	if &sliceOriginal[0] != &sliceClone[0] {
 		t.Error("complex values are not supposed to be copied")
 	}
+}
+
+func TestScopeSetPropagationContext(t *testing.T) {
+	scope := NewScope()
+	p := NewPropagationContext()
+	scope.SetPropagationContext(p)
+
+	assertEqual(t, scope.propagationContext, p)
+}
+
+func TestScopeSetSpan(t *testing.T) {
+	scope := NewScope()
+	s := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
+	scope.SetSpan(s)
+
+	assertEqual(t, scope.span, s)
 }
