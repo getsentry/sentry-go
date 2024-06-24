@@ -357,7 +357,6 @@ func NewHTTPTransport() *HTTPTransport {
 	transport := HTTPTransport{
 		BufferSize: defaultBufferSize,
 		Timeout:    defaultTimeout,
-		limits:     make(ratelimit.Map),
 	}
 	return &transport
 }

@@ -434,6 +434,7 @@ func TestHTTPTransport(t *testing.T) {
 		e.EventID = EventID(id)
 
 		transport.SendEvent(e)
+
 		t.Logf("[CLIENT] {%.4s} event sent", e.EventID)
 		return id
 	}
