@@ -718,11 +718,13 @@ func TestHTTPTransport_SendEventWithContext_NilLimits(t *testing.T) {
 	server := newTestHTTPServer(t)
 	defer server.Close()
 
-	transport := NewHTTPTransport()
+	transport := NewHTTPSyncTransport()
 	transport.Configure(ClientOptions{
 		Dsn:        fmt.Sprintf("https://test@%s/1", server.Listener.Addr()),
 		HTTPClient: server.Client(),
 	})
+
+	server.Unblock()
 
 	// Explicitly set t.limits to nil
 	transport.mu.Lock()
@@ -734,8 +736,6 @@ func TestHTTPTransport_SendEventWithContext_NilLimits(t *testing.T) {
 
 	transport.SendEventWithContext(context.Background(), event)
 
-	server.Unblock()
-
 	if !transport.Flush(testutils.FlushTimeout()) {
 		t.Fatal("Flush timed out")
 	}
@@ -745,8 +745,8 @@ func TestHTTPTransport_SendEventWithContext_NilLimits(t *testing.T) {
 	}
 
 	// Validate that t.limits is initialized and merged
-	transport.mu.RLock()
-	defer transport.mu.RUnlock()
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
 	if transport.limits == nil {
 		t.Fatal("expected t.limits to be initialized")
 	}
