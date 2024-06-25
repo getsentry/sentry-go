@@ -434,6 +434,7 @@ func TestHTTPTransport(t *testing.T) {
 		e.EventID = EventID(id)
 
 		transport.SendEvent(e)
+
 		t.Logf("[CLIENT] {%.4s} event sent", e.EventID)
 		return id
 	}
@@ -710,5 +711,43 @@ no_tags@second:1|c|T1597790835
 `
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestHTTPTransport_SendEventWithContext_NilLimits(t *testing.T) {
+	server := newTestHTTPServer(t)
+	defer server.Close()
+
+	transport := NewHTTPSyncTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        fmt.Sprintf("https://test@%s/1", server.Listener.Addr()),
+		HTTPClient: server.Client(),
+	})
+
+	server.Unblock()
+
+	// Explicitly set t.limits to nil
+	transport.mu.Lock()
+	transport.limits = nil
+	transport.mu.Unlock()
+
+	event := NewEvent()
+	event.EventID = EventID(uuid())
+
+	transport.SendEventWithContext(context.Background(), event)
+
+	if !transport.Flush(testutils.FlushTimeout()) {
+		t.Fatal("Flush timed out")
+	}
+
+	if server.EventCount() != 1 {
+		t.Fatalf("expected 1 event to be sent, but got %d", server.EventCount())
+	}
+
+	// Validate that t.limits is initialized and merged
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+	if transport.limits == nil {
+		t.Fatal("expected t.limits to be initialized")
 	}
 }
