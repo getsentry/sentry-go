@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -83,7 +84,12 @@ func TestNewRequest(t *testing.T) {
 	r.Header.Add("X-Real-Ip", "127.0.0.1")
 	r.Header.Add("Some-Header", "some-header value")
 
-	got := NewRequest(r)
+	got, err := NewRequest(r)
+
+	if err != nil {
+		t.Error(err)
+	}
+
 	want := &Request{
 		URL:         "http://example.com/test/",
 		Method:      "POST",
@@ -108,6 +114,14 @@ func TestNewRequest(t *testing.T) {
 	}
 }
 
+func TestNewRequestWithInvalidRequest(t *testing.T) {
+	_, err := NewRequest(&http.Request{})
+
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+}
+
 func TestNewRequestWithNoPII(t *testing.T) {
 	const payload = `{"test_data": true}`
 	r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
@@ -117,7 +131,10 @@ func TestNewRequestWithNoPII(t *testing.T) {
 	r.Header.Add("X-Real-Ip", "127.0.0.1")
 	r.Header.Add("Some-Header", "some-header value")
 
-	got := NewRequest(r)
+	got, err := NewRequest(r)
+	if err != nil {
+		t.Error(err)
+	}
 	want := &Request{
 		URL:         "http://example.com/test/",
 		Method:      "POST",

@@ -176,7 +176,11 @@ var sensitiveHeaders = map[string]struct{}{
 //
 // NewRequest avoids operations that depend on network access. In particular, it
 // does not read r.Body.
-func NewRequest(r *http.Request) *Request {
+func NewRequest(r *http.Request) (*Request, error) {
+	if r == nil || r.URL == nil || r.Host == "" {
+		return nil, errors.New("http.Request is nil or missing URL.Path or Host")
+	}
+
 	protocol := schemeHTTP
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		protocol = schemeHTTPS
@@ -218,7 +222,7 @@ func NewRequest(r *http.Request) *Request {
 		Cookies:     cookies,
 		Headers:     headers,
 		Env:         env,
-	}
+	}, nil
 }
 
 // Mechanism is the mechanism by which an exception was generated and handled.

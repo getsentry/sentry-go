@@ -123,7 +123,12 @@ func (h *Hook) Levels() []logrus.Level {
 
 // Fire sends entry to Sentry.
 func (h *Hook) Fire(entry *logrus.Entry) error {
-	event := h.entryToEvent(entry)
+	event, err := h.entryToEvent(entry)
+
+	if err != nil {
+		return err
+	}
+
 	if id := h.hub.CaptureEvent(event); id == nil {
 		if h.fallback != nil {
 			return h.fallback(entry)
@@ -143,7 +148,7 @@ var levelMap = map[logrus.Level]sentry.Level{
 	logrus.PanicLevel: sentry.LevelFatal,
 }
 
-func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
+func (h *Hook) entryToEvent(l *logrus.Entry) (*sentry.Event, error) {
 	data := make(logrus.Fields, len(l.Data))
 	for k, v := range l.Data {
 		data[k] = v
@@ -157,7 +162,11 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 	key := h.key(FieldRequest)
 	if req, ok := s.Extra[key].(*http.Request); ok {
 		delete(s.Extra, key)
-		s.Request = sentry.NewRequest(req)
+		var err error
+		s.Request, err = sentry.NewRequest(req)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if err, ok := s.Extra[logrus.ErrorKey].(error); ok {
 		delete(s.Extra, logrus.ErrorKey)
@@ -184,7 +193,7 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 	}
 	delete(s.Extra, FieldGoVersion)
 	delete(s.Extra, FieldMaxProcs)
-	return s
+	return s, nil
 }
 
 // Flush waits until the underlying Sentry transport sends any buffered events,

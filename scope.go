@@ -402,7 +402,14 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint) *Event {
 	}
 
 	if event.Request == nil && scope.request != nil {
-		event.Request = NewRequest(scope.request)
+		var err error
+		event.Request, err = NewRequest(scope.request)
+
+		if err != nil {
+			Logger.Printf("Failed to create http.Request: %s\n", err)
+			return nil
+		}
+
 		// NOTE: The SDK does not attempt to send partial request body data.
 		//
 		// The reason being that Sentry's ingest pipeline and UI are optimized

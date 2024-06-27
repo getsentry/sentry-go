@@ -615,7 +615,12 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	assertEqual(t, processedEvent.User, scope.user, "should use scope user")
 	assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
 	assertEqual(t, processedEvent.Level, scope.level, "should use scope level")
-	assertEqual(t, processedEvent.Request, NewRequest(scope.request), "should use scope request")
+
+	newRequest, err := NewRequest(scope.request)
+	if err != nil {
+		t.Error(err)
+	}
+	assertEqual(t, processedEvent.Request, newRequest, "should use scope request")
 }
 
 func TestEventProcessorsModifiesEvent(t *testing.T) {
