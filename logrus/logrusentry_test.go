@@ -134,6 +134,14 @@ func Test_entryToEvent(t *testing.T) {
 				},
 			},
 		},
+		"invalid http request": {
+			entry: &logrus.Entry{
+				Data: map[string]any{
+					FieldRequest: &http.Request{},
+				},
+			},
+			want: nil,
+		},
 		"error": {
 			entry: &logrus.Entry{
 				Data: map[string]any{
@@ -252,7 +260,18 @@ func Test_entryToEvent(t *testing.T) {
 		tt := tt
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got := h.entryToEvent(tt.entry)
+			var got *sentry.Event
+			got, err = h.entryToEvent(tt.entry)
+			if err == nil && tt.want == nil {
+				t.Error("expected error")
+				return
+			}
+
+			if err != nil && tt.want != nil {
+				t.Error(err)
+				return
+			}
+
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(sentry.Event{}, "sdkMetaData"),
 			}
