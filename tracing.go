@@ -18,6 +18,7 @@ const (
 	SentryBaggageHeader = "baggage"
 )
 
+// SpanOrigin indicates what created a trace or a span. See: https://develop.sentry.dev/sdk/performance/trace-origin/
 type SpanOrigin string
 
 const (
