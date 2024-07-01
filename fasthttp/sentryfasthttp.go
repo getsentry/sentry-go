@@ -70,6 +70,7 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			sentry.WithOpName("http.server"),
 			sentry.ContinueFromRequest(convertedHTTPRequest),
 			sentry.WithTransactionSource(sentry.SourceRoute),
+			sentry.WithSpanOrigin(sentry.SpanOriginFastHTTP),
 		}
 
 		method := string(ctx.Method())

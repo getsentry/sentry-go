@@ -74,6 +74,7 @@ func (h *handler) handle(c *gin.Context) {
 		sentry.WithOpName("http.server"),
 		sentry.ContinueFromRequest(c.Request),
 		sentry.WithTransactionSource(transactionSource),
+		sentry.WithSpanOrigin(sentry.SpanOriginGin),
 	}
 
 	transaction := sentry.StartTransaction(ctx,

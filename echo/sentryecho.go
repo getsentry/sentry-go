@@ -73,6 +73,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			sentry.WithOpName("http.server"),
 			sentry.ContinueFromRequest(r),
 			sentry.WithTransactionSource(transactionSource),
+			sentry.WithSpanOrigin(sentry.SpanOriginEcho),
 		}
 
 		transaction := sentry.StartTransaction(

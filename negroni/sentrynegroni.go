@@ -82,6 +82,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 		sentry.WithOpName("http.server"),
 		sentry.ContinueFromRequest(r),
 		sentry.WithTransactionSource(sentry.SourceURL),
+		sentry.WithSpanOrigin(sentry.SpanOriginNegroni),
 	}
 	// We don't mind getting an existing transaction back so we don't need to
 	// check if it is.
