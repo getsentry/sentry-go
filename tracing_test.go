@@ -211,6 +211,7 @@ func TestStartChild(t *testing.T) {
 				ParentSpanID: child.ParentSpanID,
 				Op:           child.Op,
 				Sampled:      SampledTrue,
+				Origin:       SpanOriginManual,
 			},
 		},
 		TransactionInfo: &TransactionInfo{

@@ -66,6 +66,7 @@ func (h *handler) handle(ctx iris.Context) {
 		sentry.WithOpName("http.server"),
 		sentry.ContinueFromRequest(ctx.Request()),
 		sentry.WithTransactionSource(sentry.SourceRoute),
+		sentry.WithSpanOrigin(sentry.SpanOriginIris),
 	}
 
 	currentRoute := ctx.GetCurrentRoute()
