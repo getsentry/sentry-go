@@ -418,7 +418,7 @@ func (client *Client) Options() ClientOptions {
 
 // CaptureMessage captures an arbitrary message.
 func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
-	event := client.EventFromMessage(message, LevelInfo)
+	event := client.EventFromMessage(message, LevelInfo, 0)
 	return client.CaptureEvent(event, hint, scope)
 }
 
@@ -491,9 +491,9 @@ func (client *Client) RecoverWithContext(
 	case error:
 		event = client.EventFromException(err, LevelFatal)
 	case string:
-		event = client.EventFromMessage(err, LevelFatal)
+		event = client.EventFromMessage(err, LevelFatal, 1)
 	default:
-		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
+		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal, 1)
 	}
 	return client.CaptureEvent(event, hint, scope)
 }
@@ -514,7 +514,7 @@ func (client *Client) Flush(timeout time.Duration) bool {
 }
 
 // EventFromMessage creates an event from the given message string.
-func (client *Client) EventFromMessage(message string, level Level) *Event {
+func (client *Client) EventFromMessage(message string, level Level, skipFrames int) *Event {
 	if message == "" {
 		err := usageError{fmt.Errorf("%s called with empty message", callerFunctionName())}
 		return client.EventFromException(err, level)
@@ -525,7 +525,7 @@ func (client *Client) EventFromMessage(message string, level Level) *Event {
 
 	if client.options.AttachStacktrace {
 		event.Threads = []Thread{{
-			Stacktrace: NewStacktrace(),
+			Stacktrace: NewStacktrace(NewStackTraceOptions{SkipFrames: skipFrames}),
 			Crashed:    false,
 			Current:    true,
 		}}
