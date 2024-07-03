@@ -22,7 +22,7 @@ const (
 type SpanOrigin string
 
 const (
-	SpanOriginManual   = "manual.http"
+	SpanOriginManual   = "manual"
 	SpanOriginEcho     = "auto.http.echo"
 	SpanOriginFastHTTP = "auto.http.fasthttp"
 	SpanOriginFiber    = "auto.http.fiber"
