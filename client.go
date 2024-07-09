@@ -416,10 +416,14 @@ func (client *Client) Options() ClientOptions {
 	return client.options
 }
 
+type EventOptions struct {
+	SkipFrames int
+}
+
 // CaptureMessage captures an arbitrary message.
-func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
-	event := client.EventFromMessage(message, LevelInfo, 0)
-	return client.CaptureEvent(event, hint, scope)
+func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier, opts ...EventOptions) *EventID {
+	event := client.EventFromMessage(message, LevelInfo, opts...)
+	return client.CaptureEvent(event, hint, scope, opts...)
 }
 
 // CaptureException captures an error.
@@ -443,13 +447,13 @@ func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorCon
 // The event must already be assembled. Typically code would instead use
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
-func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
-	return client.processEvent(event, hint, scope)
+func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier, opts ...EventOptions) *EventID {
+	return client.processEvent(event, hint, scope, opts...)
 }
 
 // Recover captures a panic.
 // Returns EventID if successfully, or nil if there's no error to recover from.
-func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModifier) *EventID {
+func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModifier, opts ...EventOptions) *EventID {
 	if err == nil {
 		err = recover()
 	}
@@ -459,7 +463,7 @@ func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModif
 	// is store the Context in the EventHint and there nil means the Context is
 	// not available.
 	// nolint: staticcheck
-	return client.RecoverWithContext(nil, err, hint, scope)
+	return client.RecoverWithContext(nil, err, hint, scope, opts...)
 }
 
 // RecoverWithContext captures a panic and passes relevant context object.
@@ -469,6 +473,7 @@ func (client *Client) RecoverWithContext(
 	err interface{},
 	hint *EventHint,
 	scope EventModifier,
+	opts ...EventOptions,
 ) *EventID {
 	if err == nil {
 		err = recover()
@@ -491,9 +496,9 @@ func (client *Client) RecoverWithContext(
 	case error:
 		event = client.EventFromException(err, LevelFatal)
 	case string:
-		event = client.EventFromMessage(err, LevelFatal, 1)
+		event = client.EventFromMessage(err, LevelFatal, opts...)
 	default:
-		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal, 1)
+		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal, opts...)
 	}
 	return client.CaptureEvent(event, hint, scope)
 }
@@ -514,7 +519,7 @@ func (client *Client) Flush(timeout time.Duration) bool {
 }
 
 // EventFromMessage creates an event from the given message string.
-func (client *Client) EventFromMessage(message string, level Level, skipFrames int) *Event {
+func (client *Client) EventFromMessage(message string, level Level, opts ...EventOptions) *Event {
 	if message == "" {
 		err := usageError{fmt.Errorf("%s called with empty message", callerFunctionName())}
 		return client.EventFromException(err, level)
@@ -525,7 +530,7 @@ func (client *Client) EventFromMessage(message string, level Level, skipFrames i
 
 	if client.options.AttachStacktrace {
 		event.Threads = []Thread{{
-			Stacktrace: NewStacktrace(NewStackTraceOptions{SkipFrames: skipFrames}),
+			Stacktrace: NewStacktrace(opts...),
 			Crashed:    false,
 			Current:    true,
 		}}
@@ -598,7 +603,7 @@ func reverse(a []Exception) {
 	}
 }
 
-func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
+func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier, opts ...EventOptions) *EventID {
 	if event == nil {
 		err := usageError{fmt.Errorf("%s called with nil event", callerFunctionName())}
 		return client.CaptureException(err, hint, scope)

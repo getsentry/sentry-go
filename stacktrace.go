@@ -22,12 +22,8 @@ type Stacktrace struct {
 	FramesOmitted []uint  `json:"frames_omitted,omitempty"`
 }
 
-type NewStackTraceOptions struct {
-	SkipFrames int
-}
-
 // NewStacktrace creates a stacktrace using runtime.Callers.
-func NewStacktrace(opts ...NewStackTraceOptions) *Stacktrace {
+func NewStacktrace(opts ...EventOptions) *Stacktrace {
 	pcs := make([]uintptr, 100)
 	n := runtime.Callers(1, pcs)
 
