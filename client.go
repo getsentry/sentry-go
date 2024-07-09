@@ -423,7 +423,7 @@ type EventOptions struct {
 // CaptureMessage captures an arbitrary message.
 func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier, opts ...EventOptions) *EventID {
 	event := client.EventFromMessage(message, LevelInfo, opts...)
-	return client.CaptureEvent(event, hint, scope, opts...)
+	return client.CaptureEvent(event, hint, scope)
 }
 
 // CaptureException captures an error.
@@ -444,11 +444,11 @@ func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorCon
 
 // CaptureEvent captures an event on the currently active client if any.
 //
-// The event must already be assembled. Typically code would instead use
+// The event must already be assembled. Typically, code would instead use
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
-func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier, opts ...EventOptions) *EventID {
-	return client.processEvent(event, hint, scope, opts...)
+func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
+	return client.processEvent(event, hint, scope)
 }
 
 // Recover captures a panic.
@@ -603,7 +603,7 @@ func reverse(a []Exception) {
 	}
 }
 
-func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier, opts ...EventOptions) *EventID {
+func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
 	if event == nil {
 		err := usageError{fmt.Errorf("%s called with nil event", callerFunctionName())}
 		return client.CaptureException(err, hint, scope)
