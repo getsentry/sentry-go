@@ -317,6 +317,27 @@ func TestStartTransaction(t *testing.T) {
 	}
 }
 
+func TestStartTransaction_with_context(t *testing.T) {
+	t.Run("get transaction from context", func(t *testing.T) {
+		tr := StartTransaction(context.TODO(), "")
+		ctx := tr.Context()
+		existingTr := StartTransaction(ctx, "")
+		if existingTr != tr {
+			t.Fatalf("existing transaction not found")
+		}
+	})
+
+	t.Run("get transaction with latest context", func(t *testing.T) {
+		tr := StartTransaction(context.TODO(), "")
+		ctx := context.WithValue(tr.Context(), "key", "value")
+		existingTr := StartTransaction(ctx, "")
+		_, keyExists := existingTr.Context().Value("key").(string)
+		if !keyExists {
+			t.Fatalf("key not found in context")
+		}
+	})
+}
+
 func TestSetTag(t *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing: true,

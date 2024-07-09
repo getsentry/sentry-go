@@ -962,6 +962,7 @@ func SpanFromContext(ctx context.Context) *Span {
 func StartTransaction(ctx context.Context, name string, options ...SpanOption) *Span {
 	currentTransaction, exists := ctx.Value(spanContextKey{}).(*Span)
 	if exists {
+		currentTransaction.ctx = ctx
 		return currentTransaction
 	}
 
