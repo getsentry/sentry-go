@@ -98,6 +98,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			sentry.WithOpName("http.server"),
 			sentry.ContinueFromRequest(r),
 			sentry.WithTransactionSource(sentry.SourceURL),
+			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
 		}
 
 		transaction := sentry.StartTransaction(ctx,

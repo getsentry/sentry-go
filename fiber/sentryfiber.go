@@ -71,6 +71,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 		sentry.WithOpName("http.server"),
 		sentry.ContinueFromRequest(convertedHTTPRequest),
 		sentry.WithTransactionSource(transactionSource),
+		sentry.WithSpanOrigin(sentry.SpanOriginFiber),
 	}
 
 	transaction := sentry.StartTransaction(
