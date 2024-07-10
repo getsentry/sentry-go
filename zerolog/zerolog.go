@@ -211,6 +211,7 @@ func (w *Writer) parseLogEvent(data []byte) (*sentry.Event, bool) {
 			} else {
 				event.Fingerprint = fp
 			}
+		case FieldGoVersion, FieldMaxProcs:
 		default:
 			event.Extra[k] = bytesToStrUnsafe(value)
 		}
