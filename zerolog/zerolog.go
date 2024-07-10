@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net/http"
 	"time"
 	"unsafe"
 
@@ -86,12 +85,12 @@ func (w *Writer) addBreadcrumb(event *sentry.Event) {
 func (w *Writer) Write(data []byte) (n int, err error) {
 	n = len(data)
 
-	lvl, err := w.parseLogLevel(data)
+	lvl, err := parseLogLevel(data)
 	if err != nil {
 		return n, nil
 	}
 
-	event, ok := w.parseLogEvent(data)
+	event, ok := parseLogEvent(data)
 	if !ok {
 		return
 	}
@@ -115,11 +114,11 @@ func (w *Writer) Write(data []byte) (n int, err error) {
 	return
 }
 
-// implements zerolog.LevelWriter
+// implements zerolog.LevelWriter.
 func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 	n = len(p)
 
-	event, ok := w.parseLogEvent(p)
+	event, ok := parseLogEvent(p)
 	if !ok {
 		return
 	}
@@ -151,8 +150,7 @@ func (w *Writer) Close() error {
 	return nil
 }
 
-// parses the log level from the encoded log
-func (w *Writer) parseLogLevel(data []byte) (zerolog.Level, error) {
+func parseLogLevel(data []byte) (zerolog.Level, error) {
 	level, err := jsonparser.GetUnsafeString(data, zerolog.LevelFieldName)
 	if err != nil {
 		return zerolog.Disabled, nil
@@ -163,9 +161,8 @@ func (w *Writer) parseLogLevel(data []byte) (zerolog.Level, error) {
 
 const logger = "zerolog"
 
-// parses the event except the log level
-func (w *Writer) parseLogEvent(data []byte) (*sentry.Event, bool) {
-
+// parses the event except the log level.
+func parseLogEvent(data []byte) (*sentry.Event, bool) {
 	event := sentry.Event{
 		Timestamp: now(),
 		Logger:    logger,
@@ -185,14 +182,6 @@ func (w *Writer) parseLogEvent(data []byte) (*sentry.Event, bool) {
 				}),
 			})
 		case zerolog.LevelFieldName, zerolog.TimestampFieldName:
-		case FieldRequest:
-			var req *http.Request
-			err := json.Unmarshal(value, &req)
-			if err != nil {
-				event.Extra[k] = bytesToStrUnsafe(value)
-			} else {
-				event.Request = sentry.NewRequest(req)
-			}
 		case FieldUser:
 			var user sentry.User
 			err := json.Unmarshal(value, &user)
