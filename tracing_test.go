@@ -329,9 +329,9 @@ func TestStartTransaction_with_context(t *testing.T) {
 
 	t.Run("get transaction with latest context", func(t *testing.T) {
 		tr := StartTransaction(context.TODO(), "")
-		ctx := context.WithValue(tr.Context(), "key", "value")
+		ctx := context.WithValue(tr.Context(), testContextKey{}, testContextValue{})
 		existingTr := StartTransaction(ctx, "")
-		_, keyExists := existingTr.Context().Value("key").(string)
+		_, keyExists := existingTr.Context().Value(testContextKey{}).(testContextValue)
 		if !keyExists {
 			t.Fatalf("key not found in context")
 		}
