@@ -1,4 +1,3 @@
-// Package sentryzerolog provides a simple Zerolog hook for Sentry.
 package sentryzerolog
 
 import (
@@ -38,8 +37,6 @@ const sdkIdentifier = "sentry.go.zerolog"
 // Sentry understands. If they are found in the log fields, and the value is of
 // the expected datatype, it will be converted from a generic field, into Sentry
 // metadata.
-//
-// These keys may be overridden by calling SetKey on the hook object.
 const (
 	// FieldRequest holds an *http.Request.
 	FieldRequest = "request"
@@ -157,6 +154,7 @@ func parseLogLevel(data []byte) (zerolog.Level, error) {
 	}
 
 	return zerolog.ParseLevel(level)
+	zerolog.Hook
 }
 
 const logger = "zerolog"
