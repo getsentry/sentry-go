@@ -66,7 +66,7 @@ type Writer struct {
 	withBreadcrumbs bool
 }
 
-// addBreadcrumb adds event as a breadcrumb
+// addBreadcrumb adds event as a breadcrumb.
 func (w *Writer) addBreadcrumb(event *sentry.Event) {
 	if !w.withBreadcrumbs {
 		return
