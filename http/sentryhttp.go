@@ -121,6 +121,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		// level?, ...).
 		r = r.WithContext(transaction.Context())
 		hub.Scope().SetRequest(r)
+
 		defer h.recoverWithSentry(hub, r)
 		handler.ServeHTTP(rw, r)
 	}

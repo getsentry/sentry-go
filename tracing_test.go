@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -479,6 +480,77 @@ func TestToSentryTrace(t *testing.T) {
 		if got := tt.span.ToSentryTrace(); got != tt.want {
 			t.Errorf("got %q, want %q", got, tt.want)
 		}
+	}
+}
+
+func TestGetTraceHeader(t *testing.T) {
+	tests := map[string]struct {
+		scope    *Scope
+		expected string
+	}{
+		"With span": {
+			scope: func() *Scope {
+				s := NewScope()
+				s.span = &Span{
+					TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
+					Sampled: SampledTrue,
+				}
+				return s
+			}(),
+			expected: "d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09-1",
+		},
+		"Without span": {
+			scope: func() *Scope {
+				s := NewScope()
+				s.propagationContext.TraceID = TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")
+				s.propagationContext.SpanID = SpanIDFromHex("a9f442f9330b4e09")
+				return s
+			}(),
+			expected: "d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := GetTraceHeader(tt.scope)
+			assertEqual(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetBaggageHeader(t *testing.T) {
+	tests := map[string]struct {
+		scope    *Scope
+		expected string
+	}{
+		"With span": {
+			scope: func() *Scope {
+				s := NewScope()
+				s.span = &Span{}
+				return s
+			}(),
+			expected: "",
+		},
+		"Without span": {
+			scope: func() *Scope {
+				s := NewScope()
+				s.propagationContext.DynamicSamplingContext = DynamicSamplingContext{
+					Entries: map[string]string{"release": "1.0.0", "environment": "production"},
+				}
+				return s
+			}(),
+			expected: "sentry-environment=production,sentry-release=1.0.0",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := GetBaggageHeader(tt.scope)
+			res := strings.Split(result, ",")
+			sortSlice(res)
+			assertEqual(t, tt.expected, strings.Join(res, ","))
+		})
 	}
 }
 
