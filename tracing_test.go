@@ -212,6 +212,7 @@ func TestStartChild(t *testing.T) {
 				ParentSpanID: child.ParentSpanID,
 				Op:           child.Op,
 				Sampled:      SampledTrue,
+				Origin:       SpanOriginManual,
 			},
 		},
 		TransactionInfo: &TransactionInfo{
@@ -315,6 +316,27 @@ func TestStartTransaction(t *testing.T) {
 	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
 		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func TestStartTransaction_with_context(t *testing.T) {
+	t.Run("get transaction from context", func(t *testing.T) {
+		tr := StartTransaction(context.TODO(), "")
+		ctx := tr.Context()
+		existingTr := StartTransaction(ctx, "")
+		if existingTr != tr {
+			t.Fatalf("existing transaction not found")
+		}
+	})
+
+	t.Run("get transaction with latest context", func(t *testing.T) {
+		tr := StartTransaction(context.TODO(), "")
+		ctx := context.WithValue(tr.Context(), testContextKey{}, testContextValue{})
+		existingTr := StartTransaction(ctx, "")
+		_, keyExists := existingTr.Context().Value(testContextKey{}).(testContextValue)
+		if !keyExists {
+			t.Fatalf("key not found in context")
+		}
+	})
 }
 
 func TestSetTag(t *testing.T) {
