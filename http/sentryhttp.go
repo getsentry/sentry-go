@@ -14,9 +14,6 @@ import (
 // The identifier of the HTTP SDK.
 const sdkIdentifier = "sentry.go.http"
 
-const valuesKey = "sentry"
-const transactionKey = "sentry_transaction"
-
 // A Handler is an HTTP middleware factory that provides integration with
 // Sentry.
 type Handler struct {
@@ -86,11 +83,9 @@ func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		hub := sentry.GetHubFromContext(ctx)
+		hub := sentry.GetHubFromContext(r.Context())
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
-			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
 
 		if client := hub.Client(); client != nil {
@@ -98,13 +93,14 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		}
 
 		options := []sentry.SpanOption{
-			hub.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
 		}
 
-		transaction := sentry.StartTransaction(ctx,
+		transaction := sentry.StartTransaction(
+			sentry.SetHubOnContext(r.Context(), hub),
 			fmt.Sprintf("%s %s", r.Method, r.URL.Path),
 			options...,
 		)
@@ -121,8 +117,8 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 
 		hub.Scope().SetRequest(r)
 		r = r.WithContext(transaction.Context())
-
 		defer h.recoverWithSentry(hub, r)
+
 		handler.ServeHTTP(rw, r)
 	}
 }

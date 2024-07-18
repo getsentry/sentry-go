@@ -62,12 +62,9 @@ func newResponseWriter(w http.ResponseWriter) *responseWriter {
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	ctx := r.Context()
-
-	hub := sentry.GetHubFromContext(ctx)
+	hub := sentry.GetHubFromContext(r.Context())
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
-		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
 
 	if client := hub.Client(); client != nil {
@@ -75,14 +72,14 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 	}
 
 	options := []sentry.SpanOption{
-		hub.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(sentry.SourceURL),
 		sentry.WithSpanOrigin(sentry.SpanOriginNegroni),
 	}
 
 	transaction := sentry.StartTransaction(
-		ctx,
+		sentry.SetHubOnContext(r.Context(), hub),
 		fmt.Sprintf("%s %s", r.Method, r.URL.Path),
 		options...,
 	)
@@ -102,7 +99,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 	r = r.WithContext(transaction.Context())
 	defer h.recoverWithSentry(hub, r)
 
-	next(rw, r.WithContext(ctx))
+	next(rw, r.WithContext(r.Context()))
 }
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {

@@ -892,6 +892,18 @@ func WithSpanOrigin(origin SpanOrigin) SpanOption {
 	}
 }
 
+// Continue a trace based on traceparent and bagge values.
+// If the SDK is configured with tracing enabled,
+// this function returns populated SpanOption.
+// In any other cases, it populates the propagation context on the scope.
+func ContinueTrace(hub *Hub, traceparent, baggage string) SpanOption {
+	scope := hub.Scope()
+	propagationContext, _ := PropagationContextFromHeaders(traceparent, baggage)
+	scope.SetPropagationContext(propagationContext)
+
+	return ContinueFromHeaders(traceparent, baggage)
+}
+
 // ContinueFromRequest returns a span option that updates the span to continue
 // an existing trace. If it cannot detect an existing trace in the request, the
 // span will be left unchanged.

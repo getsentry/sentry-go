@@ -49,37 +49,35 @@ func New(options Options) echo.MiddlewareFunc {
 }
 
 func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(echoCtx echo.Context) error {
-		r := echoCtx.Request()
-		ctx := r.Context()
-
-		hub := sentry.GetHubFromContext(ctx)
+	return func(ctx echo.Context) error {
+		hub := GetHubFromContext(ctx)
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
-			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
 
 		if client := hub.Client(); client != nil {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
+		r := ctx.Request()
+
 		transactionName := r.URL.Path
 		transactionSource := sentry.SourceURL
 
-		if path := echoCtx.Path(); path != "" {
+		if path := ctx.Path(); path != "" {
 			transactionName = path
 			transactionSource = sentry.SourceRoute
 		}
 
 		options := []sentry.SpanOption{
-			hub.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(transactionSource),
 			sentry.WithSpanOrigin(sentry.SpanOriginEcho),
 		}
 
 		transaction := sentry.StartTransaction(
-			ctx,
+			sentry.SetHubOnContext(r.Context(), hub),
 			fmt.Sprintf("%s %s", r.Method, transactionName),
 			options...,
 		)
@@ -87,8 +85,8 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		transaction.SetData("http.request.method", r.Method)
 
 		defer func() {
-			status := echoCtx.Response().Status
-			if err := echoCtx.Get("error"); err != nil {
+			status := ctx.Response().Status
+			if err := ctx.Get("error"); err != nil {
 				if httpError, ok := err.(*echo.HTTPError); ok {
 					status = httpError.Code
 				}
@@ -100,14 +98,14 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		}()
 
 		hub.Scope().SetRequest(r)
-		echoCtx.Set(valuesKey, hub)
-		echoCtx.Set(transactionKey, transaction)
+		ctx.Set(valuesKey, hub)
+		ctx.Set(transactionKey, transaction)
 		defer h.recoverWithSentry(hub, r)
 
-		err := next(echoCtx)
+		err := next(ctx)
 		if err != nil {
 			// Store the error so it can be used in the deferred function
-			echoCtx.Set("error", err)
+			ctx.Set("error", err)
 		}
 
 		return err

@@ -394,18 +394,6 @@ func (hub *Hub) GetBaggage() string {
 	return scope.propagationContext.DynamicSamplingContext.String()
 }
 
-// Continue a trace based on traceparent and bagge values.
-// If the SDK is configured with tracing enabled,
-// this function returns populated SpanOption.
-// In any other cases, it populates the propagation context on the scope.
-func (hub *Hub) ContinueTrace(traceparent, baggage string) SpanOption {
-	scope := hub.Scope()
-	propagationContext, _ := PropagationContextFromHeaders(traceparent, baggage)
-	scope.SetPropagationContext(propagationContext)
-
-	return ContinueFromHeaders(traceparent, baggage)
-}
-
 // HasHubOnContext checks whether Hub instance is bound to a given Context struct.
 func HasHubOnContext(ctx context.Context) bool {
 	_, ok := ctx.Value(HubContextKey).(*Hub)
