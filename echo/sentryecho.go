@@ -49,44 +49,46 @@ func New(options Options) echo.MiddlewareFunc {
 }
 
 func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(ctx echo.Context) error {
-		hub := sentry.GetHubFromContext(ctx.Request().Context())
+	return func(echoCtx echo.Context) error {
+		r := echoCtx.Request()
+		ctx := r.Context()
+
+		hub := sentry.GetHubFromContext(ctx)
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
+			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
 
 		if client := hub.Client(); client != nil {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
-		r := ctx.Request()
-
 		transactionName := r.URL.Path
 		transactionSource := sentry.SourceURL
 
-		if path := ctx.Path(); path != "" {
+		if path := echoCtx.Path(); path != "" {
 			transactionName = path
 			transactionSource = sentry.SourceRoute
 		}
 
 		options := []sentry.SpanOption{
+			hub.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
-			sentry.ContinueFromRequest(r),
 			sentry.WithTransactionSource(transactionSource),
 			sentry.WithSpanOrigin(sentry.SpanOriginEcho),
 		}
 
 		transaction := sentry.StartTransaction(
-			sentry.SetHubOnContext(r.Context(), hub),
+			ctx,
 			fmt.Sprintf("%s %s", r.Method, transactionName),
 			options...,
 		)
 
-		transaction.SetData("http.request.method", ctx.Request().Method)
+		transaction.SetData("http.request.method", r.Method)
 
 		defer func() {
-			status := ctx.Response().Status
-			if err := ctx.Get("error"); err != nil {
+			status := echoCtx.Response().Status
+			if err := echoCtx.Get("error"); err != nil {
 				if httpError, ok := err.(*echo.HTTPError); ok {
 					status = httpError.Code
 				}
@@ -98,14 +100,14 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		}()
 
 		hub.Scope().SetRequest(r)
-		ctx.Set(valuesKey, hub)
-		ctx.Set(transactionKey, transaction)
+		echoCtx.Set(valuesKey, hub)
+		echoCtx.Set(transactionKey, transaction)
 		defer h.recoverWithSentry(hub, r)
 
-		err := next(ctx)
+		err := next(echoCtx)
 		if err != nil {
 			// Store the error so it can be used in the deferred function
-			ctx.Set("error", err)
+			echoCtx.Set("error", err)
 		}
 
 		return err

@@ -383,14 +383,14 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		}
 
 		for key, value := range scope.contexts {
-			if key == "trace" && event.Type == transactionType {
-				// Do not override trace context of
-				// transactions, otherwise it breaks the
-				// transaction event representation.
-				// For error events, the trace context is used
-				// to link errors and traces/spans in Sentry.
-				continue
-			}
+			// if key == "trace" && event.Type == transactionType {
+			// 	// Do not override trace context of
+			// 	// transactions, otherwise it breaks the
+			// 	// transaction event representation.
+			// 	// For error events, the trace context is used
+			// 	// to link errors and traces/spans in Sentry.
+			// 	continue
+			// }
 
 			// Ensure we are not overwriting event fields
 			if _, ok := event.Contexts[key]; !ok {
@@ -399,29 +399,26 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		}
 	}
 
-	// Apply the trace context to errors if there is a Span on the scope. If
-	// there isn't then fall back to the propagation context.
-	if event.Type != transactionType {
-		if event.Contexts == nil {
-			event.Contexts = make(map[string]Context)
+	if event.Contexts == nil {
+		event.Contexts = make(map[string]Context)
+	}
+
+	if scope.span != nil {
+		event.Contexts["trace"] = scope.span.traceContext().Map()
+
+		transaction := scope.span.GetTransaction()
+		if transaction != nil {
+			event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
 		}
+	} else {
 
-		if scope.span != nil {
-			event.Contexts["trace"] = scope.span.traceContext().Map()
+		event.Contexts["trace"] = scope.propagationContext.Map()
 
-			transaction := scope.span.GetTransaction()
-			if transaction != nil {
-				event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
-			}
-		} else {
-			event.Contexts["trace"] = scope.propagationContext.Map()
-
-			dsc := scope.propagationContext.DynamicSamplingContext
-			if !dsc.HasEntries() && client != nil {
-				dsc = DynamicSamplingContextFromScope(scope, client)
-			}
-			event.sdkMetaData.dsc = dsc
+		dsc := scope.propagationContext.DynamicSamplingContext
+		if !dsc.HasEntries() && client != nil {
+			dsc = DynamicSamplingContextFromScope(scope, client)
 		}
+		event.sdkMetaData.dsc = dsc
 	}
 
 	if len(scope.extra) > 0 {

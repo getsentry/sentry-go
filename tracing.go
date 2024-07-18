@@ -192,11 +192,11 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	span.recorder.record(&span)
 
-	hub := hubFromContext(ctx)
-
-	// Update scope so that all events include a trace context, allowing
-	// Sentry to correlate errors to transactions/spans.
-	hub.Scope().SetContext("trace", span.traceContext().Map())
+	clientOptions := span.clientOptions()
+	if clientOptions.EnableTracing {
+		hub := hubFromContext(ctx)
+		hub.Scope().SetSpan(&span)
+	}
 
 	// Start profiling only if it's a sampled root transaction.
 	if span.IsTransaction() && span.Sampled.Bool() {
@@ -554,7 +554,6 @@ func (s *Span) toEvent() *Event {
 	for k, v := range s.contexts {
 		contexts[k] = cloneContext(v)
 	}
-	contexts["trace"] = s.traceContext().Map()
 
 	// Make sure that the transaction source is valid
 	transactionSource := s.Source
@@ -891,22 +890,6 @@ func WithSpanOrigin(origin SpanOrigin) SpanOption {
 	return func(s *Span) {
 		s.Origin = origin
 	}
-}
-
-func GetTraceHeader(s *Scope) string {
-	if s.span != nil {
-		return s.span.ToSentryTrace()
-	}
-
-	return fmt.Sprintf("%s-%s", s.propagationContext.TraceID, s.propagationContext.SpanID)
-}
-
-func GetBaggageHeader(s *Scope) string {
-	if s.span != nil {
-		return s.span.ToBaggage()
-	}
-
-	return s.propagationContext.DynamicSamplingContext.String()
 }
 
 // ContinueFromRequest returns a span option that updates the span to continue
