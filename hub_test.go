@@ -440,7 +440,7 @@ func TestGetTraceparent(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			result := tt.hub.GetTraceparent()
-			assertEqual(t, tt.expected, result)
+			assertEqual(t, result, tt.expected)
 		})
 	}
 }
@@ -479,7 +479,7 @@ func TestGetBaggageHeader(t *testing.T) {
 			result := tt.hub.GetBaggage()
 			res := strings.Split(result, ",")
 			sortSlice(res)
-			assertEqual(t, tt.expected, strings.Join(res, ","))
+			assertEqual(t, strings.Join(res, ","), tt.expected)
 		})
 	}
 }
