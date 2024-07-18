@@ -63,7 +63,7 @@ func (h *handler) handle(ctx *gin.Context) {
 
 	r := ctx.Request
 
-	transactionName := ctx.Request.URL.Path
+	transactionName := r.URL.Path
 	transactionSource := sentry.SourceURL
 
 	if fp := ctx.FullPath(); fp != "" {
