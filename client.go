@@ -612,7 +612,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	// Transactions are sampled by options.TracesSampleRate or
 	// options.TracesSampler when they are started. Other events
 	// (errors, messages) are sampled here. Does not apply to check-ins.
-	if event.Type == eventType && !sample(client.options.SampleRate) {
+	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
 		Logger.Println("Event dropped due to SampleRate hit.")
 		return nil
 	}
