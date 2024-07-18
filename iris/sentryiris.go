@@ -52,10 +52,14 @@ func New(options Options) iris.Handler {
 	}).handle
 }
 
-func (h *handler) handle(ctx iris.Context) {
-	hub := sentry.GetHubFromContext(ctx.Request().Context())
+func (h *handler) handle(irisCtx iris.Context) {
+	request := irisCtx.Request()
+	ctx := request.Context()
+
+	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
+		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
 
 	if client := hub.Client(); client != nil {
@@ -63,13 +67,13 @@ func (h *handler) handle(ctx iris.Context) {
 	}
 
 	options := []sentry.SpanOption{
+		hub.ContinueTrace(request.Header.Get(sentry.SentryTraceHeader), request.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
-		sentry.ContinueFromRequest(ctx.Request()),
 		sentry.WithTransactionSource(sentry.SourceRoute),
 		sentry.WithSpanOrigin(sentry.SpanOriginIris),
 	}
 
-	currentRoute := ctx.GetCurrentRoute()
+	currentRoute := irisCtx.GetCurrentRoute()
 
 	transaction := sentry.StartTransaction(
 		sentry.SetHubOnContext(ctx, hub),
@@ -78,18 +82,18 @@ func (h *handler) handle(ctx iris.Context) {
 	)
 
 	defer func() {
-		transaction.SetData("http.response.status_code", ctx.GetStatusCode())
-		transaction.Status = sentry.HTTPtoSpanStatus(ctx.GetStatusCode())
+		transaction.SetData("http.response.status_code", irisCtx.GetStatusCode())
+		transaction.Status = sentry.HTTPtoSpanStatus(irisCtx.GetStatusCode())
 		transaction.Finish()
 	}()
 
-	transaction.SetData("http.request.method", ctx.Request().Method)
+	transaction.SetData("http.request.method", request.Method)
 
-	hub.Scope().SetRequest(ctx.Request())
-	ctx.Values().Set(valuesKey, hub)
-	ctx.Values().Set(transactionKey, transaction)
-	defer h.recoverWithSentry(hub, ctx.Request())
-	ctx.Next()
+	hub.Scope().SetRequest(request)
+	irisCtx.Values().Set(valuesKey, hub)
+	irisCtx.Values().Set(transactionKey, transaction)
+	defer h.recoverWithSentry(hub, request)
+	irisCtx.Next()
 }
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {

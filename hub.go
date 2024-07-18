@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -223,7 +224,7 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 	}
 	eventID := client.CaptureEvent(event, nil, scope)
 
-	if event.Type != transactionType && eventID != nil {
+	if event.Type == eventType && eventID != nil {
 		hub.mu.Lock()
 		hub.lastEventID = *eventID
 		hub.mu.Unlock()
@@ -365,25 +366,44 @@ func (hub *Hub) Flush(timeout time.Duration) bool {
 	return client.Flush(timeout)
 }
 
-// Continue a trace based on HTTP header values. If performance is enabled this
-// returns a SpanOption that can be used to start a transaction, otherwise nil.
-func (hub *Hub) ContinueTrace(trace, baggage string) (SpanOption, error) {
+// GetTraceparent returns the current Sentry traceparent string, to be used as a HTTP header value
+// or HTML meta tag value.
+// This function is context aware, as in it either returns the traceparent based
+// on the current span, or the scope's propagation context.
+func (hub *Hub) GetTraceparent() string {
 	scope := hub.Scope()
-	propagationContext, err := PropagationContextFromHeaders(trace, baggage)
-	if err != nil {
-		return nil, err
+
+	if scope.span != nil {
+		return scope.span.ToSentryTrace()
 	}
 
+	return fmt.Sprintf("%s-%s", scope.propagationContext.TraceID, scope.propagationContext.SpanID)
+}
+
+// GetBaggage returns the current Sentry baggage string, to be used as a HTTP header value
+// or HTML meta tag value.
+// This function is context aware, as in it either returns the baggage based
+// on the current span or the scope's propagation context.
+func (hub *Hub) GetBaggage() string {
+	scope := hub.Scope()
+
+	if scope.span != nil {
+		return scope.span.ToBaggage()
+	}
+
+	return scope.propagationContext.DynamicSamplingContext.String()
+}
+
+// Continue a trace based on traceparent and bagge values.
+// If the SDK is configured with tracing enabled,
+// this function returns populated SpanOption.
+// In any other cases, it populates the propagation context on the scope.
+func (hub *Hub) ContinueTrace(traceparent, baggage string) SpanOption {
+	scope := hub.Scope()
+	propagationContext, _ := PropagationContextFromHeaders(traceparent, baggage)
 	scope.SetPropagationContext(propagationContext)
 
-	client := hub.Client()
-	if client != nil && client.options.EnableTracing {
-		return ContinueFromHeaders(trace, baggage), nil
-	}
-
-	scope.SetContext("trace", propagationContext.Map())
-
-	return nil, nil
+	return ContinueFromHeaders(traceparent, baggage)
 }
 
 // HasHubOnContext checks whether Hub instance is bound to a given Context struct.
