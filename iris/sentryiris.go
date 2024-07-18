@@ -52,28 +52,26 @@ func New(options Options) iris.Handler {
 	}).handle
 }
 
-func (h *handler) handle(irisCtx iris.Context) {
-	request := irisCtx.Request()
-	ctx := request.Context()
-
-	hub := sentry.GetHubFromContext(ctx)
+func (h *handler) handle(ctx iris.Context) {
+	hub := sentry.GetHubFromContext(ctx.Request().Context())
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
-		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
 
 	if client := hub.Client(); client != nil {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
+	r := ctx.Request()
+
 	options := []sentry.SpanOption{
-		hub.ContinueTrace(request.Header.Get(sentry.SentryTraceHeader), request.Header.Get(sentry.SentryBaggageHeader)),
+		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(sentry.SourceRoute),
 		sentry.WithSpanOrigin(sentry.SpanOriginIris),
 	}
 
-	currentRoute := irisCtx.GetCurrentRoute()
+	currentRoute := ctx.GetCurrentRoute()
 
 	transaction := sentry.StartTransaction(
 		sentry.SetHubOnContext(ctx, hub),
@@ -82,18 +80,18 @@ func (h *handler) handle(irisCtx iris.Context) {
 	)
 
 	defer func() {
-		transaction.SetData("http.response.status_code", irisCtx.GetStatusCode())
-		transaction.Status = sentry.HTTPtoSpanStatus(irisCtx.GetStatusCode())
+		transaction.SetData("http.response.status_code", ctx.GetStatusCode())
+		transaction.Status = sentry.HTTPtoSpanStatus(ctx.GetStatusCode())
 		transaction.Finish()
 	}()
 
-	transaction.SetData("http.request.method", request.Method)
+	transaction.SetData("http.request.method", r.Method)
 
-	hub.Scope().SetRequest(request)
-	irisCtx.Values().Set(valuesKey, hub)
-	irisCtx.Values().Set(transactionKey, transaction)
-	defer h.recoverWithSentry(hub, request)
-	irisCtx.Next()
+	hub.Scope().SetRequest(r)
+	ctx.Values().Set(valuesKey, hub)
+	ctx.Values().Set(transactionKey, transaction)
+	defer h.recoverWithSentry(hub, r)
+	ctx.Next()
 }
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {

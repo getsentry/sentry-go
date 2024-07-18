@@ -51,51 +51,54 @@ func New(options Options) gin.HandlerFunc {
 	}).handle
 }
 
-func (h *handler) handle(ginContext *gin.Context) {
-	ctx := ginContext.Request.Context()
-	hub := sentry.GetHubFromContext(ctx)
+func (h *handler) handle(ctx *gin.Context) {
+	hub := sentry.GetHubFromContext(ctx.Request.Context())
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
-		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
 
 	if client := hub.Client(); client != nil {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
-	transactionName := ginContext.Request.URL.Path
+	r := ctx.Request
+
+	transactionName := ctx.Request.URL.Path
 	transactionSource := sentry.SourceURL
 
-	if fp := ginContext.FullPath(); fp != "" {
+	if fp := ctx.FullPath(); fp != "" {
 		transactionName = fp
 		transactionSource = sentry.SourceRoute
 	}
 
 	options := []sentry.SpanOption{
-		hub.ContinueTrace(ginContext.GetHeader(sentry.SentryTraceHeader), ginContext.GetHeader(sentry.SentryBaggageHeader)),
+		sentry.ContinueTrace(hub, ctx.GetHeader(sentry.SentryTraceHeader), ctx.GetHeader(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginGin),
 	}
 
-	transaction := sentry.StartTransaction(ctx,
-		fmt.Sprintf("%s %s", ginContext.Request.Method, transactionName),
+	transaction := sentry.StartTransaction(
+		sentry.SetHubOnContext(r.Context(), hub),
+		fmt.Sprintf("%s %s", r.Method, transactionName),
 		options...,
 	)
-	transaction.SetData("http.request.method", ginContext.Request.Method)
+
+	transaction.SetData("http.request.method", r.Method)
+
 	defer func() {
-		status := ginContext.Writer.Status()
+		status := ctx.Writer.Status()
 		transaction.Status = sentry.HTTPtoSpanStatus(status)
 		transaction.SetData("http.response.status_code", status)
 		transaction.Finish()
 	}()
 
-	hub.Scope().SetRequest(ginContext.Request)
-	ginContext.Set(valuesKey, hub)
-	ginContext.Set(transactionKey, transaction)
-	defer h.recoverWithSentry(hub, ginContext.Request)
+	hub.Scope().SetRequest(r)
+	ctx.Set(valuesKey, hub)
+	ctx.Set(transactionKey, transaction)
+	defer h.recoverWithSentry(hub, r)
 
-	ginContext.Next()
+	ctx.Next()
 }
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
