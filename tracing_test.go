@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -211,6 +212,7 @@ func TestStartChild(t *testing.T) {
 				ParentSpanID: child.ParentSpanID,
 				Op:           child.Op,
 				Sampled:      SampledTrue,
+				Origin:       SpanOriginManual,
 			},
 		},
 		TransactionInfo: &TransactionInfo{
@@ -314,6 +316,27 @@ func TestStartTransaction(t *testing.T) {
 	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
 		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func TestStartTransaction_with_context(t *testing.T) {
+	t.Run("get transaction from context", func(t *testing.T) {
+		tr := StartTransaction(context.TODO(), "")
+		ctx := tr.Context()
+		existingTr := StartTransaction(ctx, "")
+		if existingTr != tr {
+			t.Fatalf("existing transaction not found")
+		}
+	})
+
+	t.Run("get transaction with latest context", func(t *testing.T) {
+		tr := StartTransaction(context.TODO(), "")
+		ctx := context.WithValue(tr.Context(), testContextKey{}, testContextValue{})
+		existingTr := StartTransaction(ctx, "")
+		_, keyExists := existingTr.Context().Value(testContextKey{}).(testContextValue)
+		if !keyExists {
+			t.Fatalf("key not found in context")
+		}
+	})
 }
 
 func TestSetTag(t *testing.T) {
@@ -457,6 +480,77 @@ func TestToSentryTrace(t *testing.T) {
 		if got := tt.span.ToSentryTrace(); got != tt.want {
 			t.Errorf("got %q, want %q", got, tt.want)
 		}
+	}
+}
+
+func TestGetTraceHeader(t *testing.T) {
+	tests := map[string]struct {
+		scope    *Scope
+		expected string
+	}{
+		"With span": {
+			scope: func() *Scope {
+				s := NewScope()
+				s.span = &Span{
+					TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
+					Sampled: SampledTrue,
+				}
+				return s
+			}(),
+			expected: "d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09-1",
+		},
+		"Without span": {
+			scope: func() *Scope {
+				s := NewScope()
+				s.propagationContext.TraceID = TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")
+				s.propagationContext.SpanID = SpanIDFromHex("a9f442f9330b4e09")
+				return s
+			}(),
+			expected: "d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := GetTraceHeader(tt.scope)
+			assertEqual(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetBaggageHeader(t *testing.T) {
+	tests := map[string]struct {
+		scope    *Scope
+		expected string
+	}{
+		"With span": {
+			scope: func() *Scope {
+				s := NewScope()
+				s.span = &Span{}
+				return s
+			}(),
+			expected: "",
+		},
+		"Without span": {
+			scope: func() *Scope {
+				s := NewScope()
+				s.propagationContext.DynamicSamplingContext = DynamicSamplingContext{
+					Entries: map[string]string{"release": "1.0.0", "environment": "production"},
+				}
+				return s
+			}(),
+			expected: "sentry-environment=production,sentry-release=1.0.0",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := GetBaggageHeader(tt.scope)
+			res := strings.Split(result, ",")
+			sortSlice(res)
+			assertEqual(t, tt.expected, strings.Join(res, ","))
+		})
 	}
 }
 

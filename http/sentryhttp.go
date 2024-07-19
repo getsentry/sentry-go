@@ -98,6 +98,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			sentry.WithOpName("http.server"),
 			sentry.ContinueFromRequest(r),
 			sentry.WithTransactionSource(sentry.SourceURL),
+			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
 		}
 
 		transaction := sentry.StartTransaction(ctx,
@@ -120,6 +121,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		// level?, ...).
 		r = r.WithContext(transaction.Context())
 		hub.Scope().SetRequest(r)
+
 		defer h.recoverWithSentry(hub, r)
 		handler.ServeHTTP(rw, r)
 	}

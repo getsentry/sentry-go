@@ -23,7 +23,7 @@ type Stacktrace struct {
 }
 
 // NewStacktrace creates a stacktrace using runtime.Callers.
-func NewStacktrace() *Stacktrace {
+func NewStacktrace(opts ...EventOptions) *Stacktrace {
 	pcs := make([]uintptr, 100)
 	n := runtime.Callers(1, pcs)
 
@@ -31,8 +31,13 @@ func NewStacktrace() *Stacktrace {
 		return nil
 	}
 
+	skipFrames := 0
+	if len(opts) > 0 {
+		skipFrames = opts[0].SkipFrames
+	}
+
 	runtimeFrames := extractFrames(pcs[:n])
-	frames := createFrames(runtimeFrames)
+	frames := createFrames(runtimeFrames, skipFrames)
 
 	stacktrace := Stacktrace{
 		Frames: frames,
@@ -62,7 +67,7 @@ func ExtractStacktrace(err error) *Stacktrace {
 	}
 
 	runtimeFrames := extractFrames(pcs)
-	frames := createFrames(runtimeFrames)
+	frames := createFrames(runtimeFrames, 0)
 
 	stacktrace := Stacktrace{
 		Frames: frames,
@@ -270,17 +275,12 @@ func extractFrames(pcs []uintptr) []runtime.Frame {
 	for {
 		callerFrame, more := callersFrames.Next()
 
-		frames = append(frames, callerFrame)
+		// Prepend the frame
+		frames = append([]runtime.Frame{callerFrame}, frames...)
 
 		if !more {
 			break
 		}
-	}
-
-	// TODO don't append and reverse, put in the right place from the start.
-	// reverse
-	for i, j := 0, len(frames)-1; i < j; i, j = i+1, j-1 {
-		frames[i], frames[j] = frames[j], frames[i]
 	}
 
 	return frames
@@ -288,12 +288,12 @@ func extractFrames(pcs []uintptr) []runtime.Frame {
 
 // createFrames creates Frame objects while filtering out frames that are not
 // meant to be reported to Sentry, those are frames internal to the SDK or Go.
-func createFrames(frames []runtime.Frame) []Frame {
-	if len(frames) == 0 {
+func createFrames(frames []runtime.Frame, skip int) []Frame {
+	if len(frames) == 0 || skip >= len(frames) {
 		return nil
 	}
 
-	result := make([]Frame, 0, len(frames))
+	var result []Frame
 
 	for _, frame := range frames {
 		function := frame.Function
@@ -307,7 +307,11 @@ func createFrames(frames []runtime.Frame) []Frame {
 		}
 	}
 
-	return result
+	if skip >= len(result) {
+		return []Frame{}
+	}
+
+	return result[:len(result)-skip]
 }
 
 // TODO ID: why do we want to do this?
@@ -333,12 +337,12 @@ func shouldSkipFrame(module string) bool {
 var goRoot = strings.ReplaceAll(build.Default.GOROOT, "\\", "/")
 
 func setInAppFrame(frame *Frame) {
+	frame.InApp = true
+
 	if strings.HasPrefix(frame.AbsPath, goRoot) ||
 		strings.Contains(frame.Module, "vendor") ||
 		strings.Contains(frame.Module, "third_party") {
 		frame.InApp = false
-	} else {
-		frame.InApp = true
 	}
 }
 

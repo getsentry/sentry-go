@@ -18,6 +18,20 @@ const (
 	SentryBaggageHeader = "baggage"
 )
 
+// SpanOrigin indicates what created a trace or a span. See: https://develop.sentry.dev/sdk/performance/trace-origin/
+type SpanOrigin string
+
+const (
+	SpanOriginManual   = "manual"
+	SpanOriginEcho     = "auto.http.echo"
+	SpanOriginFastHTTP = "auto.http.fasthttp"
+	SpanOriginFiber    = "auto.http.fiber"
+	SpanOriginGin      = "auto.http.gin"
+	SpanOriginStdLib   = "auto.http.stdlib"
+	SpanOriginIris     = "auto.http.iris"
+	SpanOriginNegroni  = "auto.http.negroni"
+)
+
 // A Span is the building block of a Sentry transaction. Spans build up a tree
 // structure of timed operations. The span tree makes up a transaction event
 // that is sent to Sentry when the root span is finished.
@@ -37,6 +51,7 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	Data         map[string]interface{} `json:"data,omitempty"`
 	Sampled      Sampled                `json:"-"`
 	Source       TransactionSource      `json:"-"`
+	Origin       SpanOrigin             `json:"origin,omitempty"`
 
 	// mu protects concurrent writes to map fields
 	mu sync.RWMutex
@@ -113,11 +128,19 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		parent: parent,
 	}
 
+	_, err := rand.Read(span.SpanID[:])
+	if err != nil {
+		panic(err)
+	}
+
 	if hasParent {
 		span.TraceID = parent.TraceID
+		span.ParentSpanID = parent.SpanID
+		span.Origin = parent.Origin
 	} else {
 		// Only set the Source if this is a transaction
 		span.Source = SourceCustom
+		span.Origin = SpanOriginManual
 
 		// Implementation note:
 		//
@@ -153,13 +176,6 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		if err != nil {
 			panic(err)
 		}
-	}
-	_, err := rand.Read(span.SpanID[:])
-	if err != nil {
-		panic(err)
-	}
-	if hasParent {
-		span.ParentSpanID = parent.SpanID
 	}
 
 	// Apply options to override defaults.
@@ -870,6 +886,29 @@ func WithSpanSampled(sampled Sampled) SpanOption {
 	}
 }
 
+// WithSpanOrigin sets the origin of the span.
+func WithSpanOrigin(origin SpanOrigin) SpanOption {
+	return func(s *Span) {
+		s.Origin = origin
+	}
+}
+
+func GetTraceHeader(s *Scope) string {
+	if s.span != nil {
+		return s.span.ToSentryTrace()
+	}
+
+	return fmt.Sprintf("%s-%s", s.propagationContext.TraceID, s.propagationContext.SpanID)
+}
+
+func GetBaggageHeader(s *Scope) string {
+	if s.span != nil {
+		return s.span.ToBaggage()
+	}
+
+	return s.propagationContext.DynamicSamplingContext.String()
+}
+
 // ContinueFromRequest returns a span option that updates the span to continue
 // an existing trace. If it cannot detect an existing trace in the request, the
 // span will be left unchanged.
@@ -939,6 +978,7 @@ func SpanFromContext(ctx context.Context) *Span {
 func StartTransaction(ctx context.Context, name string, options ...SpanOption) *Span {
 	currentTransaction, exists := ctx.Value(spanContextKey{}).(*Span)
 	if exists {
+		currentTransaction.ctx = ctx
 		return currentTransaction
 	}
 
