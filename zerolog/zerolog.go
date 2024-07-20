@@ -3,7 +3,6 @@ package sentryzerolog
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"time"
 
@@ -161,24 +160,20 @@ func (w *Writer) addBreadcrumb(event *sentry.Event) {
 
 // Write handles zerolog's json and sends events to sentry.
 func (w *Writer) Write(data []byte) (n int, err error) {
-	fmt.Println("data", string(data))
 
 	n = len(data)
 
 	lvl, err := parseLogLevel(data)
 	if err != nil {
-		fmt.Println("parseLogLevel", err)
 		return n, nil
 	}
 
 	event, ok := parseLogEvent(data)
 	if !ok {
-		fmt.Println("parseLogEvent", ok)
 		return
 	}
 	event.Level, ok = levels[lvl]
 	if !ok {
-		fmt.Println("levels", ok)
 		return
 	}
 
@@ -189,7 +184,6 @@ func (w *Writer) Write(data []byte) (n int, err error) {
 	}
 
 	w.hub.CaptureEvent(event)
-	fmt.Println("event", event)
 	// should flush before os.Exit
 	if event.Level == sentry.LevelFatal {
 		w.hub.Flush(w.flushTimeout)

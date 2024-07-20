@@ -21,9 +21,11 @@ func main() {
 			FlushTimeout:    5 * time.Second,
 		},
 		ClientOptions: sentry.ClientOptions{
-			Dsn:         "",
-			Environment: "development",
-			Release:     "1.0",
+			Dsn:              "",
+			Environment:      "development",
+			Release:          "1.0",
+			Debug:            true,
+			AttachStacktrace: true,
 		},
 	})
 
@@ -42,6 +44,6 @@ func main() {
 	logger := zerolog.New(m).With().Timestamp().Logger()
 
 	logger.Debug().Msg("Application has started")
-	logger.Error().Msg("oh no!")
-	logger.Fatal().Msg("can't continue...")
+	logger.Error().Msg("Oh no!")
+	logger.Fatal().Msg("Can't continue...")
 }
