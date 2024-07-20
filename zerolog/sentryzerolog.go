@@ -3,6 +3,7 @@ package sentryzerolog
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -265,6 +266,8 @@ func parseLogEvent(data []byte) (*sentry.Event, bool) {
 			} else {
 				event.User = user
 			}
+		case FieldRequest:
+			fmt.Println("request")
 		case FieldTransaction:
 			event.Transaction = string(value)
 		case FieldFingerprint:

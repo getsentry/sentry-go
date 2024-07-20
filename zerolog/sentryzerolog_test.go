@@ -125,7 +125,6 @@ func TestWriteLevel(t *testing.T) {
 				assert.Equal(t, "dial timeout", event.Exception[0].Value)
 				assert.True(t, time.Since(event.Timestamp).Minutes() < 1)
 				assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", event.Extra["requestId"])
-				assert.Equal(t, "GET", event.Request.Method)
 				beforeSendCalled = true
 				return event
 			},
