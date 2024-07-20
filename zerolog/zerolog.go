@@ -53,6 +53,7 @@ const (
 	// These fields are simply omitted, as they are duplicated by the Sentry SDK.
 	FieldGoVersion = "go_version"
 	FieldMaxProcs  = "go_maxprocs"
+	logger         = "zerolog"
 )
 
 // A good portion of this implementation has been taken from https://github.com/archdx/zerolog-sentry/blob/master/writer.go
@@ -236,9 +237,6 @@ func parseLogLevel(data []byte) (zerolog.Level, error) {
 	return zerolog.ParseLevel(level)
 }
 
-const logger = "zerolog"
-
-// parses the event except the log level.
 func parseLogEvent(data []byte) (*sentry.Event, bool) {
 	event := sentry.Event{
 		Timestamp: now(),
