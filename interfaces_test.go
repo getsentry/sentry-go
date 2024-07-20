@@ -78,6 +78,7 @@ func TestNewRequest(t *testing.T) {
 	const payload = `{"test_data": true}`
 	r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
 	r.Header.Add("Authorization", "Bearer 1234567890")
+	r.Header.Add("Proxy-Authorization", "Bearer 123")
 	r.Header.Add("Cookie", "foo=bar")
 	r.Header.Add("X-Forwarded-For", "127.0.0.1")
 	r.Header.Add("X-Real-Ip", "127.0.0.1")
@@ -91,12 +92,13 @@ func TestNewRequest(t *testing.T) {
 		QueryString: "q=sentry",
 		Cookies:     "foo=bar",
 		Headers: map[string]string{
-			"Authorization":   "Bearer 1234567890",
-			"Cookie":          "foo=bar",
-			"Host":            "example.com",
-			"X-Forwarded-For": "127.0.0.1",
-			"X-Real-Ip":       "127.0.0.1",
-			"Some-Header":     "some-header value",
+			"Authorization":       "Bearer 1234567890",
+			"Proxy-Authorization": "Bearer 123",
+			"Cookie":              "foo=bar",
+			"Host":                "example.com",
+			"X-Forwarded-For":     "127.0.0.1",
+			"X-Real-Ip":           "127.0.0.1",
+			"Some-Header":         "some-header value",
 		},
 		Env: map[string]string{
 			"REMOTE_ADDR": "192.0.2.1",
@@ -112,6 +114,7 @@ func TestNewRequestWithNoPII(t *testing.T) {
 	const payload = `{"test_data": true}`
 	r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
 	r.Header.Add("Authorization", "Bearer 1234567890")
+	r.Header.Add("Proxy-Authorization", "Bearer 123")
 	r.Header.Add("Cookie", "foo=bar")
 	r.Header.Add("X-Forwarded-For", "127.0.0.1")
 	r.Header.Add("X-Real-Ip", "127.0.0.1")
