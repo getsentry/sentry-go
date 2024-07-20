@@ -160,7 +160,6 @@ func (w *Writer) addBreadcrumb(event *sentry.Event) {
 
 // Write handles zerolog's json and sends events to sentry.
 func (w *Writer) Write(data []byte) (n int, err error) {
-
 	n = len(data)
 
 	lvl, err := parseLogLevel(data)
@@ -192,7 +191,6 @@ func (w *Writer) Write(data []byte) (n int, err error) {
 	return
 }
 
-// implements zerolog.LevelWriter.
 func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 	n = len(p)
 
