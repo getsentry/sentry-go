@@ -42,6 +42,24 @@ func TestParseLogEvent(t *testing.T) {
 	assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", ev.Extra["requestId"])
 }
 
+func TestFailedClientCreation(t *testing.T) {
+	_, err := New(Config{ClientOptions: sentry.ClientOptions{Dsn: "invalid"}})
+	require.NotNil(t, err)
+}
+
+func TestNewWithHub(t *testing.T) {
+	hub := sentry.CurrentHub()
+	require.NotNil(t, hub)
+
+	_, err := NewWithHub(hub, Options{
+		Levels: []zerolog.Level{zerolog.ErrorLevel},
+	})
+	require.Nil(t, err)
+
+	_, err = NewWithHub(nil, Options{})
+	require.NotNil(t, err)
+}
+
 func TestParseLogLevel(t *testing.T) {
 	_, err := New(Config{})
 	require.Nil(t, err)
@@ -66,6 +84,9 @@ func TestWrite(t *testing.T) {
 				return event
 			},
 		},
+		Options: Options{
+			WithBreadcrumbs: true,
+		},
 	}
 	writer, err := New(cfg)
 	require.Nil(t, err)
@@ -78,12 +99,23 @@ func TestWrite(t *testing.T) {
 	// use io.MultiWriter to enforce using the Write() method
 	log := zerolog.New(io.MultiWriter(writer)).With().Timestamp().
 		Str("requestId", "bee07485-2485-4f64-99e1-d10165884ca7").
+		Interface("user", sentry.User{ID: "1", Email: "testuser@sentry.io"}).
+		Strs("fingerprint", []string{"test"}).
 		Logger()
 	log.Err(errors.New("dial timeout")).
 		Msg("test message")
 
 	require.Nil(t, zerologError)
 	require.True(t, beforeSendCalled)
+}
+
+func TestClose(t *testing.T) {
+	cfg := Config{}
+	writer, err := New(cfg)
+	require.Nil(t, err)
+
+	err = writer.Close()
+	require.Nil(t, err)
 }
 
 func TestWrite_TraceDoesNotPanic(t *testing.T) {
@@ -107,6 +139,9 @@ func TestWrite_TraceDoesNotPanic(t *testing.T) {
 	// use io.MultiWriter to enforce using the Write() method
 	log := zerolog.New(io.MultiWriter(writer)).With().Timestamp().
 		Str("requestId", "bee07485-2485-4f64-99e1-d10165884ca7").
+		Str("user", "1").
+		Str("transaction", "test").
+		Str("fingerprint", "test").
 		Logger()
 	log.Trace().Msg("test message")
 
