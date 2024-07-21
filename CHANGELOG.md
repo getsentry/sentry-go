@@ -3,6 +3,7 @@
 - Add trace origin to span data ([#849](https://github.com/getsentry/sentry-go/pull/849))
 - Add ability to skip frames in stacktrace ([#852](https://github.com/getsentry/sentry-go/pull/852))
 - Add Zerolog integration ([#857](https://github.com/getsentry/sentry-go/pull/857))
+- Remove Martini integration ([#861](https://github.com/getsentry/sentry-go/pull/861))
 
 ## 0.28.1
 

@@ -5,7 +5,6 @@ go 1.18
 require (
 	github.com/gin-gonic/gin v1.8.1
 	github.com/go-errors/errors v1.4.2
-	github.com/go-martini/martini v0.0.0-20170121215854-22fa46961aab
 	github.com/gofiber/fiber/v2 v2.52.2
 	github.com/google/go-cmp v0.5.9
 	github.com/kataras/iris/v12 v12.2.0
@@ -20,7 +19,7 @@ require (
 	golang.org/x/text v0.14.0
 )
 
-require github.com/buger/jsonparser v1.1.1 // indirect
+require github.com/buger/jsonparser v1.1.1
 
 require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
@@ -31,7 +30,6 @@ require (
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
-	github.com/codegangsta/inject v0.0.0-20150114235600-33e0aa1cb7c0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/eknkc/amber v0.0.0-20171010120322-cdade1c07385 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
