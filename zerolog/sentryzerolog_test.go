@@ -127,6 +127,9 @@ func TestWrite_TraceDoesNotPanic(t *testing.T) {
 				return event
 			},
 		},
+		Options: Options{
+			WithBreadcrumbs: true,
+		},
 	}
 	writer, err := New(cfg)
 	require.Nil(t, err)
@@ -164,6 +167,9 @@ func TestWriteLevel(t *testing.T) {
 				return event
 			},
 		},
+		Options: Options{
+			WithBreadcrumbs: true,
+		},
 	}
 	writer, err := New(cfg)
 	require.Nil(t, err)
@@ -191,7 +197,8 @@ func TestWrite_Disabled(t *testing.T) {
 			},
 		},
 		Options: Options{
-			Levels: []zerolog.Level{zerolog.FatalLevel},
+			Levels:          []zerolog.Level{zerolog.FatalLevel},
+			WithBreadcrumbs: true,
 		},
 	}
 
@@ -225,7 +232,8 @@ func TestWriteLevel_Disabled(t *testing.T) {
 			},
 		},
 		Options: Options{
-			Levels: []zerolog.Level{zerolog.FatalLevel},
+			Levels:          []zerolog.Level{zerolog.FatalLevel},
+			WithBreadcrumbs: true,
 		},
 	}
 	writer, err := New(cfg)
