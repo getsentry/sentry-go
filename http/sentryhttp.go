@@ -83,9 +83,11 @@ func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		hub := sentry.GetHubFromContext(r.Context())
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
+			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
 
 		if client := hub.Client(); client != nil {
@@ -99,8 +101,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
 		}
 
-		transaction := sentry.StartTransaction(
-			sentry.SetHubOnContext(r.Context(), hub),
+		transaction := sentry.StartTransaction(ctx,
 			fmt.Sprintf("%s %s", r.Method, r.URL.Path),
 			options...,
 		)
