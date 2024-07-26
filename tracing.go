@@ -760,12 +760,13 @@ func (ss SpanStatus) MarshalJSON() ([]byte, error) {
 // A TraceContext carries information about an ongoing trace and is meant to be
 // stored in Event.Contexts (as *TraceContext).
 type TraceContext struct {
-	TraceID      TraceID    `json:"trace_id"`
-	SpanID       SpanID     `json:"span_id"`
-	ParentSpanID SpanID     `json:"parent_span_id"`
-	Op           string     `json:"op,omitempty"`
-	Description  string     `json:"description,omitempty"`
-	Status       SpanStatus `json:"status,omitempty"`
+	TraceID      TraceID                `json:"trace_id"`
+	SpanID       SpanID                 `json:"span_id"`
+	ParentSpanID SpanID                 `json:"parent_span_id"`
+	Op           string                 `json:"op,omitempty"`
+	Description  string                 `json:"description,omitempty"`
+	Status       SpanStatus             `json:"status,omitempty"`
+	Data         map[string]interface{} `json:"data,omitempty"`
 }
 
 func (tc *TraceContext) MarshalJSON() ([]byte, error) {
@@ -806,6 +807,10 @@ func (tc TraceContext) Map() map[string]interface{} {
 
 	if tc.Status > 0 && tc.Status < maxSpanStatus {
 		m["status"] = tc.Status
+	}
+
+	if len(tc.Data) > 0 {
+		m["data"] = tc.Data
 	}
 
 	return m
