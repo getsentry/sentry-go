@@ -445,7 +445,7 @@ func TestGetTraceparent(t *testing.T) {
 	}
 }
 
-func TestGetBaggageHeader(t *testing.T) {
+func TestGetBaggage(t *testing.T) {
 	tests := map[string]struct {
 		hub      *Hub
 		expected string
@@ -457,7 +457,12 @@ func TestGetBaggageHeader(t *testing.T) {
 					dynamicSamplingContext: DynamicSamplingContext{
 						Entries: map[string]string{"sample_rate": "1", "release": "1.0.0", "environment": "production"},
 					},
+					recorder: &spanRecorder{},
+					ctx:      context.Background(),
+					Sampled:  SampledTrue,
 				}
+				s.span.spanRecorder().record(s.span)
+
 				return h
 			}(),
 			expected: "sentry-sample_rate=1,sentry-environment=production,sentry-release=1.0.0",
