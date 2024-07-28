@@ -7,10 +7,6 @@ import (
 	"net/http"
 )
 
-// Majority of the code in this file is derived from: https://github.com/samber/slog-common
-// Smaller changes have been implemented to remove dependency on generics
-// and packages that are not available in the standard library of Go 1.13
-
 // This wrapper is derived from https://github.com/go-chi/chi/blob/master/middleware/wrap_writer.go
 // Copyright (c) 2015-present Peter Kieltyka (https://github.com/pkieltyka), Google Inc.
 
