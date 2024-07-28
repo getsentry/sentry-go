@@ -13,6 +13,7 @@ import (
 
 // The identifier of the Logrus SDK.
 const sdkIdentifier = "sentry.go.logrus"
+const name = "logrus"
 
 // These default log field keys are used to pass specific metadata in a way that
 // Sentry understands. If they are found in the log fields, and the value is of
@@ -153,6 +154,7 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 		Extra:     data,
 		Message:   l.Message,
 		Timestamp: l.Time,
+		Logger:    name,
 	}
 	key := h.key(FieldRequest)
 	if req, ok := s.Extra[key].(*http.Request); ok {
