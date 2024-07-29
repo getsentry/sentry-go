@@ -101,29 +101,34 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
 		}
 
-		transaction := sentry.StartTransaction(ctx,
-			fmt.Sprintf("%s %s", r.Method, r.URL.Path),
-			options...,
-		)
-		transaction.SetData("http.request.method", r.Method)
+		if hub.Client().Options().Instrumenter == "sentry" {
+			transaction := sentry.StartTransaction(ctx,
+				fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+				options...,
+			)
+			transaction.SetData("http.request.method", r.Method)
 
-		rw := NewWrapResponseWriter(w, r.ProtoMajor)
+			rw := NewWrapResponseWriter(w, r.ProtoMajor)
+			w = rw
 
-		defer func() {
-			status := rw.Status()
-			transaction.Status = sentry.HTTPtoSpanStatus(status)
-			transaction.SetData("http.response.status_code", status)
-			transaction.Finish()
-		}()
+			defer func() {
+				status := rw.Status()
+				transaction.Status = sentry.HTTPtoSpanStatus(status)
+				transaction.SetData("http.response.status_code", status)
+				transaction.Finish()
+			}()
 
-		// TODO(tracing): if the next handler.ServeHTTP panics, store
-		// information on the transaction accordingly (status, tag,
-		// level?, ...).
-		r = r.WithContext(transaction.Context())
+			// TODO(tracing): if the next handler.ServeHTTP panics, store
+			// information on the transaction accordingly (status, tag,
+			// level?, ...).
+			r = r.WithContext(transaction.Context())
+		} else {
+			r = r.WithContext(ctx) // we still need the context to get the hub
+		}
 		hub.Scope().SetRequest(r)
 
 		defer h.recoverWithSentry(hub, r)
-		handler.ServeHTTP(rw, r)
+		handler.ServeHTTP(w, r)
 	}
 }
 

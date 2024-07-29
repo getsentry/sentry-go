@@ -77,19 +77,23 @@ func (h *handler) handle(c *gin.Context) {
 		sentry.WithSpanOrigin(sentry.SpanOriginGin),
 	}
 
-	transaction := sentry.StartTransaction(ctx,
-		fmt.Sprintf("%s %s", c.Request.Method, transactionName),
-		options...,
-	)
-	transaction.SetData("http.request.method", c.Request.Method)
-	defer func() {
-		status := c.Writer.Status()
-		transaction.Status = sentry.HTTPtoSpanStatus(status)
-		transaction.SetData("http.response.status_code", status)
-		transaction.Finish()
-	}()
+	if hub.Client().Options().Instrumenter == "sentry" {
+		transaction := sentry.StartTransaction(ctx,
+			fmt.Sprintf("%s %s", c.Request.Method, transactionName),
+			options...,
+		)
+		transaction.SetData("http.request.method", c.Request.Method)
+		defer func() {
+			status := c.Writer.Status()
+			transaction.Status = sentry.HTTPtoSpanStatus(status)
+			transaction.SetData("http.response.status_code", status)
+			transaction.Finish()
+		}()
+		c.Request = c.Request.WithContext(transaction.Context())
+	} else {
+		c.Request = c.Request.WithContext(ctx) // we still need the context to get the hub
+	}
 
-	c.Request = c.Request.WithContext(transaction.Context())
 	hub.Scope().SetRequest(c.Request)
 	c.Set(valuesKey, hub)
 	defer h.recoverWithSentry(hub, c.Request)
