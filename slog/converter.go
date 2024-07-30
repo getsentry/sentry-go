@@ -72,50 +72,58 @@ func attrToSentryEvent(attr slog.Attr, event *sentry.Event) {
 	case k == "transaction" && kind == slog.KindString:
 		event.Transaction = v.String()
 	case k == "user" && kind == slog.KindGroup:
-		data := attrsToString(v.Group()...)
-		if id, ok := data["id"]; ok {
-			event.User.ID = id
-			delete(data, "id")
-		}
-		if email, ok := data["email"]; ok {
-			event.User.Email = email
-			delete(data, "email")
-		}
-		if ipAddress, ok := data["ip_address"]; ok {
-			event.User.IPAddress = ipAddress
-			delete(data, "ip_address")
-		}
-		if username, ok := data["username"]; ok {
-			event.User.Username = username
-			delete(data, "username")
-		}
-		if name, ok := data["name"]; ok {
-			event.User.Name = name
-			delete(data, "name")
-		}
-		if segment, ok := data["segment"]; ok {
-			event.User.Segment = segment
-			delete(data, "segment")
-		}
-		event.User.Data = data
+		handleUserAttributes(v, event)
 	case k == "request" && kind == slog.KindAny:
-		if req, ok := v.Any().(http.Request); ok {
-			event.Request = sentry.NewRequest(&req)
-		} else if req, ok := v.Any().(*http.Request); ok {
-			event.Request = sentry.NewRequest(req)
-		} else {
-			if tm, ok := v.Any().(encoding.TextMarshaler); ok {
-				data, err := tm.MarshalText()
-				if err == nil {
-					event.User.Data["request"] = string(data)
-				} else {
-					event.User.Data["request"] = fmt.Sprintf("%v", v.Any())
-				}
-			}
-		}
+		handleRequestAttributes(v, event)
 	case kind == slog.KindGroup:
 		event.Extra[k] = attrsToMap(v.Group()...)
 	default:
 		event.Extra[k] = v.Any()
+	}
+}
+
+func handleUserAttributes(v slog.Value, event *sentry.Event) {
+	data := attrsToString(v.Group()...)
+	if id, ok := data["id"]; ok {
+		event.User.ID = id
+		delete(data, "id")
+	}
+	if email, ok := data["email"]; ok {
+		event.User.Email = email
+		delete(data, "email")
+	}
+	if ipAddress, ok := data["ip_address"]; ok {
+		event.User.IPAddress = ipAddress
+		delete(data, "ip_address")
+	}
+	if username, ok := data["username"]; ok {
+		event.User.Username = username
+		delete(data, "username")
+	}
+	if name, ok := data["name"]; ok {
+		event.User.Name = name
+		delete(data, "name")
+	}
+	if segment, ok := data["segment"]; ok {
+		event.User.Segment = segment
+		delete(data, "segment")
+	}
+	event.User.Data = data
+}
+
+func handleRequestAttributes(v slog.Value, event *sentry.Event) {
+	if req, ok := v.Any().(http.Request); ok {
+		event.Request = sentry.NewRequest(&req)
+	} else if req, ok := v.Any().(*http.Request); ok {
+		event.Request = sentry.NewRequest(req)
+	} else {
+		if tm, ok := v.Any().(encoding.TextMarshaler); ok {
+			data, err := tm.MarshalText()
+			if err == nil {
+				event.User.Data["request"] = string(data)
+			} else {
+				event.User.Data["request"] = fmt.Sprintf("%v", v.Any())
+			}
+		}
 	}
 }
