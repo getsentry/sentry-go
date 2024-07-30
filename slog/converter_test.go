@@ -58,8 +58,22 @@ func TestAttrToSentryEvent(t *testing.T) {
 			attr: slog.Attr{Key: "user", Value: slog.GroupValue(
 				slog.Attr{Key: "id", Value: slog.StringValue("user_id")},
 				slog.Attr{Key: "email", Value: slog.StringValue("user_email")},
+				slog.Attr{Key: "ip_address", Value: slog.StringValue("user_ip_address")},
+				slog.Attr{Key: "username", Value: slog.StringValue("user_username")},
+				slog.Attr{Key: "segment", Value: slog.StringValue("user_segment")},
+				slog.Attr{Key: "name", Value: slog.StringValue("user_name")},
 			)},
-			expected: &sentry.Event{User: sentry.User{ID: "user_id", Email: "user_email", Data: map[string]string{}}},
+			expected: &sentry.Event{
+				User: sentry.User{
+					ID:        "user_id",
+					Email:     "user_email",
+					IPAddress: "user_ip_address",
+					Username:  "user_username",
+					Name:      "user_name",
+					Segment:   "user_segment",
+					Data:      map[string]string{},
+				},
+			},
 		},
 		"request": {
 			attr: slog.Attr{Key: "request", Value: slog.AnyValue(&http.Request{
@@ -74,6 +88,24 @@ func TestAttrToSentryEvent(t *testing.T) {
 					"Host": "",
 				},
 			}},
+		},
+		"request_ptr": {
+			attr: slog.Attr{Key: "request", Value: slog.AnyValue(http.Request{
+				Method: "GET",
+				URL:    reqURL,
+				Header: http.Header{},
+			})},
+			expected: &sentry.Event{Request: &sentry.Request{
+				Method: "GET",
+				URL:    "http://",
+				Headers: map[string]string{
+					"Host": "",
+				},
+			}},
+		},
+		"request_str": {
+			attr:     slog.Attr{Key: "request", Value: slog.StringValue("GET http://")},
+			expected: &sentry.Event{Extra: map[string]any{"request": "GET http://"}},
 		},
 		"context_group": {
 			attr: slog.Attr{Key: "context", Value: slog.GroupValue(
