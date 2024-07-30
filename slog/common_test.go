@@ -29,7 +29,7 @@ func TestSource(t *testing.T) {
 	expectedAttrs := map[string]any{
 		"function": "github.com/getsentry/sentry-go/slog.TestSource",
 		"file":     file,
-		"line":     int64(15),
+		"line":     int64(17),
 	}
 
 	for _, a := range groupAttrs {
