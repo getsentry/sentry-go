@@ -3,9 +3,11 @@
 package sentryslog
 
 import (
+	"context"
 	"log/slog"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -323,4 +325,192 @@ func TestRemoveEmptyAttrs(t *testing.T) {
 			[]slog.Attr{slog.Group("test", slog.Any("foobar", nil)), slog.Int("int", 42)},
 		),
 	)
+}
+
+func TestValueToString(t *testing.T) {
+	tests := map[string]struct {
+		input    slog.Attr
+		expected string
+	}{
+		"KindInt64": {
+			input:    slog.Int64("key", 42),
+			expected: "42",
+		},
+		"KindUint64": {
+			input:    slog.Uint64("key", 42),
+			expected: "42",
+		},
+		"KindFloat64": {
+			input:    slog.Float64("key", 3.14),
+			expected: "3.140000",
+		},
+		"KindString": {
+			input:    slog.String("key", "test"),
+			expected: "test",
+		},
+		"KindBool": {
+			input:    slog.Bool("key", true),
+			expected: "true",
+		},
+		"KindDuration": {
+			input:    slog.Duration("key", time.Second*42),
+			expected: "42s",
+		},
+		"KindTime": {
+			input:    slog.Time("key", time.Date(2023, time.July, 30, 12, 0, 0, 0, time.UTC)),
+			expected: "2023-07-30 12:00:00 +0000 UTC",
+		},
+		"KindAny": {
+			input:    slog.Any("key", "any value"),
+			expected: "any value",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			actual := valueToString(tc.input.Value)
+			assert.Equal(t, tc.expected, actual)
+		})
+	}
+}
+
+func TestContextExtractor(t *testing.T) {
+	tests := map[string]struct {
+		ctx      context.Context
+		fns      []func(ctx context.Context) []slog.Attr
+		expected []slog.Attr
+	}{
+		"NoFunctions": {
+			ctx:      context.Background(),
+			fns:      []func(ctx context.Context) []slog.Attr{},
+			expected: []slog.Attr{},
+		},
+		"SingleFunction": {
+			ctx: context.Background(),
+			fns: []func(ctx context.Context) []slog.Attr{
+				func(ctx context.Context) []slog.Attr {
+					return []slog.Attr{slog.String("key1", "value1")}
+				},
+			},
+			expected: []slog.Attr{slog.String("key1", "value1")},
+		},
+		"MultipleFunctions": {
+			ctx: context.Background(),
+			fns: []func(ctx context.Context) []slog.Attr{
+				func(ctx context.Context) []slog.Attr {
+					return []slog.Attr{slog.String("key1", "value1")}
+				},
+				func(ctx context.Context) []slog.Attr {
+					return []slog.Attr{slog.String("key2", "value2")}
+				},
+			},
+			expected: []slog.Attr{slog.String("key1", "value1"), slog.String("key2", "value2")},
+		},
+		"FunctionWithContext": {
+			ctx: context.WithValue(context.Background(), "userID", "1234"),
+			fns: []func(ctx context.Context) []slog.Attr{
+				func(ctx context.Context) []slog.Attr {
+					if userID, ok := ctx.Value("userID").(string); ok {
+						return []slog.Attr{slog.String("userID", userID)}
+					}
+					return []slog.Attr{}
+				},
+			},
+			expected: []slog.Attr{slog.String("userID", "1234")},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			actual := contextExtractor(tc.ctx, tc.fns)
+			assert.Equal(t, tc.expected, actual)
+		})
+	}
+}
+
+func TestAppendAttrsToGroup(t *testing.T) {
+	tests := map[string]struct {
+		groups      []string
+		actualAttrs []slog.Attr
+		newAttrs    []slog.Attr
+		expected    []slog.Attr
+	}{
+		"NoGroups": {
+			groups:      []string{},
+			actualAttrs: []slog.Attr{slog.String("key1", "value1")},
+			newAttrs:    []slog.Attr{slog.String("key2", "value2")},
+			expected:    []slog.Attr{slog.String("key1", "value1"), slog.String("key2", "value2")},
+		},
+		"SingleGroup": {
+			groups: []string{"group1"},
+			actualAttrs: []slog.Attr{
+				slog.Group("group1", slog.String("key1", "value1")),
+			},
+			newAttrs: []slog.Attr{slog.String("key2", "value2")},
+			expected: []slog.Attr{
+				slog.Group("group1", slog.String("key1", "value1"), slog.String("key2", "value2")),
+			},
+		},
+		"NestedGroups": {
+			groups: []string{"group1", "group2"},
+			actualAttrs: []slog.Attr{
+				slog.Group("group1", slog.Group("group2", slog.String("key1", "value1"))),
+			},
+			newAttrs: []slog.Attr{slog.String("key2", "value2")},
+			expected: []slog.Attr{
+				slog.Group("group1", slog.Group("group2", slog.String("key1", "value1"), slog.String("key2", "value2"))),
+			},
+		},
+		"NewGroup": {
+			groups:      []string{"group1"},
+			actualAttrs: []slog.Attr{slog.String("key1", "value1")},
+			newAttrs:    []slog.Attr{slog.String("key2", "value2")},
+			expected: []slog.Attr{
+				slog.String("key1", "value1"),
+				slog.Group("group1", slog.String("key2", "value2")),
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			actual := appendAttrsToGroup(tc.groups, tc.actualAttrs, tc.newAttrs...)
+			assert.Equal(t, tc.expected, actual)
+		})
+	}
+}
+
+func TestToAnySlice(t *testing.T) {
+	tests := map[string]struct {
+		input    []slog.Attr
+		expected []any
+	}{
+		"EmptySlice": {
+			input:    []slog.Attr{},
+			expected: []any{},
+		},
+		"SingleElement": {
+			input:    []slog.Attr{slog.String("key1", "value1")},
+			expected: []any{slog.String("key1", "value1")},
+		},
+		"MultipleElements": {
+			input: []slog.Attr{
+				slog.String("key1", "value1"),
+				slog.Int("key2", 2),
+				slog.Bool("key3", true),
+			},
+			expected: []any{
+				slog.String("key1", "value1"),
+				slog.Int("key2", 2),
+				slog.Bool("key3", true),
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			actual := toAnySlice(tc.input)
+			assert.Equal(t, tc.expected, actual)
+		})
+	}
 }
