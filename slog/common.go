@@ -7,11 +7,8 @@ import (
 	"encoding"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"runtime"
 	"strconv"
-
-	"github.com/getsentry/sentry-go"
 )
 
 func source(sourceKey string, r *slog.Record) slog.Attr {
@@ -47,93 +44,6 @@ func replaceAttrs(fn replaceAttrFn, groups []string, attrs ...slog.Attr) []slog.
 	return attrs
 }
 
-func extractError(attrs []slog.Attr) ([]slog.Attr, error) {
-	for i := range attrs {
-		attr := attrs[i]
-
-		if _, ok := errorKeys[attr.Key]; !ok {
-			continue
-		}
-
-		if err, ok := attr.Value.Resolve().Any().(error); ok {
-			return append(attrs[:i], attrs[i+1:]...), err
-		}
-	}
-
-	return attrs, nil
-}
-
-func attrToSentryEvent(attr slog.Attr, event *sentry.Event) {
-	k := attr.Key
-	v := attr.Value
-	kind := attr.Value.Kind()
-
-	if k == "dist" && kind == slog.KindString {
-		event.Dist = v.String()
-	} else if k == "environment" && kind == slog.KindString {
-		event.Environment = v.String()
-	} else if k == "event_id" && kind == slog.KindString {
-		event.EventID = sentry.EventID(v.String())
-	} else if k == "platform" && kind == slog.KindString {
-		event.Platform = v.String()
-	} else if k == "release" && kind == slog.KindString {
-		event.Release = v.String()
-	} else if k == "server_name" && kind == slog.KindString {
-		event.ServerName = v.String()
-	} else if attr.Key == "tags" && kind == slog.KindGroup {
-		event.Tags = attrsToString(v.Group()...)
-	} else if attr.Key == "transaction" && kind == slog.KindGroup {
-		event.Transaction = v.String()
-	} else if attr.Key == "user" && kind == slog.KindGroup {
-		data := attrsToString(v.Group()...)
-
-		if id, ok := data["id"]; ok {
-			event.User.ID = id
-			delete(data, "id")
-		} else if email, ok := data["email"]; ok {
-			event.User.Email = email
-			delete(data, "email")
-		} else if ipAddress, ok := data["ip_address"]; ok {
-			event.User.IPAddress = ipAddress
-			delete(data, "ip_address")
-		} else if username, ok := data["username"]; ok {
-			event.User.Username = username
-			delete(data, "username")
-		} else if name, ok := data["name"]; ok {
-			event.User.Name = name
-			delete(data, "name")
-		} else if segment, ok := data["segment"]; ok {
-			event.User.Segment = segment
-			delete(data, "segment")
-		}
-
-		event.User.Data = data
-	} else if attr.Key == "request" && kind == slog.KindAny {
-		if req, ok := attr.Value.Any().(http.Request); ok {
-			event.Request = sentry.NewRequest(&req)
-		} else if req, ok := attr.Value.Any().(*http.Request); ok {
-			event.Request = sentry.NewRequest(req)
-		} else {
-			if tm, ok := v.Any().(encoding.TextMarshaler); ok {
-				data, err := tm.MarshalText()
-				if err == nil {
-					event.User.Data["request"] = string(data)
-				} else {
-					event.User.Data["request"] = fmt.Sprintf("%v", v.Any())
-				}
-			}
-		}
-	} else if kind == slog.KindGroup {
-		event.Contexts[attr.Key] = attrsToMap(attr.Value.Group()...)
-	} else {
-		// "context" should not be added to underlying context layers (see slog.KindGroup case).
-		if _, ok := event.Contexts[contextKey]; !ok {
-			event.Contexts[contextKey] = make(map[string]any, 0)
-		}
-		event.Contexts[contextKey][attr.Key] = attr.Value.Any()
-	}
-}
-
 func attrsToMap(attrs ...slog.Attr) map[string]any {
 	output := make(map[string]any, len(attrs))
 
@@ -148,6 +58,22 @@ func attrsToMap(attrs ...slog.Attr) map[string]any {
 	}
 
 	return output
+}
+
+func extractError(attrs []slog.Attr) ([]slog.Attr, error) {
+	for i := range attrs {
+		attr := attrs[i]
+
+		if _, ok := errorKeys[attr.Key]; !ok {
+			continue
+		}
+
+		if err, ok := attr.Value.Resolve().Any().(error); ok {
+			return append(attrs[:i], attrs[i+1:]...), err
+		}
+	}
+
+	return attrs, nil
 }
 
 func mergeAttrValues(values ...slog.Value) slog.Value {
