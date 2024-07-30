@@ -147,7 +147,6 @@ func anyValueToString(v slog.Value) string {
 	}
 
 	return string(data)
-
 }
 
 func appendRecordAttrsToAttrs(attrs []slog.Attr, groups []string, record *slog.Record) []slog.Attr {

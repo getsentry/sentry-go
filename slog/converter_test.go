@@ -93,7 +93,6 @@ func TestAttrToSentryEvent(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			event := sentry.NewEvent()
 			attrToSentryEvent(tc.attr, event)
-
 			assert.Equal(t, tc.expected.Dist, event.Dist)
 			assert.Equal(t, tc.expected.Environment, event.Environment)
 			assert.Equal(t, tc.expected.EventID, event.EventID)

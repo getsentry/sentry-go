@@ -193,7 +193,6 @@ func TestAttrsToMap(t *testing.T) {
 			slog.Group("key1", slog.Any("key3", "value3")),
 		),
 	)
-
 }
 
 func TestExtractError(t *testing.T) {

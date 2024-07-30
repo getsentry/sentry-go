@@ -118,5 +118,4 @@ func attrToSentryEvent(attr slog.Attr, event *sentry.Event) {
 	default:
 		event.Extra[k] = v.Any()
 	}
-
 }
