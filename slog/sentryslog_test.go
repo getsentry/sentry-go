@@ -190,11 +190,11 @@ func equalFuncs(a, b []func(ctx context.Context) []slog.Attr) bool {
 	return true
 }
 
-// Mock functions for custom converter and custom attr from context
-func CustomConverter(addSource bool, replaceAttr func(groups []string, a slog.Attr) slog.Attr, attrs []slog.Attr, groups []string, record *slog.Record, hub *sentry.Hub) *sentry.Event {
+// Mock functions for custom converter and custom attr from context.
+func CustomConverter(bool, func([]string, slog.Attr) slog.Attr, []slog.Attr, []string, *slog.Record, *sentry.Hub) *sentry.Event {
 	return sentry.NewEvent()
 }
 
-func customAttrFromContext(ctx context.Context) []slog.Attr {
+func customAttrFromContext(context.Context) []slog.Attr {
 	return []slog.Attr{slog.String("custom", "attr")}
 }
