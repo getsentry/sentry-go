@@ -187,6 +187,33 @@ func TestWriteLevel(t *testing.T) {
 	require.True(t, beforeSendCalled)
 }
 
+func TestWriteInvalidLevel(t *testing.T) {
+	cfg := Config{
+		ClientOptions: sentry.ClientOptions{
+			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+				assert.Equal(t, sentry.LevelError, event.Level)
+				assert.Equal(t, "test message", event.Message)
+				require.Len(t, event.Exception, 1)
+				assert.Equal(t, "dial timeout", event.Exception[0].Value)
+				assert.True(t, time.Since(event.Timestamp).Minutes() < 1)
+				assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", event.Extra["requestId"])
+				return event
+			},
+		},
+		Options: Options{
+			WithBreadcrumbs: true,
+		},
+	}
+	writer, err := New(cfg)
+	require.Nil(t, err)
+
+	log := zerolog.New(writer).With().Timestamp().
+		Str("requestId", "bee07485-2485-4f64-99e1-d10165884ca7").
+		Logger()
+	log.Log().Str("level", "invalid").Msg("test message")
+
+}
+
 func TestWrite_Disabled(t *testing.T) {
 	var beforeSendCalled bool
 	cfg := Config{
