@@ -516,3 +516,56 @@ func TestToAnySlice(t *testing.T) {
 		})
 	}
 }
+
+type textMarshalerExample struct {
+	Data string
+}
+
+func (t textMarshalerExample) MarshalText() (text []byte, err error) {
+	return []byte(t.Data), nil
+}
+
+type nonTextMarshalerExample struct {
+	Data string
+}
+
+func TestAnyValueToString(t *testing.T) {
+	tests := map[string]struct {
+		input    slog.Attr
+		expected string
+	}{
+		"TextMarshaler implementation": {
+			input:    slog.Any("key", textMarshalerExample{Data: "example"}),
+			expected: "example",
+		},
+		"Non-TextMarshaler implementation": {
+			input:    slog.Any("key", nonTextMarshalerExample{Data: "example"}),
+			expected: "{Data:example}",
+		},
+		"String value": {
+			input:    slog.String("key", "example string"),
+			expected: "example string",
+		},
+		"Integer value": {
+			input:    slog.Int("key", 42),
+			expected: "42",
+		},
+		"Boolean value": {
+			input:    slog.Bool("key", true),
+			expected: "true",
+		},
+		"Nil value": {
+			input:    slog.Any("key", nil),
+			expected: "<nil>",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			output := anyValueToString(tt.input.Value)
+			if output != tt.expected {
+				t.Errorf("expected %s, got %s", tt.expected, output)
+			}
+		})
+	}
+}

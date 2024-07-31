@@ -7,10 +7,51 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestDefaultConverter(t *testing.T) {
+	// Mock data
+	mockAttr := slog.Attr{
+		Key:   "mockKey",
+		Value: slog.StringValue("mockValue"),
+	}
+	mockLoggerAttr := []slog.Attr{mockAttr}
+	mockGroups := []string{"group1", "group2"}
+	mockRecord := &slog.Record{
+		Time:    time.Now(),
+		Level:   slog.LevelInfo,
+		Message: "Test message",
+	}
+
+	// Mock replaceAttr function
+	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
+		return a
+	}
+
+	// Call DefaultConverter function
+	event := DefaultConverter(true, replaceAttr, mockLoggerAttr, mockGroups, mockRecord, nil)
+
+	// Assertions
+	assert.NotNil(t, event)
+	assert.Equal(t, mockRecord.Time.UTC(), event.Timestamp)
+	assert.Equal(t, LogLevels[mockRecord.Level], event.Level)
+	assert.Equal(t, mockRecord.Message, event.Message)
+	assert.Equal(t, name, event.Logger)
+
+	// Check if the attributes are correctly converted
+	var foundMockKey bool
+	for key, value := range event.Extra {
+		if key == "mockKey" && value == "mockValue" {
+			foundMockKey = true
+			break
+		}
+	}
+	assert.True(t, foundMockKey)
+}
 
 func TestAttrToSentryEvent(t *testing.T) {
 	reqURL, _ := url.Parse("http://example.com")
