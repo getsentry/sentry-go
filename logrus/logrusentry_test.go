@@ -73,8 +73,9 @@ func Test_entryToEvent(t *testing.T) {
 		"empty entry": {
 			entry: &logrus.Entry{},
 			want: &sentry.Event{
-				Level: "fatal",
-				Extra: map[string]any{},
+				Level:  "fatal",
+				Extra:  map[string]any{},
+				Logger: "logrus",
 			},
 		},
 		"data fields": {
@@ -85,8 +86,9 @@ func Test_entryToEvent(t *testing.T) {
 				},
 			},
 			want: &sentry.Event{
-				Level: "fatal",
-				Extra: map[string]any{"bar": "oink", "foo": 123.4},
+				Level:  "fatal",
+				Extra:  map[string]any{"bar": "oink", "foo": 123.4},
+				Logger: "logrus",
 			},
 		},
 		"info level": {
@@ -94,8 +96,9 @@ func Test_entryToEvent(t *testing.T) {
 				Level: logrus.InfoLevel,
 			},
 			want: &sentry.Event{
-				Level: "info",
-				Extra: map[string]any{},
+				Level:  "info",
+				Extra:  map[string]any{},
+				Logger: "logrus",
 			},
 		},
 		"message": {
@@ -106,6 +109,7 @@ func Test_entryToEvent(t *testing.T) {
 				Level:   "fatal",
 				Extra:   map[string]any{},
 				Message: "the only thing we have to fear is fear itself",
+				Logger:  "logrus",
 			},
 		},
 		"timestamp": {
@@ -116,6 +120,7 @@ func Test_entryToEvent(t *testing.T) {
 				Level:     "fatal",
 				Extra:     map[string]any{},
 				Timestamp: time.Unix(1, 2).UTC(),
+				Logger:    "logrus",
 			},
 		},
 		"http request": {
@@ -132,6 +137,7 @@ func Test_entryToEvent(t *testing.T) {
 					Method:  http.MethodGet,
 					Headers: map[string]string{"Host": "example.com"},
 				},
+				Logger: "logrus",
 			},
 		},
 		"error": {
@@ -146,6 +152,7 @@ func Test_entryToEvent(t *testing.T) {
 				Exception: []sentry.Exception{
 					{Type: "*errors.errorString", Value: "things failed", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 				},
+				Logger: "logrus",
 			},
 		},
 		"non-error": {
@@ -159,6 +166,7 @@ func Test_entryToEvent(t *testing.T) {
 				Extra: map[string]any{
 					"error": "this isn't really an error",
 				},
+				Logger: "logrus",
 			},
 		},
 		"error with stack trace": {
@@ -192,6 +200,7 @@ func Test_entryToEvent(t *testing.T) {
 						},
 					},
 				},
+				Logger: "logrus",
 			},
 		},
 		"user": {
@@ -208,6 +217,7 @@ func Test_entryToEvent(t *testing.T) {
 				User: sentry.User{
 					ID: "bob",
 				},
+				Logger: "logrus",
 			},
 		},
 		"user pointer": {
@@ -224,6 +234,7 @@ func Test_entryToEvent(t *testing.T) {
 				User: sentry.User{
 					ID: "alice",
 				},
+				Logger: "logrus",
 			},
 		},
 		"non-user": {
@@ -237,6 +248,7 @@ func Test_entryToEvent(t *testing.T) {
 				Extra: map[string]any{
 					"user": "just say no to drugs",
 				},
+				Logger: "logrus",
 			},
 		},
 	}
