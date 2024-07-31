@@ -211,7 +211,6 @@ func TestWriteInvalidLevel(t *testing.T) {
 		Str("requestId", "bee07485-2485-4f64-99e1-d10165884ca7").
 		Logger()
 	log.Log().Str("level", "invalid").Msg("test message")
-
 }
 
 func TestWrite_Disabled(t *testing.T) {
