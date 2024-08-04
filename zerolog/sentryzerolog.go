@@ -53,7 +53,9 @@ const (
 	// These fields are simply omitted, as they are duplicated by the Sentry SDK.
 	FieldGoVersion = "go_version"
 	FieldMaxProcs  = "go_maxprocs"
-	logger         = "zerolog"
+
+	// Name of the logger used by the Sentry SDK.
+	logger = "zerolog"
 )
 
 // A good portion of this implementation has been taken from https://github.com/archdx/zerolog-sentry/blob/master/writer.go
@@ -64,11 +66,20 @@ type Config struct {
 }
 
 type Options struct {
-	// The log levels to send to Sentry. Default levels are Error, Fatal, and Panic.
+	// Levels specifies the log levels that will trigger event sending to Sentry.
+	// Only log messages at these levels will be sent. By default, the levels are
+	// Error, Fatal, and Panic, which capture critical issues.
 	Levels []zerolog.Level
-	// Enable to add log entries as breadcrumbs in Sentry.
+
+	// WithBreadcrumbs, when enabled, adds log entries as breadcrumbs in Sentry.
+	// Breadcrumbs provide a trail of events leading up to an error, which can
+	// be invaluable for understanding the context of issues.
 	WithBreadcrumbs bool
-	// The timeout duration for flushing events to Sentry.
+
+	// FlushTimeout sets the maximum duration allowed for flushing events to Sentry.
+	// This is the time limit within which all pending events must be sent to Sentry
+	// before the application exits. A typical use is ensuring all logs are sent before
+	// application shutdown. The default timeout is usually 3 seconds.
 	FlushTimeout time.Duration
 }
 
