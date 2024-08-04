@@ -68,7 +68,7 @@ type Config struct {
 type Options struct {
 	// Levels specifies the log levels that will trigger event sending to Sentry.
 	// Only log messages at these levels will be sent. By default, the levels are
-	// Error, Fatal, and Panic, which capture critical issues.
+	// Error, Fatal, and Panic.
 	Levels []zerolog.Level
 
 	// WithBreadcrumbs, when enabled, adds log entries as breadcrumbs in Sentry.
