@@ -45,18 +45,30 @@ var (
 )
 
 type Option struct {
-	// log level (default: debug)
+	// Level sets the minimum log level to capture and send to Sentry.
+	// Logs at this level and above will be processed. The default level is debug.
 	Level slog.Leveler
-	// sentry hub (default: current hub)
+
+	// Hub specifies the Sentry Hub to use for capturing events.
+	// If not provided, the current Hub is used by default.
 	Hub *sentry.Hub
 
-	// optional: customize Sentry event builder
+	// Converter is an optional function that customizes how log records
+	// are converted into Sentry events. By default, the DefaultConverter is used.
 	Converter Converter
-	// optional: fetch attributes from context
+
+	// AttrFromContext is an optional slice of functions that extract attributes
+	// from the context. These functions can add additional metadata to the log entry.
 	AttrFromContext []func(ctx context.Context) []slog.Attr
 
-	// optional: see slog.HandlerOptions
-	AddSource   bool
+	// AddSource is an optional flag that, when set to true, includes the source
+	// information (such as file and line number) in the Sentry event.
+	// This can be useful for debugging purposes.
+	AddSource bool
+
+	// ReplaceAttr is an optional function that allows for the modification or
+	// replacement of attributes in the log record. This can be used to filter
+	// or transform attributes before they are sent to Sentry.
 	ReplaceAttr func(groups []string, a slog.Attr) slog.Attr
 }
 
