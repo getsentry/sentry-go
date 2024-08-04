@@ -64,9 +64,12 @@ type Config struct {
 }
 
 type Options struct {
-	Levels          []zerolog.Level
+	// The log levels to send to Sentry. Default levels are Error, Fatal, and Panic.
+	Levels []zerolog.Level
+	// Enable to add log entries as breadcrumbs in Sentry.
 	WithBreadcrumbs bool
-	FlushTimeout    time.Duration
+	// The timeout duration for flushing events to Sentry.
+	FlushTimeout time.Duration
 }
 
 func (o *Options) SetDefaults() {
