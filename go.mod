@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/gin-gonic/gin v1.8.1
 	github.com/go-errors/errors v1.4.2
-	github.com/gofiber/fiber/v2 v2.52.2
+	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/google/go-cmp v0.5.9
 	github.com/kataras/iris/v12 v12.2.0
 	github.com/labstack/echo/v4 v4.10.0
