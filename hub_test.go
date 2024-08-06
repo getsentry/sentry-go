@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -404,6 +405,86 @@ func TestHub_ContinueTrace(t *testing.T) {
 
 			// Additional checks on the scope
 			tt.checkScope(t, tt.hub.Scope())
+		})
+	}
+}
+
+func TestGetTraceparent(t *testing.T) {
+	tests := map[string]struct {
+		hub      *Hub
+		expected string
+	}{
+		"With span": {
+			hub: func() *Hub {
+				h, _, s := setupHubTest()
+				s.span = &Span{
+					TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
+					Sampled: SampledTrue,
+				}
+				return h
+			}(),
+			expected: "d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09-1",
+		},
+		"Without span": {
+			hub: func() *Hub {
+				h, _, s := setupHubTest()
+				s.propagationContext.TraceID = TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")
+				s.propagationContext.SpanID = SpanIDFromHex("a9f442f9330b4e09")
+				return h
+			}(),
+			expected: "d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.hub.GetTraceparent()
+			assertEqual(t, result, tt.expected)
+		})
+	}
+}
+
+func TestGetBaggage(t *testing.T) {
+	tests := map[string]struct {
+		hub      *Hub
+		expected string
+	}{
+		"With span": {
+			hub: func() *Hub {
+				h, _, s := setupHubTest()
+				s.span = &Span{
+					dynamicSamplingContext: DynamicSamplingContext{
+						Entries: map[string]string{"sample_rate": "1", "release": "1.0.0", "environment": "production"},
+					},
+					recorder: &spanRecorder{},
+					ctx:      context.Background(),
+					Sampled:  SampledTrue,
+				}
+				s.span.spanRecorder().record(s.span)
+
+				return h
+			}(),
+			expected: "sentry-sample_rate=1,sentry-environment=production,sentry-release=1.0.0",
+		},
+		"Without span": {
+			hub: func() *Hub {
+				h, _, s := setupHubTest()
+				s.propagationContext.DynamicSamplingContext = DynamicSamplingContext{
+					Entries: map[string]string{"release": "1.0.0", "environment": "production"},
+				}
+				return h
+			}(),
+			expected: "sentry-environment=production,sentry-release=1.0.0",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := tt.hub.GetBaggage()
+			res := strings.Split(result, ",")
+			sortSlice(res)
+			assertEqual(t, strings.Join(res, ","), tt.expected)
 		})
 	}
 }

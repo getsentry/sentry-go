@@ -50,7 +50,7 @@ func New(options Options) echo.MiddlewareFunc {
 
 func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		hub := sentry.GetHubFromContext(ctx.Request().Context())
+		hub := GetHubFromContext(ctx)
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
 		}
@@ -70,8 +70,8 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		options := []sentry.SpanOption{
+			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
-			sentry.ContinueFromRequest(r),
 			sentry.WithTransactionSource(transactionSource),
 			sentry.WithSpanOrigin(sentry.SpanOriginEcho),
 		}
@@ -82,7 +82,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			options...,
 		)
 
-		transaction.SetData("http.request.method", ctx.Request().Method)
+		transaction.SetData("http.request.method", r.Method)
 
 		defer func() {
 			status := ctx.Response().Status

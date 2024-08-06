@@ -54,13 +54,16 @@ func New(options Options) fiber.Handler {
 }
 
 func (h *handler) handle(ctx *fiber.Ctx) error {
-	hub := sentry.CurrentHub().Clone()
+	hub := GetHubFromContext(ctx)
+	if hub == nil {
+		hub = sentry.CurrentHub().Clone()
+	}
 
 	if client := hub.Client(); client != nil {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
-	convertedHTTPRequest := convert(ctx)
+	r := convert(ctx)
 
 	method := ctx.Method()
 
@@ -68,8 +71,8 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	transactionSource := sentry.SourceURL
 
 	options := []sentry.SpanOption{
+		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
-		sentry.ContinueFromRequest(convertedHTTPRequest),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),
 	}
@@ -90,11 +93,12 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	transaction.SetData("http.request.method", method)
 
 	scope := hub.Scope()
-	scope.SetRequest(convertedHTTPRequest)
+	scope.SetRequest(r)
 	scope.SetRequestBody(ctx.Request().Body())
 	ctx.Locals(valuesKey, hub)
 	ctx.Locals(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, ctx)
+
 	return ctx.Next()
 }
 

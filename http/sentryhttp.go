@@ -84,7 +84,7 @@ func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		hub := sentry.GetHubFromContext(ctx)
+		hub := sentry.GetHubFromContext(r.Context())
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
 			ctx = sentry.SetHubOnContext(ctx, hub)
@@ -95,8 +95,8 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		}
 
 		options := []sentry.SpanOption{
+			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
-			sentry.ContinueFromRequest(r),
 			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
 		}
@@ -116,13 +116,10 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			transaction.Finish()
 		}()
 
-		// TODO(tracing): if the next handler.ServeHTTP panics, store
-		// information on the transaction accordingly (status, tag,
-		// level?, ...).
-		r = r.WithContext(transaction.Context())
 		hub.Scope().SetRequest(r)
-
+		r = r.WithContext(transaction.Context())
 		defer h.recoverWithSentry(hub, r)
+
 		handler.ServeHTTP(rw, r)
 	}
 }

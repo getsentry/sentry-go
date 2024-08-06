@@ -58,17 +58,20 @@ func New(options Options) *Handler {
 // Handle wraps fasthttp.RequestHandler and recovers from caught panics.
 func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		hub := sentry.CurrentHub().Clone()
+		hub := GetHubFromContext(ctx)
+		if hub == nil {
+			hub = sentry.CurrentHub().Clone()
+		}
 
 		if client := hub.Client(); client != nil {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
-		convertedHTTPRequest := convert(ctx)
+		r := convert(ctx)
 
 		options := []sentry.SpanOption{
+			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
-			sentry.ContinueFromRequest(convertedHTTPRequest),
 			sentry.WithTransactionSource(sentry.SourceRoute),
 			sentry.WithSpanOrigin(sentry.SpanOriginFastHTTP),
 		}
@@ -90,11 +93,12 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 		transaction.SetData("http.request.method", method)
 
 		scope := hub.Scope()
-		scope.SetRequest(convertedHTTPRequest)
+		scope.SetRequest(r)
 		scope.SetRequestBody(ctx.Request.Body())
 		ctx.SetUserValue(valuesKey, hub)
 		ctx.SetUserValue(transactionKey, transaction)
 		defer h.recoverWithSentry(hub, ctx)
+
 		handler(ctx)
 	}
 }
