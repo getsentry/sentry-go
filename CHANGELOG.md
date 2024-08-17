@@ -4,6 +4,11 @@
 - Add ability to skip frames in stacktrace ([#852](https://github.com/getsentry/sentry-go/pull/852))
 - Remove Martini integration ([#861](https://github.com/getsentry/sentry-go/pull/861))
 
+
+### Breaking Changes
+
+- WrapResponseWriter has been moved from sentryhttp to sentry. If you've imported it from sentryhttp, you'll need to update your imports.
+
 ## 0.28.1
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.28.1.
