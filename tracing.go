@@ -324,17 +324,22 @@ func (s *Span) ToSentryTrace() string {
 // Use this function to propagate the DynamicSamplingContext to a downstream SDK,
 // either as the value of the "baggage" HTTP header, or as an html "baggage" meta tag.
 func (s *Span) ToBaggage() string {
-	if containingTransaction := s.GetTransaction(); containingTransaction != nil {
-		// In case there is currently no frozen DynamicSamplingContext attached to the transaction,
-		// create one from the properties of the transaction.
-		if !s.dynamicSamplingContext.IsFrozen() {
-			// This will return a frozen DynamicSamplingContext.
-			s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(containingTransaction)
-		}
-
-		return containingTransaction.dynamicSamplingContext.String()
+	t := s.GetTransaction()
+	if t == nil {
+		return ""
 	}
-	return ""
+
+	// In case there is currently no frozen DynamicSamplingContext attached to the transaction,
+	// create one from the properties of the transaction.
+	if !s.dynamicSamplingContext.IsFrozen() {
+		// This will return a frozen DynamicSamplingContext.
+		if dsc := DynamicSamplingContextFromTransaction(t); dsc.HasEntries() {
+			t.dynamicSamplingContext = dsc
+		}
+	}
+
+	return t.dynamicSamplingContext.String()
+
 }
 
 // SetDynamicSamplingContext sets the given dynamic sampling context on the
@@ -550,7 +555,7 @@ func (s *Span) toEvent() *Event {
 		s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(s)
 	}
 
-	contexts := map[string]Context{}
+	contexts := make(map[string]Context, len(s.contexts))
 	for k, v := range s.contexts {
 		contexts[k] = cloneContext(v)
 	}

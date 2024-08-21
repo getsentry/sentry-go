@@ -461,11 +461,12 @@ func TestGetBaggage(t *testing.T) {
 					ctx:      context.Background(),
 					Sampled:  SampledTrue,
 				}
+
 				s.span.spanRecorder().record(s.span)
 
 				return h
 			}(),
-			expected: "sentry-sample_rate=1,sentry-environment=production,sentry-release=1.0.0",
+			expected: "sentry-environment=production,sentry-release=1.0.0,sentry-sample_rate=1",
 		},
 		"Without span": {
 			hub: func() *Hub {
