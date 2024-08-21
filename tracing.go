@@ -339,7 +339,6 @@ func (s *Span) ToBaggage() string {
 	}
 
 	return t.dynamicSamplingContext.String()
-
 }
 
 // SetDynamicSamplingContext sets the given dynamic sampling context on the

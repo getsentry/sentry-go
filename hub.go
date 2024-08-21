@@ -368,7 +368,7 @@ func (hub *Hub) Flush(timeout time.Duration) bool {
 
 // Continue a trace based on HTTP header values. If performance is enabled this
 // returns a SpanOption that can be used to start a transaction, otherwise nil.
-// TODO: remove - moved to tracing.go
+// TODO: remove - moved to tracing.go.
 func (hub *Hub) ContinueTrace(trace, baggage string) (SpanOption, error) {
 	scope := hub.Scope()
 	propagationContext, err := PropagationContextFromHeaders(trace, baggage)

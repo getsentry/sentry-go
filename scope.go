@@ -411,7 +411,6 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 			event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
 		}
 	} else {
-
 		event.Contexts["trace"] = scope.propagationContext.Map()
 
 		dsc := scope.propagationContext.DynamicSamplingContext
