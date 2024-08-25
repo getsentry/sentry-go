@@ -4,7 +4,6 @@ package sentryhttp
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -102,7 +101,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		}
 
 		transaction := sentry.StartTransaction(ctx,
-			fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+			getHTTPSpanName(r),
 			options...,
 		)
 		transaction.SetData("http.request.method", r.Method)
