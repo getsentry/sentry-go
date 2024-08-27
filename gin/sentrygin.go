@@ -93,6 +93,7 @@ func (h *handler) handle(ctx *gin.Context) {
 		transaction.Finish()
 	}()
 
+	ctx.Request = ctx.Request.WithContext(transaction.Context())
 	hub.Scope().SetRequest(r)
 	ctx.Set(valuesKey, hub)
 	ctx.Set(transactionKey, transaction)
