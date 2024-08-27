@@ -24,7 +24,7 @@ type noopRoundTripper struct {
 
 func (n *noopRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
 	responseBody := make([]byte, n.ExpectResponseLength)
-	rand.Read(responseBody)
+	_, _ = rand.Read(responseBody)
 	return &http.Response{
 		Status:     "",
 		StatusCode: n.ExpectResponseStatus,
@@ -230,7 +230,7 @@ func TestDefaults(t *testing.T) {
 	})
 
 	t.Run("Create a regular outgoing HTTP request with default SentryHttpClient", func(t *testing.T) {
-		client := sentryhttpclient.SentryHttpClient
+		client := sentryhttpclient.SentryHTTPClient
 
 		res, err := client.Head("https://sentry.io")
 		if err != nil {
