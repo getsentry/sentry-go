@@ -1,13 +1,14 @@
 //go:build go1.23
 
-package sentryhttp
+package traceutils
 
 import (
 	"net/http"
 	"strings"
 )
 
-func getHTTPSpanName(r *http.Request) string {
+// GetHTTPSpanName grab needed fields from *http.Request to generate a span name for `http.server` span op.
+func GetHTTPSpanName(r *http.Request) string {
 	if r.Pattern != "" {
 		// If value does not start with HTTP methods, add them.
 		// The method and the path should be separated by a space.

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/traceutils"
 )
 
 // The identifier of the HTTP SDK.
@@ -101,7 +102,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		}
 
 		transaction := sentry.StartTransaction(ctx,
-			getHTTPSpanName(r),
+			traceutils.GetHTTPSpanName(r),
 			options...,
 		)
 		transaction.SetData("http.request.method", r.Method)

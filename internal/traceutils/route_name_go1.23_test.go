@@ -1,6 +1,6 @@
 //go:build go1.23
 
-package sentryhttp
+package traceutils
 
 import (
 	"net/http"
@@ -16,22 +16,22 @@ func TestGetHTTPSpanName(t *testing.T) {
 	}{
 		{
 			name: "Without Pattern",
-			got:  getHTTPSpanName(&http.Request{Method: "GET", URL: &url.URL{Path: "/"}}),
+			got:  GetHTTPSpanName(&http.Request{Method: "GET", URL: &url.URL{Path: "/"}}),
 			want: "GET /",
 		},
 		{
 			name: "Pattern with method",
-			got:  getHTTPSpanName(&http.Request{Method: "GET", URL: &url.URL{Path: "/"}, Pattern: "POST /foo/{bar}"}),
+			got:  GetHTTPSpanName(&http.Request{Method: "GET", URL: &url.URL{Path: "/"}, Pattern: "POST /foo/{bar}"}),
 			want: "POST /foo/{bar}",
 		},
 		{
 			name: "Pattern without method",
-			got:  getHTTPSpanName(&http.Request{Method: "GET", URL: &url.URL{Path: "/"}, Pattern: "/foo/{bar}"}),
+			got:  GetHTTPSpanName(&http.Request{Method: "GET", URL: &url.URL{Path: "/"}, Pattern: "/foo/{bar}"}),
 			want: "GET /foo/{bar}",
 		},
 		{
 			name: "Pattern without slash",
-			got:  getHTTPSpanName(&http.Request{Method: "GET", URL: &url.URL{Path: "/"}, Pattern: "example.com/"}),
+			got:  GetHTTPSpanName(&http.Request{Method: "GET", URL: &url.URL{Path: "/"}, Pattern: "example.com/"}),
 			want: "GET example.com/",
 		},
 	}

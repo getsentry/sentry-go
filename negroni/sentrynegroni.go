@@ -2,11 +2,11 @@ package sentrynegroni
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/traceutils"
 	"github.com/urfave/negroni"
 )
 
@@ -87,7 +87,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 	// We don't mind getting an existing transaction back so we don't need to
 	// check if it is.
 	transaction := sentry.StartTransaction(ctx,
-		fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+		traceutils.GetHTTPSpanName(r),
 		options...,
 	)
 	transaction.SetData("http.request.method", r.Method)

@@ -1,6 +1,6 @@
 //go:build !go1.23
 
-package sentryhttp
+package traceutils
 
 import (
 	"net/http"
@@ -16,7 +16,7 @@ func TestGetHTTPSpanName(t *testing.T) {
 	}{
 		{
 			name: "Without Pattern",
-			got:  getHTTPSpanName(&http.Request{Method: "GET", URL: &url.URL{Path: "/"}}),
+			got:  GetHTTPSpanName(&http.Request{Method: "GET", URL: &url.URL{Path: "/"}}),
 			want: "GET /",
 		},
 	}
