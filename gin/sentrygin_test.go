@@ -96,7 +96,7 @@ func TestIntegration(t *testing.T) {
 			RoutePath:   "/post",
 			Method:      "POST",
 			WantStatus:  200,
-			Body:        "",
+			Body:        "payload",
 			Handler: func(c *gin.Context) {
 				hub := sentry.GetHubFromContext(c.Request.Context())
 				body, err := io.ReadAll(c.Request.Body)
@@ -113,7 +113,7 @@ func TestIntegration(t *testing.T) {
 				Request: &sentry.Request{
 					URL:    "/post",
 					Method: "POST",
-					Data:   "",
+					Data:   "payload",
 					Headers: map[string]string{
 						"Content-Length":  "7",
 						"Accept-Encoding": "gzip",
