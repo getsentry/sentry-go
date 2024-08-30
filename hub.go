@@ -287,7 +287,7 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 	client := hub.Client()
 
 	// If there's no client, just store it on the scope straight away
-	if client == nil {
+	if client == nil && breadcrumb != nil {
 		hub.Scope().AddBreadcrumb(breadcrumb, maxBreadcrumbs)
 		return
 	}
