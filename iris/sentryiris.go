@@ -69,25 +69,27 @@ func (h *handler) handle(ctx iris.Context) {
 		sentry.WithSpanOrigin(sentry.SpanOriginIris),
 	}
 
-	currentRoute := ctx.GetCurrentRoute()
+	if hub.Client().Options().Instrumenter == "sentry" {
+		currentRoute := ctx.GetCurrentRoute()
 
-	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(ctx, hub),
-		fmt.Sprintf("%s %s", currentRoute.Method(), currentRoute.Path()),
-		options...,
-	)
+		transaction := sentry.StartTransaction(
+			sentry.SetHubOnContext(ctx, hub),
+			fmt.Sprintf("%s %s", currentRoute.Method(), currentRoute.Path()),
+			options...,
+		)
 
-	defer func() {
-		transaction.SetData("http.response.status_code", ctx.GetStatusCode())
-		transaction.Status = sentry.HTTPtoSpanStatus(ctx.GetStatusCode())
-		transaction.Finish()
-	}()
+		defer func() {
+			transaction.SetData("http.response.status_code", ctx.GetStatusCode())
+			transaction.Status = sentry.HTTPtoSpanStatus(ctx.GetStatusCode())
+			transaction.Finish()
+		}()
 
-	transaction.SetData("http.request.method", ctx.Request().Method)
+		transaction.SetData("http.request.method", ctx.Request().Method)
+		ctx.Values().Set(transactionKey, transaction)
+	}
 
 	hub.Scope().SetRequest(ctx.Request())
 	ctx.Values().Set(valuesKey, hub)
-	ctx.Values().Set(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, ctx.Request())
 	ctx.Next()
 }

@@ -46,11 +46,11 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 
 		sentrySpanMap.Set(otelSpanID, span)
 	} else {
-		traceParentContext := getTraceParentContext(parent)
+		sampled := getSampled(parent, s)
 		transaction := sentry.StartTransaction(
 			parent,
 			s.Name(),
-			sentry.WithSpanSampled(traceParentContext.Sampled),
+			sentry.WithSpanSampled(sampled),
 		)
 		transaction.SpanID = sentry.SpanID(otelSpanID)
 		transaction.TraceID = sentry.TraceID(otelTraceID)
@@ -112,12 +112,17 @@ func flushSpanProcessor(ctx context.Context) error {
 	return nil
 }
 
-func getTraceParentContext(ctx context.Context) sentry.TraceParentContext {
+func getSampled(ctx context.Context, s otelSdkTrace.ReadWriteSpan) sentry.Sampled {
 	traceParentContext, ok := ctx.Value(sentryTraceParentContextKey{}).(sentry.TraceParentContext)
-	if !ok {
-		traceParentContext.Sampled = sentry.SampledUndefined
+	if ok {
+		return traceParentContext.Sampled
 	}
-	return traceParentContext
+
+	if s.SpanContext().IsSampled() {
+		return sentry.SampledTrue
+	}
+
+	return sentry.SampledFalse
 }
 
 func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.ReadOnlySpan) {

@@ -12,3 +12,5 @@ TODO.md
 # IDE system files
 .idea
 .vscode
+
+/go.work*

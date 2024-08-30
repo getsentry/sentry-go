@@ -133,6 +133,9 @@ type ClientOptions struct {
 	TracesSampleRate float64
 	// Used to customize the sampling of traces, overrides TracesSampleRate.
 	TracesSampler TracesSampler
+	// Which instrumentation to use for tracing. Either "sentry" (default) or "otel" are supported.
+	// Setting this to "otel" will ignore TracesSampleRate and TracesSampler and assume sampling is performed by otel.
+	Instrumenter string
 	// The sample rate for profiling traces in the range [0.0, 1.0].
 	// This is relative to TracesSampleRate - it is a ratio of profiled traces out of all sampled traces.
 	ProfilesSampleRate float64
@@ -299,6 +302,14 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	if options.MaxSpans == 0 {
 		options.MaxSpans = defaultMaxSpans
+	}
+
+	switch options.Instrumenter {
+	case "":
+		options.Instrumenter = "sentry"
+	case "sentry", "otel": // noop
+	default:
+		return nil, fmt.Errorf("invalid value for Instrumenter (supported are 'sentry' and 'otel'): %q", options.Instrumenter)
 	}
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar

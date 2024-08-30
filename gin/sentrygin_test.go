@@ -16,18 +16,20 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
 
 	tests := []struct {
-		RequestPath string
-		RoutePath   string
-		Method      string
-		WantStatus  int
-		Body        string
-		Handler     gin.HandlerFunc
+		RequestPath  string
+		RoutePath    string
+		Method       string
+		WantStatus   int
+		Body         string
+		Handler      gin.HandlerFunc
+		Instrumenter string
 
 		WantEvent       *sentry.Event
 		WantTransaction *sentry.Event
@@ -291,26 +293,20 @@ func TestIntegration(t *testing.T) {
 			},
 			WantEvent: nil,
 		},
+		{
+			RequestPath:     "/404/1",
+			RoutePath:       "/otel",
+			Method:          "GET",
+			Instrumenter:    "otel",
+			WantStatus:      404,
+			Handler:         nil,
+			WantTransaction: nil,
+			WantEvent:       nil,
+		},
 	}
 
 	eventsCh := make(chan *sentry.Event, len(tests))
 	transactionsCh := make(chan *sentry.Event, len(tests))
-	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			eventsCh <- event
-			return event
-		},
-		BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			fmt.Println("BeforeSendTransaction")
-			transactionsCh <- tx
-			return tx
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	router := gin.New()
 	router.Use(sentrygin.New(sentrygin.Options{}))
@@ -329,17 +325,34 @@ func TestIntegration(t *testing.T) {
 	var wanttrans []*sentry.Event
 	var wantCodes []sentry.SpanStatus
 	for _, tt := range tests {
+		err := sentry.Init(sentry.ClientOptions{
+			EnableTracing:    true,
+			TracesSampleRate: 1.0,
+			Instrumenter:     tt.Instrumenter,
+			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+				eventsCh <- event
+				return event
+			},
+			BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+				transactionsCh <- tx
+				return tx
+			},
+		})
+		require.NoError(t, err)
+
 		if tt.WantEvent != nil && tt.WantEvent.Request != nil {
 			wantRequest := tt.WantEvent.Request
 			wantRequest.URL = srv.URL + wantRequest.URL
 			wantRequest.Headers["Host"] = srv.Listener.Addr().String()
 			want = append(want, tt.WantEvent)
 		}
-		wantTransaction := tt.WantTransaction.Request
-		wantTransaction.URL = srv.URL + wantTransaction.URL
-		wantTransaction.Headers["Host"] = srv.Listener.Addr().String()
-		wanttrans = append(wanttrans, tt.WantTransaction)
-		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
+		if tt.WantTransaction != nil {
+			wantTransaction := tt.WantTransaction.Request
+			wantTransaction.URL = srv.URL + wantTransaction.URL
+			wantTransaction.Headers["Host"] = srv.Listener.Addr().String()
+			wanttrans = append(wanttrans, tt.WantTransaction)
+			wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
+		}
 
 		req, err := http.NewRequest(tt.Method, srv.URL+tt.RequestPath, strings.NewReader(tt.Body))
 		if err != nil {

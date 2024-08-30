@@ -41,7 +41,7 @@ func emptyContextWithSentry() context.Context {
 		Environment:      "testing",
 		Release:          "1.2.3",
 		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: 0.0, // we want to ensure otel's sampling decision (AlwaysSample) is used instead
 		Transport:        &TransportMock{},
 	})
 	hub := sentry.NewHub(client, sentry.NewScope())

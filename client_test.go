@@ -13,6 +13,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -870,4 +871,17 @@ func TestClientSetsUpTransport(t *testing.T) {
 
 	client, _ = NewClient(ClientOptions{})
 	require.IsType(t, &noopTransport{}, client.Transport)
+}
+
+func TestClientSetupInstrumenter(t *testing.T) {
+	client, err := NewClient(ClientOptions{Dsn: ""})
+	require.NoError(t, err)
+	assert.Equal(t, "sentry", client.Options().Instrumenter)
+
+	_, err = NewClient(ClientOptions{Dsn: "", Instrumenter: "foo"})
+	require.Error(t, err)
+
+	client, err = NewClient(ClientOptions{Dsn: "", Instrumenter: "otel"})
+	require.NoError(t, err)
+	assert.Equal(t, "otel", client.Options().Instrumenter)
 }
