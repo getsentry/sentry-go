@@ -313,7 +313,9 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 		max = maxBreadcrumbs
 	}
 
-	hub.Scope().AddBreadcrumb(breadcrumb, max)
+	if breadcrumb != nil {
+		hub.Scope().AddBreadcrumb(breadcrumb, max)
+	}
 }
 
 // Recover calls the method of a same name on currently bound Client instance
