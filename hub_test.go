@@ -284,6 +284,13 @@ func TestAddBreadcrumbCallsBeforeBreadcrumbCallback(t *testing.T) {
 	assertEqual(t, "Breadcrumb_wat", scope.breadcrumbs[0].Message)
 }
 
+func TestAddBreadcrumbDoesNothingIfBreadcrumbIsNil(t *testing.T) {
+	hub, _, scope := setupHubTest()
+	hub.AddBreadcrumb(nil, nil)
+
+	assertEqual(t, len(scope.breadcrumbs), 0)
+}
+
 func TestBeforeBreadcrumbCallbackCanDropABreadcrumb(t *testing.T) {
 	hub, client, scope := setupHubTest()
 	client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
