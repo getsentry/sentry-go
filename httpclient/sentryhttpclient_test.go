@@ -73,6 +73,7 @@ func TestIntegration(t *testing.T) {
 				Transaction:     "GET https://example.com/foo",
 				Type:            "transaction",
 				TransactionInfo: &sentry.TransactionInfo{Source: "custom"},
+				Tags:            map[string]string{},
 			},
 		},
 		{
@@ -95,6 +96,7 @@ func TestIntegration(t *testing.T) {
 				Transaction:     "GET https://example.com:443/foo/bar?baz=123#readme",
 				Type:            "transaction",
 				TransactionInfo: &sentry.TransactionInfo{Source: "custom"},
+				Tags:            map[string]string{},
 			},
 		},
 		{
@@ -142,6 +144,7 @@ func TestIntegration(t *testing.T) {
 				Transaction:     "POST https://john:xxxxx@example.com:4321/secret",
 				Type:            "transaction",
 				TransactionInfo: &sentry.TransactionInfo{Source: "custom"},
+				Tags:            map[string]string{},
 			},
 		},
 	}
