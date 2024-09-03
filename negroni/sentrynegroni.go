@@ -45,22 +45,6 @@ func New(options Options) negroni.Handler {
 	}
 }
 
-// responseWriter is a wrapper around http.ResponseWriter that captures the status code.
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-// WriteHeader captures the status code and calls the original WriteHeader method.
-func (rw *responseWriter) WriteHeader(code int) {
-	rw.statusCode = code
-	rw.ResponseWriter.WriteHeader(code)
-}
-
-func newResponseWriter(w http.ResponseWriter) *responseWriter {
-	return &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-}
-
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	hub := sentry.GetHubFromContext(r.Context())
 	if hub == nil {
@@ -85,11 +69,10 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 	)
 
 	transaction.SetData("http.request.method", r.Method)
-
-	rw := newResponseWriter(w)
+	rw := sentry.NewWrapResponseWriter(w, r.ProtoMajor)
 
 	defer func() {
-		status := rw.statusCode
+		status := rw.Status()
 		transaction.Status = sentry.HTTPtoSpanStatus(status)
 		transaction.SetData("http.response.status_code", status)
 		transaction.Finish()

@@ -1,4 +1,4 @@
-package sentryhttp
+package sentry
 
 import (
 	"bufio"

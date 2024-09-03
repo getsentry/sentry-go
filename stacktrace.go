@@ -311,7 +311,12 @@ func createFrames(frames []runtime.Frame, skip int) []Frame {
 		return []Frame{}
 	}
 
-	return result[:len(result)-skip]
+	result = result[:len(result)-skip]
+
+	// Fix issues grouping errors with the new fully qualified function names
+	// introduced from Go 1.21
+	result = cleanupFunctionNamePrefix(result)
+	return result
 }
 
 // TODO ID: why do we want to do this?
