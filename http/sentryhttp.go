@@ -107,7 +107,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		)
 		transaction.SetData("http.request.method", r.Method)
 
-		rw := NewWrapResponseWriter(w, r.ProtoMajor)
+		rw := sentry.NewWrapResponseWriter(w, r.ProtoMajor)
 
 		defer func() {
 			status := rw.Status()

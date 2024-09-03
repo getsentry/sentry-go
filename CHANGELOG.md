@@ -4,6 +4,12 @@
 - Add ability to skip frames in stacktrace ([#852](https://github.com/getsentry/sentry-go/pull/852))
 - Remove Martini integration ([#861](https://github.com/getsentry/sentry-go/pull/861))
 - Use value from http.Request.Pattern as HTTP server span name ([#875](https://github.com/getsentry/sentry-go/pull/875))
+- Fix closure functions name grouping ([#877](https://github.com/getsentry/sentry-go/pull/877))
+
+
+### Breaking Changes
+
+- WrapResponseWriter has been moved from sentryhttp to sentry. If you've imported it from sentryhttp, you'll need to update your imports.
 
 ## 0.28.1
 
