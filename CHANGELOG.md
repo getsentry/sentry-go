@@ -4,7 +4,7 @@
 - Add ability to skip frames in stacktrace ([#852](https://github.com/getsentry/sentry-go/pull/852))
 - Remove Martini integration ([#861](https://github.com/getsentry/sentry-go/pull/861))
 - Fix closure functions name grouping ([#877](https://github.com/getsentry/sentry-go/pull/877))
-
+- Add net/http client integration ([#876](https://github.com/getsentry/sentry-go/pull/876))
 
 ### Breaking Changes
 
