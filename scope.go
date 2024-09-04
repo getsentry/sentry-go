@@ -383,15 +383,6 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		}
 
 		for key, value := range scope.contexts {
-			// if key == "trace" && event.Type == transactionType {
-			// 	// Do not override trace context of
-			// 	// transactions, otherwise it breaks the
-			// 	// transaction event representation.
-			// 	// For error events, the trace context is used
-			// 	// to link errors and traces/spans in Sentry.
-			// 	continue
-			// }
-
 			// Ensure we are not overwriting event fields
 			if _, ok := event.Contexts[key]; !ok {
 				event.Contexts[key] = cloneContext(value)
