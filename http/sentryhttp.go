@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/httputils"
 	"github.com/getsentry/sentry-go/internal/traceutils"
 )
 
@@ -107,7 +108,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		)
 		transaction.SetData("http.request.method", r.Method)
 
-		rw := sentry.NewWrapResponseWriter(w, r.ProtoMajor)
+		rw := httputils.NewWrapResponseWriter(w, r.ProtoMajor)
 
 		defer func() {
 			status := rw.Status()
