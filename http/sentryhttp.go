@@ -4,11 +4,11 @@ package sentryhttp
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/traceutils"
 )
 
 // The identifier of the HTTP SDK.
@@ -102,7 +102,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		}
 
 		transaction := sentry.StartTransaction(ctx,
-			fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+			traceutils.GetHTTPSpanName(r),
 			options...,
 		)
 		transaction.SetData("http.request.method", r.Method)

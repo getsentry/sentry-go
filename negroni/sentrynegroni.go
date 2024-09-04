@@ -2,11 +2,11 @@ package sentrynegroni
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/traceutils"
 	"github.com/urfave/negroni"
 )
 
@@ -64,7 +64,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 
 	transaction := sentry.StartTransaction(
 		sentry.SetHubOnContext(r.Context(), hub),
-		fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+		traceutils.GetHTTPSpanName(r),
 		options...,
 	)
 
