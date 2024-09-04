@@ -67,10 +67,15 @@ type SentryRoundTripper struct {
 }
 
 func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
-	ctx := request.Context()
+	// Only create the `http.client` span only if there is a parent span.
+	parentSpan := sentry.GetSpanFromContext(request.Context())
+	if parentSpan == nil {
+		return s.originalRoundTripper.RoundTrip(request)
+	}
+
 	cleanRequestURL := request.URL.Redacted()
 
-	span := sentry.StartSpan(ctx, "http.client", sentry.WithTransactionName(fmt.Sprintf("%s %s", request.Method, cleanRequestURL)))
+	span := parentSpan.StartChild("http.client", sentry.WithTransactionName(fmt.Sprintf("%s %s", request.Method, cleanRequestURL)))
 	span.Tags = s.tags
 	defer span.Finish()
 

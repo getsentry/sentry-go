@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -52,15 +53,15 @@ func TestIntegration(t *testing.T) {
 		TracerOptions      []sentryhttpclient.SentryRoundTripTracerOption
 		WantStatus         int
 		WantResponseLength int
-		WantTransaction    *sentry.Event
+		WantSpan           *sentry.Span
 	}{
 		{
 			RequestMethod:      "GET",
 			RequestURL:         "https://example.com/foo",
 			WantStatus:         200,
 			WantResponseLength: 0,
-			WantTransaction: &sentry.Event{
-				Extra: map[string]interface{}{
+			WantSpan: &sentry.Span{
+				Data: map[string]interface{}{
 					"http.fragment":                string(""),
 					"http.query":                   string(""),
 					"http.request.method":          string("GET"),
@@ -69,11 +70,12 @@ func TestIntegration(t *testing.T) {
 					"server.address":               string("example.com"),
 					"server.port":                  string(""),
 				},
-				Level:           sentry.LevelInfo,
-				Transaction:     "GET https://example.com/foo",
-				Type:            "transaction",
-				TransactionInfo: &sentry.TransactionInfo{Source: "custom"},
-				Tags:            map[string]string{},
+				Name:    "GET https://example.com/foo",
+				Op:      "http.client",
+				Tags:    map[string]string{},
+				Origin:  "manual",
+				Sampled: sentry.SampledTrue,
+				Status:  sentry.SpanStatusOK,
 			},
 		},
 		{
@@ -82,8 +84,8 @@ func TestIntegration(t *testing.T) {
 			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{nil, nil, nil},
 			WantStatus:         200,
 			WantResponseLength: 0,
-			WantTransaction: &sentry.Event{
-				Extra: map[string]interface{}{
+			WantSpan: &sentry.Span{
+				Data: map[string]interface{}{
 					"http.fragment":                string("readme"),
 					"http.query":                   string("baz=123"),
 					"http.request.method":          string("GET"),
@@ -92,11 +94,12 @@ func TestIntegration(t *testing.T) {
 					"server.address":               string("example.com"),
 					"server.port":                  string("443"),
 				},
-				Level:           sentry.LevelInfo,
-				Transaction:     "GET https://example.com:443/foo/bar?baz=123#readme",
-				Type:            "transaction",
-				TransactionInfo: &sentry.TransactionInfo{Source: "custom"},
-				Tags:            map[string]string{},
+				Name:    "GET https://example.com:443/foo/bar?baz=123#readme",
+				Op:      "http.client",
+				Tags:    map[string]string{},
+				Origin:  "manual",
+				Sampled: sentry.SampledTrue,
+				Status:  sentry.SpanStatusOK,
 			},
 		},
 		{
@@ -105,8 +108,8 @@ func TestIntegration(t *testing.T) {
 			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{sentryhttpclient.WithTag("user", "def"), sentryhttpclient.WithTags(map[string]string{"domain": "example.com"})},
 			WantStatus:         400,
 			WantResponseLength: 0,
-			WantTransaction: &sentry.Event{
-				Extra: map[string]interface{}{
+			WantSpan: &sentry.Span{
+				Data: map[string]interface{}{
 					"http.fragment":                string(""),
 					"http.query":                   string("abc=def&bar=123"),
 					"http.request.method":          string("HEAD"),
@@ -119,10 +122,11 @@ func TestIntegration(t *testing.T) {
 					"user":   "def",
 					"domain": "example.com",
 				},
-				Level:           sentry.LevelInfo,
-				Transaction:     "HEAD https://example.com:8443/foo?bar=123&abc=def",
-				Type:            "transaction",
-				TransactionInfo: &sentry.TransactionInfo{Source: "custom"},
+				Name:    "HEAD https://example.com:8443/foo?bar=123&abc=def",
+				Op:      "http.client",
+				Origin:  "manual",
+				Sampled: sentry.SampledTrue,
+				Status:  sentry.SpanStatusInvalidArgument,
 			},
 		},
 		{
@@ -130,8 +134,8 @@ func TestIntegration(t *testing.T) {
 			RequestURL:         "https://john:verysecurepassword@example.com:4321/secret",
 			WantStatus:         200,
 			WantResponseLength: 1024,
-			WantTransaction: &sentry.Event{
-				Extra: map[string]interface{}{
+			WantSpan: &sentry.Span{
+				Data: map[string]interface{}{
 					"http.fragment":                string(""),
 					"http.query":                   string(""),
 					"http.request.method":          string("POST"),
@@ -140,22 +144,23 @@ func TestIntegration(t *testing.T) {
 					"server.address":               string("example.com"),
 					"server.port":                  string("4321"),
 				},
-				Level:           sentry.LevelInfo,
-				Transaction:     "POST https://john:xxxxx@example.com:4321/secret",
-				Type:            "transaction",
-				TransactionInfo: &sentry.TransactionInfo{Source: "custom"},
-				Tags:            map[string]string{},
+				Name:    "POST https://john:xxxxx@example.com:4321/secret",
+				Op:      "http.client",
+				Tags:    map[string]string{},
+				Origin:  "manual",
+				Sampled: sentry.SampledTrue,
+				Status:  sentry.SpanStatusOK,
 			},
 		},
 	}
 
-	transactionsCh := make(chan *sentry.Event, len(tests))
+	spansCh := make(chan []*sentry.Span, len(tests))
 
 	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			transactionsCh <- event
+			spansCh <- event.Spans
 			return event
 		},
 	})
@@ -163,10 +168,11 @@ func TestIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var want []*sentry.Event
 	for _, tt := range tests {
 		hub := sentry.NewHub(sentryClient, sentry.NewScope())
 		ctx := sentry.SetHubOnContext(context.Background(), hub)
+		span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+		ctx = span.Context()
 
 		request, err := http.NewRequestWithContext(ctx, tt.RequestMethod, tt.RequestURL, nil)
 		if err != nil {
@@ -188,32 +194,45 @@ func TestIntegration(t *testing.T) {
 		}
 
 		response.Body.Close()
-		want = append(want, tt.WantTransaction)
+		span.Finish()
 	}
 
 	if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
-	close(transactionsCh)
-	var got []*sentry.Event
-	for e := range transactionsCh {
+	close(spansCh)
+
+	var got [][]*sentry.Span
+	for e := range spansCh {
 		got = append(got, e)
 	}
 
 	optstrans := cmp.Options{
 		cmpopts.IgnoreFields(
-			sentry.Event{},
-			"Contexts", "EventID", "Platform", "Modules",
-			"Release", "Sdk", "ServerName", "Timestamp",
-			"sdkMetaData", "StartTime", "Spans",
-		),
-		cmpopts.IgnoreFields(
-			sentry.Request{},
-			"Env",
+			sentry.Span{},
+			"TraceID", "SpanID", "ParentSpanID", "StartTime", "EndTime",
+			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "collectProfile", "contexts",
 		),
 	}
-	if diff := cmp.Diff(want, got, optstrans); diff != "" {
-		t.Fatalf("Transaction mismatch (-want +got):\n%s", diff)
+	for i, tt := range tests {
+		var foundMatch = false
+		gotSpans := got[i]
+
+		var diffs []string
+		for _, gotSpan := range gotSpans {
+			if diff := cmp.Diff(tt.WantSpan, gotSpan, optstrans); diff != "" {
+				diffs = append(diffs, diff)
+			} else {
+				foundMatch = true
+				break
+			}
+		}
+
+		if foundMatch {
+			continue
+		} else {
+			t.Errorf("Span mismatch (-want +got):\n%s", strings.Join(diffs, "\n"))
+		}
 	}
 }
 

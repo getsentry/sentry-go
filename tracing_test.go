@@ -1091,3 +1091,25 @@ func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 }
+
+func TestGetSpanFromContext(t *testing.T) {
+	t.Run("Exists", func(t *testing.T) {
+		span := StartSpan(context.Background(), "something")
+
+		value := GetSpanFromContext(span.Context())
+		if value == nil {
+			t.Error("expecting `value` to be not nil")
+		} else {
+			if span.Op != "something" {
+				t.Errorf("expecting `span.Op` to be 'something', instead got %q", span.Op)
+			}
+		}
+	})
+
+	t.Run("Nil", func(t *testing.T) {
+		value := GetSpanFromContext(context.Background())
+		if value != nil {
+			t.Error("expecting `value` to be nil")
+		}
+	})
+}
