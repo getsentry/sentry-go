@@ -366,28 +366,6 @@ func (hub *Hub) Flush(timeout time.Duration) bool {
 	return client.Flush(timeout)
 }
 
-// Continue a trace based on HTTP header values. If performance is enabled this
-// returns a SpanOption that can be used to start a transaction, otherwise nil.
-// TODO: remove - moved to tracing.go.
-func (hub *Hub) ContinueTrace(trace, baggage string) (SpanOption, error) {
-	scope := hub.Scope()
-	propagationContext, err := PropagationContextFromHeaders(trace, baggage)
-	if err != nil {
-		return nil, err
-	}
-
-	scope.SetPropagationContext(propagationContext)
-
-	client := hub.Client()
-	if client != nil && client.options.EnableTracing {
-		return ContinueFromHeaders(trace, baggage), nil
-	}
-
-	scope.SetContext("trace", propagationContext.Map())
-
-	return nil, nil
-}
-
 // GetTraceparent returns the current Sentry traceparent string, to be used as a HTTP header value
 // or HTML meta tag value.
 // This function is context aware, as in it either returns the traceparent based

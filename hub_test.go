@@ -2,7 +2,6 @@ package sentry
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/stretchr/testify/assert"
 )
 
 const testDsn = "http://whatever@example.com/1337"
@@ -325,88 +323,6 @@ func TestHasHubOnContextReturnsTrueIfHubIsThere(t *testing.T) {
 func TestHasHubOnContextReturnsFalseIfHubIsNotThere(t *testing.T) {
 	ctx := context.Background()
 	assertEqual(t, false, HasHubOnContext(ctx))
-}
-
-func TestHub_ContinueTrace(t *testing.T) {
-	newScope := func() *Scope {
-		return &Scope{contexts: make(map[string]Context)}
-	}
-
-	mockClient := &Client{options: ClientOptions{EnableTracing: true}}
-
-	tests := map[string]struct {
-		hub          *Hub
-		trace        string
-		baggage      string
-		expectedErr  error
-		expectedSpan bool                             // Whether a SpanOption is expected to be returned
-		checkScope   func(t *testing.T, scope *Scope) // Additional checks on the scope
-	}{
-		"Valid trace and baggage": {
-			hub:          NewHub(mockClient, newScope()),
-			trace:        "4fbfb1b884c8532962a3c0b7b834428e-a9f442f9330b4e09",
-			baggage:      "sentry-release=1.0.0,sentry-environment=production",
-			expectedErr:  nil,
-			expectedSpan: true,
-			checkScope: func(t *testing.T, scope *Scope) {
-				assert.Equal(t, "4fbfb1b884c8532962a3c0b7b834428e", scope.propagationContext.TraceID.String())
-			},
-		},
-		"Invalid trace": {
-			hub:          NewHub(mockClient, newScope()),
-			trace:        "invalid",
-			baggage:      "sentry-release=1.0.0,sentry-environment=production",
-			expectedErr:  nil,
-			expectedSpan: true,
-			checkScope: func(t *testing.T, scope *Scope) {
-				assert.NotEmpty(t, scope.propagationContext.TraceID.String())
-			},
-		},
-		"Invalid baggage": {
-			hub:          NewHub(mockClient, newScope()),
-			trace:        "4fbfb1b884c8532962a3c0b7b834428e-a9f442f9330b4e09",
-			baggage:      "invalid_baggage",
-			expectedErr:  errors.New("invalid baggage list-member: \"invalid_baggage\""),
-			expectedSpan: false,
-			checkScope: func(t *testing.T, scope *Scope) {
-				assert.Equal(t, "00000000000000000000000000000000", scope.propagationContext.TraceID.String())
-			},
-		},
-		"Tracing not enabled": {
-			hub:          NewHub(&Client{options: ClientOptions{EnableTracing: false}}, newScope()),
-			trace:        "4fbfb1b884c8532962a3c0b7b834428e-a9f442f9330b4e09",
-			baggage:      "sentry-release=1.0.0,sentry-environment=production",
-			expectedErr:  nil,
-			expectedSpan: false,
-			checkScope: func(t *testing.T, scope *Scope) {
-				assert.Equal(t, "4fbfb1b884c8532962a3c0b7b834428e", scope.propagationContext.TraceID.String())
-				assert.Contains(t, scope.contexts, "trace")
-			},
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			opt, err := tt.hub.ContinueTrace(tt.trace, tt.baggage)
-
-			if tt.expectedErr != nil {
-				assert.Error(t, err, "expected error, got nil")
-				assert.Equal(t, tt.expectedErr.Error(), err.Error())
-			} else {
-				assert.NoError(t, err, "expected no error, got one")
-			}
-
-			// Check for expected SpanOption
-			if tt.expectedSpan {
-				assert.NotNil(t, opt, "expected SpanOption, got nil")
-			} else {
-				assert.Nil(t, opt, "expected no SpanOption, got one")
-			}
-
-			// Additional checks on the scope
-			tt.checkScope(t, tt.hub.Scope())
-		})
-	}
 }
 
 func TestGetTraceparent(t *testing.T) {
