@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -365,25 +366,32 @@ func (hub *Hub) Flush(timeout time.Duration) bool {
 	return client.Flush(timeout)
 }
 
-// Continue a trace based on HTTP header values. If performance is enabled this
-// returns a SpanOption that can be used to start a transaction, otherwise nil.
-func (hub *Hub) ContinueTrace(trace, baggage string) (SpanOption, error) {
+// GetTraceparent returns the current Sentry traceparent string, to be used as a HTTP header value
+// or HTML meta tag value.
+// This function is context aware, as in it either returns the traceparent based
+// on the current span, or the scope's propagation context.
+func (hub *Hub) GetTraceparent() string {
 	scope := hub.Scope()
-	propagationContext, err := PropagationContextFromHeaders(trace, baggage)
-	if err != nil {
-		return nil, err
+
+	if scope.span != nil {
+		return scope.span.ToSentryTrace()
 	}
 
-	scope.SetPropagationContext(propagationContext)
+	return fmt.Sprintf("%s-%s", scope.propagationContext.TraceID, scope.propagationContext.SpanID)
+}
 
-	client := hub.Client()
-	if client != nil && client.options.EnableTracing {
-		return ContinueFromHeaders(trace, baggage), nil
+// GetBaggage returns the current Sentry baggage string, to be used as a HTTP header value
+// or HTML meta tag value.
+// This function is context aware, as in it either returns the baggage based
+// on the current span or the scope's propagation context.
+func (hub *Hub) GetBaggage() string {
+	scope := hub.Scope()
+
+	if scope.span != nil {
+		return scope.span.ToBaggage()
 	}
 
-	scope.SetContext("trace", propagationContext.Map())
-
-	return nil, nil
+	return scope.propagationContext.DynamicSamplingContext.String()
 }
 
 // HasHubOnContext checks whether Hub instance is bound to a given Context struct.
