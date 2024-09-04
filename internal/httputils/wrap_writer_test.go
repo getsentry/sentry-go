@@ -1,4 +1,4 @@
-package sentry
+package httputils
 
 import (
 	"bufio"
