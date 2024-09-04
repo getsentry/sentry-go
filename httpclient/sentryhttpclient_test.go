@@ -228,9 +228,7 @@ func TestIntegration(t *testing.T) {
 			}
 		}
 
-		if foundMatch {
-			continue
-		} else {
+		if !foundMatch {
 			t.Errorf("Span mismatch (-want +got):\n%s", strings.Join(diffs, "\n"))
 		}
 	}

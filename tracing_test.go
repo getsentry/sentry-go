@@ -1099,10 +1099,8 @@ func TestGetSpanFromContext(t *testing.T) {
 		value := GetSpanFromContext(span.Context())
 		if value == nil {
 			t.Error("expecting `value` to be not nil")
-		} else {
-			if span.Op != "something" {
-				t.Errorf("expecting `span.Op` to be 'something', instead got %q", span.Op)
-			}
+		} else if span.Op != "something" {
+			t.Errorf("expecting `span.Op` to be 'something', instead got %q", span.Op)
 		}
 	})
 
