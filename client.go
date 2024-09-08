@@ -416,13 +416,9 @@ func (client *Client) Options() ClientOptions {
 	return client.options
 }
 
-type EventOptions struct {
-	SkipFrames int
-}
-
 // CaptureMessage captures an arbitrary message.
-func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier, opts ...EventOptions) *EventID {
-	event := client.EventFromMessage(message, LevelInfo, opts...)
+func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
+	event := client.EventFromMessage(message, LevelInfo)
 	return client.CaptureEvent(event, hint, scope)
 }
 
@@ -444,7 +440,7 @@ func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorCon
 
 // CaptureEvent captures an event on the currently active client if any.
 //
-// The event must already be assembled. Typically, code would instead use
+// The event must already be assembled. Typically code would instead use
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
 func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
@@ -453,7 +449,7 @@ func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventMod
 
 // Recover captures a panic.
 // Returns EventID if successfully, or nil if there's no error to recover from.
-func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModifier, opts ...EventOptions) *EventID {
+func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModifier) *EventID {
 	if err == nil {
 		err = recover()
 	}
@@ -463,7 +459,7 @@ func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModif
 	// is store the Context in the EventHint and there nil means the Context is
 	// not available.
 	// nolint: staticcheck
-	return client.RecoverWithContext(nil, err, hint, scope, opts...)
+	return client.RecoverWithContext(nil, err, hint, scope)
 }
 
 // RecoverWithContext captures a panic and passes relevant context object.
@@ -473,7 +469,6 @@ func (client *Client) RecoverWithContext(
 	err interface{},
 	hint *EventHint,
 	scope EventModifier,
-	opts ...EventOptions,
 ) *EventID {
 	if err == nil {
 		err = recover()
@@ -496,9 +491,9 @@ func (client *Client) RecoverWithContext(
 	case error:
 		event = client.EventFromException(err, LevelFatal)
 	case string:
-		event = client.EventFromMessage(err, LevelFatal, opts...)
+		event = client.EventFromMessage(err, LevelFatal)
 	default:
-		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal, opts...)
+		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
 	}
 	return client.CaptureEvent(event, hint, scope)
 }
@@ -519,7 +514,7 @@ func (client *Client) Flush(timeout time.Duration) bool {
 }
 
 // EventFromMessage creates an event from the given message string.
-func (client *Client) EventFromMessage(message string, level Level, opts ...EventOptions) *Event {
+func (client *Client) EventFromMessage(message string, level Level) *Event {
 	if message == "" {
 		err := usageError{fmt.Errorf("%s called with empty message", callerFunctionName())}
 		return client.EventFromException(err, level)
@@ -530,7 +525,7 @@ func (client *Client) EventFromMessage(message string, level Level, opts ...Even
 
 	if client.options.AttachStacktrace {
 		event.Threads = []Thread{{
-			Stacktrace: NewStacktrace(opts...),
+			Stacktrace: NewStacktrace(),
 			Crashed:    false,
 			Current:    true,
 		}}

@@ -139,7 +139,7 @@ func TestCreateFrames(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run("", func(t *testing.T) {
-			got := createFrames(tt.in, 0)
+			got := createFrames(tt.in)
 			if diff := cmp.Diff(tt.out, got); diff != "" {
 				t.Errorf("filterFrames() mismatch (-want +got):\n%s", diff)
 			}
