@@ -7,7 +7,7 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 ### Breaking Changes
 
 - Remove the `sentrymartini` integration ([#861](https://github.com/getsentry/sentry-go/pull/861))
-- The `WrapResponseWriter` has been moved from the `sentryhttp` package to the `sentry` package. You'll need to update your imports if you've imported it from `sentryhttp`. ([#871](https://github.com/getsentry/sentry-go/pull/871))
+- The `WrapResponseWriter` has been moved from the `sentryhttp` package to the `internal/httputils` package. If you've imported it previosuly, you'll need to copy the implementation in your project. ([#871](https://github.com/getsentry/sentry-go/pull/871))
 
 ### Features
 
