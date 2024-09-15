@@ -192,11 +192,11 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	span.recorder.record(&span)
 
-	hub := hubFromContext(ctx)
-
-	// Update scope so that all events include a trace context, allowing
-	// Sentry to correlate errors to transactions/spans.
-	hub.Scope().SetContext("trace", span.traceContext().Map())
+	clientOptions := span.clientOptions()
+	if clientOptions.EnableTracing {
+		hub := hubFromContext(ctx)
+		hub.Scope().SetSpan(&span)
+	}
 
 	// Start profiling only if it's a sampled root transaction.
 	if span.IsTransaction() && span.Sampled.Bool() {
@@ -335,17 +335,21 @@ func (s *Span) ToSentryTrace() string {
 // Use this function to propagate the DynamicSamplingContext to a downstream SDK,
 // either as the value of the "baggage" HTTP header, or as an html "baggage" meta tag.
 func (s *Span) ToBaggage() string {
-	if containingTransaction := s.GetTransaction(); containingTransaction != nil {
-		// In case there is currently no frozen DynamicSamplingContext attached to the transaction,
-		// create one from the properties of the transaction.
-		if !s.dynamicSamplingContext.IsFrozen() {
-			// This will return a frozen DynamicSamplingContext.
-			s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(containingTransaction)
-		}
-
-		return containingTransaction.dynamicSamplingContext.String()
+	t := s.GetTransaction()
+	if t == nil {
+		return ""
 	}
-	return ""
+
+	// In case there is currently no frozen DynamicSamplingContext attached to the transaction,
+	// create one from the properties of the transaction.
+	if !s.dynamicSamplingContext.IsFrozen() {
+		// This will return a frozen DynamicSamplingContext.
+		if dsc := DynamicSamplingContextFromTransaction(t); dsc.HasEntries() {
+			t.dynamicSamplingContext = dsc
+		}
+	}
+
+	return t.dynamicSamplingContext.String()
 }
 
 // SetDynamicSamplingContext sets the given dynamic sampling context on the
@@ -561,11 +565,10 @@ func (s *Span) toEvent() *Event {
 		s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(s)
 	}
 
-	contexts := map[string]Context{}
+	contexts := make(map[string]Context, len(s.contexts))
 	for k, v := range s.contexts {
 		contexts[k] = cloneContext(v)
 	}
-	contexts["trace"] = s.traceContext().Map()
 
 	// Make sure that the transaction source is valid
 	transactionSource := s.Source
@@ -904,20 +907,16 @@ func WithSpanOrigin(origin SpanOrigin) SpanOption {
 	}
 }
 
-func GetTraceHeader(s *Scope) string {
-	if s.span != nil {
-		return s.span.ToSentryTrace()
-	}
+// Continue a trace based on traceparent and bagge values.
+// If the SDK is configured with tracing enabled,
+// this function returns populated SpanOption.
+// In any other cases, it populates the propagation context on the scope.
+func ContinueTrace(hub *Hub, traceparent, baggage string) SpanOption {
+	scope := hub.Scope()
+	propagationContext, _ := PropagationContextFromHeaders(traceparent, baggage)
+	scope.SetPropagationContext(propagationContext)
 
-	return fmt.Sprintf("%s-%s", s.propagationContext.TraceID, s.propagationContext.SpanID)
-}
-
-func GetBaggageHeader(s *Scope) string {
-	if s.span != nil {
-		return s.span.ToBaggage()
-	}
-
-	return s.propagationContext.DynamicSamplingContext.String()
+	return ContinueFromHeaders(traceparent, baggage)
 }
 
 // ContinueFromRequest returns a span option that updates the span to continue
