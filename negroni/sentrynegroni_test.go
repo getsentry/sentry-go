@@ -14,7 +14,7 @@ import (
 	sentrynegroni "github.com/getsentry/sentry-go/negroni"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/urfave/negroni"
+	"github.com/urfave/negroni/v3"
 )
 
 func TestIntegration(t *testing.T) {
