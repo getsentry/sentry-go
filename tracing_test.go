@@ -799,6 +799,26 @@ func TestParseTraceParentContext(t *testing.T) {
 			},
 			wantValid: true,
 		},
+		{
+			name:        "Valid multiple header, sampled",
+			sentryTrace: "d49d9bf66f13450b81f65bc51cf49c03-1cc4b26ab9094ef0-1,faca5d26f53d660657d9e4b073fb8da2-74dbb120f6aca02a-1",
+			wantContext: TraceParentContext{
+				TraceID:      TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+				ParentSpanID: SpanIDFromHex("1cc4b26ab9094ef0"),
+				Sampled:      SampledTrue,
+			},
+			wantValid: true,
+		},
+		{
+			name:        "Valid multiple header, unsampled",
+			sentryTrace: "d49d9bf66f13450b81f65bc51cf49c03-1cc4b26ab9094ef0-0,faca5d26f53d660657d9e4b073fb8da2-74dbb120f6aca02a-0",
+			wantContext: TraceParentContext{
+				TraceID:      TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+				ParentSpanID: SpanIDFromHex("1cc4b26ab9094ef0"),
+				Sampled:      SampledFalse,
+			},
+			wantValid: true,
+		},
 	}
 
 	for _, tt := range tests {

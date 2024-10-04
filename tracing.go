@@ -383,7 +383,7 @@ func (s *Span) doFinish() {
 //
 //	TRACE_ID - SPAN_ID - SAMPLED
 //	[[:xdigit:]]{32}-[[:xdigit:]]{16}-[01]
-var sentryTracePattern = regexp.MustCompile(`^([[:xdigit:]]{32})-([[:xdigit:]]{16})(?:-([01]))?$`)
+var sentryTracePattern = regexp.MustCompile(`([[:xdigit:]]{32})-([[:xdigit:]]{16})(?:-([01]))?`)
 
 // updateFromSentryTrace parses a sentry-trace HTTP header (as returned by
 // ToSentryTrace) and updates fields of the span. If the header cannot be
