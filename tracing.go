@@ -554,10 +554,11 @@ func (s *Span) toEvent() *Event {
 		s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(s)
 	}
 
-	contexts := make(map[string]Context, len(s.contexts))
+	contexts := map[string]Context{}
 	for k, v := range s.contexts {
 		contexts[k] = cloneContext(v)
 	}
+	contexts["trace"] = s.traceContext().Map()
 
 	// Make sure that the transaction source is valid
 	transactionSource := s.Source
