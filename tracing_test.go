@@ -1019,3 +1019,71 @@ func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 }
+
+func TestSpanScopeManagement(t *testing.T) {
+	// Initialize a test hub and client
+	transport := &TransportMock{}
+	client, err := NewClient(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := NewHub(client, NewScope())
+
+	// Set the hub on the context
+	ctx := context.Background()
+	ctx = SetHubOnContext(ctx, hub)
+
+	// Start a parent span (transaction)
+	transaction := StartTransaction(ctx, "parent-operation")
+	defer transaction.Finish()
+
+	// Start a child span
+	childSpan := StartSpan(transaction.Context(), "child-operation")
+	// Finish the child span
+	defer childSpan.Finish()
+
+	subChildSpan := StartSpan(childSpan.Context(), "sub_child-operation")
+	subChildSpan.Finish()
+
+	// Capture an event after finishing the child span
+	// This event should be associated with the first child span
+	hub.CaptureMessage("Test event")
+
+	// Flush to ensure the event is sent
+	transport.Flush(time.Second)
+
+	// Verify that the event has the correct trace data
+	events := transport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 2 event, got %d", len(events))
+	}
+	event := events[0]
+
+	// Extract the trace context from the event
+	traceCtx, ok := event.Contexts["trace"]
+	if !ok {
+		t.Fatalf("event does not have a trace context")
+	}
+
+	// Extract TraceID and SpanID from the trace context
+	traceID, ok := traceCtx["trace_id"].(TraceID)
+	if !ok {
+		t.Fatalf("trace_id not found")
+	}
+	spanID, ok := traceCtx["span_id"].(SpanID)
+	if !ok {
+		t.Fatalf("span_id not found")
+	}
+
+	// Verify that the IDs match the first child span IDs
+	if traceID != childSpan.TraceID {
+		t.Errorf("expected TraceID %s, got %s", transaction.TraceID, traceID)
+	}
+	if spanID != childSpan.SpanID {
+		t.Errorf("expected SpanID %s, got %s", transaction.SpanID, spanID)
+	}
+}
