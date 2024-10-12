@@ -554,7 +554,7 @@ func (s *Span) toEvent() *Event {
 		s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(s)
 	}
 
-	contexts := map[string]Context{}
+	contexts := make(map[string]Context, len(s.contexts)+1)
 	for k, v := range s.contexts {
 		contexts[k] = cloneContext(v)
 	}
