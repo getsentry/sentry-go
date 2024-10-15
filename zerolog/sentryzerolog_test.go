@@ -28,7 +28,7 @@ func TestParseLogEvent(t *testing.T) {
 	require.True(t, ok)
 	zLevel, err := parseLogLevel(logEventJSON)
 	assert.Nil(t, err)
-	ev.Level = levels[zLevel]
+	ev.Level = levelsMapping[zLevel]
 
 	assert.Equal(t, ts, ev.Timestamp)
 	assert.Equal(t, sentry.LevelError, ev.Level)
