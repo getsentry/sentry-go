@@ -1,5 +1,9 @@
 # Changelog
 
+### Features
+
+- Add Zerolog integration ([#857](https://github.com/getsentry/sentry-go/pull/857))
+
 ## 0.29.1
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.29.1.
