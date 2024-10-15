@@ -174,8 +174,8 @@ func (w *Writer) addBreadcrumb(event *sentry.Event) {
 }
 
 // Write handles zerolog's json and sends events to sentry.
-func (w *Writer) Write(data []byte) (n int, err error) {
-	n = len(data)
+func (w *Writer) Write(data []byte) (int, error) {
+	n := len(data)
 
 	lvl, err := parseLogLevel(data)
 	if err != nil {
@@ -184,24 +184,24 @@ func (w *Writer) Write(data []byte) (n int, err error) {
 
 	event, ok := parseLogEvent(data)
 	if !ok {
-		return
+		return n, nil
 	}
 
 	if _, enabled := w.levels[lvl]; !enabled {
 		// if the level is not enabled, add event as a breadcrumb
 		w.addBreadcrumb(event)
-		return
+		return n, nil
 	}
 
 	event.Level, ok = levelsMapping[lvl]
 	if !ok {
-		return
+		return n, nil
 	}
 
 	if _, enabled := w.levels[lvl]; !enabled {
 		// if the level is not enabled, add event as a breadcrumb
 		w.addBreadcrumb(event)
-		return
+		return n, nil
 	}
 
 	w.hub.CaptureEvent(event)
@@ -210,26 +210,26 @@ func (w *Writer) Write(data []byte) (n int, err error) {
 		w.hub.Flush(w.flushTimeout)
 	}
 
-	return
+	return n, nil
 }
 
-func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
-	n = len(p)
+func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (int, error) {
+	n := len(p)
 
 	event, ok := parseLogEvent(p)
 	if !ok {
-		return
+		return n, nil
 	}
 
 	event.Level, ok = levelsMapping[level]
 	if !ok {
-		return
+		return n, nil
 	}
 
 	if _, enabled := w.levels[level]; !enabled {
 		// if the level is not enabled, add event as a breadcrumb
 		w.addBreadcrumb(event)
-		return
+		return n, nil
 	}
 
 	w.hub.CaptureEvent(event)
@@ -237,7 +237,8 @@ func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 	if event.Level == sentry.LevelFatal {
 		w.hub.Flush(w.flushTimeout)
 	}
-	return
+
+	return n, nil
 }
 
 // Close forces client to flush all pending events.
