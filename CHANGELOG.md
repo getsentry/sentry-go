@@ -2,7 +2,7 @@
 
 ### Features
 
-- Add `sentryzerolog` integration ([#857](https://github.com/getsentry/sentry-go/pull/857))
+- Add `sentryzerolog` integration ([#865](https://github.com/getsentry/sentry-go/pull/865))
 
 ## 0.29.1
 
