@@ -2,12 +2,13 @@ package sentrynegroni
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/urfave/negroni"
+	"github.com/getsentry/sentry-go/internal/httputils"
+	"github.com/getsentry/sentry-go/internal/traceutils"
+	"github.com/urfave/negroni/v3"
 )
 
 // The identifier of the Negroni SDK.
@@ -45,25 +46,8 @@ func New(options Options) negroni.Handler {
 	}
 }
 
-// responseWriter is a wrapper around http.ResponseWriter that captures the status code.
-type responseWriter struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-// WriteHeader captures the status code and calls the original WriteHeader method.
-func (rw *responseWriter) WriteHeader(code int) {
-	rw.statusCode = code
-	rw.ResponseWriter.WriteHeader(code)
-}
-
-func newResponseWriter(w http.ResponseWriter) *responseWriter {
-	return &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-}
-
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	ctx := r.Context()
-	hub := sentry.GetHubFromContext(ctx)
+	hub := sentry.GetHubFromContext(r.Context())
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
 	}
@@ -72,40 +56,34 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
-	hub.Scope().SetRequest(r)
-	ctx = sentry.SetHubOnContext(
-		context.WithValue(ctx, sentry.RequestContextKey, r),
-		hub,
-	)
-
 	options := []sentry.SpanOption{
+		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
-		sentry.ContinueFromRequest(r),
 		sentry.WithTransactionSource(sentry.SourceURL),
 		sentry.WithSpanOrigin(sentry.SpanOriginNegroni),
 	}
-	// We don't mind getting an existing transaction back so we don't need to
-	// check if it is.
-	transaction := sentry.StartTransaction(ctx,
-		fmt.Sprintf("%s %s", r.Method, r.URL.Path),
+
+	transaction := sentry.StartTransaction(
+		sentry.SetHubOnContext(r.Context(), hub),
+		traceutils.GetHTTPSpanName(r),
 		options...,
 	)
+
 	transaction.SetData("http.request.method", r.Method)
-	rw := newResponseWriter(w)
+	rw := httputils.NewWrapResponseWriter(w, r.ProtoMajor)
 
 	defer func() {
-		status := rw.statusCode
+		status := rw.Status()
 		transaction.Status = sentry.HTTPtoSpanStatus(status)
 		transaction.SetData("http.response.status_code", status)
 		transaction.Finish()
 	}()
-	// TODO(tracing): if the next handler.ServeHTTP panics, store
-	// information on the transaction accordingly (status, tag,
-	// level?, ...).
-	r = r.WithContext(transaction.Context())
+
 	hub.Scope().SetRequest(r)
+	r = r.WithContext(transaction.Context())
 	defer h.recoverWithSentry(hub, r)
-	next(rw, r.WithContext(ctx))
+
+	next(rw, r.WithContext(r.Context()))
 }
 
 func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {

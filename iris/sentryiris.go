@@ -62,9 +62,11 @@ func (h *handler) handle(ctx iris.Context) {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
+	r := ctx.Request()
+
 	options := []sentry.SpanOption{
+		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
-		sentry.ContinueFromRequest(ctx.Request()),
 		sentry.WithTransactionSource(sentry.SourceRoute),
 		sentry.WithSpanOrigin(sentry.SpanOriginIris),
 	}
@@ -83,12 +85,12 @@ func (h *handler) handle(ctx iris.Context) {
 		transaction.Finish()
 	}()
 
-	transaction.SetData("http.request.method", ctx.Request().Method)
+	transaction.SetData("http.request.method", r.Method)
 
-	hub.Scope().SetRequest(ctx.Request())
+	hub.Scope().SetRequest(r)
 	ctx.Values().Set(valuesKey, hub)
 	ctx.Values().Set(transactionKey, transaction)
-	defer h.recoverWithSentry(hub, ctx.Request())
+	defer h.recoverWithSentry(hub, r)
 	ctx.Next()
 }
 

@@ -17,6 +17,7 @@ import (
 const sdkIdentifier = "sentry.go.gin"
 
 const valuesKey = "sentry"
+const transactionKey = "sentry_transaction"
 
 type handler struct {
 	repanic         bool
@@ -55,7 +56,6 @@ func (h *handler) handle(c *gin.Context) {
 	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
-		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
 
 	if client := hub.Client(); client != nil {
@@ -71,17 +71,20 @@ func (h *handler) handle(c *gin.Context) {
 	}
 
 	options := []sentry.SpanOption{
+		sentry.ContinueTrace(hub, c.GetHeader(sentry.SentryTraceHeader), c.GetHeader(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
-		sentry.ContinueFromRequest(c.Request),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginGin),
 	}
 
-	transaction := sentry.StartTransaction(ctx,
+	transaction := sentry.StartTransaction(
+		sentry.SetHubOnContext(ctx, hub),
 		fmt.Sprintf("%s %s", c.Request.Method, transactionName),
 		options...,
 	)
+
 	transaction.SetData("http.request.method", c.Request.Method)
+
 	defer func() {
 		status := c.Writer.Status()
 		transaction.Status = sentry.HTTPtoSpanStatus(status)
@@ -92,7 +95,9 @@ func (h *handler) handle(c *gin.Context) {
 	c.Request = c.Request.WithContext(transaction.Context())
 	hub.Scope().SetRequest(c.Request)
 	c.Set(valuesKey, hub)
+	c.Set(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, c.Request)
+
 	c.Next()
 }
 
@@ -131,6 +136,17 @@ func GetHubFromContext(ctx *gin.Context) *sentry.Hub {
 	if hub, ok := ctx.Get(valuesKey); ok {
 		if hub, ok := hub.(*sentry.Hub); ok {
 			return hub
+		}
+	}
+	return nil
+}
+
+// GetSpanFromContext retrieves attached *sentry.Span instance from gin.Context.
+// If there is no transaction on echo.Context, it will return nil.
+func GetSpanFromContext(ctx *gin.Context) *sentry.Span {
+	if span, ok := ctx.Get(transactionKey); ok {
+		if span, ok := span.(*sentry.Span); ok {
+			return span
 		}
 	}
 	return nil

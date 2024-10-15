@@ -10,7 +10,6 @@ import (
 	"math"
 	"net/http"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -480,77 +479,6 @@ func TestToSentryTrace(t *testing.T) {
 		if got := tt.span.ToSentryTrace(); got != tt.want {
 			t.Errorf("got %q, want %q", got, tt.want)
 		}
-	}
-}
-
-func TestGetTraceHeader(t *testing.T) {
-	tests := map[string]struct {
-		scope    *Scope
-		expected string
-	}{
-		"With span": {
-			scope: func() *Scope {
-				s := NewScope()
-				s.span = &Span{
-					TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
-					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
-					Sampled: SampledTrue,
-				}
-				return s
-			}(),
-			expected: "d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09-1",
-		},
-		"Without span": {
-			scope: func() *Scope {
-				s := NewScope()
-				s.propagationContext.TraceID = TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")
-				s.propagationContext.SpanID = SpanIDFromHex("a9f442f9330b4e09")
-				return s
-			}(),
-			expected: "d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09",
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			result := GetTraceHeader(tt.scope)
-			assertEqual(t, tt.expected, result)
-		})
-	}
-}
-
-func TestGetBaggageHeader(t *testing.T) {
-	tests := map[string]struct {
-		scope    *Scope
-		expected string
-	}{
-		"With span": {
-			scope: func() *Scope {
-				s := NewScope()
-				s.span = &Span{}
-				return s
-			}(),
-			expected: "",
-		},
-		"Without span": {
-			scope: func() *Scope {
-				s := NewScope()
-				s.propagationContext.DynamicSamplingContext = DynamicSamplingContext{
-					Entries: map[string]string{"release": "1.0.0", "environment": "production"},
-				}
-				return s
-			}(),
-			expected: "sentry-environment=production,sentry-release=1.0.0",
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			result := GetBaggageHeader(tt.scope)
-			res := strings.Split(result, ",")
-			sortSlice(res)
-			assertEqual(t, tt.expected, strings.Join(res, ","))
-		})
 	}
 }
 
@@ -1090,4 +1018,72 @@ func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
 	}()
 
 	time.Sleep(50 * time.Millisecond)
+}
+
+func TestSpanScopeManagement(t *testing.T) {
+	// Initialize a test hub and client
+	transport := &TransportMock{}
+	client, err := NewClient(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := NewHub(client, NewScope())
+
+	// Set the hub on the context
+	ctx := context.Background()
+	ctx = SetHubOnContext(ctx, hub)
+
+	// Start a parent span (transaction)
+	transaction := StartTransaction(ctx, "parent-operation")
+	defer transaction.Finish()
+
+	// Start a child span
+	childSpan := StartSpan(transaction.Context(), "child-operation")
+	// Finish the child span
+	defer childSpan.Finish()
+
+	subChildSpan := StartSpan(childSpan.Context(), "sub_child-operation")
+	subChildSpan.Finish()
+
+	// Capture an event after finishing the child span
+	// This event should be associated with the first child span
+	hub.CaptureMessage("Test event")
+
+	// Flush to ensure the event is sent
+	transport.Flush(time.Second)
+
+	// Verify that the event has the correct trace data
+	events := transport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 2 event, got %d", len(events))
+	}
+	event := events[0]
+
+	// Extract the trace context from the event
+	traceCtx, ok := event.Contexts["trace"]
+	if !ok {
+		t.Fatalf("event does not have a trace context")
+	}
+
+	// Extract TraceID and SpanID from the trace context
+	traceID, ok := traceCtx["trace_id"].(TraceID)
+	if !ok {
+		t.Fatalf("trace_id not found")
+	}
+	spanID, ok := traceCtx["span_id"].(SpanID)
+	if !ok {
+		t.Fatalf("span_id not found")
+	}
+
+	// Verify that the IDs match the first child span IDs
+	if traceID != childSpan.TraceID {
+		t.Errorf("expected TraceID %s, got %s", transaction.TraceID, traceID)
+	}
+	if spanID != childSpan.SpanID {
+		t.Errorf("expected SpanID %s, got %s", transaction.SpanID, spanID)
+	}
 }

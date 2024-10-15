@@ -23,7 +23,7 @@ type Stacktrace struct {
 }
 
 // NewStacktrace creates a stacktrace using runtime.Callers.
-func NewStacktrace(opts ...EventOptions) *Stacktrace {
+func NewStacktrace() *Stacktrace {
 	pcs := make([]uintptr, 100)
 	n := runtime.Callers(1, pcs)
 
@@ -31,13 +31,8 @@ func NewStacktrace(opts ...EventOptions) *Stacktrace {
 		return nil
 	}
 
-	skipFrames := 0
-	if len(opts) > 0 {
-		skipFrames = opts[0].SkipFrames
-	}
-
 	runtimeFrames := extractFrames(pcs[:n])
-	frames := createFrames(runtimeFrames, skipFrames)
+	frames := createFrames(runtimeFrames)
 
 	stacktrace := Stacktrace{
 		Frames: frames,
@@ -67,7 +62,7 @@ func ExtractStacktrace(err error) *Stacktrace {
 	}
 
 	runtimeFrames := extractFrames(pcs)
-	frames := createFrames(runtimeFrames, 0)
+	frames := createFrames(runtimeFrames)
 
 	stacktrace := Stacktrace{
 		Frames: frames,
@@ -275,12 +270,17 @@ func extractFrames(pcs []uintptr) []runtime.Frame {
 	for {
 		callerFrame, more := callersFrames.Next()
 
-		// Prepend the frame
-		frames = append([]runtime.Frame{callerFrame}, frames...)
+		frames = append(frames, callerFrame)
 
 		if !more {
 			break
 		}
+	}
+
+	// TODO don't append and reverse, put in the right place from the start.
+	// reverse
+	for i, j := 0, len(frames)-1; i < j; i, j = i+1, j-1 {
+		frames[i], frames[j] = frames[j], frames[i]
 	}
 
 	return frames
@@ -288,12 +288,12 @@ func extractFrames(pcs []uintptr) []runtime.Frame {
 
 // createFrames creates Frame objects while filtering out frames that are not
 // meant to be reported to Sentry, those are frames internal to the SDK or Go.
-func createFrames(frames []runtime.Frame, skip int) []Frame {
-	if len(frames) == 0 || skip >= len(frames) {
+func createFrames(frames []runtime.Frame) []Frame {
+	if len(frames) == 0 {
 		return nil
 	}
 
-	var result []Frame
+	result := make([]Frame, 0, len(frames))
 
 	for _, frame := range frames {
 		function := frame.Function
@@ -307,11 +307,10 @@ func createFrames(frames []runtime.Frame, skip int) []Frame {
 		}
 	}
 
-	if skip >= len(result) {
-		return []Frame{}
-	}
-
-	return result[:len(result)-skip]
+	// Fix issues grouping errors with the new fully qualified function names
+	// introduced from Go 1.21
+	result = cleanupFunctionNamePrefix(result)
+	return result
 }
 
 // TODO ID: why do we want to do this?
@@ -337,12 +336,12 @@ func shouldSkipFrame(module string) bool {
 var goRoot = strings.ReplaceAll(build.Default.GOROOT, "\\", "/")
 
 func setInAppFrame(frame *Frame) {
-	frame.InApp = true
-
 	if strings.HasPrefix(frame.AbsPath, goRoot) ||
 		strings.Contains(frame.Module, "vendor") ||
 		strings.Contains(frame.Module, "third_party") {
 		frame.InApp = false
+	} else {
+		frame.InApp = true
 	}
 }
 
