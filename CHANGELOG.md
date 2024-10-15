@@ -8,6 +8,7 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 
 - Correlate errors to the current trace ([#886](https://github.com/getsentry/sentry-go/pull/886))
 - Set the trace context when the transaction finishes ([#888](https://github.com/getsentry/sentry-go/pull/888))
+- Update `sentrynegroni` integration to use the latest (v3.1.1) version of Negroni ([#885](https://github.com/getsentry/sentry-go/pull/885/files))
 
 ## 0.29.0
 
