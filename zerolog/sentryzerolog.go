@@ -11,12 +11,14 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// A large portion of this implementation has been taken from https://github.com/archdx/zerolog-sentry/blob/master/writer.go
+
 var (
 	// ErrFlushTimeout is returned when the flush operation times out.
 	ErrFlushTimeout = errors.New("sentryzerolog flush timeout")
 
 	// levels maps zerolog levels to sentry levels.
-	levels = map[zerolog.Level]sentry.Level{
+	levelsMapping = map[zerolog.Level]sentry.Level{
 		zerolog.TraceLevel: sentry.LevelDebug,
 		zerolog.DebugLevel: sentry.LevelDebug,
 		zerolog.InfoLevel:  sentry.LevelInfo,
@@ -57,8 +59,6 @@ const (
 	// Name of the logger used by the Sentry SDK.
 	logger = "zerolog"
 )
-
-// A good portion of this implementation has been taken from https://github.com/archdx/zerolog-sentry/blob/master/writer.go
 
 type Config struct {
 	sentry.ClientOptions
@@ -186,7 +186,14 @@ func (w *Writer) Write(data []byte) (n int, err error) {
 	if !ok {
 		return
 	}
-	event.Level, ok = levels[lvl]
+
+	if _, enabled := w.levels[lvl]; !enabled {
+		// if the level is not enabled, add event as a breadcrumb
+		w.addBreadcrumb(event)
+		return
+	}
+
+	event.Level, ok = levelsMapping[lvl]
 	if !ok {
 		return
 	}
@@ -214,7 +221,7 @@ func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
 		return
 	}
 
-	event.Level, ok = levels[level]
+	event.Level, ok = levelsMapping[level]
 	if !ok {
 		return
 	}
@@ -265,10 +272,8 @@ func parseLogEvent(data []byte) (*sentry.Event, bool) {
 			event.Message = string(value)
 		case zerolog.ErrorFieldName:
 			event.Exception = append(event.Exception, sentry.Exception{
-				Value: string(value),
-				Stacktrace: sentry.NewStacktrace(sentry.EventOptions{
-					SkipFrames: 0,
-				}),
+				Value:      string(value),
+				Stacktrace: sentry.NewStacktrace(),
 			})
 		case zerolog.LevelFieldName, zerolog.TimestampFieldName:
 		case FieldUser:
