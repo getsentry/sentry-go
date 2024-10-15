@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A good portion of this implementation has been taken from https://github.com/archdx/zerolog-sentry/blob/master/writer_test.go
+// A large portion of this implementation has been taken from https://github.com/archdx/zerolog-sentry/blob/master/writer_test.go
 
 var logEventJSON = []byte(`{"level":"error","requestId":"bee07485-2485-4f64-99e1-d10165884ca7","error":"dial timeout","time":"2020-06-25T17:19:00+03:00","message":"test message"}`)
 
