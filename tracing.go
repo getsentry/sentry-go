@@ -206,17 +206,6 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 	return &span
 }
 
-// GetSpanFromContext retrieves attached *sentry.Span instance from context.Context.
-// If there are no spans, it will return nil.
-func GetSpanFromContext(ctx context.Context) *Span {
-	span, ok := ctx.Value(spanContextKey{}).(*Span)
-	if ok {
-		return span
-	}
-
-	return nil
-}
-
 // Finish sets the span's end time, unless already set. If the span is the root
 // of a span tree, Finish sends the span tree to Sentry as a transaction.
 //

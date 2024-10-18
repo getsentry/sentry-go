@@ -68,7 +68,7 @@ type SentryRoundTripper struct {
 
 func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
 	// Only create the `http.client` span only if there is a parent span.
-	parentSpan := sentry.GetSpanFromContext(request.Context())
+	parentSpan := sentry.SpanFromContext(request.Context())
 	if parentSpan == nil {
 		return s.originalRoundTripper.RoundTrip(request)
 	}
