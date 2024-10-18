@@ -9,7 +9,7 @@ import (
 	ramsqldriver "github.com/proullon/ramsql/driver"
 )
 
-func ExampleNewSentrySql() {
+func ExampleNewSentrySQL() {
 	sql.Register("sentrysql-ramsql", sentrysql.NewSentrySQL(ramsqldriver.NewDriver(), sentrysql.WithDatabaseName("TestDriver"), sentrysql.WithDatabaseSystem(sentrysql.DatabaseSystem("ramsql")), sentrysql.WithServerAddress("127.0.0.1", "3306")))
 
 	db, err := sql.Open("sentrysql-ramsql", "TestDriver")
@@ -45,13 +45,13 @@ func ExampleNewSentrySql() {
 	}
 }
 
-func ExampleNewSentrySqlConnector() {
+func ExampleNewSentrySQLConnector() {
 	pqConnector, err := pq.NewConnector("postgres://user:password@localhost:5432/db")
 	if err != nil {
 		panic(err)
 	}
 
-	db := sql.OpenDB(sentrysql.NewSentrySqlConnector(pqConnector, sentrysql.WithDatabaseName("db"), sentrysql.WithDatabaseSystem(sentrysql.PostgreSQL), sentrysql.WithServerAddress("localhost", "5432")))
+	db := sql.OpenDB(sentrysql.NewSentrySQLConnector(pqConnector, sentrysql.WithDatabaseName("db"), sentrysql.WithDatabaseSystem(sentrysql.PostgreSQL), sentrysql.WithServerAddress("localhost", "5432")))
 	defer db.Close()
 
 	// Continue executing PostgreSQL queries
