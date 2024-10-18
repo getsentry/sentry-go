@@ -76,6 +76,7 @@ func (s *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 	return &sentryTx{originalTx: tx, ctx: s.ctx, config: s.config}, nil
 }
 
+//nolint:dupl
 func (s *sentryConn) Query(query string, args []driver.Value) (driver.Rows, error) {
 	// should only be executed if the original driver implements Queryer
 	queryer, ok := s.originalConn.(driver.Queryer) //nolint:staticcheck We must support legacy clients
@@ -113,6 +114,7 @@ func (s *sentryConn) Query(query string, args []driver.Value) (driver.Rows, erro
 	return rows, nil
 }
 
+//nolint:dupl
 func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
 	// should only be executed if the original driver implements QueryerContext
 	queryerContext, ok := s.originalConn.(driver.QueryerContext)
@@ -150,6 +152,7 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 	return rows, nil
 }
 
+//nolint:dupl
 func (s *sentryConn) Exec(query string, args []driver.Value) (driver.Result, error) {
 	// should only be executed if the original driver implements Execer
 	execer, ok := s.originalConn.(driver.Execer) //nolint:staticcheck We must support legacy clients
@@ -187,6 +190,7 @@ func (s *sentryConn) Exec(query string, args []driver.Value) (driver.Result, err
 	return rows, nil
 }
 
+//nolint:dupl
 func (s *sentryConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
 	// should only be executed if the original driver implements ExecerContext {
 	execerContext, ok := s.originalConn.(driver.ExecerContext)

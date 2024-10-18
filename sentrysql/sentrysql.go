@@ -25,7 +25,7 @@ type sentrySQLConfig struct {
 
 // NewSentrySQL is a wrapper for driver.Driver that provides tracing for SQL queries.
 // The span will only be created if the parent span is available.
-func NewSentrySQL(driver driver.Driver, options ...SentrySQLOption) driver.Driver {
+func NewSentrySQL(driver driver.Driver, options ...Option) driver.Driver {
 	var config sentrySQLConfig
 	for _, option := range options {
 		option(&config)
@@ -34,9 +34,9 @@ func NewSentrySQL(driver driver.Driver, options ...SentrySQLOption) driver.Drive
 	return &sentrySQLDriver{originalDriver: driver, config: &config}
 }
 
-// NewSentrySqlConnector is a wrapper for driver.Connector that provides tracing for SQL queries.
+// NewSentrySQLConnector is a wrapper for driver.Connector that provides tracing for SQL queries.
 // The span will only be created if the parent span is available.
-func NewSentrySqlConnector(connector driver.Connector, options ...SentrySQLOption) driver.Connector {
+func NewSentrySQLConnector(connector driver.Connector, options ...Option) driver.Connector {
 	var config sentrySQLConfig
 	for _, option := range options {
 		option(&config)

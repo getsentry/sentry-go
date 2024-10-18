@@ -22,6 +22,7 @@ func (s *sentryStmt) NumInput() int {
 	return s.originalStmt.NumInput()
 }
 
+//nolint:dupl
 func (s *sentryStmt) Exec(args []driver.Value) (driver.Result, error) {
 	parentSpan := sentry.SpanFromContext(s.ctx)
 	if parentSpan == nil {
@@ -55,6 +56,7 @@ func (s *sentryStmt) Exec(args []driver.Value) (driver.Result, error) {
 	return result, nil
 }
 
+//nolint:dupl
 func (s *sentryStmt) Query(args []driver.Value) (driver.Rows, error) {
 	parentSpan := sentry.SpanFromContext(s.ctx)
 	if parentSpan == nil {
