@@ -1,6 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
 - Add net/http client integration ([#876](https://github.com/getsentry/sentry-go/pull/876))
+
+## 0.29.1
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.29.1.
+
+### Bug Fixes
+
+- Correlate errors to the current trace ([#886](https://github.com/getsentry/sentry-go/pull/886))
+- Set the trace context when the transaction finishes ([#888](https://github.com/getsentry/sentry-go/pull/888))
+
+### Misc
+
+- Update the `sentrynegroni` integration to use the latest (v3.1.1) version of Negroni ([#885](https://github.com/getsentry/sentry-go/pull/885))
 
 ## 0.29.0
 

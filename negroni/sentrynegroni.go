@@ -8,7 +8,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/httputils"
 	"github.com/getsentry/sentry-go/internal/traceutils"
-	"github.com/urfave/negroni"
+	"github.com/urfave/negroni/v3"
 )
 
 // The identifier of the Negroni SDK.

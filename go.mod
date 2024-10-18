@@ -13,7 +13,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.2
-	github.com/urfave/negroni v1.0.0
+	github.com/urfave/negroni/v3 v3.1.1
 	github.com/valyala/fasthttp v1.52.0
 	golang.org/x/sys v0.18.0
 	golang.org/x/text v0.14.0

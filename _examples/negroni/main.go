@@ -7,7 +7,7 @@ import (
 	sentrynegroni "github.com/getsentry/sentry-go/negroni"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/urfave/negroni"
+	"github.com/urfave/negroni/v3"
 )
 
 func main() {
