@@ -9,8 +9,10 @@ require (
 	github.com/google/go-cmp v0.5.9
 	github.com/kataras/iris/v12 v12.2.0
 	github.com/labstack/echo/v4 v4.10.0
+	github.com/lib/pq v1.10.9
 	github.com/pingcap/errors v0.11.4
 	github.com/pkg/errors v0.9.1
+	github.com/proullon/ramsql v0.1.4
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.2
 	github.com/urfave/negroni/v3 v3.1.1
@@ -88,6 +90,7 @@ require (
 	github.com/yudai/gojsondiff v1.0.0 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect
 	golang.org/x/crypto v0.21.0 // indirect
+	golang.org/x/exp v0.0.0-20230713183714-613f0c0eb8a1 // indirect
 	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
