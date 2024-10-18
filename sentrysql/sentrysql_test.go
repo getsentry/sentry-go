@@ -10,7 +10,7 @@ import (
 )
 
 func ExampleNewSentrySql() {
-	sql.Register("sentrysql-ramsql", sentrysql.NewSentrySql(ramsqldriver.NewDriver(), sentrysql.WithDatabaseName("TestDriver"), sentrysql.WithDatabaseSystem(sentrysql.DatabaseSystem("ramsql")), sentrysql.WithServerAddress("127.0.0.1", "3306")))
+	sql.Register("sentrysql-ramsql", sentrysql.NewSentrySQL(ramsqldriver.NewDriver(), sentrysql.WithDatabaseName("TestDriver"), sentrysql.WithDatabaseSystem(sentrysql.DatabaseSystem("ramsql")), sentrysql.WithServerAddress("127.0.0.1", "3306")))
 
 	db, err := sql.Open("sentrysql-ramsql", "TestDriver")
 	if err != nil {

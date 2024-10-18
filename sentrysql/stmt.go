@@ -25,8 +25,7 @@ func (s *sentryStmt) NumInput() int {
 func (s *sentryStmt) Exec(args []driver.Value) (driver.Result, error) {
 	parentSpan := sentry.SpanFromContext(s.ctx)
 	if parentSpan == nil {
-		//nolint:staticcheck We must support legacy clients
-		return s.originalStmt.Exec(args)
+		return s.originalStmt.Exec(args) //nolint:staticcheck We must support legacy clients
 	}
 
 	span := parentSpan.StartChild("db.sql.exec", sentry.WithDescription(s.query))
@@ -43,8 +42,7 @@ func (s *sentryStmt) Exec(args []driver.Value) (driver.Result, error) {
 		span.SetData("server.port", s.config.serverPort)
 	}
 
-	//nolint:staticcheck We must support legacy clients
-	result, err := s.originalStmt.Exec(args)
+	result, err := s.originalStmt.Exec(args) //nolint:staticcheck We must support legacy clients
 	if err != nil {
 		span.Status = sentry.SpanStatusInternalError
 		span.Finish()
@@ -60,8 +58,7 @@ func (s *sentryStmt) Exec(args []driver.Value) (driver.Result, error) {
 func (s *sentryStmt) Query(args []driver.Value) (driver.Rows, error) {
 	parentSpan := sentry.SpanFromContext(s.ctx)
 	if parentSpan == nil {
-		//nolint:staticcheck We must support legacy clients
-		return s.originalStmt.Query(args)
+		return s.originalStmt.Query(args) //nolint:staticcheck We must support legacy clients
 	}
 
 	span := parentSpan.StartChild("db.sql.query", sentry.WithDescription(s.query))
@@ -78,8 +75,7 @@ func (s *sentryStmt) Query(args []driver.Value) (driver.Rows, error) {
 		span.SetData("server.port", s.config.serverPort)
 	}
 
-	//nolint:staticcheck We must support legacy clients
-	rows, err := s.originalStmt.Query(args)
+	rows, err := s.originalStmt.Query(args) //nolint:staticcheck We must support legacy clients
 	if err != nil {
 		span.Status = sentry.SpanStatusInternalError
 		span.Finish()

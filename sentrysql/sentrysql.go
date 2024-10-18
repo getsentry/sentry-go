@@ -23,9 +23,9 @@ type sentrySQLConfig struct {
 	serverPort     string
 }
 
-// NewSentrySql is a wrapper for driver.Driver that provides tracing for SQL queries.
+// NewSentrySQL is a wrapper for driver.Driver that provides tracing for SQL queries.
 // The span will only be created if the parent span is available.
-func NewSentrySql(driver driver.Driver, options ...SentrySQLOption) driver.Driver {
+func NewSentrySQL(driver driver.Driver, options ...SentrySQLOption) driver.Driver {
 	var config sentrySQLConfig
 	for _, option := range options {
 		option(&config)

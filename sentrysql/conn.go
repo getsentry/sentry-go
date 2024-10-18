@@ -52,8 +52,7 @@ func (s *sentryConn) Close() error {
 }
 
 func (s *sentryConn) Begin() (driver.Tx, error) {
-	//nolint:staticcheck We must support legacy clients
-	tx, err := s.originalConn.Begin()
+	tx, err := s.originalConn.Begin() //nolint:staticcheck We must support legacy clients
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +78,7 @@ func (s *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 
 func (s *sentryConn) Query(query string, args []driver.Value) (driver.Rows, error) {
 	// should only be executed if the original driver implements Queryer
-	queryer, ok := s.originalConn.(driver.Queryer)
+	queryer, ok := s.originalConn.(driver.Queryer) //nolint:staticcheck We must support legacy clients
 	if !ok {
 		return nil, driver.ErrSkip
 	}
@@ -153,8 +152,7 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 
 func (s *sentryConn) Exec(query string, args []driver.Value) (driver.Result, error) {
 	// should only be executed if the original driver implements Execer
-	//nolint:staticcheck We must support legacy clients
-	execer, ok := s.originalConn.(driver.Execer)
+	execer, ok := s.originalConn.(driver.Execer) //nolint:staticcheck We must support legacy clients
 	if !ok {
 		return nil, driver.ErrSkip
 	}
