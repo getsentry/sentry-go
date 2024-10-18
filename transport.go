@@ -350,6 +350,9 @@ type HTTPTransport struct {
 
 	mu     sync.RWMutex
 	limits ratelimit.Map
+
+	// receiving struct means caller terminates.
+	done <-chan struct{}
 }
 
 // NewHTTPTransport returns a new pre-configured instance of HTTPTransport.
@@ -396,6 +399,10 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 			Transport: t.transport,
 			Timeout:   t.Timeout,
 		}
+	}
+
+	if options.Done != nil {
+		t.done = options.Done
 	}
 
 	t.start.Do(func() {
@@ -532,35 +539,44 @@ func (t *HTTPTransport) worker() {
 		t.buffer <- b
 
 		// Process all batch items.
-		for item := range b.items {
-			if t.disabled(item.category) {
-				continue
-			}
-
-			response, err := t.client.Do(item.request)
-			if err != nil {
-				Logger.Printf("There was an issue with sending an event: %v", err)
-				continue
-			}
-			if response.StatusCode >= 400 && response.StatusCode <= 599 {
-				b, err := io.ReadAll(response.Body)
-				if err != nil {
-					Logger.Printf("Error while reading response code: %v", err)
+	loop:
+		for {
+			select {
+			case <-t.done:
+				return
+			case item, open := <-b.items:
+				if !open {
+					break loop
 				}
-				Logger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
-			}
+				if t.disabled(item.category) {
+					continue
+				}
 
-			t.mu.Lock()
-			if t.limits == nil {
-				t.limits = make(ratelimit.Map)
-			}
-			t.limits.Merge(ratelimit.FromResponse(response))
-			t.mu.Unlock()
+				response, err := t.client.Do(item.request)
+				if err != nil {
+					Logger.Printf("There was an issue with sending an event: %v", err)
+					continue
+				}
+				if response.StatusCode >= 400 && response.StatusCode <= 599 {
+					b, err := io.ReadAll(response.Body)
+					if err != nil {
+						Logger.Printf("Error while reading response code: %v", err)
+					}
+					Logger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+				}
 
-			// Drain body up to a limit and close it, allowing the
-			// transport to reuse TCP connections.
-			_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
-			response.Body.Close()
+				t.mu.Lock()
+				if t.limits == nil {
+					t.limits = make(ratelimit.Map)
+				}
+				t.limits.Merge(ratelimit.FromResponse(response))
+				t.mu.Unlock()
+
+				// Drain body up to a limit and close it, allowing the
+				// transport to reuse TCP connections.
+				_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
+				response.Body.Close()
+			}
 		}
 
 		// Signal that processing of the batch is done.
