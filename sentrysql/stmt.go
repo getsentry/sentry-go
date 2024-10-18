@@ -11,7 +11,7 @@ type sentryStmt struct {
 	originalStmt driver.Stmt
 	query        string
 	ctx          context.Context
-	config       *sentrySqlConfig
+	config       *sentrySQLConfig
 }
 
 func (s *sentryStmt) Close() error {
@@ -25,6 +25,7 @@ func (s *sentryStmt) NumInput() int {
 func (s *sentryStmt) Exec(args []driver.Value) (driver.Result, error) {
 	parentSpan := sentry.SpanFromContext(s.ctx)
 	if parentSpan == nil {
+		//nolint:staticcheck We must support legacy clients
 		return s.originalStmt.Exec(args)
 	}
 
@@ -42,6 +43,7 @@ func (s *sentryStmt) Exec(args []driver.Value) (driver.Result, error) {
 		span.SetData("server.port", s.config.serverPort)
 	}
 
+	//nolint:staticcheck We must support legacy clients
 	result, err := s.originalStmt.Exec(args)
 	if err != nil {
 		span.Status = sentry.SpanStatusInternalError
@@ -58,6 +60,7 @@ func (s *sentryStmt) Exec(args []driver.Value) (driver.Result, error) {
 func (s *sentryStmt) Query(args []driver.Value) (driver.Rows, error) {
 	parentSpan := sentry.SpanFromContext(s.ctx)
 	if parentSpan == nil {
+		//nolint:staticcheck We must support legacy clients
 		return s.originalStmt.Query(args)
 	}
 
@@ -75,6 +78,7 @@ func (s *sentryStmt) Query(args []driver.Value) (driver.Rows, error) {
 		span.SetData("server.port", s.config.serverPort)
 	}
 
+	//nolint:staticcheck We must support legacy clients
 	rows, err := s.originalStmt.Query(args)
 	if err != nil {
 		span.Status = sentry.SpanStatusInternalError

@@ -8,7 +8,7 @@ import (
 type sentryTx struct {
 	originalTx driver.Tx
 	ctx        context.Context
-	config     *sentrySqlConfig
+	config     *sentrySQLConfig
 }
 
 // Commit implements driver.Tx.

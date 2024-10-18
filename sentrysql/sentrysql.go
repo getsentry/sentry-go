@@ -16,7 +16,7 @@ const (
 	MSSQL      DatabaseSystem = "mssql"
 )
 
-type sentrySqlConfig struct {
+type sentrySQLConfig struct {
 	databaseSystem DatabaseSystem
 	databaseName   string
 	serverAddress  string
@@ -25,22 +25,22 @@ type sentrySqlConfig struct {
 
 // NewSentrySql is a wrapper for driver.Driver that provides tracing for SQL queries.
 // The span will only be created if the parent span is available.
-func NewSentrySql(driver driver.Driver, options ...SentrySqlTracerOption) driver.Driver {
-	var config sentrySqlConfig
+func NewSentrySql(driver driver.Driver, options ...SentrySQLOption) driver.Driver {
+	var config sentrySQLConfig
 	for _, option := range options {
 		option(&config)
 	}
 
-	return &sentrySqlDriver{originalDriver: driver, config: &config}
+	return &sentrySQLDriver{originalDriver: driver, config: &config}
 }
 
 // NewSentrySqlConnector is a wrapper for driver.Connector that provides tracing for SQL queries.
 // The span will only be created if the parent span is available.
-func NewSentrySqlConnector(connector driver.Connector, options ...SentrySqlTracerOption) driver.Connector {
-	var config sentrySqlConfig
+func NewSentrySqlConnector(connector driver.Connector, options ...SentrySQLOption) driver.Connector {
+	var config sentrySQLConfig
 	for _, option := range options {
 		option(&config)
 	}
 
-	return &sentrySqlConnector{originalConnector: connector, config: &config}
+	return &sentrySQLConnector{originalConnector: connector, config: &config}
 }

@@ -10,7 +10,7 @@ import (
 )
 
 func ExampleNewSentrySql() {
-	sql.Register("sentrysql-ramsql", sentrysql.NewSentrySql(ramsqldriver.NewDriver(), sentrysql.WithDatabaseName("TestDriver"), sentrysql.WithDatabaseSystem("ramsql"), sentrysql.WithServerAddress("127.0.0.1", "3306")))
+	sql.Register("sentrysql-ramsql", sentrysql.NewSentrySql(ramsqldriver.NewDriver(), sentrysql.WithDatabaseName("TestDriver"), sentrysql.WithDatabaseSystem(sentrysql.DatabaseSystem("ramsql")), sentrysql.WithServerAddress("127.0.0.1", "3306")))
 
 	db, err := sql.Open("sentrysql-ramsql", "TestDriver")
 	if err != nil {
@@ -51,7 +51,7 @@ func ExampleNewSentrySqlConnector() {
 		panic(err)
 	}
 
-	db := sql.OpenDB(sentrysql.NewSentrySqlConnector(pqConnector, sentrysql.WithDatabaseName("db"), sentrysql.WithDatabaseSystem("postgres"), sentrysql.WithServerAddress("localhost", "5432")))
+	db := sql.OpenDB(sentrysql.NewSentrySqlConnector(pqConnector, sentrysql.WithDatabaseName("db"), sentrysql.WithDatabaseSystem(sentrysql.PostgreSQL), sentrysql.WithServerAddress("localhost", "5432")))
 	defer db.Close()
 
 	// Continue executing PostgreSQL queries

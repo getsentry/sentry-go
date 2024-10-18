@@ -5,12 +5,12 @@ import (
 	"database/sql/driver"
 )
 
-type sentrySqlDriver struct {
+type sentrySQLDriver struct {
 	originalDriver driver.Driver
-	config         *sentrySqlConfig
+	config         *sentrySQLConfig
 }
 
-func (s *sentrySqlDriver) OpenConnector(name string) (driver.Connector, error) {
+func (s *sentrySQLDriver) OpenConnector(name string) (driver.Connector, error) {
 	driverContext, ok := s.originalDriver.(driver.DriverContext)
 	if !ok {
 		return nil, driver.ErrSkip
@@ -21,10 +21,10 @@ func (s *sentrySqlDriver) OpenConnector(name string) (driver.Connector, error) {
 		return nil, err
 	}
 
-	return &sentrySqlConnector{originalConnector: connector, config: s.config}, nil
+	return &sentrySQLConnector{originalConnector: connector, config: s.config}, nil
 }
 
-func (s *sentrySqlDriver) Open(name string) (driver.Conn, error) {
+func (s *sentrySQLDriver) Open(name string) (driver.Conn, error) {
 	conn, err := s.originalDriver.Open(name)
 	if err != nil {
 		return nil, err
@@ -33,12 +33,12 @@ func (s *sentrySqlDriver) Open(name string) (driver.Conn, error) {
 	return &sentryConn{originalConn: conn, config: s.config}, nil
 }
 
-type sentrySqlConnector struct {
+type sentrySQLConnector struct {
 	originalConnector driver.Connector
-	config            *sentrySqlConfig
+	config            *sentrySQLConfig
 }
 
-func (s *sentrySqlConnector) Connect(ctx context.Context) (driver.Conn, error) {
+func (s *sentrySQLConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	conn, err := s.originalConnector.Connect(ctx)
 	if err != nil {
 		return nil, err
@@ -47,6 +47,6 @@ func (s *sentrySqlConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	return &sentryConn{originalConn: conn, ctx: ctx, config: s.config}, nil
 }
 
-func (s *sentrySqlConnector) Driver() driver.Driver {
+func (s *sentrySQLConnector) Driver() driver.Driver {
 	return s.originalConnector.Driver()
 }

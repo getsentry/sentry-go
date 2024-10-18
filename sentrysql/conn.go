@@ -10,7 +10,7 @@ import (
 type sentryConn struct {
 	originalConn driver.Conn
 	ctx          context.Context
-	config       *sentrySqlConfig
+	config       *sentrySQLConfig
 }
 
 func (s *sentryConn) Prepare(query string) (driver.Stmt, error) {
@@ -52,6 +52,7 @@ func (s *sentryConn) Close() error {
 }
 
 func (s *sentryConn) Begin() (driver.Tx, error) {
+	//nolint:staticcheck We must support legacy clients
 	tx, err := s.originalConn.Begin()
 	if err != nil {
 		return nil, err
@@ -152,6 +153,7 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 
 func (s *sentryConn) Exec(query string, args []driver.Value) (driver.Result, error) {
 	// should only be executed if the original driver implements Execer
+	//nolint:staticcheck We must support legacy clients
 	execer, ok := s.originalConn.(driver.Execer)
 	if !ok {
 		return nil, driver.ErrSkip
