@@ -1333,5 +1333,4 @@ func TestNewSentrySQL_NoParentSpan(t *testing.T) {
 			t.Errorf("got %d spans, want 0", len(got))
 		}
 	})
-
 }
