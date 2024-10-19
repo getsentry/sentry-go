@@ -8,7 +8,7 @@ import (
 
 // sentrySQLDriver wraps the original driver.Driver.
 // As per the driver's documentation:
-// Drivers should implement driver.Connector and driver.DriverContext interfaces
+// Drivers should implement driver.Connector and driver.DriverContext interfaces.
 type sentrySQLDriver struct {
 	originalDriver driver.Driver
 	config         *sentrySQLConfig
