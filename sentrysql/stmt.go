@@ -113,7 +113,7 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 		return s.Query(values)
 	}
 
-	parentSpan := sentry.SpanFromContext(ctx)
+	parentSpan := sentry.SpanFromContext(s.ctx)
 	if parentSpan == nil {
 		return stmtQueryContext.QueryContext(ctx, args)
 	}
