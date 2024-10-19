@@ -381,6 +381,14 @@ func TestNewSentrySQL_Integration(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("Driver", func(t *testing.T) {
+		// Just checking if this works and doesn't panic
+		driver := db.Driver()
+		if driver == nil {
+			t.Fatal("driver is nil")
+		}
+	})
 }
 
 //nolint:dupl
