@@ -20,7 +20,10 @@ var _ driver.Driver = (*sentrySQLDriver)(nil)
 func (s *sentrySQLDriver) OpenConnector(name string) (driver.Connector, error) {
 	driverContext, ok := s.originalDriver.(driver.DriverContext)
 	if !ok {
-		return nil, driver.ErrSkip
+		return &sentrySQLConnector{
+			originalConnector: dsnConnector{dsn: name, driver: s.originalDriver},
+			config:            s.config,
+		}, nil
 	}
 
 	connector, err := driverContext.OpenConnector(name)
@@ -69,4 +72,19 @@ func (s *sentrySQLConnector) Close() error {
 	}
 
 	return closer.Close()
+}
+
+// dsnConnector is copied from
+// https://cs.opensource.google/go/go/+/refs/tags/go1.23.2:src/database/sql/sql.go;l=795-806
+type dsnConnector struct {
+	dsn    string
+	driver driver.Driver
+}
+
+func (t dsnConnector) Connect(_ context.Context) (driver.Conn, error) {
+	return t.driver.Open(t.dsn)
+}
+
+func (t dsnConnector) Driver() driver.Driver {
+	return t.driver
 }
