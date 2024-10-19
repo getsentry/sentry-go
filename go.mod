@@ -1,8 +1,6 @@
 module github.com/getsentry/sentry-go
 
-go 1.22
-
-toolchain go1.23.2
+go 1.18
 
 require (
 	github.com/gin-gonic/gin v1.8.1
