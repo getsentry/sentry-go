@@ -1,6 +1,10 @@
 package sentrysql
 
-import "database/sql/driver"
+import (
+	"database/sql/driver"
+
+	"github.com/getsentry/sentry-go"
+)
 
 // DatabaseSystem points to the list of accepted OpenTelemetry database system.
 // The ones defined here are not exhaustive, but are the ones that are supported by Sentry.
@@ -21,6 +25,32 @@ type sentrySQLConfig struct {
 	databaseName   string
 	serverAddress  string
 	serverPort     string
+}
+
+func (s *sentrySQLConfig) SetData(span *sentry.Span, query string) {
+	if span == nil {
+		return
+	}
+
+	if s.databaseSystem != "" {
+		span.SetData("db.system", s.databaseSystem)
+	}
+	if s.databaseName != "" {
+		span.SetData("db.name", s.databaseName)
+	}
+	if s.serverAddress != "" {
+		span.SetData("server.address", s.serverAddress)
+	}
+	if s.serverPort != "" {
+		span.SetData("server.port", s.serverPort)
+	}
+
+	if query != "" {
+		databaseOperation := parseDatabaseOperation(query)
+		if databaseOperation != "" {
+			span.SetData("db.operation", databaseOperation)
+		}
+	}
 }
 
 // NewSentrySQL is a wrapper for driver.Driver that provides tracing for SQL queries.

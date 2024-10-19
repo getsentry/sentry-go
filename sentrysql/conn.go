@@ -7,11 +7,25 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
+// sentryConn wraps the original driver.Conn.
+// As per the driver's documentation:
+//   - All Conn implementations should implement the following interfaces:
+//     Pinger, SessionResetter, and Validator.
+//   - If named parameters or context are supported, the driver's Conn should
+//     implement: ExecerContext, QueryerContext, ConnPrepareContext,
+//     and ConnBeginTx.
+//
+// On this specific Sentry wrapper, we are not going to implement the Validator
+// interface because it does not support ErrSkip, since returning ErrSkip
+// is only possible when it's explicitly stated on the driver documentation.
 type sentryConn struct {
 	originalConn driver.Conn
 	ctx          context.Context
 	config       *sentrySQLConfig
 }
+
+// Make sure that sentryConn implements the driver.Conn interface.
+var _ driver.Conn = (*sentryConn)(nil)
 
 func (s *sentryConn) Prepare(query string) (driver.Stmt, error) {
 	stmt, err := s.originalConn.Prepare(query)
@@ -31,7 +45,8 @@ func (s *sentryConn) PrepareContext(ctx context.Context, query string) (driver.S
 	// should only be executed if the original driver implements ConnPrepareContext
 	connPrepareContext, ok := s.originalConn.(driver.ConnPrepareContext)
 	if !ok {
-		return nil, driver.ErrSkip
+		// We can't return driver.ErrSkip here. We should fall back to Prepare without context.
+		return s.Prepare(query)
 	}
 
 	stmt, err := connPrepareContext.PrepareContext(ctx, query)
@@ -52,7 +67,7 @@ func (s *sentryConn) Close() error {
 }
 
 func (s *sentryConn) Begin() (driver.Tx, error) {
-	tx, err := s.originalConn.Begin() //nolint:staticcheck We must support legacy clients
+	tx, err := s.originalConn.Begin() //nolint:staticcheck // We must support legacy clients
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +79,7 @@ func (s *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 	// should only be executed if the original driver implements ConnBeginTx
 	connBeginTx, ok := s.originalConn.(driver.ConnBeginTx)
 	if !ok {
-		// fallback to the so-called deprecated "Begin" method
+		// We can't return driver.ErrSkip here. We should fall back to Begin without context.
 		return s.Begin()
 	}
 
@@ -79,7 +94,7 @@ func (s *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 //nolint:dupl
 func (s *sentryConn) Query(query string, args []driver.Value) (driver.Rows, error) {
 	// should only be executed if the original driver implements Queryer
-	queryer, ok := s.originalConn.(driver.Queryer) //nolint:staticcheck We must support legacy clients
+	queryer, ok := s.originalConn.(driver.Queryer) //nolint:staticcheck // We must support legacy clients
 	if !ok {
 		return nil, driver.ErrSkip
 	}
@@ -90,18 +105,7 @@ func (s *sentryConn) Query(query string, args []driver.Value) (driver.Rows, erro
 	}
 
 	span := parentSpan.StartChild("db.sql.query", sentry.WithDescription(query))
-	if s.config.databaseSystem != "" {
-		span.SetData("db.system", s.config.databaseSystem)
-	}
-	if s.config.databaseName != "" {
-		span.SetData("db.name", s.config.databaseName)
-	}
-	if s.config.serverAddress != "" {
-		span.SetData("server.address", s.config.serverAddress)
-	}
-	if s.config.serverPort != "" {
-		span.SetData("server.port", s.config.serverPort)
-	}
+	s.config.SetData(span, query)
 	defer span.Finish()
 
 	rows, err := queryer.Query(query, args)
@@ -128,18 +132,7 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 	}
 
 	span := parentSpan.StartChild("db.sql.query", sentry.WithDescription(query))
-	if s.config.databaseSystem != "" {
-		span.SetData("db.system", s.config.databaseSystem)
-	}
-	if s.config.databaseName != "" {
-		span.SetData("db.name", s.config.databaseName)
-	}
-	if s.config.serverAddress != "" {
-		span.SetData("server.address", s.config.serverAddress)
-	}
-	if s.config.serverPort != "" {
-		span.SetData("server.port", s.config.serverPort)
-	}
+	s.config.SetData(span, query)
 	defer span.Finish()
 
 	rows, err := queryerContext.QueryContext(ctx, query, args)
@@ -155,7 +148,7 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 //nolint:dupl
 func (s *sentryConn) Exec(query string, args []driver.Value) (driver.Result, error) {
 	// should only be executed if the original driver implements Execer
-	execer, ok := s.originalConn.(driver.Execer) //nolint:staticcheck We must support legacy clients
+	execer, ok := s.originalConn.(driver.Execer) //nolint:staticcheck // We must support legacy clients
 	if !ok {
 		return nil, driver.ErrSkip
 	}
@@ -166,18 +159,7 @@ func (s *sentryConn) Exec(query string, args []driver.Value) (driver.Result, err
 	}
 
 	span := parentSpan.StartChild("db.sql.exec", sentry.WithDescription(query))
-	if s.config.databaseSystem != "" {
-		span.SetData("db.system", s.config.databaseSystem)
-	}
-	if s.config.databaseName != "" {
-		span.SetData("db.name", s.config.databaseName)
-	}
-	if s.config.serverAddress != "" {
-		span.SetData("server.address", s.config.serverAddress)
-	}
-	if s.config.serverPort != "" {
-		span.SetData("server.port", s.config.serverPort)
-	}
+	s.config.SetData(span, query)
 	defer span.Finish()
 
 	rows, err := execer.Exec(query, args)
@@ -195,6 +177,7 @@ func (s *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 	// should only be executed if the original driver implements ExecerContext {
 	execerContext, ok := s.originalConn.(driver.ExecerContext)
 	if !ok {
+		// ExecContext may return ErrSkip.
 		return nil, driver.ErrSkip
 	}
 
@@ -204,18 +187,7 @@ func (s *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 	}
 
 	span := parentSpan.StartChild("db.sql.exec", sentry.WithDescription(query))
-	if s.config.databaseSystem != "" {
-		span.SetData("db.system", s.config.databaseSystem)
-	}
-	if s.config.databaseName != "" {
-		span.SetData("db.name", s.config.databaseName)
-	}
-	if s.config.serverAddress != "" {
-		span.SetData("server.address", s.config.serverAddress)
-	}
-	if s.config.serverPort != "" {
-		span.SetData("server.port", s.config.serverPort)
-	}
+	s.config.SetData(span, query)
 	defer span.Finish()
 
 	rows, err := execerContext.ExecContext(ctx, query, args)
@@ -231,15 +203,27 @@ func (s *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 func (s *sentryConn) Ping(ctx context.Context) error {
 	pinger, ok := s.originalConn.(driver.Pinger)
 	if !ok {
-		return driver.ErrSkip
+		// We may not return ErrSkip. We should return nil.
+		return nil
 	}
 
 	return pinger.Ping(ctx)
 }
 
+func (s *sentryConn) ResetSession(ctx context.Context) error {
+	sessionResetter, ok := s.originalConn.(driver.SessionResetter)
+	if !ok {
+		// We may not return ErrSkip. We should return nil.
+		return nil
+	}
+
+	return sessionResetter.ResetSession(ctx)
+}
+
 func (s *sentryConn) CheckNamedValue(namedValue *driver.NamedValue) error {
 	namedValueChecker, ok := s.originalConn.(driver.NamedValueChecker)
 	if !ok {
+		// We may return ErrSkip.
 		return driver.ErrSkip
 	}
 
