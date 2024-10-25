@@ -187,12 +187,6 @@ func (w *Writer) Write(data []byte) (int, error) {
 		return n, nil
 	}
 
-	if _, enabled := w.levels[lvl]; !enabled {
-		// if the level is not enabled, add event as a breadcrumb
-		w.addBreadcrumb(event)
-		return n, nil
-	}
-
 	event.Level, ok = levelsMapping[lvl]
 	if !ok {
 		return n, nil
