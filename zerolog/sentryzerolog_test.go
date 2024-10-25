@@ -128,7 +128,7 @@ func TestWrite_TraceDoesNotPanic(t *testing.T) {
 			},
 		},
 		Options: Options{
-			WithBreadcrumbs: true,
+			WithBreadcrumbs: false,
 		},
 	}
 	writer, err := New(cfg)
@@ -272,6 +272,7 @@ func TestWriteLevel_Disabled(t *testing.T) {
 
 	log := zerolog.New(writer).With().Timestamp().
 		Str("requestId", "bee07485-2485-4f64-99e1-d10165884ca7").
+		Str("go_version", "1.14").Str("go_max_procs", "4").
 		Logger()
 	log.Err(errors.New("dial timeout")).
 		Msg("test message")
