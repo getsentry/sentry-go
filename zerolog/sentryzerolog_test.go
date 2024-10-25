@@ -281,6 +281,38 @@ func TestWriteLevel_Disabled(t *testing.T) {
 	require.False(t, beforeSendCalled)
 }
 
+func TestWriteLevelFatal(t *testing.T) {
+	var beforeSendCalled bool
+	cfg := Config{
+		ClientOptions: sentry.ClientOptions{
+			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+				beforeSendCalled = true
+				return event
+			},
+		},
+		Options: Options{
+			Levels:          []zerolog.Level{zerolog.FatalLevel},
+			WithBreadcrumbs: true,
+		},
+	}
+	writer, err := New(cfg)
+	require.Nil(t, err)
+
+	var zerologError error
+	zerolog.ErrorHandler = func(err error) {
+		zerologError = err
+	}
+
+	logger := zerolog.New(writer).With().Timestamp().
+		Str("requestId", "bee07485-2485-4f64-99e1-d10165884ca7").
+		Str("go_version", "1.14").Str("go_max_procs", "4").Str("error", "dial timeout").Str("level", "fatal").Logger()
+
+	logger.Log().Msg("test message")
+
+	require.Nil(t, zerologError)
+	require.False(t, beforeSendCalled)
+}
+
 func BenchmarkParseLogEvent(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		parseLogEvent(logEventJSON)
