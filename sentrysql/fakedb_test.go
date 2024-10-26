@@ -1,3 +1,4 @@
+//nolint:all
 package sentrysql_test
 
 // This file is a fork of
