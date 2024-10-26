@@ -44,17 +44,13 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
-)
-
-// fakeDriver is a fake database that implements Go's driver.Driver
-// (and driver.DriverContext for Sentry purposes) interface, just for testing.
+) // fakeDriver is a fake database that implements Go's driver.Driver
+// interface, just for testing.
 //
 // It speaks a query language that's semantically similar to but
 // syntactically different and simpler than SQL.  The syntax is as
@@ -93,8 +89,6 @@ type fakeConnector struct {
 	closed bool
 }
 
-var _ driver.Connector = &fakeConnector{}
-
 func (c *fakeConnector) Connect(context.Context) (driver.Conn, error) {
 	conn, err := fdriver.Open(c.name)
 	conn.(*fakeConn).waiter = c.waiter
@@ -126,8 +120,6 @@ func (cc *fakeDriverCtx) OpenConnector(name string) (driver.Connector, error) {
 type fakeDB struct {
 	name string
 
-	useRawBytes atomic.Bool
-
 	mu       sync.Mutex
 	tables   map[string]*table
 	badConn  bool
@@ -155,7 +147,12 @@ type table struct {
 }
 
 func (t *table) columnIndex(name string) int {
-	return slices.Index(t.colname, name)
+	for n, nname := range t.colname {
+		if name == nname {
+			return n
+		}
+	}
+	return -1
 }
 
 type row struct {
@@ -242,6 +239,15 @@ type fakeStmt struct {
 }
 
 var fdriver driver.Driver = &fakeDriver{}
+
+func contains(list []string, y string) bool {
+	for _, x := range list {
+		if x == y {
+			return true
+		}
+	}
+	return false
+}
 
 type Dummy struct {
 	driver.Driver
@@ -352,8 +358,10 @@ func (db *fakeDB) columnType(table, column string) (typ string, ok bool) {
 	if !ok {
 		return
 	}
-	if i := slices.Index(t.colname, column); i != -1 {
-		return t.coltype[i], true
+	for n, cname := range t.colname {
+		if cname == column {
+			return t.coltype[n], true
+		}
 	}
 	return "", false
 }
@@ -519,7 +527,8 @@ func errf(msg string, args ...any) error {
 
 // parts are table|selectCol1,selectCol2|whereCol=?,whereCol2=?
 // (note that where columns must always contain ? marks,
-// just a limitation for fakedb)
+//
+//	just a limitation for fakedb)
 func (c *fakeConn) prepareSelect(stmt *fakeStmt, parts []string) (*fakeStmt, error) {
 	if len(parts) != 3 {
 		stmt.Close()
@@ -651,7 +660,7 @@ func (c *fakeConn) PrepareContext(ctx context.Context, query string) (driver.Stm
 	}
 
 	if c.stickyBad || (hookPrepareBadConn != nil && hookPrepareBadConn()) {
-		return nil, fakeError{Message: "Prepare: Sticky Bad", Wrapped: driver.ErrBadConn}
+		return nil, fakeError{Message: "Preapre: Sticky Bad", Wrapped: driver.ErrBadConn}
 	}
 
 	c.touchMem()
@@ -705,8 +714,6 @@ func (c *fakeConn) PrepareContext(ctx context.Context, query string) (driver.Stm
 		switch cmd {
 		case "WIPE":
 			// Nothing
-		case "USE_RAWBYTES":
-			c.db.useRawBytes.Store(true)
 		case "SELECT":
 			stmt, err = c.prepareSelect(stmt, parts)
 		case "CREATE":
@@ -810,9 +817,6 @@ func (s *fakeStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (d
 	case "WIPE":
 		db.wipe()
 		return driver.ResultNoRows, nil
-	case "USE_RAWBYTES":
-		s.c.db.useRawBytes.Store(true)
-		return driver.ResultNoRows, nil
 	case "CREATE":
 		if err := db.createTable(s.table, s.colName, s.colType); err != nil {
 			return nil, err
@@ -826,15 +830,6 @@ func (s *fakeStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (d
 		return s.execInsert(args, false)
 	}
 	return nil, fmt.Errorf("fakedb: unimplemented statement Exec command type of %q", s.cmd)
-}
-
-func valueFromPlaceholderName(args []driver.NamedValue, name string) driver.Value {
-	for i := range args {
-		if args[i].Name == name {
-			return args[i].Value
-		}
-	}
-	return nil
 }
 
 // When doInsert is true, add the row to the table.
@@ -871,8 +866,11 @@ func (s *fakeStmt) execInsert(args []driver.NamedValue, doInsert bool) (driver.R
 				val = args[argPos].Value
 			} else {
 				// Assign value from argument placeholder name.
-				if v := valueFromPlaceholderName(args, strvalue[1:]); v != nil {
-					val = v
+				for _, a := range args {
+					if a.Name == strvalue[1:] {
+						val = a.Value
+						break
+					}
 				}
 			}
 			argPos++
@@ -948,7 +946,6 @@ func (s *fakeStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (
 				txStatus = "transaction"
 			}
 			cursor := &rowsCursor{
-				db:        s.c.db,
 				parentMem: s.c,
 				posRow:    -1,
 				rows: [][]*row{
@@ -1008,8 +1005,12 @@ func (s *fakeStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (
 				if wcol.Placeholder == "?" {
 					argValue = args[wcol.Ordinal-1].Value
 				} else {
-					if v := valueFromPlaceholderName(args, wcol.Placeholder[1:]); v != nil {
-						argValue = v
+					// Assign arg value from placeholder name.
+					for _, a := range args {
+						if a.Name == wcol.Placeholder[1:] {
+							argValue = a.Value
+							break
+						}
 					}
 				}
 				if fmt.Sprintf("%v", tcol) != fmt.Sprintf("%v", argValue) {
@@ -1041,7 +1042,6 @@ func (s *fakeStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (
 	}
 
 	cursor := &rowsCursor{
-		db:        s.c.db,
 		parentMem: s.c,
 		posRow:    -1,
 		rows:      setMRows,
@@ -1084,7 +1084,6 @@ func (tx *fakeTx) Rollback() error {
 }
 
 type rowsCursor struct {
-	db        *fakeDB
 	parentMem memToucher
 	cols      [][]string
 	colType   [][]string
@@ -1107,9 +1106,6 @@ type rowsCursor struct {
 	// This is separate from the fakeConn.line to allow for drivers that
 	// can start multiple queries on the same transaction at the same time.
 	line int64
-
-	// closeErr is returned when rowsCursor.Close
-	closeErr error
 }
 
 func (rc *rowsCursor) touchMem() {
@@ -1121,7 +1117,7 @@ func (rc *rowsCursor) Close() error {
 	rc.touchMem()
 	rc.parentMem.touchMem()
 	rc.closed = true
-	return rc.closeErr
+	return nil
 }
 
 func (rc *rowsCursor) Columns() []string {
@@ -1159,7 +1155,7 @@ func (rc *rowsCursor) Next(dest []driver.Value) error {
 		// messing up conversions or doing them differently.
 		dest[i] = v
 
-		if bs, ok := v.([]byte); ok && !rc.db.useRawBytes.Load() {
+		if bs, ok := v.([]byte); ok {
 			if rc.bytesClone == nil {
 				rc.bytesClone = make(map[*byte][]byte)
 			}
