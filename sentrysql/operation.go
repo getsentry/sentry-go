@@ -2,7 +2,12 @@ package sentrysql
 
 import "strings"
 
-var knownDatabaseOperations = []string{"SELECT", "INSERT", "DELETE", "UPDATE"}
+var knownDatabaseOperations = map[string]struct{}{
+	"SELECT": struct{}{},
+	"INSERT": struct{}{},
+	"DELETE": struct{}{},
+	"UPDATE": struct{}{},
+}
 
 func parseDatabaseOperation(query string) string {
 	// The operation is the first word of the query.
@@ -12,11 +17,9 @@ func parseDatabaseOperation(query string) string {
 	}
 
 	// Only returns known words.
-	for _, knownOperation := range knownDatabaseOperations {
-		if operation == knownOperation {
-			return operation
-		}
+	if _, ok := knownDatabaseOperations[operation]; !ok {
+		return ""
 	}
 
-	return ""
+	return operation
 }

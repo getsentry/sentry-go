@@ -13,11 +13,16 @@ import (
 type DatabaseSystem string
 
 const (
+	// PostgreSQL specifies the PostgreSQL database system.
 	PostgreSQL DatabaseSystem = "postgresql"
-	MySQL      DatabaseSystem = "mysql"
-	SQLite     DatabaseSystem = "sqlite"
-	Oracle     DatabaseSystem = "oracle"
-	MSSQL      DatabaseSystem = "mssql"
+	// MySQL specifies the MySQL database system.
+	MySQL DatabaseSystem = "mysql"
+	// SQLite specifies the SQLite database system.
+	SQLite DatabaseSystem = "sqlite"
+	// Oracle specifies the Oracle database system.
+	Oracle DatabaseSystem = "oracle"
+	// MSSQL specifies the Microsoft SQL Server database system.
+	MSSQL DatabaseSystem = "mssql"
 )
 
 type sentrySQLConfig struct {
