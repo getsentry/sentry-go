@@ -3,10 +3,10 @@ package sentrysql
 import "strings"
 
 var knownDatabaseOperations = map[string]struct{}{
-	"SELECT": struct{}{},
-	"INSERT": struct{}{},
-	"DELETE": struct{}{},
-	"UPDATE": struct{}{},
+	"SELECT": {},
+	"INSERT": {},
+	"DELETE": {},
+	"UPDATE": {},
 }
 
 func parseDatabaseOperation(query string) string {
