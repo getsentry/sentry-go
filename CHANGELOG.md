@@ -1,6 +1,6 @@
 # Changelog
 
-- Always set Mechanism Type to generic ([#896](https://github.com/getsentry/sentry-go/pull/896))
+- Always set Mechanism Type to generic ([#896](https://github.com/getsentry/sentry-go/pull/897))
 
 ## 0.29.1
 
