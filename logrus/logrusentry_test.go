@@ -185,6 +185,7 @@ func Test_entryToEvent(t *testing.T) {
 						Mechanism: &sentry.Mechanism{
 							ExceptionID:      0,
 							IsExceptionGroup: true,
+							Type:             "generic",
 						},
 					},
 					{
@@ -197,6 +198,7 @@ func Test_entryToEvent(t *testing.T) {
 							ExceptionID:      1,
 							IsExceptionGroup: true,
 							ParentID:         sentry.Pointer(0),
+							Type:             "generic",
 						},
 					},
 				},

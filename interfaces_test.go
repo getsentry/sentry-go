@@ -260,6 +260,7 @@ func TestSetException(t *testing.T) {
 					Value: "base error",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      0,
 						IsExceptionGroup: true,
 					},
@@ -268,6 +269,7 @@ func TestSetException(t *testing.T) {
 					Value: "level 1: base error",
 					Type:  "*fmt.wrapError",
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: true,
@@ -278,6 +280,7 @@ func TestSetException(t *testing.T) {
 					Type:       "*fmt.wrapError",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      2,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: true,
@@ -309,6 +312,7 @@ func TestSetException(t *testing.T) {
 					Value: "the cause",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      0,
 						IsExceptionGroup: true,
 					},
@@ -317,6 +321,7 @@ func TestSetException(t *testing.T) {
 					Value: "error with cause",
 					Type:  "*sentry.withCause",
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: true,
@@ -327,6 +332,7 @@ func TestSetException(t *testing.T) {
 					Type:       "*fmt.wrapError",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      2,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: true,
