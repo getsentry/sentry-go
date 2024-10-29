@@ -404,6 +404,7 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 		e.Exception[i].Mechanism = &Mechanism{
 			IsExceptionGroup: true,
 			ExceptionID:      i,
+			Type:             "generic",
 		}
 		if i == 0 {
 			continue
