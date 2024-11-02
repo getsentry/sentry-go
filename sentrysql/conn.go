@@ -123,6 +123,9 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 	// should only be executed if the original driver implements QueryerContext
 	queryerContext, ok := s.originalConn.(driver.QueryerContext)
 	if !ok {
+		if s.ctx == nil && ctx != nil {
+			s.ctx = ctx
+		}
 		return nil, driver.ErrSkip
 	}
 
@@ -177,6 +180,9 @@ func (s *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 	// should only be executed if the original driver implements ExecerContext {
 	execerContext, ok := s.originalConn.(driver.ExecerContext)
 	if !ok {
+		if s.ctx == nil && ctx != nil {
+			s.ctx = ctx
+		}
 		// ExecContext may return ErrSkip.
 		return nil, driver.ErrSkip
 	}

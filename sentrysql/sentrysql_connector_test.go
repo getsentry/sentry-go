@@ -34,7 +34,7 @@ func TestNewSentrySQLConnector_Integration(t *testing.T) {
 	for _, query := range setupQueries {
 		_, err := db.ExecContext(setupCtx, query)
 		if err != nil {
-			t.Fatalf("initializing table on sqlite: %v", err)
+			t.Fatalf("initializing table on fakedb: %v", err)
 		}
 	}
 
@@ -291,7 +291,7 @@ func TestNewSentrySQLConnector_Conn(t *testing.T) {
 	for _, query := range setupQueries {
 		_, err := db.ExecContext(setupCtx, query)
 		if err != nil {
-			t.Fatalf("initializing table on sqlite: %v", err)
+			t.Fatalf("initializing table on fakedb: %v", err)
 		}
 	}
 
@@ -547,7 +547,7 @@ func TestNewSentrySQLConnector_BeginTx(t *testing.T) {
 	for _, query := range setupQueries {
 		_, err := db.ExecContext(setupCtx, query)
 		if err != nil {
-			t.Fatalf("initializing table on sqlite: %v", err)
+			t.Fatalf("initializing table on fakedb: %v", err)
 		}
 	}
 
@@ -911,7 +911,7 @@ func TestNewSentrySQLConnector_PrepareContext(t *testing.T) {
 	for _, query := range setupQueries {
 		_, err := db.ExecContext(setupCtx, query)
 		if err != nil {
-			t.Fatalf("initializing table on sqlite: %v", err)
+			t.Fatalf("initializing table on fakedb: %v", err)
 		}
 	}
 
@@ -1165,7 +1165,7 @@ func TestNewSentrySQLConnector_NoParentSpan(t *testing.T) {
 	for _, query := range setupQueries {
 		_, err := db.ExecContext(setupCtx, query)
 		if err != nil {
-			t.Fatalf("initializing table on sqlite: %v", err)
+			t.Fatalf("initializing table on fakedb: %v", err)
 		}
 	}
 
