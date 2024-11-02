@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -21,9 +22,14 @@ import (
 type noopRoundTripper struct {
 	ExpectResponseStatus int
 	ExpectResponseLength int
+	ExpectError          bool
 }
 
 func (n *noopRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	if n.ExpectError {
+		return nil, errors.New("error")
+	}
+
 	responseBody := make([]byte, n.ExpectResponseLength)
 	_, _ = rand.Read(responseBody)
 	return &http.Response{
@@ -53,6 +59,7 @@ func TestIntegration(t *testing.T) {
 		TracerOptions      []sentryhttpclient.SentryRoundTripTracerOption
 		WantStatus         int
 		WantResponseLength int
+		WantError          bool
 		WantSpan           *sentry.Span
 	}{
 		{
@@ -152,6 +159,26 @@ func TestIntegration(t *testing.T) {
 				Status:  sentry.SpanStatusOK,
 			},
 		},
+		{
+			RequestMethod: "POST",
+			RequestURL:    "https://example.com",
+			WantError:     true,
+			WantSpan: &sentry.Span{
+				Data: map[string]interface{}{
+					"http.fragment":       string(""),
+					"http.query":          string(""),
+					"http.request.method": string("POST"),
+					"server.address":      string("example.com"),
+					"server.port":         string(""),
+				},
+				Name:    "POST https://example.com",
+				Op:      "http.client",
+				Tags:    map[string]string{},
+				Origin:  "manual",
+				Sampled: sentry.SampledTrue,
+				Status:  sentry.SpanStatusInternalError,
+			},
+		},
 	}
 
 	spansCh := make(chan []*sentry.Span, len(tests))
@@ -175,13 +202,14 @@ func TestIntegration(t *testing.T) {
 		ctx = span.Context()
 
 		request, err := http.NewRequestWithContext(ctx, tt.RequestMethod, tt.RequestURL, nil)
-		if err != nil {
+		if err != nil && !tt.WantError {
 			t.Fatal(err)
 		}
 
 		roundTripper := &noopRoundTripper{
 			ExpectResponseStatus: tt.WantStatus,
 			ExpectResponseLength: tt.WantResponseLength,
+			ExpectError:          tt.WantError,
 		}
 
 		client := &http.Client{
@@ -189,11 +217,13 @@ func TestIntegration(t *testing.T) {
 		}
 
 		response, err := client.Do(request)
-		if err != nil {
+		if err != nil && !tt.WantError {
 			t.Fatal(err)
 		}
 
-		response.Body.Close()
+		if response != nil && response.Body != nil {
+			response.Body.Close()
+		}
 		span.Finish()
 	}
 
@@ -231,6 +261,70 @@ func TestIntegration(t *testing.T) {
 		if !foundMatch {
 			t.Errorf("Span mismatch (-want +got):\n%s", strings.Join(diffs, "\n"))
 		}
+	}
+}
+
+func TestIntegration_NoParentSpan(t *testing.T) {
+	spansCh := make(chan []*sentry.Span, 1)
+
+	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			spansCh <- event.Spans
+			return event
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hub := sentry.NewHub(sentryClient, sentry.NewScope())
+	ctx := sentry.SetHubOnContext(context.Background(), hub)
+
+	request, err := http.NewRequestWithContext(ctx, "GET", "https://example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	roundTripper := &noopRoundTripper{
+		ExpectResponseStatus: 200,
+		ExpectResponseLength: 0,
+	}
+
+	client := &http.Client{
+		Transport: sentryhttpclient.NewSentryRoundTripper(roundTripper),
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response.Body.Close()
+
+	if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
+		t.Fatal("sentry.Flush timed out")
+	}
+	close(spansCh)
+
+	var got [][]*sentry.Span
+	for e := range spansCh {
+		got = append(got, e)
+	}
+
+	// Expect no spans.
+	if len(got) != 0 {
+		t.Errorf("Expected no spans, got %d", len(got))
+	}
+
+	// Expect "Baggage" and "Sentry-Trace" headers.
+	if value := response.Request.Header.Get("Baggage"); value != "" {
+		t.Errorf(`Expected "Baggage" header to be empty, got %s`, value)
+	}
+
+	if value := response.Request.Header.Get("Sentry-Trace"); value == "" {
+		t.Errorf(`Expected "Sentry-Trace" header, got %s`, value)
 	}
 }
 

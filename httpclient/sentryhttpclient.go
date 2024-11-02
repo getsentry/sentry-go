@@ -70,6 +70,11 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	// Only create the `http.client` span only if there is a parent span.
 	parentSpan := sentry.SpanFromContext(request.Context())
 	if parentSpan == nil {
+		if hub := sentry.GetHubFromContext(request.Context()); hub != nil {
+			request.Header.Add("Baggage", hub.GetBaggage())
+			request.Header.Add("Sentry-Trace", hub.GetTraceparent())
+		}
+
 		return s.originalRoundTripper.RoundTrip(request)
 	}
 
@@ -90,6 +95,9 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	request.Header.Add("Sentry-Trace", span.ToSentryTrace())
 
 	response, err := s.originalRoundTripper.RoundTrip(request)
+	if err != nil {
+		span.Status = sentry.SpanStatusInternalError
+	}
 
 	if response != nil {
 		span.Status = sentry.HTTPtoSpanStatus(response.StatusCode)
