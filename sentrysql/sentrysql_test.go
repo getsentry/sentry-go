@@ -26,6 +26,8 @@ var optstrans = cmp.Options{
 
 func TestMain(m *testing.M) {
 	sql.Register("sentrysql-sqlite", sentrysql.NewSentrySQL(&sqlite.Driver{}, sentrysql.WithDatabaseName("memory"), sentrysql.WithDatabaseSystem(sentrysql.DatabaseSystem("sqlite")), sentrysql.WithServerAddress("localhost", "5432")))
+	// sentrysql-legacy is used by `sentrysql_legacy_test.go`
+	sql.Register("sentrysql-legacy", sentrysql.NewSentrySQL(ldriver, sentrysql.WithDatabaseSystem(sentrysql.DatabaseSystem("legacydb")), sentrysql.WithDatabaseName("fake")))
 
 	os.Exit(m.Run())
 }

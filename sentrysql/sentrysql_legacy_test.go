@@ -13,12 +13,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func init() {
-	sql.Register("sentrysql-legacy", sentrysql.NewSentrySQL(ldriver, sentrysql.WithDatabaseSystem(sentrysql.DatabaseSystem("legacydb")), sentrysql.WithDatabaseName("fake")))
-
-}
-
-//nolint:dupl
+//nolint:dupl,gocyclo
 func TestNewSentrySQLLegacy_Integration(t *testing.T) {
 	db, err := sql.Open("sentrysql-legacy", "fake")
 	if err != nil {
@@ -288,7 +283,7 @@ func TestNewSentrySQLLegacy_Integration(t *testing.T) {
 	})
 }
 
-//nolint:dupl
+//nolint:dupl,gocyclo
 func TestNewSentrySQLLegacy_Conn(t *testing.T) {
 	db, err := sql.Open("sentrysql-legacy", "fake")
 	if err != nil {
