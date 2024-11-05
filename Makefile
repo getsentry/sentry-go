@@ -68,9 +68,8 @@ mod-tidy: ## Check go.mod tidiness
 vet: ## Run "go vet"
 	set -e ; \
 	for dir in $(ALL_GO_MOD_DIRS); do \
-		cd "$${dir}"; \
 		echo ">>> Running 'go vet' for module: $${dir}"; \
-		go vet ./...; \
+		(cd "$${dir}" && go vet ./...); \
 	done;
 .PHONY: vet
 
