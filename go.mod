@@ -19,8 +19,6 @@ require (
 	golang.org/x/text v0.14.0
 )
 
-require github.com/buger/jsonparser v1.1.1
-
 require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/CloudyKit/fastprinter v0.0.0-20200109182630-33d98a066a53 // indirect
@@ -70,7 +68,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
-	github.com/rs/zerolog v1.33.0
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sanity-io/litter v1.5.5 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
