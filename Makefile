@@ -57,7 +57,6 @@ test-coverage: $(COVERAGE_REPORT_DIR) clean-report-dir  ## Test with coverage en
 
 mod-tidy: ## Check go.mod tidiness
 	set -e ; \
-	@echo "ALL_GO_MOD_DIRS: $(ALL_GO_MOD_DIRS)"
 	for dir in $(ALL_GO_MOD_DIRS); do \
 		cd "$${dir}"; \
 		echo ">>> Running 'go mod tidy' for module: $${dir}"; \
