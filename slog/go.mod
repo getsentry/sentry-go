@@ -1,6 +1,6 @@
 module github.com/getsentry/sentry-go/slog
 
-go 1.23.2
+go 1.18
 
 require (
 	github.com/getsentry/sentry-go v0.29.1
