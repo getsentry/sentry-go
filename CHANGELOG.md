@@ -3,6 +3,7 @@
 ### Features
 
 - Add Zerolog integration ([#857](https://github.com/getsentry/sentry-go/pull/857))
+- Always set Mechanism Type to generic ([#896](https://github.com/getsentry/sentry-go/pull/897))
 
 ## 0.29.1
 
