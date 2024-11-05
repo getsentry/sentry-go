@@ -2,7 +2,7 @@
 
 ### Features
 
-- Add `sentryzerolog` integration ([#865](https://github.com/getsentry/sentry-go/pull/865))
+- Add `sentryslog` integration ([#865](https://github.com/getsentry/sentry-go/pull/865))
 
 - Always set Mechanism Type to generic ([#896](https://github.com/getsentry/sentry-go/pull/897))
 
