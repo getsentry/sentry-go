@@ -16,12 +16,13 @@ type sentrySQLDriver struct {
 
 // Make sure that sentrySQLDriver implements the driver.Driver interface.
 var _ driver.Driver = (*sentrySQLDriver)(nil)
+var _ driver.DriverContext = (*sentrySQLDriver)(nil)
 
 func (s *sentrySQLDriver) OpenConnector(name string) (driver.Connector, error) {
 	driverContext, ok := s.originalDriver.(driver.DriverContext)
 	if !ok {
 		return &sentrySQLConnector{
-			originalConnector: dsnConnector{dsn: name, driver: s.originalDriver},
+			originalConnector: dsnConnector{dsn: name, driver: s.originalDriver, config: s.config},
 			config:            s.config,
 		}, nil
 	}
@@ -50,6 +51,7 @@ type sentrySQLConnector struct {
 
 // Make sure that sentrySQLConnector implements the driver.Connector interface.
 var _ driver.Connector = (*sentrySQLConnector)(nil)
+var _ io.Closer = (*sentrySQLConnector)(nil)
 
 func (s *sentrySQLConnector) Connect(ctx context.Context) (driver.Conn, error) {
 	conn, err := s.originalConnector.Connect(ctx)
@@ -79,7 +81,11 @@ func (s *sentrySQLConnector) Close() error {
 type dsnConnector struct {
 	dsn    string
 	driver driver.Driver
+	config *sentrySQLConfig
 }
+
+// Make sure dsnConnector implements driver.Connector.
+var _ driver.Connector = (*dsnConnector)(nil)
 
 func (t dsnConnector) Connect(_ context.Context) (driver.Conn, error) {
 	return t.driver.Open(t.dsn)

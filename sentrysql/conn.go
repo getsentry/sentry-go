@@ -26,6 +26,14 @@ type sentryConn struct {
 
 // Make sure that sentryConn implements the driver.Conn interface.
 var _ driver.Conn = (*sentryConn)(nil)
+var _ driver.Pinger = (*sentryConn)(nil)
+var _ driver.SessionResetter = (*sentryConn)(nil)
+var _ driver.Validator = (*sentryConn)(nil)
+var _ driver.ExecerContext = (*sentryConn)(nil)
+var _ driver.QueryerContext = (*sentryConn)(nil)
+var _ driver.ConnPrepareContext = (*sentryConn)(nil)
+var _ driver.ConnBeginTx = (*sentryConn)(nil)
+var _ driver.NamedValueChecker = (*sentryConn)(nil)
 
 func (s *sentryConn) Prepare(query string) (driver.Stmt, error) {
 	stmt, err := s.originalConn.Prepare(query)
@@ -228,4 +236,14 @@ func (s *sentryConn) CheckNamedValue(namedValue *driver.NamedValue) error {
 	}
 
 	return namedValueChecker.CheckNamedValue(namedValue)
+}
+
+// IsValid implements driver.Validator.
+func (s *sentryConn) IsValid() bool {
+	validator, ok := s.originalConn.(driver.Validator)
+	if !ok {
+		return true
+	}
+
+	return validator.IsValid()
 }

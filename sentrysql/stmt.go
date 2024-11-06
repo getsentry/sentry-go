@@ -17,6 +17,9 @@ type sentryStmt struct {
 
 // Make sure sentryStmt implements driver.Stmt interface.
 var _ driver.Stmt = (*sentryStmt)(nil)
+var _ driver.StmtExecContext = (*sentryStmt)(nil)
+var _ driver.StmtQueryContext = (*sentryStmt)(nil)
+var _ driver.NamedValueChecker = (*sentryStmt)(nil)
 
 func (s *sentryStmt) Close() error {
 	return s.originalStmt.Close()
