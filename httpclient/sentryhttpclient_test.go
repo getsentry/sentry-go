@@ -79,7 +79,6 @@ func TestIntegration(t *testing.T) {
 				},
 				Name:    "GET https://example.com/foo",
 				Op:      "http.client",
-				Tags:    map[string]string{},
 				Origin:  "manual",
 				Sampled: sentry.SampledTrue,
 				Status:  sentry.SpanStatusOK,
@@ -103,7 +102,6 @@ func TestIntegration(t *testing.T) {
 				},
 				Name:    "GET https://example.com:443/foo/bar?baz=123#readme",
 				Op:      "http.client",
-				Tags:    map[string]string{},
 				Origin:  "manual",
 				Sampled: sentry.SampledTrue,
 				Status:  sentry.SpanStatusOK,
@@ -112,7 +110,7 @@ func TestIntegration(t *testing.T) {
 		{
 			RequestMethod:      "HEAD",
 			RequestURL:         "https://example.com:8443/foo?bar=123&abc=def",
-			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{sentryhttpclient.WithTag("user", "def"), sentryhttpclient.WithTags(map[string]string{"domain": "example.com"})},
+			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{},
 			WantStatus:         400,
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
@@ -125,10 +123,7 @@ func TestIntegration(t *testing.T) {
 					"server.address":               string("example.com"),
 					"server.port":                  string("8443"),
 				},
-				Tags: map[string]string{
-					"user":   "def",
-					"domain": "example.com",
-				},
+
 				Name:    "HEAD https://example.com:8443/foo?bar=123&abc=def",
 				Op:      "http.client",
 				Origin:  "manual",
@@ -153,7 +148,6 @@ func TestIntegration(t *testing.T) {
 				},
 				Name:    "POST https://john:xxxxx@example.com:4321/secret",
 				Op:      "http.client",
-				Tags:    map[string]string{},
 				Origin:  "manual",
 				Sampled: sentry.SampledTrue,
 				Status:  sentry.SpanStatusOK,
@@ -173,11 +167,71 @@ func TestIntegration(t *testing.T) {
 				},
 				Name:    "POST https://example.com",
 				Op:      "http.client",
-				Tags:    map[string]string{},
 				Origin:  "manual",
 				Sampled: sentry.SampledTrue,
 				Status:  sentry.SpanStatusInternalError,
 			},
+		},
+		{
+			RequestMethod: "OPTIONS",
+			RequestURL:    "https://example.com",
+			WantError:     false,
+			WantSpan:      nil,
+		},
+		{
+			RequestMethod:      "OPTIONS",
+			RequestURL:         "https://example.com",
+			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{sentryhttpclient.WithTraceOptionsRequests(true)},
+			WantStatus:         204,
+			WantResponseLength: 0,
+			WantSpan: &sentry.Span{
+				Data: map[string]interface{}{
+					"http.fragment":                string(""),
+					"http.query":                   string(""),
+					"http.request.method":          string("OPTIONS"),
+					"http.response.status_code":    int(204),
+					"http.response_content_length": int64(0),
+					"server.address":               string("example.com"),
+					"server.port":                  string(""),
+				},
+
+				Name:    "OPTIONS https://example.com",
+				Op:      "http.client",
+				Origin:  "manual",
+				Sampled: sentry.SampledTrue,
+				Status:  sentry.SpanStatusOK,
+			},
+		},
+		{
+			RequestMethod:      "GET",
+			RequestURL:         "https://example.com/foo/bar?baz=123#readme",
+			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{sentryhttpclient.WithTracePropagationTargets([]string{"example.com"}), sentryhttpclient.WithTracePropagationTargets([]string{"example.org"})},
+			WantStatus:         200,
+			WantResponseLength: 0,
+			WantSpan: &sentry.Span{
+				Data: map[string]interface{}{
+					"http.fragment":                string("readme"),
+					"http.query":                   string("baz=123"),
+					"http.request.method":          string("GET"),
+					"http.response.status_code":    int(200),
+					"http.response_content_length": int64(0),
+					"server.address":               string("example.com"),
+					"server.port":                  string(""),
+				},
+				Name:    "GET https://example.com/foo/bar?baz=123#readme",
+				Op:      "http.client",
+				Origin:  "manual",
+				Sampled: sentry.SampledTrue,
+				Status:  sentry.SpanStatusOK,
+			},
+		},
+		{
+			RequestMethod:      "GET",
+			RequestURL:         "https://example.net/foo/bar?baz=123#readme",
+			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{sentryhttpclient.WithTracePropagationTargets([]string{"example.com"})},
+			WantStatus:         200,
+			WantResponseLength: 0,
+			WantSpan:           nil,
 		},
 	}
 
@@ -258,9 +312,98 @@ func TestIntegration(t *testing.T) {
 			}
 		}
 
-		if !foundMatch {
+		if tt.WantSpan != nil && !foundMatch {
 			t.Errorf("Span mismatch (-want +got):\n%s", strings.Join(diffs, "\n"))
+		} else if tt.WantSpan == nil && foundMatch {
+			t.Errorf("Expected no span, got %+v", gotSpans)
 		}
+	}
+}
+
+func TestIntegration_GlobalClientOptions(t *testing.T) {
+	spansCh := make(chan []*sentry.Span, 1)
+
+	err := sentry.Init(sentry.ClientOptions{
+		EnableTracing:           true,
+		TracePropagationTargets: []string{"example.com"},
+		TraceOptionsRequests:    false,
+		TracesSampleRate:        1.0,
+		BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			spansCh <- event.Spans
+			return event
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := sentry.SetHubOnContext(context.Background(), sentry.CurrentHub())
+	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+	ctx = span.Context()
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	roundTripper := &noopRoundTripper{
+		ExpectResponseStatus: 200,
+		ExpectResponseLength: 48,
+		ExpectError:          false,
+	}
+
+	client := &http.Client{
+		Transport: sentryhttpclient.NewSentryRoundTripper(roundTripper),
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if response != nil && response.Body != nil {
+		response.Body.Close()
+	}
+	span.Finish()
+
+	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+		t.Fatal("sentry.Flush timed out")
+	}
+	close(spansCh)
+
+	var got []*sentry.Span
+	for e := range spansCh {
+		got = append(got, e...)
+	}
+
+	optstrans := cmp.Options{
+		cmpopts.IgnoreFields(
+			sentry.Span{},
+			"TraceID", "SpanID", "ParentSpanID", "StartTime", "EndTime",
+			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "collectProfile", "contexts",
+		),
+	}
+
+	gotSpan := got[0]
+	wantSpan := &sentry.Span{
+		Data: map[string]interface{}{
+			"http.fragment":                string(""),
+			"http.query":                   string(""),
+			"http.request.method":          string("POST"),
+			"http.response.status_code":    int(200),
+			"http.response_content_length": int64(48),
+			"server.address":               string("example.com"),
+			"server.port":                  string(""),
+		},
+		Name:    "POST https://example.com",
+		Op:      "http.client",
+		Origin:  "manual",
+		Sampled: sentry.SampledTrue,
+		Status:  sentry.SpanStatusOK,
+	}
+
+	if diff := cmp.Diff(wantSpan, gotSpan, optstrans); diff != "" {
+		t.Errorf("Span mismatch (-want +got):\n%s", diff)
 	}
 }
 

@@ -14,6 +14,7 @@ package sentryhttpclient
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -21,19 +22,22 @@ import (
 // SentryRoundTripTracerOption provides a specific type in which defines the option for SentryRoundTripper.
 type SentryRoundTripTracerOption func(*SentryRoundTripper)
 
-// WithTags allows the RoundTripper to includes additional tags.
-func WithTags(tags map[string]string) SentryRoundTripTracerOption {
+// WithTracePropagationTargets configures additional trace propagation targets URL for the RoundTripper.
+// Does not support regex patterns.
+func WithTracePropagationTargets(targets []string) SentryRoundTripTracerOption {
 	return func(t *SentryRoundTripper) {
-		for k, v := range tags {
-			t.tags[k] = v
+		if t.tracePropagationTargets == nil {
+			t.tracePropagationTargets = targets
+		} else {
+			t.tracePropagationTargets = append(t.tracePropagationTargets, targets...)
 		}
 	}
 }
 
-// WithTag allows the RoundTripper to includes additional tag.
-func WithTag(key, value string) SentryRoundTripTracerOption {
+// WithTraceOptionsRequests overrides the default options for whether the tracer should trace OPTIONS requests.
+func WithTraceOptionsRequests(traceOptionsRequests bool) SentryRoundTripTracerOption {
 	return func(t *SentryRoundTripper) {
-		t.tags[key] = value
+		t.traceOptionsRequests = traceOptionsRequests
 	}
 }
 
@@ -45,9 +49,25 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 		originalRoundTripper = http.DefaultTransport
 	}
 
+	// Configure trace propagation targets
+	var tracePropagationTargets []string
+	var traceOptionsRequests bool
+	if hub := sentry.CurrentHub(); hub != nil {
+		client := hub.Client()
+		if client != nil {
+			clientOptions := client.Options()
+			if clientOptions.TracePropagationTargets != nil {
+				tracePropagationTargets = clientOptions.TracePropagationTargets
+			}
+
+			traceOptionsRequests = clientOptions.TraceOptionsRequests
+		}
+	}
+
 	t := &SentryRoundTripper{
-		originalRoundTripper: originalRoundTripper,
-		tags:                 make(map[string]string),
+		originalRoundTripper:    originalRoundTripper,
+		tracePropagationTargets: tracePropagationTargets,
+		traceOptionsRequests:    traceOptionsRequests,
 	}
 
 	for _, opt := range opts {
@@ -63,10 +83,31 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 type SentryRoundTripper struct {
 	originalRoundTripper http.RoundTripper
 
-	tags map[string]string
+	tracePropagationTargets []string
+	traceOptionsRequests    bool
 }
 
 func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	if request.Method == http.MethodOptions && !s.traceOptionsRequests {
+		return s.originalRoundTripper.RoundTrip(request)
+	}
+
+	// Respect trace propagation targets
+	if len(s.tracePropagationTargets) > 0 {
+		requestURL := request.URL.String()
+		foundMatch := false
+		for _, target := range s.tracePropagationTargets {
+			if strings.Contains(requestURL, target) {
+				foundMatch = true
+				break
+			}
+		}
+
+		if !foundMatch {
+			return s.originalRoundTripper.RoundTrip(request)
+		}
+	}
+
 	// Only create the `http.client` span only if there is a parent span.
 	parentSpan := sentry.SpanFromContext(request.Context())
 	if parentSpan == nil {
@@ -81,7 +122,6 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	cleanRequestURL := request.URL.Redacted()
 
 	span := parentSpan.StartChild("http.client", sentry.WithTransactionName(fmt.Sprintf("%s %s", request.Method, cleanRequestURL)))
-	span.Tags = s.tags
 	defer span.Finish()
 
 	span.SetData("http.query", request.URL.Query().Encode())

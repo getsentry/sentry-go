@@ -133,6 +133,10 @@ type ClientOptions struct {
 	TracesSampleRate float64
 	// Used to customize the sampling of traces, overrides TracesSampleRate.
 	TracesSampler TracesSampler
+	// Control with URLs trace propagation should be enabled. Does not support regex patterns.
+	TracePropagationTargets []string
+	// When set to true, the SDK will start a span for outgoing HTTP OPTIONS requests.
+	TraceOptionsRequests bool
 	// The sample rate for profiling traces in the range [0.0, 1.0].
 	// This is relative to TracesSampleRate - it is a ratio of profiled traces out of all sampled traces.
 	ProfilesSampleRate float64
