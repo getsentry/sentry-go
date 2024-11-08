@@ -60,7 +60,7 @@ mod-tidy: ## Check go.mod tidiness
 	for dir in $(ALL_GO_MOD_DIRS); do \
 		cd "$${dir}"; \
 		echo ">>> Running 'go mod tidy' for module: $${dir}"; \
-		go mod tidy -go=1.18 -compat=1.18; \
+		go mod tidy -go=1.21 -compat=1.21; \
 	done; \
 	git diff --exit-code;
 .PHONY: mod-tidy
