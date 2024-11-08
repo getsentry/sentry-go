@@ -1,5 +1,3 @@
-//go:build go1.18
-
 package sentryotel
 
 // Context keys to be used with context.WithValue(...) and ctx.Value(...)

@@ -3,6 +3,7 @@ package sentry
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -400,7 +401,7 @@ func TestGetBaggage(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			result := tt.hub.GetBaggage()
 			res := strings.Split(result, ",")
-			sortSlice(res)
+			slices.Sort(res)
 			assertEqual(t, strings.Join(res, ","), tt.expected)
 		})
 	}
