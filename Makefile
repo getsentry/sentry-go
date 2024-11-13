@@ -59,7 +59,7 @@ mod-tidy: ## Check go.mod tidiness
 	set -e ; \
 	for dir in $(ALL_GO_MOD_DIRS); do \
 		echo ">>> Running 'go mod tidy' for module: $${dir}"; \
-		(cd "$${dir}" && go mod tidy -go=1.18 -compat=1.18); \
+		(cd "$${dir}" && go mod tidy -go=1.21 -compat=1.21); \
 	done; \
 	git diff --exit-code;
 .PHONY: mod-tidy
@@ -71,6 +71,7 @@ vet: ## Run "go vet"
 		(cd "$${dir}" && go vet ./...); \
 	done;
 .PHONY: vet
+
 
 lint: ## Lint (using "golangci-lint")
 	golangci-lint run

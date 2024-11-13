@@ -9,6 +9,9 @@ targets:
     tagPrefix: otel/v
     tagOnly: true
   - name: github
+    tagPrefix: slog/v
+    tagOnly: true
+  - name: github
     tagPrefix: zerolog/v
     tagOnly: true
   - name: registry

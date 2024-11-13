@@ -2,8 +2,13 @@
 
 ### Features
 
-- Add Zerolog integration ([#857](https://github.com/getsentry/sentry-go/pull/857))
+- Add `sentryzerolog` integration ([#857](https://github.com/getsentry/sentry-go/pull/857))
+- Add `sentryslog` integration ([#865](https://github.com/getsentry/sentry-go/pull/865))
 - Always set Mechanism Type to generic ([#896](https://github.com/getsentry/sentry-go/pull/897))
+
+### Misc
+
+Drop support for Go 1.18, 1.19 and 1.20. The currently supported Go versions are the last 3 stable releases: 1.23, 1.22 and 1.21.
 
 ## 0.29.1
 
