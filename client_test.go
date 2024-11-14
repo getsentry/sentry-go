@@ -165,6 +165,7 @@ func TestCaptureException(t *testing.T) {
 					Type:  "*sentry.customErr",
 					Value: "wat",
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      0,
 						IsExceptionGroup: true,
 					},
@@ -174,6 +175,7 @@ func TestCaptureException(t *testing.T) {
 					Value:      "wat",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: true,
@@ -200,6 +202,7 @@ func TestCaptureException(t *testing.T) {
 					Type:  "*sentry.customErr",
 					Value: "wat",
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      0,
 						IsExceptionGroup: true,
 					},
@@ -209,6 +212,7 @@ func TestCaptureException(t *testing.T) {
 					Value:      "err",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: true,
@@ -224,6 +228,7 @@ func TestCaptureException(t *testing.T) {
 					Type:  "*errors.errorString",
 					Value: "original",
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      0,
 						IsExceptionGroup: true,
 					},
@@ -233,6 +238,7 @@ func TestCaptureException(t *testing.T) {
 					Value:      "wrapped: original",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
+						Type:             "generic",
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: true,

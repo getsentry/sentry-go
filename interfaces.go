@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 )
@@ -398,12 +399,13 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 	}
 
 	// event.Exception should be sorted such that the most recent error is last.
-	reverse(e.Exception)
+	slices.Reverse(e.Exception)
 
 	for i := range e.Exception {
 		e.Exception[i].Mechanism = &Mechanism{
 			IsExceptionGroup: true,
 			ExceptionID:      i,
+			Type:             "generic",
 		}
 		if i == 0 {
 			continue
