@@ -34,13 +34,6 @@ func WithTracePropagationTargets(targets []string) SentryRoundTripTracerOption {
 	}
 }
 
-// WithTraceOptionsRequests overrides the default options for whether the tracer should trace OPTIONS requests.
-func WithTraceOptionsRequests(traceOptionsRequests bool) SentryRoundTripTracerOption {
-	return func(t *SentryRoundTripper) {
-		t.traceOptionsRequests = traceOptionsRequests
-	}
-}
-
 // NewSentryRoundTripper provides a wrapper to existing http.RoundTripper to have required span data and trace headers for outgoing HTTP requests.
 //
 //   - If `nil` is passed to `originalRoundTripper`, it will use http.DefaultTransport instead.
@@ -51,7 +44,6 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 
 	// Configure trace propagation targets
 	var tracePropagationTargets []string
-	var traceOptionsRequests bool
 	if hub := sentry.CurrentHub(); hub != nil {
 		client := hub.Client()
 		if client != nil {
@@ -60,14 +52,12 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 				tracePropagationTargets = clientOptions.TracePropagationTargets
 			}
 
-			traceOptionsRequests = clientOptions.TraceOptionsRequests
 		}
 	}
 
 	t := &SentryRoundTripper{
 		originalRoundTripper:    originalRoundTripper,
 		tracePropagationTargets: tracePropagationTargets,
-		traceOptionsRequests:    traceOptionsRequests,
 	}
 
 	for _, opt := range opts {
@@ -84,14 +74,9 @@ type SentryRoundTripper struct {
 	originalRoundTripper http.RoundTripper
 
 	tracePropagationTargets []string
-	traceOptionsRequests    bool
 }
 
 func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.Method == http.MethodOptions && !s.traceOptionsRequests {
-		return s.originalRoundTripper.RoundTrip(request)
-	}
-
 	// Respect trace propagation targets
 	if len(s.tracePropagationTargets) > 0 {
 		requestURL := request.URL.String()

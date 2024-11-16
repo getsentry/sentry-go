@@ -179,30 +179,6 @@ func TestIntegration(t *testing.T) {
 			WantSpan:      nil,
 		},
 		{
-			RequestMethod:      "OPTIONS",
-			RequestURL:         "https://example.com",
-			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{sentryhttpclient.WithTraceOptionsRequests(true)},
-			WantStatus:         204,
-			WantResponseLength: 0,
-			WantSpan: &sentry.Span{
-				Data: map[string]interface{}{
-					"http.fragment":                string(""),
-					"http.query":                   string(""),
-					"http.request.method":          string("OPTIONS"),
-					"http.response.status_code":    int(204),
-					"http.response_content_length": int64(0),
-					"server.address":               string("example.com"),
-					"server.port":                  string(""),
-				},
-
-				Name:    "OPTIONS https://example.com",
-				Op:      "http.client",
-				Origin:  "manual",
-				Sampled: sentry.SampledTrue,
-				Status:  sentry.SpanStatusOK,
-			},
-		},
-		{
 			RequestMethod:      "GET",
 			RequestURL:         "https://example.com/foo/bar?baz=123#readme",
 			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{sentryhttpclient.WithTracePropagationTargets([]string{"example.com"}), sentryhttpclient.WithTracePropagationTargets([]string{"example.org"})},
@@ -326,7 +302,6 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:           true,
 		TracePropagationTargets: []string{"example.com"},
-		TraceOptionsRequests:    false,
 		TracesSampleRate:        1.0,
 		BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			spansCh <- event.Spans
