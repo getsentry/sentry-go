@@ -112,20 +112,16 @@ func handleUserAttributes(v slog.Value, event *sentry.Event) {
 func handleRequestAttributes(v slog.Value, event *sentry.Event) {
 	if req, ok := v.Any().(http.Request); ok {
 		event.Request = sentry.NewRequest(&req)
-		return
-	}
-
-	if req, ok := v.Any().(*http.Request); ok {
+	} else if req, ok := v.Any().(*http.Request); ok {
 		event.Request = sentry.NewRequest(req)
-		return
-	}
-
-	if tm, ok := v.Any().(encoding.TextMarshaler); ok {
-		data, err := tm.MarshalText()
-		if err == nil {
-			event.User.Data["request"] = string(data)
-		} else {
-			event.User.Data["request"] = fmt.Sprintf("%v", v.Any())
+	} else {
+		if tm, ok := v.Any().(encoding.TextMarshaler); ok {
+			data, err := tm.MarshalText()
+			if err == nil {
+				event.User.Data["request"] = string(data)
+			} else {
+				event.User.Data["request"] = fmt.Sprintf("%v", v.Any())
+			}
 		}
 	}
 }
