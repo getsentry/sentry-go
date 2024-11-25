@@ -50,7 +50,7 @@ jobs:
       - name: Test
         run: make test-coverage
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@5c47607acb93fed5485fdbf7232e8a31425f672a # pin@v5.0.2
+        uses: codecov/codecov-action@015f24e6818733317a2da2edd6290ab26238649a # pin@v5.0.7
         with:
           directory: .coverage
           token: ${{ secrets.CODECOV_TOKEN }}
