@@ -35,6 +35,7 @@ type Transport interface {
 	Flush(timeout time.Duration) bool
 	Configure(options ClientOptions)
 	SendEvent(event *Event)
+	Close()
 }
 
 func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
@@ -672,6 +673,8 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 	t.SendEventWithContext(context.Background(), event)
 }
 
+func (t *HTTPSyncTransport) Close() {}
+
 // SendEventWithContext assembles a new packet out of Event and sends it to the remote server.
 func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Event) {
 	if t.dsn == nil {
@@ -767,3 +770,5 @@ func (noopTransport) SendEvent(*Event) {
 func (noopTransport) Flush(time.Duration) bool {
 	return true
 }
+
+func (noopTransport) Close() {}
