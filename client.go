@@ -226,10 +226,6 @@ type ClientOptions struct {
 	MaxErrorDepth int
 	// Default event tags. These are overridden by tags set on a scope.
 	Tags map[string]string
-
-	// Optional chan receiving from caller signal about termination.
-	// Useful to prevent goroutines leak in case of multiple Transport instances initiated.
-	Done <-chan struct{}
 }
 
 // Client is the underlying processor that is used by the main API and Hub

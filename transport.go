@@ -353,8 +353,8 @@ type HTTPTransport struct {
 	mu     sync.RWMutex
 	limits ratelimit.Map
 
-	// receiving struct means caller terminates.
-	done <-chan struct{}
+	// receiving signal will terminate worker.
+	done chan struct{}
 }
 
 // NewHTTPTransport returns a new pre-configured instance of HTTPTransport.
@@ -362,6 +362,7 @@ func NewHTTPTransport() *HTTPTransport {
 	transport := HTTPTransport{
 		BufferSize: defaultBufferSize,
 		Timeout:    defaultTimeout,
+		done:       make(chan struct{}),
 	}
 	return &transport
 }
@@ -401,10 +402,6 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 			Transport: t.transport,
 			Timeout:   t.Timeout,
 		}
-	}
-
-	if options.Done != nil {
-		t.done = options.Done
 	}
 
 	t.start.Do(func() {
@@ -529,6 +526,15 @@ started:
 fail:
 	Logger.Println("Buffer flushing reached the timeout.")
 	return false
+}
+
+// Close will terminate events sending loop.
+// It useful to prevent goroutines leak in case of multiple HTTPTransport instances initiated.
+//
+// Close should be called after Flush and before terminating the program
+// otherwise some events may be lost.
+func (t *HTTPTransport) Close() {
+	close(t.done)
 }
 
 func (t *HTTPTransport) worker() {
