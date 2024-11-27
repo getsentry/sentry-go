@@ -8,7 +8,6 @@ import (
 )
 
 // Majority of the code in this package is derived from https://github.com/samber/slog-sentry AND https://github.com/samber/slog-common
-// Smaller changes have been implemented to remove dependency on packages that are not available in the standard library of Go 1.18
 // MIT License
 
 // Copyright (c) 2023 Samuel Berthe
