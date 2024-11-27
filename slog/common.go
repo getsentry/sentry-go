@@ -90,7 +90,7 @@ func mergeAttrValues(values ...slog.Value) slog.Value {
 }
 
 func groupValuesByKey(attrs []slog.Attr) map[string][]slog.Value {
-	result := map[string][]slog.Value{}
+	result := make(map[string][]slog.Value)
 
 	for _, item := range attrs {
 		key := item.Key
