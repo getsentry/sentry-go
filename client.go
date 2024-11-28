@@ -513,6 +513,14 @@ func (client *Client) Flush(timeout time.Duration) bool {
 	return client.Transport.Flush(timeout)
 }
 
+// Close clean up underlying Transport resources.
+//
+// Close should be called after Flush and before terminating the program
+// otherwise some events may be lost.
+func (client *Client) Close() {
+	client.Transport.Close()
+}
+
 // EventFromMessage creates an event from the given message string.
 func (client *Client) EventFromMessage(message string, level Level) *Event {
 	if message == "" {
