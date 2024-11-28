@@ -17,6 +17,7 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
+	"go.uber.org/goleak"
 )
 
 type unserializableType struct {
@@ -712,4 +713,41 @@ no_tags@second:1|c|T1597790835
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	transport := NewHTTPTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        "https://test@foobar/1",
+		HTTPClient: http.DefaultClient,
+	})
+
+	transport.Close()
+}
+
+func TestHTTPTransportClose(t *testing.T) {
+	transport := NewHTTPTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        "https://test@foobar/1",
+		HTTPClient: http.DefaultClient,
+	})
+
+	transport.Close()
+
+	select {
+	case <-transport.done:
+	case <-time.After(1):
+		t.Error("transport.done not closed after Close")
+	}
+}
+
+func TestHTTPSyncTransportClose(t *testing.T) {
+	// Close does not do anything for HTTPSyncTransport, added for coverage.
+	transport := HTTPSyncTransport{}
+	transport.Close()
+
+	tr := noopTransport{}
+	tr.Close()
 }
