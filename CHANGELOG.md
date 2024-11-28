@@ -10,9 +10,12 @@
 
 - Add support for closing worker goroutines started by HTTPTranport to prevent goroutine leaks ([#894](https://github.com/getsentry/sentry-go/pull/894)).
 
-Worker can be closed by calling `Close()` method on the `HTTPTransport` instance. `Close` should be called after `Flush` and before terminating the program
+```go
+client, _ := sentry.NewClient()
+defer client.Close()
+```
 
-// otherwise some events may be lost.
+Worker can be also closed by calling `Close()` method on the `HTTPTransport` instance. `Close` should be called after `Flush` and before terminating the program otherwise some events may be lost.
 
 ```go
 transport := sentry.NewHTTPTransport()

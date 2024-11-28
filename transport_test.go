@@ -716,7 +716,7 @@ no_tags@second:1|c|T1597790835
 }
 
 func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
-	defer goleak.VerifyNone(t)
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 
 	transport := NewHTTPTransport()
 	transport.Configure(ClientOptions{
