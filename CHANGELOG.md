@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.30.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.30.0.
+
 ### Features
 
 - Add `sentryzerolog` integration ([#857](https://github.com/getsentry/sentry-go/pull/857))
