@@ -724,6 +724,7 @@ func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
 		HTTPClient: http.DefaultClient,
 	})
 
+	transport.Flush(0)
 	transport.Close()
 }
 
