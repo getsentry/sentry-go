@@ -7,7 +7,7 @@
 
 # Official Sentry Integration for slog
 
-**Go.dev Documentation:** https://pkg.go.dev/github.com/getsentry/sentry-go/sentryslog
+**Go.dev Documentation:** https://pkg.go.dev/github.com/getsentry/sentry-go/slog
 **Example Usage:** https://github.com/getsentry/sentry-go/tree/master/_examples/slog
 
 ---
@@ -15,7 +15,8 @@
 ## Installation
 
 ```sh
-go get github.com/getsentry/sentry-go/sentryslog
+go get github.com/getsentry/sentry-go/slog
+
 ```
 
 ## Usage
@@ -28,7 +29,7 @@ import (
 	"log/slog"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/your-repo/slog-sentry"
+	slogSentry "github.com/getsentry/sentry-go/slog"
 )
 
 func main() {
