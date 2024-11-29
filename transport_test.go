@@ -739,7 +739,7 @@ func TestHTTPTransportClose(t *testing.T) {
 
 	select {
 	case <-transport.done:
-	case <-time.After(1):
+	case <-time.After(time.Millisecond * 100):
 		t.Error("transport.done not closed after Close")
 	}
 }
