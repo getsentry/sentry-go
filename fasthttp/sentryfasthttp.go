@@ -13,11 +13,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-type contextKey int
-
 const (
-	ContextKey = contextKey(1)
-	// The identifier of the FastHTTP SDK.
 	sdkIdentifier  = "sentry.go.fasthttp"
 	valuesKey      = "sentry"
 	transactionKey = "sentry_transaction"
@@ -76,11 +72,9 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			sentry.WithSpanOrigin(sentry.SpanOriginFastHTTP),
 		}
 
-		method := string(ctx.Method())
-
 		transaction := sentry.StartTransaction(
 			sentry.SetHubOnContext(ctx, hub),
-			fmt.Sprintf("%s %s", method, string(ctx.Path())),
+			fmt.Sprintf("%s %s", r.Method, string(ctx.Path())),
 			options...,
 		)
 		defer func() {
@@ -90,7 +84,7 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			transaction.Finish()
 		}()
 
-		transaction.SetData("http.request.method", method)
+		transaction.SetData("http.request.method", r.Method)
 
 		scope := hub.Scope()
 		scope.SetRequest(r)
@@ -146,9 +140,9 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 	r := new(http.Request)
 
 	r.Method = string(ctx.Method())
+
 	uri := ctx.URI()
 	url, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
-	fmt.Println("Error: ", err, "URL: ", url)
 	if err == nil {
 		r.URL = url
 		r.URL.RawQuery = string(uri.QueryString())
