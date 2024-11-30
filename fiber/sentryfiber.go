@@ -65,7 +65,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	r := convert(ctx)
 
-	method := ctx.Method()
+	method := r.Method
 
 	transactionName := ctx.Path()
 	transactionSource := sentry.SourceURL
@@ -141,21 +141,31 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	r := new(http.Request)
 
 	r.Method = utils.CopyString(ctx.Method())
+
 	uri := ctx.Request().URI()
-	r.URL, _ = url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
+
+	var err error
+	url, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
+	if err == nil {
+		r.URL = url
+		r.URL.RawQuery = string(uri.QueryString())
+	}
 
 	// Headers
 	r.Header = make(http.Header)
+
 	ctx.Request().Header.VisitAll(func(key, value []byte) {
 		r.Header.Add(string(key), string(value))
 	})
 	r.Host = utils.CopyString(ctx.Hostname())
 
+	// Cookies
+	ctx.Request().Header.VisitAllCookie(func(key, value []byte) {
+		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
+	})
+
 	// Env
 	r.RemoteAddr = ctx.Context().RemoteAddr().String()
-
-	// QueryString
-	r.URL.RawQuery = string(ctx.Request().URI().QueryString())
 
 	// Body
 	r.Body = io.NopCloser(bytes.NewReader(ctx.Request().Body()))

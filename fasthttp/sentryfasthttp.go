@@ -147,8 +147,12 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 
 	r.Method = string(ctx.Method())
 	uri := ctx.URI()
-	// Ignore error.
-	r.URL, _ = url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
+	url, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
+	fmt.Println("Error: ", err, "URL: ", url)
+	if err == nil {
+		r.URL = url
+		r.URL.RawQuery = string(uri.QueryString())
+	}
 
 	// Headers
 	r.Header = make(http.Header)
@@ -165,9 +169,6 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 
 	// Env
 	r.RemoteAddr = ctx.RemoteAddr().String()
-
-	// QueryString
-	r.URL.RawQuery = string(ctx.URI().QueryString())
 
 	// Body
 	r.Body = io.NopCloser(bytes.NewReader(ctx.Request.Body()))
