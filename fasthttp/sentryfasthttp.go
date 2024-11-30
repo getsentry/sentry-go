@@ -148,13 +148,15 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 		r.URL.RawQuery = string(uri.QueryString())
 	}
 
+	host := string(ctx.Host())
+	r.Host = host
+
 	// Headers
 	r.Header = make(http.Header)
-	r.Header.Add("Host", string(ctx.Host()))
+	r.Header.Add("Host", host)
 	ctx.Request.Header.VisitAll(func(key, value []byte) {
 		r.Header.Add(string(key), string(value))
 	})
-	r.Host = string(ctx.Host())
 
 	// Cookies
 	ctx.Request.Header.VisitAllCookie(func(key, value []byte) {

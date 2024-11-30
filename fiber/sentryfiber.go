@@ -147,16 +147,16 @@ func convert(ctx *fiber.Ctx) *http.Request {
 		r.URL.RawQuery = string(uri.QueryString())
 	}
 
+	host := utils.CopyString(ctx.Hostname())
+	r.Host = host
+
 	// Headers
 	r.Header = make(http.Header)
-
-	host := utils.CopyString(ctx.Hostname())
 	r.Header.Add("Host", host)
 
 	ctx.Request().Header.VisitAll(func(key, value []byte) {
 		r.Header.Add(string(key), string(value))
 	})
-	r.Host = utils.CopyString(host)
 
 	// Cookies
 	ctx.Request().Header.VisitAllCookie(func(key, value []byte) {
