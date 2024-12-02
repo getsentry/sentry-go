@@ -10,6 +10,10 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 - Add `sentryslog` integration ([#865](https://github.com/getsentry/sentry-go/pull/865))
 - Always set Mechanism Type to generic ([#896](https://github.com/getsentry/sentry-go/pull/897))
 
+### Bug Fixes
+
+- Prevent panic in `fasthttp` and `fiber` integration in case a malformed URL has to be parsed ([#912](https://github.com/getsentry/sentry-go/pull/912))
+
 ### Misc
 
 Drop support for Go 1.18, 1.19 and 1.20. The currently supported Go versions are the last 3 stable releases: 1.23, 1.22 and 1.21.
