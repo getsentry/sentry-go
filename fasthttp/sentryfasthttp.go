@@ -13,11 +13,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-type contextKey int
-
 const (
-	ContextKey = contextKey(1)
-	// The identifier of the FastHTTP SDK.
 	sdkIdentifier  = "sentry.go.fasthttp"
 	valuesKey      = "sentry"
 	transactionKey = "sentry_transaction"
@@ -76,11 +72,9 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			sentry.WithSpanOrigin(sentry.SpanOriginFastHTTP),
 		}
 
-		method := string(ctx.Method())
-
 		transaction := sentry.StartTransaction(
 			sentry.SetHubOnContext(ctx, hub),
-			fmt.Sprintf("%s %s", method, string(ctx.Path())),
+			fmt.Sprintf("%s %s", r.Method, string(ctx.Path())),
 			options...,
 		)
 		defer func() {
@@ -90,7 +84,7 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			transaction.Finish()
 		}()
 
-		transaction.SetData("http.request.method", method)
+		transaction.SetData("http.request.method", r.Method)
 
 		scope := hub.Scope()
 		scope.SetRequest(r)
@@ -146,17 +140,23 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 	r := new(http.Request)
 
 	r.Method = string(ctx.Method())
+
 	uri := ctx.URI()
-	// Ignore error.
-	r.URL, _ = url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
+	url, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
+	if err == nil {
+		r.URL = url
+		r.URL.RawQuery = string(uri.QueryString())
+	}
+
+	host := string(ctx.Host())
+	r.Host = host
 
 	// Headers
 	r.Header = make(http.Header)
-	r.Header.Add("Host", string(ctx.Host()))
+	r.Header.Add("Host", host)
 	ctx.Request.Header.VisitAll(func(key, value []byte) {
 		r.Header.Add(string(key), string(value))
 	})
-	r.Host = string(ctx.Host())
 
 	// Cookies
 	ctx.Request.Header.VisitAllCookie(func(key, value []byte) {
@@ -165,9 +165,6 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 
 	// Env
 	r.RemoteAddr = ctx.RemoteAddr().String()
-
-	// QueryString
-	r.URL.RawQuery = string(ctx.URI().QueryString())
 
 	// Body
 	r.Body = io.NopCloser(bytes.NewReader(ctx.Request.Body()))

@@ -65,8 +65,6 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	r := convert(ctx)
 
-	method := ctx.Method()
-
 	transactionName := ctx.Path()
 	transactionSource := sentry.SourceURL
 
@@ -79,7 +77,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	transaction := sentry.StartTransaction(
 		sentry.SetHubOnContext(ctx.Context(), hub),
-		fmt.Sprintf("%s %s", method, transactionName),
+		fmt.Sprintf("%s %s", r.Method, transactionName),
 		options...,
 	)
 
@@ -90,7 +88,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 		transaction.Finish()
 	}()
 
-	transaction.SetData("http.request.method", method)
+	transaction.SetData("http.request.method", r.Method)
 
 	scope := hub.Scope()
 	scope.SetRequest(r)
@@ -141,21 +139,32 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	r := new(http.Request)
 
 	r.Method = utils.CopyString(ctx.Method())
+
 	uri := ctx.Request().URI()
-	r.URL, _ = url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
+	url, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
+	if err == nil {
+		r.URL = url
+		r.URL.RawQuery = string(uri.QueryString())
+	}
+
+	host := utils.CopyString(ctx.Hostname())
+	r.Host = host
 
 	// Headers
 	r.Header = make(http.Header)
+	r.Header.Add("Host", host)
+
 	ctx.Request().Header.VisitAll(func(key, value []byte) {
 		r.Header.Add(string(key), string(value))
 	})
-	r.Host = utils.CopyString(ctx.Hostname())
+
+	// Cookies
+	ctx.Request().Header.VisitAllCookie(func(key, value []byte) {
+		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
+	})
 
 	// Env
 	r.RemoteAddr = ctx.Context().RemoteAddr().String()
-
-	// QueryString
-	r.URL.RawQuery = string(ctx.Request().URI().QueryString())
 
 	// Body
 	r.Body = io.NopCloser(bytes.NewReader(ctx.Request().Body()))
