@@ -3,7 +3,7 @@ module github.com/getsentry/sentry-go/slog
 go 1.21
 
 require (
-	github.com/getsentry/sentry-go v0.29.1
+	github.com/getsentry/sentry-go v0.30.0
 	github.com/stretchr/testify v1.9.0
 )
 
