@@ -26,9 +26,6 @@ const profileType = "profile"
 // checkInType is the type of a check in event.
 const checkInType = "check_in"
 
-// metricType is the type of a metric event.
-const metricType = "statsd"
-
 // Level marks the severity of the event.
 type Level string
 
@@ -324,7 +321,6 @@ type Event struct {
 	Exception   []Exception            `json:"exception,omitempty"`
 	DebugMeta   *DebugMeta             `json:"debug_meta,omitempty"`
 	Attachments []*Attachment          `json:"-"`
-	Metrics     []Metric               `json:"-"`
 
 	// The fields below are only relevant for transactions.
 
