@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Breaking Changes
+
+- Remove all code related to Sentry's previous Metrics product. Read more about the end of the Metrics beta ([here](https://sentry.zendesk.com/hc/en-us/articles/26369339769883-Metrics-Beta-Ended-on-October-7th)) ([#914](https://github.com/getsentry/sentry-go/pull/914))
+
 ## 0.30.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.30.0.
