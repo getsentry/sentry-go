@@ -80,6 +80,8 @@ checkout the official documentation:
   - [iris](https://docs.sentry.io/platforms/go/guides/iris/)
   - [logrus](https://docs.sentry.io/platforms/go/guides/logrus/)
   - [negroni](https://docs.sentry.io/platforms/go/guides/negroni/)
+  - [slog](https://docs.sentry.io/platforms/go/guides/slog/)
+  - [zerolog](https://docs.sentry.io/platforms/go/guides/zerolog/)
 
 ## Resources
 
