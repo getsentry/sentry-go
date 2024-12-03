@@ -68,7 +68,7 @@ To get started, have a look at one of our [examples](_examples/):
 We also provide a [complete API reference](https://pkg.go.dev/github.com/getsentry/sentry-go).
 
 For more detailed information about how to get the most out of `sentry-go`,
-checkout the official documentation:
+check out the official documentation:
 
 - [Sentry Go SDK documentation](https://docs.sentry.io/platforms/go/)
 - Guides:
