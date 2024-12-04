@@ -104,7 +104,7 @@ func attrsToString(attrs ...slog.Attr) map[string]string {
 
 	for _, attr := range attrs {
 		k, v := attr.Key, attr.Value
-		output[k] = v.String()
+		output[k] = valueToString(v)
 	}
 
 	return output
