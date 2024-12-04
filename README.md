@@ -10,7 +10,7 @@
 
 # Official Sentry SDK for Go
 
-[![Build Status](https://github.com/getsentry/sentry-go/workflows/go-workflow/badge.svg)](https://github.com/getsentry/sentry-go/actions?query=workflow%3Ago-workflow)
+[![Build Status](https://github.com/getsentry/sentry-go/workflows/test/badge.svg)](https://github.com/getsentry/sentry-go/actions?query=workflow%3Atest)
 [![Go Report Card](https://goreportcard.com/badge/github.com/getsentry/sentry-go)](https://goreportcard.com/report/github.com/getsentry/sentry-go)
 [![Discord](https://img.shields.io/discord/621778831602221064)](https://discord.gg/Ww9hbqr)
 [![go.dev](https://img.shields.io/badge/go.dev-pkg-007d9c.svg?style=flat)](https://pkg.go.dev/github.com/getsentry/sentry-go)
