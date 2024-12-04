@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
-	"strconv"
 )
 
 func source(sourceKey string, r *slog.Record) slog.Attr {
@@ -105,7 +104,7 @@ func attrsToString(attrs ...slog.Attr) map[string]string {
 
 	for _, attr := range attrs {
 		k, v := attr.Key, attr.Value
-		output[k] = valueToString(v)
+		output[k] = v.String()
 	}
 
 	return output
@@ -113,22 +112,12 @@ func attrsToString(attrs ...slog.Attr) map[string]string {
 
 func valueToString(v slog.Value) string {
 	switch v.Kind() {
-	case slog.KindAny, slog.KindLogValuer, slog.KindGroup:
-		return anyValueToString(v)
-	case slog.KindInt64:
-		return fmt.Sprintf("%d", v.Int64())
-	case slog.KindUint64:
-		return fmt.Sprintf("%d", v.Uint64())
-	case slog.KindFloat64:
-		return fmt.Sprintf("%f", v.Float64())
-	case slog.KindString:
+	case slog.KindInt64, slog.KindUint64, slog.KindFloat64, slog.KindString, slog.KindBool, slog.KindDuration:
 		return v.String()
-	case slog.KindBool:
-		return strconv.FormatBool(v.Bool())
-	case slog.KindDuration:
-		return v.Duration().String()
 	case slog.KindTime:
 		return v.Time().UTC().String()
+	case slog.KindAny, slog.KindLogValuer, slog.KindGroup:
+		return anyValueToString(v)
 	}
 	return anyValueToString(v)
 }
@@ -148,14 +137,11 @@ func anyValueToString(v slog.Value) string {
 }
 
 func appendRecordAttrsToAttrs(attrs []slog.Attr, groups []string, record *slog.Record) []slog.Attr {
-	output := make([]slog.Attr, len(attrs))
-	copy(output, attrs)
+	output := make([]slog.Attr, 0, len(attrs)+record.NumAttrs())
+	output = append(output, attrs...)
 
-	for i, j := 0, len(groups)-1; i < j; i, j = i+1, j-1 {
-		groups[i], groups[j] = groups[j], groups[i]
-	}
 	record.Attrs(func(attr slog.Attr) bool {
-		for i := range groups {
+		for i := len(groups) - 1; i >= 0; i-- {
 			attr = slog.Group(groups[i], attr)
 		}
 		output = append(output, attr)
