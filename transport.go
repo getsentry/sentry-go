@@ -194,18 +194,6 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		}
 	}
 
-	// Profile data
-	if event.sdkMetaData.transactionProfile != nil {
-		body, err = json.Marshal(event.sdkMetaData.transactionProfile)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeEnvelopeItem(enc, profileType, body)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	return &b, nil
 }
 
