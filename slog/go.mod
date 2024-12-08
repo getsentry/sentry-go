@@ -2,12 +2,12 @@ module github.com/getsentry/sentry-go/slog
 
 go 1.21
 
+replace github.com/getsentry/sentry-go => ../
+
 require (
 	github.com/getsentry/sentry-go v0.30.0
 	github.com/stretchr/testify v1.9.0
 )
-
-replace github.com/getsentry/sentry-go => ../
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
