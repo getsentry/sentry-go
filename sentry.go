@@ -61,6 +61,34 @@ func CaptureEvent(event *Event) *EventID {
 	return hub.CaptureEvent(event)
 }
 
+// CaptureMessageWithContext captures an arbitrary message and adds the context to the EventHint.
+func CaptureMessageWithContext(ctx context.Context, message string) *EventID {
+	hub := CurrentHub()
+	return hub.CaptureMessageWithContext(ctx, message)
+}
+
+// CaptureExceptionWithContext captures an error and adds the context to the EventHint.
+func CaptureExceptionWithContext(ctx context.Context, exception error) *EventID {
+	hub := CurrentHub()
+	return hub.CaptureExceptionWithContext(ctx, exception)
+}
+
+// CaptureCheckInWithContext captures a (cron) monitor check-in and adds the context to the EventHint.
+func CaptureCheckInWithContext(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+	hub := CurrentHub()
+	return hub.CaptureCheckInWithContext(ctx, checkIn, monitorConfig)
+}
+
+// CaptureEventWithContext captures an event on the currently active client if any and adds the context to the EventHint.
+//
+// The event must already be assembled. Typically code would instead use
+// the utility methods like CaptureException. The return value is the
+// event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
+func CaptureEventWithContext(ctx context.Context, event *Event) *EventID {
+	hub := CurrentHub()
+	return hub.CaptureEventWithContext(ctx, event)
+}
+
 // Recover captures a panic.
 func Recover() *EventID {
 	if err := recover(); err != nil {

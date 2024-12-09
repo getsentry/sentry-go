@@ -316,6 +316,72 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 	hub.Scope().AddBreadcrumb(breadcrumb, max)
 }
 
+// CaptureEventWithContext calls the method of a same name on currently bound Client instance
+// passing it a top-level Scope.
+// Returns EventID if successfully, or nil if there's no Scope or Client available.
+func (hub *Hub) CaptureEventWithContext(ctx context.Context, event *Event) *EventID {
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil || scope == nil {
+		return nil
+	}
+	eventID := client.CaptureEvent(event, &EventHint{Context: ctx}, scope)
+
+	if event.Type != transactionType && eventID != nil {
+		hub.mu.Lock()
+		hub.lastEventID = *eventID
+		hub.mu.Unlock()
+	}
+	return eventID
+}
+
+// CaptureMessageWithContext calls the method of a same name on currently bound Client instance
+// passing it a top-level Scope.
+// Returns EventID if successfully, or nil if there's no Scope or Client available.
+func (hub *Hub) CaptureMessageWithContext(ctx context.Context, message string) *EventID {
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil || scope == nil {
+		return nil
+	}
+	eventID := client.CaptureMessage(message, &EventHint{Context: ctx}, scope)
+
+	if eventID != nil {
+		hub.mu.Lock()
+		hub.lastEventID = *eventID
+		hub.mu.Unlock()
+	}
+	return eventID
+}
+
+// CaptureExceptionWithContext calls the method of a same name on currently bound Client instance
+// passing it a top-level Scope.
+// Returns EventID if successfully, or nil if there's no Scope or Client available.
+func (hub *Hub) CaptureExceptionWithContext(ctx context.Context, exception error) *EventID {
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil || scope == nil {
+		return nil
+	}
+	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception, Context: ctx}, scope)
+
+	if eventID != nil {
+		hub.mu.Lock()
+		hub.lastEventID = *eventID
+		hub.mu.Unlock()
+	}
+	return eventID
+}
+
+// CaptureCheckInWithContext calls the method of the same name on currently bound Client instance
+// passing it a top-level Scope.
+// Returns CheckInID if the check-in was captured successfully, or nil otherwise.
+func (hub *Hub) CaptureCheckInWithContext(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil {
+		return nil
+	}
+
+	return client.CaptureCheckInWithContext(ctx, checkIn, monitorConfig, scope)
+}
+
 // Recover calls the method of a same name on currently bound Client instance
 // passing it a top-level Scope.
 // Returns EventID if successfully, or nil if there's no Scope or Client available.

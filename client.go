@@ -435,6 +435,16 @@ func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorCon
 	return nil
 }
 
+// CaptureCheckInWithContext captures a check in.
+func (client *Client) CaptureCheckInWithContext(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
+	event := client.EventFromCheckIn(checkIn, monitorConfig)
+	if event != nil && event.CheckIn != nil {
+		client.CaptureEvent(event, &EventHint{Context: ctx}, scope)
+		return &event.CheckIn.ID
+	}
+	return nil
+}
+
 // CaptureEvent captures an event on the currently active client if any.
 //
 // The event must already be assembled. Typically code would instead use
