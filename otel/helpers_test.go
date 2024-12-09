@@ -143,4 +143,6 @@ func (t *TransportMock) Events() []*sentry.Event {
 	return t.events
 }
 
+func (t *TransportMock) Close()  {}
+
 //

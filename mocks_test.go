@@ -42,3 +42,5 @@ func (t *TransportMock) Events() []*Event {
 	defer t.mu.Unlock()
 	return t.events
 }
+func (t *TransportMock) Close() {}
+
