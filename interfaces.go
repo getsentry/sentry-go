@@ -19,15 +19,8 @@ const eventType = "event"
 // transactionType is the type of a transaction event.
 const transactionType = "transaction"
 
-// profileType is the type of a profile event.
-// currently, profiles are always sent as part of a transaction event.
-const profileType = "profile"
-
 // checkInType is the type of a check in event.
 const checkInType = "check_in"
-
-// metricType is the type of a metric event.
-const metricType = "statsd"
 
 // Level marks the severity of the event.
 type Level string
@@ -255,8 +248,7 @@ type Exception struct {
 // SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
 // but which shouldn't get send to Sentry.
 type SDKMetaData struct {
-	dsc                DynamicSamplingContext
-	transactionProfile *profileInfo
+	dsc DynamicSamplingContext
 }
 
 // Contains information about how the name of the transaction was determined.
@@ -324,7 +316,6 @@ type Event struct {
 	Exception   []Exception            `json:"exception,omitempty"`
 	DebugMeta   *DebugMeta             `json:"debug_meta,omitempty"`
 	Attachments []*Attachment          `json:"-"`
-	Metrics     []Metric               `json:"-"`
 
 	// The fields below are only relevant for transactions.
 

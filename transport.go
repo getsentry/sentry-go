@@ -96,55 +96,6 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
-func marshalMetrics(metrics []Metric) []byte {
-	var b bytes.Buffer
-	for i, metric := range metrics {
-		b.WriteString(metric.GetKey())
-		if unit := metric.GetUnit(); unit != "" {
-			b.WriteString(fmt.Sprintf("@%s", unit))
-		}
-		b.WriteString(fmt.Sprintf("%s|%s", metric.SerializeValue(), metric.GetType()))
-		if serializedTags := metric.SerializeTags(); serializedTags != "" {
-			b.WriteString(fmt.Sprintf("|#%s", serializedTags))
-		}
-		b.WriteString(fmt.Sprintf("|T%d", metric.GetTimestamp()))
-
-		if i < len(metrics)-1 {
-			b.WriteString("\n")
-		}
-	}
-	return b.Bytes()
-}
-
-func encodeMetric(enc *json.Encoder, b io.Writer, metrics []Metric) error {
-	body := marshalMetrics(metrics)
-	// Item header
-	err := enc.Encode(struct {
-		Type   string `json:"type"`
-		Length int    `json:"length"`
-	}{
-		Type:   metricType,
-		Length: len(body),
-	})
-	if err != nil {
-		return err
-	}
-
-	// metric payload
-	if _, err = b.Write(body); err != nil {
-		return err
-	}
-
-	// "Envelopes should be terminated with a trailing newline."
-	//
-	// [1]: https://develop.sentry.dev/sdk/envelopes/#envelopes
-	if _, err := b.Write([]byte("\n")); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func encodeAttachment(enc *json.Encoder, b io.Writer, attachment *Attachment) error {
 	// Attachment header
 	err := enc.Encode(struct {
@@ -229,8 +180,6 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	switch event.Type {
 	case transactionType, checkInType:
 		err = encodeEnvelopeItem(enc, event.Type, body)
-	case metricType:
-		err = encodeMetric(enc, &b, event.Metrics)
 	default:
 		err = encodeEnvelopeItem(enc, eventType, body)
 	}
@@ -242,18 +191,6 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	// Attachments
 	for _, attachment := range event.Attachments {
 		if err := encodeAttachment(enc, &b, attachment); err != nil {
-			return nil, err
-		}
-	}
-
-	// Profile data
-	if event.sdkMetaData.transactionProfile != nil {
-		body, err = json.Marshal(event.sdkMetaData.transactionProfile)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeEnvelopeItem(enc, profileType, body)
-		if err != nil {
 			return nil, err
 		}
 	}
@@ -694,8 +631,6 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	switch {
 	case event.Type == transactionType:
 		eventType = "transaction"
-	case event.Type == metricType:
-		eventType = metricType
 	default:
 		eventType = fmt.Sprintf("%s event", event.Level)
 	}
