@@ -41,12 +41,12 @@ body:
     attributes:
       label: Steps to reproduce
       description: How can we see what you're seeing? Specific is terrific.
-      placeholder: |-
-        Good options:
-        * Inline source code snippet
-        * Link to Go Playground https://play.golang.org/
+      placeholder: |
+        Good options are
+        * inline source code snippet
+        * link to Go Playground https://play.golang.org/
         * Gist https://gist.github.com
-        * Link to a public project
+        * link to a public project
     validations:
       required: true
   - type: textarea
