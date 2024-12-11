@@ -102,10 +102,6 @@ func handleUserAttributes(v slog.Value, event *sentry.Event) {
 		event.User.Name = name
 		delete(data, "name")
 	}
-	if segment, ok := data["segment"]; ok {
-		event.User.Segment = segment
-		delete(data, "segment")
-	}
 	event.User.Data = data
 }
 

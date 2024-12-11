@@ -112,7 +112,6 @@ type User struct {
 	IPAddress string            `json:"ip_address,omitempty"`
 	Username  string            `json:"username,omitempty"`
 	Name      string            `json:"name,omitempty"`
-	Segment   string            `json:"segment,omitempty"`
 	Data      map[string]string `json:"data,omitempty"`
 }
 

@@ -52,7 +52,6 @@ func TestUserMarshalJson(t *testing.T) {
 		{input: User{IPAddress: "127.0.0.1"}, want: `{"ip_address":"127.0.0.1"}`},
 		{input: User{Username: "My Username"}, want: `{"username":"My Username"}`},
 		{input: User{Name: "My Name"}, want: `{"name":"My Name"}`},
-		{input: User{Segment: "My Segment"}, want: `{"segment":"My Segment"}`},
 		{input: User{Data: map[string]string{"foo": "bar"}}, want: `{"data":{"foo":"bar"}}`},
 	}
 
