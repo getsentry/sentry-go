@@ -99,7 +99,6 @@ func TestAttrToSentryEvent(t *testing.T) {
 				slog.Attr{Key: "email", Value: slog.StringValue("user_email")},
 				slog.Attr{Key: "ip_address", Value: slog.StringValue("user_ip_address")},
 				slog.Attr{Key: "username", Value: slog.StringValue("user_username")},
-				slog.Attr{Key: "segment", Value: slog.StringValue("user_segment")},
 				slog.Attr{Key: "name", Value: slog.StringValue("user_name")},
 			)},
 			expected: &sentry.Event{
