@@ -107,13 +107,17 @@ type Attachment struct {
 // User describes the user associated with an Event. If this is used, at least
 // an ID or an IP address should be provided.
 type User struct {
-	ID        string            `json:"id,omitempty"`
-	Email     string            `json:"email,omitempty"`
-	IPAddress string            `json:"ip_address,omitempty"`
-	Username  string            `json:"username,omitempty"`
-	Name      string            `json:"name,omitempty"`
-	Segment   string            `json:"segment,omitempty"`
-	Data      map[string]string `json:"data,omitempty"`
+	ID        string `json:"id,omitempty"`
+	Email     string `json:"email,omitempty"`
+	IPAddress string `json:"ip_address,omitempty"`
+	Username  string `json:"username,omitempty"`
+	Name      string `json:"name,omitempty"`
+	// Segment is a string representing the user segment that the user belongs to.
+	//
+	// Deprecated: Segment is deprecated and will be removed in the next major
+	// of the Sentry Go SDK.
+	Segment string            `json:"segment,omitempty"`
+	Data    map[string]string `json:"data,omitempty"`
 }
 
 func (u User) IsEmpty() bool {
