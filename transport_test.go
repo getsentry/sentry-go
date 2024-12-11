@@ -17,6 +17,7 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
+	"go.uber.org/goleak"
 )
 
 type unserializableType struct {
@@ -628,4 +629,42 @@ func testRateLimiting(t *testing.T, tr Transport) {
 	if n := atomic.LoadUint64(&transactionEventCount); n != 1 {
 		t.Errorf("got transactionEvent = %d, want %d", n, 1)
 	}
+}
+
+func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
+	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+
+	transport := NewHTTPTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        "https://test@foobar/1",
+		HTTPClient: http.DefaultClient,
+	})
+
+	transport.Flush(0)
+	transport.Close()
+}
+
+func TestHTTPTransportClose(t *testing.T) {
+	transport := NewHTTPTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        "https://test@foobar/1",
+		HTTPClient: http.DefaultClient,
+	})
+
+	transport.Close()
+
+	select {
+	case <-transport.done:
+	case <-time.After(time.Second):
+		t.Error("transport.done not closed after Close")
+	}
+}
+
+func TestHTTPSyncTransportClose(t *testing.T) {
+	// Close does not do anything for HTTPSyncTransport, added for coverage.
+	transport := HTTPSyncTransport{}
+	transport.Close()
+
+	tr := noopTransport{}
+	tr.Close()
 }

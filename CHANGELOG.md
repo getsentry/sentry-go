@@ -20,6 +20,19 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 
 ### Bug Fixes
 
+- Add support for closing worker goroutines started by HTTPTranport to prevent goroutine leaks ([#894](https://github.com/getsentry/sentry-go/pull/894)).
+
+```go
+client, _ := sentry.NewClient()
+defer client.Close()
+```
+
+Worker can be also closed by calling `Close()` method on the `HTTPTransport` instance. `Close` should be called after `Flush` and before terminating the program otherwise some events may be lost.
+
+```go
+transport := sentry.NewHTTPTransport()
+defer transport.Close()
+```
 - Prevent panic in `fasthttp` and `fiber` integration in case a malformed URL has to be parsed ([#912](https://github.com/getsentry/sentry-go/pull/912))
 
 ### Misc
