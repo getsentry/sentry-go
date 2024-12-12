@@ -31,9 +31,8 @@ func TestUserIsEmpty(t *testing.T) {
 		{input: User{IPAddress: "127.0.0.1"}, want: false},
 		{input: User{Username: "My Username"}, want: false},
 		{input: User{Name: "My Name"}, want: false},
-		{input: User{Segment: "My Segment"}, want: false},
 		{input: User{Data: map[string]string{"foo": "bar"}}, want: false},
-		{input: User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Segment: "My Segment", Data: map[string]string{"foo": "bar"}}, want: false},
+		{input: User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Data: map[string]string{"foo": "bar"}}, want: false},
 	}
 
 	for _, test := range tests {
@@ -52,7 +51,6 @@ func TestUserMarshalJson(t *testing.T) {
 		{input: User{IPAddress: "127.0.0.1"}, want: `{"ip_address":"127.0.0.1"}`},
 		{input: User{Username: "My Username"}, want: `{"username":"My Username"}`},
 		{input: User{Name: "My Name"}, want: `{"name":"My Name"}`},
-		{input: User{Segment: "My Segment"}, want: `{"segment":"My Segment"}`},
 		{input: User{Data: map[string]string{"foo": "bar"}}, want: `{"data":{"foo":"bar"}}`},
 	}
 
