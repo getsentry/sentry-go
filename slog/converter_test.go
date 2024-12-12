@@ -108,7 +108,6 @@ func TestAttrToSentryEvent(t *testing.T) {
 					IPAddress: "user_ip_address",
 					Username:  "user_username",
 					Name:      "user_name",
-					Segment:   "user_segment",
 					Data:      map[string]string{},
 				},
 			},

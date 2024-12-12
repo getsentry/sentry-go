@@ -136,10 +136,6 @@ func (u User) IsEmpty() bool {
 		return false
 	}
 
-	if u.Segment != "" {
-		return false
-	}
-
 	if len(u.Data) > 0 {
 		return false
 	}

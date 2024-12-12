@@ -87,9 +87,6 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 					Release:          "1.0.0",
 					Environment:      "test",
 				})
-				hubFromContext(ctx).ConfigureScope(func(scope *Scope) {
-					scope.SetUser(User{Segment: "user_segment"})
-				})
 				txn := StartTransaction(ctx, "name", WithTransactionSource(SourceCustom))
 				txn.TraceID = TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")
 				return txn
