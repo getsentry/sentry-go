@@ -7,6 +7,8 @@
 - Remove all code related to Sentry's previous Metrics product. Read more about the end of the Metrics beta ([here](https://sentry.zendesk.com/hc/en-us/articles/26369339769883-Metrics-Beta-Ended-on-October-7th)) ([#914](https://github.com/getsentry/sentry-go/pull/914))
 - Remove `Segment` field from the `User` struct. This field is no longer used in the Sentry product. ([#928](https://github.com/getsentry/sentry-go/pull/928))
 
+- Every integration is now a separate module, reducing the binary size and number of dependencies. Once you update `sentry-go` to latest version, you'll need to `go get` the integration you want to use. For example, if you want to use the `echo` integration, you'll need to run `go get github.com/getsentry/sentry-go/echo` ([#919](github.com/getsentry/sentry-go/pull/919)).
+
 ## 0.30.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.30.0.
