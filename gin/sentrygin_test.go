@@ -418,7 +418,7 @@ func TestSetHubOnContext(t *testing.T) {
 	sentrygin.SetHubOnContext(ctx, hub)
 	got := sentrygin.GetHubFromContext(ctx)
 
-	if reflect.DeepEqual(hub, got) {
+	if !reflect.DeepEqual(hub, got) {
 		t.Fatalf("Hub mismatch: got %v want %v", got, hub)
 	}
 }
