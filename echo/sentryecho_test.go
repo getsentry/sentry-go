@@ -420,6 +420,49 @@ func TestIntegration(t *testing.T) {
 	}
 }
 
+func TestSetHubOnContext(t *testing.T) {
+	err := sentry.Init(sentry.ClientOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hub := sentry.CurrentHub().Clone()
+	router := echo.New()
+	router.GET("/set-hub", func(c echo.Context) error {
+		sentryecho.SetHubOnContext(c, hub)
+		retrievedHub := sentryecho.GetHubFromContext(c)
+		if retrievedHub == nil {
+			t.Error("expecting hub to be set on context")
+		}
+		if retrievedHub != hub {
+			t.Error("expecting retrieved hub to be the same as the set hub")
+		}
+		return c.NoContent(http.StatusOK)
+	})
+
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	c := srv.Client()
+	c.Timeout = time.Second
+
+	req, err := http.NewRequest("GET", srv.URL+"/set-hub", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := c.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != 200 {
+		t.Errorf("Status code = %d expected: %d", res.StatusCode, 200)
+	}
+	err = res.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestGetSpanFromContext(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,

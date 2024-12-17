@@ -114,6 +114,10 @@ func GetHubFromContext(ctx iris.Context) *sentry.Hub {
 	return nil
 }
 
+func SetHubOnContext(ctx iris.Context, hub *sentry.Hub) {
+	ctx.Values().Set(valuesKey, hub)
+}
+
 // GetSpanFromContext retrieves attached *sentry.Span instance from iris.Context.
 // If there is no transaction on iris.Context, it will return nil.
 func GetSpanFromContext(ctx iris.Context) *sentry.Span {
