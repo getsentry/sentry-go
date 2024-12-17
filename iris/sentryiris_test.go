@@ -498,4 +498,9 @@ func TestSetHubOnContext(t *testing.T) {
 		ctx.StatusCode(http.StatusOK)
 	})
 
+	srv := httptest.New(t, app)
+
+	res := srv.Request(http.MethodGet, "/with-hub").Expect()
+
+	res.Status(http.StatusOK)
 }
