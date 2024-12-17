@@ -9,6 +9,10 @@
 
 - Every integration is now a separate module, reducing the binary size and number of dependencies. Once you update `sentry-go` to latest version, you'll need to `go get` the integration you want to use. For example, if you want to use the `echo` integration, you'll need to run `go get github.com/getsentry/sentry-go/echo` ([#919](github.com/getsentry/sentry-go/pull/919)).
 
+### Features
+
+Add ability to override `hub` in `context` for integrations that use custom context ([#931](https://github.com/getsentry/sentry-go/pull/931))
+
 ## 0.30.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.30.0.
