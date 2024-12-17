@@ -141,6 +141,11 @@ func GetHubFromContext(ctx *gin.Context) *sentry.Hub {
 	return nil
 }
 
+// SetHubOnContext sets *sentry.Hub instance to gin.Context.
+func SetHubOnContext(ctx *gin.Context, hub *sentry.Hub) {
+	ctx.Set(valuesKey, hub)
+}
+
 // GetSpanFromContext retrieves attached *sentry.Span instance from gin.Context.
 // If there is no transaction on echo.Context, it will return nil.
 func GetSpanFromContext(ctx *gin.Context) *sentry.Span {

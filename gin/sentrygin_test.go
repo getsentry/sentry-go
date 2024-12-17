@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -408,5 +409,16 @@ func TestIntegration(t *testing.T) {
 
 	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestSetHubOnContext(t *testing.T) {
+	hub := sentry.CurrentHub()
+	ctx := &gin.Context{}
+	sentrygin.SetHubOnContext(ctx, hub)
+	got := sentrygin.GetHubFromContext(ctx)
+
+	if !reflect.DeepEqual(hub, got) {
+		t.Fatalf("Hub mismatch: got %v want %v", got, hub)
 	}
 }

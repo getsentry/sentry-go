@@ -121,6 +121,10 @@ func GetHubFromContext(ctx *fasthttp.RequestCtx) *sentry.Hub {
 	return nil
 }
 
+func SetHubOnContext(ctx *fasthttp.RequestCtx, hub *sentry.Hub) {
+	ctx.SetUserValue(valuesKey, hub)
+}
+
 // GetSpanFromContext retrieves attached *sentry.Span instance from *fasthttp.RequestCtx.
 // If there is no transaction on *fasthttp.RequestCtx, it will return nil.
 func GetSpanFromContext(ctx *fasthttp.RequestCtx) *sentry.Span {

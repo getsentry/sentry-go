@@ -531,3 +531,36 @@ func TestHandlers(t *testing.T) {
 		})
 	}
 }
+
+func TestSetHubOnContext(t *testing.T) {
+	app := fiber.New()
+	hub := sentry.NewHub(sentry.CurrentHub().Client(), sentry.NewScope())
+
+	app.Get("/test", func(c *fiber.Ctx) error {
+		sentryfiber.SetHubOnContext(c, hub)
+		retrievedHub := sentryfiber.GetHubFromContext(c)
+		if retrievedHub == nil {
+			t.Fatal("expected hub to be set on context, but got nil")
+		}
+		if !reflect.DeepEqual(hub, retrievedHub) {
+			t.Fatalf("expected hub to be %v, but got %v", hub, retrievedHub)
+		}
+		return nil
+	})
+
+	req, err := http.NewRequest(http.MethodGet, "/test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("User-Agent", "fiber")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Request failed: %s", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+}

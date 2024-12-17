@@ -122,6 +122,10 @@ func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
 	return nil
 }
 
+func SetHubOnContext(ctx *fiber.Ctx, hub *sentry.Hub) {
+	ctx.Locals(valuesKey, hub)
+}
+
 func GetSpanFromContext(ctx *fiber.Ctx) *sentry.Span {
 	if span, ok := ctx.Locals(transactionKey).(*sentry.Span); ok {
 		return span

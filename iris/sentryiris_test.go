@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -476,4 +477,30 @@ func TestGetSpanFromContext(t *testing.T) {
 			t.Fatal("sentry.Flush timed out")
 		}
 	}
+}
+
+func TestSetHubOnContext(t *testing.T) {
+	app := iris.New()
+
+	app.Get("/with-hub", func(ctx iris.Context) {
+		hub := sentry.CurrentHub().Clone()
+		sentryiris.SetHubOnContext(ctx, hub)
+
+		newHub := sentryiris.GetHubFromContext(ctx)
+		if newHub == nil {
+			t.Error("expecting hub to be not nil")
+		}
+
+		if !reflect.DeepEqual(hub, newHub) {
+			t.Error("expecting hub to be the same")
+		}
+
+		ctx.StatusCode(http.StatusOK)
+	})
+
+	srv := httptest.New(t, app)
+
+	res := srv.Request(http.MethodGet, "/with-hub").Expect()
+
+	res.Status(http.StatusOK)
 }

@@ -491,3 +491,19 @@ func TestGetTransactionFromContext(t *testing.T) {
 		})
 	}
 }
+
+func TestSetHubOnContext(t *testing.T) {
+	hub := sentry.NewHub(sentry.CurrentHub().Client(), sentry.NewScope())
+	ctx := &fasthttp.RequestCtx{}
+
+	sentryfasthttp.SetHubOnContext(ctx, hub)
+
+	retrievedHub := sentryfasthttp.GetHubFromContext(ctx)
+	if retrievedHub == nil {
+		t.Fatal("expected hub to be set on context, but got nil")
+	}
+
+	if !reflect.DeepEqual(hub, retrievedHub) {
+		t.Fatalf("expected hub to be %v, but got %v", hub, retrievedHub)
+	}
+}
