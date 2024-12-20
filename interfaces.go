@@ -184,6 +184,7 @@ func NewRequest(r *http.Request) *Request {
 		// attach more than one Cookie header field.
 		cookies = r.Header.Get("Cookie")
 
+		headers = make(map[string]string, len(r.Header))
 		for k, v := range r.Header {
 			headers[k] = strings.Join(v, ",")
 		}
