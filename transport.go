@@ -432,7 +432,14 @@ func (t *HTTPTransport) FlushWithContext(ctx context.Context) bool {
 }
 
 func (t *HTTPTransport) flushInternal(timeout <-chan struct{}) bool {
+	// Wait until processing the current batch has started or the timeout.
+	//
+	// We must wait until the worker has seen the current batch, because it is
+	// the only way b.done will be closed. If we do not wait, there is a
+	// possible execution flow in which b.done is never closed, and the only way
+	// out of Flush would be waiting for the timeout, which is undesired.
 	var b batch
+
 	for {
 		select {
 		case b = <-t.buffer:
