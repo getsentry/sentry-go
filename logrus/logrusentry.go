@@ -156,34 +156,40 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 		Timestamp: l.Time,
 		Logger:    name,
 	}
+
 	key := h.key(FieldRequest)
 	if req, ok := s.Extra[key].(*http.Request); ok {
 		delete(s.Extra, key)
 		s.Request = sentry.NewRequest(req)
 	}
+
 	if err, ok := s.Extra[logrus.ErrorKey].(error); ok {
 		delete(s.Extra, logrus.ErrorKey)
 		s.SetException(err, -1)
 	}
+
 	key = h.key(FieldUser)
-	if user, ok := s.Extra[key].(sentry.User); ok {
+	switch user := s.Extra[key].(type) {
+	case sentry.User:
 		delete(s.Extra, key)
 		s.User = user
-	}
-	if user, ok := s.Extra[key].(*sentry.User); ok {
+	case *sentry.User:
 		delete(s.Extra, key)
 		s.User = *user
 	}
+
 	key = h.key(FieldTransaction)
 	if txn, ok := s.Extra[key].(string); ok {
 		delete(s.Extra, key)
 		s.Transaction = txn
 	}
+
 	key = h.key(FieldFingerprint)
 	if fp, ok := s.Extra[key].([]string); ok {
 		delete(s.Extra, key)
 		s.Fingerprint = fp
 	}
+
 	delete(s.Extra, FieldGoVersion)
 	delete(s.Extra, FieldMaxProcs)
 	return s
