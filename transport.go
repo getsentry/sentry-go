@@ -720,4 +720,8 @@ func (noopTransport) Flush(time.Duration) bool {
 	return true
 }
 
+func (noopTransport) FlushWithContext(context.Context) bool {
+	return true
+}
+
 func (noopTransport) Close() {}
