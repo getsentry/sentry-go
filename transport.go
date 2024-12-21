@@ -688,6 +688,11 @@ func (t *HTTPSyncTransport) Flush(_ time.Duration) bool {
 	return true
 }
 
+// FlushWithContext is a no-op for HTTPSyncTransport. It always returns true immediately.
+func (t *HTTPSyncTransport) FlushWithContext(_ context.Context) bool {
+	return true
+}
+
 func (t *HTTPSyncTransport) disabled(c ratelimit.Category) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
