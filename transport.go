@@ -33,6 +33,7 @@ const maxDrainResponseBytes = 16 << 10
 // Transport is used by the Client to deliver events to remote server.
 type Transport interface {
 	Flush(timeout time.Duration) bool
+	FlushWithContext(ctx context.Context) bool
 	Configure(options ClientOptions)
 	SendEvent(event *Event)
 	Close()
