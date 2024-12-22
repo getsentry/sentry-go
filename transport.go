@@ -420,10 +420,9 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 // the HTTPSyncTransport in the call to Init.
 func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 	timeoutCh := make(chan struct{})
-	go func() {
-		time.Sleep(timeout)
+	time.AfterFunc(timeout, func() {
 		close(timeoutCh)
-	}()
+	})
 	return t.flushInternal(timeoutCh)
 }
 
