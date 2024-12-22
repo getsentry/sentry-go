@@ -42,10 +42,10 @@ const (
 // It is not safe to configure the hook while logging is happening. Please
 // perform all configuration before using it.
 type Hook struct {
-	hub      *sentry.Hub
-	fallback FallbackFunc
-	keys     map[string]string
-	levels   []logrus.Level
+	hubProvider func() *sentry.Hub
+	fallback    FallbackFunc
+	keys        map[string]string
+	levels      []logrus.Level
 }
 
 var _ logrus.Hook = &Hook{}
@@ -66,17 +66,26 @@ func New(levels []logrus.Level, opts sentry.ClientOptions) (*Hook, error) {
 // NewFromClient initializes a new Logrus hook which sends logs to the provided
 // sentry client.
 func NewFromClient(levels []logrus.Level, client *sentry.Client) *Hook {
-	h := &Hook{
+	defaultHub := sentry.NewHub(client, sentry.NewScope())
+	return &Hook{
 		levels: levels,
-		hub:    sentry.NewHub(client, sentry.NewScope()),
-		keys:   make(map[string]string),
+		hubProvider: func() *sentry.Hub {
+			// Default to using the same hub if no specific provider is set
+			return defaultHub
+		},
+		keys: make(map[string]string),
 	}
-	return h
+}
+
+// SetHubProvider sets a function to provide a hub for each log entry.
+// This can be used to ensure separate hubs per goroutine if needed.
+func (h *Hook) SetHubProvider(provider func() *sentry.Hub) {
+	h.hubProvider = provider
 }
 
 // AddTags adds tags to the hook's scope.
 func (h *Hook) AddTags(tags map[string]string) {
-	h.hub.Scope().SetTags(tags)
+	h.hubProvider().Scope().SetTags(tags)
 }
 
 // A FallbackFunc can be used to attempt to handle any errors in logging, before
@@ -124,8 +133,9 @@ func (h *Hook) Levels() []logrus.Level {
 
 // Fire sends entry to Sentry.
 func (h *Hook) Fire(entry *logrus.Entry) error {
+	hub := h.hubProvider() // Use the hub provided by the HubProvider
 	event := h.entryToEvent(entry)
-	if id := h.hub.CaptureEvent(event); id == nil {
+	if id := hub.CaptureEvent(event); id == nil {
 		if h.fallback != nil {
 			return h.fallback(entry)
 		}
@@ -199,5 +209,5 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 // blocking for at most the given timeout. It returns false if the timeout was
 // reached, in which case some events may not have been sent.
 func (h *Hook) Flush(timeout time.Duration) bool {
-	return h.hub.Client().Flush(timeout)
+	return h.hubProvider().Client().Flush(timeout)
 }

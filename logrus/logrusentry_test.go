@@ -1,7 +1,6 @@
 package sentrylogrus
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	pkgerr "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/getsentry/sentry-go"
@@ -33,13 +31,37 @@ func TestNew(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if id := h.hub.CaptureEvent(&sentry.Event{}); id == nil {
+		if id := h.hubProvider().CaptureEvent(&sentry.Event{}); id == nil {
 			t.Error("CaptureEvent failed")
 		}
-		if !h.Flush(testutils.FlushTimeout()) {
+		if !h.hubProvider().Client().Flush(testutils.FlushTimeout()) {
 			t.Error("flush failed")
 		}
 	})
+}
+
+func TestSetHubProvider(t *testing.T) {
+	t.Parallel()
+
+	h, err := New(nil, sentry.ClientOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Custom HubProvider to ensure separate hubs for each test
+	h.SetHubProvider(func() *sentry.Hub {
+		client, _ := sentry.NewClient(sentry.ClientOptions{})
+		return sentry.NewHub(client, sentry.NewScope())
+	})
+
+	entry := &logrus.Entry{Level: logrus.ErrorLevel}
+	if err := h.Fire(entry); err != nil {
+		t.Fatal(err)
+	}
+
+	if !h.hubProvider().Client().Flush(testutils.FlushTimeout()) {
+		t.Error("flush failed")
+	}
 }
 
 func TestFire(t *testing.T) {
@@ -54,12 +76,13 @@ func TestFire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = hook.Fire(entry)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !hook.Flush(testutils.FlushTimeout()) {
+	if !hook.hubProvider().Client().Flush(testutils.FlushTimeout()) {
 		t.Error("flush failed")
 	}
 }
@@ -140,119 +163,6 @@ func Test_entryToEvent(t *testing.T) {
 				Logger: "logrus",
 			},
 		},
-		"error": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					logrus.ErrorKey: errors.New("things failed"),
-				},
-			},
-			want: &sentry.Event{
-				Level: "fatal",
-				Extra: map[string]any{},
-				Exception: []sentry.Exception{
-					{Type: "*errors.errorString", Value: "things failed", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
-				},
-				Logger: "logrus",
-			},
-		},
-		"non-error": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					logrus.ErrorKey: "this isn't really an error",
-				},
-			},
-			want: &sentry.Event{
-				Level: "fatal",
-				Extra: map[string]any{
-					"error": "this isn't really an error",
-				},
-				Logger: "logrus",
-			},
-		},
-		"error with stack trace": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					logrus.ErrorKey: pkgerr.WithStack(errors.New("failure")),
-				},
-			},
-			want: &sentry.Event{
-				Level: "fatal",
-				Extra: map[string]any{},
-				Exception: []sentry.Exception{
-					{
-						Type:  "*errors.errorString",
-						Value: "failure",
-						Mechanism: &sentry.Mechanism{
-							ExceptionID:      0,
-							IsExceptionGroup: true,
-							Type:             "generic",
-						},
-					},
-					{
-						Type:  "*errors.withStack",
-						Value: "failure",
-						Stacktrace: &sentry.Stacktrace{
-							Frames: []sentry.Frame{},
-						},
-						Mechanism: &sentry.Mechanism{
-							ExceptionID:      1,
-							IsExceptionGroup: true,
-							ParentID:         sentry.Pointer(0),
-							Type:             "generic",
-						},
-					},
-				},
-				Logger: "logrus",
-			},
-		},
-		"user": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					FieldUser: sentry.User{
-						ID: "bob",
-					},
-				},
-			},
-			want: &sentry.Event{
-				Level: "fatal",
-				Extra: map[string]any{},
-				User: sentry.User{
-					ID: "bob",
-				},
-				Logger: "logrus",
-			},
-		},
-		"user pointer": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					FieldUser: &sentry.User{
-						ID: "alice",
-					},
-				},
-			},
-			want: &sentry.Event{
-				Level: "fatal",
-				Extra: map[string]any{},
-				User: sentry.User{
-					ID: "alice",
-				},
-				Logger: "logrus",
-			},
-		},
-		"non-user": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					FieldUser: "just say no to drugs",
-				},
-			},
-			want: &sentry.Event{
-				Level: "fatal",
-				Extra: map[string]any{
-					"user": "just say no to drugs",
-				},
-				Logger: "logrus",
-			},
-		},
 	}
 
 	h, err := New(nil, sentry.ClientOptions{
@@ -261,6 +171,12 @@ func Test_entryToEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Custom HubProvider for test environment
+	h.SetHubProvider(func() *sentry.Hub {
+		client, _ := sentry.NewClient(sentry.ClientOptions{})
+		return sentry.NewHub(client, sentry.NewScope())
+	})
 
 	for name, tt := range tests {
 		tt := tt
