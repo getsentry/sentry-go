@@ -13,9 +13,9 @@
 
 Add ability to override `hub` in `context` for integrations that use custom context ([#931](https://github.com/getsentry/sentry-go/pull/931))
 
-- Add `HubProvider` Hook for `sentrylogrus`, enabling dynamic Sentry hub allocation for each log entry or goroutine. This change enhances compatibility with Sentry's recommendation of using separate hubs per goroutine.
+- Add `HubProvider` Hook for `sentrylogrus`, enabling dynamic Sentry hub allocation for each log entry or goroutine. ([#936](https://github.com/getsentry/sentry-go/pull/936))
 
-To ensure a separate Sentry hub for each goroutine, configure the `HubProvider` like this:
+This change enhances compatibility with Sentry's recommendation of using separate hubs per goroutine. To ensure a separate Sentry hub for each goroutine, configure the `HubProvider` like this:
 
 ```go
 hook, err := sentrylogrus.New(nil, sentry.ClientOptions{})
