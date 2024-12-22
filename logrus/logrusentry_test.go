@@ -1,11 +1,14 @@
 package sentrylogrus
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	pkgerr "github.com/pkg/errors"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -159,6 +162,119 @@ func Test_entryToEvent(t *testing.T) {
 					URL:     "http://example.com/",
 					Method:  http.MethodGet,
 					Headers: map[string]string{"Host": "example.com"},
+				},
+				Logger: "logrus",
+			},
+		},
+		"error": {
+			entry: &logrus.Entry{
+				Data: map[string]any{
+					logrus.ErrorKey: errors.New("things failed"),
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]any{},
+				Exception: []sentry.Exception{
+					{Type: "*errors.errorString", Value: "things failed", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
+				},
+				Logger: "logrus",
+			},
+		},
+		"non-error": {
+			entry: &logrus.Entry{
+				Data: map[string]any{
+					logrus.ErrorKey: "this isn't really an error",
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]any{
+					"error": "this isn't really an error",
+				},
+				Logger: "logrus",
+			},
+		},
+		"error with stack trace": {
+			entry: &logrus.Entry{
+				Data: map[string]any{
+					logrus.ErrorKey: pkgerr.WithStack(errors.New("failure")),
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]any{},
+				Exception: []sentry.Exception{
+					{
+						Type:  "*errors.errorString",
+						Value: "failure",
+						Mechanism: &sentry.Mechanism{
+							ExceptionID:      0,
+							IsExceptionGroup: true,
+							Type:             "generic",
+						},
+					},
+					{
+						Type:  "*errors.withStack",
+						Value: "failure",
+						Stacktrace: &sentry.Stacktrace{
+							Frames: []sentry.Frame{},
+						},
+						Mechanism: &sentry.Mechanism{
+							ExceptionID:      1,
+							IsExceptionGroup: true,
+							ParentID:         sentry.Pointer(0),
+							Type:             "generic",
+						},
+					},
+				},
+				Logger: "logrus",
+			},
+		},
+		"user": {
+			entry: &logrus.Entry{
+				Data: map[string]any{
+					FieldUser: sentry.User{
+						ID: "bob",
+					},
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]any{},
+				User: sentry.User{
+					ID: "bob",
+				},
+				Logger: "logrus",
+			},
+		},
+		"user pointer": {
+			entry: &logrus.Entry{
+				Data: map[string]any{
+					FieldUser: &sentry.User{
+						ID: "alice",
+					},
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]any{},
+				User: sentry.User{
+					ID: "alice",
+				},
+				Logger: "logrus",
+			},
+		},
+		"non-user": {
+			entry: &logrus.Entry{
+				Data: map[string]any{
+					FieldUser: "just say no to drugs",
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]any{
+					"user": "just say no to drugs",
 				},
 				Logger: "logrus",
 			},
