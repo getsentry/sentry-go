@@ -16,8 +16,13 @@ import (
 )
 
 const (
-	valuesKey      = "sentry"
-	sdkIdentifier  = "sentry.go.fiber"
+	// sdkIdentifier is the identifier of the FastHTTP SDK.
+	sdkIdentifier = "sentry.go.fiber"
+
+	// valuesKey is used as a key to store the Sentry Hub instance in fasthttp.RequestCtx.
+	valuesKey = "sentry"
+
+	// transactionKey is used as a key to store the Sentry transaction in fasthttp.RequestCtx.
 	transactionKey = "sentry_transaction"
 )
 
@@ -29,10 +34,10 @@ type handler struct {
 
 type Options struct {
 	// Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to false,
-	// as fasthttp doesn't include it's own Recovery handler.
+	// as fasthttp doesn't include its own Recovery handler.
 	Repanic bool
 	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
-	// Because fasthttp doesn't include it's own Recovery handler, it will restart the application,
+	// Because fasthttp doesn't include its own Recovery handler, it will restart the application,
 	// and event won't be delivered otherwise.
 	WaitForDelivery bool
 	// Timeout for the event delivery requests.
@@ -40,17 +45,15 @@ type Options struct {
 }
 
 func New(options Options) fiber.Handler {
-	handler := handler{
+	if options.Timeout == 0 {
+		options.Timeout = 2 * time.Second
+	}
+
+	return (&handler{
 		repanic:         options.Repanic,
-		timeout:         time.Second * 2,
+		timeout:         options.Timeout,
 		waitForDelivery: options.WaitForDelivery,
-	}
-
-	if options.Timeout != 0 {
-		handler.timeout = options.Timeout
-	}
-
-	return handler.handle
+	}).handle
 }
 
 func (h *handler) handle(ctx *fiber.Ctx) error {
@@ -115,6 +118,7 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
 	}
 }
 
+// GetHubFromContext retrieves the Hub instance from the *fiber.Ctx
 func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
 	if hub, ok := ctx.Locals(valuesKey).(*sentry.Hub); ok {
 		return hub
@@ -122,10 +126,12 @@ func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
 	return nil
 }
 
+// SetHubOnContext sets the Hub instance on the *fiber.Ctx
 func SetHubOnContext(ctx *fiber.Ctx, hub *sentry.Hub) {
 	ctx.Locals(valuesKey, hub)
 }
 
+// GetSpanFromContext retrieves the Span instance from the *fiber.Ctx
 func GetSpanFromContext(ctx *fiber.Ctx) *sentry.Span {
 	if span, ok := ctx.Locals(transactionKey).(*sentry.Span); ok {
 		return span
@@ -167,10 +173,8 @@ func convert(ctx *fiber.Ctx) *http.Request {
 		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
 	})
 
-	// Env
 	r.RemoteAddr = ctx.Context().RemoteAddr().String()
 
-	// Body
 	r.Body = io.NopCloser(bytes.NewReader(ctx.Request().Body()))
 
 	return r

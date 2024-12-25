@@ -53,13 +53,13 @@ type Options struct {
 // New returns a new Handler. Use the Handle and HandleFunc methods to wrap
 // existing HTTP handlers.
 func New(options Options) *Handler {
-	timeout := options.Timeout
-	if timeout == 0 {
-		timeout = 2 * time.Second
+	if options.Timeout == 0 {
+		options.Timeout = 2 * time.Second
 	}
+
 	return &Handler{
 		repanic:         options.Repanic,
-		timeout:         timeout,
+		timeout:         options.Timeout,
 		waitForDelivery: options.WaitForDelivery,
 	}
 }

@@ -14,8 +14,13 @@ import (
 )
 
 const (
-	sdkIdentifier  = "sentry.go.fasthttp"
-	valuesKey      = "sentry"
+	// sdkIdentifier is the identifier of the FastHTTP SDK.
+	sdkIdentifier = "sentry.go.fasthttp"
+
+	// valuesKey is used as a key to store the Sentry Hub instance in fasthttp.RequestCtx.
+	valuesKey = "sentry"
+
+	// transactionKey is used as a key to store the Sentry transaction in fasthttp.RequestCtx.
 	transactionKey = "sentry_transaction"
 )
 
@@ -40,13 +45,13 @@ type Options struct {
 // New returns a struct that provides Handle method
 // that satisfy fasthttp.RequestHandler interface.
 func New(options Options) *Handler {
-	timeout := options.Timeout
-	if timeout == 0 {
-		timeout = 2 * time.Second
+	if options.Timeout == 0 {
+		options.Timeout = 2 * time.Second
 	}
+
 	return &Handler{
 		repanic:         options.Repanic,
-		timeout:         timeout,
+		timeout:         options.Timeout,
 		waitForDelivery: options.WaitForDelivery,
 	}
 }
@@ -121,6 +126,7 @@ func GetHubFromContext(ctx *fasthttp.RequestCtx) *sentry.Hub {
 	return nil
 }
 
+// SetHubOnContext attaches *sentry.Hub instance to fasthttp.RequestCtx.
 func SetHubOnContext(ctx *fasthttp.RequestCtx, hub *sentry.Hub) {
 	ctx.SetUserValue(valuesKey, hub)
 }
@@ -167,10 +173,8 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
 	})
 
-	// Env
 	r.RemoteAddr = ctx.RemoteAddr().String()
 
-	// Body
 	r.Body = io.NopCloser(bytes.NewReader(ctx.Request.Body()))
 
 	return r
