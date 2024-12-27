@@ -69,7 +69,7 @@ func recoverWithSentry(ctx context.Context, hub *sentry.Hub, o ServerOptions) {
 	}
 }
 
-func reportErrorToSentry(hub *sentry.Hub, err error, methodName string, req interface{}, md map[string]string) {
+func reportErrorToSentry(hub *sentry.Hub, err error, methodName string, req any, md map[string]string) {
 	hub.WithScope(func(scope *sentry.Scope) {
 		scope.SetExtras(map[string]any{
 			"grpc.method": methodName,
@@ -111,7 +111,7 @@ func reportErrorToSentry(hub *sentry.Hub, err error, methodName string, req inte
 func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 	opts.SetDefaults()
 
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		hub := sentry.GetHubFromContext(ctx)
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
@@ -135,7 +135,7 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
-			sentry.WithOpName("http.server"),
+			sentry.WithOpName(opts.OperationName),
 			sentry.WithDescription(info.FullMethod),
 			sentry.WithTransactionSource(sentry.SourceURL),
 		}
@@ -176,7 +176,7 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 // StreamServerInterceptor provides Sentry integration for streaming gRPC calls.
 func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 	opts.SetDefaults()
-	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		ctx := ss.Context()
 		hub := sentry.GetHubFromContext(ctx)
 		if hub == nil {
@@ -201,7 +201,7 @@ func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
-			sentry.WithOpName("http.server"),
+			sentry.WithOpName(opts.OperationName),
 			sentry.WithDescription(info.FullMethod),
 			sentry.WithTransactionSource(sentry.SourceURL),
 		}

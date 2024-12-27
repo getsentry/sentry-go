@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Part of this code is derived from [github.com/johnbellone/grpc-middleware-sentry], licensed under the Apache 2.0 License.
+
 package sentrygrpc
 
 import (
@@ -35,12 +38,14 @@ func createOrUpdateMetadata(ctx context.Context, span *sentry.Span) context.Cont
 		md = md.Copy()
 		md.Append(sentry.SentryTraceHeader, span.ToSentryTrace())
 		md.Append(sentry.SentryBaggageHeader, span.ToBaggage())
-	} else {
-		md = metadata.Pairs(
-			sentry.SentryTraceHeader, span.ToSentryTrace(),
-			sentry.SentryBaggageHeader, span.ToBaggage(),
-		)
+		return metadata.NewOutgoingContext(ctx, md)
 	}
+
+	md = metadata.Pairs(
+		sentry.SentryTraceHeader, span.ToSentryTrace(),
+		sentry.SentryBaggageHeader, span.ToBaggage(),
+	)
+
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
