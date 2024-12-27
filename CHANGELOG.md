@@ -11,7 +11,9 @@
 
 ### Features
 
-Add ability to override `hub` in `context` for integrations that use custom context ([#931](https://github.com/getsentry/sentry-go/pull/931))
+- Add ability to override `hub` in `context` for integrations that use custom context ([#931](https://github.com/getsentry/sentry-go/pull/931))
+
+- Add `grpc` integration ([#938](https://github.com/getsentry/sentry-go/pull/938))
 
 ## 0.30.0
 
