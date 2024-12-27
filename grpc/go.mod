@@ -1,14 +1,14 @@
 module github.com/getsentry/sentry-go/grpc
 
-go 1.22
+go 1.21
 
 replace github.com/getsentry/sentry-go => ../
 
 require (
 	github.com/getsentry/sentry-go v0.30.0
-	github.com/stretchr/testify v1.8.2
+	github.com/stretchr/testify v1.10.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241223144023-3abc09e42ca8
-	google.golang.org/grpc v1.69.2
+	google.golang.org/grpc v1.67.3
 )
 
 require (
