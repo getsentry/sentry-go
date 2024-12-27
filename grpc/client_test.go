@@ -16,8 +16,6 @@ import (
 const defaultClientOperationName = "grpc.client"
 
 func TestClientOptions_SetDefaults(t *testing.T) {
-	t.Parallel()
-
 	tests := map[string]struct {
 		options    sentrygrpc.ClientOptions
 		assertions func(t *testing.T, options sentrygrpc.ClientOptions)
@@ -53,7 +51,6 @@ func TestClientOptions_SetDefaults(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 
 			test.options.SetDefaults()
 			test.assertions(t, test.options)

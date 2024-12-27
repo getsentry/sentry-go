@@ -19,7 +19,6 @@ import (
 const defaultServerOperationName = "grpc.server"
 
 func TestServerOptions_SetDefaults(t *testing.T) {
-	t.Parallel()
 	tests := map[string]struct {
 		options    sentrygrpc.ServerOptions
 		assertions func(t *testing.T, options sentrygrpc.ServerOptions)
@@ -74,8 +73,6 @@ func TestServerOptions_SetDefaults(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			test.options.SetDefaults()
 
 			test.assertions(t, test.options)
@@ -236,7 +233,6 @@ func (w *wrappedServerStream) Context() context.Context {
 }
 
 func TestStreamServerInterceptor(t *testing.T) {
-	t.Parallel()
 	tests := map[string]struct {
 		options          sentrygrpc.ServerOptions
 		handler          grpc.StreamHandler
@@ -275,7 +271,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 			},
 			expectedErr:      "",
 			expectedMetadata: false,
-			expectedEvent:    false, // The panic is re-raised, event capture may depend on hub state
+			expectedEvent:    true,
 		},
 		"Metadata is propagated": {
 			options: sentrygrpc.ServerOptions{},
@@ -294,7 +290,6 @@ func TestStreamServerInterceptor(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 
 			eventsCh := make(chan *sentry.Event, 1)
 			transactionsCh := make(chan *sentry.Event, 1)
@@ -312,13 +307,12 @@ func TestStreamServerInterceptor(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer sentry.Flush(2 * time.Second)
 
 			interceptor := sentrygrpc.StreamServerInterceptor(test.options)
 
 			// Simulate a server stream
 			stream := &wrappedServerStream{
-				ServerStream: nil, // Mock implementation or use a testing framework
+				ServerStream: nil,
 				ctx:          metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value")),
 			}
 
@@ -357,6 +351,8 @@ func TestStreamServerInterceptor(t *testing.T) {
 				assert.NotNil(t, recovered, "Expected panic to be re-raised")
 				assert.Equal(t, "test panic", recovered, "Panic value should match")
 			}
+
+			sentry.Flush(2 * time.Second)
 		})
 	}
 }
