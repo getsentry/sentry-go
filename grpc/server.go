@@ -138,6 +138,7 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 			sentry.WithOpName(opts.OperationName),
 			sentry.WithDescription(info.FullMethod),
 			sentry.WithTransactionSource(sentry.SourceURL),
+			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		}
 
 		transaction := sentry.StartTransaction(
@@ -204,6 +205,7 @@ func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 			sentry.WithOpName(opts.OperationName),
 			sentry.WithDescription(info.FullMethod),
 			sentry.WithTransactionSource(sentry.SourceURL),
+			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		}
 
 		transaction := sentry.StartTransaction(
