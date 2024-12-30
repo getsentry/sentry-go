@@ -126,7 +126,7 @@ func GetHubFromContext(ctx *fasthttp.RequestCtx) *sentry.Hub {
 	return nil
 }
 
-// SetHubOnContext attaches *sentry.Hub instance to fasthttp.RequestCtx.
+// SetHubOnContext attaches the *sentry.Hub instance to the fasthttp.RequestCtx.
 func SetHubOnContext(ctx *fasthttp.RequestCtx, hub *sentry.Hub) {
 	ctx.SetUserValue(valuesKey, hub)
 }
