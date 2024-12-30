@@ -12,9 +12,13 @@ import (
 	sentry "github.com/getsentry/sentry-go"
 )
 
-// The identifier of the Logrus SDK.
-const sdkIdentifier = "sentry.go.logrus"
-const name = "logrus"
+const (
+	// sdkIdentifier is the identifier of the Logrus SDK.
+	sdkIdentifier = "sentry.go.logrus"
+
+	// the name of the logger
+	name = "logrus"
+)
 
 // These default log field keys are used to pass specific metadata in a way that
 // Sentry understands. If they are found in the log fields, and the value is of
