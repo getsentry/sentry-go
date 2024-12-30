@@ -17,7 +17,7 @@ const (
 	// sdkIdentifier is the identifier of the FastHTTP SDK.
 	sdkIdentifier = "sentry.go.fasthttp"
 
-	// valuesKey is used as a key to store the Sentry Hub instance in fasthttp.RequestCtx.
+	// valuesKey is used as a key to store the Sentry Hub instance on the  fasthttp.RequestCtx.
 	valuesKey = "sentry"
 
 	// transactionKey is used as a key to store the Sentry transaction on the fasthttp.RequestCtx.
