@@ -20,7 +20,7 @@ const (
 	// valuesKey is used as a key to store the Sentry Hub instance in fasthttp.RequestCtx.
 	valuesKey = "sentry"
 
-	// transactionKey is used as a key to store the Sentry transaction in fasthttp.RequestCtx.
+	// transactionKey is used as a key to store the Sentry transaction on the fasthttp.RequestCtx.
 	transactionKey = "sentry_transaction"
 )
 
