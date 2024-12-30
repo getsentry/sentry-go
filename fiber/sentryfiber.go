@@ -126,7 +126,7 @@ func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
 	return nil
 }
 
-// SetHubOnContext sets the Hub instance on the *fiber.Ctx
+// SetHubOnContext sets the Hub instance on the *fiber.Ctx.
 func SetHubOnContext(ctx *fiber.Ctx, hub *sentry.Hub) {
 	ctx.Locals(valuesKey, hub)
 }
