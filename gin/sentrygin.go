@@ -17,7 +17,7 @@ const (
 	// sdkIdentifier is the identifier of the Gin SDK.
 	sdkIdentifier = "sentry.go.gin"
 
-	// valuesKey is used as a key to store the Sentry Hub instance in gin.Context.
+	// valuesKey is used as a key to store the Sentry Hub instance on the gin.Context.
 	valuesKey = "sentry"
 
 	// transactionKey is used as a key to store the Sentry transaction in gin.Context.
