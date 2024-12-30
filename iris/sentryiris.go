@@ -15,7 +15,7 @@ const (
 	// sdkIdentifier is the identifier of the Iris SDK.
 	sdkIdentifier = "sentry.go.iris"
 
-	// valuesKey is used as a key to store the Sentry Hub instance in iris.Context.
+	// valuesKey is used as a key to store the Sentry Hub instance on the iris.Context.
 	valuesKey = "sentry"
 
 	// transactionKey is used as a key to store the Sentry transaction in iris.Context.
