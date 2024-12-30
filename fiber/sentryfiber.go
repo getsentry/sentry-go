@@ -44,6 +44,7 @@ type Options struct {
 	Timeout time.Duration
 }
 
+// New returns a handler struct which satisfies Fiber's middleware interface
 func New(options Options) fiber.Handler {
 	if options.Timeout == 0 {
 		options.Timeout = 2 * time.Second
