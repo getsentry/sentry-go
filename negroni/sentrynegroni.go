@@ -22,7 +22,7 @@ type handler struct {
 
 type Options struct {
 	// Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to true,
-	// as negroni.Classic includes it's own Recovery middleware what handles http responses.
+	// as negroni.Classic includes it's own Recovery middleware that handles http responses.
 	Repanic bool
 	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
 	// Because Negroni's default Recovery handler doesn't restart the application,
@@ -35,13 +35,13 @@ type Options struct {
 // New returns a handler struct which satisfies Negroni's middleware interface
 // It can be used with New(), Use() or With() methods.
 func New(options Options) negroni.Handler {
-	timeout := options.Timeout
-	if timeout == 0 {
-		timeout = 2 * time.Second
+	if options.Timeout == 0 {
+		options.Timeout = 2 * time.Second
 	}
+
 	return &handler{
 		repanic:         options.Repanic,
-		timeout:         timeout,
+		timeout:         options.Timeout,
 		waitForDelivery: options.WaitForDelivery,
 	}
 }
@@ -102,7 +102,7 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 }
 
 // PanicHandlerFunc can be used for Negroni's default Recovery middleware option called PanicHandlerFunc,
-// which let you "plug-in" to it's own handler.
+// which let you "plug-in" to its own handler.
 func PanicHandlerFunc(info *negroni.PanicInformation) {
 	hub := sentry.CurrentHub().Clone()
 	hub.WithScope(func(scope *sentry.Scope) {

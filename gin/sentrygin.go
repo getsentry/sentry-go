@@ -13,11 +13,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// The identifier of the Gin SDK.
-const sdkIdentifier = "sentry.go.gin"
+const (
+	// sdkIdentifier is the identifier of the Gin SDK.
+	sdkIdentifier = "sentry.go.gin"
 
-const valuesKey = "sentry"
-const transactionKey = "sentry_transaction"
+	// valuesKey is used as a key to store the Sentry Hub instance on the gin.Context.
+	valuesKey = "sentry"
+
+	// transactionKey is used as a key to store the Sentry transaction on the gin.Context.
+	transactionKey = "sentry_transaction"
+)
 
 type handler struct {
 	repanic         bool
@@ -40,13 +45,13 @@ type Options struct {
 // New returns a function that satisfies gin.HandlerFunc interface
 // It can be used with Use() methods.
 func New(options Options) gin.HandlerFunc {
-	timeout := options.Timeout
-	if timeout == 0 {
-		timeout = 2 * time.Second
+	if options.Timeout == 0 {
+		options.Timeout = 2 * time.Second
 	}
+
 	return (&handler{
 		repanic:         options.Repanic,
-		timeout:         timeout,
+		timeout:         options.Timeout,
 		waitForDelivery: options.WaitForDelivery,
 	}).handle
 }
