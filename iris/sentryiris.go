@@ -18,7 +18,7 @@ const (
 	// valuesKey is used as a key to store the Sentry Hub instance on the iris.Context.
 	valuesKey = "sentry"
 
-	// transactionKey is used as a key to store the Sentry transaction in iris.Context.
+	// transactionKey is used as a key to store the Sentry transaction on the iris.Context.
 	transactionKey = "sentry_transaction"
 )
 
