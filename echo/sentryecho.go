@@ -17,7 +17,7 @@ const (
 	// valuesKey is used as a key to store the Sentry Hub instance on the  echo.Context.
 	valuesKey = "sentry"
 
-	// transactionKey is used as a key to store the Sentry transaction in echo.Context.
+	// transactionKey is used as a key to store the Sentry transaction on the echo.Context.
 	transactionKey = "sentry_transaction"
 
 	// errorKey is used as a key to store the error in echo.Context.
