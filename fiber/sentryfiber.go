@@ -118,7 +118,7 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
 	}
 }
 
-// GetHubFromContext retrieves the Hub instance from the *fiber.Ctx
+// GetHubFromContext retrieves the Hub instance from the *fiber.Ctx.
 func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
 	if hub, ok := ctx.Locals(valuesKey).(*sentry.Hub); ok {
 		return hub
