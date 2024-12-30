@@ -131,7 +131,7 @@ func SetHubOnContext(ctx *fiber.Ctx, hub *sentry.Hub) {
 	ctx.Locals(valuesKey, hub)
 }
 
-// GetSpanFromContext retrieves the Span instance from the *fiber.Ctx
+// GetSpanFromContext retrieves the Span instance from the *fiber.Ctx.
 func GetSpanFromContext(ctx *fiber.Ctx) *sentry.Span {
 	if span, ok := ctx.Locals(transactionKey).(*sentry.Span); ok {
 		return span
