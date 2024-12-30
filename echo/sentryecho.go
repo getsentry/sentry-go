@@ -14,7 +14,7 @@ const (
 	// sdkIdentifier is the identifier of the Echo SDK.
 	sdkIdentifier = "sentry.go.echo"
 
-	// valuesKey is used as a key to store the Sentry Hub instance in echo.Context.
+	// valuesKey is used as a key to store the Sentry Hub instance on the  echo.Context.
 	valuesKey = "sentry"
 
 	// transactionKey is used as a key to store the Sentry transaction in echo.Context.
