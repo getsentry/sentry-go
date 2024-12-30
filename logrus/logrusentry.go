@@ -15,7 +15,7 @@ const (
 	// sdkIdentifier is the identifier of the Logrus SDK.
 	sdkIdentifier = "sentry.go.logrus"
 
-	// name is the name of the logger
+	// the name of the logger
 	name = "logrus"
 )
 
