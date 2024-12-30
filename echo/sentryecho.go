@@ -20,7 +20,7 @@ const (
 	// transactionKey is used as a key to store the Sentry transaction on the echo.Context.
 	transactionKey = "sentry_transaction"
 
-	// errorKey is used as a key to store the error in echo.Context.
+	// errorKey is used as a key to store the error on the echo.Context.
 	errorKey = "error"
 )
 
