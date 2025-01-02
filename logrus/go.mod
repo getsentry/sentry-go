@@ -1,4 +1,4 @@
-module github.com/getsentry/sentry-go/sentrylogrus
+module github.com/getsentry/sentry-go/logrus
 
 go 1.21
 
