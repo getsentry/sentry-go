@@ -1,6 +1,16 @@
 # Changelog
 
+## 0.31.1
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.31.1.
+
+### Bug Fixes
+
+- Correct wrong module name for `sentry-go/logrus` ([#950](https://github.com/getsentry/sentry-go/pull/950))
+
 ## 0.31.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.31.0.
 
 ### Breaking Changes
 
