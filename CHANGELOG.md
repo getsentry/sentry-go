@@ -11,7 +11,9 @@
 
 ### Features
 
-Add ability to override `hub` in `context` for integrations that use custom context ([#931](https://github.com/getsentry/sentry-go/pull/931))
+- Introduced `FlushWithContext` method to support flushing events with a `context.Context` ([#935](https://github.com/getsentry/sentry-go/pull/935))
+
+- Add ability to override `hub` in `context` for integrations that use custom context ([#931](https://github.com/getsentry/sentry-go/pull/931))
 
 - Add `HubProvider` Hook for `sentrylogrus`, enabling dynamic Sentry hub allocation for each log entry or goroutine. ([#936](https://github.com/getsentry/sentry-go/pull/936))
 

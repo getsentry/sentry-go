@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -37,10 +38,14 @@ func (t *TransportMock) SendEvent(event *Event) {
 func (t *TransportMock) Flush(_ time.Duration) bool {
 	return true
 }
+
+func (t *TransportMock) FlushWithContext(_ context.Context) bool {
+	return true
+}
+
 func (t *TransportMock) Events() []*Event {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.events
 }
 func (t *TransportMock) Close() {}
-

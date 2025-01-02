@@ -1,6 +1,7 @@
 package sentryotel
 
 import (
+	"context"
 	"encoding/hex"
 	"sort"
 	"sync"
@@ -137,12 +138,16 @@ func (t *TransportMock) SendEvent(event *sentry.Event) {
 func (t *TransportMock) Flush(timeout time.Duration) bool {
 	return true
 }
+
+func (t *TransportMock) FlushWithContext(ctx context.Context) bool {
+	return true
+}
 func (t *TransportMock) Events() []*sentry.Event {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.events
 }
 
-func (t *TransportMock) Close()  {}
+func (t *TransportMock) Close() {}
 
 //
