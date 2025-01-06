@@ -1,17 +1,32 @@
 # Changelog
 
-## Unreleased
+## Features
+
+- Introduced `FlushWithContext` method to support flushing events with a `context.Context` ([#935](https://github.com/getsentry/sentry-go/pull/935))
+
+## 0.31.1
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.31.1.
+
+### Bug Fixes
+
+- Correct wrong module name for `sentry-go/logrus` ([#950](https://github.com/getsentry/sentry-go/pull/950))
+
+## 0.31.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.31.0.
 
 ### Breaking Changes
 
-- Remove all code related to Sentry's previous Metrics product. Read more about the end of the Metrics beta ([here](https://sentry.zendesk.com/hc/en-us/articles/26369339769883-Metrics-Beta-Ended-on-October-7th)) ([#914](https://github.com/getsentry/sentry-go/pull/914))
+- Remove support for metrics. Read more about the end of the Metrics beta [here](https://sentry.zendesk.com/hc/en-us/articles/26369339769883-Metrics-Beta-Ended-on-October-7th). ([#914](https://github.com/getsentry/sentry-go/pull/914))
+
+- Remove support for profiling. ([#915](https://github.com/getsentry/sentry-go/pull/915))
+
 - Remove `Segment` field from the `User` struct. This field is no longer used in the Sentry product. ([#928](https://github.com/getsentry/sentry-go/pull/928))
 
 - Every integration is now a separate module, reducing the binary size and number of dependencies. Once you update `sentry-go` to latest version, you'll need to `go get` the integration you want to use. For example, if you want to use the `echo` integration, you'll need to run `go get github.com/getsentry/sentry-go/echo` ([#919](github.com/getsentry/sentry-go/pull/919)).
 
 ### Features
-
-- Introduced `FlushWithContext` method to support flushing events with a `context.Context` ([#935](https://github.com/getsentry/sentry-go/pull/935))
 
 - Add ability to override `hub` in `context` for integrations that use custom context ([#931](https://github.com/getsentry/sentry-go/pull/931))
 
@@ -34,6 +49,25 @@ hook.SetHubProvider(func() *sentry.Hub {
 logrus.AddHook(hook)
 ```
 
+### Bug Fixes
+
+- Add support for closing worker goroutines started by the `HTTPTranport` to prevent goroutine leaks. ([#894](https://github.com/getsentry/sentry-go/pull/894))
+
+```go
+client, _ := sentry.NewClient()
+defer client.Close()
+```
+
+Worker can be also closed by calling `Close()` method on the `HTTPTransport` instance. `Close` should be called after `Flush` and before terminating the program otherwise some events may be lost.
+
+```go
+transport := sentry.NewHTTPTransport()
+defer transport.Close()
+```
+
+### Misc
+
+- Bump [gin-gonic/gin](https://github.com/gin-gonic/gin) to v1.9.1. ([#946](https://github.com/getsentry/sentry-go/pull/946))
 
 ## 0.30.0
 
@@ -47,19 +81,6 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 
 ### Bug Fixes
 
-- Add support for closing worker goroutines started by HTTPTranport to prevent goroutine leaks ([#894](https://github.com/getsentry/sentry-go/pull/894)).
-
-```go
-client, _ := sentry.NewClient()
-defer client.Close()
-```
-
-Worker can be also closed by calling `Close()` method on the `HTTPTransport` instance. `Close` should be called after `Flush` and before terminating the program otherwise some events may be lost.
-
-```go
-transport := sentry.NewHTTPTransport()
-defer transport.Close()
-```
 - Prevent panic in `fasthttp` and `fiber` integration in case a malformed URL has to be parsed ([#912](https://github.com/getsentry/sentry-go/pull/912))
 
 ### Misc
