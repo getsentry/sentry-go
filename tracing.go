@@ -569,7 +569,6 @@ func (s *Span) toEvent() *Event {
 		Transaction: s.Name,
 		Contexts:    contexts,
 		Tags:        s.Tags,
-		Extra:       s.Data,
 		Timestamp:   s.EndTime,
 		StartTime:   s.StartTime,
 		Spans:       finished,
@@ -588,6 +587,7 @@ func (s *Span) traceContext() *TraceContext {
 		SpanID:       s.SpanID,
 		ParentSpanID: s.ParentSpanID,
 		Op:           s.Op,
+		Data:         s.Data,
 		Description:  s.Description,
 		Status:       s.Status,
 	}
