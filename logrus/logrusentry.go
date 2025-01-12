@@ -222,5 +222,5 @@ func (h *Hook) Flush(timeout time.Duration) bool {
 // It returns false if the context is canceled or its deadline expires before the events
 // are sent, meaning some events may not have been sent.
 func (h *Hook) FlushWithContext(ctx context.Context) bool {
-	return h.hub.Client().FlushWithContext(ctx)
+	return h.hubProvider().Client().FlushWithContext(ctx)
 }
