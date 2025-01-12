@@ -87,5 +87,5 @@ sentryHook.AddTags(map[string]string{
 
 ## Notes
 
-- Always call Flush to ensure all events are sent to Sentry before program termination
+- Always call `Flush` or `FlushWithContext` to ensure all events are sent to Sentry before program termination
 
