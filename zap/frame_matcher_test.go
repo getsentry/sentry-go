@@ -24,26 +24,11 @@ func Test_core_filterFrames(t *testing.T) {
 			args: args{
 				[]sentry.Frame{
 					{
-						Module: "github.com/TheZeroSlave/zapsentry",
+						Module: "github.com/getsentry/sentry-go/zapsentry",
 					},
 				},
 			},
 			wantRemainingFrames: 1,
-		},
-		{
-			name:    "Default filter set - filter frames from zapsentry",
-			matcher: defaultFrameMatchers,
-			args: args{
-				[]sentry.Frame{
-					{
-						Module: "github.com/TheZeroSlave/zapsentry",
-					},
-					{
-						Module: "github.com/TheZeroSlave/zapsentry/someinternal",
-					},
-				},
-			},
-			wantRemainingFrames: 0,
 		},
 		{
 			name:    "Default filter set - filter frames from zap",

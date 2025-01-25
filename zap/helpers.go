@@ -45,7 +45,7 @@ func getTypeOf(err error) string {
 
 func getScope(field zapcore.Field) *sentry.Scope {
 	if field.Type == zapcore.SkipType {
-		if scope, ok := field.Interface.(*sentry.Scope); ok && field.Key == zapSentryScopeKey {
+		if scope, ok := field.Interface.(*sentry.Scope); ok && field.Key == sentryZapScopeKey {
 			return scope
 		}
 	}
