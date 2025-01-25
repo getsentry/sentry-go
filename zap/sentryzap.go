@@ -10,6 +10,8 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// This implementation is largely adapted from https://github.com/TheZeroSlave/zapsentry
+
 const (
 	defaultMaxBreadcrumbs = 100
 	maxErrorDepth         = 10
