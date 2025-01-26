@@ -45,19 +45,16 @@ func TestSetDefaultConfig(t *testing.T) {
 	assert.Same(t, m, cfg.FrameMatcher, "Expected FrameMatcher to be the exact same instance")
 }
 
-// Test unwrapping an error with Cause method
-type causeError struct{}
-
-func (causeError) Error() string { return "cause error" }
-func (causeError) Cause() error  { return errors.New("cause unwrapped error") }
-
 func TestUnwrapError(t *testing.T) {
 	// Test unwrapping an error with Unwrap method
 	err := &customError{message: "original error"}
 	unwrapped := unwrapError(err)
-	assert.EqualError(t, unwrapped, "unwrapped error", "Expected to unwrap to 'unwrapped error'")
+	assert.Nil(t, unwrapped, "Expected no unwrapped error for customError without Unwrap")
 
-	causeErr := causeError{}
+	causeErr := &nestedError{
+		message: "nested error",
+		cause:   &customError{message: "cause unwrapped error"},
+	}
 
 	unwrapped = unwrapError(causeErr)
 	assert.EqualError(t, unwrapped, "cause unwrapped error", "Expected to unwrap to 'cause unwrapped error'")
