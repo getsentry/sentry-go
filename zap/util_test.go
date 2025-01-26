@@ -45,18 +45,6 @@ func TestSetDefaultConfig(t *testing.T) {
 	assert.Same(t, m, cfg.FrameMatcher, "Expected FrameMatcher to be the exact same instance")
 }
 
-type customError struct {
-	message string
-}
-
-func (e *customError) Error() string {
-	return e.message
-}
-
-func (e *customError) Unwrap() error {
-	return errors.New("unwrapped error")
-}
-
 // Test unwrapping an error with Cause method
 type causeError struct{}
 
