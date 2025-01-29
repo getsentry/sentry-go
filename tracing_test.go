@@ -138,15 +138,12 @@ func TestStartSpan(t *testing.T) {
 				SpanID:       span.SpanID,
 				ParentSpanID: parentSpanID,
 				Op:           op,
+				Data:         span.Data,
 				Description:  description,
 				Status:       status,
 			}.Map(),
 		},
-		Tags: nil,
-		// TODO(tracing): the root span / transaction data field is
-		// mapped into Event.Extra for now, pending spec clarification.
-		// https://github.com/getsentry/develop/issues/244#issuecomment-778694182
-		Extra:     span.Data,
+		Tags:      nil,
 		Timestamp: endTime,
 		StartTime: startTime,
 		TransactionInfo: &TransactionInfo{
@@ -283,16 +280,13 @@ func TestStartTransaction(t *testing.T) {
 			"trace": TraceContext{
 				TraceID:     transaction.TraceID,
 				SpanID:      transaction.SpanID,
+				Data:        transaction.Data,
 				Description: description,
 				Status:      status,
 			}.Map(),
 			"otel": {"k": "v"},
 		},
-		Tags: nil,
-		// TODO(tracing): the root span / transaction data field is
-		// mapped into Event.Extra for now, pending spec clarification.
-		// https://github.com/getsentry/develop/issues/244#issuecomment-778694182
-		Extra:     transaction.Data,
+		Tags:      nil,
 		Timestamp: endTime,
 		StartTime: startTime,
 		TransactionInfo: &TransactionInfo{
