@@ -85,4 +85,4 @@ The `sentryzerolog.Options` struct allows you to configure the following:
 
 ## Notes
 
-- Always call Flush to ensure all events are sent to Sentry before program termination
+- Always call `Flush` or `FlushWithContext` to ensure all events are sent to Sentry before program termination
