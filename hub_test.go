@@ -15,7 +15,7 @@ import (
 const testDsn = "http://whatever@example.com/1337"
 
 func setupHubTest() (*Hub, *Client, *Scope) {
-	client, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &TransportMock{}})
+	client, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
 	scope := NewScope()
 	hub := NewHub(client, scope)
 	return hub, client, scope
@@ -97,7 +97,7 @@ func TestPopScopeCannotLeaveStackEmpty(t *testing.T) {
 func TestBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 	hub.PushScope()
-	newClient, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &TransportMock{}})
+	newClient, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
 	hub.BindClient(newClient)
 
 	if (*hub.stack)[0].client == (*hub.stack)[1].client {
@@ -125,7 +125,7 @@ func TestWithScopeBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 
 	hub.WithScope(func(scope *Scope) {
-		newClient, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &TransportMock{}})
+		newClient, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
 		hub.BindClient(newClient)
 		if hub.stackTop().client != newClient {
 			t.Error("should use newly bound client")
@@ -436,7 +436,7 @@ func TestConcurrentHubClone(t *testing.T) {
 	const goroutineCount = 3
 
 	hub, client, _ := setupHubTest()
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	client.Transport = transport
 
 	var wg sync.WaitGroup
