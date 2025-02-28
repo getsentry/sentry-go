@@ -102,5 +102,5 @@ This ensures that logs from specific contexts or threads use the appropriate Sen
 
 ## Notes
 
-- Always call Flush to ensure all events are sent to Sentry before program termination
+- Always call `Flush` or `FlushWithContext` to ensure all events are sent to Sentry before program termination
 

@@ -2,6 +2,7 @@
 package sentrylogrus
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -221,4 +222,12 @@ func (h *Hook) entryToEvent(l *logrus.Entry) *sentry.Event {
 // reached, in which case some events may not have been sent.
 func (h *Hook) Flush(timeout time.Duration) bool {
 	return h.hubProvider().Client().Flush(timeout)
+}
+
+// FlushWithContext waits for the underlying Sentry transport to send any buffered
+// events, blocking until the context's deadline is reached or the context is canceled.
+// It returns false if the context is canceled or its deadline expires before the events
+// are sent, meaning some events may not have been sent.
+func (h *Hook) FlushWithContext(ctx context.Context) bool {
+	return h.hubProvider().Client().FlushWithContext(ctx)
 }
