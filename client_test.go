@@ -17,7 +17,7 @@ import (
 )
 
 func TestNewClientAllowsEmptyDSN(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	client, err := NewClient(ClientOptions{
 		Transport: transport,
 	})
@@ -25,7 +25,7 @@ func TestNewClientAllowsEmptyDSN(t *testing.T) {
 		t.Fatalf("expected no error when creating client without a DNS but got %v", err)
 	}
 
-	client.CaptureException(errors.New("custom error"), nil, &ScopeMock{})
+	client.CaptureException(errors.New("custom error"), nil, &MockScope{})
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
 }
 
@@ -41,9 +41,9 @@ func (e customComplexError) AnswerToLife() string {
 	return "42"
 }
 
-func setupClientTest() (*Client, *ScopeMock, *TransportMock) {
-	scope := &ScopeMock{}
-	transport := &TransportMock{}
+func setupClientTest() (*Client, *MockScope, *MockTransport) {
+	scope := &MockScope{}
+	transport := &MockTransport{}
 	client, _ := NewClient(ClientOptions{
 		Dsn:       "http://whatever@example.com/1337",
 		Transport: transport,
@@ -533,7 +533,7 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 }
 
 func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
@@ -559,7 +559,7 @@ func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
 }
 
 func TestBeforeSendTransactionIsCalled(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
@@ -621,8 +621,8 @@ func TestIgnoreErrors(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			scope := &ScopeMock{}
-			transport := &TransportMock{}
+			scope := &MockScope{}
+			transport := &MockTransport{}
 			client, err := NewClient(ClientOptions{
 				Transport:    transport,
 				IgnoreErrors: tt.ignoreErrors,
@@ -676,7 +676,7 @@ func TestIgnoreTransactions(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			transport := &TransportMock{}
+			transport := &MockTransport{}
 			ctx := NewTestContext(ClientOptions{
 				EnableTracing:      true,
 				TracesSampleRate:   1.0,
@@ -755,7 +755,7 @@ func TestSampleRate(t *testing.T) {
 func BenchmarkProcessEvent(b *testing.B) {
 	c, err := NewClient(ClientOptions{
 		SampleRate: 0.25,
-		Transport:  &TransportMock{},
+		Transport:  &MockTransport{},
 	})
 	if err != nil {
 		b.Fatal(err)
@@ -856,7 +856,7 @@ func TestCustomMaxSpansProperty(t *testing.T) {
 
 	properClient, _ := NewClient(ClientOptions{
 		MaxSpans:  3000,
-		Transport: &TransportMock{},
+		Transport: &MockTransport{},
 	})
 
 	assertEqual(t, properClient.Options().MaxSpans, 3000)

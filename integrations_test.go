@@ -399,7 +399,7 @@ func TestExtractModules(t *testing.T) {
 }
 
 func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	client, err := NewClient(ClientOptions{
 		Transport: transport,
 		Integrations: func([]Integration) []Integration {
@@ -451,7 +451,7 @@ func TestGlobalTagsIntegration(t *testing.T) {
 	defer os.Unsetenv("SENTRY_TAGS_bar")
 	defer os.Unsetenv("SENTRY_TAGS_baz")
 
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	client, err := NewClient(ClientOptions{
 		Transport: transport,
 		Tags: map[string]string{
