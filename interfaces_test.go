@@ -236,12 +236,12 @@ func (e *customError) Error() string {
 func TestSetException(t *testing.T) {
 	testCases := map[string]struct {
 		exception     error
-		maxErrorDepth int
+		maxErrorCount int
 		expected      []Exception
 	}{
 		"Single error without unwrap": {
 			exception:     errors.New("simple error"),
-			maxErrorDepth: 1,
+			maxErrorCount: 1,
 			expected: []Exception{
 				{
 					Value:      "simple error",
@@ -252,7 +252,7 @@ func TestSetException(t *testing.T) {
 		},
 		"Nested errors with Unwrap": {
 			exception:     fmt.Errorf("level 2: %w", fmt.Errorf("level 1: %w", errors.New("base error"))),
-			maxErrorDepth: 3,
+			maxErrorCount: 3,
 			expected: []Exception{
 				{
 					Value: "base error",
@@ -290,7 +290,7 @@ func TestSetException(t *testing.T) {
 			exception: &customError{
 				message: "custom error message",
 			},
-			maxErrorDepth: 1,
+			maxErrorCount: 1,
 			expected: []Exception{
 				{
 					Value:      "custom error message",
@@ -304,7 +304,7 @@ func TestSetException(t *testing.T) {
 				msg:   "error with cause",
 				cause: errors.New("the cause"),
 			}),
-			maxErrorDepth: 3,
+			maxErrorCount: 3,
 			expected: []Exception{
 				{
 					Value: "the cause",
@@ -338,12 +338,54 @@ func TestSetException(t *testing.T) {
 				},
 			},
 		},
+		"Joined errors": {
+			exception: errors.Join(
+				errors.Join(
+					errors.New("1"),
+					errors.New("2"),
+				),
+				errors.New("3"),
+			),
+			maxErrorCount: -1,
+			expected: []Exception{
+				{
+					Value:      "1",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
+					Mechanism:  &Mechanism{Type: "generic", ExceptionID: 0, IsExceptionGroup: true},
+				},
+				{
+					Value:      "2",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
+					Mechanism:  &Mechanism{Type: "generic", ExceptionID: 1, IsExceptionGroup: true},
+				},
+				{
+					Value:      "1\n2",
+					Type:       "*errors.joinError",
+					Stacktrace: nil,
+					Mechanism:  &Mechanism{Type: "generic", ExceptionID: 2, IsExceptionGroup: true},
+				},
+				{
+					Value:      "3",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
+					Mechanism:  &Mechanism{Type: "generic", ExceptionID: 3, IsExceptionGroup: true},
+				},
+				{
+					Value:      "1\n2\n3",
+					Type:       "*errors.joinError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism:  &Mechanism{Type: "generic", ExceptionID: 4, IsExceptionGroup: true},
+				},
+			},
+		},
 	}
 
 	for name, tc := range testCases {
 		t.Run(name, func(t *testing.T) {
 			e := &Event{}
-			e.SetException(tc.exception, tc.maxErrorDepth)
+			e.SetException(tc.exception, tc.maxErrorCount)
 
 			if len(e.Exception) != len(tc.expected) {
 				t.Fatalf("Expected %d exceptions, got %d", len(tc.expected), len(e.Exception))
