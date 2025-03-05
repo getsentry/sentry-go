@@ -380,6 +380,36 @@ func TestSetException(t *testing.T) {
 				},
 			},
 		},
+		"Joined and wrapped errors": {
+			exception: errors.Join(
+				fmt.Errorf("wrapper: %w", errors.New("base error")),
+				errors.New("joined"),
+			),
+			maxErrorCount: -1,
+			expected: []Exception{
+				{
+					Value:     "base error",
+					Type:      "*errors.errorString",
+					Mechanism: &Mechanism{Type: "generic", ExceptionID: 0, IsExceptionGroup: true},
+				},
+				{
+					Value:     "wrapper: base error",
+					Type:      "*fmt.wrapError",
+					Mechanism: &Mechanism{Type: "generic", ExceptionID: 1, ParentID: Pointer(0), IsExceptionGroup: true},
+				},
+				{
+					Value:     "joined",
+					Type:      "*errors.errorString",
+					Mechanism: &Mechanism{Type: "generic", ExceptionID: 2, IsExceptionGroup: true},
+				},
+				{
+					Value:      "wrapper: base error\njoined",
+					Type:       "*errors.joinError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism:  &Mechanism{Type: "generic", ExceptionID: 3, IsExceptionGroup: true},
+				},
+			},
+		},
 	}
 
 	for name, tc := range testCases {
