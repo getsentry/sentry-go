@@ -43,4 +43,3 @@ func (t *TransportMock) Events() []*Event {
 	return t.events
 }
 func (t *TransportMock) Close() {}
-
