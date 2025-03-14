@@ -25,7 +25,6 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@2226d7cb06a077cd73e56eedd38eecad18e5d837 # pin@v6.5.0
         with:
-          github-token: ${{ steps.token.outputs.token }}
           version: v1.62
           only-new-issues: true
           args: --timeout=10m
