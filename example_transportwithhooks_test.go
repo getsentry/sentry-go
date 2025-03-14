@@ -43,7 +43,7 @@ func Example_transportWithHooks() {
 				}
 				return nil
 			},
-			After: func(req *http.Request, resp *http.Response, err error) (*http.Response, error) {
+			After: func(_ *http.Request, resp *http.Response, err error) (*http.Response, error) {
 				if b, err := httputil.DumpResponse(resp, true); err != nil {
 					fmt.Println(err)
 				} else {

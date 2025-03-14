@@ -224,7 +224,7 @@ func TestStartChild(t *testing.T) {
 			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
 			"sdkMetaData",
 		),
-		cmpopts.IgnoreMapEntries(func(k string, v interface{}) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ interface{}) bool {
 			return k != "trace"
 		}),
 		cmpopts.IgnoreFields(Span{},
@@ -691,7 +691,7 @@ func TestSample(t *testing.T) {
 	// traces sampler
 	ctx = NewTestContext(ClientOptions{
 		EnableTracing: true,
-		TracesSampler: func(ctx SamplingContext) float64 {
+		TracesSampler: func(_ SamplingContext) float64 {
 			return 1.0
 		},
 	})

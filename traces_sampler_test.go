@@ -26,7 +26,7 @@ func TestFixedRateSampler(t *testing.T) {
 		for _, tt := range tests {
 			tt := tt
 			t.Run(fmt.Sprint(tt.Rate), func(t *testing.T) {
-				got := repeatedSample(func(ctx SamplingContext) float64 { return tt.Rate }, SamplingContext{Span: rootSpan}, 10000)
+				got := repeatedSample(func(_ SamplingContext) float64 { return tt.Rate }, SamplingContext{Span: rootSpan}, 10000)
 				if got < tt.Rate*(1-tt.Tolerance) || got > tt.Rate*(1+tt.Tolerance) {
 					t.Errorf("got rootSpan sample rate %.2f, want %.2f±%.0f%%", got, tt.Rate, 100*tt.Tolerance)
 				}
@@ -34,14 +34,14 @@ func TestFixedRateSampler(t *testing.T) {
 		}
 	})
 
-	t.Run("Concurrency", func(t *testing.T) {
+	t.Run("Concurrency", func(_ *testing.T) {
 		// This test is for use with -race to catch data races.
 		var wg sync.WaitGroup
 		for i := 0; i < 32; i++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				repeatedSample(func(ctx SamplingContext) float64 { return 0.5 }, SamplingContext{Span: rootSpan}, 10000)
+				repeatedSample(func(_ SamplingContext) float64 { return 0.5 }, SamplingContext{Span: rootSpan}, 10000)
 			}()
 		}
 		wg.Wait()

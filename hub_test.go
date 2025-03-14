@@ -114,7 +114,7 @@ func TestBindClient(t *testing.T) {
 func TestWithScopeCreatesIsolatedScope(t *testing.T) {
 	hub, _, _ := setupHubTest()
 
-	hub.WithScope(func(scope *Scope) {
+	hub.WithScope(func(_ *Scope) {
 		assertEqual(t, len(*hub.stack), 2)
 	})
 
@@ -124,7 +124,7 @@ func TestWithScopeCreatesIsolatedScope(t *testing.T) {
 func TestWithScopeBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 
-	hub.WithScope(func(scope *Scope) {
+	hub.WithScope(func(_ *Scope) {
 		newClient, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
 		hub.BindClient(newClient)
 		if hub.stackTop().client != newClient {
@@ -153,7 +153,7 @@ func TestWithScopeChangesThroughConfigureScope(t *testing.T) {
 	hub, _, _ := setupHubTest()
 	hub.Scope().SetExtra("extra", "foo")
 
-	hub.WithScope(func(scope *Scope) {
+	hub.WithScope(func(_ *Scope) {
 		hub.ConfigureScope(func(scope *Scope) {
 			scope.SetExtra("extra", "bar")
 		})
@@ -210,7 +210,7 @@ func TestLastEventIDDoesNotReset(t *testing.T) {
 	id1 := hub.CaptureException(fmt.Errorf("error 1"))
 	assertEqual(t, hub.LastEventID(), *id1)
 
-	client.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	client.AddEventProcessor(func(_ *Event, _ *EventHint) *Event {
 		// drop all events
 		return nil
 	})
@@ -273,7 +273,7 @@ func TestAddBreadcrumbShouldWorkWithoutClient(t *testing.T) {
 
 func TestAddBreadcrumbCallsBeforeBreadcrumbCallback(t *testing.T) {
 	hub, client, scope := setupHubTest()
-	client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
+	client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, _ *BreadcrumbHint) *Breadcrumb {
 		breadcrumb.Message += "_wat"
 		return breadcrumb
 	}
@@ -286,7 +286,7 @@ func TestAddBreadcrumbCallsBeforeBreadcrumbCallback(t *testing.T) {
 
 func TestBeforeBreadcrumbCallbackCanDropABreadcrumb(t *testing.T) {
 	hub, client, scope := setupHubTest()
-	client.options.BeforeBreadcrumb = func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb {
+	client.options.BeforeBreadcrumb = func(_ *Breadcrumb, _ *BreadcrumbHint) *Breadcrumb {
 		return nil
 	}
 

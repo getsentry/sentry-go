@@ -393,7 +393,7 @@ func TestScopeBasicInheritance(t *testing.T) {
 	scope := NewScope()
 	scope.SetExtra("a", 1)
 	scope.SetRequestBody([]byte("requestbody"))
-	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	scope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		return event
 	})
 	clone := scope.Clone()
@@ -474,7 +474,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.SetUser(User{ID: "bar"})
 	r1 := httptest.NewRequest("GET", "/bar", nil)
 	scope.SetRequest(r1)
-	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	scope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		return event
 	})
 	p1 := NewPropagationContext()
@@ -493,7 +493,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.SetUser(User{ID: "foo"})
 	r2 := httptest.NewRequest("GET", "/foo", nil)
 	clone.SetRequest(r2)
-	clone.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	clone.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		return event
 	})
 	p2 := NewPropagationContext()
@@ -654,11 +654,11 @@ func TestEventProcessorsModifiesEvent(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
 	scope.eventProcessors = []EventProcessor{
-		func(event *Event, hint *EventHint) *Event {
+		func(event *Event, _ *EventHint) *Event {
 			event.Level = LevelFatal
 			return event
 		},
-		func(event *Event, hint *EventHint) *Event {
+		func(event *Event, _ *EventHint) *Event {
 			event.Fingerprint = []string{"wat"}
 			return event
 		},
@@ -676,7 +676,7 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
 	scope.eventProcessors = []EventProcessor{
-		func(event *Event, hint *EventHint) *Event {
+		func(_ *Event, _ *EventHint) *Event {
 			return nil
 		},
 	}
@@ -696,7 +696,7 @@ func TestEventProcessorsAddEventProcessor(t *testing.T) {
 		t.Error("event should not be dropped")
 	}
 
-	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	scope.AddEventProcessor(func(_ *Event, _ *EventHint) *Event {
 		return nil
 	})
 	processedEvent = scope.ApplyToEvent(event, nil, nil)
