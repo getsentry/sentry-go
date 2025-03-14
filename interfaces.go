@@ -3,12 +3,9 @@ package sentry
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
-	"reflect"
-	"slices"
 	"strings"
 	"time"
 )
@@ -335,68 +332,28 @@ type Event struct {
 // maxErrorDepth is the maximum depth of the error chain we will look
 // into while unwrapping the errors. If maxErrorDepth is -1, we will
 // unwrap all errors in the chain.
-func (e *Event) SetException(exception error, maxErrorDepth int) {
+//
+// FIXME: "depth" and "count" have very different meanings for error trees.
+func (e *Event) SetException(exception error, maxErrorCount int) {
 	if exception == nil {
 		return
 	}
 
-	err := exception
-
-	for i := 0; err != nil && (i < maxErrorDepth || maxErrorDepth == -1); i++ {
-		// Add the current error to the exception slice with its details
-		e.Exception = append(e.Exception, Exception{
-			Value:      err.Error(),
-			Type:       reflect.TypeOf(err).String(),
-			Stacktrace: ExtractStacktrace(err),
-		})
-
-		// Attempt to unwrap the error using the standard library's Unwrap method.
-		// If errors.Unwrap returns nil, it means either there is no error to unwrap,
-		// or the error does not implement the Unwrap method.
-		unwrappedErr := errors.Unwrap(err)
-
-		if unwrappedErr != nil {
-			// The error was successfully unwrapped using the standard library's Unwrap method.
-			err = unwrappedErr
-			continue
-		}
-
-		cause, ok := err.(interface{ Cause() error })
-		if !ok {
-			// We cannot unwrap the error further.
-			break
-		}
-
-		// The error implements the Cause method, indicating it may have been wrapped
-		// using the github.com/pkg/errors package.
-		err = cause.Cause()
-	}
-
-	// Add a trace of the current stack to the most recent error in a chain if
-	// it doesn't have a stack trace yet.
-	// We only add to the most recent error to avoid duplication and because the
-	// current stack is most likely unrelated to errors deeper in the chain.
-	if e.Exception[0].Stacktrace == nil {
-		e.Exception[0].Stacktrace = NewStacktrace()
-	}
-
-	if len(e.Exception) <= 1 {
+	e.Exception = errorTree{exception}.Exceptions()
+	if len(e.Exception) == 0 {
 		return
 	}
 
-	// event.Exception should be sorted such that the most recent error is last.
-	slices.Reverse(e.Exception)
+	if len(e.Exception) <= 1 {
+		// Strip indication the Exception belongs to a group.
+		for i := range e.Exception {
+			e.Exception[i].Mechanism = nil
+		}
+	}
 
-	for i := range e.Exception {
-		e.Exception[i].Mechanism = &Mechanism{
-			IsExceptionGroup: true,
-			ExceptionID:      i,
-			Type:             "generic",
-		}
-		if i == 0 {
-			continue
-		}
-		e.Exception[i].Mechanism.ParentID = Pointer(i - 1)
+	latest := len(e.Exception) - 1
+	if e.Exception[latest].Stacktrace == nil {
+		e.Exception[latest].Stacktrace = NewStacktrace()
 	}
 }
 
