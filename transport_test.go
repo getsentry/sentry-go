@@ -333,7 +333,7 @@ type testHTTPServer struct {
 func newTestHTTPServer(t *testing.T) *testHTTPServer {
 	ch := make(chan bool)
 	eventCounter := new(uint64)
-	handler := func(w http.ResponseWriter, r *http.Request) {
+	handler := func(_ http.ResponseWriter, r *http.Request) {
 		var event struct {
 			EventID string `json:"event_id"`
 		}
@@ -481,7 +481,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 	// unexpectedly large response from Relay -- the SDK should not try to
 	// consume arbitrarily large responses.
 	largeResponse := false
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Simulates a response from Relay. The event_id is arbitrary,
 		// it doesn't matter for this test.
 		fmt.Fprintln(w, `{"id":"ec71d87189164e79ab1e61030c183af0"}`)
@@ -660,7 +660,7 @@ func TestHTTPTransportClose(t *testing.T) {
 	}
 }
 
-func TestHTTPSyncTransportClose(t *testing.T) {
+func TestHTTPSyncTransportClose(_ *testing.T) {
 	// Close does not do anything for HTTPSyncTransport, added for coverage.
 	transport := HTTPSyncTransport{}
 	transport.Close()

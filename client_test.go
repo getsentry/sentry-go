@@ -47,7 +47,7 @@ func setupClientTest() (*Client, *MockScope, *MockTransport) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:       "http://whatever@example.com/1337",
 		Transport: transport,
-		Integrations: func(i []Integration) []Integration {
+		Integrations: func(_ []Integration) []Integration {
 			return []Integration{}
 		},
 	})
@@ -490,7 +490,7 @@ func TestApplyToScopeCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	scope.shouldDropEvent = true
 
-	client.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	client.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		if event == nil {
 			t.Errorf("EventProcessor received nil Event")
 		}
@@ -506,7 +506,7 @@ func TestApplyToScopeCanDropEvent(t *testing.T) {
 
 func TestBeforeSendCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
+	client.options.BeforeSend = func(_ *Event, _ *EventHint) *Event {
 		return nil
 	}
 
@@ -538,11 +538,11 @@ func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Transport:        transport,
-		BeforeSend: func(event *Event, hint *EventHint) *Event {
+		BeforeSend: func(event *Event, _ *EventHint) *Event {
 			t.Error("beforeSend should not be called")
 			return event
 		},
-		BeforeSendTransaction: func(event *Event, hint *EventHint) *Event {
+		BeforeSendTransaction: func(event *Event, _ *EventHint) *Event {
 			assertEqual(t, event.Transaction, "Foo")
 			return nil
 		},
@@ -564,11 +564,11 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Transport:        transport,
-		BeforeSend: func(event *Event, hint *EventHint) *Event {
+		BeforeSend: func(event *Event, _ *EventHint) *Event {
 			t.Error("beforeSend should not be called")
 			return event
 		},
-		BeforeSendTransaction: func(event *Event, hint *EventHint) *Event {
+		BeforeSendTransaction: func(event *Event, _ *EventHint) *Event {
 			assertEqual(t, event.Transaction, "Foo")
 			event.Transaction = "Bar"
 			return event
