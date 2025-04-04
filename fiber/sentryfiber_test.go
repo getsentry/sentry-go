@@ -108,9 +108,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Extra: map[string]any{
-					"http.request.method":       http.MethodGet,
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodGet,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 		},
@@ -148,9 +154,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Extra: map[string]any{
-					"http.request.method":       http.MethodPost,
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 		},
@@ -184,9 +196,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Extra: map[string]any{
-					"http.request.method":       http.MethodGet,
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodGet,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 		},
@@ -219,9 +237,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Extra: map[string]any{
-					"http.request.method":       http.MethodGet,
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodGet,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 		},
@@ -260,9 +284,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Extra: map[string]any{
-					"http.request.method":       http.MethodPost,
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 		},
@@ -301,9 +331,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Extra: map[string]any{
-					"http.request.method":       http.MethodPost,
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 		},
@@ -344,9 +380,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Extra: map[string]any{
-					"http.request.method":       http.MethodPost,
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 		},
@@ -452,7 +494,7 @@ func TestIntegration(t *testing.T) {
 	optstrans := cmp.Options{
 		cmpopts.IgnoreFields(
 			sentry.Event{},
-			"Contexts", "EventID", "Platform", "Modules",
+			"EventID", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp",
 			"sdkMetaData", "StartTime", "Spans",
 		),
@@ -464,6 +506,15 @@ func TestIntegration(t *testing.T) {
 			sentry.Exception{},
 			"Stacktrace",
 		),
+		cmpopts.IgnoreMapEntries(func(k string, v any) bool {
+			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
+			for _, e := range ignoredCtxEntries {
+				if k == e {
+					return true
+				}
+			}
+			return false
+		}),
 	}
 
 	if diff := cmp.Diff(wantTransactions, gotTransactions, optstrans); diff != "" {

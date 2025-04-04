@@ -64,7 +64,16 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodGet, "http.response.status_code": http.StatusOK},
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodGet,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
+				},
 			},
 		},
 		{
@@ -103,8 +112,16 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodPost, "http.response.status_code": http.StatusOK},
-			},
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
+				}},
 		},
 		{
 			Path: "/get",
@@ -138,8 +155,16 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodGet, "http.response.status_code": http.StatusOK},
-			},
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodGet,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
+				}},
 		},
 		{
 			Path:       "/post/large",
@@ -178,8 +203,16 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodPost, "http.response.status_code": http.StatusOK},
-			},
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
+				}},
 		},
 		{
 			Path:       "/post/body-ignored",
@@ -219,8 +252,16 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodPost, "http.response.status_code": http.StatusOK},
-			},
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
+				}},
 		},
 		{
 			Path:   "/post/error-handler",
@@ -262,8 +303,16 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra:           map[string]any{"http.request.method": http.MethodPost, "http.response.status_code": http.StatusOK},
-			},
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
+				}},
 		},
 	}
 
@@ -379,7 +428,7 @@ func TestIntegration(t *testing.T) {
 	optstrans := cmp.Options{
 		cmpopts.IgnoreFields(
 			sentry.Event{},
-			"Contexts", "EventID", "Platform", "Modules",
+			"EventID", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp",
 			"sdkMetaData", "StartTime", "Spans",
 		),
@@ -400,6 +449,15 @@ func TestIntegration(t *testing.T) {
 			// important from the perspective of sentry-go, we
 			// ignore them.
 			return k == "Content-Length" || k == "Content-Type"
+		}),
+		cmpopts.IgnoreMapEntries(func(k string, v any) bool {
+			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
+			for _, e := range ignoredCtxEntries {
+				if k == e {
+					return true
+				}
+			}
+			return false
 		}),
 	}
 	if diff := cmp.Diff(wantTransactions, gotTransactions, optstrans); diff != "" {
