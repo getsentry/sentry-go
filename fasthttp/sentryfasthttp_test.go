@@ -121,7 +121,8 @@ func TestIntegration(t *testing.T) {
 						Op:     "http.server",
 						Status: sentry.SpanStatusOK,
 					}.Map(),
-				}},
+				},
+			},
 		},
 		{
 			Path: "/get",
@@ -164,7 +165,8 @@ func TestIntegration(t *testing.T) {
 						Op:     "http.server",
 						Status: sentry.SpanStatusOK,
 					}.Map(),
-				}},
+				},
+			},
 		},
 		{
 			Path:       "/post/large",
@@ -212,7 +214,8 @@ func TestIntegration(t *testing.T) {
 						Op:     "http.server",
 						Status: sentry.SpanStatusOK,
 					}.Map(),
-				}},
+				},
+			},
 		},
 		{
 			Path:       "/post/body-ignored",
@@ -261,7 +264,8 @@ func TestIntegration(t *testing.T) {
 						Op:     "http.server",
 						Status: sentry.SpanStatusOK,
 					}.Map(),
-				}},
+				},
+			},
 		},
 		{
 			Path:   "/post/error-handler",
@@ -312,7 +316,8 @@ func TestIntegration(t *testing.T) {
 						Op:     "http.server",
 						Status: sentry.SpanStatusOK,
 					}.Map(),
-				}},
+				},
+			},
 		},
 	}
 
