@@ -424,12 +424,13 @@ func TestIntegration(t *testing.T) {
 
 	close(transactionsCh)
 	var gotTransactions []*sentry.Event
-	var statusCodes []sentry.SpanStatus
+	var gotCodes []sentry.SpanStatus
 
 	for e := range transactionsCh {
 		gotTransactions = append(gotTransactions, e)
-		statusCodes = append(statusCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
+		gotCodes = append(gotCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
 	}
+
 	optstrans := cmp.Options{
 		cmpopts.IgnoreFields(
 			sentry.Event{},
@@ -469,7 +470,7 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("Transactions mismatch (-want +gotEvents):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
+	if diff := cmp.Diff(wantCodes, gotCodes, cmp.Options{}); diff != "" {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
 	}
 

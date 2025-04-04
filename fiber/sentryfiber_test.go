@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -71,18 +70,17 @@ func TestIntegration(t *testing.T) {
 	})
 
 	tests := []struct {
-		Path       string
-		Method     string
-		Body       string
-		WantStatus int
-
+		Path            string
+		Method          string
+		Body            string
+		WantStatus      int
 		WantEvent       *sentry.Event
 		WantTransaction *sentry.Event
 	}{
 		{
 			Path:       "/panic",
 			Method:     "GET",
-			WantStatus: http.StatusOK,
+			WantStatus: 200,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
 				Message: "test",
@@ -107,7 +105,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -124,7 +122,7 @@ func TestIntegration(t *testing.T) {
 			Path:       "/post",
 			Method:     "POST",
 			Body:       "payload",
-			WantStatus: http.StatusOK,
+			WantStatus: 200,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "post: payload",
@@ -153,11 +151,11 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":     "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
-							"http.request.method":       http.MethodPost,
+							"http.request.method":       http.MethodGet,
 							"http.response.status_code": http.StatusOK,
 						},
 						Op:     "http.server",
@@ -169,7 +167,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path:       "/get",
 			Method:     "GET",
-			WantStatus: http.StatusOK,
+			WantStatus: 200,
 
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -195,7 +193,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -211,7 +209,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path:       "/get/123",
 			Method:     "GET",
-			WantStatus: http.StatusOK,
+			WantStatus: 200,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
 				Message: "get: 123",
@@ -236,7 +234,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -252,7 +250,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path:       "/post/large",
 			Method:     "POST",
-			WantStatus: http.StatusOK,
+			WantStatus: 200,
 			Body:       largePayload,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -283,11 +281,11 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":     "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
-							"http.request.method":       http.MethodPost,
+							"http.request.method":       http.MethodGet,
 							"http.response.status_code": http.StatusOK,
 						},
 						Op:     "http.server",
@@ -298,7 +296,7 @@ func TestIntegration(t *testing.T) {
 		},
 		{
 			Path:       "/post/body-ignored",
-			WantStatus: http.StatusOK,
+			WantStatus: 200,
 			Method:     "POST",
 			Body:       "client sends, fiber always reads, SDK reports",
 
@@ -330,11 +328,11 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":     "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
-							"http.request.method":       http.MethodPost,
+							"http.request.method":       http.MethodGet,
 							"http.response.status_code": http.StatusOK,
 						},
 						Op:     "http.server",
@@ -346,7 +344,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path:       "/post/error-handler",
 			Method:     "POST",
-			WantStatus: http.StatusOK,
+			WantStatus: 200,
 
 			WantEvent: &sentry.Event{
 				Level: sentry.LevelError,
@@ -379,11 +377,11 @@ func TestIntegration(t *testing.T) {
 						"Content-Length": "0",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
-							"http.request.method":       http.MethodPost,
+							"http.request.method":       http.MethodGet,
 							"http.response.status_code": http.StatusOK,
 						},
 						Op:     "http.server",
@@ -422,16 +420,13 @@ func TestIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var wantEvents, gotEvents []*sentry.Event
-	var wantTransactions, gotTransactions []*sentry.Event
-	var wantCodes, gotCodes []sentry.SpanStatus
-
+	var wantEvents []*sentry.Event
+	var wantTransactions []*sentry.Event
+	var wantCodes []sentry.SpanStatus
 	for _, tt := range tests {
 		wantEvents = append(wantEvents, tt.WantEvent)
 		wantTransactions = append(wantTransactions, tt.WantTransaction)
-
 		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
-
 		req, err := http.NewRequest(tt.Method, "http://example.com"+tt.Path, strings.NewReader(tt.Body))
 		if err != nil {
 			t.Fatal(err)
@@ -452,6 +447,7 @@ func TestIntegration(t *testing.T) {
 	}
 
 	close(eventsCh)
+	var gotEvents []*sentry.Event
 	for e := range eventsCh {
 		gotEvents = append(gotEvents, e)
 	}
@@ -477,18 +473,12 @@ func TestIntegration(t *testing.T) {
 	}
 
 	close(transactionsCh)
+	var gotTransactions []*sentry.Event
+	var gotCodes []sentry.SpanStatus
 
 	for e := range transactionsCh {
-		for k, v := range e.Extra {
-			if k != "http.response.status_code" {
-				continue
-			}
-			f, _ := v.(float64)
-			e.Extra[k] = int(f)
-		}
 		gotTransactions = append(gotTransactions, e)
-		gotCode, _ := strconv.Atoi(e.Contexts["trace"]["status"].(string))
-		gotCodes = append(gotCodes, sentry.HTTPtoSpanStatus(gotCode))
+		gotCodes = append(gotCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
 	}
 
 	optstrans := cmp.Options{
