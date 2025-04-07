@@ -387,7 +387,7 @@ func TestIntegration(t *testing.T) {
 			"Release", "Sdk", "ServerName", "Timestamp",
 			"sdkMetaData", "StartTime", "Spans",
 		),
-		cmpopts.IgnoreMapEntries(func(k string, v any) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
 			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
 			for _, e := range ignoredCtxEntries {
 				if k == e {
