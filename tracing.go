@@ -48,7 +48,7 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	Tags         map[string]string `json:"tags,omitempty"`
 	StartTime    time.Time         `json:"start_timestamp"`
 	EndTime      time.Time         `json:"timestamp"`
-	// Deprecated, use Data instead. To be removed in 0.33.0
+	// Deprecated: use Data instead. To be removed in 0.33.0
 	Extra   map[string]interface{} `json:"-"`
 	Data    map[string]interface{} `json:"data,omitempty"`
 	Sampled Sampled                `json:"-"`
