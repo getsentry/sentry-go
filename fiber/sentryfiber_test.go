@@ -1,7 +1,6 @@
 package sentryfiber_test
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -105,7 +104,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -151,11 +150,11 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":     "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
-							"http.request.method":       http.MethodGet,
+							"http.request.method":       http.MethodPost,
 							"http.response.status_code": http.StatusOK,
 						},
 						Op:     "http.server",
@@ -193,7 +192,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -234,7 +233,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -281,11 +280,11 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":     "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
-							"http.request.method":       http.MethodGet,
+							"http.request.method":       http.MethodPost,
 							"http.response.status_code": http.StatusOK,
 						},
 						Op:     "http.server",
@@ -328,11 +327,11 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":     "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
-							"http.request.method":       http.MethodGet,
+							"http.request.method":       http.MethodPost,
 							"http.response.status_code": http.StatusOK,
 						},
 						Op:     "http.server",
@@ -377,11 +376,11 @@ func TestIntegration(t *testing.T) {
 						"Content-Length": "0",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
-							"http.request.method":       http.MethodGet,
+							"http.request.method":       http.MethodPost,
 							"http.response.status_code": http.StatusOK,
 						},
 						Op:     "http.server",
@@ -394,7 +393,6 @@ func TestIntegration(t *testing.T) {
 
 	eventsCh := make(chan *sentry.Event, len(tests))
 	transactionsCh := make(chan *sentry.Event, len(tests))
-
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
@@ -403,16 +401,7 @@ func TestIntegration(t *testing.T) {
 			return event
 		},
 		BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			// Deep copy the transaction
-			jsonStr, err := json.Marshal(tx)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var cpTx sentry.Event
-			if err := json.Unmarshal(jsonStr, &cpTx); err != nil {
-				t.Fatal(err)
-			}
-			transactionsCh <- &cpTx
+			transactionsCh <- tx
 			return tx
 		},
 	})
