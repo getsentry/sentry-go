@@ -90,7 +90,7 @@ func testMarshalJSONOmitEmptyParentSpanID(t *testing.T, v interface{}) {
 }
 
 func TestStartSpan(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing: true,
 		Transport:     transport,
@@ -169,7 +169,7 @@ func TestStartSpan(t *testing.T) {
 }
 
 func TestStartChild(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
@@ -221,7 +221,7 @@ func TestStartChild(t *testing.T) {
 			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
 			"sdkMetaData",
 		),
-		cmpopts.IgnoreMapEntries(func(k string, v interface{}) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ interface{}) bool {
 			return k != "trace"
 		}),
 		cmpopts.IgnoreFields(Span{},
@@ -236,7 +236,7 @@ func TestStartChild(t *testing.T) {
 }
 
 func TestStartTransaction(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing: true,
 		Transport:     transport,
@@ -392,7 +392,7 @@ type testContextValue struct{}
 
 func NewTestContext(options ClientOptions) context.Context {
 	if options.Transport == nil {
-		options.Transport = &TransportMock{}
+		options.Transport = &MockTransport{}
 	}
 	client, err := NewClient(options)
 	if err != nil {
@@ -631,7 +631,7 @@ func TestSpanFromContext(_ *testing.T) {
 }
 
 func TestDoubleSampling(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
 		// A SampleRate set to 0.0 will be transformed to 1.0,
 		// hence we're using math.SmallestNonzeroFloat64.
@@ -685,7 +685,7 @@ func TestSample(t *testing.T) {
 	// traces sampler
 	ctx = NewTestContext(ClientOptions{
 		EnableTracing: true,
-		TracesSampler: func(ctx SamplingContext) float64 {
+		TracesSampler: func(_ SamplingContext) float64 {
 			return 1.0
 		},
 	})
@@ -969,7 +969,7 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			transport := &TransportMock{}
+			transport := &MockTransport{}
 			ctx := NewTestContext(ClientOptions{
 				EnableTracing:    true,
 				TracesSampleRate: 1.0,
@@ -1016,7 +1016,7 @@ func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
 
 func TestSpanScopeManagement(t *testing.T) {
 	// Initialize a test hub and client
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	client, err := NewClient(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
