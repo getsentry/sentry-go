@@ -778,7 +778,7 @@ func TestSampleRatePropagation(t *testing.T) {
 			name: "TracesSampler with sampled flag = 1",
 			clientOptions: ClientOptions{
 				EnableTracing: true,
-				TracesSampler: func(ctx SamplingContext) float64 {
+				TracesSampler: func(_ SamplingContext) float64 {
 					return 0.8
 				},
 			},
@@ -794,7 +794,7 @@ func TestSampleRatePropagation(t *testing.T) {
 			name: "TracesSampler with sampled flag = 0",
 			clientOptions: ClientOptions{
 				EnableTracing: true,
-				TracesSampler: func(ctx SamplingContext) float64 {
+				TracesSampler: func(_ SamplingContext) float64 {
 					return 0.8
 				},
 			},
@@ -810,7 +810,7 @@ func TestSampleRatePropagation(t *testing.T) {
 			name: "TracesSampler - defer sampled flag",
 			clientOptions: ClientOptions{
 				EnableTracing: true,
-				TracesSampler: func(ctx SamplingContext) float64 {
+				TracesSampler: func(_ SamplingContext) float64 {
 					return 0.8
 				},
 			},
