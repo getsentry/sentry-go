@@ -492,17 +492,18 @@ func (s *Span) sample() Sampled {
 			s.dynamicSamplingContext.Entries["sample_rate"] = strconv.FormatFloat(tracesSamplerSampleRate, 'f', -1, 64)
 		}
 		if tracesSamplerSampleRate < 0.0 || tracesSamplerSampleRate > 1.0 {
-			Logger.Printf("Dropping transaction: TracesSampler out of range [0.0, 1.0]: %f", tracesSamplerSampleRate)
+			Logger.Printf("Dropping transaction: Returned TracesSampler rate is out of range [0.0, 1.0]: %f", tracesSamplerSampleRate)
 			return SampledFalse
 		}
 		if tracesSamplerSampleRate == 0.0 {
-			Logger.Printf("Dropping transaction: TracesSampler rate is: %f", tracesSamplerSampleRate)
+			Logger.Printf("Dropping transaction: Returned TracesSampler rate is: %f", tracesSamplerSampleRate)
 			return SampledFalse
 		}
 
 		if rng.Float64() < tracesSamplerSampleRate {
 			return SampledTrue
 		}
+		Logger.Printf("Dropping transaction: TracesSampler returned rate: %f", tracesSamplerSampleRate)
 
 		return SampledFalse
 	}
