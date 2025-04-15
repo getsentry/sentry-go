@@ -137,7 +137,7 @@ type flushWriter struct {
 func (f *flushWriter) Flush() {
 	f.wroteHeader = true
 
-	fl := f.basicWriter.ResponseWriter.(http.Flusher)
+	fl := f.ResponseWriter.(http.Flusher)
 	fl.Flush()
 }
 
@@ -153,27 +153,27 @@ type httpFancyWriter struct {
 
 func (f *httpFancyWriter) Flush() {
 	f.wroteHeader = true
-	f.basicWriter.ResponseWriter.(http.Flusher).Flush()
+	f.ResponseWriter.(http.Flusher).Flush()
 }
 
 func (f *httpFancyWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	return f.basicWriter.ResponseWriter.(http.Hijacker).Hijack()
+	return f.ResponseWriter.(http.Hijacker).Hijack()
 }
 
 func (f *http2FancyWriter) Push(target string, opts *http.PushOptions) error {
-	return f.basicWriter.ResponseWriter.(http.Pusher).Push(target, opts)
+	return f.ResponseWriter.(http.Pusher).Push(target, opts)
 }
 
 func (f *httpFancyWriter) ReadFrom(r io.Reader) (int64, error) {
-	if f.basicWriter.tee != nil {
+	if f.tee != nil {
 		n, err := io.Copy(&f.basicWriter, r)
-		f.basicWriter.bytes += int(n)
+		f.bytes += int(n)
 		return n, err
 	}
-	rf := f.basicWriter.ResponseWriter.(io.ReaderFrom)
-	f.basicWriter.maybeWriteHeader()
+	rf := f.ResponseWriter.(io.ReaderFrom)
+	f.maybeWriteHeader()
 	n, err := rf.ReadFrom(r)
-	f.basicWriter.bytes += int(n)
+	f.bytes += int(n)
 	return n, err
 }
 

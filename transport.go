@@ -628,8 +628,8 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	}
 
 	var eventType string
-	switch {
-	case event.Type == transactionType:
+	switch event.Type {
+	case transactionType:
 		eventType = "transaction"
 	default:
 		eventType = fmt.Sprintf("%s event", event.Level)

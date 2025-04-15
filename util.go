@@ -36,7 +36,7 @@ func monotonicTimeSince(start time.Time) (end time.Time) {
 	return start.Add(time.Since(start))
 }
 
-// nolint: deadcode, unused
+// nolint: unused
 func prettyPrint(data interface{}) {
 	dbg, _ := json.MarshalIndent(data, "", "  ")
 	fmt.Println(string(dbg))
