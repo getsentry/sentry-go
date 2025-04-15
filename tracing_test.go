@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -575,6 +576,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 		spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
 		spanOption(s)
 
+		fmt.Println(s, tt.wantSpan)
 		assertEqual(t, s, tt.wantSpan)
 	}
 }
@@ -678,7 +680,7 @@ func TestSample(t *testing.T) {
 		TracesSampleRate: 0.0,
 	})
 	span = StartSpan(ctx, "op", WithTransactionName("name"), WithSpanSampled(SampledTrue))
-	if got := span.Sampled; got != SampledTrue {
+	if got := span.ExplicitSampled; got != SampledTrue {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
 	}
 
@@ -713,6 +715,185 @@ func TestSample(t *testing.T) {
 	span = StartSpan(ctx, "op", WithTransactionName("name"))
 	if got := span.Sampled; got != SampledTrue {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
+	}
+}
+
+func TestSampleRatePropagation(t *testing.T) {
+	tests := []struct {
+		name            string
+		clientOptions   ClientOptions
+		traceHeader     string
+		expectedRate    float64
+		expectedHeaders []string
+	}{
+		{
+			name: "Tracing disabled",
+			clientOptions: ClientOptions{
+				EnableTracing: false,
+			},
+			traceHeader:     "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
+			expectedRate:    0.0,
+			expectedHeaders: nil,
+		},
+		{
+			name: "Inherit from parent - sampled flag = 1",
+			clientOptions: ClientOptions{
+				EnableTracing: true,
+			},
+			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
+			expectedRate: 1.0,
+			expectedHeaders: []string{
+				"sentry-sampled=true",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+				"sentry-sample_rate=1",
+			},
+		},
+		{
+			name: "Inherit from parent - sampled flag = 0",
+			clientOptions: ClientOptions{
+				EnableTracing: true,
+			},
+			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
+			expectedRate: 0.0,
+			expectedHeaders: []string{
+				"sentry-sampled=false",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+				"sentry-sample_rate=0",
+			},
+		},
+		{
+			name: "Inherit from parent - defer sampled flag",
+			clientOptions: ClientOptions{
+				EnableTracing: true,
+			},
+			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963",
+			expectedRate: 0.0,
+			expectedHeaders: []string{
+				"sentry-sampled=false",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+				"sentry-sample_rate=0",
+			},
+		},
+		{
+			name: "TracesSampler with sampled flag = 1",
+			clientOptions: ClientOptions{
+				EnableTracing: true,
+				TracesSampler: func(ctx SamplingContext) float64 {
+					return 0.8
+				},
+			},
+			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
+			expectedRate: 0.8,
+			expectedHeaders: []string{
+				"sentry-sampled=true",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+				"sentry-sample_rate=0.8",
+			},
+		},
+		{
+			name: "TracesSampler with sampled flag = 0",
+			clientOptions: ClientOptions{
+				EnableTracing: true,
+				TracesSampler: func(ctx SamplingContext) float64 {
+					return 0.8
+				},
+			},
+			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
+			expectedRate: 0.8,
+			expectedHeaders: []string{
+				"sentry-sampled=true",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+				"sentry-sample_rate=0.8",
+			},
+		},
+		{
+			name: "TracesSampler - defer sampled flag",
+			clientOptions: ClientOptions{
+				EnableTracing: true,
+				TracesSampler: func(ctx SamplingContext) float64 {
+					return 0.8
+				},
+			},
+			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
+			expectedRate: 0.8,
+			expectedHeaders: []string{
+				"sentry-sampled=true",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+				"sentry-sample_rate=0.8",
+			},
+		},
+		{
+			name: "TracesSampleRate with sampled flag = 1",
+			clientOptions: ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 0.4,
+			},
+			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
+			expectedRate: 1.0,
+			expectedHeaders: []string{
+				"sentry-sampled=true",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba-1",
+				"sentry-sample_rate=1",
+			},
+		},
+		{
+			name: "TracesSampleRate with sampled flag = 0",
+			clientOptions: ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 0.4,
+			},
+			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
+			expectedRate: 0.0,
+			expectedHeaders: []string{
+				"sentry-sampled=false",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba-0",
+				"sentry-sample_rate=0",
+			},
+		},
+		{
+			name: "TracesSampleRate - defer sampled flag",
+			clientOptions: ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 0.4,
+			},
+			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963",
+			expectedRate: 0.4,
+			expectedHeaders: []string{
+				"sentry-sampled=false",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+				"sentry-sample_rate=0.4",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &MockTransport{}
+			ctx := NewTestContext(ClientOptions{
+				EnableTracing:    tt.clientOptions.EnableTracing,
+				TracesSampler:    tt.clientOptions.TracesSampler,
+				TracesSampleRate: tt.clientOptions.TracesSampleRate,
+				Transport:        transport,
+			})
+
+			hub := GetHubFromContext(ctx)
+			options := []SpanOption{
+				ContinueTrace(hub, tt.traceHeader, ""),
+			}
+			transaction := StartTransaction(ctx, "test-transaction", options...)
+			transaction.Finish()
+
+			baggage := transaction.ToBaggage()
+			for _, header := range tt.expectedHeaders {
+				if !strings.Contains(header, baggage) {
+					t.Errorf("Expected baggage header to contain %q, got %q", header, baggage)
+				}
+			}
+
+			if transaction.sampleRate != tt.expectedRate {
+				t.Errorf("Expected sample rate %f, got %f", tt.expectedRate, transaction.sampleRate)
+			}
+		})
 	}
 }
 
