@@ -576,7 +576,6 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 		spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
 		spanOption(s)
 
-		fmt.Println(s, tt.wantSpan)
 		assertEqual(t, s, tt.wantSpan)
 	}
 }
@@ -680,7 +679,7 @@ func TestSample(t *testing.T) {
 		TracesSampleRate: 0.0,
 	})
 	span = StartSpan(ctx, "op", WithTransactionName("name"), WithSpanSampled(SampledTrue))
-	if got := span.ExplicitSampled; got != SampledTrue {
+	if got := span.explicitSampled; got != SampledTrue {
 		t.Fatalf("got %s, want %s", got, SampledTrue)
 	}
 
@@ -720,29 +719,32 @@ func TestSample(t *testing.T) {
 
 func TestSampleRatePropagation(t *testing.T) {
 	tests := []struct {
-		name            string
-		clientOptions   ClientOptions
-		traceHeader     string
-		expectedRate    float64
-		expectedHeaders []string
+		name                   string
+		clientOptions          ClientOptions
+		traceHeader            string
+		baggageHeader          string
+		expectedRate           float64
+		expectedBaggageEntries []string
 	}{
 		{
 			name: "Tracing disabled",
 			clientOptions: ClientOptions{
 				EnableTracing: false,
 			},
-			traceHeader:     "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
-			expectedRate:    0.0,
-			expectedHeaders: nil,
+			traceHeader:            "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
+			baggageHeader:          "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=true,sentry-sample_rate=1",
+			expectedRate:           0.0,
+			expectedBaggageEntries: nil,
 		},
 		{
 			name: "Inherit from parent - sampled flag = 1",
 			clientOptions: ClientOptions{
 				EnableTracing: true,
 			},
-			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
-			expectedRate: 1.0,
-			expectedHeaders: []string{
+			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
+			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=true,sentry-sample_rate=1",
+			expectedRate:  1.0,
+			expectedBaggageEntries: []string{
 				"sentry-sampled=true",
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
 				"sentry-sample_rate=1",
@@ -753,9 +755,10 @@ func TestSampleRatePropagation(t *testing.T) {
 			clientOptions: ClientOptions{
 				EnableTracing: true,
 			},
-			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
-			expectedRate: 0.0,
-			expectedHeaders: []string{
+			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
+			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=false,sentry-sample_rate=0.0",
+			expectedRate:  0.0,
+			expectedBaggageEntries: []string{
 				"sentry-sampled=false",
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
 				"sentry-sample_rate=0",
@@ -766,10 +769,10 @@ func TestSampleRatePropagation(t *testing.T) {
 			clientOptions: ClientOptions{
 				EnableTracing: true,
 			},
-			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963",
-			expectedRate: 0.0,
-			expectedHeaders: []string{
-				"sentry-sampled=false",
+			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963",
+			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+			expectedRate:  0.0,
+			expectedBaggageEntries: []string{
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
 				"sentry-sample_rate=0",
 			},
@@ -782,9 +785,10 @@ func TestSampleRatePropagation(t *testing.T) {
 					return 0.8
 				},
 			},
-			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
-			expectedRate: 0.8,
-			expectedHeaders: []string{
+			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
+			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=true,sentry-sample_rate=1",
+			expectedRate:  0.8,
+			expectedBaggageEntries: []string{
 				"sentry-sampled=true",
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
 				"sentry-sample_rate=0.8",
@@ -798,10 +802,11 @@ func TestSampleRatePropagation(t *testing.T) {
 					return 0.8
 				},
 			},
-			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
-			expectedRate: 0.8,
-			expectedHeaders: []string{
-				"sentry-sampled=true",
+			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
+			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=false,sentry-sample_rate=0.0",
+			expectedRate:  0.8,
+			expectedBaggageEntries: []string{
+				"sentry-sampled=false",
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
 				"sentry-sample_rate=0.8",
 			},
@@ -814,10 +819,10 @@ func TestSampleRatePropagation(t *testing.T) {
 					return 0.8
 				},
 			},
-			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
-			expectedRate: 0.8,
-			expectedHeaders: []string{
-				"sentry-sampled=true",
+			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963",
+			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+			expectedRate:  0.8,
+			expectedBaggageEntries: []string{
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
 				"sentry-sample_rate=0.8",
 			},
@@ -828,11 +833,12 @@ func TestSampleRatePropagation(t *testing.T) {
 				EnableTracing:    true,
 				TracesSampleRate: 0.4,
 			},
-			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
-			expectedRate: 1.0,
-			expectedHeaders: []string{
+			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
+			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=true,sentry-sample_rate=1",
+			expectedRate:  1.0,
+			expectedBaggageEntries: []string{
 				"sentry-sampled=true",
-				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba-1",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
 				"sentry-sample_rate=1",
 			},
 		},
@@ -842,11 +848,12 @@ func TestSampleRatePropagation(t *testing.T) {
 				EnableTracing:    true,
 				TracesSampleRate: 0.4,
 			},
-			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
-			expectedRate: 0.0,
-			expectedHeaders: []string{
+			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
+			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=false,sentry-sample_rate=0.0",
+			expectedRate:  0.0,
+			expectedBaggageEntries: []string{
 				"sentry-sampled=false",
-				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba-0",
+				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
 				"sentry-sample_rate=0",
 			},
 		},
@@ -856,10 +863,10 @@ func TestSampleRatePropagation(t *testing.T) {
 				EnableTracing:    true,
 				TracesSampleRate: 0.4,
 			},
-			traceHeader:  "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963",
-			expectedRate: 0.4,
-			expectedHeaders: []string{
-				"sentry-sampled=false",
+			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963",
+			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+			expectedRate:  0.4,
+			expectedBaggageEntries: []string{
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
 				"sentry-sample_rate=0.4",
 			},
@@ -878,14 +885,14 @@ func TestSampleRatePropagation(t *testing.T) {
 
 			hub := GetHubFromContext(ctx)
 			options := []SpanOption{
-				ContinueTrace(hub, tt.traceHeader, ""),
+				ContinueTrace(hub, tt.traceHeader, tt.baggageHeader),
 			}
 			transaction := StartTransaction(ctx, "test-transaction", options...)
 			transaction.Finish()
 
 			baggage := transaction.ToBaggage()
-			for _, header := range tt.expectedHeaders {
-				if !strings.Contains(header, baggage) {
+			for _, header := range tt.expectedBaggageEntries {
+				if !strings.Contains(baggage, header) {
 					t.Errorf("Expected baggage header to contain %q, got %q", header, baggage)
 				}
 			}

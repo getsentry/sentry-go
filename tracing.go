@@ -53,11 +53,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	Extra   map[string]interface{} `json:"-"`
 	Data    map[string]interface{} `json:"data,omitempty"`
 	Sampled Sampled                `json:"-"`
-	// ExplicitSampled is set from `WithSpanSampled` option. The difference with the Sampled flag
-	// is that Sampled is the final sampling decision based on applied sampling rules.
-	ExplicitSampled Sampled           `json:"-"`
-	Source          TransactionSource `json:"-"`
-	Origin          SpanOrigin        `json:"origin,omitempty"`
+	Source  TransactionSource      `json:"-"`
+	Origin  SpanOrigin             `json:"origin,omitempty"`
 
 	// mu protects concurrent writes to map fields
 	mu sync.RWMutex
@@ -76,6 +73,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	contexts map[string]Context
 	// a Once instance to make sure that Finish() is only called once.
 	finishOnce sync.Once
+	// explicitSampled is a flag for configuring sampling by using `WithSpanSampled` option.
+	explicitSampled Sampled
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -459,15 +458,15 @@ func (s *Span) sample() Sampled {
 	}
 
 	// #2 explicit sampling decision via StartSpan/StartTransaction options.
-	if s.ExplicitSampled != SampledUndefined {
-		Logger.Printf("Using explicit sampling decision from StartSpan/StartTransaction: %v", s.Sampled)
-		switch s.ExplicitSampled {
+	if s.explicitSampled != SampledUndefined {
+		Logger.Printf("Using explicit sampling decision from StartSpan/StartTransaction: %v", s.explicitSampled)
+		switch s.explicitSampled {
 		case SampledTrue:
 			s.sampleRate = 1.0
 		case SampledFalse:
 			s.sampleRate = 0.0
 		}
-		return s.ExplicitSampled
+		return s.explicitSampled
 	}
 
 	// Variant for non-transaction spans: they inherit the parent decision.
@@ -489,10 +488,23 @@ func (s *Span) sample() Sampled {
 		tracesSamplerSampleRate := sampler.Sample(samplingContext)
 		s.sampleRate = tracesSamplerSampleRate
 		// tracesSampler can update the sample_rate on frozen DSC
-		if len(s.dynamicSamplingContext.Entries) > 0 {
+		if s.dynamicSamplingContext.HasEntries() {
 			s.dynamicSamplingContext.Entries["sample_rate"] = strconv.FormatFloat(tracesSamplerSampleRate, 'f', -1, 64)
 		}
-		return samplingDecision(s.sampleRate, "TracesSampler")
+		if tracesSamplerSampleRate < 0.0 || tracesSamplerSampleRate > 1.0 {
+			Logger.Printf("Dropping transaction: TracesSampler out of range [0.0, 1.0]: %f", tracesSamplerSampleRate)
+			return SampledFalse
+		}
+		if tracesSamplerSampleRate == 0.0 {
+			Logger.Printf("Dropping transaction: TracesSampler rate is: %f", tracesSamplerSampleRate)
+			return SampledFalse
+		}
+
+		if rng.Float64() < tracesSamplerSampleRate {
+			return SampledTrue
+		}
+
+		return SampledFalse
 	}
 
 	// #4 inherit parent decision.
@@ -511,19 +523,15 @@ func (s *Span) sample() Sampled {
 	sampleRate := clientOptions.TracesSampleRate
 	s.sampleRate = sampleRate
 	// tracesSampleRate can update the sample_rate on frozen DSC
-	if len(s.dynamicSamplingContext.Entries) > 0 {
+	if s.dynamicSamplingContext.HasEntries() {
 		s.dynamicSamplingContext.Entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
 	}
-	return samplingDecision(s.sampleRate, "TracesSamplerRate")
-}
-
-func samplingDecision(sampleRate float64, name string) Sampled {
 	if sampleRate < 0.0 || sampleRate > 1.0 {
-		Logger.Printf("Dropping transaction: %s out of range [0.0, 1.0]: %f", name, sampleRate)
+		Logger.Printf("Dropping transaction: TracesSampleRate out of range [0.0, 1.0]: %f", sampleRate)
 		return SampledFalse
 	}
 	if sampleRate == 0.0 {
-		Logger.Printf("Dropping transaction: %s rate is: %f", name, sampleRate)
+		Logger.Printf("Dropping transaction: TracesSampleRate rate is: %f", sampleRate)
 		return SampledFalse
 	}
 
@@ -896,7 +904,7 @@ func WithTransactionSource(source TransactionSource) SpanOption {
 // WithSpanSampled updates the sampling flag for a given span.
 func WithSpanSampled(sampled Sampled) SpanOption {
 	return func(s *Span) {
-		s.ExplicitSampled = sampled
+		s.explicitSampled = sampled
 	}
 }
 
