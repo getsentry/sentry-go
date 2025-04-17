@@ -4,8 +4,8 @@ import "testing"
 
 func TestCategoryString(t *testing.T) {
 	tests := []struct {
-		Category
-		want string
+		Category Category
+		want     string
 	}{
 		{CategoryAll, "CategoryAll"},
 		{CategoryError, "CategoryError"},
@@ -14,7 +14,6 @@ func TestCategoryString(t *testing.T) {
 		{Category("two words"), "CategoryTwoWords"},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.want, func(t *testing.T) {
 			got := tt.Category.String()
 			if got != tt.want {
