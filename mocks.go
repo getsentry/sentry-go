@@ -5,41 +5,43 @@ import (
 	"time"
 )
 
-type ScopeMock struct {
+// MockScope implements [Scope] for use in tests.
+type MockScope struct {
 	breadcrumb      *Breadcrumb
 	shouldDropEvent bool
 }
 
-func (scope *ScopeMock) AddBreadcrumb(breadcrumb *Breadcrumb, _ int) {
+func (scope *MockScope) AddBreadcrumb(breadcrumb *Breadcrumb, _ int) {
 	scope.breadcrumb = breadcrumb
 }
 
-func (scope *ScopeMock) ApplyToEvent(event *Event, _ *EventHint, _ *Client) *Event {
+func (scope *MockScope) ApplyToEvent(event *Event, _ *EventHint, _ *Client) *Event {
 	if scope.shouldDropEvent {
 		return nil
 	}
 	return event
 }
 
-type TransportMock struct {
+// MockTransport implements [Transport] for use in tests.
+type MockTransport struct {
 	mu        sync.Mutex
 	events    []*Event
 	lastEvent *Event
 }
 
-func (t *TransportMock) Configure(_ ClientOptions) {}
-func (t *TransportMock) SendEvent(event *Event) {
+func (t *MockTransport) Configure(_ ClientOptions) {}
+func (t *MockTransport) SendEvent(event *Event) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.events = append(t.events, event)
 	t.lastEvent = event
 }
-func (t *TransportMock) Flush(_ time.Duration) bool {
+func (t *MockTransport) Flush(_ time.Duration) bool {
 	return true
 }
-func (t *TransportMock) Events() []*Event {
+func (t *MockTransport) Events() []*Event {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.events
 }
-func (t *TransportMock) Close() {}
+func (t *MockTransport) Close() {}

@@ -34,7 +34,7 @@ func TestLinkTraceContextToErrorEventSetsContext(t *testing.T) {
 				hub.Scope(),
 			)
 
-			transport := client.Transport.(*sentry.TransportMock)
+			transport := client.Transport.(*sentry.MockTransport)
 			events := transport.Events()
 			assertEqual(t, len(events), 1)
 			err := events[0]

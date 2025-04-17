@@ -17,7 +17,7 @@ import (
 )
 
 func TestNewClientAllowsEmptyDSN(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	client, err := NewClient(ClientOptions{
 		Transport: transport,
 	})
@@ -25,7 +25,7 @@ func TestNewClientAllowsEmptyDSN(t *testing.T) {
 		t.Fatalf("expected no error when creating client without a DNS but got %v", err)
 	}
 
-	client.CaptureException(errors.New("custom error"), nil, &ScopeMock{})
+	client.CaptureException(errors.New("custom error"), nil, &MockScope{})
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
 }
 
@@ -41,13 +41,13 @@ func (e customComplexError) AnswerToLife() string {
 	return "42"
 }
 
-func setupClientTest() (*Client, *ScopeMock, *TransportMock) {
-	scope := &ScopeMock{}
-	transport := &TransportMock{}
+func setupClientTest() (*Client, *MockScope, *MockTransport) {
+	scope := &MockScope{}
+	transport := &MockTransport{}
 	client, _ := NewClient(ClientOptions{
 		Dsn:       "http://whatever@example.com/1337",
 		Transport: transport,
-		Integrations: func(i []Integration) []Integration {
+		Integrations: func(_ []Integration) []Integration {
 			return []Integration{}
 		},
 	})
@@ -490,7 +490,7 @@ func TestApplyToScopeCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	scope.shouldDropEvent = true
 
-	client.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	client.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		if event == nil {
 			t.Errorf("EventProcessor received nil Event")
 		}
@@ -506,7 +506,7 @@ func TestApplyToScopeCanDropEvent(t *testing.T) {
 
 func TestBeforeSendCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
+	client.options.BeforeSend = func(_ *Event, _ *EventHint) *Event {
 		return nil
 	}
 
@@ -533,16 +533,16 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 }
 
 func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Transport:        transport,
-		BeforeSend: func(event *Event, hint *EventHint) *Event {
+		BeforeSend: func(event *Event, _ *EventHint) *Event {
 			t.Error("beforeSend should not be called")
 			return event
 		},
-		BeforeSendTransaction: func(event *Event, hint *EventHint) *Event {
+		BeforeSendTransaction: func(event *Event, _ *EventHint) *Event {
 			assertEqual(t, event.Transaction, "Foo")
 			return nil
 		},
@@ -559,16 +559,16 @@ func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
 }
 
 func TestBeforeSendTransactionIsCalled(t *testing.T) {
-	transport := &TransportMock{}
+	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Transport:        transport,
-		BeforeSend: func(event *Event, hint *EventHint) *Event {
+		BeforeSend: func(event *Event, _ *EventHint) *Event {
 			t.Error("beforeSend should not be called")
 			return event
 		},
-		BeforeSendTransaction: func(event *Event, hint *EventHint) *Event {
+		BeforeSendTransaction: func(event *Event, _ *EventHint) *Event {
 			assertEqual(t, event.Transaction, "Foo")
 			event.Transaction = "Bar"
 			return event
@@ -621,8 +621,8 @@ func TestIgnoreErrors(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			scope := &ScopeMock{}
-			transport := &TransportMock{}
+			scope := &MockScope{}
+			transport := &MockTransport{}
 			client, err := NewClient(ClientOptions{
 				Transport:    transport,
 				IgnoreErrors: tt.ignoreErrors,
@@ -676,7 +676,7 @@ func TestIgnoreTransactions(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			transport := &TransportMock{}
+			transport := &MockTransport{}
 			ctx := NewTestContext(ClientOptions{
 				EnableTracing:      true,
 				TracesSampleRate:   1.0,
@@ -755,7 +755,7 @@ func TestSampleRate(t *testing.T) {
 func BenchmarkProcessEvent(b *testing.B) {
 	c, err := NewClient(ClientOptions{
 		SampleRate: 0.25,
-		Transport:  &TransportMock{},
+		Transport:  &MockTransport{},
 	})
 	if err != nil {
 		b.Fatal(err)
@@ -856,7 +856,7 @@ func TestCustomMaxSpansProperty(t *testing.T) {
 
 	properClient, _ := NewClient(ClientOptions{
 		MaxSpans:  3000,
-		Transport: &TransportMock{},
+		Transport: &MockTransport{},
 	})
 
 	assertEqual(t, properClient.Options().MaxSpans, 3000)

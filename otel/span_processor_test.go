@@ -40,15 +40,15 @@ func emptyContextWithSentry() context.Context {
 		Release:          "1.2.3",
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
-		Transport:        &sentry.TransportMock{},
+		Transport:        &sentry.MockTransport{},
 	})
 	hub := sentry.NewHub(client, sentry.NewScope())
 	return sentry.SetHubOnContext(context.Background(), hub)
 }
 
-func getSentryTransportFromContext(ctx context.Context) *sentry.TransportMock {
+func getSentryTransportFromContext(ctx context.Context) *sentry.MockTransport {
 	hub := sentry.GetHubFromContext(ctx)
-	transport, ok := hub.Client().Transport.(*sentry.TransportMock)
+	transport, ok := hub.Client().Transport.(*sentry.MockTransport)
 	if !ok {
 		log.Fatal(
 			"Cannot get mock transport from context",

@@ -63,14 +63,14 @@ func TestUnaryClientInterceptor(t *testing.T) {
 		invoker     grpc.UnaryInvoker
 		options     sentrygrpc.ClientOptions
 		expectedErr error
-		assertions  func(t *testing.T, transport *sentry.TransportMock)
+		assertions  func(t *testing.T, transport *sentry.MockTransport)
 	}{
 		"Default behavior, no error": {
 			invoker: func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 				return nil
 			},
 			options: sentrygrpc.ClientOptions{},
-			assertions: func(t *testing.T, transport *sentry.TransportMock) {
+			assertions: func(t *testing.T, transport *sentry.MockTransport) {
 				assert.Empty(t, transport.Events(), "No events should be captured")
 			},
 		},
@@ -80,7 +80,7 @@ func TestUnaryClientInterceptor(t *testing.T) {
 			},
 			options:     sentrygrpc.ClientOptions{},
 			expectedErr: errors.New("test error"),
-			assertions: func(t *testing.T, transport *sentry.TransportMock) {
+			assertions: func(t *testing.T, transport *sentry.MockTransport) {
 				events := transport.Events()
 				assert.Len(t, events, 1, "One event should be captured")
 				assert.Equal(t, "test error", events[0].Exception[0].Value, "Captured exception should match the error")
@@ -95,7 +95,7 @@ func TestUnaryClientInterceptor(t *testing.T) {
 				return nil
 			},
 			options:    sentrygrpc.ClientOptions{},
-			assertions: func(t *testing.T, transport *sentry.TransportMock) {},
+			assertions: func(t *testing.T, transport *sentry.MockTransport) {},
 		},
 		"Custom ReportOn behavior": {
 			invoker: func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
@@ -107,7 +107,7 @@ func TestUnaryClientInterceptor(t *testing.T) {
 				},
 			},
 			expectedErr: errors.New("test error"),
-			assertions: func(t *testing.T, transport *sentry.TransportMock) {
+			assertions: func(t *testing.T, transport *sentry.MockTransport) {
 				assert.Empty(t, transport.Events(), "No events should be captured due to custom ReportOn")
 			},
 		},
@@ -115,7 +115,7 @@ func TestUnaryClientInterceptor(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			transport := &sentry.TransportMock{}
+			transport := &sentry.MockTransport{}
 			sentry.Init(sentry.ClientOptions{
 				Transport: transport,
 			})
@@ -144,7 +144,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 		streamer    grpc.Streamer
 		options     sentrygrpc.ClientOptions
 		expectedErr error
-		assertions  func(t *testing.T, transport *sentry.TransportMock)
+		assertions  func(t *testing.T, transport *sentry.MockTransport)
 		streamDesc  *grpc.StreamDesc
 	}{
 		"Default behavior, no error": {
@@ -155,7 +155,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 			streamDesc: &grpc.StreamDesc{
 				ClientStreams: true,
 			},
-			assertions: func(t *testing.T, transport *sentry.TransportMock) {
+			assertions: func(t *testing.T, transport *sentry.MockTransport) {
 				assert.Empty(t, transport.Events(), "No events should be captured")
 			},
 		},
@@ -166,7 +166,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 			options:     sentrygrpc.ClientOptions{},
 			expectedErr: errors.New("test stream error"),
 			streamDesc:  &grpc.StreamDesc{},
-			assertions: func(t *testing.T, transport *sentry.TransportMock) {
+			assertions: func(t *testing.T, transport *sentry.MockTransport) {
 				events := transport.Events()
 				assert.Len(t, events, 1, "One event should be captured")
 				assert.Equal(t, "test stream error", events[0].Exception[0].Value, "Captured exception should match the error")
@@ -184,7 +184,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 			streamDesc: &grpc.StreamDesc{
 				ClientStreams: true,
 			},
-			assertions: func(t *testing.T, transport *sentry.TransportMock) {},
+			assertions: func(t *testing.T, transport *sentry.MockTransport) {},
 		},
 		"Custom ReportOn behavior": {
 			streamer: func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
@@ -197,7 +197,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 			},
 			expectedErr: errors.New("test stream error"),
 			streamDesc:  &grpc.StreamDesc{},
-			assertions: func(t *testing.T, transport *sentry.TransportMock) {
+			assertions: func(t *testing.T, transport *sentry.MockTransport) {
 				assert.Empty(t, transport.Events(), "No events should be captured due to custom ReportOn")
 			},
 		},
@@ -206,7 +206,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Reinitialize the transport for each test to ensure isolation.
-			transport := &sentry.TransportMock{}
+			transport := &sentry.MockTransport{}
 			sentry.Init(sentry.ClientOptions{
 				Transport: transport,
 			})

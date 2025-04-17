@@ -5,7 +5,7 @@ go 1.21
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.30.0
+	github.com/getsentry/sentry-go v0.32.0
 	github.com/stretchr/testify v1.9.0
 )
 
