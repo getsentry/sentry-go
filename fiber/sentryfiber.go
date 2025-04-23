@@ -16,8 +16,13 @@ import (
 )
 
 const (
-	valuesKey      = "sentry"
-	sdkIdentifier  = "sentry.go.fiber"
+	// sdkIdentifier is the identifier of the FastHTTP SDK.
+	sdkIdentifier = "sentry.go.fiber"
+
+	// valuesKey is used as a key to store the Sentry Hub instance on the fasthttp.RequestCtx.
+	valuesKey = "sentry"
+
+	// transactionKey is used as a key to store the Sentry transaction on the fasthttp.RequestCtx.
 	transactionKey = "sentry_transaction"
 )
 
@@ -29,28 +34,27 @@ type handler struct {
 
 type Options struct {
 	// Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to false,
-	// as fasthttp doesn't include it's own Recovery handler.
+	// as fasthttp doesn't include its own Recovery handler.
 	Repanic bool
 	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
-	// Because fasthttp doesn't include it's own Recovery handler, it will restart the application,
+	// Because fasthttp doesn't include its own Recovery handler, it will restart the application,
 	// and event won't be delivered otherwise.
 	WaitForDelivery bool
 	// Timeout for the event delivery requests.
 	Timeout time.Duration
 }
 
+// New returns a handler struct which satisfies Fiber's middleware interface
 func New(options Options) fiber.Handler {
-	handler := handler{
+	if options.Timeout == 0 {
+		options.Timeout = 2 * time.Second
+	}
+
+	return (&handler{
 		repanic:         options.Repanic,
-		timeout:         time.Second * 2,
+		timeout:         options.Timeout,
 		waitForDelivery: options.WaitForDelivery,
-	}
-
-	if options.Timeout != 0 {
-		handler.timeout = options.Timeout
-	}
-
-	return handler.handle
+	}).handle
 }
 
 func (h *handler) handle(ctx *fiber.Ctx) error {
@@ -65,8 +69,6 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	r := convert(ctx)
 
-	method := ctx.Method()
-
 	transactionName := ctx.Path()
 	transactionSource := sentry.SourceURL
 
@@ -79,7 +81,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	transaction := sentry.StartTransaction(
 		sentry.SetHubOnContext(ctx.Context(), hub),
-		fmt.Sprintf("%s %s", method, transactionName),
+		fmt.Sprintf("%s %s", r.Method, transactionName),
 		options...,
 	)
 
@@ -90,7 +92,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 		transaction.Finish()
 	}()
 
-	transaction.SetData("http.request.method", method)
+	transaction.SetData("http.request.method", r.Method)
 
 	scope := hub.Scope()
 	scope.SetRequest(r)
@@ -117,6 +119,7 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
 	}
 }
 
+// GetHubFromContext retrieves the Hub instance from the *fiber.Ctx.
 func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
 	if hub, ok := ctx.Locals(valuesKey).(*sentry.Hub); ok {
 		return hub
@@ -124,6 +127,12 @@ func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
 	return nil
 }
 
+// SetHubOnContext sets the Hub instance on the *fiber.Ctx.
+func SetHubOnContext(ctx *fiber.Ctx, hub *sentry.Hub) {
+	ctx.Locals(valuesKey, hub)
+}
+
+// GetSpanFromContext retrieves the Span instance from the *fiber.Ctx.
 func GetSpanFromContext(ctx *fiber.Ctx) *sentry.Span {
 	if span, ok := ctx.Locals(transactionKey).(*sentry.Span); ok {
 		return span
@@ -141,23 +150,32 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	r := new(http.Request)
 
 	r.Method = utils.CopyString(ctx.Method())
+
 	uri := ctx.Request().URI()
-	r.URL, _ = url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
+	url, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
+	if err == nil {
+		r.URL = url
+		r.URL.RawQuery = string(uri.QueryString())
+	}
+
+	host := utils.CopyString(ctx.Hostname())
+	r.Host = host
 
 	// Headers
 	r.Header = make(http.Header)
+	r.Header.Add("Host", host)
+
 	ctx.Request().Header.VisitAll(func(key, value []byte) {
 		r.Header.Add(string(key), string(value))
 	})
-	r.Host = utils.CopyString(ctx.Hostname())
 
-	// Env
+	// Cookies
+	ctx.Request().Header.VisitAllCookie(func(key, value []byte) {
+		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
+	})
+
 	r.RemoteAddr = ctx.Context().RemoteAddr().String()
 
-	// QueryString
-	r.URL.RawQuery = string(ctx.Request().URI().QueryString())
-
-	// Body
 	r.Body = io.NopCloser(bytes.NewReader(ctx.Request().Body()))
 
 	return r

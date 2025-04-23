@@ -31,9 +31,8 @@ func TestUserIsEmpty(t *testing.T) {
 		{input: User{IPAddress: "127.0.0.1"}, want: false},
 		{input: User{Username: "My Username"}, want: false},
 		{input: User{Name: "My Name"}, want: false},
-		{input: User{Segment: "My Segment"}, want: false},
 		{input: User{Data: map[string]string{"foo": "bar"}}, want: false},
-		{input: User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Segment: "My Segment", Data: map[string]string{"foo": "bar"}}, want: false},
+		{input: User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Data: map[string]string{"foo": "bar"}}, want: false},
 	}
 
 	for _, test := range tests {
@@ -52,7 +51,6 @@ func TestUserMarshalJson(t *testing.T) {
 		{input: User{IPAddress: "127.0.0.1"}, want: `{"ip_address":"127.0.0.1"}`},
 		{input: User{Username: "My Username"}, want: `{"username":"My Username"}`},
 		{input: User{Name: "My Name"}, want: `{"name":"My Name"}`},
-		{input: User{Segment: "My Segment"}, want: `{"segment":"My Segment"}`},
 		{input: User{Data: map[string]string{"foo": "bar"}}, want: `{"data":{"foo":"bar"}}`},
 	}
 
@@ -518,42 +516,6 @@ func TestStructSnapshots(t *testing.T) {
 
 			if diff := cmp.Diff(want, got); diff != "" {
 				t.Errorf("struct %s mismatch (-want +got):\n%s", test.testName, diff)
-			}
-		})
-	}
-}
-
-func TestMarshalMetrics(t *testing.T) {
-	tests := []struct {
-		name    string
-		metrics []Metric
-		want    string
-	}{
-		{
-			name: "allowed characters",
-			metrics: []Metric{
-				NewCounterMetric("counter", Second(), map[string]string{"foo": "bar", "route": "GET /foo"}, 1597790835, 1.0),
-				NewDistributionMetric("distribution", Second(), map[string]string{"$foo$": "%bar%"}, 1597790835, 1.0),
-				NewGaugeMetric("gauge", Second(), map[string]string{"föö": "bär"}, 1597790835, 1.0),
-				NewSetMetric[int]("set", Second(), map[string]string{"%{key}": "$value$"}, 1597790835, 1),
-				NewCounterMetric("no_tags", Second(), nil, 1597790835, 1.0),
-			},
-
-			want: strings.Join([]string{
-				"counter@second:1|c|#foo:bar,route:GET /foo|T1597790835",
-				"distribution@second:1|d|#_foo_:bar|T1597790835",
-				"gauge@second:1:1:1:1:1|g|#f_:br|T1597790835",
-				"set@second:1|s|#_key_:$value$|T1597790835",
-				"no_tags@second:1|c|T1597790835",
-			}, "\n"),
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			serializedMetric := marshalMetrics(test.metrics)
-			if diff := cmp.Diff(string(serializedMetric), test.want); diff != "" {
-				t.Errorf("Context mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
+	pkgerr "github.com/pkg/errors"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	pkgerr "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
 	"github.com/getsentry/sentry-go"
@@ -33,13 +34,37 @@ func TestNew(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if id := h.hub.CaptureEvent(&sentry.Event{}); id == nil {
+		if id := h.hubProvider().CaptureEvent(&sentry.Event{}); id == nil {
 			t.Error("CaptureEvent failed")
 		}
-		if !h.Flush(testutils.FlushTimeout()) {
+		if !h.hubProvider().Client().Flush(testutils.FlushTimeout()) {
 			t.Error("flush failed")
 		}
 	})
+}
+
+func TestSetHubProvider(t *testing.T) {
+	t.Parallel()
+
+	h, err := New(nil, sentry.ClientOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Custom HubProvider to ensure separate hubs for each test
+	h.SetHubProvider(func() *sentry.Hub {
+		client, _ := sentry.NewClient(sentry.ClientOptions{})
+		return sentry.NewHub(client, sentry.NewScope())
+	})
+
+	entry := &logrus.Entry{Level: logrus.ErrorLevel}
+	if err := h.Fire(entry); err != nil {
+		t.Fatal(err)
+	}
+
+	if !h.hubProvider().Client().Flush(testutils.FlushTimeout()) {
+		t.Error("flush failed")
+	}
 }
 
 func TestFire(t *testing.T) {
@@ -54,12 +79,13 @@ func TestFire(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	err = hook.Fire(entry)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !hook.Flush(testutils.FlushTimeout()) {
+	if !hook.hubProvider().Client().Flush(testutils.FlushTimeout()) {
 		t.Error("flush failed")
 	}
 }
@@ -136,6 +162,44 @@ func Test_entryToEvent(t *testing.T) {
 					URL:     "http://example.com/",
 					Method:  http.MethodGet,
 					Headers: map[string]string{"Host": "example.com"},
+				},
+				Logger: "logrus",
+			},
+		},
+		"sentry request": {
+			entry: &logrus.Entry{
+				Data: map[string]any{
+					FieldRequest: sentry.Request{
+						URL:    "http://example.com/",
+						Method: http.MethodGet,
+					},
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]any{},
+				Request: &sentry.Request{
+					URL:    "http://example.com/",
+					Method: http.MethodGet,
+				},
+				Logger: "logrus",
+			},
+		},
+		"sentry pointer to request": {
+			entry: &logrus.Entry{
+				Data: map[string]any{
+					FieldRequest: &sentry.Request{
+						URL:    "http://example.com/",
+						Method: http.MethodGet,
+					},
+				},
+			},
+			want: &sentry.Event{
+				Level: "fatal",
+				Extra: map[string]any{},
+				Request: &sentry.Request{
+					URL:    "http://example.com/",
+					Method: http.MethodGet,
 				},
 				Logger: "logrus",
 			},
@@ -261,6 +325,12 @@ func Test_entryToEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// Custom HubProvider for test environment
+	h.SetHubProvider(func() *sentry.Hub {
+		client, _ := sentry.NewClient(sentry.ClientOptions{})
+		return sentry.NewHub(client, sentry.NewScope())
+	})
 
 	for name, tt := range tests {
 		tt := tt

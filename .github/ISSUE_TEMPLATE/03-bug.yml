@@ -1,0 +1,70 @@
+name: 🐞 Bug Report
+description: Tell us about something that's not working the way we (probably) intend.
+type: Bug
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: How do you use Sentry?
+      options:
+        - Sentry SaaS (sentry.io)
+        - Self-hosted / on-premises
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: SDK version
+      description: Which SDK version do you use?
+      placeholder: e.g. 0.30.0
+    validations:
+      required: true
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: Which Go version do you use?
+      placeholder: e.g. 1.23.4
+    validations:
+      required: false
+  - type: dropdown
+    id: go-modules
+    attributes:
+      label: Are you using Go Modules?
+      options:
+        - yes
+        - no
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: How can we see what you're seeing? Specific is terrific.
+      placeholder: |
+        Good options are
+        * inline source code snippet
+        * link to Go Playground https://play.golang.org/
+        * Gist https://gist.github.com
+        * link to a public project
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Logs? Screenshots? Yes, please.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |-
+        ## Thanks 🙏
+    validations:
+      required: false

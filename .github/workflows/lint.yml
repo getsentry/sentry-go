@@ -20,12 +20,11 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
       - uses: actions/checkout@v4
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8 # pin@v6.1.1
+        uses: golangci/golangci-lint-action@1481404843c368bc19ca9406f87d6e0fc97bdcfd # pin@v7.0
         with:
-          version: v1.54
-          only-new-issues: true
+          version: v2.1.1
           args: --timeout=10m
     timeout-minutes: 10

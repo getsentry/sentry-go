@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,20 +39,22 @@ const (
 //
 // Spans must be started with either StartSpan or Span.StartChild.
 type Span struct { //nolint: maligned // prefer readability over optimal memory layout (see note below *)
-	TraceID      TraceID                `json:"trace_id"`
-	SpanID       SpanID                 `json:"span_id"`
-	ParentSpanID SpanID                 `json:"parent_span_id"`
-	Name         string                 `json:"name,omitempty"`
-	Op           string                 `json:"op,omitempty"`
-	Description  string                 `json:"description,omitempty"`
-	Status       SpanStatus             `json:"status,omitempty"`
-	Tags         map[string]string      `json:"tags,omitempty"`
-	StartTime    time.Time              `json:"start_timestamp"`
-	EndTime      time.Time              `json:"timestamp"`
-	Data         map[string]interface{} `json:"data,omitempty"`
-	Sampled      Sampled                `json:"-"`
-	Source       TransactionSource      `json:"-"`
-	Origin       SpanOrigin             `json:"origin,omitempty"`
+	TraceID      TraceID           `json:"trace_id"`
+	SpanID       SpanID            `json:"span_id"`
+	ParentSpanID SpanID            `json:"parent_span_id"`
+	Name         string            `json:"name,omitempty"`
+	Op           string            `json:"op,omitempty"`
+	Description  string            `json:"description,omitempty"`
+	Status       SpanStatus        `json:"status,omitempty"`
+	Tags         map[string]string `json:"tags,omitempty"`
+	StartTime    time.Time         `json:"start_timestamp"`
+	EndTime      time.Time         `json:"timestamp"`
+	// Deprecated: use Data instead. To be removed in 0.33.0
+	Extra   map[string]interface{} `json:"-"`
+	Data    map[string]interface{} `json:"data,omitempty"`
+	Sampled Sampled                `json:"-"`
+	Source  TransactionSource      `json:"-"`
+	Origin  SpanOrigin             `json:"origin,omitempty"`
 
 	// mu protects concurrent writes to map fields
 	mu sync.RWMutex
@@ -68,10 +71,10 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	recorder *spanRecorder
 	// span context, can only be set on transactions
 	contexts map[string]Context
-	// collectProfile is a function that collects a profile of the current transaction. May be nil.
-	collectProfile transactionProfiler
 	// a Once instance to make sure that Finish() is only called once.
 	finishOnce sync.Once
+	// explicitSampled is a flag for configuring sampling by using `WithSpanSampled` option.
+	explicitSampled Sampled
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -202,11 +205,6 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		hub.Scope().SetSpan(&span)
 	}
 
-	// Start profiling only if it's a sampled root transaction.
-	if span.IsTransaction() && span.Sampled.Bool() {
-		span.sampleTransactionProfile()
-	}
-
 	return &span
 }
 
@@ -307,7 +305,7 @@ func (s *Span) GetTransaction() *Span {
 // func (s *Span) TransactionName() string
 // func (s *Span) SetTransactionName(name string)
 
-// ToSentryTrace returns the seralized TraceParentContext from a transaction/span.
+// ToSentryTrace returns the serialized TraceParentContext from a transaction/span.
 // Use this function to propagate the TraceParentContext to a downstream SDK,
 // either as the value of the "sentry-trace" HTTP header, or as an html "sentry-trace" meta tag.
 func (s *Span) ToSentryTrace() string {
@@ -371,10 +369,6 @@ func (s *Span) doFinish() {
 	event := s.toEvent()
 	if event == nil {
 		return
-	}
-
-	if s.collectProfile != nil {
-		event.sdkMetaData.transactionProfile = s.collectProfile(s)
 	}
 
 	// TODO(tracing): add breadcrumbs
@@ -464,15 +458,15 @@ func (s *Span) sample() Sampled {
 	}
 
 	// #2 explicit sampling decision via StartSpan/StartTransaction options.
-	if s.Sampled != SampledUndefined {
-		Logger.Printf("Using explicit sampling decision from StartSpan/StartTransaction: %v", s.Sampled)
-		switch s.Sampled {
+	if s.explicitSampled != SampledUndefined {
+		Logger.Printf("Using explicit sampling decision from StartSpan/StartTransaction: %v", s.explicitSampled)
+		switch s.explicitSampled {
 		case SampledTrue:
 			s.sampleRate = 1.0
 		case SampledFalse:
 			s.sampleRate = 0.0
 		}
-		return s.Sampled
+		return s.explicitSampled
 	}
 
 	// Variant for non-transaction spans: they inherit the parent decision.
@@ -493,11 +487,15 @@ func (s *Span) sample() Sampled {
 	if sampler != nil {
 		tracesSamplerSampleRate := sampler.Sample(samplingContext)
 		s.sampleRate = tracesSamplerSampleRate
+		// tracesSampler can update the sample_rate on frozen DSC
+		if s.dynamicSamplingContext.HasEntries() {
+			s.dynamicSamplingContext.Entries["sample_rate"] = strconv.FormatFloat(tracesSamplerSampleRate, 'f', -1, 64)
+		}
 		if tracesSamplerSampleRate < 0.0 || tracesSamplerSampleRate > 1.0 {
 			Logger.Printf("Dropping transaction: Returned TracesSampler rate is out of range [0.0, 1.0]: %f", tracesSamplerSampleRate)
 			return SampledFalse
 		}
-		if tracesSamplerSampleRate == 0 {
+		if tracesSamplerSampleRate == 0.0 {
 			Logger.Printf("Dropping transaction: Returned TracesSampler rate is: %f", tracesSamplerSampleRate)
 			return SampledFalse
 		}
@@ -506,25 +504,31 @@ func (s *Span) sample() Sampled {
 			return SampledTrue
 		}
 		Logger.Printf("Dropping transaction: TracesSampler returned rate: %f", tracesSamplerSampleRate)
+
 		return SampledFalse
 	}
+
 	// #4 inherit parent decision.
-	if s.parent != nil {
-		Logger.Printf("Using sampling decision from parent: %v", s.parent.Sampled)
-		switch s.parent.Sampled {
+	if s.Sampled != SampledUndefined {
+		Logger.Printf("Using sampling decision from parent: %v", s.Sampled)
+		switch s.Sampled {
 		case SampledTrue:
 			s.sampleRate = 1.0
 		case SampledFalse:
 			s.sampleRate = 0.0
 		}
-		return s.parent.Sampled
+		return s.Sampled
 	}
 
 	// #5 use TracesSampleRate from ClientOptions.
 	sampleRate := clientOptions.TracesSampleRate
 	s.sampleRate = sampleRate
+	// tracesSampleRate can update the sample_rate on frozen DSC
+	if s.dynamicSamplingContext.HasEntries() {
+		s.dynamicSamplingContext.Entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
+	}
 	if sampleRate < 0.0 || sampleRate > 1.0 {
-		Logger.Printf("Dropping transaction: TracesSamplerRate out of range [0.0, 1.0]: %f", sampleRate)
+		Logger.Printf("Dropping transaction: TracesSampleRate out of range [0.0, 1.0]: %f", sampleRate)
 		return SampledFalse
 	}
 	if sampleRate == 0.0 {
@@ -580,7 +584,6 @@ func (s *Span) toEvent() *Event {
 		Transaction: s.Name,
 		Contexts:    contexts,
 		Tags:        s.Tags,
-		Extra:       s.Data,
 		Timestamp:   s.EndTime,
 		StartTime:   s.StartTime,
 		Spans:       finished,
@@ -599,6 +602,7 @@ func (s *Span) traceContext() *TraceContext {
 		SpanID:       s.SpanID,
 		ParentSpanID: s.ParentSpanID,
 		Op:           s.Op,
+		Data:         s.Data,
 		Description:  s.Description,
 		Status:       s.Status,
 	}
@@ -774,12 +778,13 @@ func (ss SpanStatus) MarshalJSON() ([]byte, error) {
 // A TraceContext carries information about an ongoing trace and is meant to be
 // stored in Event.Contexts (as *TraceContext).
 type TraceContext struct {
-	TraceID      TraceID    `json:"trace_id"`
-	SpanID       SpanID     `json:"span_id"`
-	ParentSpanID SpanID     `json:"parent_span_id"`
-	Op           string     `json:"op,omitempty"`
-	Description  string     `json:"description,omitempty"`
-	Status       SpanStatus `json:"status,omitempty"`
+	TraceID      TraceID                `json:"trace_id"`
+	SpanID       SpanID                 `json:"span_id"`
+	ParentSpanID SpanID                 `json:"parent_span_id"`
+	Op           string                 `json:"op,omitempty"`
+	Description  string                 `json:"description,omitempty"`
+	Status       SpanStatus             `json:"status,omitempty"`
+	Data         map[string]interface{} `json:"data,omitempty"`
 }
 
 func (tc *TraceContext) MarshalJSON() ([]byte, error) {
@@ -820,6 +825,10 @@ func (tc TraceContext) Map() map[string]interface{} {
 
 	if tc.Status > 0 && tc.Status < maxSpanStatus {
 		m["status"] = tc.Status
+	}
+
+	if len(tc.Data) > 0 {
+		m["data"] = tc.Data
 	}
 
 	return m
@@ -896,7 +905,7 @@ func WithTransactionSource(source TransactionSource) SpanOption {
 // WithSpanSampled updates the sampling flag for a given span.
 func WithSpanSampled(sampled Sampled) SpanOption {
 	return func(s *Span) {
-		s.Sampled = sampled
+		s.explicitSampled = sampled
 	}
 }
 
@@ -907,7 +916,7 @@ func WithSpanOrigin(origin SpanOrigin) SpanOption {
 	}
 }
 
-// Continue a trace based on traceparent and bagge values.
+// ContinueTrace continues a trace based on traceparent and baggage values.
 // If the SDK is configured with tracing enabled,
 // this function returns populated SpanOption.
 // In any other cases, it populates the propagation context on the scope.
