@@ -135,6 +135,6 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 
 // SentryHTTPClient provides a default HTTP client with SentryRoundTripper included.
 // This can be used directly to perform HTTP request.
-var SentryHTTPClient = &http.Client{
+var Client = &http.Client{
 	Transport: NewSentryRoundTripper(http.DefaultTransport),
 }
