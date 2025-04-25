@@ -20,7 +20,7 @@ var optstrans = cmp.Options{
 	cmpopts.IgnoreFields(
 		sentry.Span{},
 		"TraceID", "SpanID", "ParentSpanID", "StartTime", "EndTime",
-		"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "collectProfile", "contexts",
+		"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "contexts", "explicitSampled",
 	),
 }
 

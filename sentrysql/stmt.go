@@ -82,6 +82,7 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 			return nil, err
 		}
 
+		s.ctx = ctx
 		return s.Exec(values)
 	}
 
@@ -115,6 +116,7 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 			return nil, err
 		}
 
+		s.ctx = ctx
 		return s.Query(values)
 	}
 

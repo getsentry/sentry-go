@@ -131,7 +131,13 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 	// should only be executed if the original driver implements QueryerContext
 	queryerContext, ok := s.originalConn.(driver.QueryerContext)
 	if !ok {
-		return nil, driver.ErrSkip
+		values, err := namedValueToValue(args)
+		if err != nil {
+			return nil, err
+		}
+
+		s.ctx = ctx
+		return s.Query(query, values)
 	}
 
 	parentSpan := sentry.SpanFromContext(ctx)
@@ -185,8 +191,13 @@ func (s *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 	// should only be executed if the original driver implements ExecerContext {
 	execerContext, ok := s.originalConn.(driver.ExecerContext)
 	if !ok {
-		// ExecContext may return ErrSkip.
-		return nil, driver.ErrSkip
+		values, err := namedValueToValue(args)
+		if err != nil {
+			return nil, err
+		}
+
+		s.ctx = ctx
+		return s.Exec(query, values)
 	}
 
 	parentSpan := sentry.SpanFromContext(ctx)
