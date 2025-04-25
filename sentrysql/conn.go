@@ -54,6 +54,7 @@ func (s *sentryConn) PrepareContext(ctx context.Context, query string) (driver.S
 	connPrepareContext, ok := s.originalConn.(driver.ConnPrepareContext)
 	if !ok {
 		// We can't return driver.ErrSkip here. We should fall back to Prepare without context.
+		s.ctx = ctx
 		return s.Prepare(query)
 	}
 
@@ -88,6 +89,7 @@ func (s *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 	connBeginTx, ok := s.originalConn.(driver.ConnBeginTx)
 	if !ok {
 		// We can't return driver.ErrSkip here. We should fall back to Begin without context.
+		s.ctx = ctx
 		return s.Begin()
 	}
 
