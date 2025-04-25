@@ -103,7 +103,7 @@ func descriptionForHttpMethod(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 
 	var httpPath string
 
-	// prefer httpRoute
+	// Prefer httpRoute if available
 	if httpRoute != "" {
 		httpPath = httpRoute
 	} else if httpTarget != "" {
