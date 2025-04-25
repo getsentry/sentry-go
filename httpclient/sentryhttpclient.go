@@ -106,7 +106,7 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 
 	cleanRequestURL := request.URL.Redacted()
 
-	span := parentSpan.StartChild("http.client", sentry.WithTransactionName(fmt.Sprintf("%s %s", request.Method, cleanRequestURL)))
+	span := parentSpan.StartChild("http.client", sentry.WithDescription(fmt.Sprintf("%s %s", request.Method, cleanRequestURL)))
 	defer span.Finish()
 
 	span.SetData("http.query", request.URL.Query().Encode())

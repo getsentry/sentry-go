@@ -77,11 +77,11 @@ func TestIntegration(t *testing.T) {
 					"server.address":               string("example.com"),
 					"server.port":                  string(""),
 				},
-				Name:    "GET https://example.com/foo",
-				Op:      "http.client",
-				Origin:  "manual",
-				Sampled: sentry.SampledTrue,
-				Status:  sentry.SpanStatusOK,
+				Description: "GET https://example.com/foo",
+				Op:          "http.client",
+				Origin:      "manual",
+				Sampled:     sentry.SampledTrue,
+				Status:      sentry.SpanStatusOK,
 			},
 		},
 		{
@@ -100,11 +100,11 @@ func TestIntegration(t *testing.T) {
 					"server.address":               string("example.com"),
 					"server.port":                  string("443"),
 				},
-				Name:    "GET https://example.com:443/foo/bar?baz=123#readme",
-				Op:      "http.client",
-				Origin:  "manual",
-				Sampled: sentry.SampledTrue,
-				Status:  sentry.SpanStatusOK,
+				Description: "GET https://example.com:443/foo/bar?baz=123#readme",
+				Op:          "http.client",
+				Origin:      "manual",
+				Sampled:     sentry.SampledTrue,
+				Status:      sentry.SpanStatusOK,
 			},
 		},
 		{
@@ -123,12 +123,11 @@ func TestIntegration(t *testing.T) {
 					"server.address":               string("example.com"),
 					"server.port":                  string("8443"),
 				},
-
-				Name:    "HEAD https://example.com:8443/foo?bar=123&abc=def",
-				Op:      "http.client",
-				Origin:  "manual",
-				Sampled: sentry.SampledTrue,
-				Status:  sentry.SpanStatusInvalidArgument,
+				Description: "HEAD https://example.com:8443/foo?bar=123&abc=def",
+				Op:          "http.client",
+				Origin:      "manual",
+				Sampled:     sentry.SampledTrue,
+				Status:      sentry.SpanStatusInvalidArgument,
 			},
 		},
 		{
@@ -146,11 +145,11 @@ func TestIntegration(t *testing.T) {
 					"server.address":               string("example.com"),
 					"server.port":                  string("4321"),
 				},
-				Name:    "POST https://john:xxxxx@example.com:4321/secret",
-				Op:      "http.client",
-				Origin:  "manual",
-				Sampled: sentry.SampledTrue,
-				Status:  sentry.SpanStatusOK,
+				Description: "POST https://john:xxxxx@example.com:4321/secret",
+				Op:          "http.client",
+				Origin:      "manual",
+				Sampled:     sentry.SampledTrue,
+				Status:      sentry.SpanStatusOK,
 			},
 		},
 		{
@@ -165,11 +164,11 @@ func TestIntegration(t *testing.T) {
 					"server.address":      string("example.com"),
 					"server.port":         string(""),
 				},
-				Name:    "POST https://example.com",
-				Op:      "http.client",
-				Origin:  "manual",
-				Sampled: sentry.SampledTrue,
-				Status:  sentry.SpanStatusInternalError,
+				Description: "POST https://example.com",
+				Op:          "http.client",
+				Origin:      "manual",
+				Sampled:     sentry.SampledTrue,
+				Status:      sentry.SpanStatusInternalError,
 			},
 		},
 		{
@@ -194,11 +193,11 @@ func TestIntegration(t *testing.T) {
 					"server.address":               string("example.com"),
 					"server.port":                  string(""),
 				},
-				Name:    "GET https://example.com/foo/bar?baz=123#readme",
-				Op:      "http.client",
-				Origin:  "manual",
-				Sampled: sentry.SampledTrue,
-				Status:  sentry.SpanStatusOK,
+				Description: "GET https://example.com/foo/bar?baz=123#readme",
+				Op:          "http.client",
+				Origin:      "manual",
+				Sampled:     sentry.SampledTrue,
+				Status:      sentry.SpanStatusOK,
 			},
 		},
 		{
@@ -271,7 +270,8 @@ func TestIntegration(t *testing.T) {
 		cmpopts.IgnoreFields(
 			sentry.Span{},
 			"TraceID", "SpanID", "ParentSpanID", "StartTime", "EndTime",
-			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "collectProfile", "contexts",
+			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "contexts",
+			"explicitSampled",
 		),
 	}
 	for i, tt := range tests {
@@ -355,7 +355,8 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 		cmpopts.IgnoreFields(
 			sentry.Span{},
 			"TraceID", "SpanID", "ParentSpanID", "StartTime", "EndTime",
-			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "collectProfile", "contexts",
+			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "contexts",
+			"explicitSampled",
 		),
 	}
 
@@ -370,11 +371,11 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 			"server.address":               string("example.com"),
 			"server.port":                  string(""),
 		},
-		Name:    "POST https://example.com",
-		Op:      "http.client",
-		Origin:  "manual",
-		Sampled: sentry.SampledTrue,
-		Status:  sentry.SpanStatusOK,
+		Description: "POST https://example.com",
+		Op:          "http.client",
+		Origin:      "manual",
+		Sampled:     sentry.SampledTrue,
+		Status:      sentry.SpanStatusOK,
 	}
 
 	if diff := cmp.Diff(wantSpan, gotSpan, optstrans); diff != "" {
@@ -462,7 +463,7 @@ func TestDefaults(t *testing.T) {
 	})
 
 	t.Run("Create a regular outgoing HTTP request with default SentryHttpClient", func(t *testing.T) {
-		client := sentryhttpclient.SentryHTTPClient
+		client := sentryhttpclient.Client
 
 		res, err := client.Head("https://sentry.io")
 		if err != nil {
