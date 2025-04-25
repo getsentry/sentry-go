@@ -3,9 +3,7 @@ package sentryotel
 import (
 	"encoding/hex"
 	"sort"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/otel/baggage"
@@ -112,35 +110,3 @@ func otelSpanIDFromHex(s string) trace.SpanID {
 	}
 	return spanID
 }
-
-// FIXME(anton): TransportMock is copied from mocks_test.go
-// I don't see an easy way right now to reuse this struct in "sentry" and
-// "sentryotel" packages: it naturally depends on "sentry", but tests in "sentry"
-// package also depend on it, so if we move it to a new package, we'll get an
-// import cycle.
-// Alternatively, it could be made public on "sentry" package, but it doesn't
-// feel right.
-
-type TransportMock struct {
-	mu        sync.Mutex
-	events    []*sentry.Event
-	lastEvent *sentry.Event
-}
-
-func (t *TransportMock) Configure(options sentry.ClientOptions) {}
-func (t *TransportMock) SendEvent(event *sentry.Event) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.events = append(t.events, event)
-	t.lastEvent = event
-}
-func (t *TransportMock) Flush(timeout time.Duration) bool {
-	return true
-}
-func (t *TransportMock) Events() []*sentry.Event {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.events
-}
-
-//

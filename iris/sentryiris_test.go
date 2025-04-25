@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -52,9 +53,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra: map[string]interface{}{
-					"http.request.method":       string("GET"),
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodGet,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 			WantEvent: &sentry.Event{
@@ -125,9 +132,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra: map[string]interface{}{
-					"http.request.method":       string("POST"),
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 			WantEvent: &sentry.Event{
@@ -169,9 +182,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra: map[string]interface{}{
-					"http.request.method":       string("GET"),
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodGet,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 			WantEvent: &sentry.Event{
@@ -215,9 +234,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra: map[string]interface{}{
-					"http.request.method":       string("POST"),
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 			WantEvent: &sentry.Event{
@@ -262,9 +287,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra: map[string]interface{}{
-					"http.request.method":       string("POST"),
-					"http.response.status_code": http.StatusOK,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodPost,
+							"http.response.status_code": http.StatusOK,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusOK,
+					}.Map(),
 				},
 			},
 			WantEvent: &sentry.Event{
@@ -305,9 +336,15 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Extra: map[string]interface{}{
-					"http.request.method":       string("GET"),
-					"http.response.status_code": http.StatusBadRequest,
+				Contexts: map[string]sentry.Context{
+					"trace": sentry.TraceContext{
+						Data: map[string]interface{}{
+							"http.request.method":       http.MethodGet,
+							"http.response.status_code": http.StatusBadRequest,
+						},
+						Op:     "http.server",
+						Status: sentry.SpanStatusInvalidArgument,
+					}.Map(),
 				},
 			},
 			WantEvent: nil,
@@ -414,7 +451,7 @@ func TestIntegration(t *testing.T) {
 	optstrans := cmp.Options{
 		cmpopts.IgnoreFields(
 			sentry.Event{},
-			"Contexts", "EventID", "Platform", "Modules",
+			"EventID", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp",
 			"sdkMetaData", "StartTime", "Spans",
 		),
@@ -422,6 +459,15 @@ func TestIntegration(t *testing.T) {
 			sentry.Request{},
 			"Env",
 		),
+		cmpopts.IgnoreMapEntries(func(k string, v any) bool {
+			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
+			for _, e := range ignoredCtxEntries {
+				if k == e {
+					return true
+				}
+			}
+			return false
+		}),
 	}
 	if diff := cmp.Diff(wanttrans, gott, optstrans); diff != "" {
 		t.Fatalf("Transaction mismatch (-want +got):\n%s", diff)
@@ -476,4 +522,30 @@ func TestGetSpanFromContext(t *testing.T) {
 			t.Fatal("sentry.Flush timed out")
 		}
 	}
+}
+
+func TestSetHubOnContext(t *testing.T) {
+	app := iris.New()
+
+	app.Get("/with-hub", func(ctx iris.Context) {
+		hub := sentry.CurrentHub().Clone()
+		sentryiris.SetHubOnContext(ctx, hub)
+
+		newHub := sentryiris.GetHubFromContext(ctx)
+		if newHub == nil {
+			t.Error("expecting hub to be not nil")
+		}
+
+		if !reflect.DeepEqual(hub, newHub) {
+			t.Error("expecting hub to be the same")
+		}
+
+		ctx.StatusCode(http.StatusOK)
+	})
+
+	srv := httptest.New(t, app)
+
+	res := srv.Request(http.MethodGet, "/with-hub").Expect()
+
+	res.Status(http.StatusOK)
 }

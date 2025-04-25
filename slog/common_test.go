@@ -340,7 +340,7 @@ func TestValueToString(t *testing.T) {
 		},
 		"KindFloat64": {
 			input:    slog.Float64("key", 3.14),
-			expected: "3.140000",
+			expected: "3.14",
 		},
 		"KindString": {
 			input:    slog.String("key", "test"),

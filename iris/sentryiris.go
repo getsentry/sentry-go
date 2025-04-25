@@ -1,6 +1,3 @@
-//go:build go1.13
-// +build go1.13
-
 package sentryiris
 
 import (
@@ -15,8 +12,13 @@ import (
 
 // The identifier of the Iris SDK.
 const (
-	sdkIdentifier  = "sentry.go.iris"
-	valuesKey      = "sentry"
+	// sdkIdentifier is the identifier of the Iris SDK.
+	sdkIdentifier = "sentry.go.iris"
+
+	// valuesKey is used as a key to store the Sentry Hub instance on the iris.Context.
+	valuesKey = "sentry"
+
+	// transactionKey is used as a key to store the Sentry transaction on the iris.Context.
 	transactionKey = "sentry_transaction"
 )
 
@@ -41,13 +43,13 @@ type Options struct {
 // New returns a function that satisfies iris.Handler interface
 // It can be used with Use() method.
 func New(options Options) iris.Handler {
-	timeout := options.Timeout
-	if timeout == 0 {
-		timeout = 2 * time.Second
+	if options.Timeout == 0 {
+		options.Timeout = 2 * time.Second
 	}
+
 	return (&handler{
 		repanic:         options.Repanic,
-		timeout:         timeout,
+		timeout:         options.Timeout,
 		waitForDelivery: options.WaitForDelivery,
 	}).handle
 }
@@ -115,6 +117,11 @@ func GetHubFromContext(ctx iris.Context) *sentry.Hub {
 		return hub
 	}
 	return nil
+}
+
+// SetHubOnContext attaches a *sentry.Hub instance to iris.Context.
+func SetHubOnContext(ctx iris.Context, hub *sentry.Hub) {
+	ctx.Values().Set(valuesKey, hub)
 }
 
 // GetSpanFromContext retrieves attached *sentry.Span instance from iris.Context.

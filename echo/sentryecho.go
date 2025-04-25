@@ -10,11 +10,19 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// The identifier of the Echo SDK.
-const sdkIdentifier = "sentry.go.echo"
+const (
+	// sdkIdentifier is the identifier of the Echo SDK.
+	sdkIdentifier = "sentry.go.echo"
 
-const valuesKey = "sentry"
-const transactionKey = "sentry_transaction"
+	// valuesKey is used as a key to store the Sentry Hub instance on the  echo.Context.
+	valuesKey = "sentry"
+
+	// transactionKey is used as a key to store the Sentry transaction on the echo.Context.
+	transactionKey = "sentry_transaction"
+
+	// errorKey is used as a key to store the error on the echo.Context.
+	errorKey = "error"
+)
 
 type handler struct {
 	repanic         bool
@@ -24,7 +32,7 @@ type handler struct {
 
 type Options struct {
 	// Repanic configures whether Sentry should repanic after recovery, in most cases it should be set to true,
-	// as echo includes its own Recover middleware what handles http responses.
+	// as Echo includes its own Recover middleware that handles HTTP responses.
 	Repanic bool
 	// WaitForDelivery configures whether you want to block the request before moving forward with the response.
 	// Because Echo's Recover handler doesn't restart the application,
@@ -37,13 +45,13 @@ type Options struct {
 // New returns a function that satisfies echo.HandlerFunc interface
 // It can be used with Use() methods.
 func New(options Options) echo.MiddlewareFunc {
-	timeout := options.Timeout
-	if timeout == 0 {
-		timeout = 2 * time.Second
+	if options.Timeout == 0 {
+		options.Timeout = 2 * time.Second
 	}
+
 	return (&handler{
 		repanic:         options.Repanic,
-		timeout:         timeout,
+		timeout:         options.Timeout,
 		waitForDelivery: options.WaitForDelivery,
 	}).handle
 }
@@ -86,7 +94,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 
 		defer func() {
 			status := ctx.Response().Status
-			if err := ctx.Get("error"); err != nil {
+			if err := ctx.Get(errorKey); err != nil {
 				if httpError, ok := err.(*echo.HTTPError); ok {
 					status = httpError.Code
 				}
@@ -105,7 +113,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		err := next(ctx)
 		if err != nil {
 			// Store the error so it can be used in the deferred function
-			ctx.Set("error", err)
+			ctx.Set(errorKey, err)
 		}
 
 		return err
@@ -133,6 +141,11 @@ func GetHubFromContext(ctx echo.Context) *sentry.Hub {
 		return hub
 	}
 	return nil
+}
+
+// SetHubOnContext attaches *sentry.Hub instance to echo.Context.
+func SetHubOnContext(ctx echo.Context, hub *sentry.Hub) {
+	ctx.Set(valuesKey, hub)
 }
 
 // GetSpanFromContext retrieves attached *sentry.Span instance from echo.Context.
