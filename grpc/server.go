@@ -31,12 +31,6 @@ type ServerOptions struct {
 
 	// ReportOn defines the conditions under which errors are reported to Sentry.
 	ReportOn func(error) bool
-
-	// CaptureRequestBody determines whether to capture and send request bodies to Sentry.
-	CaptureRequestBody bool
-
-	// OperationName overrides the default operation name (grpc.server).
-	OperationName string
 }
 
 func (o *ServerOptions) SetDefaults() {
@@ -48,10 +42,6 @@ func (o *ServerOptions) SetDefaults() {
 
 	if o.Timeout == 0 {
 		o.Timeout = sentry.DefaultFlushTimeout
-	}
-
-	if o.OperationName == "" {
-		o.OperationName = defaultServerOperationName
 	}
 }
 
@@ -135,7 +125,7 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
-			sentry.WithOpName(opts.OperationName),
+			sentry.WithOpName(defaultServerOperationName),
 			sentry.WithDescription(info.FullMethod),
 			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
@@ -151,11 +141,6 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 
 		ctx = transaction.Context()
 		defer transaction.Finish()
-
-		if opts.CaptureRequestBody {
-			// Marshal from proto.Message to bytes? Slow?
-			// hub.Scope().SetRequestBody(req)
-		}
 
 		defer recoverWithSentry(ctx, hub, opts)
 
@@ -202,7 +187,6 @@ func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
-			sentry.WithOpName(opts.OperationName),
 			sentry.WithDescription(info.FullMethod),
 			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
@@ -281,8 +265,8 @@ var codeToSpanStatus = map[codes.Code]sentry.SpanStatus{
 }
 
 func toSpanStatus(code codes.Code) sentry.SpanStatus {
-	if status, ok := codeToSpanStatus[code]; ok {
-		return status
+	if spanStatus, ok := codeToSpanStatus[code]; ok {
+		return spanStatus
 	}
 	return sentry.SpanStatusUndefined
 }

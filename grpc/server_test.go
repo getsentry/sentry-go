@@ -16,8 +16,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const defaultServerOperationName = "grpc.server"
-
 func TestServerOptions_SetDefaults(t *testing.T) {
 	tests := map[string]struct {
 		options    sentrygrpc.ServerOptions
@@ -28,7 +26,6 @@ func TestServerOptions_SetDefaults(t *testing.T) {
 			assertions: func(t *testing.T, options sentrygrpc.ServerOptions) {
 				assert.NotNil(t, options.ReportOn, "ReportOn should be set to default function")
 				assert.Equal(t, sentry.DefaultFlushTimeout, options.Timeout, "Timeout should be set to default value")
-				assert.Equal(t, defaultServerOperationName, options.OperationName, "OperationName should be set to default value")
 			},
 		},
 		"Custom ReportOn is preserved": {
@@ -51,22 +48,6 @@ func TestServerOptions_SetDefaults(t *testing.T) {
 			},
 			assertions: func(t *testing.T, options sentrygrpc.ServerOptions) {
 				assert.Equal(t, 5*time.Second, options.Timeout, "Timeout should be set to custom value")
-			},
-		},
-		"Custom OperationName is preserved": {
-			options: sentrygrpc.ServerOptions{
-				OperationName: "custom.operation",
-			},
-			assertions: func(t *testing.T, options sentrygrpc.ServerOptions) {
-				assert.Equal(t, "custom.operation", options.OperationName, "OperationName should be set to custom value")
-			},
-		},
-		"CaptureRequestBody remains unchanged": {
-			options: sentrygrpc.ServerOptions{
-				CaptureRequestBody: true,
-			},
-			assertions: func(t *testing.T, options sentrygrpc.ServerOptions) {
-				assert.True(t, options.CaptureRequestBody, "CaptureRequestBody should remain true")
 			},
 		},
 	}
@@ -118,34 +99,6 @@ func TestUnaryServerInterceptor(t *testing.T) {
 				return nil, status.Error(codes.Internal, "handler error not reported")
 			},
 			expectedErr:       "rpc error: code = Internal desc = handler error not reported",
-			assertTransaction: true,
-		},
-		"Capture request body when enabled": {
-			options: sentrygrpc.ServerOptions{
-				CaptureRequestBody: true,
-				ReportOn: func(err error) bool {
-					return true
-				},
-			},
-			handler: func(ctx context.Context, req any) (any, error) {
-				return nil, status.Error(codes.InvalidArgument, "invalid request body")
-			},
-			expectedErr:       "rpc error: code = InvalidArgument desc = invalid request body",
-			wantException:     "rpc error: code = InvalidArgument desc = invalid request body",
-			assertTransaction: true,
-		},
-		"Custom operation name is used in transaction": {
-			options: sentrygrpc.ServerOptions{
-				OperationName: "CustomUnaryOperation",
-				ReportOn: func(err error) bool {
-					return true
-				},
-			},
-			handler: func(ctx context.Context, req any) (any, error) {
-				return nil, status.Error(codes.PermissionDenied, "access denied")
-			},
-			expectedErr:       "rpc error: code = PermissionDenied desc = access denied",
-			wantException:     "rpc error: code = PermissionDenied desc = access denied",
 			assertTransaction: true,
 		},
 	}
