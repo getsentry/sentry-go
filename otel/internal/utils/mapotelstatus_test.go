@@ -15,6 +15,7 @@ import (
 
 type mockReadOnlySpan struct {
 	trace.ReadOnlySpan
+	name       string
 	status     trace.Status
 	spanKind   oteltrace.SpanKind
 	attributes []attribute.KeyValue
@@ -32,6 +33,10 @@ func (m *mockReadOnlySpan) Status() trace.Status {
 
 func (m *mockReadOnlySpan) SpanKind() oteltrace.SpanKind {
 	return m.spanKind
+}
+
+func (m *mockReadOnlySpan) Name() string {
+	return m.name
 }
 
 func TestMapOtelStatus(t *testing.T) {
