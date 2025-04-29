@@ -31,6 +31,7 @@ const (
 	SpanOriginStdLib   = "auto.http.stdlib"
 	SpanOriginIris     = "auto.http.iris"
 	SpanOriginNegroni  = "auto.http.negroni"
+	SpanOriginGoframe  = "auto.http.goframe"
 )
 
 // A Span is the building block of a Sentry transaction. Spans build up a tree
