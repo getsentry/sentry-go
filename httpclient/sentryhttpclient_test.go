@@ -215,7 +215,7 @@ func TestIntegration(t *testing.T) {
 	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
-		BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			spansCh <- event.Spans
 			return event
 		},
@@ -303,7 +303,7 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 		EnableTracing:           true,
 		TracePropagationTargets: []string{"example.com"},
 		TracesSampleRate:        1.0,
-		BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(event *sentry.Event, _s *sentry.EventHint) *sentry.Event {
 			spansCh <- event.Spans
 			return event
 		},
@@ -389,7 +389,7 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
-		BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			spansCh <- event.Spans
 			return event
 		},

@@ -51,7 +51,6 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 			if clientOptions.TracePropagationTargets != nil {
 				tracePropagationTargets = clientOptions.TracePropagationTargets
 			}
-
 		}
 	}
 
