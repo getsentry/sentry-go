@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"testing"
 	"time"
 
@@ -15,6 +16,15 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+func errorWithDebugInfo() error {
+	st := status.New(codes.Internal, "debug info error")
+	stWithDetails, _ := st.WithDetails(&errdetails.DebugInfo{
+		Detail:       "debugging something broke",
+		StackEntries: []string{"main.go:10", "server.go:15"},
+	})
+	return stWithDetails.Err()
+}
 
 func TestServerOptions_SetDefaults(t *testing.T) {
 	tests := map[string]struct {
@@ -65,13 +75,17 @@ func TestUnaryServerInterceptor(t *testing.T) {
 	tests := map[string]struct {
 		options           sentrygrpc.ServerOptions
 		handler           grpc.UnaryHandler
+		ctx               context.Context
 		expectedErr       string
 		wantException     string
 		wantTransaction   *sentry.Event
+		expectedMetadata  string
 		assertTransaction bool
 	}{
 		"Handle panic and re-panic": {
-			options: sentrygrpc.ServerOptions{Repanic: true},
+			options:          sentrygrpc.ServerOptions{Repanic: true},
+			ctx:              metadata.NewIncomingContext(context.Background(), metadata.Pairs("md", "some")),
+			expectedMetadata: "some",
 			handler: func(ctx context.Context, req any) (any, error) {
 				panic("test panic")
 			},
@@ -82,6 +96,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 					return true
 				},
 			},
+			ctx: context.Background(),
 			handler: func(ctx context.Context, req any) (any, error) {
 				return nil, status.Error(codes.Internal, "handler error")
 			},
@@ -95,11 +110,27 @@ func TestUnaryServerInterceptor(t *testing.T) {
 					return false
 				},
 			},
+			ctx: context.Background(),
 			handler: func(ctx context.Context, req any) (any, error) {
 				return nil, status.Error(codes.Internal, "handler error not reported")
 			},
 			expectedErr:       "rpc error: code = Internal desc = handler error not reported",
 			assertTransaction: true,
+		},
+		"Report error with DebugInfo breadcrumb": {
+			options: sentrygrpc.ServerOptions{
+				ReportOn: func(err error) bool {
+					return true
+				},
+			},
+			ctx: context.Background(),
+			handler: func(ctx context.Context, req any) (any, error) {
+				return nil, errorWithDebugInfo()
+			},
+			expectedErr:       "rpc error: code = Internal desc = debug info error",
+			wantException:     "rpc error: code = Internal desc = debug info error",
+			assertTransaction: true,
+			expectedMetadata:  "", // optional
 		},
 	}
 
@@ -136,7 +167,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 				}
 			}()
 
-			_, err = interceptor(context.Background(), nil, &grpc.UnaryServerInfo{
+			_, err = interceptor(test.ctx, nil, &grpc.UnaryServerInfo{
 				FullMethod: "TestService.Method",
 			}, test.handler)
 
@@ -156,6 +187,9 @@ func TestUnaryServerInterceptor(t *testing.T) {
 				assert.NotNil(t, gotEvent, "Expected an event")
 				assert.Len(t, gotEvent.Exception, 1, "Expected one exception in the event")
 				assert.Equal(t, test.wantException, gotEvent.Exception[0].Value, "Exception values should match")
+				if test.expectedMetadata != "" {
+					assert.Equal(t, gotEvent.Extra["md"], test.expectedMetadata)
+				}
 			}
 
 			if test.assertTransaction {

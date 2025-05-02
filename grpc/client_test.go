@@ -47,6 +47,18 @@ func TestClientOptions_SetDefaults(t *testing.T) {
 				assert.Equal(t, "custom.operation", options.OperationName, "OperationName should be set to custom value")
 			},
 		},
+		"Both custom ReportOn and OperationName are preserved": {
+			options: sentrygrpc.ClientOptions{
+				ReportOn: func(err error) bool {
+					return false
+				},
+				OperationName: "custom.operation",
+			},
+			assertions: func(t *testing.T, options sentrygrpc.ClientOptions) {
+				assert.Equal(t, "custom.operation", options.OperationName)
+				assert.False(t, options.ReportOn(errors.New("any error")))
+			},
+		},
 	}
 
 	for name, test := range tests {
@@ -60,12 +72,14 @@ func TestClientOptions_SetDefaults(t *testing.T) {
 
 func TestUnaryClientInterceptor(t *testing.T) {
 	tests := map[string]struct {
+		ctx         context.Context
 		invoker     grpc.UnaryInvoker
 		options     sentrygrpc.ClientOptions
 		expectedErr error
 		assertions  func(t *testing.T, transport *sentry.MockTransport)
 	}{
 		"Default behavior, no error": {
+			ctx: context.Background(),
 			invoker: func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 				return nil
 			},
@@ -75,6 +89,7 @@ func TestUnaryClientInterceptor(t *testing.T) {
 			},
 		},
 		"Error is reported": {
+			ctx: context.Background(),
 			invoker: func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 				return errors.New("test error")
 			},
@@ -87,17 +102,20 @@ func TestUnaryClientInterceptor(t *testing.T) {
 			},
 		},
 		"Metadata propagation": {
+			ctx: metadata.NewOutgoingContext(context.Background(), metadata.Pairs("existing", "value")),
 			invoker: func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 				md, ok := metadata.FromOutgoingContext(ctx)
 				assert.True(t, ok, "Metadata should be present in the outgoing context")
 				assert.Contains(t, md, sentry.SentryTraceHeader, "Metadata should contain Sentry trace header")
 				assert.Contains(t, md, sentry.SentryBaggageHeader, "Metadata should contain Sentry baggage header")
+				assert.Contains(t, md, "existing", "Metadata should contain key")
 				return nil
 			},
 			options:    sentrygrpc.ClientOptions{},
 			assertions: func(t *testing.T, transport *sentry.MockTransport) {},
 		},
 		"Custom ReportOn behavior": {
+			ctx: context.Background(),
 			invoker: func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 				return errors.New("test error")
 			},
@@ -123,7 +141,7 @@ func TestUnaryClientInterceptor(t *testing.T) {
 			interceptor := sentrygrpc.UnaryClientInterceptor(test.options)
 
 			// Execute the interceptor
-			err := interceptor(context.Background(), "/test.Service/TestMethod", struct{}{}, struct{}{}, nil, test.invoker)
+			err := interceptor(test.ctx, "/test.Service/TestMethod", struct{}{}, struct{}{}, nil, test.invoker)
 
 			if test.expectedErr != nil {
 				assert.Equal(t, test.expectedErr, err, "Expected error mismatch")
