@@ -1,6 +1,6 @@
 name: 🐞 Bug Report
 description: Tell us about something that's not working the way we (probably) intend.
-type: Bug
+labels: ["Go", "Bug"]
 body:
   - type: dropdown
     id: type
@@ -32,8 +32,8 @@ body:
     attributes:
       label: Are you using Go Modules?
       options:
-        - yes
-        - no
+        - "yes"
+        - "no"
     validations:
       required: true
   - type: textarea
@@ -42,11 +42,7 @@ body:
       label: Steps to reproduce
       description: How can we see what you're seeing? Specific is terrific.
       placeholder: |
-        Good options are
-        * inline source code snippet
-        * link to Go Playground https://play.golang.org/
-        * Gist https://gist.github.com
-        * link to a public project
+        Good options are an inline source code snippet; a link to Go Playground https://play.golang.org/; Gist https://gist.github.com, or link to a public project
     validations:
       required: true
   - type: textarea

@@ -634,7 +634,7 @@ func TestIgnoreErrors(t *testing.T) {
 			client.CaptureMessage(tt.message, nil, scope)
 
 			dropped := transport.lastEvent == nil
-			if !(tt.expectDrop == dropped) {
+			if tt.expectDrop != dropped {
 				t.Errorf("expected event to be dropped")
 			}
 		})
@@ -690,7 +690,7 @@ func TestIgnoreTransactions(t *testing.T) {
 			transaction.Finish()
 
 			dropped := transport.lastEvent == nil
-			if !(tt.expectDrop == dropped) {
+			if tt.expectDrop != dropped {
 				t.Errorf("expected event to be dropped")
 			}
 		})
