@@ -32,8 +32,8 @@ func main() {
 	conn, err := grpc.NewClient(
 		grpcServerAddress,
 		grpc.WithTransportCredentials(insecure.NewCredentials()), // Use TLS in production
-		grpc.WithUnaryInterceptor(sentrygrpc.UnaryClientInterceptor(sentrygrpc.ClientOptions{})),
-		grpc.WithStreamInterceptor(sentrygrpc.StreamClientInterceptor(sentrygrpc.ClientOptions{})),
+		grpc.WithUnaryInterceptor(sentrygrpc.UnaryClientInterceptor()),
+		grpc.WithStreamInterceptor(sentrygrpc.StreamClientInterceptor()),
 	)
 	if err != nil {
 		log.Fatalf("Failed to connect to gRPC server: %s", err)
