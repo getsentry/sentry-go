@@ -2,9 +2,7 @@ package sentrygrpc_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"testing"
 	"time"
 
@@ -17,15 +15,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func errorWithDebugInfo() error {
-	st := status.New(codes.Internal, "debug info error")
-	stWithDetails, _ := st.WithDetails(&errdetails.DebugInfo{
-		Detail:       "debugging something broke",
-		StackEntries: []string{"main.go:10", "server.go:15"},
-	})
-	return stWithDetails.Err()
-}
-
 func TestServerOptions_SetDefaults(t *testing.T) {
 	tests := map[string]struct {
 		options    sentrygrpc.ServerOptions
@@ -34,22 +23,7 @@ func TestServerOptions_SetDefaults(t *testing.T) {
 		"Defaults are set when fields are empty": {
 			options: sentrygrpc.ServerOptions{},
 			assertions: func(t *testing.T, options sentrygrpc.ServerOptions) {
-				assert.NotNil(t, options.ReportOn, "ReportOn should be set to default function")
 				assert.Equal(t, sentry.DefaultFlushTimeout, options.Timeout, "Timeout should be set to default value")
-			},
-		},
-		"Custom ReportOn is preserved": {
-			options: sentrygrpc.ServerOptions{
-				ReportOn: func(err error) bool {
-					return err.Error() == "specific error"
-				},
-			},
-			assertions: func(t *testing.T, options sentrygrpc.ServerOptions) {
-				assert.NotNil(t, options.ReportOn, "ReportOn should not be nil")
-				err := errors.New("random error")
-				assert.False(t, options.ReportOn(err), "ReportOn should return false for random error")
-				err = errors.New("specific error")
-				assert.True(t, options.ReportOn(err), "ReportOn should return true for specific error")
 			},
 		},
 		"Custom Timeout is preserved": {
@@ -76,7 +50,6 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		options           sentrygrpc.ServerOptions
 		handler           grpc.UnaryHandler
 		ctx               context.Context
-		expectedErr       string
 		wantException     string
 		wantTransaction   *sentry.Event
 		expectedMetadata  string
@@ -89,48 +62,6 @@ func TestUnaryServerInterceptor(t *testing.T) {
 			handler: func(ctx context.Context, req any) (any, error) {
 				panic("test panic")
 			},
-		},
-		"Report error with transaction": {
-			options: sentrygrpc.ServerOptions{
-				ReportOn: func(err error) bool {
-					return true
-				},
-			},
-			ctx: context.Background(),
-			handler: func(ctx context.Context, req any) (any, error) {
-				return nil, status.Error(codes.Internal, "handler error")
-			},
-			expectedErr:       "rpc error: code = Internal desc = handler error",
-			wantException:     "rpc error: code = Internal desc = handler error",
-			assertTransaction: true,
-		},
-		"Do not report error when ReportOn returns false": {
-			options: sentrygrpc.ServerOptions{
-				ReportOn: func(err error) bool {
-					return false
-				},
-			},
-			ctx: context.Background(),
-			handler: func(ctx context.Context, req any) (any, error) {
-				return nil, status.Error(codes.Internal, "handler error not reported")
-			},
-			expectedErr:       "rpc error: code = Internal desc = handler error not reported",
-			assertTransaction: true,
-		},
-		"Report error with DebugInfo breadcrumb": {
-			options: sentrygrpc.ServerOptions{
-				ReportOn: func(err error) bool {
-					return true
-				},
-			},
-			ctx: context.Background(),
-			handler: func(ctx context.Context, req any) (any, error) {
-				return nil, errorWithDebugInfo()
-			},
-			expectedErr:       "rpc error: code = Internal desc = debug info error",
-			wantException:     "rpc error: code = Internal desc = debug info error",
-			assertTransaction: true,
-			expectedMetadata:  "", // optional
 		},
 	}
 
@@ -170,12 +101,6 @@ func TestUnaryServerInterceptor(t *testing.T) {
 			_, err = interceptor(test.ctx, nil, &grpc.UnaryServerInfo{
 				FullMethod: "TestService.Method",
 			}, test.handler)
-
-			if test.expectedErr != "" {
-				assert.EqualError(t, err, test.expectedErr)
-			} else {
-				assert.NoError(t, err)
-			}
 
 			if test.wantException != "" {
 				close(eventsCh)
@@ -223,7 +148,6 @@ func TestStreamServerInterceptor(t *testing.T) {
 	tests := map[string]struct {
 		options          sentrygrpc.ServerOptions
 		handler          grpc.StreamHandler
-		expectedErr      string
 		expectedMetadata bool
 		expectedEvent    bool
 	}{
@@ -232,22 +156,8 @@ func TestStreamServerInterceptor(t *testing.T) {
 			handler: func(srv any, stream grpc.ServerStream) error {
 				return nil
 			},
-			expectedErr:      "",
 			expectedMetadata: false,
 			expectedEvent:    false,
-		},
-		"Handler returns an error": {
-			options: sentrygrpc.ServerOptions{
-				ReportOn: func(err error) bool {
-					return true
-				},
-			},
-			handler: func(srv any, stream grpc.ServerStream) error {
-				return status.Error(codes.Internal, "stream error")
-			},
-			expectedErr:      "rpc error: code = Internal desc = stream error",
-			expectedMetadata: false,
-			expectedEvent:    true,
 		},
 		"Repanic is enabled": {
 			options: sentrygrpc.ServerOptions{
@@ -256,7 +166,6 @@ func TestStreamServerInterceptor(t *testing.T) {
 			handler: func(srv any, stream grpc.ServerStream) error {
 				panic("test panic")
 			},
-			expectedErr:      "",
 			expectedMetadata: false,
 			expectedEvent:    true,
 		},
@@ -269,7 +178,6 @@ func TestStreamServerInterceptor(t *testing.T) {
 				}
 				return nil
 			},
-			expectedErr:      "",
 			expectedMetadata: true,
 			expectedEvent:    false,
 		},
@@ -310,12 +218,6 @@ func TestStreamServerInterceptor(t *testing.T) {
 				}()
 				err = interceptor(nil, stream, &grpc.StreamServerInfo{FullMethod: "TestService.StreamMethod"}, test.handler)
 			}()
-
-			if test.expectedErr != "" {
-				assert.EqualError(t, err, test.expectedErr)
-			} else {
-				assert.NoError(t, err)
-			}
 
 			if test.expectedMetadata {
 				md, ok := metadata.FromIncomingContext(stream.Context())

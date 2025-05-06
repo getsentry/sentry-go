@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -28,18 +27,9 @@ type ServerOptions struct {
 
 	// Timeout sets the maximum duration for Sentry event delivery.
 	Timeout time.Duration
-
-	// ReportOn defines the conditions under which errors are reported to Sentry.
-	ReportOn func(error) bool
 }
 
 func (o *ServerOptions) SetDefaults() {
-	if o.ReportOn == nil {
-		o.ReportOn = func(err error) bool {
-			return true
-		}
-	}
-
 	if o.Timeout == 0 {
 		o.Timeout = sentry.DefaultFlushTimeout
 	}
@@ -57,45 +47,6 @@ func recoverWithSentry(ctx context.Context, hub *sentry.Hub, o ServerOptions) {
 			panic(r)
 		}
 	}
-}
-
-func reportErrorToSentry(hub *sentry.Hub, err error, methodName string, req any, md map[string]string) {
-	hub.WithScope(func(scope *sentry.Scope) {
-		scope.SetExtras(map[string]any{
-			"grpc.method": methodName,
-			"grpc.error":  err.Error(),
-		})
-
-		if req != nil {
-			scope.SetExtra("request", req)
-		}
-
-		if len(md) > 0 {
-			scope.SetExtra("metadata", md)
-		}
-
-		defer hub.CaptureException(err)
-
-		statusErr, ok := status.FromError(err)
-		if !ok {
-			return
-		}
-
-		for _, detail := range statusErr.Details() {
-			debugInfo, ok := detail.(*errdetails.DebugInfo)
-			if !ok {
-				continue
-			}
-			hub.AddBreadcrumb(&sentry.Breadcrumb{
-				Type:      "debug",
-				Category:  "grpc.server",
-				Message:   debugInfo.Detail,
-				Data:      map[string]any{"stackTrace": strings.Join(debugInfo.StackEntries, "\n")},
-				Level:     sentry.LevelError,
-				Timestamp: time.Now(),
-			}, nil)
-		}
-	})
 }
 
 func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
@@ -145,12 +96,6 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 		defer recoverWithSentry(ctx, hub, opts)
 
 		resp, err := handler(ctx, req)
-		if err != nil && opts.ReportOn(err) {
-			reportErrorToSentry(hub, err, info.FullMethod, req, data)
-
-			transaction.Sampled = sentry.SampledTrue
-		}
-
 		statusCode := status.Code(err)
 		transaction.Status = toSpanStatus(statusCode)
 		transaction.SetData("http.response.status_code", statusCode.String())
@@ -207,12 +152,6 @@ func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 		defer recoverWithSentry(ctx, hub, opts)
 
 		err := handler(srv, stream)
-		if err != nil && opts.ReportOn(err) {
-			reportErrorToSentry(hub, err, info.FullMethod, nil, data)
-
-			transaction.Sampled = sentry.SampledTrue
-		}
-
 		statusCode := status.Code(err)
 		transaction.Status = toSpanStatus(statusCode)
 		transaction.SetData("grpc.status", statusCode.String())
