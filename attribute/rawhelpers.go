@@ -19,7 +19,7 @@ import (
 	"math"
 )
 
-func boolToRaw(b bool) uint64 { // nolint:revive  // b is not a control flag.
+func boolToRaw(b bool) uint64 { // b is not a control flag.
 	if b {
 		return 1
 	}
