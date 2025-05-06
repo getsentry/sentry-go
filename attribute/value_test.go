@@ -76,7 +76,7 @@ func TestValue(t *testing.T) {
 	}
 }
 
-func TestValue_Emit(t *testing.T) {
+func TestValue_toString(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
 		value Value
@@ -113,7 +113,7 @@ func TestValue_Emit(t *testing.T) {
 			want:  "unknown",
 		},
 	} {
-		str := tt.value.Emit()
+		str := tt.value.String()
 		if str != tt.want {
 			t.Errorf("expected %v, got: %v", tt.want, str)
 		}

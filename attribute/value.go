@@ -128,8 +128,8 @@ func (v Value) AsInterface() interface{} {
 	return unknownValueType{}
 }
 
-// Emit returns a string representation of Value's data.
-func (v Value) Emit() string {
+// String returns a string representation of Value's data.
+func (v Value) String() string {
 	switch v.Type() {
 	case BOOL:
 		return strconv.FormatBool(v.AsBool())
