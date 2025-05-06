@@ -1,11 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Features
-
-- Add net/http client integration ([#876](https://github.com/getsentry/sentry-go/pull/876))
-
 ## 0.32.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.32.0.
