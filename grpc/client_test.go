@@ -2,7 +2,6 @@ package sentrygrpc_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -13,92 +12,19 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const defaultClientOperationName = "grpc.client"
-
-func TestClientOptions_SetDefaults(t *testing.T) {
-	tests := map[string]struct {
-		options    sentrygrpc.ClientOptions
-		assertions func(t *testing.T, options sentrygrpc.ClientOptions)
-	}{
-		"Defaults are set when fields are empty": {
-			options: sentrygrpc.ClientOptions{},
-			assertions: func(t *testing.T, options sentrygrpc.ClientOptions) {
-				assert.NotNil(t, options.ReportOn, "ReportOn should be set to default function")
-				assert.Equal(t, defaultClientOperationName, options.OperationName, "OperationName should be set to default value")
-			},
-		},
-		"Custom ReportOn is preserved": {
-			options: sentrygrpc.ClientOptions{
-				ReportOn: func(err error) bool {
-					return err.Error() == "custom error"
-				},
-			},
-			assertions: func(t *testing.T, options sentrygrpc.ClientOptions) {
-				assert.NotNil(t, options.ReportOn, "ReportOn should not be nil")
-				err := errors.New("random error")
-				assert.False(t, options.ReportOn(err), "ReportOn should return false for random error")
-			},
-		},
-		"Custom OperationName is preserved": {
-			options: sentrygrpc.ClientOptions{
-				OperationName: "custom.operation",
-			},
-			assertions: func(t *testing.T, options sentrygrpc.ClientOptions) {
-				assert.Equal(t, "custom.operation", options.OperationName, "OperationName should be set to custom value")
-			},
-		},
-		"Both custom ReportOn and OperationName are preserved": {
-			options: sentrygrpc.ClientOptions{
-				ReportOn: func(err error) bool {
-					return false
-				},
-				OperationName: "custom.operation",
-			},
-			assertions: func(t *testing.T, options sentrygrpc.ClientOptions) {
-				assert.Equal(t, "custom.operation", options.OperationName)
-				assert.False(t, options.ReportOn(errors.New("any error")))
-			},
-		},
-	}
-
-	for name, test := range tests {
-		t.Run(name, func(t *testing.T) {
-
-			test.options.SetDefaults()
-			test.assertions(t, test.options)
-		})
-	}
-}
-
 func TestUnaryClientInterceptor(t *testing.T) {
 	tests := map[string]struct {
-		ctx         context.Context
-		invoker     grpc.UnaryInvoker
-		options     sentrygrpc.ClientOptions
-		expectedErr error
-		assertions  func(t *testing.T, transport *sentry.MockTransport)
+		ctx        context.Context
+		invoker    grpc.UnaryInvoker
+		assertions func(t *testing.T, transport *sentry.MockTransport)
 	}{
 		"Default behavior, no error": {
 			ctx: context.Background(),
 			invoker: func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
 				return nil
 			},
-			options: sentrygrpc.ClientOptions{},
 			assertions: func(t *testing.T, transport *sentry.MockTransport) {
 				assert.Empty(t, transport.Events(), "No events should be captured")
-			},
-		},
-		"Error is reported": {
-			ctx: context.Background(),
-			invoker: func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
-				return errors.New("test error")
-			},
-			options:     sentrygrpc.ClientOptions{},
-			expectedErr: errors.New("test error"),
-			assertions: func(t *testing.T, transport *sentry.MockTransport) {
-				events := transport.Events()
-				assert.Len(t, events, 1, "One event should be captured")
-				assert.Equal(t, "test error", events[0].Exception[0].Value, "Captured exception should match the error")
 			},
 		},
 		"Metadata propagation": {
@@ -111,23 +37,7 @@ func TestUnaryClientInterceptor(t *testing.T) {
 				assert.Contains(t, md, "existing", "Metadata should contain key")
 				return nil
 			},
-			options:    sentrygrpc.ClientOptions{},
 			assertions: func(t *testing.T, transport *sentry.MockTransport) {},
-		},
-		"Custom ReportOn behavior": {
-			ctx: context.Background(),
-			invoker: func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, opts ...grpc.CallOption) error {
-				return errors.New("test error")
-			},
-			options: sentrygrpc.ClientOptions{
-				ReportOn: func(err error) bool {
-					return err.Error() == "specific error"
-				},
-			},
-			expectedErr: errors.New("test error"),
-			assertions: func(t *testing.T, transport *sentry.MockTransport) {
-				assert.Empty(t, transport.Events(), "No events should be captured due to custom ReportOn")
-			},
 		},
 	}
 
@@ -138,16 +48,10 @@ func TestUnaryClientInterceptor(t *testing.T) {
 				Transport: transport,
 			})
 
-			interceptor := sentrygrpc.UnaryClientInterceptor(test.options)
+			interceptor := sentrygrpc.UnaryClientInterceptor()
 
 			// Execute the interceptor
-			err := interceptor(test.ctx, "/test.Service/TestMethod", struct{}{}, struct{}{}, nil, test.invoker)
-
-			if test.expectedErr != nil {
-				assert.Equal(t, test.expectedErr, err, "Expected error mismatch")
-			} else {
-				assert.NoError(t, err, "Expected no error")
-			}
+			interceptor(test.ctx, "/test.Service/TestMethod", struct{}{}, struct{}{}, nil, test.invoker)
 
 			sentry.Flush(2 * time.Second)
 
@@ -159,35 +63,19 @@ func TestUnaryClientInterceptor(t *testing.T) {
 
 func TestStreamClientInterceptor(t *testing.T) {
 	tests := map[string]struct {
-		streamer    grpc.Streamer
-		options     sentrygrpc.ClientOptions
-		expectedErr error
-		assertions  func(t *testing.T, transport *sentry.MockTransport)
-		streamDesc  *grpc.StreamDesc
+		streamer   grpc.Streamer
+		assertions func(t *testing.T, transport *sentry.MockTransport)
+		streamDesc *grpc.StreamDesc
 	}{
 		"Default behavior, no error": {
 			streamer: func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
 				return nil, nil
 			},
-			options: sentrygrpc.ClientOptions{},
 			streamDesc: &grpc.StreamDesc{
 				ClientStreams: true,
 			},
 			assertions: func(t *testing.T, transport *sentry.MockTransport) {
 				assert.Empty(t, transport.Events(), "No events should be captured")
-			},
-		},
-		"Error is reported": {
-			streamer: func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-				return nil, errors.New("test stream error")
-			},
-			options:     sentrygrpc.ClientOptions{},
-			expectedErr: errors.New("test stream error"),
-			streamDesc:  &grpc.StreamDesc{},
-			assertions: func(t *testing.T, transport *sentry.MockTransport) {
-				events := transport.Events()
-				assert.Len(t, events, 1, "One event should be captured")
-				assert.Equal(t, "test stream error", events[0].Exception[0].Value, "Captured exception should match the error")
 			},
 		},
 		"Metadata propagation": {
@@ -198,26 +86,10 @@ func TestStreamClientInterceptor(t *testing.T) {
 				assert.Contains(t, md, sentry.SentryBaggageHeader, "Metadata should contain Sentry baggage header")
 				return nil, nil
 			},
-			options: sentrygrpc.ClientOptions{},
 			streamDesc: &grpc.StreamDesc{
 				ClientStreams: true,
 			},
 			assertions: func(t *testing.T, transport *sentry.MockTransport) {},
-		},
-		"Custom ReportOn behavior": {
-			streamer: func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-				return nil, errors.New("test stream error")
-			},
-			options: sentrygrpc.ClientOptions{
-				ReportOn: func(err error) bool {
-					return err.Error() == "specific error"
-				},
-			},
-			expectedErr: errors.New("test stream error"),
-			streamDesc:  &grpc.StreamDesc{},
-			assertions: func(t *testing.T, transport *sentry.MockTransport) {
-				assert.Empty(t, transport.Events(), "No events should be captured due to custom ReportOn")
-			},
 		},
 	}
 
@@ -229,17 +101,10 @@ func TestStreamClientInterceptor(t *testing.T) {
 				Transport: transport,
 			})
 
-			interceptor := sentrygrpc.StreamClientInterceptor(test.options)
+			interceptor := sentrygrpc.StreamClientInterceptor()
 
 			// Execute the interceptor
-			clientStream, err := interceptor(context.Background(), test.streamDesc, nil, "/test.Service/TestMethod", test.streamer)
-
-			if test.expectedErr != nil {
-				assert.Equal(t, test.expectedErr, err, "Expected error mismatch")
-			} else {
-				assert.NoError(t, err, "Expected no error")
-			}
-
+			clientStream, _ := interceptor(context.Background(), test.streamDesc, nil, "/test.Service/TestMethod", test.streamer)
 			sentry.Flush(2 * time.Second)
 
 			assert.Nil(t, clientStream, "ClientStream should be nil in this test scenario")
