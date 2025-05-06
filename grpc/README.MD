@@ -96,8 +96,8 @@ func main() {
 	conn, err := grpc.Dial(
 		"localhost:50051",
 		grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(sentrygrpc.UnaryClientInterceptor(sentrygrpc.ClientOptions{})),
-		grpc.WithStreamInterceptor(sentrygrpc.StreamClientInterceptor(sentrygrpc.ClientOptions{})),
+		grpc.WithUnaryInterceptor(sentrygrpc.UnaryClientInterceptor()),
+		grpc.WithStreamInterceptor(sentrygrpc.StreamClientInterceptor()),
 	)
 	if err != nil {
 		sentry.CaptureException(err)
