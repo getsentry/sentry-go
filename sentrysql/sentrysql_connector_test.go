@@ -128,6 +128,18 @@ func TestNewSentrySQLConnector_Integration(t *testing.T) {
 			var foundMatch = false
 			gotSpans := got[i]
 
+			// if WantSpan is nil, yet we got some spans, it should be an error
+			if tt.WantSpan == nil {
+				t.Errorf("Expecting no spans, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
+
+			// if WantSpan is not nil, we should have at least one span
+			if len(gotSpans) == 0 {
+				t.Errorf("Expecting at least one span, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
+
 			var diffs []string
 			for _, gotSpan := range gotSpans {
 				if diff := cmp.Diff(tt.WantSpan, gotSpan, optstrans); diff != "" {
@@ -228,6 +240,18 @@ func TestNewSentrySQLConnector_Integration(t *testing.T) {
 		for i, tt := range tests {
 			var foundMatch = false
 			gotSpans := got[i]
+
+			// if WantSpan is nil, yet we got some spans, it should be an error
+			if tt.WantSpan == nil {
+				t.Errorf("Expecting no spans, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
+
+			// if WantSpan is not nil, we should have at least one span
+			if len(gotSpans) == 0 {
+				t.Errorf("Expecting at least one span, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
 
 			var diffs []string
 			for _, gotSpan := range gotSpans {
@@ -395,6 +419,18 @@ func TestNewSentrySQLConnector_Conn(t *testing.T) {
 			var foundMatch = false
 			gotSpans := got[i]
 
+			// if WantSpan is nil, yet we got some spans, it should be an error
+			if tt.WantSpan == nil {
+				t.Errorf("Expecting no spans, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
+
+			// if WantSpan is not nil, we should have at least one span
+			if len(gotSpans) == 0 {
+				t.Errorf("Expecting at least one span, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
+
 			var diffs []string
 			for _, gotSpan := range gotSpans {
 				if diff := cmp.Diff(tt.WantSpan, gotSpan, optstrans); diff != "" {
@@ -505,6 +541,18 @@ func TestNewSentrySQLConnector_Conn(t *testing.T) {
 		for i, tt := range tests {
 			var foundMatch = false
 			gotSpans := got[i]
+
+			// if WantSpan is nil, yet we got some spans, it should be an error
+			if tt.WantSpan == nil {
+				t.Errorf("Expecting no spans, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
+
+			// if WantSpan is not nil, we should have at least one span
+			if len(gotSpans) == 0 {
+				t.Errorf("Expecting at least one span, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
 
 			var diffs []string
 			for _, gotSpan := range gotSpans {
@@ -660,6 +708,18 @@ func TestNewSentrySQLConnector_BeginTx(t *testing.T) {
 		for i, tt := range tests {
 			var foundMatch = false
 			gotSpans := got[i]
+
+			// if WantSpan is nil, yet we got some spans, it should be an error
+			if tt.WantSpan == nil {
+				t.Errorf("Expecting no spans, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
+
+			// if WantSpan is not nil, we should have at least one span
+			if len(gotSpans) == 0 {
+				t.Errorf("Expecting at least one span, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
 
 			var diffs []string
 			for _, gotSpan := range gotSpans {
@@ -1010,6 +1070,18 @@ func TestNewSentrySQLConnector_PrepareContext(t *testing.T) {
 			var foundMatch = false
 			gotSpans := got[i]
 
+			// if WantSpan is nil, yet we got some spans, it should be an error
+			if tt.WantSpan == nil {
+				t.Errorf("Expecting no spans, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
+
+			// if WantSpan is not nil, we should have at least one span
+			if len(gotSpans) == 0 {
+				t.Errorf("Expecting at least one span, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
+
 			var diffs []string
 			for _, gotSpan := range gotSpans {
 				if diff := cmp.Diff(tt.WantSpan, gotSpan, optstrans); diff != "" {
@@ -1126,6 +1198,18 @@ func TestNewSentrySQLConnector_PrepareContext(t *testing.T) {
 		for i, tt := range tests {
 			var foundMatch = false
 			gotSpans := got[i]
+
+			// if WantSpan is nil, yet we got some spans, it should be an error
+			if tt.WantSpan == nil {
+				t.Errorf("Expecting no spans, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
+
+			// if WantSpan is not nil, we should have at least one span
+			if len(gotSpans) == 0 {
+				t.Errorf("Expecting at least one span, but got %d spans: %v", len(gotSpans), gotSpans)
+				continue
+			}
 
 			var diffs []string
 			for _, gotSpan := range gotSpans {

@@ -10,7 +10,6 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/google/go-cmp v0.5.9
 	github.com/lib/pq v1.10.9
-
 )
 
 require (
