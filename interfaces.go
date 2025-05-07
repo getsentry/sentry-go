@@ -13,13 +13,16 @@ import (
 	"time"
 )
 
-// eventType is the type of an error event.
+// eventType is the type of error event.
 const eventType = "event"
 
-// transactionType is the type of a transaction event.
+// transactionType is the type of transaction event.
 const transactionType = "transaction"
 
-// checkInType is the type of a check in event.
+// logType is the type of log event.
+const logType = "log"
+
+// checkInType is the type of check in event.
 const checkInType = "check_in"
 
 // Level marks the severity of the event.
@@ -27,6 +30,7 @@ type Level string
 
 // Describes the severity of the event.
 const (
+	LevelTrace   Level = "trace"
 	LevelDebug   Level = "debug"
 	LevelInfo    Level = "info"
 	LevelWarning Level = "warning"
@@ -34,7 +38,7 @@ const (
 	LevelFatal   Level = "fatal"
 )
 
-// SdkInfo contains all metadata about about the SDK being used.
+// SdkInfo contains all metadata about the SDK being used.
 type SdkInfo struct {
 	Name         string       `json:"name,omitempty"`
 	Version      string       `json:"version,omitempty"`
@@ -94,6 +98,18 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 		}{breadcrumb: (*breadcrumb)(b)})
 	}
 	return json.Marshal((*breadcrumb)(b))
+}
+
+// Logger allows sending structured logs to sentry.
+type Logger interface {
+	Write(p []byte) (n int, err error)
+	Trace(v ...interface{})
+	Debug(v ...interface{})
+	Info(v ...interface{})
+	Warn(v ...interface{})
+	Error(v ...interface{})
+	Fatal(v ...interface{})
+	Panic(v ...interface{})
 }
 
 // Attachment allows associating files with your events to aid in investigation.
@@ -325,6 +341,9 @@ type Event struct {
 	CheckIn       *CheckIn       `json:"check_in,omitempty"`
 	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
 
+	// The fields below are only relevant for logs
+	Logs []Log `json:"items,omitempty"`
+
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
@@ -546,4 +565,19 @@ type EventHint struct {
 	Context            context.Context
 	Request            *http.Request
 	Response           *http.Response
+}
+
+// Log contains information about a logging event sent to Sentry.
+type Log struct {
+	Timestamp  time.Time      `json:"timestamp,omitempty"`
+	TraceID    TraceID        `json:"trace_id,omitempty"`
+	Level      Level          `json:"level,omitempty"`
+	Body       string         `json:"body,omitempty"`
+	Attributes map[string]any `json:"attributes,omitempty"`
+}
+
+// Attribute is a log attribute.
+type Attribute struct {
+	Value string `json:"value"`
+	Type  string `json:"type"`
 }

@@ -77,9 +77,9 @@ type usageError struct {
 	error
 }
 
-// Logger is an instance of log.Logger that is use to provide debug information about running Sentry Client
-// can be enabled by either using Logger.SetOutput directly or with Debug client option.
-var Logger = log.New(io.Discard, "[Sentry] ", log.LstdFlags)
+// DebugLogger is an instance of log.Logger that is used to provide debug information about running Sentry Client
+// can be enabled by either using DebugLogger.SetOutput directly or with Debug client option.
+var DebugLogger = log.New(io.Discard, "[Sentry] ", log.LstdFlags)
 
 // EventProcessor is a function that processes an event.
 // Event processors are used to change an event before it is sent to Sentry.
@@ -223,6 +223,9 @@ type ClientOptions struct {
 	MaxErrorDepth int
 	// Default event tags. These are overridden by tags set on a scope.
 	Tags map[string]string
+	// EnableLogs is a boolean flag to control if log envelopes will be generated and
+	// sent to Sentry via the logging API.
+	EnableLogs bool
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -237,7 +240,8 @@ type Client struct {
 	sdkVersion      string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
-	Transport Transport
+	Transport   Transport
+	batchLogger *BatchLogger
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -275,7 +279,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		if debugWriter == nil {
 			debugWriter = os.Stderr
 		}
-		Logger.SetOutput(debugWriter)
+		DebugLogger.SetOutput(debugWriter)
 	}
 
 	if options.Dsn == "" {
@@ -337,6 +341,11 @@ func NewClient(options ClientOptions) (*Client, error) {
 		sdkVersion:    SDKVersion,
 	}
 
+	if options.EnableLogs {
+		client.batchLogger = NewBatchLogger(&client)
+		client.batchLogger.Start()
+	}
+
 	client.setupTransport()
 	client.setupIntegrations()
 
@@ -383,12 +392,12 @@ func (client *Client) setupIntegrations() {
 
 	for _, integration := range integrations {
 		if client.integrationAlreadyInstalled(integration.Name()) {
-			Logger.Printf("Integration %s is already installed\n", integration.Name())
+			DebugLogger.Printf("Integration %s is already installed\n", integration.Name())
 			continue
 		}
 		client.integrations = append(client.integrations, integration)
 		integration.SetupOnce(client)
-		Logger.Printf("Integration installed: %s\n", integration.Name())
+		DebugLogger.Printf("Integration installed: %s\n", integration.Name())
 	}
 
 	sort.Slice(client.integrations, func(i, j int) bool {
@@ -507,6 +516,9 @@ func (client *Client) RecoverWithContext(
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
+	if client.batchLogger != nil {
+		client.batchLogger.Flush()
+	}
 	return client.Transport.Flush(timeout)
 }
 
@@ -605,7 +617,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	// options.TracesSampler when they are started. Other events
 	// (errors, messages) are sampled here. Does not apply to check-ins.
 	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
-		Logger.Println("Event dropped due to SampleRate hit.")
+		DebugLogger.Println("Event dropped due to SampleRate hit.")
 		return nil
 	}
 
@@ -620,13 +632,13 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	if event.Type == transactionType && client.options.BeforeSendTransaction != nil {
 		// Transaction events
 		if event = client.options.BeforeSendTransaction(event, hint); event == nil {
-			Logger.Println("Transaction dropped due to BeforeSendTransaction callback.")
+			DebugLogger.Println("Transaction dropped due to BeforeSendTransaction callback.")
 			return nil
 		}
 	} else if event.Type != transactionType && event.Type != checkInType && client.options.BeforeSend != nil {
 		// All other events
 		if event = client.options.BeforeSend(event, hint); event == nil {
-			Logger.Println("Event dropped due to BeforeSend callback.")
+			DebugLogger.Println("Event dropped due to BeforeSend callback.")
 			return nil
 		}
 	}
@@ -692,7 +704,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			Logger.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
+			DebugLogger.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
 			return nil
 		}
 	}
@@ -701,7 +713,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			Logger.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
+			DebugLogger.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
 			return nil
 		}
 	}
