@@ -5,10 +5,40 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/getsentry/sentry-go/attribute"
 	"os"
 	"strings"
 	"time"
 )
+
+// LogLevel marks the severity of the log event.
+type LogLevel string
+
+const (
+	LogLevelTrace   Level = "trace"
+	LogLevelDebug   Level = "debug"
+	LogLevelInfo    Level = "info"
+	LogLevelWarning Level = "warning"
+	LogLevelError   Level = "error"
+	LogLevelFatal   Level = "fatal"
+)
+
+const (
+	LogSeverityTrace   int = 1
+	LogSeverityDebug   int = 5
+	LogSeverityInfo    int = 9
+	LogSeverityWarning int = 13
+	LogSeverityError   int = 17
+	LogSeverityFatal   int = 21
+)
+
+var mapTypesToStr = map[attribute.Type]string{
+	attribute.INVALID: "",
+	attribute.BOOL:    "boolean",
+	attribute.INT64:   "integer",
+	attribute.FLOAT64: "double",
+	attribute.STRING:  "string",
+}
 
 // sentryLogger implements a custom logger that writes to Sentry.
 type sentryLogger struct {
@@ -34,11 +64,11 @@ func NewLogger(ctx context.Context) Logger {
 func (l *sentryLogger) Write(p []byte) (n int, err error) {
 	// Avoid sending double newlines to Sentry
 	msg := strings.TrimRight(string(p), "\n")
-	err = l.log(LevelInfo, msg)
+	err = l.log(LevelInfo, LogSeverityInfo, msg)
 	return len(p), err
 }
 
-func (l *sentryLogger) log(level Level, args ...interface{}) error {
+func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error {
 	if len(args) == 0 {
 		return nil
 	}
@@ -62,10 +92,11 @@ func (l *sentryLogger) log(level Level, args ...interface{}) error {
 			} else {
 				parameters = append(parameters, a)
 			}
-		// case attribute.Builder:
-		//	for k, v := range a {
-		//		attrs[k] = v
-		//	}
+		case attribute.Builder:
+			attrs[a.Key] = Attribute{
+				Value: a.Value.AsInterface(),
+				Type:  mapTypesToStr[a.Value.Type()],
+			}
 		default:
 			parameters = append(parameters, a)
 		}
@@ -111,6 +142,7 @@ func (l *sentryLogger) log(level Level, args ...interface{}) error {
 		Timestamp:  time.Now(),
 		TraceID:    traceID,
 		Level:      level,
+		Severity:   severity,
 		Body:       message,
 		Attributes: attrs,
 	}
@@ -118,13 +150,19 @@ func (l *sentryLogger) log(level Level, args ...interface{}) error {
 	return nil
 }
 
-func (l *sentryLogger) Trace(v ...interface{}) { _ = l.log(LevelTrace, v...) }
-func (l *sentryLogger) Debug(v ...interface{}) { _ = l.log(LevelDebug, v...) }
-func (l *sentryLogger) Info(v ...interface{})  { _ = l.log(LevelInfo, v...) }
-func (l *sentryLogger) Warn(v ...interface{})  { _ = l.log(LevelWarning, v...) }
-func (l *sentryLogger) Error(v ...interface{}) { _ = l.log(LevelError, v...) }
-func (l *sentryLogger) Fatal(v ...interface{}) { _ = l.log(LevelFatal, v...); os.Exit(1) }
-func (l *sentryLogger) Panic(v ...interface{}) { _ = l.log(LevelFatal, v...); panic(fmt.Sprint(v...)) }
+func (l *sentryLogger) Trace(v ...interface{}) { _ = l.log(LogLevelTrace, LogSeverityTrace, v...) }
+func (l *sentryLogger) Debug(v ...interface{}) { _ = l.log(LogLevelDebug, LogSeverityDebug, v...) }
+func (l *sentryLogger) Info(v ...interface{})  { _ = l.log(LogLevelInfo, LogSeverityInfo, v...) }
+func (l *sentryLogger) Warn(v ...interface{})  { _ = l.log(LogLevelWarning, LogSeverityWarning, v...) }
+func (l *sentryLogger) Error(v ...interface{}) { _ = l.log(LogLevelError, LogSeverityError, v...) }
+func (l *sentryLogger) Fatal(v ...interface{}) {
+	_ = l.log(LogLevelFatal, LogSeverityFatal, v...)
+	os.Exit(1)
+}
+func (l *sentryLogger) Panic(v ...interface{}) {
+	_ = l.log(LogLevelFatal, LogSeverityFatal, v...)
+	panic(fmt.Sprint(v...))
+}
 
 // fallback no-op logger if Sentry is not enabled.
 type noopLogger struct{}

@@ -30,7 +30,6 @@ type Level string
 
 // Describes the severity of the event.
 const (
-	LevelTrace   Level = "trace"
 	LevelDebug   Level = "debug"
 	LevelInfo    Level = "info"
 	LevelWarning Level = "warning"
@@ -572,12 +571,13 @@ type Log struct {
 	Timestamp  time.Time      `json:"timestamp,omitempty"`
 	TraceID    TraceID        `json:"trace_id,omitempty"`
 	Level      Level          `json:"level,omitempty"`
+	Severity   int            `json:"severity_number"`
 	Body       string         `json:"body,omitempty"`
 	Attributes map[string]any `json:"attributes,omitempty"`
 }
 
 // Attribute is a log attribute.
 type Attribute struct {
-	Value string `json:"value"`
+	Value any    `json:"value"`
 	Type  string `json:"type"`
 }

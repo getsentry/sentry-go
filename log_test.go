@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -92,7 +93,8 @@ func Test_sentryLogger_log(t *testing.T) {
 					Logs: []Log{
 						{
 							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LevelTrace,
+							Level:      LogLevelTrace,
+							Severity:   LogSeverityTrace,
 							Body:       "trace",
 							Attributes: attrs,
 						},
@@ -111,7 +113,8 @@ func Test_sentryLogger_log(t *testing.T) {
 					Logs: []Log{
 						{
 							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LevelDebug,
+							Level:      LogLevelDebug,
+							Severity:   LogSeverityDebug,
 							Body:       "debug",
 							Attributes: attrs,
 						},
@@ -130,7 +133,8 @@ func Test_sentryLogger_log(t *testing.T) {
 					Logs: []Log{
 						{
 							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LevelInfo,
+							Level:      LogLevelInfo,
+							Severity:   LogSeverityInfo,
 							Body:       "info",
 							Attributes: attrs,
 						},
@@ -149,7 +153,8 @@ func Test_sentryLogger_log(t *testing.T) {
 					Logs: []Log{
 						{
 							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LevelWarning,
+							Level:      LogLevelWarning,
+							Severity:   LogSeverityWarning,
 							Body:       "warn",
 							Attributes: attrs,
 						},
@@ -168,7 +173,8 @@ func Test_sentryLogger_log(t *testing.T) {
 					Logs: []Log{
 						{
 							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LevelError,
+							Level:      LogLevelError,
+							Severity:   LogSeverityError,
 							Body:       "error",
 							Attributes: attrs,
 						},
@@ -232,7 +238,8 @@ func Test_sentryLogger_log_Format(t *testing.T) {
 	wantLogs := []Log{
 		{
 			TraceID:    TraceIDFromHex(LogTraceID),
-			Level:      LevelInfo,
+			Level:      LogLevelInfo,
+			Severity:   LogSeverityInfo,
 			Body:       "param matching: param1 and param2",
 			Attributes: attrs,
 		},
@@ -241,10 +248,13 @@ func Test_sentryLogger_log_Format(t *testing.T) {
 	wantLogs[0].Attributes["sentry.message.template"] = Attribute{Value: "param matching: %v and %v", Type: "string"}
 	wantLogs[0].Attributes["sentry.message.parameters.0"] = Attribute{Value: "param1", Type: "string"}
 	wantLogs[0].Attributes["sentry.message.parameters.1"] = Attribute{Value: "param2", Type: "string"}
+	wantLogs[0].Attributes["int"] = Attribute{Value: int64(42), Type: "integer"}
 
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx)
-	l.Info("param matching: %v and %v", "param1", "param2")
+	l.Info("param matching: %v and %v", "param1", "param2",
+		attribute.Int("int", 42),
+	)
 	Flush(20 * time.Millisecond)
 
 	gotEvents := mockTransport.Events()
@@ -276,7 +286,8 @@ func Test_sentryLogger_Write(t *testing.T) {
 	wantLogs := []Log{
 		{
 			TraceID:    TraceIDFromHex(LogTraceID),
-			Level:      LevelInfo,
+			Level:      LogLevelInfo,
+			Severity:   LogSeverityInfo,
 			Body:       "message from writer",
 			Attributes: attrs,
 		},
@@ -309,9 +320,9 @@ func Test_sentryLogger_Write(t *testing.T) {
 	}
 }
 
-func Test_batchLogger_ContextDone(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(ctx)
+func Test_batchLogger_Flush(t *testing.T) {
+	_, mockTransport := setupMockTransport()
+	l := NewLogger(context.Background())
 	l.Info("context done log")
 	Flush(20 * time.Millisecond)
 
