@@ -37,35 +37,6 @@ func setupMockTransport() (context.Context, *MockTransport) {
 	return ctx, mockTransport
 }
 
-// func TestNewLogger(t *testing.T) {
-//	tests := []struct {
-//		name   string
-//		config ClientOptions
-//		want   Logger
-//	}{
-//		{
-//			"disabled logs should return nooplogger",
-//			ClientOptions{},
-//			&noopLogger{},
-//		},
-//		{
-//			"enabled logs should return a new logger instance with current hub",
-//			ClientOptions{EnableLogs: true},
-//			&sentryLogger{CurrentHub()},
-//		},
-//	}
-//	for _, tt := range tests {
-//		t.Run(tt.name, func(t *testing.T) {
-//			err := Init(tt.config)
-//			if err != nil {
-//				t.Fatalf("cannot initialize sentry client: %e", err)
-//			}
-//			got := NewLogger(context.Background())
-//			assertEqual(t, got, tt.want)
-//		})
-//	}
-//}
-
 func Test_sentryLogger_log(t *testing.T) {
 	attrs := map[string]any{
 		"sentry.release":              "v1.2.3",
