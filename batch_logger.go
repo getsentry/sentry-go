@@ -72,10 +72,6 @@ func (l *BatchLogger) run(ctx context.Context) {
 				select {
 				case log := <-l.logCh:
 					logs = append(logs, log)
-					if len(logs) >= batchSize {
-						l.processEvent(logs)
-						logs = nil
-					}
 				default:
 					break drain
 				}

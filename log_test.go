@@ -211,19 +211,19 @@ func Test_sentryLogger_log_Format(t *testing.T) {
 			TraceID:    TraceIDFromHex(LogTraceID),
 			Level:      LogLevelInfo,
 			Severity:   LogSeverityInfo,
-			Body:       "param matching: param1 and param2",
+			Body:       "param matching: param1 and {42}",
 			Attributes: attrs,
 		},
 	}
 
 	wantLogs[0].Attributes["sentry.message.template"] = Attribute{Value: "param matching: %v and %v", Type: "string"}
 	wantLogs[0].Attributes["sentry.message.parameters.0"] = Attribute{Value: "param1", Type: "string"}
-	wantLogs[0].Attributes["sentry.message.parameters.1"] = Attribute{Value: "param2", Type: "string"}
+	wantLogs[0].Attributes["sentry.message.parameters.1"] = Attribute{Value: "{42}", Type: "string"}
 	wantLogs[0].Attributes["int"] = Attribute{Value: int64(42), Type: "integer"}
 
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx, LoggerOptions{})
-	l.Info("param matching: %v and %v", "param1", "param2",
+	l.Info("param matching: %v and %v", "param1", struct{ val int }{42},
 		attribute.Int("int", 42),
 	)
 	Flush(20 * time.Millisecond)
@@ -303,7 +303,7 @@ func Test_batchLogger_Flush(t *testing.T) {
 	}
 }
 
-func Test_sentrylogger_BeforeSendLog(t *testing.T) {
+func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 	_, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background(), LoggerOptions{
 		BeforeSendLog: func(_ *Log) *Log {
@@ -316,5 +316,20 @@ func Test_sentrylogger_BeforeSendLog(t *testing.T) {
 	events := mockTransport.Events()
 	if len(events) != 0 {
 		t.Fatalf("expected no events, got %d", len(events))
+	}
+}
+
+func Test_Logger_ExceedBatchSize(t *testing.T) {
+	_, mockTransport := setupMockTransport()
+	l := NewLogger(context.Background(), LoggerOptions{})
+	for i := 0; i < 100; i++ {
+		l.Info("test")
+	}
+
+	// sleep to wait for events to propagate
+	time.Sleep(20 * time.Millisecond)
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected only one event with 100 logs, got %d", len(events))
 	}
 }
