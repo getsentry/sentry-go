@@ -5,10 +5,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/getsentry/sentry-go/attribute"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/getsentry/sentry-go/attribute"
 )
 
 // LogLevel marks the severity of the log event.
@@ -42,12 +43,19 @@ var mapTypesToStr = map[attribute.Type]string{
 
 // sentryLogger implements a custom logger that writes to Sentry.
 type sentryLogger struct {
-	hub    *Hub
-	client *Client
+	hub     *Hub
+	client  *Client
+	options LoggerOptions
+}
+
+type LoggerOptions struct {
+	// BeforeSendLog is called before a log event is sent to Sentry.
+	// Use it to mutate the log event or return nil to discard.
+	BeforeSendLog func(log *Log) *Log
 }
 
 // NewLogger returns a Logger that writes to Sentry if enabled, or discards otherwise.
-func NewLogger(ctx context.Context) Logger {
+func NewLogger(ctx context.Context, opts LoggerOptions) Logger {
 	var hub *Hub
 	hub = GetHubFromContext(ctx)
 	if hub == nil {
@@ -56,7 +64,7 @@ func NewLogger(ctx context.Context) Logger {
 
 	client := hub.Client()
 	if client != nil && client.batchLogger != nil {
-		return &sentryLogger{hub, client}
+		return &sentryLogger{hub, client, opts}
 	}
 	return &noopLogger{} // fallback: does nothing
 }
@@ -138,7 +146,7 @@ func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error
 		attrs["sentry.sdk.version"] = sdkVersion
 	}
 
-	l.client.batchLogger.logCh <- Log{
+	log := &Log{
 		Timestamp:  time.Now(),
 		TraceID:    traceID,
 		Level:      level,
@@ -146,7 +154,13 @@ func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error
 		Body:       message,
 		Attributes: attrs,
 	}
+	if l.options.BeforeSendLog != nil {
+		log = l.options.BeforeSendLog(log)
+	}
 
+	if log != nil {
+		l.client.batchLogger.logCh <- *log
+	}
 	return nil
 }
 

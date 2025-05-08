@@ -158,7 +158,7 @@ func Test_sentryLogger_log(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
-			l := NewLogger(ctx)
+			l := NewLogger(ctx, LoggerOptions{})
 			tt.logFunc(l, tt.args)
 			Flush(400 * time.Millisecond)
 
@@ -192,7 +192,7 @@ func Test_sentryLogger_Panic(t *testing.T) {
 			}
 		}()
 		ctx, _ := setupMockTransport()
-		l := NewLogger(ctx)
+		l := NewLogger(ctx, LoggerOptions{})
 		l.Panic("panic message") // This should panic
 	})
 }
@@ -222,7 +222,7 @@ func Test_sentryLogger_log_Format(t *testing.T) {
 	wantLogs[0].Attributes["int"] = Attribute{Value: int64(42), Type: "integer"}
 
 	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(ctx)
+	l := NewLogger(ctx, LoggerOptions{})
 	l.Info("param matching: %v and %v", "param1", "param2",
 		attribute.Int("int", 42),
 	)
@@ -265,7 +265,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 	}
 
 	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(ctx)
+	l := NewLogger(ctx, LoggerOptions{})
 	n, err := l.Write(msg)
 
 	if err != nil {
@@ -293,12 +293,28 @@ func Test_sentryLogger_Write(t *testing.T) {
 
 func Test_batchLogger_Flush(t *testing.T) {
 	_, mockTransport := setupMockTransport()
-	l := NewLogger(context.Background())
+	l := NewLogger(context.Background(), LoggerOptions{})
 	l.Info("context done log")
 	Flush(20 * time.Millisecond)
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+}
+
+func Test_sentrylogger_BeforeSendLog(t *testing.T) {
+	_, mockTransport := setupMockTransport()
+	l := NewLogger(context.Background(), LoggerOptions{
+		BeforeSendLog: func(_ *Log) *Log {
+			return nil
+		},
+	})
+	l.Info("context done log")
+	Flush(20 * time.Millisecond)
+
+	events := mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected no events, got %d", len(events))
 	}
 }
