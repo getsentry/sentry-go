@@ -45,6 +45,7 @@ func Test_sentryLogger_log(t *testing.T) {
 		"sentry.trace.parent_span_id": {Value: LogSpanID, Type: "string"},
 		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
 		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
+		"sentry.origin":               {Value: "auto.logger.log", Type: "string"},
 	}
 
 	tests := []struct {
@@ -205,6 +206,7 @@ func Test_sentryLogger_log_Format(t *testing.T) {
 		"sentry.trace.parent_span_id": {Value: LogSpanID, Type: "string"},
 		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
 		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
+		"sentry.origin":               {Value: "auto.logger.log", Type: "string"},
 	}
 	wantLogs := []Log{
 		{
@@ -253,6 +255,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 		"sentry.trace.parent_span_id": {Value: LogSpanID, Type: "string"},
 		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
 		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
+		"sentry.origin":               {Value: "auto.logger.log", Type: "string"},
 	}
 	wantLogs := []Log{
 		{

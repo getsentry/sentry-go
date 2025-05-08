@@ -145,6 +145,7 @@ func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error
 	if sdkVersion := l.client.sdkVersion; sdkVersion != "" {
 		attrs["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: "string"}
 	}
+	attrs["sentry.origin"] = Attribute{Value: "auto.logger.log", Type: "string"}
 
 	log := &Log{
 		Timestamp:  time.Now(),
