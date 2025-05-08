@@ -90,7 +90,7 @@ func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error
 	var template string
 	var message string
 	var parameters []interface{}
-	attrs := map[string]any{}
+	attrs := map[string]Attribute{}
 
 	for _, arg := range args {
 		switch a := arg.(type) {
@@ -128,22 +128,22 @@ func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error
 
 	// handle metadata
 	if release := l.client.options.Release; release != "" {
-		attrs["sentry.release"] = release
+		attrs["sentry.release"] = Attribute{Value: release, Type: "string"}
 	}
 	if environment := l.client.options.Environment; environment != "" {
-		attrs["sentry.environment"] = environment
+		attrs["sentry.environment"] = Attribute{Value: environment, Type: "string"}
 	}
 	if serverAddr := l.client.options.ServerName; serverAddr != "" {
-		attrs["sentry.server.address"] = serverAddr
+		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
 	}
 	if traceParent != "" {
-		attrs["sentry.trace.parent_span_id"] = traceParent[33:]
+		attrs["sentry.trace.parent_span_id"] = Attribute{Value: traceParent[33:], Type: "string"}
 	}
 	if sdkIdentifier := l.client.sdkIdentifier; sdkIdentifier != "" {
-		attrs["sentry.sdk.name"] = sdkIdentifier
+		attrs["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: "string"}
 	}
 	if sdkVersion := l.client.sdkVersion; sdkVersion != "" {
-		attrs["sentry.sdk.version"] = sdkVersion
+		attrs["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: "string"}
 	}
 
 	log := &Log{

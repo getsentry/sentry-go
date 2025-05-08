@@ -568,12 +568,12 @@ type EventHint struct {
 
 // Log contains information about a logging event sent to Sentry.
 type Log struct {
-	Timestamp  time.Time      `json:"timestamp,omitempty"`
-	TraceID    TraceID        `json:"trace_id,omitempty"`
-	Level      Level          `json:"level,omitempty"`
-	Severity   int            `json:"severity_number"`
-	Body       string         `json:"body,omitempty"`
-	Attributes map[string]any `json:"attributes,omitempty"`
+	Timestamp  time.Time            `json:"timestamp,omitempty"`
+	TraceID    TraceID              `json:"trace_id,omitempty"`
+	Level      Level                `json:"level,omitempty"`
+	Severity   int                  `json:"severity_number"`
+	Body       string               `json:"body,omitempty"`
+	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
 
 // Attribute is a log attribute.

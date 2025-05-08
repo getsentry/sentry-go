@@ -38,13 +38,13 @@ func setupMockTransport() (context.Context, *MockTransport) {
 }
 
 func Test_sentryLogger_log(t *testing.T) {
-	attrs := map[string]any{
-		"sentry.release":              "v1.2.3",
-		"sentry.environment":          "testing",
-		"sentry.server.address":       "test-server",
-		"sentry.trace.parent_span_id": LogSpanID,
-		"sentry.sdk.name":             "sentry.go",
-		"sentry.sdk.version":          "0.10.0",
+	attrs := map[string]Attribute{
+		"sentry.release":              {Value: "v1.2.3", Type: "string"},
+		"sentry.environment":          {Value: "testing", Type: "string"},
+		"sentry.server.address":       {Value: "test-server", Type: "string"},
+		"sentry.trace.parent_span_id": {Value: LogSpanID, Type: "string"},
+		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
+		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
 	}
 
 	tests := []struct {
@@ -198,13 +198,13 @@ func Test_sentryLogger_Panic(t *testing.T) {
 }
 
 func Test_sentryLogger_log_Format(t *testing.T) {
-	attrs := map[string]any{
-		"sentry.release":              "v1.2.3",
-		"sentry.environment":          "testing",
-		"sentry.server.address":       "test-server",
-		"sentry.trace.parent_span_id": LogSpanID,
-		"sentry.sdk.name":             "sentry.go",
-		"sentry.sdk.version":          "0.10.0",
+	attrs := map[string]Attribute{
+		"sentry.release":              {Value: "v1.2.3", Type: "string"},
+		"sentry.environment":          {Value: "testing", Type: "string"},
+		"sentry.server.address":       {Value: "test-server", Type: "string"},
+		"sentry.trace.parent_span_id": {Value: LogSpanID, Type: "string"},
+		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
+		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
 	}
 	wantLogs := []Log{
 		{
@@ -246,13 +246,13 @@ func Test_sentryLogger_log_Format(t *testing.T) {
 
 func Test_sentryLogger_Write(t *testing.T) {
 	msg := []byte("message from writer\n")
-	attrs := map[string]any{
-		"sentry.release":              "v1.2.3",
-		"sentry.environment":          "testing",
-		"sentry.server.address":       "test-server",
-		"sentry.trace.parent_span_id": LogSpanID,
-		"sentry.sdk.name":             "sentry.go",
-		"sentry.sdk.version":          "0.10.0",
+	attrs := map[string]Attribute{
+		"sentry.release":              {Value: "v1.2.3", Type: "string"},
+		"sentry.environment":          {Value: "testing", Type: "string"},
+		"sentry.server.address":       {Value: "test-server", Type: "string"},
+		"sentry.trace.parent_span_id": {Value: LogSpanID, Type: "string"},
+		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
+		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
 	}
 	wantLogs := []Log{
 		{
