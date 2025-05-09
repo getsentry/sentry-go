@@ -161,7 +161,7 @@ func Test_sentryLogger_log(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
 			l := NewLogger(ctx, LoggerOptions{})
 			tt.logFunc(l, tt.args)
-			Flush(400 * time.Millisecond)
+			Flush(20 * time.Millisecond)
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
