@@ -67,16 +67,16 @@ func NewLogger(ctx context.Context, opts LoggerOptions) Logger {
 	return &noopLogger{} // fallback: does nothing
 }
 
-func (l *sentryLogger) Write(p []byte) (n int, err error) {
+func (l *sentryLogger) Write(p []byte) (int, error) {
 	// Avoid sending double newlines to Sentry
 	msg := strings.TrimRight(string(p), "\n")
-	err = l.log(context.Background(), LevelInfo, LogSeverityInfo, msg)
-	return len(p), err
+	l.log(context.Background(), LevelInfo, LogSeverityInfo, msg)
+	return len(p), nil
 }
 
-func (l *sentryLogger) log(ctx context.Context, level Level, severity int, args ...interface{}) error {
+func (l *sentryLogger) log(ctx context.Context, level Level, severity int, args ...interface{}) {
 	if len(args) == 0 {
-		return nil
+		return
 	}
 	hub := GetHubFromContext(ctx)
 	if hub == nil {
@@ -169,30 +169,29 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, args 
 	if log != nil {
 		l.client.batchLogger.logCh <- *log
 	}
-	return nil
 }
 
 func (l *sentryLogger) Trace(ctx context.Context, v ...interface{}) {
-	_ = l.log(ctx, LogLevelTrace, LogSeverityTrace, v...)
+	l.log(ctx, LogLevelTrace, LogSeverityTrace, v...)
 }
 func (l *sentryLogger) Debug(ctx context.Context, v ...interface{}) {
-	_ = l.log(ctx, LogLevelDebug, LogSeverityDebug, v...)
+	l.log(ctx, LogLevelDebug, LogSeverityDebug, v...)
 }
 func (l *sentryLogger) Info(ctx context.Context, v ...interface{}) {
-	_ = l.log(ctx, LogLevelInfo, LogSeverityInfo, v...)
+	l.log(ctx, LogLevelInfo, LogSeverityInfo, v...)
 }
 func (l *sentryLogger) Warn(ctx context.Context, v ...interface{}) {
-	_ = l.log(ctx, LogLevelWarning, LogSeverityWarning, v...)
+	l.log(ctx, LogLevelWarning, LogSeverityWarning, v...)
 }
 func (l *sentryLogger) Error(ctx context.Context, v ...interface{}) {
-	_ = l.log(ctx, LogLevelError, LogSeverityError, v...)
+	l.log(ctx, LogLevelError, LogSeverityError, v...)
 }
 func (l *sentryLogger) Fatal(ctx context.Context, v ...interface{}) {
-	_ = l.log(ctx, LogLevelFatal, LogSeverityFatal, v...)
+	l.log(ctx, LogLevelFatal, LogSeverityFatal, v...)
 	os.Exit(1)
 }
 func (l *sentryLogger) Panic(ctx context.Context, v ...interface{}) {
-	_ = l.log(ctx, LogLevelFatal, LogSeverityFatal, v...)
+	l.log(ctx, LogLevelFatal, LogSeverityFatal, v...)
 	panic(fmt.Sprint(v...))
 }
 
