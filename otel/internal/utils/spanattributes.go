@@ -102,15 +102,17 @@ func descriptionForHttpMethod(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 	}
 
 	var httpPath string
-	if httpTarget != "" {
+
+	// Prefer httpRoute if available
+	if httpRoute != "" {
+		httpPath = httpRoute
+	} else if httpTarget != "" {
 		if parsedUrl, err := url.Parse(httpTarget); err == nil {
 			// Do not include the query and fragment parts
 			httpPath = parsedUrl.Path
 		} else {
 			httpPath = httpTarget
 		}
-	} else if httpRoute != "" {
-		httpPath = httpRoute
 	} else if httpUrl != "" {
 		// This is normally the HTTP-client case
 		if parsedUrl, err := url.Parse(httpUrl); err == nil {
