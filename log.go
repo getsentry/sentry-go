@@ -2,7 +2,6 @@ package sentry
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -80,12 +79,7 @@ func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error
 	if len(args) == 0 {
 		return nil
 	}
-	traceParent := l.hub.GetTraceparent()
-	var traceID TraceID
-	_, err := hex.Decode(traceID[:], []byte(traceParent[:32]))
-	if err != nil {
-		return err
-	}
+	traceID, spanID := l.hub.Scope().propagationContext.TraceID, l.hub.Scope().propagationContext.SpanID
 
 	var template string
 	var message string
@@ -136,8 +130,8 @@ func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error
 	if serverAddr := l.client.options.ServerName; serverAddr != "" {
 		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
 	}
-	if traceParent != "" {
-		attrs["sentry.trace.parent_span_id"] = Attribute{Value: traceParent[33:], Type: "string"}
+	if spanID.String() != "" {
+		attrs["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: "string"}
 	}
 	if sdkIdentifier := l.client.sdkIdentifier; sdkIdentifier != "" {
 		attrs["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: "string"}
