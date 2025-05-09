@@ -102,13 +102,13 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 // Logger allows sending structured logs to sentry.
 type Logger interface {
 	Write(p []byte) (n int, err error)
-	Trace(v ...interface{})
-	Debug(v ...interface{})
-	Info(v ...interface{})
-	Warn(v ...interface{})
-	Error(v ...interface{})
-	Fatal(v ...interface{})
-	Panic(v ...interface{})
+	Trace(ctx context.Context, v ...interface{})
+	Debug(ctx context.Context, v ...interface{})
+	Info(ctx context.Context, v ...interface{})
+	Warn(ctx context.Context, v ...interface{})
+	Error(ctx context.Context, v ...interface{})
+	Fatal(ctx context.Context, v ...interface{})
+	Panic(ctx context.Context, v ...interface{})
 }
 
 // Attachment allows associating files with your events to aid in investigation.

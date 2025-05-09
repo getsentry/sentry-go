@@ -12,26 +12,25 @@ import (
 
 const (
 	LogTraceID = "d49d9bf66f13450b81f65bc51cf49c03"
-	LogSpanID  = "a9f442f9330b4e09"
 )
 
 func setupMockTransport() (context.Context, *MockTransport) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
-		Dsn:         testDsn,
-		Transport:   mockTransport,
-		Release:     "v1.2.3",
-		Environment: "testing",
-		ServerName:  "test-server",
-		EnableLogs:  true,
+		Dsn:           testDsn,
+		Transport:     mockTransport,
+		Release:       "v1.2.3",
+		Environment:   "testing",
+		ServerName:    "test-server",
+		EnableLogs:    true,
+		EnableTracing: true,
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
 	hub := CurrentHub()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-	hub.Scope().propagationContext.SpanID = SpanIDFromHex(LogSpanID)
 
 	ctx = SetHubOnContext(ctx, hub)
 	return ctx, mockTransport
@@ -39,25 +38,24 @@ func setupMockTransport() (context.Context, *MockTransport) {
 
 func Test_sentryLogger_log(t *testing.T) {
 	attrs := map[string]Attribute{
-		"sentry.release":              {Value: "v1.2.3", Type: "string"},
-		"sentry.environment":          {Value: "testing", Type: "string"},
-		"sentry.server.address":       {Value: "test-server", Type: "string"},
-		"sentry.trace.parent_span_id": {Value: LogSpanID, Type: "string"},
-		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
-		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
-		"sentry.origin":               {Value: "auto.logger.log", Type: "string"},
+		"sentry.release":        {Value: "v1.2.3", Type: "string"},
+		"sentry.environment":    {Value: "testing", Type: "string"},
+		"sentry.server.address": {Value: "test-server", Type: "string"},
+		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
+		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
+		"sentry.origin":         {Value: "auto.logger.log", Type: "string"},
 	}
 
 	tests := []struct {
 		name       string
-		logFunc    func(l Logger, msg any)
+		logFunc    func(ctx context.Context, l Logger, msg any)
 		args       any
 		wantEvents []Event
 	}{
 		{
 			name: "Trace level",
-			logFunc: func(l Logger, msg any) {
-				l.Trace(msg)
+			logFunc: func(ctx context.Context, l Logger, msg any) {
+				l.Trace(ctx, msg)
 			},
 			args: "trace",
 			wantEvents: []Event{
@@ -76,8 +74,8 @@ func Test_sentryLogger_log(t *testing.T) {
 		},
 		{
 			name: "Debug level",
-			logFunc: func(l Logger, msg any) {
-				l.Debug(msg)
+			logFunc: func(ctx context.Context, l Logger, msg any) {
+				l.Debug(ctx, msg)
 			},
 			args: "debug",
 			wantEvents: []Event{
@@ -96,8 +94,8 @@ func Test_sentryLogger_log(t *testing.T) {
 		},
 		{
 			name: "Info level",
-			logFunc: func(l Logger, msg any) {
-				l.Info(msg)
+			logFunc: func(ctx context.Context, l Logger, msg any) {
+				l.Info(ctx, msg)
 			},
 			args: "info",
 			wantEvents: []Event{
@@ -116,8 +114,8 @@ func Test_sentryLogger_log(t *testing.T) {
 		},
 		{
 			name: "Warn level",
-			logFunc: func(l Logger, msg any) {
-				l.Warn(msg)
+			logFunc: func(ctx context.Context, l Logger, msg any) {
+				l.Warn(ctx, msg)
 			},
 			args: "warn",
 			wantEvents: []Event{
@@ -136,8 +134,8 @@ func Test_sentryLogger_log(t *testing.T) {
 		},
 		{
 			name: "Error level",
-			logFunc: func(l Logger, msg any) {
-				l.Error(msg)
+			logFunc: func(ctx context.Context, l Logger, msg any) {
+				l.Error(ctx, msg)
 			},
 			args: "error",
 			wantEvents: []Event{
@@ -160,7 +158,7 @@ func Test_sentryLogger_log(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
 			l := NewLogger(ctx, LoggerOptions{})
-			tt.logFunc(l, tt.args)
+			tt.logFunc(ctx, l, tt.args)
 			Flush(20 * time.Millisecond)
 
 			opts := cmp.Options{
@@ -194,19 +192,18 @@ func Test_sentryLogger_Panic(t *testing.T) {
 		}()
 		ctx, _ := setupMockTransport()
 		l := NewLogger(ctx, LoggerOptions{})
-		l.Panic("panic message") // This should panic
+		l.Panic(context.Background(), "panic message") // This should panic
 	})
 }
 
 func Test_sentryLogger_log_Format(t *testing.T) {
 	attrs := map[string]Attribute{
-		"sentry.release":              {Value: "v1.2.3", Type: "string"},
-		"sentry.environment":          {Value: "testing", Type: "string"},
-		"sentry.server.address":       {Value: "test-server", Type: "string"},
-		"sentry.trace.parent_span_id": {Value: LogSpanID, Type: "string"},
-		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
-		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
-		"sentry.origin":               {Value: "auto.logger.log", Type: "string"},
+		"sentry.release":        {Value: "v1.2.3", Type: "string"},
+		"sentry.environment":    {Value: "testing", Type: "string"},
+		"sentry.server.address": {Value: "test-server", Type: "string"},
+		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
+		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
+		"sentry.origin":         {Value: "auto.logger.log", Type: "string"},
 	}
 	wantLogs := []Log{
 		{
@@ -225,7 +222,7 @@ func Test_sentryLogger_log_Format(t *testing.T) {
 
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx, LoggerOptions{})
-	l.Info("param matching: %v and %v", "param1", struct{ val int }{42},
+	l.Info(ctx, "param matching: %v and %v", "param1", struct{ val int }{42},
 		attribute.Int("int", 42),
 	)
 	Flush(20 * time.Millisecond)
@@ -249,13 +246,12 @@ func Test_sentryLogger_log_Format(t *testing.T) {
 func Test_sentryLogger_Write(t *testing.T) {
 	msg := []byte("message from writer\n")
 	attrs := map[string]Attribute{
-		"sentry.release":              {Value: "v1.2.3", Type: "string"},
-		"sentry.environment":          {Value: "testing", Type: "string"},
-		"sentry.server.address":       {Value: "test-server", Type: "string"},
-		"sentry.trace.parent_span_id": {Value: LogSpanID, Type: "string"},
-		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
-		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
-		"sentry.origin":               {Value: "auto.logger.log", Type: "string"},
+		"sentry.release":        {Value: "v1.2.3", Type: "string"},
+		"sentry.environment":    {Value: "testing", Type: "string"},
+		"sentry.server.address": {Value: "test-server", Type: "string"},
+		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
+		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
+		"sentry.origin":         {Value: "auto.logger.log", Type: "string"},
 	}
 	wantLogs := []Log{
 		{
@@ -295,9 +291,9 @@ func Test_sentryLogger_Write(t *testing.T) {
 }
 
 func Test_batchLogger_Flush(t *testing.T) {
-	_, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background(), LoggerOptions{})
-	l.Info("context done log")
+	l.Info(ctx, "context done log")
 	Flush(20 * time.Millisecond)
 
 	events := mockTransport.Events()
@@ -307,13 +303,13 @@ func Test_batchLogger_Flush(t *testing.T) {
 }
 
 func Test_sentryLogger_BeforeSendLog(t *testing.T) {
-	_, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background(), LoggerOptions{
 		BeforeSendLog: func(_ *Log) *Log {
 			return nil
 		},
 	})
-	l.Info("context done log")
+	l.Info(ctx, "context done log")
 	Flush(20 * time.Millisecond)
 
 	events := mockTransport.Events()
@@ -323,10 +319,10 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 }
 
 func Test_Logger_ExceedBatchSize(t *testing.T) {
-	_, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background(), LoggerOptions{})
 	for i := 0; i < 100; i++ {
-		l.Info("test")
+		l.Info(ctx, "test")
 	}
 
 	// sleep to wait for events to propagate
@@ -334,5 +330,41 @@ func Test_Logger_ExceedBatchSize(t *testing.T) {
 	events := mockTransport.Events()
 	if len(events) != 1 {
 		t.Fatalf("expected only one event with 100 logs, got %d", len(events))
+	}
+}
+
+func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+
+	// Start a new transaction
+	txn := StartTransaction(ctx, "test-transaction")
+	defer txn.Finish()
+
+	expectedTraceID := txn.TraceID
+	expectedSpanID := txn.SpanID
+
+	logger := NewLogger(txn.Context(), LoggerOptions{})
+	logger.Info(txn.Context(), "message with tracing")
+
+	Flush(20 * time.Millisecond)
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	logs := events[0].Logs
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 log, got %d", len(logs))
+	}
+
+	log := logs[0]
+
+	if log.TraceID != expectedTraceID {
+		t.Errorf("unexpected TraceID: got %s, want %s", log.TraceID.String(), expectedTraceID.String())
+	}
+	if val, ok := log.Attributes["sentry.trace.parent_span_id"]; !ok {
+		t.Errorf("missing sentry.trace.parent_span_id attribute")
+	} else if val.Value != expectedSpanID.String() {
+		t.Errorf("unexpected SpanID: got %s, want %s", val.Value, expectedSpanID.String())
 	}
 }

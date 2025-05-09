@@ -42,7 +42,6 @@ var mapTypesToStr = map[attribute.Type]string{
 
 // sentryLogger implements a custom logger that writes to Sentry.
 type sentryLogger struct {
-	hub     *Hub
 	client  *Client
 	options LoggerOptions
 }
@@ -63,7 +62,7 @@ func NewLogger(ctx context.Context, opts LoggerOptions) Logger {
 
 	client := hub.Client()
 	if client != nil && client.batchLogger != nil {
-		return &sentryLogger{hub, client, opts}
+		return &sentryLogger{client, opts}
 	}
 	return &noopLogger{} // fallback: does nothing
 }
@@ -71,15 +70,29 @@ func NewLogger(ctx context.Context, opts LoggerOptions) Logger {
 func (l *sentryLogger) Write(p []byte) (n int, err error) {
 	// Avoid sending double newlines to Sentry
 	msg := strings.TrimRight(string(p), "\n")
-	err = l.log(LevelInfo, LogSeverityInfo, msg)
+	err = l.log(context.Background(), LevelInfo, LogSeverityInfo, msg)
 	return len(p), err
 }
 
-func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error {
+func (l *sentryLogger) log(ctx context.Context, level Level, severity int, args ...interface{}) error {
 	if len(args) == 0 {
 		return nil
 	}
-	traceID, spanID := l.hub.Scope().propagationContext.TraceID, l.hub.Scope().propagationContext.SpanID
+	hub := GetHubFromContext(ctx)
+	if hub == nil {
+		hub = CurrentHub()
+	}
+
+	var traceID TraceID
+	var spanID SpanID
+
+	span := hub.Scope().span
+	if span != nil {
+		traceID = span.TraceID
+		spanID = span.SpanID
+	} else {
+		traceID = hub.Scope().propagationContext.TraceID
+	}
 
 	var template string
 	var message string
@@ -130,7 +143,7 @@ func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error
 	if serverAddr := l.client.options.ServerName; serverAddr != "" {
 		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
 	}
-	if spanID.String() != "" {
+	if spanID.String() != "0000000000000000" {
 		attrs["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: "string"}
 	}
 	if sdkIdentifier := l.client.sdkIdentifier; sdkIdentifier != "" {
@@ -159,30 +172,42 @@ func (l *sentryLogger) log(level Level, severity int, args ...interface{}) error
 	return nil
 }
 
-func (l *sentryLogger) Trace(v ...interface{}) { _ = l.log(LogLevelTrace, LogSeverityTrace, v...) }
-func (l *sentryLogger) Debug(v ...interface{}) { _ = l.log(LogLevelDebug, LogSeverityDebug, v...) }
-func (l *sentryLogger) Info(v ...interface{})  { _ = l.log(LogLevelInfo, LogSeverityInfo, v...) }
-func (l *sentryLogger) Warn(v ...interface{})  { _ = l.log(LogLevelWarning, LogSeverityWarning, v...) }
-func (l *sentryLogger) Error(v ...interface{}) { _ = l.log(LogLevelError, LogSeverityError, v...) }
-func (l *sentryLogger) Fatal(v ...interface{}) {
-	_ = l.log(LogLevelFatal, LogSeverityFatal, v...)
+func (l *sentryLogger) Trace(ctx context.Context, v ...interface{}) {
+	_ = l.log(ctx, LogLevelTrace, LogSeverityTrace, v...)
+}
+func (l *sentryLogger) Debug(ctx context.Context, v ...interface{}) {
+	_ = l.log(ctx, LogLevelDebug, LogSeverityDebug, v...)
+}
+func (l *sentryLogger) Info(ctx context.Context, v ...interface{}) {
+	_ = l.log(ctx, LogLevelInfo, LogSeverityInfo, v...)
+}
+func (l *sentryLogger) Warn(ctx context.Context, v ...interface{}) {
+	_ = l.log(ctx, LogLevelWarning, LogSeverityWarning, v...)
+}
+func (l *sentryLogger) Error(ctx context.Context, v ...interface{}) {
+	_ = l.log(ctx, LogLevelError, LogSeverityError, v...)
+}
+func (l *sentryLogger) Fatal(ctx context.Context, v ...interface{}) {
+	_ = l.log(ctx, LogLevelFatal, LogSeverityFatal, v...)
 	os.Exit(1)
 }
-func (l *sentryLogger) Panic(v ...interface{}) {
-	_ = l.log(LogLevelFatal, LogSeverityFatal, v...)
+func (l *sentryLogger) Panic(ctx context.Context, v ...interface{}) {
+	_ = l.log(ctx, LogLevelFatal, LogSeverityFatal, v...)
 	panic(fmt.Sprint(v...))
 }
 
 // fallback no-op logger if Sentry is not enabled.
 type noopLogger struct{}
 
-func (*noopLogger) Trace(_ ...interface{}) {}
-func (*noopLogger) Debug(_ ...interface{}) {}
-func (*noopLogger) Info(_ ...interface{})  {}
-func (*noopLogger) Warn(_ ...interface{})  {}
-func (*noopLogger) Error(_ ...interface{}) {}
-func (*noopLogger) Fatal(_ ...interface{}) { os.Exit(1) }
-func (*noopLogger) Panic(_ ...interface{}) { panic("invalid setup: EnableLogs disabled") }
+func (*noopLogger) Trace(_ context.Context, _ ...interface{}) {}
+func (*noopLogger) Debug(_ context.Context, _ ...interface{}) {}
+func (*noopLogger) Info(_ context.Context, _ ...interface{})  {}
+func (*noopLogger) Warn(_ context.Context, _ ...interface{})  {}
+func (*noopLogger) Error(_ context.Context, _ ...interface{}) {}
+func (*noopLogger) Fatal(_ context.Context, _ ...interface{}) { os.Exit(1) }
+func (*noopLogger) Panic(_ context.Context, _ ...interface{}) {
+	panic("invalid setup: EnableLogs disabled")
+}
 func (*noopLogger) Write(_ []byte) (n int, err error) {
 	return 0, errors.New("invalid setup: EnableLogs disabled")
 }
