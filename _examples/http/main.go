@@ -264,8 +264,8 @@ func NewImage(ctx context.Context, width, height int, seed []byte) image.Image {
 // The only reason to change logger configuration in this example is aesthetics.
 func configureLoggers() {
 	logFlags := log.Ldate | log.Ltime
-	sentry.Logger.SetPrefix("[sentry sdk]   ")
-	sentry.Logger.SetFlags(logFlags)
+	sentry.DebugLogger.SetPrefix("[sentry sdk]   ")
+	sentry.DebugLogger.SetFlags(logFlags)
 	log.SetPrefix("[http example] ")
 	log.SetFlags(logFlags)
 }
