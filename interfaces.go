@@ -152,6 +152,7 @@ type Logger interface {
 	// Panicf sends a [LogLevelFatal] log to Sentry followed by a call to panic().
 	// Arguments are handled in the manner of [fmt.Printf].
 	Panicf(ctx context.Context, format string, v ...interface{})
+	// SetAttributes allows attaching parameters to the log message using the attribute API.
 	SetAttributes(...attribute.Builder)
 }
 
