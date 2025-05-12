@@ -84,14 +84,14 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	}
 	body, err = json.Marshal(event)
 	if err == nil {
-		Logger.Println(msg)
+		DebugLogger.Println(msg)
 		return body
 	}
 
 	// This should _only_ happen when Event.Exception[0].Stacktrace.Frames[0].Vars is unserializable
 	// Which won't ever happen, as we don't use it now (although it's the part of public interface accepted by Sentry)
 	// Juuust in case something, somehow goes utterly wrong.
-	Logger.Println("Event couldn't be marshaled, even with stripped contextual data. Skipping delivery. " +
+	DebugLogger.Println("Event couldn't be marshaled, even with stripped contextual data. Skipping delivery. " +
 		"Please notify the SDK owners with possibly broken payload.")
 	return nil
 }
@@ -309,7 +309,7 @@ func NewHTTPTransport() *HTTPTransport {
 func (t *HTTPTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
-		Logger.Printf("%v\n", err)
+		DebugLogger.Printf("%v\n", err)
 		return
 	}
 	t.dsn = dsn
@@ -393,7 +393,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		} else {
 			eventType = fmt.Sprintf("%s event", event.Level)
 		}
-		Logger.Printf(
+		DebugLogger.Printf(
 			"Sending %s [%s] to %s project: %s",
 			eventType,
 			event.EventID,
@@ -401,7 +401,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 			t.dsn.projectID,
 		)
 	default:
-		Logger.Println("Event dropped due to transport buffer being full.")
+		DebugLogger.Println("Event dropped due to transport buffer being full.")
 	}
 
 	t.buffer <- b
@@ -455,14 +455,14 @@ started:
 	// Wait until the current batch is done or the timeout.
 	select {
 	case <-b.done:
-		Logger.Println("Buffer flushed successfully.")
+		DebugLogger.Println("Buffer flushed successfully.")
 		return true
 	case <-toolate:
 		goto fail
 	}
 
 fail:
-	Logger.Println("Buffer flushing reached the timeout.")
+	DebugLogger.Println("Buffer flushing reached the timeout.")
 	return false
 }
 
@@ -500,15 +500,15 @@ func (t *HTTPTransport) worker() {
 
 				response, err := t.client.Do(item.request)
 				if err != nil {
-					Logger.Printf("There was an issue with sending an event: %v", err)
+					DebugLogger.Printf("There was an issue with sending an event: %v", err)
 					continue
 				}
 				if response.StatusCode >= 400 && response.StatusCode <= 599 {
 					b, err := io.ReadAll(response.Body)
 					if err != nil {
-						Logger.Printf("Error while reading response code: %v", err)
+						DebugLogger.Printf("Error while reading response code: %v", err)
 					}
-					Logger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+					DebugLogger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
 				}
 
 				t.mu.Lock()
@@ -535,7 +535,7 @@ func (t *HTTPTransport) disabled(c ratelimit.Category) bool {
 	defer t.mu.RUnlock()
 	disabled := t.limits.IsRateLimited(c)
 	if disabled {
-		Logger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
+		DebugLogger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
 	}
 	return disabled
 }
@@ -581,7 +581,7 @@ func NewHTTPSyncTransport() *HTTPSyncTransport {
 func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
-		Logger.Printf("%v\n", err)
+		DebugLogger.Printf("%v\n", err)
 		return
 	}
 	t.dsn = dsn
@@ -634,7 +634,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	default:
 		eventType = fmt.Sprintf("%s event", event.Level)
 	}
-	Logger.Printf(
+	DebugLogger.Printf(
 		"Sending %s [%s] to %s project: %s",
 		eventType,
 		event.EventID,
@@ -644,15 +644,15 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 
 	response, err := t.client.Do(request)
 	if err != nil {
-		Logger.Printf("There was an issue with sending an event: %v", err)
+		DebugLogger.Printf("There was an issue with sending an event: %v", err)
 		return
 	}
 	if response.StatusCode >= 400 && response.StatusCode <= 599 {
 		b, err := io.ReadAll(response.Body)
 		if err != nil {
-			Logger.Printf("Error while reading response code: %v", err)
+			DebugLogger.Printf("Error while reading response code: %v", err)
 		}
-		Logger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+		DebugLogger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
 	}
 
 	t.mu.Lock()
@@ -679,7 +679,7 @@ func (t *HTTPSyncTransport) disabled(c ratelimit.Category) bool {
 	defer t.mu.Unlock()
 	disabled := t.limits.IsRateLimited(c)
 	if disabled {
-		Logger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
+		DebugLogger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
 	}
 	return disabled
 }
@@ -695,11 +695,11 @@ type noopTransport struct{}
 var _ Transport = noopTransport{}
 
 func (noopTransport) Configure(ClientOptions) {
-	Logger.Println("Sentry client initialized with an empty DSN. Using noopTransport. No events will be delivered.")
+	DebugLogger.Println("Sentry client initialized with an empty DSN. Using noopTransport. No events will be delivered.")
 }
 
 func (noopTransport) SendEvent(*Event) {
-	Logger.Println("Event dropped due to noopTransport usage.")
+	DebugLogger.Println("Event dropped due to noopTransport usage.")
 }
 
 func (noopTransport) Flush(time.Duration) bool {
