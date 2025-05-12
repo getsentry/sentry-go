@@ -18,7 +18,7 @@ const (
 	LogLevelTrace   Level = "trace"
 	LogLevelDebug   Level = "debug"
 	LogLevelInfo    Level = "info"
-	LogLevelWarning Level = "warning"
+	LogLevelWarning Level = "warn"
 	LogLevelError   Level = "error"
 	LogLevelFatal   Level = "fatal"
 )
