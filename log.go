@@ -147,7 +147,7 @@ func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
 		t, ok := mapTypesToStr[v.Value.Type()]
 		if !ok {
 			DebugLogger.Printf("invalid attribute type set: %v", t)
-			return
+			continue
 		}
 
 		l.attributes[v.Key] = Attribute{
