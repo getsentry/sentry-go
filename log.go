@@ -42,7 +42,8 @@ var mapTypesToStr = map[attribute.Type]string{
 
 // sentryLogger implements a custom logger that writes to Sentry.
 type sentryLogger struct {
-	client *Client
+	client     *Client
+	attributes map[string]Attribute
 }
 
 // NewLogger returns a Logger that writes to Sentry if enabled, or discards otherwise.
@@ -55,8 +56,10 @@ func NewLogger(ctx context.Context) Logger {
 
 	client := hub.Client()
 	if client != nil && client.batchLogger != nil {
-		return &sentryLogger{client}
+		return &sentryLogger{client, make(map[string]Attribute)}
 	}
+
+	DebugLogger.Println("fallback to noopLogger: enableLogs disabled")
 	return &noopLogger{} // fallback: does nothing
 }
 
@@ -67,8 +70,8 @@ func (l *sentryLogger) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (l *sentryLogger) log(ctx context.Context, level Level, severity int, args ...interface{}) {
-	if len(args) == 0 {
+func (l *sentryLogger) log(ctx context.Context, level Level, severity int, message string, args ...interface{}) {
+	if message == "" {
 		return
 	}
 	hub := GetHubFromContext(ctx)
@@ -87,40 +90,12 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, args 
 		traceID = hub.Scope().propagationContext.TraceID
 	}
 
-	var template string
-	var message string
-	var parameters []interface{}
-	attrs := map[string]Attribute{}
-
-	for _, arg := range args {
-		switch a := arg.(type) {
-		case string:
-			if template == "" {
-				template = a
-			} else {
-				parameters = append(parameters, a)
-			}
-		case attribute.Builder:
-			attrs[a.Key] = Attribute{
-				Value: a.Value.AsInterface(),
-				Type:  mapTypesToStr[a.Value.Type()],
-			}
-		default:
-			parameters = append(parameters, a)
+	if len(args) > 0 {
+		l.attributes["sentry.message.template"] = Attribute{
+			Value: message, Type: "string",
 		}
-	}
-
-	if template != "" && len(parameters) > 0 {
-		message = fmt.Sprintf(template, parameters...)
-	} else {
-		message = template
-	}
-	if template != "" && len(parameters) > 0 {
-		attrs["sentry.message.template"] = Attribute{
-			Value: template, Type: "string",
-		}
-		for i, p := range parameters {
-			attrs[fmt.Sprintf("sentry.message.parameters.%d", i)] = Attribute{
+		for i, p := range args {
+			l.attributes[fmt.Sprintf("sentry.message.parameters.%d", i)] = Attribute{
 				Value: fmt.Sprint(p), Type: "string",
 			}
 		}
@@ -128,71 +103,143 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, args 
 
 	// handle metadata
 	if release := l.client.options.Release; release != "" {
-		attrs["sentry.release"] = Attribute{Value: release, Type: "string"}
+		l.attributes["sentry.release"] = Attribute{Value: release, Type: "string"}
 	}
 	if environment := l.client.options.Environment; environment != "" {
-		attrs["sentry.environment"] = Attribute{Value: environment, Type: "string"}
+		l.attributes["sentry.environment"] = Attribute{Value: environment, Type: "string"}
 	}
 	if serverAddr := l.client.options.ServerName; serverAddr != "" {
-		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
+		l.attributes["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
 	}
 	if spanID.String() != "0000000000000000" {
-		attrs["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: "string"}
+		l.attributes["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: "string"}
 	}
 	if sdkIdentifier := l.client.sdkIdentifier; sdkIdentifier != "" {
-		attrs["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: "string"}
+		l.attributes["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: "string"}
 	}
 	if sdkVersion := l.client.sdkVersion; sdkVersion != "" {
-		attrs["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: "string"}
+		l.attributes["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: "string"}
 	}
-	attrs["sentry.origin"] = Attribute{Value: "auto.logger.log", Type: "string"}
+	l.attributes["sentry.origin"] = Attribute{Value: "auto.logger.log", Type: "string"}
 
 	l.client.batchLogger.logCh <- Log{
 		Timestamp:  time.Now(),
 		TraceID:    traceID,
 		Level:      level,
 		Severity:   severity,
-		Body:       message,
-		Attributes: attrs,
+		Body:       fmt.Sprintf(message, args...),
+		Attributes: l.attributes,
+	}
+}
+
+func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
+	for _, v := range attrs {
+		l.attributes[v.Key] = Attribute{
+			Value: v.Value.AsInterface(),
+			Type:  mapTypesToStr[v.Value.Type()],
+		}
 	}
 }
 
 func (l *sentryLogger) Trace(ctx context.Context, v ...interface{}) {
-	l.log(ctx, LogLevelTrace, LogSeverityTrace, v...)
+	l.log(ctx, LogLevelTrace, LogSeverityTrace, fmt.Sprint(v...))
 }
 func (l *sentryLogger) Debug(ctx context.Context, v ...interface{}) {
-	l.log(ctx, LogLevelDebug, LogSeverityDebug, v...)
+	l.log(ctx, LogLevelDebug, LogSeverityDebug, fmt.Sprint(v...))
 }
 func (l *sentryLogger) Info(ctx context.Context, v ...interface{}) {
-	l.log(ctx, LogLevelInfo, LogSeverityInfo, v...)
+	l.log(ctx, LogLevelInfo, LogSeverityInfo, fmt.Sprint(v...))
 }
 func (l *sentryLogger) Warn(ctx context.Context, v ...interface{}) {
-	l.log(ctx, LogLevelWarning, LogSeverityWarning, v...)
+	l.log(ctx, LogLevelWarning, LogSeverityWarning, fmt.Sprint(v...))
 }
 func (l *sentryLogger) Error(ctx context.Context, v ...interface{}) {
-	l.log(ctx, LogLevelError, LogSeverityError, v...)
+	l.log(ctx, LogLevelError, LogSeverityError, fmt.Sprint(v...))
 }
 func (l *sentryLogger) Fatal(ctx context.Context, v ...interface{}) {
-	l.log(ctx, LogLevelFatal, LogSeverityFatal, v...)
+	l.log(ctx, LogLevelFatal, LogSeverityFatal, fmt.Sprint(v...))
 	os.Exit(1)
 }
 func (l *sentryLogger) Panic(ctx context.Context, v ...interface{}) {
-	l.log(ctx, LogLevelFatal, LogSeverityFatal, v...)
+	l.log(ctx, LogLevelFatal, LogSeverityFatal, fmt.Sprint(v...))
+	panic(fmt.Sprint(v...))
+}
+func (l *sentryLogger) Tracef(ctx context.Context, format string, v ...interface{}) {
+	l.log(ctx, LogLevelTrace, LogSeverityTrace, format, v...)
+}
+func (l *sentryLogger) Debugf(ctx context.Context, format string, v ...interface{}) {
+	l.log(ctx, LogLevelDebug, LogSeverityDebug, format, v...)
+}
+func (l *sentryLogger) Infof(ctx context.Context, format string, v ...interface{}) {
+	l.log(ctx, LogLevelInfo, LogSeverityInfo, format, v...)
+}
+func (l *sentryLogger) Warnf(ctx context.Context, format string, v ...interface{}) {
+	l.log(ctx, LogLevelWarning, LogSeverityWarning, format, v...)
+}
+func (l *sentryLogger) Errorf(ctx context.Context, format string, v ...interface{}) {
+	l.log(ctx, LogLevelError, LogSeverityError, format, v...)
+}
+func (l *sentryLogger) Fatalf(ctx context.Context, format string, v ...interface{}) {
+	l.log(ctx, LogLevelFatal, LogSeverityFatal, format, v...)
+	os.Exit(1)
+}
+func (l *sentryLogger) Panicf(ctx context.Context, format string, v ...interface{}) {
+	l.log(ctx, LogLevelFatal, LogSeverityFatal, format, v...)
 	panic(fmt.Sprint(v...))
 }
 
 // fallback no-op logger if Sentry is not enabled.
 type noopLogger struct{}
 
-func (*noopLogger) Trace(_ context.Context, _ ...interface{}) {}
-func (*noopLogger) Debug(_ context.Context, _ ...interface{}) {}
-func (*noopLogger) Info(_ context.Context, _ ...interface{})  {}
-func (*noopLogger) Warn(_ context.Context, _ ...interface{})  {}
-func (*noopLogger) Error(_ context.Context, _ ...interface{}) {}
-func (*noopLogger) Fatal(_ context.Context, _ ...interface{}) { os.Exit(1) }
+func (*noopLogger) Trace(_ context.Context, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
+func (*noopLogger) Debug(_ context.Context, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
+func (*noopLogger) Info(_ context.Context, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
+func (*noopLogger) Warn(_ context.Context, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
+func (*noopLogger) Error(_ context.Context, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
+func (*noopLogger) Fatal(_ context.Context, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+	os.Exit(1)
+}
 func (*noopLogger) Panic(_ context.Context, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
 	panic("invalid setup: EnableLogs disabled")
 }
+func (*noopLogger) Tracef(_ context.Context, _ string, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
+func (*noopLogger) Debugf(_ context.Context, _ string, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
+func (*noopLogger) Infof(_ context.Context, _ string, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
+func (*noopLogger) Warnf(_ context.Context, _ string, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
+func (*noopLogger) Errorf(_ context.Context, _ string, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
+func (*noopLogger) Fatalf(_ context.Context, _ string, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+	os.Exit(1)
+}
+func (*noopLogger) Panicf(_ context.Context, _ string, _ ...interface{}) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+	panic("invalid setup: EnableLogs disabled")
+}
+func (*noopLogger) SetAttributes(...attribute.Builder) {
+	DebugLogger.Println("does nothing: EnableLogs disabled")
+}
 func (*noopLogger) Write(_ []byte) (n int, err error) {
-	return 0, errors.New("invalid setup: EnableLogs disabled")
+	return 0, errors.New("does nothing: EnableLogs disabled")
 }

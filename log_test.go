@@ -36,7 +36,158 @@ func setupMockTransport() (context.Context, *MockTransport) {
 	return ctx, mockTransport
 }
 
-func Test_sentryLogger_log(t *testing.T) {
+func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
+	attrs := map[string]Attribute{
+		"sentry.release":              {Value: "v1.2.3", Type: "string"},
+		"sentry.environment":          {Value: "testing", Type: "string"},
+		"sentry.server.address":       {Value: "test-server", Type: "string"},
+		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
+		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
+		"sentry.origin":               {Value: "auto.logger.log", Type: "string"},
+		"sentry.message.template":     {Value: "param matching: %v and %v", Type: "string"},
+		"sentry.message.parameters.0": {Value: "param1", Type: "string"},
+		"sentry.message.parameters.1": {Value: "param2", Type: "string"},
+		"int":                         {Value: int64(42), Type: "integer"},
+	}
+
+	tests := []struct {
+		name       string
+		logFunc    func(ctx context.Context, l Logger)
+		message    string
+		args       any
+		wantEvents []Event
+	}{
+		{
+			name: "Trace level",
+			logFunc: func(ctx context.Context, l Logger) {
+				l.Tracef(ctx, "param matching: %v and %v", "param1", "param2")
+			},
+			message: "param matching: %v and %v",
+			wantEvents: []Event{
+				{
+					Logs: []Log{
+						{
+							TraceID:    TraceIDFromHex(LogTraceID),
+							Level:      LogLevelTrace,
+							Severity:   LogSeverityTrace,
+							Body:       "param matching: param1 and param2",
+							Attributes: attrs,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Debug level",
+			logFunc: func(ctx context.Context, l Logger) {
+				l.Debugf(ctx, "param matching: %v and %v", "param1", "param2")
+			},
+			message: "param matching: %v and %v",
+			wantEvents: []Event{
+				{
+					Logs: []Log{
+						{
+							TraceID:    TraceIDFromHex(LogTraceID),
+							Level:      LogLevelDebug,
+							Severity:   LogSeverityDebug,
+							Body:       "param matching: param1 and param2",
+							Attributes: attrs,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Info level",
+			logFunc: func(ctx context.Context, l Logger) {
+				l.Infof(ctx, "param matching: %v and %v", "param1", "param2")
+			},
+			message: "param matching: %v and %v",
+			wantEvents: []Event{
+				{
+					Logs: []Log{
+						{
+							TraceID:    TraceIDFromHex(LogTraceID),
+							Level:      LogLevelInfo,
+							Severity:   LogSeverityInfo,
+							Body:       "param matching: param1 and param2",
+							Attributes: attrs,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Warn level",
+			logFunc: func(ctx context.Context, l Logger) {
+				l.Warnf(ctx, "param matching: %v and %v", "param1", "param2")
+			},
+			message: "param matching: %v and %v",
+			wantEvents: []Event{
+				{
+					Logs: []Log{
+						{
+							TraceID:    TraceIDFromHex(LogTraceID),
+							Level:      LogLevelWarning,
+							Severity:   LogSeverityWarning,
+							Body:       "param matching: param1 and param2",
+							Attributes: attrs,
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Error level",
+			logFunc: func(ctx context.Context, l Logger) {
+				l.Errorf(ctx, "param matching: %v and %v", "param1", "param2")
+			},
+			message: "param matching: %v and %v",
+			wantEvents: []Event{
+				{
+					Logs: []Log{
+						{
+							TraceID:    TraceIDFromHex(LogTraceID),
+							Level:      LogLevelError,
+							Severity:   LogSeverityError,
+							Body:       "param matching: param1 and param2",
+							Attributes: attrs,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, mockTransport := setupMockTransport()
+			l := NewLogger(ctx)
+			tt.logFunc(ctx, l)
+			l.SetAttributes(attribute.Int("int", 42))
+			Flush(20 * time.Millisecond)
+
+			opts := cmp.Options{
+				cmpopts.IgnoreFields(Log{}, "Timestamp"),
+			}
+
+			gotEvents := mockTransport.Events()
+			if len(gotEvents) != len(tt.wantEvents) {
+				t.Fatalf("expected %d events, got %d", len(tt.wantEvents), len(gotEvents))
+			}
+			for i, event := range gotEvents {
+				assertEqual(t, event.Type, logType)
+				if diff := cmp.Diff(tt.wantEvents[i].Logs, event.Logs, opts); diff != "" {
+					t.Errorf("Log mismatch (-want +got):\n%s", diff)
+				}
+				// pop used mock event
+				mockTransport.events = nil
+			}
+		})
+	}
+}
+
+func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 	attrs := map[string]Attribute{
 		"sentry.release":        {Value: "v1.2.3", Type: "string"},
 		"sentry.environment":    {Value: "testing", Type: "string"},
@@ -182,7 +333,7 @@ func Test_sentryLogger_log(t *testing.T) {
 }
 
 func Test_sentryLogger_Panic(t *testing.T) {
-	t.Run("Panic level", func(t *testing.T) {
+	t.Run("logger.Panic", func(t *testing.T) {
 		defer func() {
 			if r := recover(); r == nil {
 				t.Errorf("expected panic, but code did not panic")
@@ -194,53 +345,19 @@ func Test_sentryLogger_Panic(t *testing.T) {
 		l := NewLogger(ctx)
 		l.Panic(context.Background(), "panic message") // This should panic
 	})
-}
 
-func Test_sentryLogger_log_Format(t *testing.T) {
-	attrs := map[string]Attribute{
-		"sentry.release":        {Value: "v1.2.3", Type: "string"},
-		"sentry.environment":    {Value: "testing", Type: "string"},
-		"sentry.server.address": {Value: "test-server", Type: "string"},
-		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
-		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
-		"sentry.origin":         {Value: "auto.logger.log", Type: "string"},
-	}
-	wantLogs := []Log{
-		{
-			TraceID:    TraceIDFromHex(LogTraceID),
-			Level:      LogLevelInfo,
-			Severity:   LogSeverityInfo,
-			Body:       "param matching: param1 and {42}",
-			Attributes: attrs,
-		},
-	}
-
-	wantLogs[0].Attributes["sentry.message.template"] = Attribute{Value: "param matching: %v and %v", Type: "string"}
-	wantLogs[0].Attributes["sentry.message.parameters.0"] = Attribute{Value: "param1", Type: "string"}
-	wantLogs[0].Attributes["sentry.message.parameters.1"] = Attribute{Value: "{42}", Type: "string"}
-	wantLogs[0].Attributes["int"] = Attribute{Value: int64(42), Type: "integer"}
-
-	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(ctx)
-	l.Info(ctx, "param matching: %v and %v", "param1", struct{ val int }{42},
-		attribute.Int("int", 42),
-	)
-	Flush(20 * time.Millisecond)
-
-	gotEvents := mockTransport.Events()
-	if len(gotEvents) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(gotEvents))
-	}
-
-	event := gotEvents[0]
-	assertEqual(t, event.Type, logType)
-
-	opts := cmp.Options{
-		cmpopts.IgnoreFields(Log{}, "Timestamp"),
-	}
-	if diff := cmp.Diff(wantLogs, event.Logs, opts); diff != "" {
-		t.Errorf("Log mismatch (-want +got):\n%s", diff)
-	}
+	t.Run("logger.Panicf", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("expected panic, but code did not panic")
+			} else {
+				t.Logf("recovered panic: %v", r)
+			}
+		}()
+		ctx, _ := setupMockTransport()
+		l := NewLogger(ctx)
+		l.Panicf(context.Background(), "panic message") // This should panic
+	})
 }
 
 func Test_sentryLogger_Write(t *testing.T) {
