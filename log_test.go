@@ -1,7 +1,10 @@
 package sentry
 
 import (
+	"bytes"
 	"context"
+	"log"
+	"strings"
 	"testing"
 	"time"
 
@@ -523,5 +526,59 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 		t.Errorf("missing sentry.trace.parent_span_id attribute")
 	} else if val.Value != expectedSpanID.String() {
 		t.Errorf("unexpected SpanID: got %s, want %s", val.Value, expectedSpanID.String())
+	}
+}
+
+func TestSentryLogger_DebugLogging(t *testing.T) {
+	var buf bytes.Buffer
+	debugLogger := log.New(&buf, "", 0)
+	originalLogger := DebugLogger
+	DebugLogger = debugLogger
+	defer func() {
+		DebugLogger = originalLogger
+	}()
+
+	tests := []struct {
+		name          string
+		debugEnabled  bool
+		message       string
+		expectedDebug string
+	}{
+		{
+			name:          "Debug enabled",
+			debugEnabled:  true,
+			message:       "test message",
+			expectedDebug: "test message\n",
+		},
+		{
+			name:          "Debug disabled",
+			debugEnabled:  false,
+			message:       "test message",
+			expectedDebug: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf.Reset()
+			ctx := context.Background()
+			mockClient, _ := NewClient(ClientOptions{
+				Transport:  &MockTransport{},
+				EnableLogs: true,
+				Debug:      tt.debugEnabled,
+			})
+			hub := CurrentHub()
+			hub.BindClient(mockClient)
+
+			logger := NewLogger(ctx)
+			logger.Info(ctx, tt.message)
+
+			got := buf.String()
+			if !tt.debugEnabled {
+				assertEqual(t, len(got), 0)
+			} else if strings.Contains(got, tt.expectedDebug) {
+				t.Errorf("Debug output = %q, want %q", got, tt.expectedDebug)
+			}
+		})
 	}
 }

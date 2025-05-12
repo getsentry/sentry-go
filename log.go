@@ -140,6 +140,10 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 		Body:       fmt.Sprintf(message, args...),
 		Attributes: attrs,
 	}
+
+	if l.client.options.Debug {
+		DebugLogger.Printf(message, args...)
+	}
 }
 
 func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
