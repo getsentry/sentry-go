@@ -649,16 +649,18 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		return
 	}
 
-	var eventType string
+	var eventIdentifier string
 	switch event.Type {
 	case transactionType:
-		eventType = "transaction"
+		eventIdentifier = "transaction"
+	case logType:
+		eventIdentifier = fmt.Sprintf("%v log events", len(event.Logs))
 	default:
-		eventType = fmt.Sprintf("%s event", event.Level)
+		eventIdentifier = fmt.Sprintf("%s event", event.Level)
 	}
 	DebugLogger.Printf(
 		"Sending %s [%s] to %s project: %s",
-		eventType,
+		eventIdentifier,
 		event.EventID,
 		t.dsn.host,
 		t.dsn.projectID,
@@ -674,7 +676,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		if err != nil {
 			DebugLogger.Printf("Error while reading response code: %v", err)
 		}
-		DebugLogger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+		DebugLogger.Printf("Sending %s failed with the following error: %s", eventIdentifier, string(b))
 	}
 
 	t.mu.Lock()

@@ -456,7 +456,7 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 		ServerName:    "test-server",
 		EnableLogs:    true,
 		EnableTracing: true,
-		BeforeSendLog: func(_ *Event, _ *EventHint) *Event {
+		BeforeSendLog: func(_ *Log) *Log {
 			return nil
 		},
 	})

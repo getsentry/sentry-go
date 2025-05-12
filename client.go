@@ -148,7 +148,7 @@ type ClientOptions struct {
 	BeforeSend func(event *Event, hint *EventHint) *Event
 	// BeforeSendLong is called before log events are sent to Sentry.
 	// Use it to mutate the log event or return nil to discard it.
-	BeforeSendLog func(event *Event, hint *EventHint) *Event
+	BeforeSendLog func(event *Log) *Log
 	// BeforeSendTransaction is called before transaction events are sent to Sentry.
 	// Use it to mutate the transaction or return nil to discard the transaction.
 	BeforeSendTransaction func(event *Event, hint *EventHint) *Event
@@ -637,13 +637,6 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		if client.options.BeforeSendTransaction != nil {
 			if event = client.options.BeforeSendTransaction(event, hint); event == nil {
 				DebugLogger.Println("Transaction dropped due to BeforeSendTransaction callback.")
-				return nil
-			}
-		}
-	case logType:
-		if client.options.BeforeSendLog != nil {
-			if event = client.options.BeforeSendLog(event, hint); event == nil {
-				DebugLogger.Println("Log dropped due to BeforeSendLog callback.")
 				return nil
 			}
 		}

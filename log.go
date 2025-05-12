@@ -117,7 +117,9 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 	if environment := l.client.options.Environment; environment != "" {
 		attrs["sentry.environment"] = Attribute{Value: environment, Type: "string"}
 	}
-	if serverAddr := l.client.options.ServerName; serverAddr != "" {
+	if serverName := l.client.options.ServerName; serverName != "" {
+		attrs["sentry.server.address"] = Attribute{Value: serverName, Type: "string"}
+	} else if serverAddr, err := os.Hostname(); err == nil {
 		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
 	}
 	if spanID.String() != "0000000000000000" {
@@ -131,13 +133,21 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 	}
 	attrs["sentry.origin"] = Attribute{Value: "auto.logger.log", Type: "string"}
 
-	l.client.batchLogger.logCh <- Log{
+	log := &Log{
 		Timestamp:  time.Now(),
 		TraceID:    traceID,
 		Level:      level,
 		Severity:   severity,
 		Body:       fmt.Sprintf(message, args...),
 		Attributes: attrs,
+	}
+
+	if l.client.options.BeforeSendLog != nil {
+		log = l.client.options.BeforeSendLog(log)
+	}
+
+	if log != nil {
+		l.client.batchLogger.logCh <- *log
 	}
 
 	if l.client.options.Debug {
