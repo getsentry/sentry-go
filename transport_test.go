@@ -260,6 +260,41 @@ func TestEnvelopeFromCheckInEvent(t *testing.T) {
 	}
 }
 
+func TestEnvelopeFromLogEvent(t *testing.T) {
+	event := newTestEvent(logType)
+	event.Logs = []Log{
+		{
+			TraceID:  TraceIDFromHex(LogTraceID),
+			Level:    LogLevelInfo,
+			Severity: LogSeverityInfo,
+			Body:     "test log message",
+			Attributes: map[string]Attribute{
+				"sentry.release":        {Value: "v1.2.3", Type: "string"},
+				"sentry.environment":    {Value: "testing", Type: "string"},
+				"sentry.server.address": {Value: "test-server", Type: "string"},
+				"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
+				"sentry.sdk.version":    {Value: "0.0.1", Type: "string"},
+				"sentry.origin":         {Value: "auto.logger.log", Type: "string"},
+			},
+		},
+	}
+	sentAt := time.Unix(0, 0).UTC()
+
+	body := getRequestBodyFromEvent(event)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
+{"type":"log","item_count":1,"content_type":"application/vnd.sentry.items.log+json"}
+{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sdk":{"name":"sentry.go","version":"0.0.1"},"user":{},"items":[{"timestamp":"0001-01-01T00:00:00Z","trace_id":"d49d9bf66f13450b81f65bc51cf49c03","level":"info","severity_number":9,"body":"test log message","attributes":{"sentry.environment":{"value":"testing","type":"string"},"sentry.origin":{"value":"auto.logger.log","type":"string"},"sentry.release":{"value":"v1.2.3","type":"string"},"sentry.sdk.name":{"value":"sentry.go","type":"string"},"sentry.sdk.version":{"value":"0.0.1","type":"string"},"sentry.server.address":{"value":"test-server","type":"string"}}}]}
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestGetRequestFromEvent(t *testing.T) {
 	testCases := []struct {
 		testName string
