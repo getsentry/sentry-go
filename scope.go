@@ -302,6 +302,11 @@ func (scope *Scope) SetPropagationContext(propagationContext PropagationContext)
 	scope.propagationContext = propagationContext
 }
 
+// GetSpan returns the span from the current scope.
+func (scope *Scope) GetSpan() *Span {
+	return scope.span
+}
+
 // SetSpan sets a span for the current scope.
 func (scope *Scope) SetSpan(span *Span) {
 	scope.mu.Lock()
