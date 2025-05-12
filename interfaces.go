@@ -570,8 +570,8 @@ type EventHint struct {
 type Log struct {
 	Timestamp  time.Time            `json:"timestamp,omitempty"`
 	TraceID    TraceID              `json:"trace_id,omitempty"`
-	Level      Level                `json:"level,omitempty"`
-	Severity   int                  `json:"severity_number"`
+	Level      Level                `json:"level"`
+	Severity   int                  `json:"severity_number,omitempty"`
 	Body       string               `json:"body,omitempty"`
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
