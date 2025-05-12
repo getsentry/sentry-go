@@ -90,37 +90,47 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 		traceID = hub.Scope().propagationContext.TraceID
 	}
 
+	attrs := map[string]Attribute{}
 	if len(args) > 0 {
-		l.attributes["sentry.message.template"] = Attribute{
+		attrs["sentry.message.template"] = Attribute{
 			Value: message, Type: "string",
 		}
 		for i, p := range args {
-			l.attributes[fmt.Sprintf("sentry.message.parameters.%d", i)] = Attribute{
+			attrs[fmt.Sprintf("sentry.message.parameters.%d", i)] = Attribute{
 				Value: fmt.Sprint(p), Type: "string",
 			}
 		}
 	}
 
+	// if log was called with SetAttributes pass the attributes to attrs
+	if len(l.attributes) > 0 {
+		for k, v := range l.attributes {
+			attrs[k] = v
+		}
+		// flush attributes from logger after send
+		clear(l.attributes)
+	}
+
 	// handle metadata
 	if release := l.client.options.Release; release != "" {
-		l.attributes["sentry.release"] = Attribute{Value: release, Type: "string"}
+		attrs["sentry.release"] = Attribute{Value: release, Type: "string"}
 	}
 	if environment := l.client.options.Environment; environment != "" {
-		l.attributes["sentry.environment"] = Attribute{Value: environment, Type: "string"}
+		attrs["sentry.environment"] = Attribute{Value: environment, Type: "string"}
 	}
 	if serverAddr := l.client.options.ServerName; serverAddr != "" {
-		l.attributes["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
+		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
 	}
 	if spanID.String() != "0000000000000000" {
-		l.attributes["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: "string"}
+		attrs["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: "string"}
 	}
 	if sdkIdentifier := l.client.sdkIdentifier; sdkIdentifier != "" {
-		l.attributes["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: "string"}
+		attrs["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: "string"}
 	}
 	if sdkVersion := l.client.sdkVersion; sdkVersion != "" {
-		l.attributes["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: "string"}
+		attrs["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: "string"}
 	}
-	l.attributes["sentry.origin"] = Attribute{Value: "auto.logger.log", Type: "string"}
+	attrs["sentry.origin"] = Attribute{Value: "auto.logger.log", Type: "string"}
 
 	l.client.batchLogger.logCh <- Log{
 		Timestamp:  time.Now(),
@@ -128,15 +138,21 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 		Level:      level,
 		Severity:   severity,
 		Body:       fmt.Sprintf(message, args...),
-		Attributes: l.attributes,
+		Attributes: attrs,
 	}
 }
 
 func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
 	for _, v := range attrs {
+		t, ok := mapTypesToStr[v.Value.Type()]
+		if !ok {
+			DebugLogger.Printf("invalid attribute type set: %v", t)
+			return
+		}
+
 		l.attributes[v.Key] = Attribute{
 			Value: v.Value.AsInterface(),
-			Type:  mapTypesToStr[v.Value.Type()],
+			Type:  t,
 		}
 	}
 }

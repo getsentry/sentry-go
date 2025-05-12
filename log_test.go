@@ -163,8 +163,8 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
 			l := NewLogger(ctx)
-			tt.logFunc(ctx, l)
 			l.SetAttributes(attribute.Int("int", 42))
+			tt.logFunc(ctx, l)
 			Flush(20 * time.Millisecond)
 
 			opts := cmp.Options{
@@ -405,6 +405,29 @@ func Test_sentryLogger_Write(t *testing.T) {
 	if diff := cmp.Diff(wantLogs, event.Logs, opts); diff != "" {
 		t.Errorf("Logs mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
+	msg := []byte("something")
+	ctx, mockTransport := setupMockTransport()
+	l := NewLogger(ctx)
+	l.SetAttributes(attribute.Int("int", 42))
+	l.Info(ctx, msg)
+
+	l.SetAttributes(attribute.String("string", "some str"))
+	l.Warn(ctx, msg)
+	Flush(20 * time.Millisecond)
+
+	gotEvents := mockTransport.Events()
+	if len(gotEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(gotEvents))
+	}
+	event := gotEvents[0]
+	assertEqual(t, event.Logs[0].Attributes["int"].Value, int64(42))
+	if _, ok := event.Logs[1].Attributes["int"]; ok {
+		t.Fatalf("expected key to not exist")
+	}
+	assertEqual(t, event.Logs[1].Attributes["string"].Value, "some str")
 }
 
 func Test_batchLogger_Flush(t *testing.T) {
