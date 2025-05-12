@@ -42,18 +42,11 @@ var mapTypesToStr = map[attribute.Type]string{
 
 // sentryLogger implements a custom logger that writes to Sentry.
 type sentryLogger struct {
-	client  *Client
-	options LoggerOptions
-}
-
-type LoggerOptions struct {
-	// BeforeSendLog is called before a log event is sent to Sentry.
-	// Use it to mutate the log event or return nil to discard.
-	BeforeSendLog func(log *Log) *Log
+	client *Client
 }
 
 // NewLogger returns a Logger that writes to Sentry if enabled, or discards otherwise.
-func NewLogger(ctx context.Context, opts LoggerOptions) Logger {
+func NewLogger(ctx context.Context) Logger {
 	var hub *Hub
 	hub = GetHubFromContext(ctx)
 	if hub == nil {
@@ -62,7 +55,7 @@ func NewLogger(ctx context.Context, opts LoggerOptions) Logger {
 
 	client := hub.Client()
 	if client != nil && client.batchLogger != nil {
-		return &sentryLogger{client, opts}
+		return &sentryLogger{client}
 	}
 	return &noopLogger{} // fallback: does nothing
 }
@@ -154,20 +147,13 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, args 
 	}
 	attrs["sentry.origin"] = Attribute{Value: "auto.logger.log", Type: "string"}
 
-	log := &Log{
+	l.client.batchLogger.logCh <- Log{
 		Timestamp:  time.Now(),
 		TraceID:    traceID,
 		Level:      level,
 		Severity:   severity,
 		Body:       message,
 		Attributes: attrs,
-	}
-	if l.options.BeforeSendLog != nil {
-		log = l.options.BeforeSendLog(log)
-	}
-
-	if log != nil {
-		l.client.batchLogger.logCh <- *log
 	}
 }
 

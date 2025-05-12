@@ -144,8 +144,11 @@ type ClientOptions struct {
 	// By default, no such data is sent.
 	SendDefaultPII bool
 	// BeforeSend is called before error events are sent to Sentry.
-	// Use it to mutate the event or return nil to discard the event.
+	// Use it to mutate the event or return nil to discard it.
 	BeforeSend func(event *Event, hint *EventHint) *Event
+	// BeforeSendLong is called before log events are sent to Sentry.
+	// Use it to mutate the log event or return nil to discard it.
+	BeforeSendLog func(event *Event, hint *EventHint) *Event
 	// BeforeSendTransaction is called before transaction events are sent to Sentry.
 	// Use it to mutate the transaction or return nil to discard the transaction.
 	BeforeSendTransaction func(event *Event, hint *EventHint) *Event
@@ -629,17 +632,28 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	if hint == nil {
 		hint = &EventHint{}
 	}
-	if event.Type == transactionType && client.options.BeforeSendTransaction != nil {
-		// Transaction events
-		if event = client.options.BeforeSendTransaction(event, hint); event == nil {
-			DebugLogger.Println("Transaction dropped due to BeforeSendTransaction callback.")
-			return nil
+	switch event.Type {
+	case transactionType:
+		if client.options.BeforeSendTransaction != nil {
+			if event = client.options.BeforeSendTransaction(event, hint); event == nil {
+				DebugLogger.Println("Transaction dropped due to BeforeSendTransaction callback.")
+				return nil
+			}
 		}
-	} else if event.Type != transactionType && event.Type != checkInType && client.options.BeforeSend != nil {
-		// All other events
-		if event = client.options.BeforeSend(event, hint); event == nil {
-			DebugLogger.Println("Event dropped due to BeforeSend callback.")
-			return nil
+	case logType:
+		if client.options.BeforeSendLog != nil {
+			if event = client.options.BeforeSendLog(event, hint); event == nil {
+				DebugLogger.Println("Log dropped due to BeforeSendLog callback.")
+				return nil
+			}
+		}
+	case checkInType:
+	default:
+		if client.options.BeforeSend != nil {
+			if event = client.options.BeforeSend(event, hint); event == nil {
+				DebugLogger.Println("Event dropped due to BeforeSend callback.")
+				return nil
+			}
 		}
 	}
 

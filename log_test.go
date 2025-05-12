@@ -157,7 +157,7 @@ func Test_sentryLogger_log(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
-			l := NewLogger(ctx, LoggerOptions{})
+			l := NewLogger(ctx)
 			tt.logFunc(ctx, l, tt.args)
 			Flush(20 * time.Millisecond)
 
@@ -191,7 +191,7 @@ func Test_sentryLogger_Panic(t *testing.T) {
 			}
 		}()
 		ctx, _ := setupMockTransport()
-		l := NewLogger(ctx, LoggerOptions{})
+		l := NewLogger(ctx)
 		l.Panic(context.Background(), "panic message") // This should panic
 	})
 }
@@ -221,7 +221,7 @@ func Test_sentryLogger_log_Format(t *testing.T) {
 	wantLogs[0].Attributes["int"] = Attribute{Value: int64(42), Type: "integer"}
 
 	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(ctx, LoggerOptions{})
+	l := NewLogger(ctx)
 	l.Info(ctx, "param matching: %v and %v", "param1", struct{ val int }{42},
 		attribute.Int("int", 42),
 	)
@@ -264,7 +264,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 	}
 
 	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(ctx, LoggerOptions{})
+	l := NewLogger(ctx)
 	n, err := l.Write(msg)
 
 	if err != nil {
@@ -292,7 +292,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 
 func Test_batchLogger_Flush(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(context.Background(), LoggerOptions{})
+	l := NewLogger(context.Background())
 	l.Info(ctx, "context done log")
 	Flush(20 * time.Millisecond)
 
@@ -303,12 +303,29 @@ func Test_batchLogger_Flush(t *testing.T) {
 }
 
 func Test_sentryLogger_BeforeSendLog(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(context.Background(), LoggerOptions{
-		BeforeSendLog: func(_ *Log) *Log {
+	ctx := context.Background()
+	mockTransport := &MockTransport{}
+	mockClient, _ := NewClient(ClientOptions{
+		Dsn:           testDsn,
+		Transport:     mockTransport,
+		Release:       "v1.2.3",
+		Environment:   "testing",
+		ServerName:    "test-server",
+		EnableLogs:    true,
+		EnableTracing: true,
+		BeforeSendLog: func(_ *Event, _ *EventHint) *Event {
 			return nil
 		},
 	})
+	mockClient.sdkIdentifier = "sentry.go"
+	mockClient.sdkVersion = "0.10.0"
+	hub := CurrentHub()
+	hub.BindClient(mockClient)
+	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+
+	ctx = SetHubOnContext(ctx, hub)
+
+	l := NewLogger(ctx)
 	l.Info(ctx, "context done log")
 	Flush(20 * time.Millisecond)
 
@@ -320,7 +337,7 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 
 func Test_Logger_ExceedBatchSize(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(context.Background(), LoggerOptions{})
+	l := NewLogger(context.Background())
 	for i := 0; i < 100; i++ {
 		l.Info(ctx, "test")
 	}
@@ -343,7 +360,7 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 	expectedTraceID := txn.TraceID
 	expectedSpanID := txn.SpanID
 
-	logger := NewLogger(txn.Context(), LoggerOptions{})
+	logger := NewLogger(txn.Context())
 	logger.Info(txn.Context(), "message with tracing")
 
 	Flush(20 * time.Millisecond)
