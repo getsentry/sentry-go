@@ -10,16 +10,15 @@ import (
 	"github.com/getsentry/sentry-go/attribute"
 )
 
-// LogLevel marks the severity of the log event.
 type LogLevel string
 
 const (
-	LogLevelTrace   Level = "trace"
-	LogLevelDebug   Level = "debug"
-	LogLevelInfo    Level = "info"
-	LogLevelWarning Level = "warn"
-	LogLevelError   Level = "error"
-	LogLevelFatal   Level = "fatal"
+	LogLevelTrace Level = "trace"
+	LogLevelDebug Level = "debug"
+	LogLevelInfo  Level = "info"
+	LogLevelWarn  Level = "warn"
+	LogLevelError Level = "error"
+	LogLevelFatal Level = "fatal"
 )
 
 const (
@@ -39,13 +38,12 @@ var mapTypesToStr = map[attribute.Type]string{
 	attribute.STRING:  "string",
 }
 
-// sentryLogger implements a custom logger that writes to Sentry.
 type sentryLogger struct {
 	client     *Client
 	attributes map[string]Attribute
 }
 
-// NewLogger returns a Logger that writes to Sentry if enabled, or discards otherwise.
+// NewLogger returns a Logger that emits logs to Sentry. If logging is turned off, all logs get discarded.
 func NewLogger(ctx context.Context) Logger {
 	var hub *Hub
 	hub = GetHubFromContext(ctx)
@@ -101,7 +99,7 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 		}
 	}
 
-	// if log was called with SetAttributes pass the attributes to attrs
+	// If `log` was called with SetAttributes, pass the attributes to attrs
 	if len(l.attributes) > 0 {
 		for k, v := range l.attributes {
 			attrs[k] = v
@@ -110,7 +108,7 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 		clear(l.attributes)
 	}
 
-	// handle metadata
+	// Set default attributes
 	if release := l.client.options.Release; release != "" {
 		attrs["sentry.release"] = Attribute{Value: release, Type: "string"}
 	}
@@ -180,7 +178,7 @@ func (l *sentryLogger) Info(ctx context.Context, v ...interface{}) {
 	l.log(ctx, LogLevelInfo, LogSeverityInfo, fmt.Sprint(v...))
 }
 func (l *sentryLogger) Warn(ctx context.Context, v ...interface{}) {
-	l.log(ctx, LogLevelWarning, LogSeverityWarning, fmt.Sprint(v...))
+	l.log(ctx, LogLevelWarn, LogSeverityWarning, fmt.Sprint(v...))
 }
 func (l *sentryLogger) Error(ctx context.Context, v ...interface{}) {
 	l.log(ctx, LogLevelError, LogSeverityError, fmt.Sprint(v...))
@@ -203,7 +201,7 @@ func (l *sentryLogger) Infof(ctx context.Context, format string, v ...interface{
 	l.log(ctx, LogLevelInfo, LogSeverityInfo, format, v...)
 }
 func (l *sentryLogger) Warnf(ctx context.Context, format string, v ...interface{}) {
-	l.log(ctx, LogLevelWarning, LogSeverityWarning, format, v...)
+	l.log(ctx, LogLevelWarn, LogSeverityWarning, format, v...)
 }
 func (l *sentryLogger) Errorf(ctx context.Context, format string, v ...interface{}) {
 	l.log(ctx, LogLevelError, LogSeverityError, format, v...)

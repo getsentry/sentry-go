@@ -261,7 +261,7 @@ func TestEnvelopeFromCheckInEvent(t *testing.T) {
 }
 
 func TestEnvelopeFromLogEvent(t *testing.T) {
-	event := newTestEvent(logType)
+	event := newTestEvent(logEvent.Type)
 	event.Logs = []Log{
 		{
 			TraceID:  TraceIDFromHex(LogTraceID),

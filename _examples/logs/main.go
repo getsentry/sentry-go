@@ -2,9 +2,10 @@ package main
 
 import (
 	"context"
+	"time"
+
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
-	"time"
 )
 
 func main() {
@@ -20,12 +21,12 @@ func main() {
 	ctx := context.Background()
 	logger := sentry.NewLogger(ctx)
 
-	// you can use the logger like [fmt.Print]
+	// You can use the logger like [fmt.Print]
 	logger.Info(ctx, "Expecting ", 2, " params")
 	// or like [fmt.Printf]
 	logger.Infof(ctx, "format: %v", "value")
 
-	// and you can also set attributes on the log like this
+	// Additionally, you can also set attributes on the log like this
 	logger.SetAttributes(
 		attribute.Int("key.int", 42),
 		attribute.Bool("key.boolean", true),

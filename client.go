@@ -144,10 +144,10 @@ type ClientOptions struct {
 	// By default, no such data is sent.
 	SendDefaultPII bool
 	// BeforeSend is called before error events are sent to Sentry.
-	// Use it to mutate the event or return nil to discard it.
+	// You can use it to mutate the event or return nil to discard it.
 	BeforeSend func(event *Event, hint *EventHint) *Event
 	// BeforeSendLong is called before log events are sent to Sentry.
-	// Use it to mutate the log event or return nil to discard it.
+	// You can use it to mutate the log event or return nil to discard it.
 	BeforeSendLog func(event *Log) *Log
 	// BeforeSendTransaction is called before transaction events are sent to Sentry.
 	// Use it to mutate the transaction or return nil to discard the transaction.
@@ -226,8 +226,7 @@ type ClientOptions struct {
 	MaxErrorDepth int
 	// Default event tags. These are overridden by tags set on a scope.
 	Tags map[string]string
-	// EnableLogs is a boolean flag to control if log envelopes will be generated and
-	// sent to Sentry via the logging API.
+	// EnableLogs controls when logs should be emitted.
 	EnableLogs bool
 }
 
@@ -363,15 +362,7 @@ func (client *Client) setupTransport() {
 		if opts.Dsn == "" {
 			transport = new(noopTransport)
 		} else {
-			httpTransport := NewHTTPTransport()
-			// When tracing is enabled, use larger buffer to
-			// accommodate more concurrent events.
-			// TODO(tracing): consider using separate buffers per
-			// event type.
-			if opts.EnableTracing {
-				httpTransport.BufferSize = 1000
-			}
-			transport = httpTransport
+			transport = NewHTTPTransport()
 		}
 	}
 

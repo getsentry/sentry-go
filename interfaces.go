@@ -15,17 +15,17 @@ import (
 	"github.com/getsentry/sentry-go/attribute"
 )
 
-// eventType is the type of error event.
 const eventType = "event"
-
-// transactionType is the type of transaction event.
 const transactionType = "transaction"
-
-// logType is the type of log event.
-const logType = "log"
-
-// checkInType is the type of check in event.
 const checkInType = "check_in"
+
+var logEvent = struct {
+	Type        string
+	ContentType string
+}{
+	"log",
+	"application/vnd.sentry.items.log+json",
+}
 
 // Level marks the severity of the event.
 type Level string
@@ -39,7 +39,7 @@ const (
 	LevelFatal   Level = "fatal"
 )
 
-// SdkInfo contains all metadata about the SDK being used.
+// SdkInfo contains all metadata about the SDK.
 type SdkInfo struct {
 	Name         string       `json:"name,omitempty"`
 	Version      string       `json:"version,omitempty"`
@@ -101,55 +101,54 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 	return json.Marshal((*breadcrumb)(b))
 }
 
-// Logger allows sending structured logs to sentry.
 type Logger interface {
 	// Write implements the io.Writer interface. Currently, the [sentry.Hub] is
-	// context aware, in order to get the correct trace details. Using this
+	// context aware, in order to get the correct trace correlation. Using this
 	// might result in incorrect span association on logs. If you need to use
 	// Write it is recommended to create a NewLogger so that the associated context
 	// is passed correctly.
 	Write(p []byte) (n int, err error)
-	// Trace sends a [LogLevelTrace] log to Sentry.
+	// Trace emits a [LogLevelTrace] log to Sentry.
 	// Arguments are handled in the manner of [fmt.Print].
 	Trace(ctx context.Context, v ...interface{})
-	// Debug sends a [LogLevelDebug] log to Sentry.
+	// Debug emits a [LogLevelDebug] log to Sentry.
 	// Arguments are handled in the manner of [fmt.Print].
 	Debug(ctx context.Context, v ...interface{})
-	// Info sends a [LogLevelInfo] log to Sentry.
+	// Info emits a [LogLevelInfo] log to Sentry.
 	// Arguments are handled in the manner of [fmt.Print].
 	Info(ctx context.Context, v ...interface{})
-	// Warn sends a [LogLevelWarning] log to Sentry.
+	// Warn emits a [LogLevelWarn] log to Sentry.
 	// Arguments are handled in the manner of [fmt.Print].
 	Warn(ctx context.Context, v ...interface{})
-	// Error sends a [LogLevelError] log to Sentry.
+	// Error emits a [LogLevelError] log to Sentry.
 	// Arguments are handled in the manner of [fmt.Print].
 	Error(ctx context.Context, v ...interface{})
-	// Fatal sends a [LogLevelFatal] log to Sentry followed by a call to [os.Exit](1).
+	// Fatal emits a [LogLevelFatal] log to Sentry followed by a call to [os.Exit](1).
 	// Arguments are handled in the manner of [fmt.Print].
 	Fatal(ctx context.Context, v ...interface{})
-	// Panic sends a [LogLevelFatal] log to Sentry followed by a call to panic().
+	// Panic emits a [LogLevelFatal] log to Sentry followed by a call to panic().
 	// Arguments are handled in the manner of [fmt.Print].
 	Panic(ctx context.Context, v ...interface{})
 
-	// Tracef sends a [LogLevelTrace] log to Sentry.
+	// Tracef emits a [LogLevelTrace] log to Sentry.
 	// Arguments are handled in the manner of [fmt.Printf].
 	Tracef(ctx context.Context, format string, v ...interface{})
-	// Debugf sends a [LogLevelDebug] log to Sentry.
+	// Debugf emits a [LogLevelDebug] log to Sentry.
 	// Arguments are handled in the manner of [fmt.Printf].
 	Debugf(ctx context.Context, format string, v ...interface{})
-	// Infof sends a [LogLevelInfo] log to Sentry.
+	// Infof emits a [LogLevelInfo] log to Sentry.
 	// Arguments are handled in the manner of [fmt.Printf].
 	Infof(ctx context.Context, format string, v ...interface{})
-	// Warnf sends a [LogLevelWarning] log to Sentry.
+	// Warnf emits a [LogLevelWarn] log to Sentry.
 	// Arguments are handled in the manner of [fmt.Printf].
 	Warnf(ctx context.Context, format string, v ...interface{})
-	// Errorf sends a [LogLevelError] log to Sentry.
+	// Errorf emits a [LogLevelError] log to Sentry.
 	// Arguments are handled in the manner of [fmt.Printf].
 	Errorf(ctx context.Context, format string, v ...interface{})
-	// Fatalf sends a [LogLevelFatal] log to Sentry followed by a call to [os.Exit](1).
+	// Fatalf emits a [LogLevelFatal] log to Sentry followed by a call to [os.Exit](1).
 	// Arguments are handled in the manner of [fmt.Printf].
 	Fatalf(ctx context.Context, format string, v ...interface{})
-	// Panicf sends a [LogLevelFatal] log to Sentry followed by a call to panic().
+	// Panicf emits a [LogLevelFatal] log to Sentry followed by a call to panic().
 	// Arguments are handled in the manner of [fmt.Printf].
 	Panicf(ctx context.Context, format string, v ...interface{})
 	// SetAttributes allows attaching parameters to the log message using the attribute API.
@@ -611,7 +610,6 @@ type EventHint struct {
 	Response           *http.Response
 }
 
-// Log contains information about a logging event sent to Sentry.
 type Log struct {
 	Timestamp  time.Time            `json:"timestamp,omitempty"`
 	TraceID    TraceID              `json:"trace_id,omitempty"`
@@ -621,7 +619,6 @@ type Log struct {
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
 
-// Attribute is a log attribute.
 type Attribute struct {
 	Value any    `json:"value"`
 	Type  string `json:"type"`

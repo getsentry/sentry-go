@@ -131,7 +131,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 					Logs: []Log{
 						{
 							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LogLevelWarning,
+							Level:      LogLevelWarn,
 							Severity:   LogSeverityWarning,
 							Body:       "param matching: param1 and param2",
 							Attributes: attrs,
@@ -179,7 +179,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 				t.Fatalf("expected %d events, got %d", len(tt.wantEvents), len(gotEvents))
 			}
 			for i, event := range gotEvents {
-				assertEqual(t, event.Type, logType)
+				assertEqual(t, event.Type, logEvent.Type)
 				if diff := cmp.Diff(tt.wantEvents[i].Logs, event.Logs, opts); diff != "" {
 					t.Errorf("Log mismatch (-want +got):\n%s", diff)
 				}
@@ -277,7 +277,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 					Logs: []Log{
 						{
 							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LogLevelWarning,
+							Level:      LogLevelWarn,
 							Severity:   LogSeverityWarning,
 							Body:       "warn",
 							Attributes: attrs,
@@ -324,7 +324,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 				t.Fatalf("expected %d events, got %d", len(tt.wantEvents), len(gotEvents))
 			}
 			for i, event := range gotEvents {
-				assertEqual(t, event.Type, logType)
+				assertEqual(t, event.Type, logEvent.Type)
 				if diff := cmp.Diff(tt.wantEvents[i].Logs, event.Logs, opts); diff != "" {
 					t.Errorf("Log mismatch (-want +got):\n%s", diff)
 				}
@@ -400,7 +400,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(gotEvents))
 	}
 	event := gotEvents[0]
-	assertEqual(t, event.Type, logType)
+	assertEqual(t, event.Type, logEvent.Type)
 
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Log{}, "Timestamp"),
