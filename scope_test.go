@@ -393,7 +393,7 @@ func TestScopeBasicInheritance(t *testing.T) {
 	scope := NewScope()
 	scope.SetExtra("a", 1)
 	scope.SetRequestBody([]byte("requestbody"))
-	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	scope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		return event
 	})
 	clone := scope.Clone()
@@ -447,7 +447,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r1, clone.request)
 	assertEqual(t, p1, clone.propagationContext)
-	assertEqual(t, s1, clone.span)
+	assertEqual(t, s1, clone.GetSpan())
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -458,7 +458,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r2, scope.request)
-	assertEqual(t, s2, scope.span)
+	assertEqual(t, s2, scope.GetSpan())
 }
 
 func TestScopeChildOverrideInheritance(t *testing.T) {
@@ -474,7 +474,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.SetUser(User{ID: "bar"})
 	r1 := httptest.NewRequest("GET", "/bar", nil)
 	scope.SetRequest(r1)
-	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	scope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		return event
 	})
 	p1 := NewPropagationContext()
@@ -493,7 +493,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.SetUser(User{ID: "foo"})
 	r2 := httptest.NewRequest("GET", "/foo", nil)
 	clone.SetRequest(r2)
-	clone.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	clone.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		return event
 	})
 	p2 := NewPropagationContext()
@@ -517,7 +517,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r2, clone.request)
 	assertEqual(t, p2, clone.propagationContext)
-	assertEqual(t, s2, clone.span)
+	assertEqual(t, s2, clone.GetSpan())
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -529,7 +529,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r1, scope.request)
 	assertEqual(t, p1, scope.propagationContext)
-	assertEqual(t, s1, scope.span)
+	assertEqual(t, s1, scope.GetSpan())
 
 	assertEqual(t, len(scope.eventProcessors), 1)
 	assertEqual(t, len(clone.eventProcessors), 2)
@@ -548,7 +548,7 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, (*http.Request)(nil), scope.request)
-	assertEqual(t, (*Span)(nil), scope.span)
+	assertEqual(t, (*Span)(nil), scope.GetSpan())
 }
 
 func TestClearAndReconfigure(t *testing.T) {
@@ -580,7 +580,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, scope.user)
 	assertEqual(t, r, scope.request)
 	assertEqual(t, p, scope.propagationContext)
-	assertEqual(t, s, scope.span)
+	assertEqual(t, s, scope.GetSpan())
 }
 
 func TestClearBreadcrumbs(t *testing.T) {
@@ -654,11 +654,11 @@ func TestEventProcessorsModifiesEvent(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
 	scope.eventProcessors = []EventProcessor{
-		func(event *Event, hint *EventHint) *Event {
+		func(event *Event, _ *EventHint) *Event {
 			event.Level = LevelFatal
 			return event
 		},
-		func(event *Event, hint *EventHint) *Event {
+		func(event *Event, _ *EventHint) *Event {
 			event.Fingerprint = []string{"wat"}
 			return event
 		},
@@ -676,7 +676,7 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
 	scope.eventProcessors = []EventProcessor{
-		func(event *Event, hint *EventHint) *Event {
+		func(_ *Event, _ *EventHint) *Event {
 			return nil
 		},
 	}
@@ -696,7 +696,7 @@ func TestEventProcessorsAddEventProcessor(t *testing.T) {
 		t.Error("event should not be dropped")
 	}
 
-	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	scope.AddEventProcessor(func(_ *Event, _ *EventHint) *Event {
 		return nil
 	})
 	processedEvent = scope.ApplyToEvent(event, nil, nil)

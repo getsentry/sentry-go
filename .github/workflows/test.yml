@@ -50,7 +50,7 @@ jobs:
       - name: Test
         run: make test-coverage
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@1e68e06f1dbfde0e4cefc87efeba9e4643565303 # pin@v5.1.2
+        uses: codecov/codecov-action@ad3126e916f78f00edff4ed0317cf185271ccc2d # pin@v5.4.2
         with:
           directory: .coverage
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -64,6 +64,6 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        go: ["1.23", "1.22", "1.21"]
+        go: ["1.24", "1.23", "1.22"]
         os: [ubuntu, windows, macos]
       fail-fast: false

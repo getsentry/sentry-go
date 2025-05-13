@@ -1,8 +1,25 @@
 # Changelog
 
-## Features
+## 0.32.0
 
-- Introduced `FlushWithContext` method to support flushing events with a `context.Context` ([#935](https://github.com/getsentry/sentry-go/pull/935))
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.32.0.
+
+### Breaking Changes
+
+- Bump the minimum Go version to 1.22. The supported versions are 1.22, 1.23 and 1.24. ([#967](https://github.com/getsentry/sentry-go/issues/967))
+- Setting any values on `span.Extra` has no effect anymore. Use `SetData(name string, value interface{})` instead. ([#864](https://github.com/getsentry/sentry-go/pull/864))
+
+### Features
+
+- Add a `MockTransport` and `MockScope`. ([#972](https://github.com/getsentry/sentry-go/pull/972))
+
+### Bug Fixes
+
+- Fix writing `*http.Request` in the Logrus JSONFormatter. ([#955](https://github.com/getsentry/sentry-go/issues/955))
+
+### Misc
+
+- Transaction `data` attributes are now seralized as trace context data attributes, allowing you to query these attributes in the [Trace Explorer](https://docs.sentry.io/product/explore/traces/).
 
 ## 0.31.1
 
@@ -28,7 +45,7 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 
 ### Features
 
-- Add the ability to override `hub` in `context` for integrations that use custom context. ([#931](https://github.com/getsentry/sentry-go/pull/931))
+Add the ability to override `hub` in `context` for integrations that use custom context. ([#931](https://github.com/getsentry/sentry-go/pull/931))
 
 - Add `HubProvider` Hook for `sentrylogrus`, enabling dynamic Sentry hub allocation for each log entry or goroutine. ([#936](https://github.com/getsentry/sentry-go/pull/936))
 

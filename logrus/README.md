@@ -83,7 +83,22 @@ sentryHook.AddTags(map[string]string{
     "key": "value",
 })
 ```
-- 
+
+- Using `hubProvider` for Scoped Sentry Hubs
+
+The hubProvider allows you to configure the Sentry hook to use a custom Sentry hub. This can be particularly useful when you want to scope logs to specific goroutines or operations, enabling more precise grouping and context in Sentry.
+
+You can set a custom hubProvider function using the SetHubProvider method:
+
+```go
+sentryHook.SetHubProvider(func() *sentry.Hub {
+    // Create or return a specific Sentry hub
+    return sentry.NewHub(sentry.GetCurrentHub().Client(), sentry.NewScope())
+})
+```
+
+This ensures that logs from specific contexts or threads use the appropriate Sentry hub and scope.
+
 
 ## Notes
 

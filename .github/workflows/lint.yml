@@ -20,19 +20,11 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.24"
       - uses: actions/checkout@v4
-      - name: Get auth token
-        id: token
-        uses: actions/create-github-app-token@c1a285145b9d317df6ced56c09f525b5c2b6f755 # v1.11.1
-        with:
-          app-id: ${{ vars.SENTRY_RELEASE_BOT_CLIENT_ID }}
-          private-key: ${{ secrets.SENTRY_RELEASE_BOT_PRIVATE_KEY }}
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@971e284b6050e8a5849b72094c50ab08da042db8 # pin@v6.1.1
+        uses: golangci/golangci-lint-action@1481404843c368bc19ca9406f87d6e0fc97bdcfd # pin@v7.0
         with:
-          github-token: ${{ steps.token.outputs.token }}
-          version: v1.62
-          only-new-issues: true
+          version: v2.1.1
           args: --timeout=10m
     timeout-minutes: 10
