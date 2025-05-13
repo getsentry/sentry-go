@@ -50,7 +50,10 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		"sentry.message.template":     {Value: "param matching: %v and %v", Type: "string"},
 		"sentry.message.parameters.0": {Value: "param1", Type: "string"},
 		"sentry.message.parameters.1": {Value: "param2", Type: "string"},
-		"int":                         {Value: int64(42), Type: "integer"},
+		"key.int":                     {Value: int64(42), Type: "integer"},
+		"key.float":                   {Value: 42.2, Type: "double"},
+		"key.bool":                    {Value: true, Type: "boolean"},
+		"key.string":                  {Value: "str", Type: "string"},
 	}
 
 	tests := []struct {
@@ -166,7 +169,14 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
 			l := NewLogger(ctx)
-			l.SetAttributes(attribute.Int("int", 42))
+			l.SetAttributes(
+				attribute.Int("key.int", 42),
+				attribute.Float64("key.float", 42.2),
+				attribute.Bool("key.bool", true),
+				attribute.String("key.string", "str"),
+			)
+			// invalid attribute should be dropped
+			l.SetAttributes(attribute.Builder{Key: "key.invalid", Value: attribute.Value{}})
 			tt.logFunc(ctx, l)
 			Flush(20 * time.Millisecond)
 

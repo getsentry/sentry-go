@@ -156,7 +156,7 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
 	for _, v := range attrs {
 		t, ok := mapTypesToStr[v.Value.Type()]
-		if !ok {
+		if !ok || t == "" {
 			DebugLogger.Printf("invalid attribute type set: %v", t)
 			continue
 		}
