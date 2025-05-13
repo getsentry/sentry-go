@@ -462,7 +462,7 @@ func Test_batchLogger_FlushWithContext(t *testing.T) {
 
 	cancelCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	FlushWithContext(cancelCtx)
-	cancel()
+	defer cancel()
 
 	events := mockTransport.Events()
 	if len(events) != 1 {

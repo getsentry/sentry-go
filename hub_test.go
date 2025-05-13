@@ -523,7 +523,7 @@ func TestHub_FlushWithContext(t *testing.T) {
 
 	cancelCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	hub.FlushWithContext(cancelCtx)
-	cancel()
+	defer cancel()
 
 	gotEvents := transport.Events()
 	if len(gotEvents) != 1 {
