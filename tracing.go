@@ -198,10 +198,6 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 	clientOptions := span.clientOptions()
 	if clientOptions.EnableTracing {
 		hub := hubFromContext(ctx)
-		if !span.IsTransaction() {
-			// Push a new scope to stack for non transaction span
-			hub.PushScope()
-		}
 		hub.Scope().SetSpan(&span)
 	}
 
@@ -359,8 +355,9 @@ func (s *Span) doFinish() {
 
 	hub := hubFromContext(s.ctx)
 	if !s.IsTransaction() {
-		// Referenced to StartSpan function that pushes current non-transaction span to scope stack
-		defer hub.PopScope()
+		if s.parent != nil {
+			hub.Scope().SetSpan(s.parent)
+		}
 	}
 
 	if !s.Sampled.Bool() {
