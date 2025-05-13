@@ -631,7 +631,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 				return nil
 			}
 		}
-	case checkInType:
+	case checkInType: // not a default case, since we shouldn't apply BeforeSend on check-in events
 	default:
 		if client.options.BeforeSend != nil {
 			if event = client.options.BeforeSend(event, hint); event == nil {
