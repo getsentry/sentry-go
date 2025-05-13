@@ -16,8 +16,10 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
-const defaultBufferSize = 30
-const defaultTimeout = time.Second * 30
+const (
+	defaultBufferSize = 1000
+	defaultTimeout    = time.Second * 30
+)
 
 // maxDrainResponseBytes is the maximum number of bytes that transport
 // implementations will read from response bodies when draining them.
@@ -144,6 +146,23 @@ func encodeEnvelopeItem(enc *json.Encoder, itemType string, body json.RawMessage
 	return err
 }
 
+func encodeEnvelopeLogs(enc *json.Encoder, itemsLength int, body json.RawMessage) error {
+	err := enc.Encode(
+		struct {
+			Type        string `json:"type"`
+			ItemCount   int    `json:"item_count"`
+			ContentType string `json:"content_type"`
+		}{
+			Type:        logEvent.Type,
+			ItemCount:   itemsLength,
+			ContentType: logEvent.ContentType,
+		})
+	if err == nil {
+		err = enc.Encode(body)
+	}
+	return err
+}
+
 func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -180,6 +199,8 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	switch event.Type {
 	case transactionType, checkInType:
 		err = encodeEnvelopeItem(enc, event.Type, body)
+	case logEvent.Type:
+		err = encodeEnvelopeLogs(enc, len(event.Logs), body)
 	default:
 		err = encodeEnvelopeItem(enc, eventType, body)
 	}
@@ -627,16 +648,18 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		return
 	}
 
-	var eventType string
+	var eventIdentifier string
 	switch event.Type {
 	case transactionType:
-		eventType = "transaction"
+		eventIdentifier = "transaction"
+	case logEvent.Type:
+		eventIdentifier = fmt.Sprintf("%v log events", len(event.Logs))
 	default:
-		eventType = fmt.Sprintf("%s event", event.Level)
+		eventIdentifier = fmt.Sprintf("%s event", event.Level)
 	}
 	DebugLogger.Printf(
 		"Sending %s [%s] to %s project: %s",
-		eventType,
+		eventIdentifier,
 		event.EventID,
 		t.dsn.host,
 		t.dsn.projectID,
@@ -652,7 +675,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		if err != nil {
 			DebugLogger.Printf("Error while reading response code: %v", err)
 		}
-		DebugLogger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+		DebugLogger.Printf("Sending %s failed with the following error: %s", eventIdentifier, string(b))
 	}
 
 	t.mu.Lock()

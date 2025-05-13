@@ -144,8 +144,11 @@ type ClientOptions struct {
 	// By default, no such data is sent.
 	SendDefaultPII bool
 	// BeforeSend is called before error events are sent to Sentry.
-	// Use it to mutate the event or return nil to discard the event.
+	// You can use it to mutate the event or return nil to discard it.
 	BeforeSend func(event *Event, hint *EventHint) *Event
+	// BeforeSendLong is called before log events are sent to Sentry.
+	// You can use it to mutate the log event or return nil to discard it.
+	BeforeSendLog func(event *Log) *Log
 	// BeforeSendTransaction is called before transaction events are sent to Sentry.
 	// Use it to mutate the transaction or return nil to discard the transaction.
 	BeforeSendTransaction func(event *Event, hint *EventHint) *Event
@@ -223,6 +226,8 @@ type ClientOptions struct {
 	MaxErrorDepth int
 	// Default event tags. These are overridden by tags set on a scope.
 	Tags map[string]string
+	// EnableLogs controls when logs should be emitted.
+	EnableLogs bool
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -237,7 +242,8 @@ type Client struct {
 	sdkVersion      string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
-	Transport Transport
+	Transport   Transport
+	batchLogger *BatchLogger
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -337,6 +343,11 @@ func NewClient(options ClientOptions) (*Client, error) {
 		sdkVersion:    SDKVersion,
 	}
 
+	if options.EnableLogs {
+		client.batchLogger = NewBatchLogger(&client)
+		client.batchLogger.Start()
+	}
+
 	client.setupTransport()
 	client.setupIntegrations()
 
@@ -351,15 +362,7 @@ func (client *Client) setupTransport() {
 		if opts.Dsn == "" {
 			transport = new(noopTransport)
 		} else {
-			httpTransport := NewHTTPTransport()
-			// When tracing is enabled, use larger buffer to
-			// accommodate more concurrent events.
-			// TODO(tracing): consider using separate buffers per
-			// event type.
-			if opts.EnableTracing {
-				httpTransport.BufferSize = 1000
-			}
-			transport = httpTransport
+			transport = NewHTTPTransport()
 		}
 	}
 
@@ -507,6 +510,9 @@ func (client *Client) RecoverWithContext(
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
+	if client.batchLogger != nil {
+		client.batchLogger.Flush()
+	}
 	return client.Transport.Flush(timeout)
 }
 
@@ -617,17 +623,21 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	if hint == nil {
 		hint = &EventHint{}
 	}
-	if event.Type == transactionType && client.options.BeforeSendTransaction != nil {
-		// Transaction events
-		if event = client.options.BeforeSendTransaction(event, hint); event == nil {
-			DebugLogger.Println("Transaction dropped due to BeforeSendTransaction callback.")
-			return nil
+	switch event.Type {
+	case transactionType:
+		if client.options.BeforeSendTransaction != nil {
+			if event = client.options.BeforeSendTransaction(event, hint); event == nil {
+				DebugLogger.Println("Transaction dropped due to BeforeSendTransaction callback.")
+				return nil
+			}
 		}
-	} else if event.Type != transactionType && event.Type != checkInType && client.options.BeforeSend != nil {
-		// All other events
-		if event = client.options.BeforeSend(event, hint); event == nil {
-			DebugLogger.Println("Event dropped due to BeforeSend callback.")
-			return nil
+	case checkInType: // not a default case, since we shouldn't apply BeforeSend on check-in events
+	default:
+		if client.options.BeforeSend != nil {
+			if event = client.options.BeforeSend(event, hint); event == nil {
+				DebugLogger.Println("Event dropped due to BeforeSend callback.")
+				return nil
+			}
 		}
 	}
 
