@@ -806,7 +806,7 @@ func TestHTTPSyncTransport_Flush(_ *testing.T) {
 	transport.Flush(testutils.FlushTimeout())
 
 	tr := noopTransport{}
-	tr.Close()
+	tr.Flush(testutils.FlushTimeout())
 }
 
 func TestHTTPSyncTransport_FlushWithContext(_ *testing.T) {
@@ -817,5 +817,5 @@ func TestHTTPSyncTransport_FlushWithContext(_ *testing.T) {
 	transport.FlushWithContext(cancelCtx)
 
 	tr := noopTransport{}
-	tr.Close()
+	tr.FlushWithContext(cancelCtx)
 }
