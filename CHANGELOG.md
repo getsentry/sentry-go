@@ -15,7 +15,7 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 
   ```go
   logger := sentry.NewLogger(ctx)
-	logger.Info(ctx, "Hello, Logs!")
+  logger.Info(ctx, "Hello, Logs!")
   ```
 
   You can learn more about Sentry Logs on our [docs](https://docs.sentry.io/product/explore/logs/) and the [examples](https://github.com/getsentry/sentry-go/blob/master/_examples/logs/main.go).
