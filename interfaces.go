@@ -160,42 +160,37 @@ var sensitiveHeaders = map[string]struct{}{
 	"Cookie":              {},
 	"X-Forwarded-For":     {},
 	"X-Real-Ip":           {},
-
-	// additional headers coopied from python sdk and canonicalized
-	"Password": {},
-	"Passwd": {},
-	"Secret": {},
-	"Api-Key": {},
-	"Apikey": {},
-	"Auth": {},
-	"Credentials": {},
-	"Mysql-Pwd": {},
-	"Privatekey": {},
-	"Private-Key": {},
-	"Token": {},
-	"Ip-Address": {},
-	"Session": {},
-	// django
-	"Csrftoken": {},
-	"Sessionid": {},
-	// wsgi
-	"Remote-Addr": {},
-	"X-Csrftoken": {},
-	"Set-Cookie": {},
-	"X-Api-Key": {},
-	// other common names used in the wild
-	"Aiohttp-Session": {},  // aiohttp
-	"Connect.sid": {},  // Express
-	"Csrf-Token": {},  // Pyramid
-	"Csrf": {},  // (this is a cookie name used in accepted answers on stack overflow)
-	"_csrf": {},  // Express
-	"_csrf_token": {},  // Bottle
-	"PHPSESSID": {},  // PHP
-	"_session": {},  // Sanic
-	"Symfony": {},  // Symfony
-	"User-Session": {},  // Vue
-	"_xsrf": {},  // Tornado
-	"XSRF-TOKEN": {},  // Angular, Laravel
+	"Password":            {},
+	"Passwd":              {},
+	"Secret":              {},
+	"Api-Key":             {},
+	"Apikey":              {},
+	"Auth":                {},
+	"Credentials":         {},
+	"Mysql-Pwd":           {},
+	"Privatekey":          {},
+	"Private-Key":         {},
+	"Token":               {},
+	"Ip-Address":          {},
+	"Session":             {},
+	"Csrftoken":           {},
+	"Sessionid":           {},
+	"Remote-Addr":         {},
+	"X-Csrftoken":         {},
+	"Set-Cookie":          {},
+	"X-Api-Key":           {},
+	"Aiohttp-Session":     {},
+	"Connect.sid":         {},
+	"Csrf-Token":          {},
+	"Csrf":                {},
+	"_csrf":               {},
+	"_csrf_token":         {},
+	"PHPSESSID":           {},
+	"_session":            {},
+	"Symfony":             {},
+	"User-Session":        {},
+	"_xsrf":               {},
+	"XSRF-TOKEN":          {},
 }
 
 // NewRequest returns a new Sentry Request from the given http.Request.
