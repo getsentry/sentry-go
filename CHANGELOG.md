@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.33.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.33.0.
+
+
+### Breaking Changes
+
+- Rename `Logger` to `DebugLogger`. ([#1012](https://github.com/getsentry/sentry-go/issues/1012))
+
+### Features
+
+- Add initial logger implementation. ([#1010](https://github.com/getsentry/sentry-go/issues/1010))
+
+[Structured Logging](https://docs.sentry.io/product/explore/logs/) is now available in Sentry. This change introduces the logging API to the Go SDK.
+
+- Add attributes API. ([#1007](https://github.com/getsentry/sentry-go/issues/1007))
+
+### Bug Fixes
+
+- Do not push a new scope on `StartSpan`. ([#1013](https://github.com/getsentry/sentry-go/issues/1013))
+
+- Prefer http route over http target for span description. ([#1002](https://github.com/getsentry/sentry-go/issues/1002))
+
+- Update the DSC sample rate based on client options. ([#995](https://github.com/getsentry/sentry-go/issues/995))
+
+### Misc
+
+- Bump github.com/stretchr/testify on otel submodule. ([#1011](https://github.com/getsentry/sentry-go/issues/1011))
+
+- Update golangci-lint to v2. ([#997](https://github.com/getsentry/sentry-go/issues/997))
+
+- Update github.com/stretchr/testify to v1.8.4. ([#988](https://github.com/getsentry/sentry-go/issues/988))
+  
+- build(deps): bump actions/create-github-app-token from 1.11.5 to 1.12.0. ([#987](https://github.com/getsentry/sentry-go/issues/987))
+  
+- build(deps): bump codecov/codecov-action from 5.4.0 to 5.4.2. ([#1005](https://github.com/getsentry/sentry-go/issues/1005))
+
+- Update GH issue templates for Linear compatibility. ([#1003](https://github.com/getsentry/sentry-go/issues/1003))
+
 ## 0.32.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.32.0.
