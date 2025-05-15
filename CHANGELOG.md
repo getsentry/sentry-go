@@ -7,37 +7,30 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 
 ### Breaking Changes
 
-- Rename `Logger` to `DebugLogger`. ([#1012](https://github.com/getsentry/sentry-go/issues/1012))
+- Rename the internal `Logger` to `DebugLogger`. This feature was only used when you set `Debug: True` in your `sentry.Init()` call. If you haven't used the Logger directly, no changes are necessary. ([#1012](https://github.com/getsentry/sentry-go/issues/1012))
 
 ### Features
 
-- Add initial logger implementation. ([#1010](https://github.com/getsentry/sentry-go/issues/1010))
+- Add support for [Structured Logging](https://docs.sentry.io/product/explore/logs/). ([#1010](https://github.com/getsentry/sentry-go/issues/1010))
 
-[Structured Logging](https://docs.sentry.io/product/explore/logs/) is now available in Sentry. This change introduces the logging API to the Go SDK.
+  ```go
+  logger := sentry.NewLogger(ctx)
+	logger.Info(ctx, "Hello, Logs!")
+  ```
 
-- Add attributes API. ([#1007](https://github.com/getsentry/sentry-go/issues/1007))
+  You can learn more about Sentry Logs on our [docs](https://docs.sentry.io/product/explore/logs/) and the [examples](https://github.com/getsentry/sentry-go/blob/master/_examples/logs/main.go).
+
+- Add new attributes APIs, which are currently only exposed on logs. ([#1007](https://github.com/getsentry/sentry-go/issues/1007))
 
 ### Bug Fixes
 
 - Do not push a new scope on `StartSpan`. ([#1013](https://github.com/getsentry/sentry-go/issues/1013))
-
-- Prefer http route over http target for span description. ([#1002](https://github.com/getsentry/sentry-go/issues/1002))
-
-- Update the DSC sample rate based on client options. ([#995](https://github.com/getsentry/sentry-go/issues/995))
+- Fix an issue where the propagated smapling decision wasn't used. ([#995](https://github.com/getsentry/sentry-go/issues/995))
+- [Otel] Prefer `httpRoute` over `httpTarget` for span descriptions. ([#1002](https://github.com/getsentry/sentry-go/issues/1002))
 
 ### Misc
 
-- Bump github.com/stretchr/testify on otel submodule. ([#1011](https://github.com/getsentry/sentry-go/issues/1011))
-
-- Update golangci-lint to v2. ([#997](https://github.com/getsentry/sentry-go/issues/997))
-
-- Update github.com/stretchr/testify to v1.8.4. ([#988](https://github.com/getsentry/sentry-go/issues/988))
-  
-- build(deps): bump actions/create-github-app-token from 1.11.5 to 1.12.0. ([#987](https://github.com/getsentry/sentry-go/issues/987))
-  
-- build(deps): bump codecov/codecov-action from 5.4.0 to 5.4.2. ([#1005](https://github.com/getsentry/sentry-go/issues/1005))
-
-- Update GH issue templates for Linear compatibility. ([#1003](https://github.com/getsentry/sentry-go/issues/1003))
+- Update `github.com/stretchr/testify` to v1.8.4. ([#988](https://github.com/getsentry/sentry-go/issues/988))  
 
 ## 0.32.0
 
