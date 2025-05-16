@@ -800,13 +800,16 @@ func TestHTTPSyncTransportClose(_ *testing.T) {
 	tr.Close()
 }
 
-func TestHTTPSyncTransport_Flush(_ *testing.T) {
+func TestHTTPSyncTransport_Flush(t *testing.T) {
 	// Flush does not do anything for HTTPSyncTransport, added for coverage.
 	transport := HTTPSyncTransport{}
 	transport.Flush(testutils.FlushTimeout())
 
 	tr := noopTransport{}
-	tr.Flush(testutils.FlushTimeout())
+	ret := tr.Flush(testutils.FlushTimeout())
+	if ret != true {
+		t.Fatalf("expected Flush to be true, got: %v", ret)
+	}
 }
 
 func TestHTTPSyncTransport_FlushWithContext(_ *testing.T) {
