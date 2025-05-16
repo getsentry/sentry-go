@@ -12,6 +12,9 @@ const SDKVersion = "0.33.0"
 // sentry-go SDK.
 const apiVersion = "7"
 
+// DefaultFlushTimeout is the default timeout used for flushing events.
+const DefaultFlushTimeout = 2 * time.Second
+
 // Init initializes the SDK with options. The returned error is non-nil if
 // options is invalid, for instance if a malformed DSN is provided.
 func Init(options ClientOptions) error {
