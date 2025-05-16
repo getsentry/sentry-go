@@ -631,7 +631,8 @@ func testRateLimiting(t *testing.T, tr Transport) {
 	dsn := strings.Replace(srv.URL, "//", "//pubkey@", 1) + "/1"
 
 	tr.Configure(ClientOptions{
-		Dsn: dsn,
+		Dsn:           dsn,
+		EnableTracing: true,
 	})
 
 	// Send several errors and transactions concurrently.
