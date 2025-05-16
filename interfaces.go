@@ -214,11 +214,36 @@ type Request struct {
 }
 
 var sensitiveHeaders = map[string]struct{}{
+	"_csrf":               {},
+	"_csrf_token":         {},
+	"_session":            {},
+	"_xsrf":               {},
+	"Api-Key":             {},
+	"Apikey":              {},
+	"Auth":                {},
 	"Authorization":       {},
-	"Proxy-Authorization": {},
 	"Cookie":              {},
+	"Credentials":         {},
+	"Csrf":                {},
+	"Csrf-Token":          {},
+	"Csrftoken":           {},
+	"Ip-Address":          {},
+	"Passwd":              {},
+	"Password":            {},
+	"Private-Key":         {},
+	"Privatekey":          {},
+	"Proxy-Authorization": {},
+	"Remote-Addr":         {},
+	"Secret":              {},
+	"Session":             {},
+	"Sessionid":           {},
+	"Token":               {},
+	"User-Session":        {},
+	"X-Api-Key":           {},
+	"X-Csrftoken":         {},
 	"X-Forwarded-For":     {},
 	"X-Real-Ip":           {},
+	"XSRF-TOKEN":          {},
 }
 
 // NewRequest returns a new Sentry Request from the given http.Request.
