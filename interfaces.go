@@ -27,6 +27,8 @@ var logEvent = struct {
 	"application/vnd.sentry.items.log+json",
 }
 
+var logType = logEvent.Type
+
 // Level marks the severity of the event.
 type Level string
 

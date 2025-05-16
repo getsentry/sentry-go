@@ -199,7 +199,7 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	switch event.Type {
 	case transactionType, checkInType:
 		err = encodeEnvelopeItem(enc, event.Type, body)
-	case logEvent.Type:
+	case logType:
 		err = encodeEnvelopeLogs(enc, len(event.Logs), body)
 	default:
 		err = encodeEnvelopeItem(enc, eventType, body)
@@ -298,9 +298,10 @@ type HTTPTransport struct {
 	client    *http.Client
 	transport http.RoundTripper
 
-	// buffer is a channel of batches. Calling Flush terminates work on the
-	// current in-flight items and starts a new batch for subsequent events.
-	buffer chan batch
+	// buffer is a map of channels of batches, keyed by event type.
+	// Calling Flush terminates work on the current in-flight items and starts
+	// a new batch for subsequent events.
+	buffer map[string]chan batch
 
 	start sync.Once
 
@@ -326,7 +327,7 @@ func NewHTTPTransport() *HTTPTransport {
 	return &transport
 }
 
-// Configure is called by the Client itself, providing it it's own ClientOptions.
+// Configure is called by the Client itself, providing its own ClientOptions.
 func (t *HTTPTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
@@ -335,14 +336,36 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 	}
 	t.dsn = dsn
 
-	// A buffered channel with capacity 1 works like a mutex, ensuring only one
+	// A buffered channel with capacity 1, works like a mutex, ensuring only one
 	// goroutine can access the current batch at a given time. Access is
 	// synchronized by reading from and writing to the channel.
-	t.buffer = make(chan batch, 1)
-	t.buffer <- batch{
-		items:   make(chan batchItem, t.BufferSize),
+
+	t.buffer = make(map[string]chan batch)
+	// error type has "" as event type
+	// TODO: should fix event type names
+	t.buffer[""] = make(chan batch, 1)
+	t.buffer[""] <- batch{
+		items:   make(chan batchItem, 30),
 		started: make(chan struct{}),
 		done:    make(chan struct{}),
+	}
+
+	if options.EnableLogs {
+		t.buffer[logType] = make(chan batch, 1)
+		t.buffer[logType] <- batch{
+			items:   make(chan batchItem, 1000),
+			started: make(chan struct{}),
+			done:    make(chan struct{}),
+		}
+	}
+
+	if options.EnableTracing {
+		t.buffer[transactionType] = make(chan batch, 1)
+		t.buffer[transactionType] <- batch{
+			items:   make(chan batchItem, 1000),
+			started: make(chan struct{}),
+			done:    make(chan struct{}),
+		}
 	}
 
 	if options.HTTPTransport != nil {
@@ -401,7 +424,12 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	// the default case that is executed if sending on b.items would block. That
 	// is, the event is dropped if it cannot be sent immediately to the b.items
 	// channel (used as a queue).
-	b := <-t.buffer
+	_, ok := t.buffer[event.Type]
+	if !ok {
+		DebugLogger.Printf("Event with type: %v dropped due to buffer not set correctly", event.Type)
+		return
+	}
+	b := <-t.buffer[event.Type]
 
 	select {
 	case b.items <- batchItem{
@@ -425,7 +453,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		DebugLogger.Println("Event dropped due to transport buffer being full.")
 	}
 
-	t.buffer <- b
+	t.buffer[event.Type] <- b
 }
 
 // Flush waits until any buffered events are sent to the Sentry server, blocking
@@ -448,39 +476,51 @@ func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 	// possible execution flow in which b.done is never closed, and the only way
 	// out of Flush would be waiting for the timeout, which is undesired.
 	var b batch
-	for {
-		select {
-		case b = <-t.buffer:
+	var key string
+
+	for key = range t.buffer {
+		// TODO: bind event types with buffers
+		bufSize := 1000
+		if key == "" {
+			bufSize = 30
+		}
+
+		for {
 			select {
-			case <-b.started:
-				goto started
-			default:
-				t.buffer <- b
+			case b = <-t.buffer[key]:
+				select {
+				case <-b.started:
+					goto started
+				default:
+					t.buffer[key] <- b
+				}
+			case <-toolate:
+				goto fail
 			}
+		}
+
+	started:
+		// Signal that there won't be any more items in this batch, so that the
+		// worker inner loop can end.
+		close(b.items)
+		// Start a new batch for subsequent events.
+		t.buffer[key] <- batch{
+			items:   make(chan batchItem, bufSize),
+			started: make(chan struct{}),
+			done:    make(chan struct{}),
+		}
+
+		// Wait until the current batch is done or the timeout.
+		select {
+		case <-b.done:
+			DebugLogger.Printf("Buffer for %s events flushed successfully.", key)
 		case <-toolate:
 			goto fail
 		}
 	}
 
-started:
-	// Signal that there won't be any more items in this batch, so that the
-	// worker inner loop can end.
-	close(b.items)
-	// Start a new batch for subsequent events.
-	t.buffer <- batch{
-		items:   make(chan batchItem, t.BufferSize),
-		started: make(chan struct{}),
-		done:    make(chan struct{}),
-	}
-
-	// Wait until the current batch is done or the timeout.
-	select {
-	case <-b.done:
-		DebugLogger.Println("Buffer flushed successfully.")
-		return true
-	case <-toolate:
-		goto fail
-	}
+	DebugLogger.Println("All buffers flushed successfully.")
+	return true
 
 fail:
 	DebugLogger.Println("Buffer flushing reached the timeout.")
@@ -497,58 +537,74 @@ func (t *HTTPTransport) Close() {
 }
 
 func (t *HTTPTransport) worker() {
-	for b := range t.buffer {
-		// Signal that processing of the current batch has started.
-		close(b.started)
+	// Create a wait group to track all worker goroutines
+	var wg sync.WaitGroup
 
-		// Return the batch to the buffer so that other goroutines can use it.
-		// Equivalent to releasing a lock.
-		t.buffer <- b
+	// Start a separate worker for each buffer
+	for eventType, buf := range t.buffer {
+		wg.Add(1)
+		go func(eventType string, buf chan batch) {
+			defer wg.Done()
+			for b := range buf {
+				// Signal that processing of the current batch has started.
+				close(b.started)
 
-		// Process all batch items.
-	loop:
-		for {
-			select {
-			case <-t.done:
-				return
-			case item, open := <-b.items:
-				if !open {
-					break loop
-				}
-				if t.disabled(item.category) {
-					continue
-				}
+				// Return the batch to the buffer so that other goroutines can use it.
+				// Equivalent to releasing a lock.
+				buf <- b
 
-				response, err := t.client.Do(item.request)
-				if err != nil {
-					DebugLogger.Printf("There was an issue with sending an event: %v", err)
-					continue
-				}
-				if response.StatusCode >= 400 && response.StatusCode <= 599 {
-					b, err := io.ReadAll(response.Body)
-					if err != nil {
-						DebugLogger.Printf("Error while reading response code: %v", err)
+				// Process all batch items.
+			loop:
+				for {
+					select {
+					case <-t.done:
+						return
+					case item, open := <-b.items:
+						if !open {
+							break loop
+						}
+						if t.disabled(item.category) {
+							continue
+						}
+
+						response, err := t.client.Do(item.request)
+						if err != nil {
+							DebugLogger.Printf("There was an issue with sending an event: %v", err)
+							continue
+						}
+						if response.StatusCode >= 400 && response.StatusCode <= 599 {
+							b, err := io.ReadAll(response.Body)
+							if err != nil {
+								DebugLogger.Printf("Error while reading response code: %v", err)
+							}
+							DebugLogger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
+						}
+
+						t.mu.Lock()
+						if t.limits == nil {
+							t.limits = make(ratelimit.Map)
+						}
+						t.limits.Merge(ratelimit.FromResponse(response))
+						t.mu.Unlock()
+
+						// Drain body up to a limit and close it, allowing the
+						// transport to reuse TCP connections.
+						_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
+						response.Body.Close()
 					}
-					DebugLogger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
 				}
 
-				t.mu.Lock()
-				if t.limits == nil {
-					t.limits = make(ratelimit.Map)
-				}
-				t.limits.Merge(ratelimit.FromResponse(response))
-				t.mu.Unlock()
-
-				// Drain body up to a limit and close it, allowing the
-				// transport to reuse TCP connections.
-				_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
-				response.Body.Close()
+				// Signal that processing of the batch is done.
+				close(b.done)
 			}
-		}
-
-		// Signal that processing of the batch is done.
-		close(b.done)
+		}(eventType, buf)
 	}
+
+	// Wait for all workers to finish when done channel is closed
+	go func() {
+		<-t.done
+		wg.Wait()
+	}()
 }
 
 func (t *HTTPTransport) disabled(c ratelimit.Category) bool {
