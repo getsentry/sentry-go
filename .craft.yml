@@ -35,6 +35,9 @@ targets:
   - name: github
     tagPrefix: zerolog/v
     tagOnly: true
+  - name: github
+    tagPrefix: grpc/v
+    tagOnly: true
   - name: registry
     sdks:
       github:getsentry/sentry-go:
