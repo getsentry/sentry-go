@@ -493,56 +493,81 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 // have the SDK send events over the network synchronously, configure it to use
 // the HTTPSyncTransport in the call to Init.
 func (t *HTTPTransport) Flush(timeout time.Duration) bool {
-	toolate := time.After(timeout)
-
-	// Wait until processing the current batch has started or the timeout.
-	//
-	// We must wait until the worker has seen the current batch, because it is
-	// the only way b.done will be closed. If we do not wait, there is a
-	// possible execution flow in which b.done is never closed, and the only way
-	// out of Flush would be waiting for the timeout, which is undesired.
-	var b batch
+	var wg sync.WaitGroup
+	success := make(chan bool, len(t.buffer))
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
 	for bufferType := range t.buffer {
-		for {
+		wg.Add(1)
+		go func(bt BufferType, buf Buffer) {
+			defer wg.Done()
+			var b batch
+
 			select {
-			case b = <-t.buffer[bufferType].batch:
+			case b = <-buf.batch:
 				select {
 				case <-b.started:
-					goto started
-				default:
-					t.buffer[bufferType].batch <- b
+					// Proceed
 				}
-			case <-toolate:
-				goto fail
+			case <-ctx.Done():
+				success <- false
+				return
 			}
-		}
 
-	started:
-		// Signal that there won't be any more items in this batch, so that the
-		// worker inner loop can end.
-		close(b.items)
-		// Start a new batch for subsequent events.
-		t.buffer[bufferType].batch <- batch{
-			items:   make(chan batchItem, t.buffer[bufferType].size),
-			started: make(chan struct{}),
-			done:    make(chan struct{}),
-		}
+			// Close items channel to signal no more items
+			close(b.items)
 
-		// Wait until the current batch is done or the timeout.
-		select {
-		case <-b.done:
-			DebugLogger.Printf("Buffer for %s events flushed successfully.", bufferType)
-		case <-toolate:
-			goto fail
-		}
+			// Set up a new batch for incoming items
+			select {
+			case buf.batch <- batch{
+				items:   make(chan batchItem, buf.size),
+				started: make(chan struct{}),
+				done:    make(chan struct{}),
+			}:
+			case <-ctx.Done():
+				success <- false
+				return
+			}
+
+			select {
+			case <-b.done:
+				DebugLogger.Printf("Buffer for %s events flushed successfully.", bt)
+				success <- true
+			case <-ctx.Done():
+				success <- false
+			}
+		}(bufferType, t.buffer[bufferType])
 	}
 
-	DebugLogger.Println("All buffers flushed successfully.")
-	return true
+	// Wait for all goroutines or timeout
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
 
-fail:
-	DebugLogger.Println("Buffer flushing reached the timeout.")
+	select {
+	case <-done:
+		allSucceeded := true
+		for i := 0; i < len(t.buffer); i++ {
+			select {
+			case ok := <-success:
+				if !ok {
+					allSucceeded = false
+				}
+			case <-ctx.Done():
+				allSucceeded = false
+			}
+		}
+		if allSucceeded {
+			DebugLogger.Println("All buffers flushed successfully.")
+			return true
+		}
+	case <-ctx.Done():
+		DebugLogger.Println("Buffer flushing reached the timeout.")
+	}
+
 	return false
 }
 
@@ -552,8 +577,13 @@ fail:
 // Close should be called after Flush and before terminating the program
 // otherwise some events may be lost.
 func (t *HTTPTransport) Close() {
-	for key := range t.buffer {
-		close(t.buffer[key].done)
+	for _, buf := range t.buffer {
+		select {
+		case <-buf.done:
+			// Already closed
+		default:
+			close(buf.done)
+		}
 	}
 }
 
@@ -718,7 +748,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	switch event.Type {
 	case transactionType:
 		eventIdentifier = "transaction"
-	case logEvent.Type:
+	case logType:
 		eventIdentifier = fmt.Sprintf("%v log events", len(event.Logs))
 	default:
 		eventIdentifier = fmt.Sprintf("%s event", event.Level)
