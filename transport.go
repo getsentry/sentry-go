@@ -16,10 +16,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
-const (
-	defaultBufferSize = 1000
-	defaultTimeout    = time.Second * 30
-)
+const defaultTimeout = time.Second * 30
 
 // maxDrainResponseBytes is the maximum number of bytes that transport
 // implementations will read from response bodies when draining them.
@@ -272,9 +269,37 @@ func categoryFor(eventType string) ratelimit.Category {
 	}
 }
 
+func eventToBuffer(eventType string) BufferType {
+	switch eventType {
+	case "":
+		return ErrorBuffer
+	case transactionType:
+		return TransactionBuffer
+	case logType:
+		return LogBuffer
+	default:
+		return InvalidBuffer
+	}
+}
+
 // ================================
 // HTTPTransport
 // ================================
+
+type BufferType string
+
+const (
+	InvalidBuffer     BufferType = "invalid"
+	ErrorBuffer                  = "error"
+	TransactionBuffer            = "transaction"
+	LogBuffer                    = "log"
+)
+
+type Buffer struct {
+	batch chan batch
+	size  int
+	done  chan struct{} // signal to terminate async processing.
+}
 
 // A batch groups items that are processed sequentially.
 type batch struct {
@@ -298,31 +323,21 @@ type HTTPTransport struct {
 	client    *http.Client
 	transport http.RoundTripper
 
-	// buffer is a map of channels of batches, keyed by event type.
-	// Calling Flush terminates work on the current in-flight items and starts
-	// a new batch for subsequent events.
-	buffer map[string]chan batch
+	buffer map[BufferType]Buffer
 
 	start sync.Once
 
-	// Size of the transport buffer. Defaults to 30.
-	BufferSize int
 	// HTTP Client request timeout. Defaults to 30 seconds.
 	Timeout time.Duration
 
 	mu     sync.RWMutex
 	limits ratelimit.Map
-
-	// receiving signal will terminate worker.
-	done chan struct{}
 }
 
 // NewHTTPTransport returns a new pre-configured instance of HTTPTransport.
 func NewHTTPTransport() *HTTPTransport {
 	transport := HTTPTransport{
-		BufferSize: defaultBufferSize,
-		Timeout:    defaultTimeout,
-		done:       make(chan struct{}),
+		Timeout: defaultTimeout,
 	}
 	return &transport
 }
@@ -340,19 +355,25 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 	// goroutine can access the current batch at a given time. Access is
 	// synchronized by reading from and writing to the channel.
 
-	t.buffer = make(map[string]chan batch)
-	// error type has "" as event type
-	// TODO: should fix event type names
-	t.buffer[""] = make(chan batch, 1)
-	t.buffer[""] <- batch{
+	t.buffer = make(map[BufferType]Buffer)
+	t.buffer[ErrorBuffer] = Buffer{
+		make(chan batch, 1),
+		30,
+		make(chan struct{}),
+	}
+	t.buffer[ErrorBuffer].batch <- batch{
 		items:   make(chan batchItem, 30),
 		started: make(chan struct{}),
 		done:    make(chan struct{}),
 	}
 
 	if options.EnableLogs {
-		t.buffer[logType] = make(chan batch, 1)
-		t.buffer[logType] <- batch{
+		t.buffer[LogBuffer] = Buffer{
+			make(chan batch, 1),
+			1000,
+			make(chan struct{}),
+		}
+		t.buffer[LogBuffer].batch <- batch{
 			items:   make(chan batchItem, 1000),
 			started: make(chan struct{}),
 			done:    make(chan struct{}),
@@ -360,8 +381,12 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 	}
 
 	if options.EnableTracing {
-		t.buffer[transactionType] = make(chan batch, 1)
-		t.buffer[transactionType] <- batch{
+		t.buffer[TransactionBuffer] = Buffer{
+			make(chan batch, 1),
+			1000,
+			make(chan struct{}),
+		}
+		t.buffer[TransactionBuffer].batch <- batch{
 			items:   make(chan batchItem, 1000),
 			started: make(chan struct{}),
 			done:    make(chan struct{}),
@@ -424,12 +449,13 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	// the default case that is executed if sending on b.items would block. That
 	// is, the event is dropped if it cannot be sent immediately to the b.items
 	// channel (used as a queue).
-	_, ok := t.buffer[event.Type]
-	if !ok {
+	bufType := eventToBuffer(event.Type)
+	_, ok := t.buffer[eventToBuffer(event.Type)]
+	if !ok || bufType == InvalidBuffer {
 		DebugLogger.Printf("Event with type: %v dropped due to buffer not set correctly", event.Type)
 		return
 	}
-	b := <-t.buffer[event.Type]
+	b := <-t.buffer[bufType].batch
 
 	select {
 	case b.items <- batchItem{
@@ -453,7 +479,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		DebugLogger.Println("Event dropped due to transport buffer being full.")
 	}
 
-	t.buffer[event.Type] <- b
+	t.buffer[bufType].batch <- b
 }
 
 // Flush waits until any buffered events are sent to the Sentry server, blocking
@@ -476,23 +502,16 @@ func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 	// possible execution flow in which b.done is never closed, and the only way
 	// out of Flush would be waiting for the timeout, which is undesired.
 	var b batch
-	var key string
 
-	for key = range t.buffer {
-		// TODO: bind event types with buffers
-		bufSize := 1000
-		if key == "" {
-			bufSize = 30
-		}
-
+	for bufferType := range t.buffer {
 		for {
 			select {
-			case b = <-t.buffer[key]:
+			case b = <-t.buffer[bufferType].batch:
 				select {
 				case <-b.started:
 					goto started
 				default:
-					t.buffer[key] <- b
+					t.buffer[bufferType].batch <- b
 				}
 			case <-toolate:
 				goto fail
@@ -504,8 +523,8 @@ func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 		// worker inner loop can end.
 		close(b.items)
 		// Start a new batch for subsequent events.
-		t.buffer[key] <- batch{
-			items:   make(chan batchItem, bufSize),
+		t.buffer[bufferType].batch <- batch{
+			items:   make(chan batchItem, t.buffer[bufferType].size),
 			started: make(chan struct{}),
 			done:    make(chan struct{}),
 		}
@@ -513,7 +532,7 @@ func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 		// Wait until the current batch is done or the timeout.
 		select {
 		case <-b.done:
-			DebugLogger.Printf("Buffer for %s events flushed successfully.", key)
+			DebugLogger.Printf("Buffer for %s events flushed successfully.", bufferType)
 		case <-toolate:
 			goto fail
 		}
@@ -533,18 +552,15 @@ fail:
 // Close should be called after Flush and before terminating the program
 // otherwise some events may be lost.
 func (t *HTTPTransport) Close() {
-	close(t.done)
+	for key := range t.buffer {
+		close(t.buffer[key].done)
+	}
 }
 
 func (t *HTTPTransport) worker() {
-	// Create a wait group to track all worker goroutines
-	var wg sync.WaitGroup
-
 	// Start a separate worker for each buffer
-	for eventType, buf := range t.buffer {
-		wg.Add(1)
-		go func(eventType string, buf chan batch) {
-			defer wg.Done()
+	for bufferType, buf := range t.buffer {
+		go func(bufferType BufferType, buf chan batch) {
 			for b := range buf {
 				// Signal that processing of the current batch has started.
 				close(b.started)
@@ -557,7 +573,7 @@ func (t *HTTPTransport) worker() {
 			loop:
 				for {
 					select {
-					case <-t.done:
+					case <-t.buffer[bufferType].done:
 						return
 					case item, open := <-b.items:
 						if !open {
@@ -597,14 +613,8 @@ func (t *HTTPTransport) worker() {
 				// Signal that processing of the batch is done.
 				close(b.done)
 			}
-		}(eventType, buf)
+		}(bufferType, buf.batch)
 	}
-
-	// Wait for all workers to finish when done channel is closed
-	go func() {
-		<-t.done
-		wg.Wait()
-	}()
 }
 
 func (t *HTTPTransport) disabled(c ratelimit.Category) bool {

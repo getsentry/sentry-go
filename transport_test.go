@@ -691,10 +691,14 @@ func TestHTTPTransportClose(t *testing.T) {
 		HTTPClient: http.DefaultClient,
 	})
 
-	transport.Close()
+	finished := make(chan struct{})
+	go func() {
+		transport.Close()
+		finished <- struct{}{}
+	}()
 
 	select {
-	case <-transport.done:
+	case <-finished:
 	case <-time.After(time.Second):
 		t.Error("transport.done not closed after Close")
 	}
