@@ -122,9 +122,11 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 	}
 	if l.client.options.SendDefaultPII {
 		user := GetHubFromContext(ctx).Scope().user
-		attrs["user.id"] = Attribute{Value: user.ID, Type: "string"}
-		attrs["user.name"] = Attribute{Value: user.Name, Type: "string"}
-		attrs["user.email"] = Attribute{Value: user.Email, Type: "string"}
+		if !user.IsEmpty() {
+			attrs["user.id"] = Attribute{Value: user.ID, Type: "string"}
+			attrs["user.name"] = Attribute{Value: user.Name, Type: "string"}
+			attrs["user.email"] = Attribute{Value: user.Email, Type: "string"}
+		}
 	}
 	if spanID.String() != "0000000000000000" {
 		attrs["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: "string"}
