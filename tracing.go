@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -1056,24 +1055,24 @@ func HTTPtoSpanStatus(code int) SpanStatus {
 func GetSpanData[T any](s *Span, name string) (T, error) {
 	var zero T
 	if s == nil {
-		return zero, errors.New("span is nil")
+		return zero, fmt.Errorf("failed to get span data: span is nil")
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if s.Data == nil {
-		return zero, errors.New("span data is nil")
+		return zero, fmt.Errorf("failed to get span data: span data is nil")
 	}
 
 	value, exists := s.Data[name]
 	if !exists {
-		return zero, errors.New("key does not exist")
+		return zero, fmt.Errorf("failed to get span data: key %s does not exist", name)
 	}
 
 	typedValue, ok := value.(T)
 	if !ok {
-		return zero, errors.New("value is not of type T")
+		return zero, fmt.Errorf("failed to get span data: attribute %s has type %T, expected %T", name, value, zero)
 	}
 
 	return typedValue, nil
