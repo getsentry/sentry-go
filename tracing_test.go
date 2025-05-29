@@ -360,6 +360,71 @@ func TestSetData(t *testing.T) {
 	}
 }
 
+func TestGetSpanData(t *testing.T) {
+	// Test getting data from nil span
+	if _, err := GetSpanData[string](nil, "nonexistent"); err == nil {
+		t.Fatalf("Expected error for nil span")
+	}
+
+	// Initialize a span
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	span := StartSpan(ctx, "Test Span")
+
+	// Test getting data from empty span
+	if val, err := GetSpanData[string](span, "nonexistent"); err == nil {
+		t.Fatalf("Expected error for nonexistent key, got true with value: %v", val)
+	}
+
+	// Set various types of data
+	span.SetData("string", "hello")
+	span.SetData("int", 42)
+	span.SetData("bool", true)
+	span.SetData("slice", []string{"foo", "bar"})
+	span.SetData("map", map[string]int{"count": 5})
+	span.SetData("map.interface", map[string]interface{}{"count": 5})
+
+	// Test successful retrieval with correct types
+	if val, err := GetSpanData[string](span, "string"); err != nil || val != "hello" {
+		t.Fatalf("Expected string 'hello', got ok=%v, val=%v", err, val)
+	}
+
+	if val, err := GetSpanData[int](span, "int"); err != nil || val != 42 {
+		t.Fatalf("Expected int 42, got ok=%v, val=%v", err, val)
+	}
+
+	if val, err := GetSpanData[bool](span, "bool"); err != nil || val != true {
+		t.Fatalf("Expected bool true, got ok=%v, val=%v", err, val)
+	}
+
+	if val, err := GetSpanData[[]string](span, "slice"); err != nil || !reflect.DeepEqual(val, []string{"foo", "bar"}) {
+		t.Fatalf("Expected slice [foo bar], got ok=%v, val=%v", err, val)
+	}
+
+	if val, err := GetSpanData[map[string]int](span, "map"); err != nil || val["count"] != 5 {
+		t.Fatalf("Expected map with count=5, got ok=%v, val=%v", err, val)
+	}
+
+	if val, err := GetSpanData[map[string]interface{}](span, "map.interface"); err != nil || val["count"] != 5 {
+		t.Fatalf("Expected map with count=5, got ok=%v, val=%v", err, val)
+	}
+
+	// Test type mismatch - should return false
+	if val, err := GetSpanData[int](span, "string"); err == nil {
+		t.Fatalf("Expected error for type mismatch, got true with value: %v", val)
+	}
+
+	if val, err := GetSpanData[string](span, "int"); err == nil {
+		t.Fatalf("Expected error for type mismatch, got true with value: %v", val)
+	}
+
+	// test non-existent key
+	if val, err := GetSpanData[string](span, "nonexistent"); err == nil {
+		t.Fatalf("Expected error for nonexistent key, got true with value: %v", val)
+	}
+}
+
 func TestWithDescription(t *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing: true,

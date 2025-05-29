@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -1042,4 +1043,38 @@ func HTTPtoSpanStatus(code int) SpanStatus {
 		}
 	}
 	return SpanStatusUnknown
+}
+
+// GetSpanData retrieves a data value from the span and attempts to cast it to the specified type T.
+// It returns the value and an error if the key does not exist or the value is not of type T.
+//
+// Example usage:
+//
+//	if val, err := GetSpanData[int](span, "count"); err == nil {
+//	    span.SetData("count", val+1)
+//	}
+func GetSpanData[T any](s *Span, name string) (T, error) {
+	var zero T
+	if s == nil {
+		return zero, errors.New("span is nil")
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.Data == nil {
+		return zero, errors.New("span data is nil")
+	}
+
+	value, exists := s.Data[name]
+	if !exists {
+		return zero, errors.New("key does not exist")
+	}
+
+	typedValue, ok := value.(T)
+	if !ok {
+		return zero, errors.New("value is not of type T")
+	}
+
+	return typedValue, nil
 }
