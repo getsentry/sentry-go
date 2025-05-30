@@ -462,12 +462,14 @@ func (t *HTTPTransport) SendEventWithContext(_ context.Context, event *Event) {
 func (t *HTTPTransport) Flush(timeout time.Duration) bool {
 	done := make(chan struct{})
 	go func() {
-		for _, buffer := range t.buffers {
-			events := buffer.FlushItems()
-			if len(events) > 0 {
-				t.createAndSendRequest(context.Background(), events)
+		t.mu.RLock()
+		for bufType := range t.buffers {
+			select {
+			case t.bufferSignal[bufType] <- struct{}{}:
+			default: // prevent blocking if signal already sent
 			}
 		}
+		t.mu.RUnlock()
 		close(done)
 	}()
 	select {
@@ -510,7 +512,7 @@ func (t *HTTPTransport) worker(ctx context.Context, bufType BufferType, buffer B
 				t.createAndSendRequest(context.Background(), events)
 			}
 		case <-newEventSig:
-			events := buffer.FlushItemsIfBatchSize()
+			events := buffer.FlushItems()
 			if len(events) > 0 {
 				t.createAndSendRequest(ctx, events)
 			}
