@@ -497,25 +497,23 @@ func (t *HTTPTransport) worker(ctx context.Context, bufType BufferType, buffer B
 	ticker := time.NewTicker(buffer.Timeout())
 	defer ticker.Stop()
 
+	flushAndSend := func() {
+		events := buffer.FlushItems()
+		if len(events) > 0 {
+			t.createAndSendRequest(context.Background(), events)
+		}
+	}
+
 	newEventSig := t.bufferSignal[bufType]
 	for {
 		select {
 		case <-ctx.Done():
-			events := buffer.FlushItems()
-			if len(events) > 0 {
-				t.createAndSendRequest(context.Background(), events)
-			}
+			flushAndSend()
 			return
 		case <-ticker.C:
-			events := buffer.FlushItems()
-			if len(events) > 0 {
-				t.createAndSendRequest(context.Background(), events)
-			}
+			flushAndSend()
 		case <-newEventSig:
-			events := buffer.FlushItems()
-			if len(events) > 0 {
-				t.createAndSendRequest(ctx, events)
-			}
+			flushAndSend()
 		}
 	}
 }
