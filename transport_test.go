@@ -358,7 +358,7 @@ func TestGetRequestFromEvent(t *testing.T) {
 	}
 }
 
-// A testHTTPServer counts events sent to it. It requires a call to Unblock
+// A testHTTPServer counts events sent to it. It requires a call to WaitForEvent
 // before incrementing its internal counter and sending a response to the HTTP
 // client. This allows for coordinating the execution flow when needed.
 type testHTTPServer struct {
@@ -397,7 +397,7 @@ func (ts *testHTTPServer) EventCount() uint64 {
 	return atomic.LoadUint64(ts.eventCounter)
 }
 
-func (ts *testHTTPServer) Unblock() {
+func (ts *testHTTPServer) WaitForEvent() {
 	ts.ch <- true
 }
 
@@ -456,7 +456,7 @@ func TestHTTPTransport(t *testing.T) {
 
 		// After unblocking the server, Flush must guarantee that the server
 		// event count increased by one.
-		server.Unblock()
+		server.WaitForEvent()
 		transportMustFlush(t, id)
 		serverEventCountMustBe(t, initialCount+1)
 	}
@@ -489,6 +489,36 @@ func TestHTTPTransport(t *testing.T) {
 		}()
 		wg.Wait()
 	})
+}
+
+func TestTimeoutTicker(t *testing.T) {
+	server := newTestHTTPServer(t)
+	defer server.Close()
+
+	tr := NewHTTPTransport()
+	tr.client = server.Client()
+	tr.dsn, _ = NewDsn(fmt.Sprintf("https://test@%s/1", server.Listener.Addr()))
+
+	// simulate a transport start with a 1 ms timeout for the ErrorBuffer
+	tr.SetBuffer(ErrorBuffer, 30, 2, HighPriority, 5*time.Millisecond)
+	tr.Start()
+
+	e := NewEvent()
+	e.EventID = EventID(uuid())
+	tr.SendEvent(e)
+
+	t.Logf("[CLIENT] {%.4s} event sent", e.EventID)
+
+	initialCount := server.EventCount()
+	count := server.EventCount()
+	if count != initialCount {
+		t.Fatalf("[SERVER] event count = %d, want %d", count, initialCount)
+	}
+	server.WaitForEvent()
+	count = server.EventCount()
+	if count != initialCount+1 {
+		t.Fatalf("[SERVER] event count = %d, want %d", count, initialCount+1)
+	}
 }
 
 // httptraceRoundTripper implements http.RoundTripper by wrapping
@@ -631,7 +661,8 @@ func testRateLimiting(t *testing.T, tr Transport) {
 	dsn := strings.Replace(srv.URL, "//", "//pubkey@", 1) + "/1"
 
 	tr.Configure(ClientOptions{
-		Dsn: dsn,
+		Dsn:           dsn,
+		EnableTracing: true,
 	})
 
 	// Send several errors and transactions concurrently.
@@ -690,12 +721,18 @@ func TestHTTPTransportClose(t *testing.T) {
 		HTTPClient: http.DefaultClient,
 	})
 
+	done := make(chan struct{})
+	go func() {
+		transport.wg.Wait()
+		close(done)
+	}()
+
 	transport.Close()
 
 	select {
-	case <-transport.done:
+	case <-done:
 	case <-time.After(time.Second):
-		t.Error("transport.done not closed after Close")
+		t.Error("Worker not stopped after Close")
 	}
 }
 

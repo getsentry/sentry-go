@@ -16,10 +16,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
-const (
-	defaultBufferSize = 1000
-	defaultTimeout    = time.Second * 30
-)
+const defaultTimeout = time.Second * 30
 
 // maxDrainResponseBytes is the maximum number of bytes that transport
 // implementations will read from response bodies when draining them.
@@ -199,7 +196,7 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	switch event.Type {
 	case transactionType, checkInType:
 		err = encodeEnvelopeItem(enc, event.Type, body)
-	case logEvent.Type:
+	case logType:
 		err = encodeEnvelopeLogs(enc, len(event.Logs), body)
 	default:
 		err = encodeEnvelopeItem(enc, eventType, body)
@@ -230,7 +227,7 @@ func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (r *http.R
 
 			// The key sentry_secret is effectively deprecated and no longer needs to be set.
 			// However, since it was required in older self-hosted versions,
-			// it should still passed through to Sentry if set.
+			// it should still be passed through to Sentry if set.
 			if dsn.secretKey != "" {
 				auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.secretKey)
 			}
@@ -276,57 +273,48 @@ func categoryFor(eventType string) ratelimit.Category {
 // HTTPTransport
 // ================================
 
-// A batch groups items that are processed sequentially.
-type batch struct {
-	items   chan batchItem
-	started chan struct{} // closed to signal items started to be worked on
-	done    chan struct{} // closed to signal completion of all items
-}
-
-type batchItem struct {
-	request  *http.Request
-	category ratelimit.Category
-}
-
 // HTTPTransport is the default, non-blocking, implementation of Transport.
 //
-// Clients using this transport will enqueue requests in a buffer and return to
+// Clients using this transport will enqueue requests in buffers and return to
 // the caller before any network communication has happened. Requests are sent
 // to Sentry sequentially from a background goroutine.
 type HTTPTransport struct {
-	dsn       *Dsn
-	client    *http.Client
-	transport http.RoundTripper
+	dsn          *Dsn
+	client       *http.Client
+	transport    http.RoundTripper
+	buffers      map[BufferType]Buffer
+	bufferSignal map[BufferType]chan struct{}
 
-	// buffer is a channel of batches. Calling Flush terminates work on the
-	// current in-flight items and starts a new batch for subsequent events.
-	buffer chan batch
-
-	start sync.Once
-
-	// Size of the transport buffer. Defaults to 30.
-	BufferSize int
-	// HTTP Client request timeout. Defaults to 30 seconds.
-	Timeout time.Duration
-
+	start  sync.Once
 	mu     sync.RWMutex
+	wg     sync.WaitGroup
 	limits ratelimit.Map
 
-	// receiving signal will terminate worker.
-	done chan struct{}
+	// HTTP Client request timeout. Defaults to 30 seconds.
+	Timeout time.Duration
+	// shutdownFunc terminates the async worker.
+	shutdownFunc context.CancelFunc
 }
 
 // NewHTTPTransport returns a new pre-configured instance of HTTPTransport.
 func NewHTTPTransport() *HTTPTransport {
 	transport := HTTPTransport{
-		BufferSize: defaultBufferSize,
-		Timeout:    defaultTimeout,
-		done:       make(chan struct{}),
+		Timeout:      defaultTimeout,
+		buffers:      make(map[BufferType]Buffer),
+		bufferSignal: make(map[BufferType]chan struct{}),
 	}
 	return &transport
 }
 
-// Configure is called by the Client itself, providing it it's own ClientOptions.
+func (t *HTTPTransport) SetBuffer(bufferType BufferType, size int, batchSize int, priority Priority, timeout time.Duration) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.buffers[bufferType] = NewBuffer(bufferType, size, batchSize, priority, timeout)
+	t.bufferSignal[bufferType] = make(chan struct{}, 1)
+}
+
+// Configure is called by the Client itself, providing its own ClientOptions.
 func (t *HTTPTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
@@ -334,16 +322,6 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		return
 	}
 	t.dsn = dsn
-
-	// A buffered channel with capacity 1 works like a mutex, ensuring only one
-	// goroutine can access the current batch at a given time. Access is
-	// synchronized by reading from and writing to the channel.
-	t.buffer = make(chan batch, 1)
-	t.buffer <- batch{
-		items:   make(chan batchItem, t.BufferSize),
-		started: make(chan struct{}),
-		done:    make(chan struct{}),
-	}
 
 	if options.HTTPTransport != nil {
 		t.transport = options.HTTPTransport
@@ -363,9 +341,92 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		}
 	}
 
+	t.SetBuffer(ErrorBuffer, 30, 1, 1, 5*time.Second)
+	if options.EnableLogs {
+		t.SetBuffer(LogBuffer, 1000, 100, 3, 5*time.Second)
+	}
+	if options.EnableTracing {
+		t.SetBuffer(TransactionBuffer, 1000, 1, 2, 5*time.Second)
+	}
+	t.Start()
+}
+
+func (t *HTTPTransport) Start() {
 	t.start.Do(func() {
-		go t.worker()
+		ctx, cancel := context.WithCancel(context.Background())
+		t.shutdownFunc = cancel
+		t.mu.RLock()
+		for bufType, buffer := range t.buffers {
+			t.wg.Add(1)
+			go t.worker(ctx, bufType, buffer)
+		}
+		t.mu.RUnlock()
 	})
+}
+
+func (t *HTTPTransport) createAndSendRequest(ctx context.Context, events []*Event) {
+	if len(events) == 0 {
+		return
+	}
+
+	for _, event := range events {
+		if t.dsn == nil {
+			return
+		}
+
+		category := categoryFor(event.Type)
+		if t.disabled(category) {
+			return
+		}
+
+		request, err := getRequestFromEvent(ctx, event, t.dsn)
+		if err != nil {
+			return
+		}
+
+		var eventIdentifier string
+		switch event.Type {
+		case transactionType:
+			eventIdentifier = "transaction"
+		case logType:
+			eventIdentifier = fmt.Sprintf("%v log events", len(event.Logs))
+		default:
+			eventIdentifier = fmt.Sprintf("%s event", event.Level)
+		}
+		DebugLogger.Printf(
+			"Sending %s [%s] to %s project: %s",
+			eventIdentifier,
+			event.EventID,
+			t.dsn.host,
+			t.dsn.projectID,
+		)
+
+		response, err := t.client.Do(request)
+		if err != nil {
+			DebugLogger.Printf("There was an issue with sending an event: %v", err)
+			return
+		}
+		if response.StatusCode >= 400 && response.StatusCode <= 599 {
+			b, err := io.ReadAll(response.Body)
+			if err != nil {
+				DebugLogger.Printf("Error while reading response code: %v", err)
+			}
+			DebugLogger.Printf("Sending %s failed with the following error: %s", eventIdentifier, string(b))
+		}
+
+		t.mu.Lock()
+		if t.limits == nil {
+			t.limits = make(ratelimit.Map)
+		}
+
+		t.limits.Merge(ratelimit.FromResponse(response))
+		t.mu.Unlock()
+
+		// Drain body up to a limit and close it, allowing the
+		// transport to reuse TCP connections.
+		_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
+		response.Body.Close()
+	}
 }
 
 // SendEvent assembles a new packet out of Event and sends it to the remote server.
@@ -374,58 +435,18 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 }
 
 // SendEventWithContext assembles a new packet out of Event and sends it to the remote server.
-func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) {
-	if t.dsn == nil {
+func (t *HTTPTransport) SendEventWithContext(_ context.Context, event *Event) {
+	bufType := eventToBuffer(event.Type)
+	buffer, ok := t.buffers[bufType]
+	if !ok || bufType == InvalidBuffer {
+		DebugLogger.Printf("Event with type: %v dropped due to buffer not set correctly", event.Type)
 		return
 	}
 
-	category := categoryFor(event.Type)
-
-	if t.disabled(category) {
-		return
+	buffer.AddItem(event)
+	if buffer.HasBatchSize() {
+		t.bufferSignal[bufType] <- struct{}{}
 	}
-
-	request, err := getRequestFromEvent(ctx, event, t.dsn)
-	if err != nil {
-		return
-	}
-
-	// <-t.buffer is equivalent to acquiring a lock to access the current batch.
-	// A few lines below, t.buffer <- b releases the lock.
-	//
-	// The lock must be held during the select block below to guarantee that
-	// b.items is not closed while trying to send to it. Remember that sending
-	// on a closed channel panics.
-	//
-	// Note that the select block takes a bounded amount of CPU time because of
-	// the default case that is executed if sending on b.items would block. That
-	// is, the event is dropped if it cannot be sent immediately to the b.items
-	// channel (used as a queue).
-	b := <-t.buffer
-
-	select {
-	case b.items <- batchItem{
-		request:  request,
-		category: category,
-	}:
-		var eventType string
-		if event.Type == transactionType {
-			eventType = "transaction"
-		} else {
-			eventType = fmt.Sprintf("%s event", event.Level)
-		}
-		DebugLogger.Printf(
-			"Sending %s [%s] to %s project: %s",
-			eventType,
-			event.EventID,
-			t.dsn.host,
-			t.dsn.projectID,
-		)
-	default:
-		DebugLogger.Println("Event dropped due to transport buffer being full.")
-	}
-
-	t.buffer <- b
 }
 
 // Flush waits until any buffered events are sent to the Sentry server, blocking
@@ -439,52 +460,22 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 // have the SDK send events over the network synchronously, configure it to use
 // the HTTPSyncTransport in the call to Init.
 func (t *HTTPTransport) Flush(timeout time.Duration) bool {
-	toolate := time.After(timeout)
-
-	// Wait until processing the current batch has started or the timeout.
-	//
-	// We must wait until the worker has seen the current batch, because it is
-	// the only way b.done will be closed. If we do not wait, there is a
-	// possible execution flow in which b.done is never closed, and the only way
-	// out of Flush would be waiting for the timeout, which is undesired.
-	var b batch
-	for {
-		select {
-		case b = <-t.buffer:
-			select {
-			case <-b.started:
-				goto started
-			default:
-				t.buffer <- b
+	done := make(chan struct{})
+	go func() {
+		for _, buffer := range t.buffers {
+			events := buffer.FlushItems()
+			if len(events) > 0 {
+				t.createAndSendRequest(context.Background(), events)
 			}
-		case <-toolate:
-			goto fail
 		}
-	}
-
-started:
-	// Signal that there won't be any more items in this batch, so that the
-	// worker inner loop can end.
-	close(b.items)
-	// Start a new batch for subsequent events.
-	t.buffer <- batch{
-		items:   make(chan batchItem, t.BufferSize),
-		started: make(chan struct{}),
-		done:    make(chan struct{}),
-	}
-
-	// Wait until the current batch is done or the timeout.
+		close(done)
+	}()
 	select {
-	case <-b.done:
-		DebugLogger.Println("Buffer flushed successfully.")
+	case <-done:
 		return true
-	case <-toolate:
-		goto fail
+	case <-time.After(timeout):
+		return false
 	}
-
-fail:
-	DebugLogger.Println("Buffer flushing reached the timeout.")
-	return false
 }
 
 // Close will terminate events sending loop.
@@ -493,61 +484,37 @@ fail:
 // Close should be called after Flush and before terminating the program
 // otherwise some events may be lost.
 func (t *HTTPTransport) Close() {
-	close(t.done)
+	if t.shutdownFunc == nil {
+		return
+	}
+	t.shutdownFunc()
 }
 
-func (t *HTTPTransport) worker() {
-	for b := range t.buffer {
-		// Signal that processing of the current batch has started.
-		close(b.started)
+func (t *HTTPTransport) worker(ctx context.Context, bufType BufferType, buffer Buffer) {
+	defer t.wg.Done()
+	ticker := time.NewTicker(buffer.Timeout())
+	defer ticker.Stop()
 
-		// Return the batch to the buffer so that other goroutines can use it.
-		// Equivalent to releasing a lock.
-		t.buffer <- b
-
-		// Process all batch items.
-	loop:
-		for {
-			select {
-			case <-t.done:
-				return
-			case item, open := <-b.items:
-				if !open {
-					break loop
-				}
-				if t.disabled(item.category) {
-					continue
-				}
-
-				response, err := t.client.Do(item.request)
-				if err != nil {
-					DebugLogger.Printf("There was an issue with sending an event: %v", err)
-					continue
-				}
-				if response.StatusCode >= 400 && response.StatusCode <= 599 {
-					b, err := io.ReadAll(response.Body)
-					if err != nil {
-						DebugLogger.Printf("Error while reading response code: %v", err)
-					}
-					DebugLogger.Printf("Sending %s failed with the following error: %s", eventType, string(b))
-				}
-
-				t.mu.Lock()
-				if t.limits == nil {
-					t.limits = make(ratelimit.Map)
-				}
-				t.limits.Merge(ratelimit.FromResponse(response))
-				t.mu.Unlock()
-
-				// Drain body up to a limit and close it, allowing the
-				// transport to reuse TCP connections.
-				_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
-				response.Body.Close()
+	newEventSig := t.bufferSignal[bufType]
+	for {
+		select {
+		case <-ctx.Done():
+			events := buffer.FlushItems()
+			if len(events) > 0 {
+				t.createAndSendRequest(context.Background(), events)
+			}
+			return
+		case <-ticker.C:
+			events := buffer.FlushItems()
+			if len(events) > 0 {
+				t.createAndSendRequest(context.Background(), events)
+			}
+		case <-newEventSig:
+			events := buffer.FlushItemsIfBatchSize()
+			if len(events) > 0 {
+				t.createAndSendRequest(ctx, events)
 			}
 		}
-
-		// Signal that processing of the batch is done.
-		close(b.done)
 	}
 }
 
@@ -598,7 +565,7 @@ func NewHTTPSyncTransport() *HTTPSyncTransport {
 	return &transport
 }
 
-// Configure is called by the Client itself, providing it it's own ClientOptions.
+// Configure is called by the Client itself, providing it, its own ClientOptions.
 func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
@@ -652,7 +619,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	switch event.Type {
 	case transactionType:
 		eventIdentifier = "transaction"
-	case logEvent.Type:
+	case logType:
 		eventIdentifier = fmt.Sprintf("%v log events", len(event.Logs))
 	default:
 		eventIdentifier = fmt.Sprintf("%s event", event.Level)

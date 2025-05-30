@@ -242,8 +242,7 @@ type Client struct {
 	sdkVersion      string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
-	Transport   Transport
-	batchLogger *BatchLogger
+	Transport Transport
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -341,11 +340,6 @@ func NewClient(options ClientOptions) (*Client, error) {
 		dsn:           dsn,
 		sdkIdentifier: sdkIdentifier,
 		sdkVersion:    SDKVersion,
-	}
-
-	if options.EnableLogs {
-		client.batchLogger = NewBatchLogger(&client)
-		client.batchLogger.Start()
 	}
 
 	client.setupTransport()
@@ -510,9 +504,6 @@ func (client *Client) RecoverWithContext(
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
-	if client.batchLogger != nil {
-		client.batchLogger.Flush()
-	}
 	return client.Transport.Flush(timeout)
 }
 

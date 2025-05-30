@@ -52,7 +52,7 @@ func NewLogger(ctx context.Context) Logger {
 	}
 
 	client := hub.Client()
-	if client != nil && client.batchLogger != nil {
+	if client != nil {
 		return &sentryLogger{client, make(map[string]Attribute)}
 	}
 
@@ -142,11 +142,16 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 
 	if l.client.options.BeforeSendLog != nil {
 		log = l.client.options.BeforeSendLog(log)
+		if log == nil {
+			return
+		}
 	}
 
-	if log != nil {
-		l.client.batchLogger.logCh <- *log
-	}
+	event := NewEvent()
+	event.Timestamp = time.Now()
+	event.Type = logType
+	event.Logs = []Log{*log}
+	l.client.Transport.SendEvent(event)
 
 	if l.client.options.Debug {
 		DebugLogger.Printf(message, args...)

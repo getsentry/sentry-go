@@ -18,12 +18,13 @@ import (
 const eventType = "event"
 const transactionType = "transaction"
 const checkInType = "check_in"
+const logType = "log"
 
 var logEvent = struct {
 	Type        string
 	ContentType string
 }{
-	"log",
+	logType,
 	"application/vnd.sentry.items.log+json",
 }
 

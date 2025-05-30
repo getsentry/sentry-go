@@ -3,6 +3,7 @@ package sentry
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"testing"
@@ -17,26 +18,27 @@ const (
 	LogTraceID = "d49d9bf66f13450b81f65bc51cf49c03"
 )
 
-func setupMockTransport() (context.Context, *MockTransport) {
+func setupMockClient(transport Transport) context.Context {
 	ctx := context.Background()
-	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
-		Dsn:           testDsn,
-		Transport:     mockTransport,
-		Release:       "v1.2.3",
-		Environment:   "testing",
-		ServerName:    "test-server",
-		EnableLogs:    true,
-		EnableTracing: true,
-	})
+	mockClient := &Client{
+		Transport: transport,
+		options: ClientOptions{
+			Dsn:           testDsn,
+			Release:       "v1.2.3",
+			Environment:   "testing",
+			ServerName:    "test-server",
+			EnableLogs:    true,
+			EnableTracing: true,
+		},
+	}
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub()
-	hub.BindClient(mockClient)
+
+	hub := NewHub(mockClient, CurrentHub().Scope())
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 
 	ctx = SetHubOnContext(ctx, hub)
-	return ctx, mockTransport
+	return ctx
 }
 
 func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
@@ -167,7 +169,8 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, mockTransport := setupMockTransport()
+			mockTransport := &MockTransport{}
+			ctx := setupMockClient(mockTransport)
 			l := NewLogger(ctx)
 			l.SetAttributes(
 				attribute.Int("key.int", 42),
@@ -320,7 +323,8 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, mockTransport := setupMockTransport()
+			mockTransport := &MockTransport{}
+			ctx := setupMockClient(mockTransport)
 			l := NewLogger(ctx)
 			tt.logFunc(ctx, l, tt.args)
 			Flush(20 * time.Millisecond)
@@ -354,7 +358,8 @@ func Test_sentryLogger_Panic(t *testing.T) {
 				t.Logf("recovered panic: %v", r)
 			}
 		}()
-		ctx, _ := setupMockTransport()
+		mockTransport := &MockTransport{}
+		ctx := setupMockClient(mockTransport)
 		l := NewLogger(ctx)
 		l.Panic(context.Background(), "panic message") // This should panic
 	})
@@ -367,7 +372,8 @@ func Test_sentryLogger_Panic(t *testing.T) {
 				t.Logf("recovered panic: %v", r)
 			}
 		}()
-		ctx, _ := setupMockTransport()
+		mockTransport := &MockTransport{}
+		ctx := setupMockClient(mockTransport)
 		l := NewLogger(ctx)
 		l.Panicf(context.Background(), "panic message") // This should panic
 	})
@@ -393,7 +399,8 @@ func Test_sentryLogger_Write(t *testing.T) {
 		},
 	}
 
-	ctx, mockTransport := setupMockTransport()
+	mockTransport := &MockTransport{}
+	ctx := setupMockClient(mockTransport)
 	l := NewLogger(ctx)
 	n, err := l.Write(msg)
 
@@ -417,41 +424,6 @@ func Test_sentryLogger_Write(t *testing.T) {
 	}
 	if diff := cmp.Diff(wantLogs, event.Logs, opts); diff != "" {
 		t.Errorf("Logs mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
-	msg := []byte("something")
-	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(ctx)
-	l.SetAttributes(attribute.Int("int", 42))
-	l.Info(ctx, msg)
-
-	l.SetAttributes(attribute.String("string", "some str"))
-	l.Warn(ctx, msg)
-	Flush(20 * time.Millisecond)
-
-	gotEvents := mockTransport.Events()
-	if len(gotEvents) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(gotEvents))
-	}
-	event := gotEvents[0]
-	assertEqual(t, event.Logs[0].Attributes["int"].Value, int64(42))
-	if _, ok := event.Logs[1].Attributes["int"]; ok {
-		t.Fatalf("expected key to not exist")
-	}
-	assertEqual(t, event.Logs[1].Attributes["string"].Value, "some str")
-}
-
-func Test_batchLogger_Flush(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(context.Background())
-	l.Info(ctx, "context done log")
-	Flush(20 * time.Millisecond)
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
 	}
 }
 
@@ -488,23 +460,26 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 	}
 }
 
-func Test_Logger_ExceedBatchSize(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(context.Background())
-	for i := 0; i < 100; i++ {
-		l.Info(ctx, "test")
-	}
+func TestLogger_TracePropagationWithTransaction(t *testing.T) {
+	mockTransport := &MockTransport{}
+	ctx := context.Background()
+	mockClient, _ := NewClient(ClientOptions{
+		Dsn:           testDsn,
+		Transport:     mockTransport,
+		Release:       "v1.2.3",
+		Environment:   "testing",
+		ServerName:    "test-server",
+		EnableLogs:    true,
+		EnableTracing: true,
+	})
 
-	// sleep to wait for events to propagate
-	time.Sleep(20 * time.Millisecond)
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected only one event with 100 logs, got %d", len(events))
-	}
-}
+	mockClient.sdkIdentifier = "sentry.go"
+	mockClient.sdkVersion = "0.10.0"
+	hub := CurrentHub()
+	hub.BindClient(mockClient)
+	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 
-func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
+	ctx = SetHubOnContext(ctx, hub)
 
 	// Start a new transaction
 	txn := StartTransaction(ctx, "test-transaction")
@@ -590,5 +565,29 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 				t.Errorf("Debug output = %q, want %q", got, tt.expectedDebug)
 			}
 		})
+	}
+}
+
+func TestLogger_IntegrationExceedBatchSize(t *testing.T) {
+	server := newTestHTTPServer(t)
+	defer server.Close()
+	mockClient := server.Client()
+	transport := NewHTTPTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        fmt.Sprintf("https://test@%s/1", server.Listener.Addr()),
+		HTTPClient: mockClient,
+		EnableLogs: true,
+	})
+
+	ctx := setupMockClient(transport)
+	l := NewLogger(ctx)
+	for i := 0; i < 100; i++ {
+		l.Info(ctx, "test")
+	}
+
+	server.WaitForEvent()
+	count := server.EventCount()
+	if count != 1 {
+		t.Fatalf("[SERVER] event count = %d, want %d", count, 1)
 	}
 }
