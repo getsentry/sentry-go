@@ -190,7 +190,7 @@ func (b *noopBuffer) Timeout() time.Duration {
 	return time.Second
 }
 
-func (b *noopBuffer) AddItem(event *Event) {
+func (b *noopBuffer) AddItem(_ *Event) {
 }
 
 func (b *noopBuffer) HasBatchSize() bool {
