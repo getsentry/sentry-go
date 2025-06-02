@@ -791,7 +791,7 @@ func TestHTTPTransportClose(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		transport.wg.Wait()
+		transport.workerWg.Wait()
 		close(done)
 	}()
 

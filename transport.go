@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"container/heap"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -285,10 +286,15 @@ type HTTPTransport struct {
 	buffers      map[BufferType]Buffer
 	bufferSignal map[BufferType]chan struct{}
 
-	start  sync.Once
-	mu     sync.RWMutex
-	wg     sync.WaitGroup
-	limits ratelimit.Map
+	start    sync.Once
+	mu       sync.RWMutex
+	workerWg sync.WaitGroup
+	limits   ratelimit.Map
+
+	eventPQ      *transportQueue
+	pqMutex      sync.Mutex
+	pqCond       *sync.Cond
+	pqConsumerWg sync.WaitGroup
 
 	// HTTP Client request timeout. Defaults to 30 seconds.
 	Timeout time.Duration
@@ -305,7 +311,10 @@ func NewHTTPTransport() *HTTPTransport {
 		buffers:        make(map[BufferType]Buffer),
 		bufferSignal:   make(map[BufferType]chan struct{}),
 		flushListeners: make(map[BufferType][]chan struct{}),
+		eventPQ:        new(transportQueue),
 	}
+	transport.pqCond = sync.NewCond(&transport.pqMutex)
+	heap.Init(transport.eventPQ)
 	return &transport
 }
 
@@ -361,9 +370,12 @@ func (t *HTTPTransport) Start() {
 	t.start.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		t.shutdownFunc = cancel
+
+		t.pqConsumerWg.Add(1)
+		go t.pqConsumer(ctx)
 		t.mu.RLock()
 		for bufType, buffer := range t.buffers {
-			t.wg.Add(1)
+			t.workerWg.Add(1)
 			go t.worker(ctx, bufType, buffer)
 		}
 		t.mu.RUnlock()
@@ -442,17 +454,10 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 
 // SendEventWithContext assembles a new packet out of Event and sends it to the remote server.
 func (t *HTTPTransport) SendEventWithContext(_ context.Context, event *Event) {
-	bufType := eventToBuffer(event.Type)
-	buffer, ok := t.buffers[bufType]
-	if !ok || bufType == InvalidBuffer {
-		DebugLogger.Printf("Event with type: %v dropped due to buffer not set correctly", event.Type)
-		return
-	}
-
-	buffer.AddItem(event)
-	if buffer.HasBatchSize() {
-		t.bufferSignal[bufType] <- struct{}{}
-	}
+	t.pqMutex.Lock()
+	heap.Push(t.eventPQ, event)
+	t.pqCond.Signal()
+	t.pqMutex.Unlock()
 }
 
 // Flush waits until any buffered events are sent to the Sentry server, blocking
@@ -466,6 +471,26 @@ func (t *HTTPTransport) SendEventWithContext(_ context.Context, event *Event) {
 // have the SDK send events over the network synchronously, configure it to use
 // the HTTPSyncTransport in the call to Init.
 func (t *HTTPTransport) Flush(timeout time.Duration) bool {
+	flushDeadline := time.Now().Add(timeout)
+	for {
+		if time.Now().After(flushDeadline) {
+			break
+		}
+		t.pqMutex.Lock()
+		pqLen := t.eventPQ.Len()
+		if pqLen == 0 {
+			t.pqMutex.Unlock()
+			break
+		}
+		t.pqCond.Signal()
+		t.pqMutex.Unlock()
+	}
+
+	if time.Until(flushDeadline) <= 0 {
+		DebugLogger.Println("Flush timed out while draining priority queue.")
+		return false
+	}
+
 	activeBufTypes := make([]BufferType, 0, len(t.buffers))
 	bufferSignalsToUse := make(map[BufferType]chan struct{})
 
@@ -533,11 +558,60 @@ func (t *HTTPTransport) Close() {
 		return
 	}
 	t.shutdownFunc()
-	t.wg.Wait()
+
+	t.pqMutex.Lock()
+	t.pqCond.Broadcast()
+	t.pqMutex.Unlock()
+	t.pqConsumerWg.Wait()
+	t.workerWg.Wait()
+}
+
+func (t *HTTPTransport) pqConsumer(ctx context.Context) {
+	defer t.pqConsumerWg.Done()
+	for {
+		t.pqMutex.Lock()
+		// when the queue is empty the consumer should wait for sync.Cond signal
+		for t.eventPQ.Len() == 0 {
+			// 1. check for ctx.Done
+			select {
+			case <-ctx.Done():
+				t.pqMutex.Unlock()
+				return
+			default:
+				// Fallthrough to t.pqCond.Wait()
+			}
+			// 2. wait for Broadcast signal to resume
+			t.pqCond.Wait()
+			select {
+			case <-ctx.Done():
+				// cannot terminate yet, should check for events in queue we exit when we confirm
+				// that the queue is drained and ctx.Done was received
+				break
+			default:
+				// Continue if not stopping
+			}
+		}
+		event := heap.Pop(t.eventPQ).(*Event)
+		t.pqMutex.Unlock()
+
+		bufType := eventToBuffer(event.Type)
+		t.mu.RLock()
+		buffer, ok := t.buffers[bufType]
+		t.mu.RUnlock()
+		if !ok || bufType == InvalidBuffer {
+			DebugLogger.Printf("Event with type: %v dropped due to buffer not set correctly", event.Type)
+			continue
+		}
+
+		buffer.AddItem(event)
+		if buffer.HasBatchSize() {
+			t.bufferSignal[bufType] <- struct{}{}
+		}
+	}
 }
 
 func (t *HTTPTransport) worker(ctx context.Context, bufType BufferType, buffer Buffer) {
-	defer t.wg.Done()
+	defer t.workerWg.Done()
 	ticker := time.NewTicker(buffer.Timeout())
 	defer ticker.Stop()
 
