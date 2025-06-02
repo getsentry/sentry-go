@@ -53,7 +53,7 @@ func sendBenchEvents() {
 
 type mockRoundTripper struct{}
 
-func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (m *mockRoundTripper) RoundTrip(_ *http.Request) (*http.Response, error) {
 	// simulate fast HTTP response
 	time.Sleep(1 * time.Millisecond)
 	return &http.Response{

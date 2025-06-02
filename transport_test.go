@@ -500,7 +500,7 @@ func TestTimeoutTicker(t *testing.T) {
 	tr.dsn, _ = NewDsn(fmt.Sprintf("https://test@%s/1", server.Listener.Addr()))
 
 	// simulate a transport start with a 1 ms timeout for the ErrorBuffer
-	tr.SetBuffer(ErrorBuffer, 30, 2, HighPriority, 5*time.Millisecond)
+	tr.SetBuffer(ErrorBuffer, 30, 2, 5*time.Millisecond)
 	tr.Start()
 
 	e := NewEvent()
@@ -778,7 +778,7 @@ func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
 		HTTPClient: http.DefaultClient,
 	})
 
-	transport.Flush(0)
+	transport.Flush(time.Millisecond)
 	transport.Close()
 }
 

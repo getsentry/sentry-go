@@ -294,24 +294,30 @@ type HTTPTransport struct {
 	Timeout time.Duration
 	// shutdownFunc terminates the async worker.
 	shutdownFunc context.CancelFunc
+	// For Flush mechanism
+	flushListeners map[BufferType][]chan struct{}
 }
 
 // NewHTTPTransport returns a new pre-configured instance of HTTPTransport.
 func NewHTTPTransport() *HTTPTransport {
 	transport := HTTPTransport{
-		Timeout:      defaultTimeout,
-		buffers:      make(map[BufferType]Buffer),
-		bufferSignal: make(map[BufferType]chan struct{}),
+		Timeout:        defaultTimeout,
+		buffers:        make(map[BufferType]Buffer),
+		bufferSignal:   make(map[BufferType]chan struct{}),
+		flushListeners: make(map[BufferType][]chan struct{}),
 	}
 	return &transport
 }
 
-func (t *HTTPTransport) SetBuffer(bufferType BufferType, size int, batchSize int, priority Priority, timeout time.Duration) {
+func (t *HTTPTransport) SetBuffer(bufferType BufferType, size int, batchSize int, timeout time.Duration) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.buffers[bufferType] = NewBuffer(bufferType, size, batchSize, priority, timeout)
+	t.buffers[bufferType] = NewBuffer(bufferType, size, batchSize, timeout)
 	t.bufferSignal[bufferType] = make(chan struct{}, 1)
+	if _, ok := t.flushListeners[bufferType]; !ok {
+		t.flushListeners[bufferType] = make([]chan struct{}, 0)
+	}
 }
 
 // Configure is called by the Client itself, providing its own ClientOptions.
@@ -341,12 +347,12 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		}
 	}
 
-	t.SetBuffer(ErrorBuffer, 30, 1, 1, 5*time.Second)
+	t.SetBuffer(ErrorBuffer, 30, 1, 5*time.Second)
 	if options.EnableLogs {
-		t.SetBuffer(LogBuffer, 1000, 100, 3, 5*time.Second)
+		t.SetBuffer(LogBuffer, 1000, 100, 5*time.Second)
 	}
 	if options.EnableTracing {
-		t.SetBuffer(TransactionBuffer, 1000, 1, 2, 5*time.Second)
+		t.SetBuffer(TransactionBuffer, 1000, 1, 5*time.Second)
 	}
 	t.Start()
 }
@@ -404,7 +410,7 @@ func (t *HTTPTransport) createAndSendRequest(ctx context.Context, events []*Even
 		response, err := t.client.Do(request)
 		if err != nil {
 			DebugLogger.Printf("There was an issue with sending an event: %v", err)
-			return
+			continue
 		}
 		if response.StatusCode >= 400 && response.StatusCode <= 599 {
 			b, err := io.ReadAll(response.Body)
@@ -460,18 +466,55 @@ func (t *HTTPTransport) SendEventWithContext(_ context.Context, event *Event) {
 // have the SDK send events over the network synchronously, configure it to use
 // the HTTPSyncTransport in the call to Init.
 func (t *HTTPTransport) Flush(timeout time.Duration) bool {
+	activeBufTypes := make([]BufferType, 0, len(t.buffers))
+	bufferSignalsToUse := make(map[BufferType]chan struct{})
+
+	t.mu.RLock()
+	for bt, signalChan := range t.bufferSignal {
+		if _, bufferExists := t.buffers[bt]; bufferExists {
+			activeBufTypes = append(activeBufTypes, bt)
+			bufferSignalsToUse[bt] = signalChan
+		}
+	}
+	t.mu.RUnlock()
+
+	if len(activeBufTypes) == 0 {
+		return true
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(activeBufTypes))
+
+	for _, bufType := range activeBufTypes {
+		go func(bt BufferType) {
+			defer wg.Done()
+			listenerCh := make(chan struct{})
+
+			t.mu.Lock()
+			if _, ok := t.flushListeners[bt]; !ok {
+				t.flushListeners[bt] = nil
+			}
+			t.flushListeners[bt] = append(t.flushListeners[bt], listenerCh)
+			t.mu.Unlock()
+
+			if signalChan, ok := bufferSignalsToUse[bt]; ok && signalChan != nil {
+				select {
+				case signalChan <- struct{}{}:
+				default: // prevent blocking if signal channel is full or worker is busy
+				}
+			}
+			// Wait for this specific listener to be closed by the worker.
+			// The overall timeout is handled by the main Flush goroutine's select.
+			<-listenerCh
+		}(bufType)
+	}
+
 	done := make(chan struct{})
 	go func() {
-		t.mu.RLock()
-		for bufType := range t.buffers {
-			select {
-			case t.bufferSignal[bufType] <- struct{}{}:
-			default: // prevent blocking if signal already sent
-			}
-		}
-		t.mu.RUnlock()
+		wg.Wait()
 		close(done)
 	}()
+
 	select {
 	case <-done:
 		return true
@@ -490,6 +533,7 @@ func (t *HTTPTransport) Close() {
 		return
 	}
 	t.shutdownFunc()
+	t.wg.Wait()
 }
 
 func (t *HTTPTransport) worker(ctx context.Context, bufType BufferType, buffer Buffer) {
@@ -502,9 +546,19 @@ func (t *HTTPTransport) worker(ctx context.Context, bufType BufferType, buffer B
 		if len(events) > 0 {
 			t.createAndSendRequest(context.Background(), events)
 		}
-	}
 
+		// Notify listeners after processing the buffer and attempting to send.
+		t.mu.Lock()
+		listeners := t.flushListeners[bufType]
+		t.flushListeners[bufType] = nil
+		t.mu.Unlock()
+		for _, ch := range listeners {
+			close(ch)
+		}
+	}
+	t.mu.RLock()
 	newEventSig := t.bufferSignal[bufType]
+	t.mu.RUnlock()
 	for {
 		select {
 		case <-ctx.Done():

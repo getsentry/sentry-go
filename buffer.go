@@ -14,14 +14,6 @@ const (
 	LogBuffer         BufferType = "log"
 )
 
-type Priority int
-
-const (
-	HighPriority Priority = iota
-	MediumPriority
-	LowPriority
-)
-
 type Buffer interface {
 	Timeout() time.Duration
 	AddItem(event *Event)
@@ -32,35 +24,34 @@ type Buffer interface {
 	FlushItemsIfBatchSize() []*Event
 }
 
-func NewBuffer(bufferType BufferType, size int, batchSize int, priority Priority, timeout time.Duration) Buffer {
+func NewBuffer(bufferType BufferType, size int, batchSize int, timeout time.Duration) Buffer {
 	var e Buffer
 	switch bufferType {
 	case TransactionBuffer, ErrorBuffer:
 		e = &eventBuffer{
 			events:    make([]*Event, 0, size),
 			batchSize: batchSize,
-			priority:  priority,
 			timeout:   timeout,
 		}
 	case LogBuffer:
 		e = &logBuffer{
 			events:    make([]*Event, 0, size),
 			batchSize: batchSize,
-			priority:  priority,
 			timeout:   timeout,
 		}
+	default:
+		DebugLogger.Println("Invalid bufferType: fallback to noopBuffer")
+		e = &noopBuffer{}
 	}
 
 	return e
 }
 
 type eventBuffer struct {
-	mu         sync.Mutex
-	events     []*Event
-	bufferType BufferType
-	priority   Priority
-	timeout    time.Duration
-	batchSize  int
+	mu        sync.Mutex
+	events    []*Event
+	timeout   time.Duration
+	batchSize int
 }
 
 func (b *eventBuffer) Timeout() time.Duration {
@@ -114,15 +105,15 @@ func (b *eventBuffer) flushItemsLocked() []*Event {
 }
 
 type logBuffer struct {
-	mu         sync.Mutex
-	events     []*Event
-	bufferType BufferType
-	priority   Priority
-	timeout    time.Duration
-	batchSize  int
+	mu        sync.Mutex
+	events    []*Event
+	timeout   time.Duration
+	batchSize int
 }
 
 func (b *logBuffer) Timeout() time.Duration {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.timeout
 }
 
@@ -190,4 +181,28 @@ func eventToBuffer(eventType string) BufferType {
 	default:
 		return InvalidBuffer
 	}
+}
+
+// noopBuffer is an implementation of Buffer that does nothing.
+type noopBuffer struct{}
+
+func (b *noopBuffer) Timeout() time.Duration {
+	return time.Second
+}
+
+func (b *noopBuffer) AddItem(event *Event) {
+}
+
+func (b *noopBuffer) HasBatchSize() bool {
+	return false
+}
+
+func (b *noopBuffer) FlushItems() []*Event {
+	DebugLogger.Println("Buffer incorrectly initialised: no events to flush")
+	return nil
+}
+
+func (b *noopBuffer) FlushItemsIfBatchSize() []*Event {
+	DebugLogger.Println("Buffer incorrectly initialised: no events to flush")
+	return nil
 }
