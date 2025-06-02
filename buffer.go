@@ -198,11 +198,11 @@ func (b *noopBuffer) HasBatchSize() bool {
 }
 
 func (b *noopBuffer) FlushItems() []*Event {
-	DebugLogger.Println("Buffer incorrectly initialised: no events to flush")
+	DebugLogger.Println("NoopBuffer: no events to flush")
 	return nil
 }
 
 func (b *noopBuffer) FlushItemsIfBatchSize() []*Event {
-	DebugLogger.Println("Buffer incorrectly initialised: no events to flush")
+	DebugLogger.Println("NoopBuffer: no events to flush")
 	return nil
 }
