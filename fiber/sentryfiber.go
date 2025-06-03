@@ -143,7 +143,7 @@ func GetSpanFromContext(ctx *fiber.Ctx) *sentry.Span {
 func convert(ctx *fiber.Ctx) *http.Request {
 	defer func() {
 		if err := recover(); err != nil {
-			sentry.Logger.Printf("%v", err)
+			sentry.DebugLogger.Printf("%v", err)
 		}
 	}()
 
