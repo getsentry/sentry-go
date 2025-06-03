@@ -121,11 +121,20 @@ func (l *sentryLogger) log(ctx context.Context, level Level, severity int, messa
 		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
 	}
 	if l.client.options.SendDefaultPII {
-		user := GetHubFromContext(ctx).Scope().user
-		if !user.IsEmpty() {
-			attrs["user.id"] = Attribute{Value: user.ID, Type: "string"}
-			attrs["user.name"] = Attribute{Value: user.Name, Type: "string"}
-			attrs["user.email"] = Attribute{Value: user.Email, Type: "string"}
+		scope := hub.Scope()
+		if scope != nil {
+			user := scope.user
+			if !user.IsEmpty() {
+				if user.ID != "" {
+					attrs["user.id"] = Attribute{Value: user.ID, Type: "string"}
+				}
+				if user.Name != "" {
+					attrs["user.name"] = Attribute{Value: user.Name, Type: "string"}
+				}
+				if user.Email != "" {
+					attrs["user.email"] = Attribute{Value: user.Email, Type: "string"}
+				}
+			}
 		}
 	}
 	if spanID.String() != "0000000000000000" {
