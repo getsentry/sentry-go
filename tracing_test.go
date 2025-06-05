@@ -508,13 +508,14 @@ func TestContinueSpanFromRequest(t *testing.T) {
 
 func TestContinueTransactionFromHeaders(t *testing.T) {
 	tests := []struct {
+		name       string
 		traceStr   string
 		baggageStr string
 		// Using a pointer to Span so we don't implicitly copy Span.mu mutex
 		wantSpan *Span
 	}{
 		{
-			// No sentry-trace or baggage => nothing to do, unfrozen DSC
+			name:       "No sentry-trace or baggage => nothing to do, unfrozen DSC",
 			traceStr:   "",
 			baggageStr: "",
 			wantSpan: &Span{
@@ -526,20 +527,19 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			},
 		},
 		{
-			// Third-party baggage => nothing to do, unfrozen DSC
+			name:       "baggage => nothing to do, unfrozen DSC",
 			traceStr:   "",
 			baggageStr: "other-vendor-key1=value1;value2, other-vendor-key2=value3",
 			wantSpan: &Span{
 				Sampled: 0,
 				dynamicSamplingContext: DynamicSamplingContext{
 					Frozen:  false,
-					Entries: map[string]string{},
+					Entries: nil,
 				},
 			},
 		},
 		{
-			// sentry-trace and no baggage => we should create a new DSC and freeze it
-			// immediately.
+			name:       "sentry-trace and no baggage => we should create a new DSC and freeze it",
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
 			baggageStr: "",
 			wantSpan: &Span{
@@ -552,7 +552,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			},
 		},
 		{
-			// sentry-trace and baggage with Sentry values => we freeze immediately.
+			name:       "sentry-trace and baggage with Sentry values => we freeze immediately.",
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
 			baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
 			wantSpan: &Span{
@@ -569,14 +569,32 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:       "no sentry-trace and baggage with Sentry values => unfrozen DSC",
+			baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
+			wantSpan: &Span{
+				Sampled: 0,
+				dynamicSamplingContext: DynamicSamplingContext{
+					Frozen:  false,
+					Entries: nil,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
-		s := &Span{}
-		spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
-		spanOption(s)
+		t.Run(tt.name, func(t *testing.T) {
+			s := &Span{}
+			spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
+			spanOption(s)
 
-		assertEqual(t, s, tt.wantSpan)
+			if diff := cmp.Diff(tt.wantSpan, s, cmp.Options{
+				cmp.AllowUnexported(Span{}),
+				cmpopts.IgnoreFields(Span{}, "mu", "finishOnce"),
+			}); diff != "" {
+				t.Fatalf("Expected no difference on spans, got: %s", diff)
+			}
+		})
 	}
 }
 
