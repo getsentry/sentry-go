@@ -13,12 +13,12 @@ import (
 type LogLevel string
 
 const (
-	LogLevelTrace Level = "trace"
-	LogLevelDebug Level = "debug"
-	LogLevelInfo  Level = "info"
-	LogLevelWarn  Level = "warn"
-	LogLevelError Level = "error"
-	LogLevelFatal Level = "fatal"
+	LogLevelTrace LogLevel = "trace"
+	LogLevelDebug LogLevel = "debug"
+	LogLevelInfo  LogLevel = "info"
+	LogLevelWarn  LogLevel = "warn"
+	LogLevelError LogLevel = "error"
+	LogLevelFatal LogLevel = "fatal"
 )
 
 const (
@@ -63,11 +63,11 @@ func NewLogger(ctx context.Context) Logger {
 func (l *sentryLogger) Write(p []byte) (int, error) {
 	// Avoid sending double newlines to Sentry
 	msg := strings.TrimRight(string(p), "\n")
-	l.log(context.Background(), LevelInfo, LogSeverityInfo, msg)
+	l.log(context.Background(), LogLevelInfo, LogSeverityInfo, msg)
 	return len(p), nil
 }
 
-func (l *sentryLogger) log(ctx context.Context, level Level, severity int, message string, args ...interface{}) {
+func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, message string, args ...interface{}) {
 	if message == "" {
 		return
 	}
