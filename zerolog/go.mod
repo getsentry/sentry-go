@@ -7,6 +7,7 @@ replace github.com/getsentry/sentry-go => ../
 require (
 	github.com/buger/jsonparser v1.1.1
 	github.com/getsentry/sentry-go v0.33.0
+	github.com/google/go-cmp v0.5.9
 	github.com/rs/zerolog v1.33.0
 	github.com/stretchr/testify v1.9.0
 )
