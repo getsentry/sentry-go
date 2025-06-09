@@ -593,18 +593,17 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 	}
 }
 
-func Test_sentryLogger_SendDefaultPII(t *testing.T) {
+func Test_sentryLogger_UserAttributes(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
-		Dsn:            testDsn,
-		Transport:      mockTransport,
-		Release:        "v1.2.3",
-		Environment:    "testing",
-		ServerName:     "test-server",
-		EnableLogs:     true,
-		EnableTracing:  true,
-		SendDefaultPII: true,
+		Dsn:           testDsn,
+		Transport:     mockTransport,
+		Release:       "v1.2.3",
+		Environment:   "testing",
+		ServerName:    "test-server",
+		EnableLogs:    true,
+		EnableTracing: true,
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
@@ -653,61 +652,5 @@ func Test_sentryLogger_SendDefaultPII(t *testing.T) {
 		t.Error("missing user.email attribute")
 	} else if val.Value != "test@example.com" {
 		t.Errorf("unexpected user.email: got %v, want %v", val.Value, "test@example.com")
-	}
-}
-
-func Test_sentryLogger_NoUserInfoWithSendDefaultPII_False(t *testing.T) {
-	ctx := context.Background()
-	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
-		Dsn:           testDsn,
-		Transport:     mockTransport,
-		Release:       "v1.2.3",
-		Environment:   "testing",
-		ServerName:    "test-server",
-		EnableLogs:    true,
-		EnableTracing: true,
-	})
-	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub()
-	hub.BindClient(mockClient)
-	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-
-	hub.Scope().SetUser(User{
-		ID:    "user123",
-		Name:  "Test User",
-		Email: "test@example.com",
-	})
-
-	ctx = SetHubOnContext(ctx, hub)
-
-	l := NewLogger(ctx)
-	l.Info(ctx, "test message with PII")
-	Flush(20 * time.Millisecond)
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-
-	logs := events[0].Logs
-	if len(logs) != 1 {
-		t.Fatalf("expected 1 log, got %d", len(logs))
-	}
-
-	log := logs[0]
-	attrs := log.Attributes
-
-	if _, ok := attrs["user.id"]; ok {
-		t.Error("unexpected user.id attribute")
-	}
-
-	if _, ok := attrs["user.name"]; ok {
-		t.Error("unexpected user.name attribute")
-	}
-
-	if _, ok := attrs["user.email"]; ok {
-		t.Error("unexpected user.email attribute")
 	}
 }
