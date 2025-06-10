@@ -137,9 +137,9 @@ func TestOption_NewSentryHandler(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := tt.option.NewSentryHandler()
+			got := tt.option.NewSentryHandler(context.Background())
 			if !compareHandlers(got, tt.expected) {
-				t.Errorf("NewSentryHandler() = %+v, want %+v", got, tt.expected)
+				t.Errorf("NewSentryHandler(ctx) = %+v, want %+v", got, tt.expected)
 			}
 		})
 	}
@@ -300,7 +300,7 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 			ctx, mockTransport := newMockTransport()
 			handler := Option{
 				CaptureType: LogType,
-			}.NewSentryHandler()
+			}.NewSentryHandler(ctx)
 			logger := slog.New(handler)
 			logger.InfoContext(ctx, "test message", tt.attr...)
 			sentry.Flush(20 * time.Millisecond)
@@ -321,7 +321,7 @@ func TestSentryHandler_WithAttrsAndGroup(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 	baseHandler := Option{
 		CaptureType: LogType,
-	}.NewSentryHandler()
+	}.NewSentryHandler(ctx)
 	baseLogger := slog.New(baseHandler)
 
 	// Create a handler with nested groups and attributes
@@ -424,7 +424,7 @@ func TestSentryHandler_LogLevels(t *testing.T) {
 			handler := Option{
 				CaptureType: LogType,
 				Level:       slog.LevelDebug,
-			}.NewSentryHandler()
+			}.NewSentryHandler(ctx)
 			logger := slog.New(handler)
 
 			tt.logFunc(ctx, logger, tt.message)
@@ -451,7 +451,7 @@ func TestSentryHandler_ReplaceAttr(t *testing.T) {
 		CaptureType: LogType,
 		ReplaceAttr: replaceAttr,
 		Level:       slog.LevelDebug,
-	}.NewSentryHandler()
+	}.NewSentryHandler(ctx)
 
 	logger := slog.New(handler)
 	logger.InfoContext(ctx, "replace test", "foo", "bar", "num", 123)
@@ -476,7 +476,7 @@ func TestSentryHandler_AddSource(t *testing.T) {
 		CaptureType: LogType,
 		AddSource:   true,
 		Level:       slog.LevelDebug,
-	}.NewSentryHandler()
+	}.NewSentryHandler(ctx)
 
 	logger := slog.New(handler)
 	logger.InfoContext(ctx, "test with source")
@@ -499,7 +499,7 @@ func TestSentryHandler_EventType(t *testing.T) {
 	handler := Option{
 		CaptureType: EventType,
 		Level:       slog.LevelDebug,
-	}.NewSentryHandler()
+	}.NewSentryHandler(ctx)
 
 	logger := slog.New(handler)
 	message := fmt.Sprintf("%s message with event type", slog.LevelInfo)
@@ -529,7 +529,7 @@ func TestSentryHandler_EventTypeWithReplaceAttr(t *testing.T) {
 		CaptureType: EventType,
 		ReplaceAttr: replaceAttr,
 		Level:       slog.LevelDebug,
-	}.NewSentryHandler()
+	}.NewSentryHandler(ctx)
 
 	logger := slog.New(handler)
 	logger.InfoContext(ctx, "replace test event", "foo", "bar", "num", 123)

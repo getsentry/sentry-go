@@ -81,7 +81,7 @@ type Option struct {
 	ReplaceAttr func(groups []string, a slog.Attr) slog.Attr
 }
 
-func (o Option) NewSentryHandler() slog.Handler {
+func (o Option) NewSentryHandler(ctx context.Context) slog.Handler {
 	if o.Level == nil {
 		o.Level = slog.LevelDebug
 	}
@@ -94,7 +94,7 @@ func (o Option) NewSentryHandler() slog.Handler {
 		o.AttrFromContext = []func(ctx context.Context) []slog.Attr{}
 	}
 
-	logger := sentry.NewLogger(context.Background())
+	logger := sentry.NewLogger(ctx)
 	return &SentryHandler{
 		option: o,
 		attrs:  []slog.Attr{},
