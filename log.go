@@ -120,20 +120,18 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	} else if serverAddr, err := os.Hostname(); err == nil {
 		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
 	}
-	if l.client.options.SendDefaultPII {
-		scope := hub.Scope()
-		if scope != nil {
-			user := scope.user
-			if !user.IsEmpty() {
-				if user.ID != "" {
-					attrs["user.id"] = Attribute{Value: user.ID, Type: "string"}
-				}
-				if user.Name != "" {
-					attrs["user.name"] = Attribute{Value: user.Name, Type: "string"}
-				}
-				if user.Email != "" {
-					attrs["user.email"] = Attribute{Value: user.Email, Type: "string"}
-				}
+	scope := hub.Scope()
+	if scope != nil {
+		user := scope.user
+		if !user.IsEmpty() {
+			if user.ID != "" {
+				attrs["user.id"] = Attribute{Value: user.ID, Type: "string"}
+			}
+			if user.Name != "" {
+				attrs["user.name"] = Attribute{Value: user.Name, Type: "string"}
+			}
+			if user.Email != "" {
+				attrs["user.email"] = Attribute{Value: user.Email, Type: "string"}
 			}
 		}
 	}
