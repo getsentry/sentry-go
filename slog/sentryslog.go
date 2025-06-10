@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 )
 
 // Majority of the code in this package is derived from https://github.com/samber/slog-sentry AND https://github.com/samber/slog-common
@@ -41,7 +42,18 @@ var (
 	}
 )
 
+type CaptureType int
+
+const (
+	EventType CaptureType = iota
+	LogType
+)
+
 type Option struct {
+	// CaptureType defines how the SDK should handle captured logs. [EventType] instructs the SDK to send events,
+	// while [LogType], sends logs. Defaults to [EventType].
+	CaptureType CaptureType
+
 	// Level sets the minimum log level to capture and send to Sentry.
 	// Logs at this level and above will be processed. The default level is debug.
 	Level slog.Leveler
@@ -82,10 +94,12 @@ func (o Option) NewSentryHandler() slog.Handler {
 		o.AttrFromContext = []func(ctx context.Context) []slog.Attr{}
 	}
 
+	logger := sentry.NewLogger(context.Background())
 	return &SentryHandler{
 		option: o,
 		attrs:  []slog.Attr{},
 		groups: []string{},
+		logger: logger,
 	}
 }
 
@@ -93,6 +107,7 @@ type SentryHandler struct {
 	option Option
 	attrs  []slog.Attr
 	groups []string
+	logger sentry.Logger
 }
 
 func (h *SentryHandler) Enabled(_ context.Context, level slog.Level) bool {
@@ -108,8 +123,18 @@ func (h *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 	}
 
 	fromContext := contextExtractor(ctx, h.option.AttrFromContext)
-	event := h.option.Converter(h.option.AddSource, h.option.ReplaceAttr, append(h.attrs, fromContext...), h.groups, &record, hub)
-	hub.CaptureEvent(event)
+	switch h.option.CaptureType {
+	case EventType:
+		event := h.option.Converter(h.option.AddSource, h.option.ReplaceAttr, append(h.attrs, fromContext...), h.groups, &record, hub)
+		hub.CaptureEvent(event)
+	case LogType:
+		err := h.logHandle(ctx, record)
+		if err != nil {
+			return err
+		}
+	default:
+		sentry.DebugLogger.Printf("Invalid configuration Capture Type: %v. Dropping log.", h.option.CaptureType)
+	}
 
 	return nil
 }
@@ -119,6 +144,7 @@ func (h *SentryHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 		option: h.option,
 		attrs:  appendAttrsToGroup(h.groups, h.attrs, attrs...),
 		groups: h.groups,
+		logger: h.logger,
 	}
 }
 
@@ -132,5 +158,36 @@ func (h *SentryHandler) WithGroup(name string) slog.Handler {
 		option: h.option,
 		attrs:  h.attrs,
 		groups: append(h.groups, name),
+		logger: h.logger,
 	}
+}
+
+func (h *SentryHandler) logHandle(ctx context.Context, record slog.Record) error {
+	sentryAttributes := make([]attribute.Builder, 0)
+	replaceAttr := h.option.ReplaceAttr
+
+	// replace handler attributes first
+	replaceAttrs(replaceAttr, h.groups, h.attrs...)
+
+	record.Attrs(func(a slog.Attr) bool {
+		if replaceAttr != nil {
+			a = replaceAttr(h.groups, a)
+		}
+		sentryAttributes = append(sentryAttributes, attrToSentryLog("", a)...)
+		return true
+	})
+
+	h.logger.SetAttributes(sentryAttributes...)
+	switch record.Level {
+	case slog.LevelDebug:
+		h.logger.Debug(ctx, record.Message)
+	case slog.LevelInfo:
+		h.logger.Info(ctx, record.Message)
+	case slog.LevelWarn:
+		h.logger.Warn(ctx, record.Message)
+	case slog.LevelError:
+		h.logger.Error(ctx, record.Message)
+	}
+
+	return nil
 }

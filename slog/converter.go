@@ -4,9 +4,12 @@ import (
 	"encoding"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
+	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 )
 
 var (
@@ -120,4 +123,48 @@ func handleRequestAttributes(v slog.Value, event *sentry.Event) {
 			}
 		}
 	}
+}
+
+func attrToSentryLog(group string, a slog.Attr) []attribute.Builder {
+	switch a.Value.Kind() {
+	case slog.KindAny:
+		return []attribute.Builder{attribute.String(group+a.Key, fmt.Sprintf("%+v", a.Value.Any()))}
+	case slog.KindBool:
+		return []attribute.Builder{attribute.Bool(group+a.Key, a.Value.Bool())}
+	case slog.KindDuration:
+		return []attribute.Builder{attribute.String(group+a.Key, a.Value.Duration().String())}
+	case slog.KindFloat64:
+		return []attribute.Builder{attribute.Float64(group+a.Key, a.Value.Float64())}
+	case slog.KindInt64:
+		return []attribute.Builder{attribute.Int64(group+a.Key, a.Value.Int64())}
+	case slog.KindString:
+		return []attribute.Builder{attribute.String(group+a.Key, a.Value.String())}
+	case slog.KindTime:
+		return []attribute.Builder{attribute.String(group+a.Key, a.Value.Time().Format(time.RFC3339))}
+	case slog.KindUint64:
+		// TODO: currently Relay cannot process uint64, try to convert to a supported format.
+		val := a.Value.Uint64()
+		if val <= math.MaxInt64 {
+			return []attribute.Builder{attribute.Int64(a.Key, int64(val))}
+		} else {
+			// For values larger than int64 can handle, we are using float. Potential precision loss
+			return []attribute.Builder{attribute.Float64(a.Key, float64(val))}
+		}
+	case slog.KindLogValuer:
+		return []attribute.Builder{attribute.String(group+a.Key, a.Value.LogValuer().LogValue().String())}
+	case slog.KindGroup:
+		// Handle nested group attributes
+		var attrs []attribute.Builder
+		groupPrefix := group + a.Key
+		if groupPrefix != "" {
+			groupPrefix += "."
+		}
+		for _, subAttr := range a.Value.Group() {
+			attrs = append(attrs, attrToSentryLog(groupPrefix, subAttr)...)
+		}
+		return attrs
+	}
+
+	sentry.DebugLogger.Printf("Invalid type: dropping attribute with key: %v and value: %v", a.Key, a.Value)
+	return []attribute.Builder{}
 }
