@@ -214,7 +214,7 @@ func newMockTransport() (context.Context, *sentry.MockTransport) {
 	return ctx, mockTransport
 }
 
-func TestSlogHandlerAttrToSentryAttr(t *testing.T) {
+func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 	testCases := []struct {
 		name          string
 		attr          []any
@@ -311,7 +311,7 @@ func TestSlogHandlerAttrToSentryAttr(t *testing.T) {
 	}
 }
 
-func TestSlogHandlerWithAttrsAndGroup(t *testing.T) {
+func TestSentryHandler_WithAttrsAndGroup(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 	baseHandler := Option{
 		CaptureType: LogType,
@@ -371,7 +371,7 @@ func TestSlogHandlerWithAttrsAndGroup(t *testing.T) {
 	assert.False(t, found, "parent.child.child_attr should be missing from base log")
 }
 
-func TestSlogHandlerLogLevels(t *testing.T) {
+func TestSentryHandler_LogLevels(t *testing.T) {
 	testCases := []struct {
 		name          string
 		logFunc       func(ctx context.Context, logger *slog.Logger, msg string)
@@ -433,7 +433,7 @@ func TestSlogHandlerLogLevels(t *testing.T) {
 	}
 }
 
-func TestSlogHandlerReplaceAttr(t *testing.T) {
+func TestSentryHandler_ReplaceAttr(t *testing.T) {
 	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
 		if a.Value.Kind() == slog.KindString {
 			return slog.String(a.Key, "replaced")
