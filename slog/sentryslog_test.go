@@ -214,6 +214,12 @@ func newMockTransport() (context.Context, *sentry.MockTransport) {
 	return ctx, mockTransport
 }
 
+type mockLogValuer struct{}
+
+func (t mockLogValuer) LogValue() slog.Value {
+	return slog.StringValue("something")
+}
+
 func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -270,10 +276,10 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 			expectedValue: 9.223372036854776e+18,
 		},
 		{
-			name:          "LogValuer attribute",
-			attr:          []any{"key9", testLogValuer{}},
+			name:          "something attribute",
+			attr:          []any{"key9", mockLogValuer{}},
 			expectedKey:   "key9",
-			expectedValue: "[name= password=********]",
+			expectedValue: "something",
 		},
 		{
 			name:          "Any attribute (struct)",
@@ -462,4 +468,83 @@ func TestSentryHandler_ReplaceAttr(t *testing.T) {
 	val, found = attrs["num"]
 	assert.True(t, found)
 	assert.Equal(t, int64(123), val.Value)
+}
+
+func TestSentryHandler_AddSource(t *testing.T) {
+	ctx, mockTransport := newMockTransport()
+	handler := Option{
+		CaptureType: LogType,
+		AddSource:   true,
+		Level:       slog.LevelDebug,
+	}.NewSentryHandler()
+
+	logger := slog.New(handler)
+	logger.InfoContext(ctx, "test with source")
+	sentry.Flush(20 * time.Millisecond)
+
+	gotEvents := mockTransport.Events()
+	assert.Equal(t, 1, len(gotEvents))
+
+	// Check if source attribute exists
+	_, found := mockTransport.Events()[0].Logs[0].Attributes["source.line"]
+	assert.True(t, found, "source attribute not found")
+	_, found = mockTransport.Events()[0].Logs[0].Attributes["source.file"]
+	assert.True(t, found, "source attribute not found")
+	_, found = mockTransport.Events()[0].Logs[0].Attributes["source.function"]
+	assert.True(t, found, "source attribute not found")
+}
+
+func TestSentryHandler_EventType(t *testing.T) {
+	ctx, mockTransport := newMockTransport()
+	handler := Option{
+		CaptureType: EventType,
+		Level:       slog.LevelDebug,
+	}.NewSentryHandler()
+
+	logger := slog.New(handler)
+	message := fmt.Sprintf("%s message with event type", slog.LevelInfo)
+	logger.InfoContext(ctx, message, "attr_key", "attr_value")
+	sentry.Flush(20 * time.Millisecond)
+
+	events := mockTransport.Events()
+	assert.Equal(t, 1, len(events), "should capture one event")
+
+	assert.Nil(t, events[0].Logs, "should not have logs for EventType")
+	assert.Equal(t, message, events[0].Message, "event message should match")
+
+	_, found := events[0].Extra["attr_key"]
+	assert.True(t, found, "attribute should be in event's Extra map")
+}
+
+func TestSentryHandler_EventTypeWithReplaceAttr(t *testing.T) {
+	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
+		if a.Value.Kind() == slog.KindString {
+			return slog.String(a.Key, "replaced_"+a.Value.String())
+		}
+		return a
+	}
+
+	ctx, mockTransport := newMockTransport()
+	handler := Option{
+		CaptureType: EventType,
+		ReplaceAttr: replaceAttr,
+		Level:       slog.LevelDebug,
+	}.NewSentryHandler()
+
+	logger := slog.New(handler)
+	logger.InfoContext(ctx, "replace test event", "foo", "bar", "num", 123)
+	sentry.Flush(20 * time.Millisecond)
+
+	events := mockTransport.Events()
+	assert.Equal(t, 1, len(events))
+
+	// Check if attribute was replaced
+	fooAttr, found := events[0].Extra["foo"]
+	assert.True(t, found)
+	assert.Equal(t, "replaced_bar", fooAttr)
+
+	// Check if non-string attribute is unchanged
+	numAttr, found := events[0].Extra["num"]
+	assert.True(t, found)
+	assert.Equal(t, int64(123), numAttr)
 }

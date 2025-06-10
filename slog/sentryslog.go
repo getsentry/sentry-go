@@ -128,7 +128,7 @@ func (h *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 		event := h.option.Converter(h.option.AddSource, h.option.ReplaceAttr, append(h.attrs, fromContext...), h.groups, &record, hub)
 		hub.CaptureEvent(event)
 	case LogType:
-		err := h.logHandle(ctx, record)
+		err := h.handleAsLog(ctx, &record)
 		if err != nil {
 			return err
 		}
@@ -162,21 +162,19 @@ func (h *SentryHandler) WithGroup(name string) slog.Handler {
 	}
 }
 
-func (h *SentryHandler) logHandle(ctx context.Context, record slog.Record) error {
-	sentryAttributes := make([]attribute.Builder, 0)
-	replaceAttr := h.option.ReplaceAttr
+func (h *SentryHandler) handleAsLog(ctx context.Context, record *slog.Record) error {
+	// aggregate all attributes
+	attrs := appendRecordAttrsToAttrs(h.attrs, h.groups, record)
+	if h.option.AddSource {
+		attrs = append(attrs, source(sourceKey, record))
+	}
+	attrs = replaceAttrs(h.option.ReplaceAttr, []string{}, attrs...)
+	attrs = removeEmptyAttrs(attrs)
 
-	// replace handler attributes first
-	replaceAttrs(replaceAttr, h.groups, h.attrs...)
-
-	record.Attrs(func(a slog.Attr) bool {
-		if replaceAttr != nil {
-			a = replaceAttr(h.groups, a)
-		}
-		sentryAttributes = append(sentryAttributes, attrToSentryLog("", a)...)
-		return true
-	})
-
+	var sentryAttributes []attribute.Builder
+	for _, attr := range attrs {
+		sentryAttributes = append(sentryAttributes, attrToSentryLog("", attr)...)
+	}
 	h.logger.SetAttributes(sentryAttributes...)
 	switch record.Level {
 	case slog.LevelDebug:
