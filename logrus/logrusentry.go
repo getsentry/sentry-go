@@ -303,6 +303,7 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 			h.logger.SetAttributes(attribute.String(k, fmt.Sprint(v)))
 		}
 	}
+	h.logger.SetAttributes(attribute.String("sentry.origin", "auto.logger.logrus"))
 
 	switch entry.Level {
 	case logrus.TraceLevel:

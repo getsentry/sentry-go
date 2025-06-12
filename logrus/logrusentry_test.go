@@ -689,16 +689,17 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 		Level: sentry.LogLevelInfo,
 		Body:  "test message",
 		Attributes: map[string]sentry.Attribute{
-			"int8":    {int64(8), "integer"},
-			"int16":   {int64(16), "integer"},
-			"int32":   {int64(32), "integer"},
-			"int64":   {int64(64), "integer"},
-			"int":     {int64(42), "integer"},
-			"string":  {"test string", "string"},
-			"float32": {float64(float32(3.14)), "double"},
-			"float64": {6.28, "double"},
-			"bool":    {true, "boolean"},
-			"custom":  {"{test}", "string"},
+			"int8":          {int64(8), "integer"},
+			"int16":         {int64(16), "integer"},
+			"int32":         {int64(32), "integer"},
+			"int64":         {int64(64), "integer"},
+			"int":           {int64(42), "integer"},
+			"string":        {"test string", "string"},
+			"float32":       {float64(float32(3.14)), "double"},
+			"float64":       {6.28, "double"},
+			"bool":          {true, "boolean"},
+			"custom":        {"{test}", "string"},
+			"sentry.origin": {"auto.logger.logrus", "string"},
 		},
 	}
 
@@ -728,7 +729,7 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 	assert.Equal(t, 1, len(got), "unexpected number of events")
 	if diff := cmp.Diff(wantLog.Attributes, got[0].Logs[0].Attributes,
 		cmpopts.IgnoreMapEntries(func(k string, v sentry.Attribute) bool {
-			return k == "sentry.sdk.name" || k == "sentry.origin" || k == "sentry.release" || k == "sentry.sdk.version" || k == "sentry.server.address"
+			return k == "sentry.sdk.name" || k == "sentry.release" || k == "sentry.sdk.version" || k == "sentry.server.address"
 		}),
 	); diff != "" {
 		t.Errorf("Attributes mismatch (-want +got):\n%s", diff)
