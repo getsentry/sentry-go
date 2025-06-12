@@ -685,6 +685,11 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
 	logHook := hook.(*logHook)
 
+	type complexStruct struct {
+		Name  string
+		Value int
+	}
+
 	wantLog := sentry.Log{
 		Level: sentry.LogLevelInfo,
 		Body:  "test message",
@@ -694,32 +699,61 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 			"int32":         {int64(32), "integer"},
 			"int64":         {int64(64), "integer"},
 			"int":           {int64(42), "integer"},
+			"uint8":         {int64(8), "integer"},
+			"uint16":        {int64(16), "integer"},
+			"uint32":        {int64(32), "integer"},
+			"uint64":        {int64(64), "integer"},
+			"uint":          {int64(42), "integer"},
 			"string":        {"test string", "string"},
 			"float32":       {float64(float32(3.14)), "double"},
 			"float64":       {6.28, "double"},
 			"bool":          {true, "boolean"},
-			"custom":        {"{test}", "string"},
+			"string_slice":  {"[one two three]", "string"},
+			"string_map":    {"map[a:1 b:2 c:3]", "string"},
+			"complex":       {"{test 42}", "string"},
 			"sentry.origin": {"auto.logger.logrus", "string"},
+			"error.message": {Value: "test error", Type: "string"},
+			"error.type":    {Value: "*errors.errorString", Type: "string"},
+			"http.method":   {Value: "GET", Type: "string"},
+			"http.url":      {Value: "https://example.com/test", Type: "string"},
+			"user.email":    {Value: "test@example.com", Type: "string"},
+			"user.id":       {Value: "test-user", Type: "string"},
+			"user.username": {Value: "tester", Type: "string"},
 		},
 	}
 
 	entry := &logrus.Entry{
 		Level: logrus.InfoLevel,
 		Data: logrus.Fields{
-			"int8":    int8(8),
-			"int16":   int16(16),
-			"int32":   int32(32),
-			"int64":   int64(64),
-			"int":     42,
-			"string":  "test string",
-			"float32": float32(3.14),
-			"float64": float64(6.28),
-			"bool":    true,
-			"custom":  struct{ Name string }{"test"},
+			"int8":         int8(8),
+			"int16":        int16(16),
+			"int32":        int32(32),
+			"int64":        int64(64),
+			"int":          42,
+			"uint8":        uint8(8),
+			"uint16":       uint16(16),
+			"uint32":       uint32(32),
+			"uint64":       uint64(64),
+			"uint":         uint(42),
+			"string":       "test string",
+			"float32":      float32(3.14),
+			"float64":      float64(6.28),
+			"bool":         true,
+			"error":        errors.New("test error"),
+			"string_slice": []string{"one", "two", "three"},
+			"string_map":   map[string]string{"a": "1", "b": "2", "c": "3"},
+			"complex":      complexStruct{Name: "test", Value: 42},
 		},
 		Message: "test message",
 		Context: context.Background(),
 	}
+
+	// Add fields for request, user and transaction
+	req, _ := http.NewRequest("GET", "https://example.com/test", nil)
+	user := sentry.User{ID: "test-user", Email: "test@example.com", Username: "tester"}
+	entry.Data[logHook.key(FieldRequest)] = req
+	entry.Data[logHook.key(FieldUser)] = user
+	entry.Data[logHook.key(FieldFingerprint)] = []string{"test-fingerprint"}
 
 	err := logHook.Fire(entry)
 	assert.NoError(t, err)

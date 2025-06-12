@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
+	"reflect"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -284,6 +286,13 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 	}
 
 	for k, v := range entry.Data {
+		// Skip specific fields that might be handled separately
+		if k == h.key(FieldRequest) || k == h.key(FieldUser) ||
+			k == h.key(FieldFingerprint) || k == FieldGoVersion ||
+			k == FieldMaxProcs || k == logrus.ErrorKey {
+			continue
+		}
+
 		switch val := v.(type) {
 		case int8:
 			h.logger.SetAttributes(attribute.Int(k, int(val)))
@@ -295,6 +304,15 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 			h.logger.SetAttributes(attribute.Int(k, int(val)))
 		case int:
 			h.logger.SetAttributes(attribute.Int(k, val))
+		case uint, uint8, uint16, uint32, uint64:
+			uval := reflect.ValueOf(val).Convert(reflect.TypeOf(uint64(0))).Uint()
+			// currently Relay cannot process uint64, try to convert to a supported format.
+			if uval <= math.MaxInt64 {
+				h.logger.SetAttributes(attribute.Int64(k, int64(uval)))
+			} else {
+				// For values larger than int64 can handle, we are using float. Potential precision loss
+				h.logger.SetAttributes(attribute.Float64(k, float64(uval)))
+			}
 		case string:
 			h.logger.SetAttributes(attribute.String(k, val))
 		case float32:
@@ -306,6 +324,32 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 		default:
 			// can't drop argument, fallback to string conversion
 			h.logger.SetAttributes(attribute.String(k, fmt.Sprint(v)))
+		}
+	}
+	// Handle request field
+	key := h.key(FieldRequest)
+	if req, ok := entry.Data[key].(*http.Request); ok {
+		h.logger.SetAttributes(attribute.String("http.method", req.Method))
+		h.logger.SetAttributes(attribute.String("http.url", req.URL.String()))
+	}
+
+	// Handle error field
+	if err, ok := entry.Data[logrus.ErrorKey].(error); ok {
+		h.logger.SetAttributes(attribute.String("error.type", fmt.Sprintf("%T", err)))
+		h.logger.SetAttributes(attribute.String("error.message", err.Error()))
+	}
+
+	// Handle user field
+	key = h.key(FieldUser)
+	if user, ok := entry.Data[key].(sentry.User); ok {
+		if user.ID != "" {
+			h.logger.SetAttributes(attribute.String("user.id", user.ID))
+		}
+		if user.Email != "" {
+			h.logger.SetAttributes(attribute.String("user.email", user.Email))
+		}
+		if user.Name != "" {
+			h.logger.SetAttributes(attribute.String("user.name", user.Name))
 		}
 	}
 	h.logger.SetAttributes(attribute.String("sentry.origin", "auto.logger.logrus"))
@@ -323,8 +367,14 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 		h.logger.Error(ctx, entry.Message)
 	case logrus.FatalLevel:
 		h.logger.Fatal(ctx, entry.Message)
+	case logrus.PanicLevel:
+		h.logger.Panic(ctx, entry.Message)
 	default:
 		sentry.DebugLogger.Printf("Invalid logrus logging level: %v. Dropping log.", entry.Level)
+		if h.fallback != nil {
+			return h.fallback(entry)
+		}
+		return errors.New("invalid log level")
 	}
 	return nil
 }
