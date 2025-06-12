@@ -313,6 +313,7 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 			value, found := mockTransport.Events()[0].Logs[0].Attributes[tt.expectedKey]
 			assert.True(t, found, "Attribute %s not found", tt.expectedKey)
 			assert.Equal(t, tt.expectedValue, value.Value, "For %s, expected value %v, got %v", tt.expectedKey, tt.expectedValue, value)
+			assert.Equal(t, "auto.logger.slog", mockTransport.Events()[0].Logs[0].Attributes["sentry.origin"].Value, "incorrect sentry.origin")
 		})
 	}
 }

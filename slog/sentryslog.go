@@ -176,6 +176,7 @@ func (h *SentryHandler) handleAsLog(ctx context.Context, record *slog.Record) er
 		sentryAttributes = append(sentryAttributes, attrToSentryLog("", attr)...)
 	}
 	h.logger.SetAttributes(sentryAttributes...)
+	h.logger.SetAttributes(attribute.String("sentry.origin", "auto.logger.slog"))
 	switch record.Level {
 	case slog.LevelDebug:
 		h.logger.Debug(ctx, record.Message)
