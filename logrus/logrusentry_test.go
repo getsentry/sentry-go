@@ -718,7 +718,7 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 			"http.url":      {Value: "https://example.com/test", Type: "string"},
 			"user.email":    {Value: "test@example.com", Type: "string"},
 			"user.id":       {Value: "test-user", Type: "string"},
-			"user.username": {Value: "tester", Type: "string"},
+			"user.name":     {Value: "tester", Type: "string"},
 		},
 	}
 
@@ -750,7 +750,7 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 
 	// Add fields for request, user and transaction
 	req, _ := http.NewRequest("GET", "https://example.com/test", nil)
-	user := sentry.User{ID: "test-user", Email: "test@example.com", Username: "tester"}
+	user := sentry.User{ID: "test-user", Email: "test@example.com", Name: "tester"}
 	entry.Data[logHook.key(FieldRequest)] = req
 	entry.Data[logHook.key(FieldUser)] = user
 	entry.Data[logHook.key(FieldFingerprint)] = []string{"test-fingerprint"}
