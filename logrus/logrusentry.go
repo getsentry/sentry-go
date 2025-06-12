@@ -278,6 +278,11 @@ func (h *logHook) key(key string) string {
 }
 
 func (h *logHook) Fire(entry *logrus.Entry) error {
+	ctx := context.Background()
+	if entry.Context != nil {
+		ctx = entry.Context
+	}
+
 	for k, v := range entry.Data {
 		switch val := v.(type) {
 		case int8:
@@ -307,17 +312,17 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 
 	switch entry.Level {
 	case logrus.TraceLevel:
-		h.logger.Trace(entry.Context, entry.Message)
+		h.logger.Trace(ctx, entry.Message)
 	case logrus.DebugLevel:
-		h.logger.Debug(entry.Context, entry.Message)
+		h.logger.Debug(ctx, entry.Message)
 	case logrus.InfoLevel:
-		h.logger.Info(entry.Context, entry.Message)
+		h.logger.Info(ctx, entry.Message)
 	case logrus.WarnLevel:
-		h.logger.Warn(entry.Context, entry.Message)
+		h.logger.Warn(ctx, entry.Message)
 	case logrus.ErrorLevel:
-		h.logger.Error(entry.Context, entry.Message)
+		h.logger.Error(ctx, entry.Message)
 	case logrus.FatalLevel:
-		h.logger.Fatal(entry.Context, entry.Message)
+		h.logger.Fatal(ctx, entry.Message)
 	default:
 		sentry.DebugLogger.Printf("Invalid logrus logging level: %v. Dropping log.", entry.Level)
 	}
