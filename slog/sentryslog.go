@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 )
 
 // Majority of the code in this package is derived from https://github.com/samber/slog-sentry AND https://github.com/samber/slog-common
@@ -42,9 +43,17 @@ var (
 )
 
 type Option struct {
-	// Level sets the minimum log level to capture and send to Sentry.
-	// Logs at this level and above will be processed. The default level is debug.
+	// Deprecated: Level is kept for backwards compatibility and defaults to EventLevel.
 	Level slog.Leveler
+	// EventLevel sets the minimum log level to capture and send to Sentry as an Event.
+	// Logs at this level and above will be processed as events.
+	// Defaults to slog.LevelError.
+	EventLevel slog.Leveler
+
+	// LogLevel sets the minimum log level to capture and send to Sentry as a Log entry.
+	// Logs at this level and above will be processed as log entries.
+	// Defaults to slog.LevelDebug.
+	LogLevel slog.Leveler
 
 	// Hub specifies the Sentry Hub to use for capturing events.
 	// If not provided, the current Hub is used by default.
@@ -69,9 +78,17 @@ type Option struct {
 	ReplaceAttr func(groups []string, a slog.Attr) slog.Attr
 }
 
-func (o Option) NewSentryHandler() slog.Handler {
-	if o.Level == nil {
-		o.Level = slog.LevelDebug
+func (o Option) NewSentryHandler(ctx context.Context) slog.Handler {
+	if o.EventLevel == nil {
+		// backwards compatibility
+		if o.Level != nil {
+			o.EventLevel = o.Level
+		} else {
+			o.EventLevel = slog.LevelError
+		}
+	}
+	if o.LogLevel == nil {
+		o.LogLevel = slog.LevelDebug
 	}
 
 	if o.Converter == nil {
@@ -82,24 +99,80 @@ func (o Option) NewSentryHandler() slog.Handler {
 		o.AttrFromContext = []func(ctx context.Context) []slog.Attr{}
 	}
 
-	return &SentryHandler{
+	logger := sentry.NewLogger(ctx)
+	eventHandler := &eventHandler{
 		option: o,
 		attrs:  []slog.Attr{},
 		groups: []string{},
 	}
+	logHandler := &logHandler{
+		option: o,
+		attrs:  []slog.Attr{},
+		groups: []string{},
+		logger: logger,
+	}
+
+	return &SentryHandler{
+		eventHandler: eventHandler,
+		logHandler:   logHandler,
+	}
 }
 
 type SentryHandler struct {
+	eventHandler *eventHandler
+	logHandler   *logHandler
+}
+
+func (h *SentryHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.eventHandler.Enabled(ctx, level) || h.logHandler.Enabled(ctx, level)
+}
+
+func (h *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
+	var err error
+
+	if h.eventHandler.Enabled(ctx, record.Level) {
+		if handleErr := h.eventHandler.Handle(ctx, record); handleErr != nil {
+			err = handleErr
+		}
+	}
+
+	if h.logHandler.Enabled(ctx, record.Level) {
+		if handleErr := h.logHandler.Handle(ctx, record); handleErr != nil {
+			err = handleErr
+		}
+	}
+
+	return err
+}
+
+func (h *SentryHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &SentryHandler{
+		eventHandler: h.eventHandler.WithAttrs(attrs),
+		logHandler:   h.logHandler.WithAttrs(attrs),
+	}
+}
+
+func (h *SentryHandler) WithGroup(name string) slog.Handler {
+	return &SentryHandler{
+		eventHandler: h.eventHandler.WithGroup(name),
+		logHandler:   h.logHandler.WithGroup(name),
+	}
+}
+
+type eventHandler struct {
 	option Option
 	attrs  []slog.Attr
 	groups []string
 }
 
-func (h *SentryHandler) Enabled(_ context.Context, level slog.Level) bool {
-	return level >= h.option.Level.Level()
+func (h *eventHandler) Enabled(_ context.Context, level slog.Level) bool {
+	if h.option.EventLevel == nil {
+		return false
+	}
+	return level >= h.option.EventLevel.Level()
 }
 
-func (h *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
+func (h *eventHandler) Handle(ctx context.Context, record slog.Record) error {
 	hub := sentry.CurrentHub()
 	if hubFromContext := sentry.GetHubFromContext(ctx); hubFromContext != nil {
 		hub = hubFromContext
@@ -110,27 +183,90 @@ func (h *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 	fromContext := contextExtractor(ctx, h.option.AttrFromContext)
 	event := h.option.Converter(h.option.AddSource, h.option.ReplaceAttr, append(h.attrs, fromContext...), h.groups, &record, hub)
 	hub.CaptureEvent(event)
-
 	return nil
 }
 
-func (h *SentryHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &SentryHandler{
+func (h *eventHandler) WithAttrs(attrs []slog.Attr) *eventHandler {
+	return &eventHandler{
 		option: h.option,
 		attrs:  appendAttrsToGroup(h.groups, h.attrs, attrs...),
 		groups: h.groups,
 	}
 }
 
-func (h *SentryHandler) WithGroup(name string) slog.Handler {
-	// https://cs.opensource.google/go/x/exp/+/46b07846:slog/handler.go;l=247
+func (h *eventHandler) WithGroup(name string) *eventHandler {
 	if name == "" {
 		return h
 	}
 
-	return &SentryHandler{
+	return &eventHandler{
 		option: h.option,
 		attrs:  h.attrs,
 		groups: append(h.groups, name),
+	}
+}
+
+type logHandler struct {
+	option Option
+	attrs  []slog.Attr
+	groups []string
+	logger sentry.Logger
+}
+
+func (h *logHandler) Enabled(_ context.Context, level slog.Level) bool {
+	if h.option.LogLevel == nil {
+		return false
+	}
+	return level >= h.option.LogLevel.Level()
+}
+
+func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
+	// aggregate all attributes
+	attrs := appendRecordAttrsToAttrs(h.attrs, h.groups, &record)
+	if h.option.AddSource {
+		attrs = append(attrs, source(sourceKey, &record))
+	}
+	attrs = replaceAttrs(h.option.ReplaceAttr, []string{}, attrs...)
+	attrs = removeEmptyAttrs(attrs)
+
+	var sentryAttributes []attribute.Builder
+	for _, attr := range attrs {
+		sentryAttributes = append(sentryAttributes, attrToSentryLog("", attr)...)
+	}
+	h.logger.SetAttributes(sentryAttributes...)
+	h.logger.SetAttributes(attribute.String("sentry.origin", "auto.logger.slog"))
+	switch record.Level {
+	case slog.LevelDebug:
+		h.logger.Debug(ctx, record.Message)
+	case slog.LevelInfo:
+		h.logger.Info(ctx, record.Message)
+	case slog.LevelWarn:
+		h.logger.Warn(ctx, record.Message)
+	case slog.LevelError:
+		h.logger.Error(ctx, record.Message)
+	}
+
+	return nil
+}
+
+func (h *logHandler) WithAttrs(attrs []slog.Attr) *logHandler {
+	return &logHandler{
+		option: h.option,
+		attrs:  appendAttrsToGroup(h.groups, h.attrs, attrs...),
+		groups: h.groups,
+		logger: h.logger,
+	}
+}
+
+func (h *logHandler) WithGroup(name string) *logHandler {
+	if name == "" {
+		return h
+	}
+
+	return &logHandler{
+		option: h.option,
+		attrs:  h.attrs,
+		groups: append(h.groups, name),
+		logger: h.logger,
 	}
 }

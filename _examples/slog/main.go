@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -22,9 +23,14 @@ func main() {
 
 	defer sentry.Flush(2 * time.Second)
 
-	logger := slog.New(sentryslog.Option{Level: slog.LevelDebug}.NewSentryHandler())
+	ctx := context.Background()
+	logger := slog.New(sentryslog.Option{
+		LogLevel:   slog.LevelInfo,
+		EventLevel: slog.LevelError,
+	}.NewSentryHandler(ctx))
 	logger = logger.With("release", "v1.0.0")
 
+	// message level is Error and will be handled by both the event & log handler.
 	logger.
 		With(
 			slog.Group("user",
