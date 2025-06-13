@@ -142,7 +142,7 @@ func attrToSentryLog(group string, a slog.Attr) []attribute.Builder {
 	case slog.KindTime:
 		return []attribute.Builder{attribute.String(group+a.Key, a.Value.Time().Format(time.RFC3339))}
 	case slog.KindUint64:
-		// TODO: currently Relay cannot process uint64, try to convert to a supported format.
+		// currently Relay cannot process uint64, try to convert to a supported format.
 		val := a.Value.Uint64()
 		if val <= math.MaxInt64 {
 			return []attribute.Builder{attribute.Int64(group+a.Key, int64(val))}
