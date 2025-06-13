@@ -594,6 +594,8 @@ func (s *Span) toEvent() *Event {
 }
 
 func (s *Span) traceContext() *TraceContext {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return &TraceContext{
 		TraceID:      s.TraceID,
 		SpanID:       s.SpanID,
