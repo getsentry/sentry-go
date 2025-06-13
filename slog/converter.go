@@ -145,10 +145,10 @@ func attrToSentryLog(group string, a slog.Attr) []attribute.Builder {
 		// TODO: currently Relay cannot process uint64, try to convert to a supported format.
 		val := a.Value.Uint64()
 		if val <= math.MaxInt64 {
-			return []attribute.Builder{attribute.Int64(a.Key, int64(val))}
+			return []attribute.Builder{attribute.Int64(group+a.Key, int64(val))}
 		} else {
 			// For values larger than int64 can handle, we are using float. Potential precision loss
-			return []attribute.Builder{attribute.Float64(a.Key, float64(val))}
+			return []attribute.Builder{attribute.Float64(group+a.Key, float64(val))}
 		}
 	case slog.KindLogValuer:
 		return []attribute.Builder{attribute.String(group+a.Key, a.Value.LogValuer().LogValue().String())}
