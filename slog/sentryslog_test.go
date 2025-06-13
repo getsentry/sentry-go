@@ -66,11 +66,8 @@ func TestSentryHandler_Enabled(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			h := SentryHandler{option: Option{EventLevel: tt.eventLevel, LogLevel: tt.logLevel}}
-			// Manually ensure NewSentryHandler defaults are not overriding specific nil tests if any were intended
-			// However, the current Enabled logic handles nil by effectively setting level to MaxInt
-			// And NewSentryHandler sets defaults if nil, so option.EventLevel/LogLevel won't be nil in practice after NewSentryHandler.
-			// For this unit test of Enabled directly, we pass the levels.
+			option := Option{EventLevel: tt.eventLevel, LogLevel: tt.logLevel}
+			h := option.NewSentryHandler(context.Background())
 			if got := h.Enabled(context.Background(), tt.checkLevel); got != tt.expected {
 				t.Errorf("Enabled() = %v, want %v (EventLevel: %s, LogLevel: %s, CheckLevel: %s)", got, tt.expected, tt.eventLevel, tt.logLevel, tt.checkLevel)
 			}
@@ -98,10 +95,19 @@ func TestSentryHandler_WithAttrs(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			h := SentryHandler{attrs: tt.initialAttrs}
+			option := Option{}
+			h := option.NewSentryHandler(context.Background()).(*SentryHandler)
+
+			h.eventHandler.attrs = tt.initialAttrs
+			h.logHandler.attrs = tt.initialAttrs
+
 			newHandler := h.WithAttrs(tt.newAttrs)
-			if !equalAttrs(newHandler.(*SentryHandler).attrs, tt.expected) {
-				t.Errorf("WithAttrs() = %+v, want %+v", newHandler.(*SentryHandler).attrs, tt.expected)
+			sh := newHandler.(*SentryHandler)
+			if !equalAttrs(sh.eventHandler.attrs, tt.expected) {
+				t.Errorf("eventHandler WithAttrs() = %+v, want %+v", sh.eventHandler.attrs, tt.expected)
+			}
+			if !equalAttrs(sh.logHandler.attrs, tt.expected) {
+				t.Errorf("logHandler WithAttrs() = %+v, want %+v", sh.logHandler.attrs, tt.expected)
 			}
 		})
 	}
@@ -127,10 +133,17 @@ func TestSentryHandler_WithGroup(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			h := SentryHandler{groups: tt.initialGroups}
+			option := Option{}
+			h := option.NewSentryHandler(context.Background()).(*SentryHandler)
+			h.eventHandler.groups = tt.initialGroups
+			h.logHandler.groups = tt.initialGroups
 			newHandler := h.WithGroup(tt.newGroup)
-			if !equalStrings(newHandler.(*SentryHandler).groups, tt.expected) {
-				t.Errorf("WithGroup() = %+v, want %+v", newHandler.(*SentryHandler).groups, tt.expected)
+			sh := newHandler.(*SentryHandler)
+			if !equalStrings(sh.eventHandler.groups, tt.expected) {
+				t.Errorf("eventHandler WithGroup() = %+v, want %+v", sh.eventHandler.groups, tt.expected)
+			}
+			if !equalStrings(sh.logHandler.groups, tt.expected) {
+				t.Errorf("logHandler WithGroup() = %+v, want %+v", sh.logHandler.groups, tt.expected)
 			}
 		})
 	}
@@ -139,15 +152,15 @@ func TestSentryHandler_WithGroup(t *testing.T) {
 func TestOption_NewSentryHandler(t *testing.T) {
 	tests := map[string]struct {
 		option   Option
-		expected slog.Handler
+		expected Option
 	}{
 		"Default options": {
 			option: Option{},
-			expected: &SentryHandler{option: Option{
+			expected: Option{
 				EventLevel:      slog.LevelError,
 				LogLevel:        slog.LevelDebug,
 				Converter:       DefaultConverter,
-				AttrFromContext: []func(ctx context.Context) []slog.Attr{}}},
+				AttrFromContext: []func(ctx context.Context) []slog.Attr{}},
 		},
 		"Custom options": {
 			option: Option{
@@ -156,15 +169,11 @@ func TestOption_NewSentryHandler(t *testing.T) {
 				Converter:       CustomConverter,
 				AttrFromContext: []func(ctx context.Context) []slog.Attr{customAttrFromContext},
 			},
-			expected: &SentryHandler{
-				option: Option{
-					EventLevel:      slog.LevelWarn,
-					LogLevel:        slog.LevelInfo,
-					Converter:       CustomConverter,
-					AttrFromContext: []func(ctx context.Context) []slog.Attr{customAttrFromContext},
-				},
-				attrs:  []slog.Attr{},
-				groups: []string{},
+			expected: Option{
+				EventLevel:      slog.LevelWarn,
+				LogLevel:        slog.LevelInfo,
+				Converter:       CustomConverter,
+				AttrFromContext: []func(ctx context.Context) []slog.Attr{customAttrFromContext},
 			},
 		},
 	}
@@ -172,8 +181,19 @@ func TestOption_NewSentryHandler(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			got := tt.option.NewSentryHandler(context.Background())
-			if !compareHandlers(got, tt.expected) {
-				t.Errorf("NewSentryHandler(ctx) = %+v, want %+v", got, tt.expected)
+			sh := got.(*SentryHandler)
+
+			if sh.eventHandler.option.EventLevel.Level() != tt.expected.EventLevel.Level() {
+				t.Errorf("eventHandler EventLevel = %v, want %v", sh.eventHandler.option.EventLevel.Level(), tt.expected.EventLevel.Level())
+			}
+			if sh.logHandler.option.LogLevel.Level() != tt.expected.LogLevel.Level() {
+				t.Errorf("logHandler LogLevel = %v, want %v", sh.logHandler.option.LogLevel.Level(), tt.expected.LogLevel.Level())
+			}
+			if !equalFuncs(sh.eventHandler.option.AttrFromContext, tt.expected.AttrFromContext) {
+				t.Errorf("eventHandler AttrFromContext functions don't match")
+			}
+			if !equalFuncs(sh.logHandler.option.AttrFromContext, tt.expected.AttrFromContext) {
+				t.Errorf("logHandler AttrFromContext functions don't match")
 			}
 		})
 	}
@@ -201,18 +221,6 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-func compareHandlers(h1, h2 slog.Handler) bool {
-	sh1, ok1 := h1.(*SentryHandler)
-	sh2, ok2 := h2.(*SentryHandler)
-	if !ok1 || !ok2 {
-		return false
-	}
-	// Compare Leveler by their Level() value as NewSentryHandler ensures they are not nil.
-	return sh1.option.EventLevel.Level() == sh2.option.EventLevel.Level() &&
-		sh1.option.LogLevel.Level() == sh2.option.LogLevel.Level() &&
-		equalFuncs(sh1.option.AttrFromContext, sh2.option.AttrFromContext)
 }
 
 func equalFuncs(a, b []func(ctx context.Context) []slog.Attr) bool {
