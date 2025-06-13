@@ -3,6 +3,7 @@ package sentryslog
 import (
 	"context"
 	"log/slog"
+	"math"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
@@ -42,21 +43,18 @@ var (
 	}
 )
 
-type CaptureType int
-
-const (
-	EventType CaptureType = iota
-	LogType
-)
-
 type Option struct {
-	// CaptureType defines how the SDK should handle captured logs. [EventType] instructs the SDK to send events,
-	// while [LogType], sends logs. Defaults to [EventType].
-	CaptureType CaptureType
-
-	// Level sets the minimum log level to capture and send to Sentry.
-	// Logs at this level and above will be processed. The default level is debug.
+	// Deprecated: Level is kept for backwards compatibility and defaults to EventLevel.
 	Level slog.Leveler
+	// EventLevel sets the minimum log level to capture and send to Sentry as an Event.
+	// Logs at this level and above will be processed as events.
+	// Defaults to slog.LevelError.
+	EventLevel slog.Leveler
+
+	// LogLevel sets the minimum log level to capture and send to Sentry as a Log entry.
+	// Logs at this level and above will be processed as log entries.
+	// Defaults to slog.LevelDebug.
+	LogLevel slog.Leveler
 
 	// Hub specifies the Sentry Hub to use for capturing events.
 	// If not provided, the current Hub is used by default.
@@ -82,8 +80,16 @@ type Option struct {
 }
 
 func (o Option) NewSentryHandler(ctx context.Context) slog.Handler {
-	if o.Level == nil {
-		o.Level = slog.LevelDebug
+	if o.EventLevel == nil {
+		// backwards compatibility
+		if o.Level != nil {
+			o.EventLevel = o.Level
+		} else {
+			o.EventLevel = slog.LevelError
+		}
+	}
+	if o.LogLevel == nil {
+		o.LogLevel = slog.LevelDebug
 	}
 
 	if o.Converter == nil {
@@ -111,7 +117,17 @@ type SentryHandler struct {
 }
 
 func (h *SentryHandler) Enabled(_ context.Context, level slog.Level) bool {
-	return level >= h.option.Level.Level()
+	eventLevel := slog.Level(math.MaxInt)
+	if h.option.EventLevel != nil {
+		eventLevel = h.option.EventLevel.Level()
+	}
+
+	logLevel := slog.Level(math.MaxInt)
+	if h.option.LogLevel != nil {
+		logLevel = h.option.LogLevel.Level()
+	}
+
+	return level >= eventLevel || level >= logLevel
 }
 
 func (h *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
@@ -122,20 +138,25 @@ func (h *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 		hub = h.option.Hub
 	}
 
-	fromContext := contextExtractor(ctx, h.option.AttrFromContext)
-	switch h.option.CaptureType {
-	case EventType:
-		event := h.option.Converter(h.option.AddSource, h.option.ReplaceAttr, append(h.attrs, fromContext...), h.groups, &record, hub)
-		hub.CaptureEvent(event)
-	case LogType:
-		err := h.handleAsLog(ctx, &record)
-		if err != nil {
+	if h.option.EventLevel != nil && record.Level >= h.option.EventLevel.Level() {
+		if err := h.handleAsEvent(ctx, &record, hub); err != nil {
 			return err
 		}
-	default:
-		sentry.DebugLogger.Printf("Invalid configuration Capture Type: %v. Dropping log.", h.option.CaptureType)
 	}
 
+	if h.option.LogLevel != nil && record.Level >= h.option.LogLevel.Level() {
+		if err := h.handleAsLog(ctx, &record, hub); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (h *SentryHandler) handleAsEvent(ctx context.Context, record *slog.Record, hub *sentry.Hub) error {
+	fromContext := contextExtractor(ctx, h.option.AttrFromContext)
+	event := h.option.Converter(h.option.AddSource, h.option.ReplaceAttr, append(h.attrs, fromContext...), h.groups, record, hub)
+	hub.CaptureEvent(event)
 	return nil
 }
 
@@ -162,7 +183,7 @@ func (h *SentryHandler) WithGroup(name string) slog.Handler {
 	}
 }
 
-func (h *SentryHandler) handleAsLog(ctx context.Context, record *slog.Record) error {
+func (h *SentryHandler) handleAsLog(ctx context.Context, record *slog.Record, _ *sentry.Hub) error {
 	// aggregate all attributes
 	attrs := appendRecordAttrsToAttrs(h.attrs, h.groups, record)
 	if h.option.AddSource {

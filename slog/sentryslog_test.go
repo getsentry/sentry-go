@@ -10,41 +10,69 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSentryHandler_Enabled(t *testing.T) {
 	tests := map[string]struct {
-		handlerLevel slog.Level
-		checkLevel   slog.Level
-		expected     bool
+		eventLevel slog.Leveler
+		logLevel   slog.Leveler
+		checkLevel slog.Level
+		expected   bool
 	}{
-		"LevelDebug, CheckDebug": {
-			handlerLevel: slog.LevelDebug,
-			checkLevel:   slog.LevelDebug,
-			expected:     true,
+		"Event:Error, Log:Info, Check:Debug": {
+			eventLevel: slog.LevelError,
+			logLevel:   slog.LevelInfo,
+			checkLevel: slog.LevelDebug,
+			expected:   false, // Debug < Info and Debug < Error
 		},
-		"LevelInfo, CheckDebug": {
-			handlerLevel: slog.LevelInfo,
-			checkLevel:   slog.LevelDebug,
-			expected:     false,
+		"Event:Error, Log:Info, Check:Info": {
+			eventLevel: slog.LevelError,
+			logLevel:   slog.LevelInfo,
+			checkLevel: slog.LevelInfo,
+			expected:   true, // Info >= Info
 		},
-		"LevelError, CheckWarn": {
-			handlerLevel: slog.LevelError,
-			checkLevel:   slog.LevelWarn,
-			expected:     false,
+		"Event:Error, Log:Info, Check:Warn": {
+			eventLevel: slog.LevelError,
+			logLevel:   slog.LevelInfo,
+			checkLevel: slog.LevelWarn,
+			expected:   true, // Warn >= Info
 		},
-		"LevelWarn, CheckError": {
-			handlerLevel: slog.LevelWarn,
-			checkLevel:   slog.LevelError,
-			expected:     true,
+		"Event:Error, Log:Info, Check:Error": {
+			eventLevel: slog.LevelError,
+			logLevel:   slog.LevelInfo,
+			checkLevel: slog.LevelError,
+			expected:   true, // Error >= Error (and Error >= Info)
+		},
+		"Event:Debug, Log:Warn, Check:Info": {
+			eventLevel: slog.LevelDebug,
+			logLevel:   slog.LevelWarn,
+			checkLevel: slog.LevelInfo,
+			expected:   true, // Info >= Debug
+		},
+		"Only EventLevel (Debug), Check Info": {
+			eventLevel: slog.LevelDebug,
+			logLevel:   slog.Level(slog.LevelError + 100), // Effectively disable log level
+			checkLevel: slog.LevelInfo,
+			expected:   true,
+		},
+		"Only LogLevel (Debug), Check Info": {
+			eventLevel: slog.Level(slog.LevelError + 100), // Effectively disable event level
+			logLevel:   slog.LevelDebug,
+			checkLevel: slog.LevelInfo,
+			expected:   true,
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			h := SentryHandler{option: Option{Level: tt.handlerLevel}}
+			h := SentryHandler{option: Option{EventLevel: tt.eventLevel, LogLevel: tt.logLevel}}
+			// Manually ensure NewSentryHandler defaults are not overriding specific nil tests if any were intended
+			// However, the current Enabled logic handles nil by effectively setting level to MaxInt
+			// And NewSentryHandler sets defaults if nil, so option.EventLevel/LogLevel won't be nil in practice after NewSentryHandler.
+			// For this unit test of Enabled directly, we pass the levels.
 			if got := h.Enabled(context.Background(), tt.checkLevel); got != tt.expected {
-				t.Errorf("Enabled() = %v, want %v", got, tt.expected)
+				t.Errorf("Enabled() = %v, want %v (EventLevel: %s, LogLevel: %s, CheckLevel: %s)", got, tt.expected, tt.eventLevel, tt.logLevel, tt.checkLevel)
 			}
 		})
 	}
@@ -114,18 +142,24 @@ func TestOption_NewSentryHandler(t *testing.T) {
 		expected slog.Handler
 	}{
 		"Default options": {
-			option:   Option{},
-			expected: &SentryHandler{option: Option{Level: slog.LevelDebug, Converter: DefaultConverter, AttrFromContext: []func(ctx context.Context) []slog.Attr{}}},
+			option: Option{},
+			expected: &SentryHandler{option: Option{
+				EventLevel:      slog.LevelError,
+				LogLevel:        slog.LevelDebug,
+				Converter:       DefaultConverter,
+				AttrFromContext: []func(ctx context.Context) []slog.Attr{}}},
 		},
 		"Custom options": {
 			option: Option{
-				Level:           slog.LevelInfo,
+				EventLevel:      slog.LevelWarn,
+				LogLevel:        slog.LevelInfo,
 				Converter:       CustomConverter,
 				AttrFromContext: []func(ctx context.Context) []slog.Attr{customAttrFromContext},
 			},
 			expected: &SentryHandler{
 				option: Option{
-					Level:           slog.LevelInfo,
+					EventLevel:      slog.LevelWarn,
+					LogLevel:        slog.LevelInfo,
 					Converter:       CustomConverter,
 					AttrFromContext: []func(ctx context.Context) []slog.Attr{customAttrFromContext},
 				},
@@ -175,7 +209,9 @@ func compareHandlers(h1, h2 slog.Handler) bool {
 	if !ok1 || !ok2 {
 		return false
 	}
-	return sh1.option.Level == sh2.option.Level &&
+	// Compare Leveler by their Level() value as NewSentryHandler ensures they are not nil.
+	return sh1.option.EventLevel.Level() == sh2.option.EventLevel.Level() &&
+		sh1.option.LogLevel.Level() == sh2.option.LogLevel.Level() &&
 		equalFuncs(sh1.option.AttrFromContext, sh2.option.AttrFromContext)
 }
 
@@ -299,7 +335,8 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := newMockTransport()
 			handler := Option{
-				CaptureType: LogType,
+				LogLevel:   slog.LevelDebug,       // Capture logs
+				EventLevel: slog.LevelError + 100, // Do not capture events for this test
 			}.NewSentryHandler(ctx)
 			logger := slog.New(handler)
 			logger.InfoContext(ctx, "test message", tt.attr...)
@@ -321,7 +358,8 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 func TestSentryHandler_WithAttrsAndGroup(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 	baseHandler := Option{
-		CaptureType: LogType,
+		LogLevel:   slog.LevelDebug,
+		EventLevel: slog.LevelError + 100,
 	}.NewSentryHandler(ctx)
 	baseLogger := slog.New(baseHandler)
 
@@ -382,6 +420,7 @@ func TestSentryHandler_LogLevels(t *testing.T) {
 	testCases := []struct {
 		name          string
 		logFunc       func(ctx context.Context, logger *slog.Logger, msg string)
+		slogLevel     slog.Level
 		message       string
 		expectedLevel sentry.LogLevel
 	}{
@@ -390,6 +429,7 @@ func TestSentryHandler_LogLevels(t *testing.T) {
 			logFunc: func(ctx context.Context, logger *slog.Logger, msg string) {
 				logger.DebugContext(ctx, msg)
 			},
+			slogLevel:     slog.LevelDebug,
 			message:       "debug message",
 			expectedLevel: sentry.LogLevelDebug,
 		},
@@ -398,6 +438,7 @@ func TestSentryHandler_LogLevels(t *testing.T) {
 			logFunc: func(ctx context.Context, logger *slog.Logger, msg string) {
 				logger.InfoContext(ctx, msg)
 			},
+			slogLevel:     slog.LevelInfo,
 			message:       "info message",
 			expectedLevel: sentry.LogLevelInfo,
 		},
@@ -406,6 +447,7 @@ func TestSentryHandler_LogLevels(t *testing.T) {
 			logFunc: func(ctx context.Context, logger *slog.Logger, msg string) {
 				logger.WarnContext(ctx, msg)
 			},
+			slogLevel:     slog.LevelWarn,
 			message:       "warning message",
 			expectedLevel: sentry.LogLevelWarn,
 		},
@@ -414,6 +456,7 @@ func TestSentryHandler_LogLevels(t *testing.T) {
 			logFunc: func(ctx context.Context, logger *slog.Logger, msg string) {
 				logger.ErrorContext(ctx, msg)
 			},
+			slogLevel:     slog.LevelError,
 			message:       "error message",
 			expectedLevel: sentry.LogLevelError,
 		},
@@ -423,8 +466,8 @@ func TestSentryHandler_LogLevels(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := newMockTransport()
 			handler := Option{
-				CaptureType: LogType,
-				Level:       slog.LevelDebug,
+				LogLevel:   slog.LevelDebug,
+				EventLevel: slog.LevelError + 100,
 			}.NewSentryHandler(ctx)
 			logger := slog.New(handler)
 
@@ -449,9 +492,9 @@ func TestSentryHandler_ReplaceAttr(t *testing.T) {
 	}
 	ctx, mockTransport := newMockTransport()
 	handler := Option{
-		CaptureType: LogType,
+		LogLevel:    slog.LevelDebug,       // Capture as log
+		EventLevel:  slog.LevelError + 100, // Don't capture as event
 		ReplaceAttr: replaceAttr,
-		Level:       slog.LevelDebug,
 	}.NewSentryHandler(ctx)
 
 	logger := slog.New(handler)
@@ -474,9 +517,9 @@ func TestSentryHandler_ReplaceAttr(t *testing.T) {
 func TestSentryHandler_AddSource(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 	handler := Option{
-		CaptureType: LogType,
-		AddSource:   true,
-		Level:       slog.LevelDebug,
+		EventLevel: slog.LevelError + 100,
+		LogLevel:   slog.LevelDebug,
+		AddSource:  true,
 	}.NewSentryHandler(ctx)
 
 	logger := slog.New(handler)
@@ -487,19 +530,19 @@ func TestSentryHandler_AddSource(t *testing.T) {
 	assert.Equal(t, 1, len(gotEvents))
 
 	// Check if source attribute exists
-	_, found := mockTransport.Events()[0].Logs[0].Attributes["source.line"]
+	_, found := gotEvents[0].Logs[0].Attributes["source.line"]
 	assert.True(t, found, "source attribute not found")
-	_, found = mockTransport.Events()[0].Logs[0].Attributes["source.file"]
+	_, found = gotEvents[0].Logs[0].Attributes["source.file"]
 	assert.True(t, found, "source attribute not found")
-	_, found = mockTransport.Events()[0].Logs[0].Attributes["source.function"]
+	_, found = gotEvents[0].Logs[0].Attributes["source.function"]
 	assert.True(t, found, "source attribute not found")
 }
 
 func TestSentryHandler_EventType(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 	handler := Option{
-		CaptureType: EventType,
-		Level:       slog.LevelDebug,
+		EventLevel: slog.LevelInfo,
+		LogLevel:   slog.LevelError + 100,
 	}.NewSentryHandler(ctx)
 
 	logger := slog.New(handler)
@@ -527,9 +570,9 @@ func TestSentryHandler_EventTypeWithReplaceAttr(t *testing.T) {
 
 	ctx, mockTransport := newMockTransport()
 	handler := Option{
-		CaptureType: EventType,
+		EventLevel:  slog.LevelDebug,       // Capture as event
+		LogLevel:    slog.LevelError + 100, // Don't capture as log
 		ReplaceAttr: replaceAttr,
-		Level:       slog.LevelDebug,
 	}.NewSentryHandler(ctx)
 
 	logger := slog.New(handler)
@@ -548,4 +591,36 @@ func TestSentryHandler_EventTypeWithReplaceAttr(t *testing.T) {
 	numAttr, found := events[0].Extra["num"]
 	assert.True(t, found)
 	assert.Equal(t, int64(123), numAttr)
+}
+
+func TestSentryHandler_CaptureAsEventAndLog(t *testing.T) {
+	ctx, mockTransport := newMockTransport()
+	handler := Option{
+		EventLevel: slog.LevelWarn,
+		LogLevel:   slog.LevelWarn,
+	}.NewSentryHandler(ctx)
+
+	logger := slog.New(handler)
+	message := "warning message for both Event and Log"
+	logger.WarnContext(ctx, message, "common_attr", "common_value")
+	sentry.Flush(20 * time.Millisecond)
+
+	events := mockTransport.Events()
+	require.Equal(t, 2, len(events), "should capture two events")
+	event := events[0]
+
+	assert.Equal(t, message, event.Message, "event message should match")
+	assert.Equal(t, sentry.LevelWarning, event.Level)
+	eventAttrVal, found := event.Extra["common_attr"]
+	assert.True(t, found, "attribute should be in event's Extra map")
+	assert.Equal(t, "common_value", eventAttrVal)
+
+	event = events[1]
+	require.NotEmpty(t, event.Logs, "should have Sentry log entries")
+	logEntry := event.Logs[0]
+	assert.Equal(t, message, logEntry.Body)
+	assert.Equal(t, sentry.LogLevelWarn, logEntry.Level)
+	logAttrVal, found := logEntry.Attributes["common_attr"]
+	assert.True(t, found, "attribute should be in log entry's attributes")
+	assert.Equal(t, sentry.Attribute{Value: "common_value", Type: "string"}, logAttrVal)
 }
