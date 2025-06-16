@@ -15,18 +15,7 @@ import (
 	"time"
 )
 
-var (
-	// logLevelsMapping maps zerolog levels to sentry log levels.
-	logLevelsMapping = map[zerolog.Level]sentry.LogLevel{
-		zerolog.TraceLevel: sentry.LogLevelTrace,
-		zerolog.DebugLevel: sentry.LogLevelDebug,
-		zerolog.InfoLevel:  sentry.LogLevelInfo,
-		zerolog.WarnLevel:  sentry.LogLevelWarn,
-		zerolog.ErrorLevel: sentry.LogLevelError,
-		zerolog.FatalLevel: sentry.LogLevelFatal,
-		zerolog.PanicLevel: sentry.LogLevelFatal,
-	}
-)
+const zerologOrigin = "auto.logger.zerolog"
 
 // NewLogWriter allows for sending zerolog events to Sentry as logs.
 //
@@ -100,16 +89,25 @@ func (w *logWriter) WriteLevel(level zerolog.Level, p []byte) (n int, err error)
 // Close forces client to flush all pending events.
 // Can be useful before application exits.
 func (w *logWriter) Close() error {
-	sentry.Flush(time.Second)
+	if ok := w.hub.Flush(w.flushTimeout); !ok {
+		return ErrFlushTimeout
+	}
 	return nil
 }
 
 func (w *logWriter) writeAsLog(level zerolog.Level, p []byte) (n int, err error) {
+	// Check if this log level is enabled
+	if _, enabled := w.levels[level]; !enabled {
+		// If level is not enabled, still return the number of bytes written
+		// but don't process the log
+		return len(p), nil
+	}
+
 	var evt map[string]any
 	d := json.NewDecoder(bytes.NewReader(p))
 	err = d.Decode(&evt)
 	if err != nil {
-		return 0, fmt.Errorf("cannot decode event: %e", err)
+		return 0, fmt.Errorf("cannot decode event: %w", err)
 	}
 
 	var message string
@@ -175,6 +173,8 @@ func (w *logWriter) writeAsLog(level zerolog.Level, p []byte) (n int, err error)
 	if message == "" {
 		message = string(p)
 	}
+
+	w.logger.SetAttributes(attribute.String("sentry.origin", zerologOrigin))
 	switch level {
 	case zerolog.TraceLevel:
 		w.logger.Trace(w.ctx, message)
