@@ -16,7 +16,7 @@ import (
 
 var logEventJSON = []byte(`{"level":"error","requestId":"bee07485-2485-4f64-99e1-d10165884ca7","error":"dial timeout","time":"2020-06-25T17:19:00+03:00","message":"test message"}`)
 
-func TestParseLogEvent(t *testing.T) {
+func TestParseDataAsEvent(t *testing.T) {
 	ts := time.Now()
 
 	now = func() time.Time { return ts }
@@ -24,7 +24,7 @@ func TestParseLogEvent(t *testing.T) {
 	_, err := New(Config{})
 	require.Nil(t, err)
 
-	ev, ok := parseLogEvent(logEventJSON)
+	ev, ok := parseDataAsEvent(logEventJSON)
 	require.True(t, ok)
 	zLevel, err := parseLogLevel(logEventJSON)
 	assert.Nil(t, err)
@@ -313,9 +313,9 @@ func TestWriteLevelFatal(t *testing.T) {
 	require.False(t, beforeSendCalled)
 }
 
-func BenchmarkParseLogEvent(b *testing.B) {
+func BenchmarkParseDataAsEvent(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		parseLogEvent(logEventJSON)
+		parseDataAsEvent(logEventJSON)
 	}
 }
 

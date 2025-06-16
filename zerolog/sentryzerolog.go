@@ -3,11 +3,10 @@ package sentryzerolog
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"time"
 
 	"github.com/buger/jsonparser"
-	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 )
 
@@ -27,9 +26,6 @@ var (
 		zerolog.FatalLevel: sentry.LevelFatal,
 		zerolog.PanicLevel: sentry.LevelFatal,
 	}
-
-	// Ensure that the Writer implements the io.WriteCloser interface.
-	_ = io.WriteCloser(new(Writer))
 
 	now = time.Now
 )
@@ -97,8 +93,18 @@ func (o *Options) SetDefaults() {
 	}
 }
 
-// New creates writer with provided DSN and options.
-func New(cfg Config) (*Writer, error) {
+// Deprecated: New simply invokes NewEventWriter.
+func New(cfg Config) (Writer, error) {
+	return NewEventWriter(cfg)
+}
+
+// Deprecated: NewWithHub simply invokes NewEventWriterWithHub.
+func NewWithHub(hub *sentry.Hub, opts Options) (Writer, error) {
+	return NewEventWriterWithHub(hub, opts)
+}
+
+// NewEventWriter allows for sending zerolog events to Sentry as events.
+func NewEventWriter(cfg Config) (Writer, error) {
 	client, err := sentry.NewClient(cfg.ClientOptions)
 	if err != nil {
 		return nil, err
@@ -113,7 +119,7 @@ func New(cfg Config) (*Writer, error) {
 		levels[lvl] = struct{}{}
 	}
 
-	return &Writer{
+	return &eventWriter{
 		hub:             sentry.NewHub(client, sentry.NewScope()),
 		levels:          levels,
 		flushTimeout:    cfg.FlushTimeout,
@@ -121,8 +127,8 @@ func New(cfg Config) (*Writer, error) {
 	}, nil
 }
 
-// NewWithHub creates a writer using an existing sentry Hub and options.
-func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
+// NewEventWriterWithHub allows for sending zerolog events to Sentry as events, using an existing sentry Hub and options.
+func NewEventWriterWithHub(hub *sentry.Hub, opts Options) (Writer, error) {
 	if hub == nil {
 		return nil, errors.New("hub cannot be nil")
 	}
@@ -134,7 +140,7 @@ func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 		levels[lvl] = struct{}{}
 	}
 
-	return &Writer{
+	return &eventWriter{
 		hub:             hub,
 		levels:          levels,
 		flushTimeout:    opts.FlushTimeout,
@@ -143,7 +149,13 @@ func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 }
 
 // Writer is a sentry events writer with std io.Writer interface.
-type Writer struct {
+type Writer interface {
+	Write(data []byte) (int, error)
+	WriteLevel(level zerolog.Level, p []byte) (int, error)
+	Close() error
+}
+
+type eventWriter struct {
 	hub             *sentry.Hub
 	levels          map[zerolog.Level]struct{}
 	flushTimeout    time.Duration
@@ -151,7 +163,7 @@ type Writer struct {
 }
 
 // addBreadcrumb adds event as a breadcrumb.
-func (w *Writer) addBreadcrumb(event *sentry.Event) {
+func (w *eventWriter) addBreadcrumb(event *sentry.Event) {
 	if !w.withBreadcrumbs {
 		return
 	}
@@ -174,7 +186,7 @@ func (w *Writer) addBreadcrumb(event *sentry.Event) {
 }
 
 // Write handles zerolog's json and sends events to sentry.
-func (w *Writer) Write(data []byte) (int, error) {
+func (w *eventWriter) Write(data []byte) (int, error) {
 	n := len(data)
 
 	lvl, err := parseLogLevel(data)
@@ -182,7 +194,7 @@ func (w *Writer) Write(data []byte) (int, error) {
 		return n, nil
 	}
 
-	event, ok := parseLogEvent(data)
+	event, ok := parseDataAsEvent(data)
 	if !ok {
 		return n, nil
 	}
@@ -207,10 +219,10 @@ func (w *Writer) Write(data []byte) (int, error) {
 	return n, nil
 }
 
-func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (int, error) {
+func (w *eventWriter) WriteLevel(level zerolog.Level, p []byte) (int, error) {
 	n := len(p)
 
-	event, ok := parseLogEvent(p)
+	event, ok := parseDataAsEvent(p)
 	if !ok {
 		return n, nil
 	}
@@ -237,7 +249,7 @@ func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (int, error) {
 
 // Close forces client to flush all pending events.
 // Can be useful before application exits.
-func (w *Writer) Close() error {
+func (w *eventWriter) Close() error {
 	if ok := w.hub.Flush(w.flushTimeout); !ok {
 		return ErrFlushTimeout
 	}
@@ -253,7 +265,7 @@ func parseLogLevel(data []byte) (zerolog.Level, error) {
 	return zerolog.ParseLevel(level)
 }
 
-func parseLogEvent(data []byte) (*sentry.Event, bool) {
+func parseDataAsEvent(data []byte) (*sentry.Event, bool) {
 	event := sentry.Event{
 		Timestamp: now(),
 		Logger:    logger,
@@ -271,6 +283,7 @@ func parseLogEvent(data []byte) (*sentry.Event, bool) {
 				Stacktrace: sentry.NewStacktrace(),
 			})
 		case zerolog.LevelFieldName, zerolog.TimestampFieldName:
+			// Skip these as they're handled by Sentry
 		case FieldUser:
 			var user sentry.User
 			err := json.Unmarshal(value, &user)
@@ -290,6 +303,7 @@ func parseLogEvent(data []byte) (*sentry.Event, bool) {
 				event.Fingerprint = fp
 			}
 		case FieldGoVersion, FieldMaxProcs:
+			// Skip these fields
 		default:
 			event.Extra[k] = string(value)
 		}
