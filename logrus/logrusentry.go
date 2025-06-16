@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -306,12 +307,11 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 			h.logger.SetAttributes(attribute.Int(k, val))
 		case uint, uint8, uint16, uint32, uint64:
 			uval := reflect.ValueOf(val).Convert(reflect.TypeOf(uint64(0))).Uint()
-			// currently Relay cannot process uint64, try to convert to a supported format.
 			if uval <= math.MaxInt64 {
 				h.logger.SetAttributes(attribute.Int64(k, int64(uval)))
 			} else {
-				// For values larger than int64 can handle, we are using float. Potential precision loss
-				h.logger.SetAttributes(attribute.Float64(k, float64(uval)))
+				// For values larger than int64 can handle, we are using string.
+				h.logger.SetAttributes(attribute.String(k, strconv.FormatUint(uval, 10)))
 			}
 		case string:
 			h.logger.SetAttributes(attribute.String(k, val))
