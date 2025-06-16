@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"maps"
+	"math"
+	"strconv"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -23,7 +25,7 @@ var baseAttributes = map[string]sentry.Attribute{
 	"sentry.environment":    {Value: "testing", Type: "string"},
 	"sentry.origin":         {Value: zerologOrigin, Type: "string"},
 	"sentry.release":        {Value: "v1.2.3", Type: "string"},
-	"sentry.sdk.name":       {Value: "sentry.go.zerolog", Type: "string"},
+	"sentry.sdk.name":       {Value: sdkIdentifier, Type: "string"},
 	"sentry.sdk.version":    {Value: sentry.SDKVersion, Type: "string"},
 	"sentry.server.address": {Value: "test-server", Type: "string"},
 }
@@ -180,7 +182,6 @@ func TestNewLogWriter_Levels(t *testing.T) {
 				t.Fatalf("expected %d events, got %d", len(tt.wantEvents), len(gotEvents))
 			}
 			for i, event := range gotEvents {
-				// testutils.AssertEqual(t, event.Type, "log") // Event.Type is not guaranteed for log events
 				require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
 				if diff := cmp.Diff(tt.wantEvents[i].Logs, event.Logs, opts); diff != "" {
 					t.Errorf("Log mismatch (-want +got):\n%s", diff)
@@ -236,19 +237,19 @@ func TestNewLogWriter_Attributes(t *testing.T) {
 		{
 			name: "Float64 attribute",
 			logFunc: func(c *zerolog.Event) *zerolog.Event {
-				return c.Float64("foo", 10.0)
+				return c.Float64("foo", 10.2)
 			},
 			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: 10.0, Type: "double"},
+				"foo": {Value: 10.2, Type: "double"},
 			},
 		},
 		{
 			name: "Float32 attribute",
 			logFunc: func(c *zerolog.Event) *zerolog.Event {
-				return c.Float32("foo", 10.0)
+				return c.Float32("foo", 10.2)
 			},
 			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: 10.0, Type: "double"},
+				"foo": {Value: 10.2, Type: "double"},
 			},
 		},
 		{
@@ -257,7 +258,7 @@ func TestNewLogWriter_Attributes(t *testing.T) {
 				return c.Int("foo", 10)
 			},
 			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: float64(10), Type: "double"},
+				"foo": {Value: int64(10), Type: "integer"},
 			},
 		},
 		{
@@ -266,7 +267,7 @@ func TestNewLogWriter_Attributes(t *testing.T) {
 				return c.Int8("foo", 10)
 			},
 			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: float64(10), Type: "double"},
+				"foo": {Value: int64(10), Type: "integer"},
 			},
 		},
 		{
@@ -275,7 +276,7 @@ func TestNewLogWriter_Attributes(t *testing.T) {
 				return c.Int16("foo", 10)
 			},
 			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: float64(10), Type: "double"},
+				"foo": {Value: int64(10), Type: "integer"},
 			},
 		},
 		{
@@ -284,43 +285,7 @@ func TestNewLogWriter_Attributes(t *testing.T) {
 				return c.Int32("foo", 10)
 			},
 			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: float64(10), Type: "double"},
-			},
-		},
-		{
-			name: "Uint attribute",
-			logFunc: func(c *zerolog.Event) *zerolog.Event {
-				return c.Uint("foo", 10)
-			},
-			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: float64(10), Type: "double"},
-			},
-		},
-		{
-			name: "Uint8 attribute",
-			logFunc: func(c *zerolog.Event) *zerolog.Event {
-				return c.Uint8("foo", 10)
-			},
-			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: float64(10), Type: "double"},
-			},
-		},
-		{
-			name: "Uint16 attribute",
-			logFunc: func(c *zerolog.Event) *zerolog.Event {
-				return c.Uint16("foo", 10)
-			},
-			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: float64(10), Type: "double"},
-			},
-		},
-		{
-			name: "Uint32 attribute",
-			logFunc: func(c *zerolog.Event) *zerolog.Event {
-				return c.Uint32("foo", 10)
-			},
-			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: float64(10), Type: "double"},
+				"foo": {Value: int64(10), Type: "integer"},
 			},
 		},
 		{
@@ -329,7 +294,43 @@ func TestNewLogWriter_Attributes(t *testing.T) {
 				return c.Int64("foo", 10)
 			},
 			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: float64(10), Type: "double"},
+				"foo": {Value: int64(10), Type: "integer"},
+			},
+		},
+		{
+			name: "Uint attribute",
+			logFunc: func(c *zerolog.Event) *zerolog.Event {
+				return c.Uint("foo", 10)
+			},
+			wantAttributes: map[string]sentry.Attribute{
+				"foo": {Value: int64(10), Type: "integer"},
+			},
+		},
+		{
+			name: "Uint8 attribute",
+			logFunc: func(c *zerolog.Event) *zerolog.Event {
+				return c.Uint8("foo", 10)
+			},
+			wantAttributes: map[string]sentry.Attribute{
+				"foo": {Value: int64(10), Type: "integer"},
+			},
+		},
+		{
+			name: "Uint16 attribute",
+			logFunc: func(c *zerolog.Event) *zerolog.Event {
+				return c.Uint16("foo", 10)
+			},
+			wantAttributes: map[string]sentry.Attribute{
+				"foo": {Value: int64(10), Type: "integer"},
+			},
+		},
+		{
+			name: "Uint32 attribute",
+			logFunc: func(c *zerolog.Event) *zerolog.Event {
+				return c.Uint32("foo", 10)
+			},
+			wantAttributes: map[string]sentry.Attribute{
+				"foo": {Value: int64(10), Type: "integer"},
 			},
 		},
 		{
@@ -338,7 +339,16 @@ func TestNewLogWriter_Attributes(t *testing.T) {
 				return c.Uint64("foo", 10)
 			},
 			wantAttributes: map[string]sentry.Attribute{
-				"foo": {Value: float64(10), Type: "double"},
+				"foo": {Value: int64(10), Type: "integer"},
+			},
+		},
+		{
+			name: "Uint64 attribute - overflow",
+			logFunc: func(c *zerolog.Event) *zerolog.Event {
+				return c.Uint64("foo", math.MaxUint64)
+			},
+			wantAttributes: map[string]sentry.Attribute{
+				"foo": {Value: strconv.FormatUint(math.MaxUint64, 10), Type: "string"},
 			},
 		},
 		{
@@ -434,7 +444,6 @@ func TestNewLogWriter_Attributes(t *testing.T) {
 				t.Fatalf("expected %d events, got %d", len(wantEvents), len(gotEvents))
 			}
 			for i, event := range gotEvents {
-				// testutils.AssertEqual(t, event.Type, "log") // Event.Type is not guaranteed
 				require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
 				if diff := cmp.Diff(wantEvents[i].Logs, event.Logs, opts); diff != "" {
 					t.Errorf("Log mismatch (-want +got):\n%s", diff)
@@ -483,7 +492,6 @@ func TestNewLogWriter_EmptyMessage(t *testing.T) {
 		t.Fatalf("expected %d events, got %d", len(wantEvents), len(gotEvents))
 	}
 	for i, event := range gotEvents {
-		// testutils.AssertEqual(t, event.Type, "log") // Event.Type is not guaranteed
 		require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
 		if diff := cmp.Diff(wantEvents[i].Logs, event.Logs, opts); diff != "" {
 			t.Errorf("Log mismatch (-want +got):\n%s", diff)
@@ -527,7 +535,6 @@ func TestNewLogWriter_WithoutContext(t *testing.T) {
 		t.Fatalf("expected %d events, got %d", len(wantEvents), len(gotEvents))
 	}
 	for i, event := range gotEvents {
-		// testutils.AssertEqual(t, event.Type, "log") // Event.Type is not guaranteed
 		require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
 		if diff := cmp.Diff(wantEvents[i].Logs, event.Logs, opts); diff != "" {
 			t.Errorf("Log mismatch (-want +got):\n%s", diff)
@@ -575,28 +582,12 @@ func TestSentryLogger_Write(t *testing.T) {
 		t.Fatalf("expected %d events, got %d", len(wantEvents), len(gotEvents))
 	}
 	for i, event := range gotEvents {
-		// testutils.AssertEqual(t, event.Type, "log") // Event.Type is not guaranteed
 		require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
 		if diff := cmp.Diff(wantEvents[i].Logs, event.Logs, opts); diff != "" {
 			t.Errorf("Log mismatch (-want +got):\n%s", diff)
 		}
 	}
 }
-
-//func TestSentryLogger_ParseError(t *testing.T) {
-//	sentryZerolog, _ := NewLogWriter(Config{ClientOptions: sentry.ClientOptions{Dsn: testDsn, EnableLogs: true}}) // Provide minimal valid options
-//	n, err := sentryZerolog.Write([]byte(`this should trigger an error`))
-//	expectedError := "cannot decode event: invalid character 'h' in literal true (expecting 'r')"
-//	if err == nil {
-//		t.Errorf("expected error, got nil")
-//	} else if err.Error() != expectedError {
-//		t.Errorf("expected error %q, got %q", expectedError, err.Error())
-//	}
-//
-//	if n != 0 {
-//		t.Errorf("expected to write 0 bytes, got %d", n)
-//	}
-//}
 
 func TestSentryLogger_UnparsableLevel(t *testing.T) {
 	clientOptions, mockTransport := setupMockTransport()
@@ -635,7 +626,6 @@ func TestSentryLogger_UnparsableLevel(t *testing.T) {
 		t.Fatalf("expected %d events, got %d", len(wantEvents), len(gotEvents))
 	}
 	for i, event := range gotEvents {
-		// testutils.AssertEqual(t, event.Type, "log") // Event.Type is not guaranteed
 		require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
 		if diff := cmp.Diff(wantEvents[i].Logs, event.Logs, opts); diff != "" {
 			t.Errorf("Log mismatch (-want +got):\n%s", diff)
@@ -672,5 +662,209 @@ func TestSentryLogger_DisabledLevel(t *testing.T) {
 	gotEvents := mockTransport.Events()
 	if len(gotEvents) != 0 {
 		t.Fatalf("expected %d events, got %d", 0, len(gotEvents))
+	}
+}
+
+func TestNewLogWriterWithHub(t *testing.T) {
+	tests := []struct {
+		name       string
+		logFunc    func(ctx context.Context, l zerolog.Logger)
+		wantEvents []sentry.Event
+	}{
+		{
+			name: "Info level with hub",
+			logFunc: func(ctx context.Context, l zerolog.Logger) {
+				l.Info().Ctx(ctx).Str("test", "hub").Msg("info message with hub")
+			},
+			wantEvents: []sentry.Event{
+				{
+					Logs: []sentry.Log{
+						{
+							Level:    sentry.LogLevelInfo,
+							Severity: sentry.LogSeverityInfo,
+							Body:     "info message with hub",
+							Attributes: map[string]sentry.Attribute{
+								"test":                  {Value: "hub", Type: "string"},
+								"sentry.environment":    {Value: "testing", Type: "string"},
+								"sentry.origin":         {Value: zerologOrigin, Type: "string"},
+								"sentry.release":        {Value: "v1.2.3", Type: "string"},
+								"sentry.sdk.name":       {Value: sdkIdentifier, Type: "string"},
+								"sentry.sdk.version":    {Value: sentry.SDKVersion, Type: "string"},
+								"sentry.server.address": {Value: "test-server", Type: "string"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientOptions, mockTransport := setupMockTransport()
+			client, err := sentry.NewClient(clientOptions)
+			require.NoError(t, err)
+
+			hub := sentry.NewHub(client, sentry.NewScope())
+			sentryZerolog, err := NewLogWriterWithHub(hub, defaultTestOptions)
+			require.NoError(t, err)
+
+			l := zerolog.New(sentryZerolog).With().Timestamp().Logger()
+			tt.logFunc(context.Background(), l)
+			if err := sentryZerolog.Close(); err != nil {
+				t.Errorf("failed to close sentry zerolog: %v", err)
+			}
+
+			opts := cmp.Options{
+				cmpopts.IgnoreFields(sentry.Log{}, "Timestamp", "TraceID"),
+			}
+			gotEvents := mockTransport.Events()
+			if len(gotEvents) != len(tt.wantEvents) {
+				t.Fatalf("expected %d events, got %d", len(tt.wantEvents), len(gotEvents))
+			}
+			for i, event := range gotEvents {
+				require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
+				if diff := cmp.Diff(tt.wantEvents[i].Logs, event.Logs, opts); diff != "" {
+					t.Errorf("Log mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
+	}
+}
+
+func TestNewLogWriterWithHub_NilHub(t *testing.T) {
+	_, err := NewLogWriterWithHub(nil, defaultTestOptions)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "hub or client cannot be nil")
+}
+
+func TestNewLogWriter_UserAttributes(t *testing.T) {
+	clientOptions, mockTransport := setupMockTransport()
+	client, err := sentry.NewClient(clientOptions)
+	require.NoError(t, err)
+
+	hub := sentry.NewHub(client, sentry.NewScope())
+
+	sentryZerolog, err := NewLogWriterWithHub(hub, defaultTestOptions)
+	require.NoError(t, err)
+
+	l := zerolog.New(sentryZerolog).With().Timestamp().Logger()
+	l.Info().Ctx(context.Background()).
+		Str("key", "value").
+		Interface("user", sentry.User{ID: "test-user-id", Email: "test@sentry.io", Name: "Test User"}).
+		Msg("test message")
+
+	if err := sentryZerolog.Close(); err != nil {
+		t.Errorf("failed to close sentry zerolog: %v", err)
+	}
+
+	wantUserAttributes := map[string]sentry.Attribute{
+		"key":                   {Value: "value", Type: "string"},
+		"user.id":               {Value: "test-user-id", Type: "string"},
+		"user.name":             {Value: "Test User", Type: "string"},
+		"user.email":            {Value: "test@sentry.io", Type: "string"},
+		"sentry.environment":    {Value: "testing", Type: "string"},
+		"sentry.origin":         {Value: zerologOrigin, Type: "string"},
+		"sentry.release":        {Value: "v1.2.3", Type: "string"},
+		"sentry.sdk.name":       {Value: sdkIdentifier, Type: "string"},
+		"sentry.sdk.version":    {Value: sentry.SDKVersion, Type: "string"},
+		"sentry.server.address": {Value: "test-server", Type: "string"},
+	}
+
+	wantEvents := []sentry.Event{
+		{
+			Logs: []sentry.Log{
+				{
+					Level:      sentry.LogLevelInfo,
+					Severity:   sentry.LogSeverityInfo,
+					Body:       "test message",
+					Attributes: wantUserAttributes,
+				},
+			},
+		},
+	}
+
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(sentry.Log{}, "Timestamp", "TraceID"),
+	}
+
+	gotEvents := mockTransport.Events()
+	if len(gotEvents) != len(wantEvents) {
+		t.Fatalf("expected %d events, got %d", len(wantEvents), len(gotEvents))
+	}
+	for i, event := range gotEvents {
+		require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
+		if diff := cmp.Diff(wantEvents[i].Logs, event.Logs, opts); diff != "" {
+			t.Errorf("Log mismatch (-want +got):\n%s", diff)
+		}
+	}
+}
+
+func TestNewLogWriter_UserAttributesPartial(t *testing.T) {
+	clientOptions, mockTransport := setupMockTransport()
+	client, err := sentry.NewClient(clientOptions)
+	require.NoError(t, err)
+
+	hub := sentry.NewHub(client, sentry.NewScope())
+
+	sentryZerolog, err := NewLogWriterWithHub(hub, defaultTestOptions)
+	require.NoError(t, err)
+
+	l := zerolog.New(sentryZerolog).With().Timestamp().Logger()
+	l.Info().Ctx(context.Background()).
+		Str("key", "value").
+		Interface("user", sentry.User{ID: "test-user-id", Name: "Test User"}).
+		Msg("test message")
+
+	if err := sentryZerolog.Close(); err != nil {
+		t.Errorf("failed to close sentry zerolog: %v", err)
+	}
+
+	wantUserAttributes := map[string]sentry.Attribute{
+		"key":       {Value: "value", Type: "string"},
+		"user.id":   {Value: "test-user-id", Type: "string"},
+		"user.name": {Value: "Test User", Type: "string"},
+		// No user.email should be present
+		"sentry.environment":    {Value: "testing", Type: "string"},
+		"sentry.origin":         {Value: zerologOrigin, Type: "string"},
+		"sentry.release":        {Value: "v1.2.3", Type: "string"},
+		"sentry.sdk.name":       {Value: sdkIdentifier, Type: "string"},
+		"sentry.sdk.version":    {Value: sentry.SDKVersion, Type: "string"},
+		"sentry.server.address": {Value: "test-server", Type: "string"},
+	}
+
+	wantEvents := []sentry.Event{
+		{
+			Logs: []sentry.Log{
+				{
+					Level:      sentry.LogLevelInfo,
+					Severity:   sentry.LogSeverityInfo,
+					Body:       "test message",
+					Attributes: wantUserAttributes,
+				},
+			},
+		},
+	}
+
+	opts := cmp.Options{
+		cmpopts.IgnoreFields(sentry.Log{}, "Timestamp", "TraceID"),
+	}
+
+	gotEvents := mockTransport.Events()
+	if len(gotEvents) != len(wantEvents) {
+		t.Fatalf("expected %d events, got %d", len(wantEvents), len(gotEvents))
+	}
+	for i, event := range gotEvents {
+		require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
+		if diff := cmp.Diff(wantEvents[i].Logs, event.Logs, opts); diff != "" {
+			t.Errorf("Log mismatch (-want +got):\n%s", diff)
+		}
+
+		// Verify user.email is not present
+		for _, log := range event.Logs {
+			if _, exists := log.Attributes["user.email"]; exists {
+				t.Error("user.email should not be present when not set in scope")
+			}
+		}
 	}
 }

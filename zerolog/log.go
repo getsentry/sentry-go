@@ -6,16 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"reflect"
-
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/rs/zerolog"
+	"math"
+	"strconv"
 	"time"
 )
-
-const zerologOrigin = "auto.logger.zerolog"
 
 // NewLogWriter allows for sending zerolog events to Sentry as logs.
 //
@@ -50,9 +47,10 @@ func NewLogWriter(cfg Config) (Writer, error) {
 //
 // If you want to send events/errors to Sentry, use the NewEventWriter() function instead.
 func NewLogWriterWithHub(hub *sentry.Hub, opts Options) (Writer, error) {
-	if hub == nil {
-		return nil, errors.New("hub cannot be nil")
+	if hub == nil || hub.Client() == nil {
+		return nil, errors.New("hub or client cannot be nil")
 	}
+	hub.Client().SetSDKIdentifier(sdkIdentifier)
 	opts.SetDefaults()
 
 	levels := make(map[zerolog.Level]struct{}, len(opts.Levels))
@@ -118,49 +116,41 @@ func (w *logWriter) writeAsLog(level zerolog.Level, p []byte) (n int, err error)
 		case zerolog.MessageFieldName:
 			message, _ = value.(string)
 		case FieldUser:
-			var user sentry.User
-			userJSON, ok := value.([]byte)
-			err := json.Unmarshal(userJSON, &user)
-			if !ok || err != nil {
-				w.logger.SetAttributes(attribute.String(k, fmt.Sprint(value)))
+			m, ok := value.(map[string]any)
+			if !ok {
+				w.logger.SetAttributes(attribute.String(FieldUser, fmt.Sprint(value)))
 				continue
 			}
-			w.logger.SetAttributes(
-				attribute.String("user.id", user.ID),
-				attribute.String("user.email", user.Email),
-				attribute.String("user.name", user.Name),
-			)
+			// converting to byte doesn't work, try to unmarshal manually.
+			if id, ok := m["id"]; ok {
+				w.logger.SetAttributes(attribute.String("user.id", fmt.Sprint(id)))
+			}
+			if email, ok := m["email"]; ok {
+				w.logger.SetAttributes(attribute.String("user.email", fmt.Sprint(email)))
+			}
+			if name, ok := m["name"]; ok {
+				w.logger.SetAttributes(attribute.String("user.name", fmt.Sprint(name)))
+			}
 		case zerolog.ErrorFieldName:
 			w.logger.SetAttributes(attribute.String("error", fmt.Sprint(value)))
 		case FieldGoVersion, FieldMaxProcs:
 			// Skip these fields
 		default:
 			switch val := value.(type) {
-			case int8:
-				w.logger.SetAttributes(attribute.Int(k, int(val)))
-			case int16:
-				w.logger.SetAttributes(attribute.Int(k, int(val)))
-			case int32:
-				w.logger.SetAttributes(attribute.Int(k, int(val)))
-			case int64:
-				w.logger.SetAttributes(attribute.Int(k, int(val)))
-			case int:
-				w.logger.SetAttributes(attribute.Int(k, val))
-			case uint, uint8, uint16, uint32, uint64:
-				uval := reflect.ValueOf(val).Convert(reflect.TypeOf(uint64(0))).Uint()
-				// currently Relay cannot process uint64, try to convert to a supported format.
-				if uval <= math.MaxInt64 {
-					w.logger.SetAttributes(attribute.Int64(k, int64(uval)))
+			// json decode converts all numbers to float64, check if types satisfy int or float to convert properly.
+			case float64:
+				if math.Trunc(val) > math.MaxInt64 {
+					w.logger.SetAttributes(attribute.String(k, strconv.FormatUint(uint64(val), 10)))
+					continue
+				}
+				// check if value is integer
+				if val == float64(int64(val)) {
+					w.logger.SetAttributes(attribute.Int64(k, int64(val)))
 				} else {
-					// For values larger than int64 can handle, we are using float. Potential precision loss
-					w.logger.SetAttributes(attribute.Float64(k, float64(uval)))
+					w.logger.SetAttributes(attribute.Float64(k, val))
 				}
 			case string:
 				w.logger.SetAttributes(attribute.String(k, val))
-			case float32:
-				w.logger.SetAttributes(attribute.Float64(k, float64(val)))
-			case float64:
-				w.logger.SetAttributes(attribute.Float64(k, val))
 			case bool:
 				w.logger.SetAttributes(attribute.Bool(k, val))
 			default:

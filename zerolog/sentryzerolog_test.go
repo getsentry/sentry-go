@@ -21,7 +21,7 @@ func TestParseDataAsEvent(t *testing.T) {
 
 	now = func() time.Time { return ts }
 
-	_, err := New(Config{})
+	_, err := NewEventWriter(Config{})
 	require.Nil(t, err)
 
 	ev, ok := parseDataAsEvent(logEventJSON)
@@ -42,26 +42,56 @@ func TestParseDataAsEvent(t *testing.T) {
 	assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", ev.Extra["requestId"])
 }
 
-func TestFailedClientCreation(t *testing.T) {
-	_, err := New(Config{ClientOptions: sentry.ClientOptions{Dsn: "invalid"}})
-	require.NotNil(t, err)
+// dummy test for deprecated
+func TestNew_EmptyClient(t *testing.T) {
+	_, err := New(Config{Options: Options{
+		Levels: []zerolog.Level{zerolog.ErrorLevel},
+	}})
+	require.Nil(t, err)
 }
 
 func TestNewWithHub(t *testing.T) {
-	hub := sentry.CurrentHub()
+	hub := sentry.CurrentHub().Clone()
+	hub.BindClient(&sentry.Client{})
 	require.NotNil(t, hub)
 
 	_, err := NewWithHub(hub, Options{
 		Levels: []zerolog.Level{zerolog.ErrorLevel},
 	})
 	require.Nil(t, err)
+}
 
-	_, err = NewWithHub(nil, Options{})
+func TestFailedClientCreation(t *testing.T) {
+	_, err := NewEventWriter(Config{ClientOptions: sentry.ClientOptions{Dsn: "invalid"}})
+	require.NotNil(t, err)
+}
+
+func TestNewEventWriterWithHub_EmptyClient(t *testing.T) {
+	hub := sentry.CurrentHub().Clone()
+	require.NotNil(t, hub)
+
+	_, err := NewEventWriterWithHub(hub, Options{
+		Levels: []zerolog.Level{zerolog.ErrorLevel},
+	})
+	require.NotNil(t, err)
+}
+
+func TestNewEventWriterWithHub_NonEmptyClient(t *testing.T) {
+	hub := sentry.CurrentHub().Clone()
+	hub.BindClient(&sentry.Client{})
+	require.NotNil(t, hub)
+
+	_, err := NewEventWriterWithHub(hub, Options{
+		Levels: []zerolog.Level{zerolog.ErrorLevel},
+	})
+	require.Nil(t, err)
+
+	_, err = NewEventWriterWithHub(nil, Options{})
 	require.NotNil(t, err)
 }
 
 func TestParseLogLevel(t *testing.T) {
-	_, err := New(Config{})
+	_, err := NewEventWriter(Config{})
 	require.Nil(t, err)
 
 	level, err := parseLogLevel(logEventJSON)
@@ -88,7 +118,7 @@ func TestWrite(t *testing.T) {
 			WithBreadcrumbs: true,
 		},
 	}
-	writer, err := New(cfg)
+	writer, err := NewEventWriter(cfg)
 	require.Nil(t, err)
 
 	var zerologError error
@@ -111,7 +141,7 @@ func TestWrite(t *testing.T) {
 
 func TestClose(t *testing.T) {
 	cfg := Config{}
-	writer, err := New(cfg)
+	writer, err := NewEventWriter(cfg)
 	require.Nil(t, err)
 
 	err = writer.Close()
@@ -131,7 +161,7 @@ func TestWrite_TraceDoesNotPanic(t *testing.T) {
 			WithBreadcrumbs: false,
 		},
 	}
-	writer, err := New(cfg)
+	writer, err := NewEventWriter(cfg)
 	require.Nil(t, err)
 
 	var zerologError error
@@ -171,7 +201,7 @@ func TestWriteLevel(t *testing.T) {
 			WithBreadcrumbs: true,
 		},
 	}
-	writer, err := New(cfg)
+	writer, err := NewEventWriter(cfg)
 	require.Nil(t, err)
 
 	var zerologError error
@@ -204,7 +234,7 @@ func TestWriteInvalidLevel(t *testing.T) {
 			WithBreadcrumbs: true,
 		},
 	}
-	writer, err := New(cfg)
+	writer, err := NewEventWriter(cfg)
 	require.Nil(t, err)
 
 	log := zerolog.New(writer).With().Timestamp().
@@ -228,7 +258,7 @@ func TestWrite_Disabled(t *testing.T) {
 		},
 	}
 
-	writer, err := New(cfg)
+	writer, err := NewEventWriter(cfg)
 
 	require.Nil(t, err)
 
@@ -262,7 +292,7 @@ func TestWriteLevel_Disabled(t *testing.T) {
 			WithBreadcrumbs: true,
 		},
 	}
-	writer, err := New(cfg)
+	writer, err := NewEventWriter(cfg)
 	require.Nil(t, err)
 
 	var zerologError error
@@ -295,7 +325,7 @@ func TestWriteLevelFatal(t *testing.T) {
 			WithBreadcrumbs: true,
 		},
 	}
-	writer, err := New(cfg)
+	writer, err := NewEventWriter(cfg)
 	require.Nil(t, err)
 
 	var zerologError error
@@ -320,7 +350,7 @@ func BenchmarkParseDataAsEvent(b *testing.B) {
 }
 
 func BenchmarkWriteLogEvent(b *testing.B) {
-	w, err := New(Config{})
+	w, err := NewEventWriter(Config{})
 	if err != nil {
 		b.Errorf("failed to create writer: %v", err)
 	}
@@ -331,7 +361,7 @@ func BenchmarkWriteLogEvent(b *testing.B) {
 }
 
 func BenchmarkWriteLogLevelEvent(b *testing.B) {
-	w, err := New(Config{})
+	w, err := NewEventWriter(Config{})
 	if err != nil {
 		b.Errorf("failed to create writer: %v", err)
 	}

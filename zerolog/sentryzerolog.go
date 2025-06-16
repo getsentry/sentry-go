@@ -33,6 +33,9 @@ var (
 // The identifier of the Zerolog SDK.
 const sdkIdentifier = "sentry.go.zerolog"
 
+// The origin of the Zerolog SDK.
+const zerologOrigin = "auto.logger.zerolog"
+
 // These default log field keys are used to pass specific metadata in a way that
 // Sentry understands. If they are found in the log fields, and the value is of
 // the expected datatype, it will be converted from a generic field, into Sentry
@@ -129,9 +132,10 @@ func NewEventWriter(cfg Config) (Writer, error) {
 
 // NewEventWriterWithHub allows for sending zerolog events to Sentry as events, using an existing sentry Hub and options.
 func NewEventWriterWithHub(hub *sentry.Hub, opts Options) (Writer, error) {
-	if hub == nil {
-		return nil, errors.New("hub cannot be nil")
+	if hub == nil || hub.Client() == nil {
+		return nil, errors.New("hub or client cannot be nil")
 	}
+	hub.Client().SetSDKIdentifier(sdkIdentifier)
 
 	opts.SetDefaults()
 
