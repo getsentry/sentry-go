@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"strconv"
 	"testing"
 	"time"
 
@@ -315,9 +317,9 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 		},
 		{
 			name:          "Uint64 attribute - convert to float",
-			attr:          []any{"key8", uint64(1 << 63)},
+			attr:          []any{"key8", uint64(math.MaxUint64)},
 			expectedKey:   "key8",
-			expectedValue: 9.223372036854776e+18,
+			expectedValue: strconv.FormatUint(math.MaxUint64, 10),
 		},
 		{
 			name:          "something attribute",

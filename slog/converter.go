@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -142,13 +143,11 @@ func attrToSentryLog(group string, a slog.Attr) []attribute.Builder {
 	case slog.KindTime:
 		return []attribute.Builder{attribute.String(group+a.Key, a.Value.Time().Format(time.RFC3339))}
 	case slog.KindUint64:
-		// currently Relay cannot process uint64, try to convert to a supported format.
 		val := a.Value.Uint64()
 		if val <= math.MaxInt64 {
 			return []attribute.Builder{attribute.Int64(group+a.Key, int64(val))}
 		} else {
-			// For values larger than int64 can handle, we are using float. Potential precision loss
-			return []attribute.Builder{attribute.Float64(group+a.Key, float64(val))}
+			return []attribute.Builder{attribute.String(group+a.Key, strconv.FormatUint(val, 10))}
 		}
 	case slog.KindLogValuer:
 		return []attribute.Builder{attribute.String(group+a.Key, a.Value.LogValuer().LogValue().String())}
