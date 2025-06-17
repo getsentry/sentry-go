@@ -73,6 +73,8 @@ func attrToSentryEvent(attr slog.Attr, event *sentry.Event) {
 		handleUserAttributes(v, event)
 	case k == "request" && kind == slog.KindAny:
 		handleRequestAttributes(v, event)
+	case k == "fingerprint" && kind == slog.KindAny:
+		handleFingerprint(v, event)
 	case kind == slog.KindGroup:
 		event.Extra[k] = attrsToMap(v.Group()...)
 	default:
@@ -119,5 +121,11 @@ func handleRequestAttributes(v slog.Value, event *sentry.Event) {
 				event.User.Data["request"] = fmt.Sprintf("%v", v.Any())
 			}
 		}
+	}
+}
+
+func handleFingerprint(v slog.Value, event *sentry.Event) {
+	if fingerprint, ok := v.Any().([]string); ok {
+		event.Fingerprint = fingerprint
 	}
 }
