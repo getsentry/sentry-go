@@ -6,13 +6,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/getsentry/sentry-go"
 	sentrylogrus "github.com/getsentry/sentry-go/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
+	// Initialize Logrus
 	logger := logrus.New()
 
 	// Log DEBUG and higher level logs to STDERR
@@ -23,7 +23,7 @@ func main() {
 	logHook, err := sentrylogrus.NewLogHook(
 		[]logrus.Level{logrus.InfoLevel},
 		sentry.ClientOptions{
-			Dsn: "",
+			Dsn: "your-public-dsn",
 			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 				if hint.Context != nil {
 					if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
@@ -46,7 +46,7 @@ func main() {
 		logrus.FatalLevel,
 		logrus.PanicLevel,
 	}, sentry.ClientOptions{
-		Dsn: "",
+		Dsn: "your-public-dsn",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			if hint.Context != nil {
 				if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
