@@ -144,7 +144,6 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	if sdkVersion := l.client.sdkVersion; sdkVersion != "" {
 		attrs["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: "string"}
 	}
-	attrs["sentry.origin"] = Attribute{Value: "auto.logger.log", Type: "string"}
 
 	log := &Log{
 		Timestamp:  time.Now(),
