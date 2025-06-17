@@ -46,7 +46,6 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		"sentry.server.address":       {Value: "test-server", Type: "string"},
 		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
 		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
-		"sentry.origin":               {Value: "auto.logger.log", Type: "string"},
 		"sentry.message.template":     {Value: "param matching: %v and %v", Type: "string"},
 		"sentry.message.parameters.0": {Value: "param1", Type: "string"},
 		"sentry.message.parameters.1": {Value: "param2", Type: "string"},
@@ -207,7 +206,6 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		"sentry.server.address": {Value: "test-server", Type: "string"},
 		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
 		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
-		"sentry.origin":         {Value: "auto.logger.log", Type: "string"},
 	}
 
 	tests := []struct {
@@ -381,7 +379,6 @@ func Test_sentryLogger_Write(t *testing.T) {
 		"sentry.server.address": {Value: "test-server", Type: "string"},
 		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
 		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
-		"sentry.origin":         {Value: "auto.logger.log", Type: "string"},
 	}
 	wantLogs := []Log{
 		{
