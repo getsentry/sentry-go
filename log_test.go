@@ -452,6 +452,21 @@ func Test_batchLogger_Flush(t *testing.T) {
 	}
 }
 
+func Test_batchLogger_FlushWithContext(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	l := NewLogger(context.Background())
+	l.Info(ctx, "context done log")
+
+	cancelCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	FlushWithContext(cancelCtx)
+	defer cancel()
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+}
+
 func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
