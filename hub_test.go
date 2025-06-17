@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -491,5 +492,64 @@ func TestConcurrentHubClone(t *testing.T) {
 		return x.Message < y.Message
 	})); diff != "" {
 		t.Errorf("Events mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestHub_Flush(t *testing.T) {
+	hub, client, _ := setupHubTest()
+	transport := &MockTransport{}
+	client.Transport = transport
+
+	wantEvent := Event{Message: "something"}
+	hub.CaptureEvent(&wantEvent)
+	hub.Flush(20 * time.Millisecond)
+
+	gotEvents := transport.Events()
+	if len(gotEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(gotEvents))
+	}
+	if gotEvents[0].Message != wantEvent.Message {
+		t.Fatalf("expected message to be %v, got %v", wantEvent.Message, gotEvents[0].Message)
+	}
+}
+
+func TestHub_Flush_NoClient(t *testing.T) {
+	hub := NewHub(nil, nil)
+	flushed := hub.Flush(20 * time.Millisecond)
+
+	if flushed != false {
+		t.Fatalf("expected flush to be false, got %v", flushed)
+	}
+}
+
+func TestHub_FlushWithCtx_NoClient(t *testing.T) {
+	hub := NewHub(nil, nil)
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	flushed := hub.FlushWithContext(cancelCtx)
+
+	if flushed != false {
+		t.Fatalf("expected flush to be false, got %v", flushed)
+	}
+}
+
+func TestHub_FlushWithContext(t *testing.T) {
+	hub, client, _ := setupHubTest()
+	transport := &MockTransport{}
+	client.Transport = transport
+
+	wantEvent := Event{Message: "something"}
+	hub.CaptureEvent(&wantEvent)
+
+	cancelCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	hub.FlushWithContext(cancelCtx)
+	defer cancel()
+
+	gotEvents := transport.Events()
+	if len(gotEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(gotEvents))
+	}
+	if gotEvents[0].Message != wantEvent.Message {
+		t.Fatalf("expected message to be %v, got %v", wantEvent.Message, gotEvents[0].Message)
 	}
 }
