@@ -74,6 +74,11 @@ type Hook interface {
 	Fire(entry *logrus.Entry) error
 	// Flush waits until the underlying Sentry transport sends any buffered events.
 	Flush(timeout time.Duration) bool
+	// FlushWithContext waits for the underlying Sentry transport to send any buffered
+	// events, blocking until the context's deadline is reached or the context is canceled.
+	// It returns false if the context is canceled or its deadline expires before the events
+	// are sent, meaning some events may not have been sent.
+	FlushWithContext(ctx context.Context) bool
 }
 
 // Deprecated: New just makes an underlying call to NewEventHook.
@@ -207,6 +212,10 @@ func (h *eventHook) entryToEvent(l *logrus.Entry) *sentry.Event {
 
 func (h *eventHook) Flush(timeout time.Duration) bool {
 	return h.hubProvider().Client().Flush(timeout)
+}
+
+func (h *eventHook) FlushWithContext(ctx context.Context) bool {
+	return h.hubProvider().Client().FlushWithContext(ctx)
 }
 
 // NewEventHook initializes a new Logrus hook which sends events to a new Sentry client
@@ -385,6 +394,10 @@ func (h *logHook) Levels() []logrus.Level {
 
 func (h *logHook) Flush(timeout time.Duration) bool {
 	return h.hubProvider().Client().Flush(timeout)
+}
+
+func (h *logHook) FlushWithContext(ctx context.Context) bool {
+	return h.hubProvider().Client().FlushWithContext(ctx)
 }
 
 // NewLogHook initializes a new Logrus hook which sends logs to a new Sentry client
