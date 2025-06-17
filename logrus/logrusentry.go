@@ -329,8 +329,8 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 	// Handle request field
 	key := h.key(FieldRequest)
 	if req, ok := entry.Data[key].(*http.Request); ok {
-		h.logger.SetAttributes(attribute.String("http.method", req.Method))
-		h.logger.SetAttributes(attribute.String("http.url", req.URL.String()))
+		h.logger.SetAttributes(attribute.String("http.request.method", req.Method))
+		h.logger.SetAttributes(attribute.String("url.full", req.URL.String()))
 	}
 
 	// Handle error field
@@ -390,6 +390,9 @@ func (h *logHook) Flush(timeout time.Duration) bool {
 // NewLogHook initializes a new Logrus hook which sends logs to a new Sentry client
 // configured according to opts.
 func NewLogHook(levels []logrus.Level, opts sentry.ClientOptions) (Hook, error) {
+	if !opts.EnableLogs {
+		return nil, errors.New("cannot create log hook, EnableLogs is set to false")
+	}
 	client, err := sentry.NewClient(opts)
 	if err != nil {
 		return nil, err
