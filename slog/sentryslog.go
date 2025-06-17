@@ -2,6 +2,7 @@ package sentryslog
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/getsentry/sentry-go"
@@ -131,15 +132,11 @@ func (h *SentryHandler) Handle(ctx context.Context, record slog.Record) error {
 	var err error
 
 	if h.eventHandler.Enabled(ctx, record.Level) {
-		if handleErr := h.eventHandler.Handle(ctx, record); handleErr != nil {
-			err = handleErr
-		}
+		err = errors.Join(err, h.eventHandler.Handle(ctx, record))
 	}
 
 	if h.logHandler.Enabled(ctx, record.Level) {
-		if handleErr := h.logHandler.Handle(ctx, record); handleErr != nil {
-			err = handleErr
-		}
+		err = errors.Join(err, h.logHandler.Handle(ctx, record))
 	}
 
 	return err

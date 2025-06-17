@@ -127,34 +127,35 @@ func handleRequestAttributes(v slog.Value, event *sentry.Event) {
 }
 
 func attrToSentryLog(group string, a slog.Attr) []attribute.Builder {
+	key := group + a.Key
 	switch a.Value.Kind() {
 	case slog.KindAny:
-		return []attribute.Builder{attribute.String(group+a.Key, fmt.Sprintf("%+v", a.Value.Any()))}
+		return []attribute.Builder{attribute.String(key, fmt.Sprintf("%+v", a.Value.Any()))}
 	case slog.KindBool:
-		return []attribute.Builder{attribute.Bool(group+a.Key, a.Value.Bool())}
+		return []attribute.Builder{attribute.Bool(key, a.Value.Bool())}
 	case slog.KindDuration:
-		return []attribute.Builder{attribute.String(group+a.Key, a.Value.Duration().String())}
+		return []attribute.Builder{attribute.String(key, a.Value.Duration().String())}
 	case slog.KindFloat64:
-		return []attribute.Builder{attribute.Float64(group+a.Key, a.Value.Float64())}
+		return []attribute.Builder{attribute.Float64(key, a.Value.Float64())}
 	case slog.KindInt64:
-		return []attribute.Builder{attribute.Int64(group+a.Key, a.Value.Int64())}
+		return []attribute.Builder{attribute.Int64(key, a.Value.Int64())}
 	case slog.KindString:
-		return []attribute.Builder{attribute.String(group+a.Key, a.Value.String())}
+		return []attribute.Builder{attribute.String(key, a.Value.String())}
 	case slog.KindTime:
-		return []attribute.Builder{attribute.String(group+a.Key, a.Value.Time().Format(time.RFC3339))}
+		return []attribute.Builder{attribute.String(key, a.Value.Time().Format(time.RFC3339))}
 	case slog.KindUint64:
 		val := a.Value.Uint64()
 		if val <= math.MaxInt64 {
-			return []attribute.Builder{attribute.Int64(group+a.Key, int64(val))}
+			return []attribute.Builder{attribute.Int64(key, int64(val))}
 		} else {
-			return []attribute.Builder{attribute.String(group+a.Key, strconv.FormatUint(val, 10))}
+			return []attribute.Builder{attribute.String(key, strconv.FormatUint(val, 10))}
 		}
 	case slog.KindLogValuer:
-		return []attribute.Builder{attribute.String(group+a.Key, a.Value.LogValuer().LogValue().String())}
+		return []attribute.Builder{attribute.String(key, a.Value.LogValuer().LogValue().String())}
 	case slog.KindGroup:
 		// Handle nested group attributes
 		var attrs []attribute.Builder
-		groupPrefix := group + a.Key
+		groupPrefix := key
 		if groupPrefix != "" {
 			groupPrefix += "."
 		}
