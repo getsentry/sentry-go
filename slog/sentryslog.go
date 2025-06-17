@@ -40,8 +40,11 @@ var (
 		slog.LevelInfo:  sentry.LevelInfo,
 		slog.LevelWarn:  sentry.LevelWarning,
 		slog.LevelError: sentry.LevelError,
+		LevelFatal:      sentry.LevelFatal,
 	}
 )
+
+const LevelFatal = slog.Level(12)
 
 type Option struct {
 	// Deprecated: Use EventLevel instead. Level is kept for backwards compatibility and defaults to EventLevel.
@@ -232,15 +235,26 @@ func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
 	}
 	h.logger.SetAttributes(sentryAttributes...)
 	h.logger.SetAttributes(attribute.String("sentry.origin", "auto.logger.slog"))
-	switch record.Level {
-	case slog.LevelDebug:
+
+	// Use level ranges instead of exact matches to support custom levels
+	switch {
+	case record.Level < slog.LevelDebug:
+		// Levels below Debug (e.g., Trace)
+		h.logger.Trace(ctx, record.Message)
+	case record.Level < slog.LevelInfo:
+		// Debug level range: -4 to -1
 		h.logger.Debug(ctx, record.Message)
-	case slog.LevelInfo:
+	case record.Level < slog.LevelWarn:
+		// Info level range: 0 to 3
 		h.logger.Info(ctx, record.Message)
-	case slog.LevelWarn:
+	case record.Level < slog.LevelError:
+		// Warn level range: 4 to 7
 		h.logger.Warn(ctx, record.Message)
-	case slog.LevelError:
+	case record.Level < LevelFatal: // custom Fatal level, keep +4 increments
 		h.logger.Error(ctx, record.Message)
+	default:
+		// Fatal level range: 12 and above
+		h.logger.Fatal(ctx, record.Message)
 	}
 
 	return nil

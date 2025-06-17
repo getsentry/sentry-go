@@ -634,3 +634,71 @@ func TestSentryHandler_CaptureAsEventAndLog(t *testing.T) {
 	assert.True(t, found, "attribute should be in log entry's attributes")
 	assert.Equal(t, sentry.Attribute{Value: "common_value", Type: "string"}, logAttrVal)
 }
+
+func TestSentryHandler_CustomLogLevels(t *testing.T) {
+	testCases := []struct {
+		name                string
+		customLevel         slog.Level
+		expectedSentryLevel sentry.LogLevel
+		description         string
+	}{
+		{
+			name:                "Trace level",
+			customLevel:         slog.Level(-8),
+			expectedSentryLevel: sentry.LogLevelTrace,
+			description:         "Custom level below Debug should use Trace",
+		},
+		{
+			name:                "Between Debug and Info",
+			customLevel:         slog.Level(-2),
+			expectedSentryLevel: sentry.LogLevelDebug,
+			description:         "Custom level between Debug and Info should use Debug",
+		},
+		{
+			name:                "Between Info and Warn",
+			customLevel:         slog.Level(2),
+			expectedSentryLevel: sentry.LogLevelInfo,
+			description:         "Custom level between Info and Warn should use Info",
+		},
+		{
+			name:                "Between Warn and Error",
+			customLevel:         slog.Level(6),
+			expectedSentryLevel: sentry.LogLevelWarn,
+			description:         "Custom level between Warn and Error should use Warn",
+		},
+		{
+			name:                "Between Error and Fatal",
+			customLevel:         slog.Level(10),
+			expectedSentryLevel: sentry.LogLevelError,
+			description:         "Custom level between Error and Fatal should use Error",
+		},
+		// Note: We skip testing Fatal level (12+) because Fatal calls os.Exit(1)
+		// which would terminate the test process. The logic is covered by the
+		// range-based implementation in the actual handler.
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, mockTransport := newMockTransport()
+			handler := Option{
+				LogLevel:   slog.Level(-10), // Capture all levels
+				EventLevel: slog.LevelError + 100,
+			}.NewSentryHandler(ctx)
+			logger := slog.New(handler)
+
+			logger.LogAttrs(ctx, tt.customLevel, "test message with custom level", slog.String("level_name", tt.name))
+			sentry.Flush(20 * time.Millisecond)
+
+			gotEvents := mockTransport.Events()
+			assert.Equal(t, 1, len(gotEvents), "expected 1 event, got %d for %s", len(gotEvents), tt.description)
+
+			assert.Equal(t, "test message with custom level", mockTransport.Events()[0].Logs[0].Body)
+			assert.Equal(t, tt.expectedSentryLevel, mockTransport.Events()[0].Logs[0].Level,
+				"For %s: expected level %v, got %v", tt.description, tt.expectedSentryLevel, mockTransport.Events()[0].Logs[0].Level)
+
+			levelName, found := mockTransport.Events()[0].Logs[0].Attributes["level_name"]
+			assert.True(t, found, "level_name attribute not found for %s", tt.description)
+			assert.Equal(t, tt.name, levelName.Value, "level_name value mismatch for %s", tt.description)
+		})
+	}
+}
