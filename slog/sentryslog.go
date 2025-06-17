@@ -44,7 +44,7 @@ var (
 )
 
 type Option struct {
-	// Deprecated: Level is kept for backwards compatibility and defaults to EventLevel.
+	// Deprecated: Use EventLevel instead. Level is kept for backwards compatibility and defaults to EventLevel.
 	Level slog.Leveler
 	// EventLevel sets the minimum log level to capture and send to Sentry as an Event.
 	// Logs at this level and above will be processed as events.

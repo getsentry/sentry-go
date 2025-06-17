@@ -29,7 +29,7 @@ import (
 	"log/slog"
 
 	"github.com/getsentry/sentry-go"
-	slogSentry "github.com/getsentry/sentry-go/slog"
+	sentryslog "github.com/getsentry/sentry-go/slog"
 )
 
 func main() {
@@ -37,22 +37,23 @@ func main() {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn: "your-public-dsn",
 		Debug: true,
+        EnableLogs: true, 
 	})
 	if err != nil {
 		panic(err)
 	}
 	defer sentry.Flush(5 * time.Second)
 
-	// Set up slog with Sentry handler
-	handler := slogSentry.Option{
-		Level: slog.LevelError, // Minimum log level
-		AddSource: true,        // Include file/line source info
-	}.NewSentryHandler()
-	logger := slog.New(handler)
+	ctx := context.Background()
+	handler := sentryslog.Option{
+		LogLevel:   slog.LevelInfo,
+		EventLevel: slog.LevelError,
+	}.NewSentryHandler(ctx)
+    logger := slog.New(handler)
 
 	// Example logging
-	logger.Info("This will not be sent to Sentry")
-	logger.Error("An error occurred", "user", "test-user")
+	logger.Info("This will be sent to sentry as a log")
+	logger.Error("An error occurred", "user", "test-user") // this will be sent both as an event & log
 }
 ```
 
@@ -60,7 +61,9 @@ func main() {
 
 The slog-sentry package offers several options to customize how logs are handled and sent to Sentry. These are specified through the Option struct:
 
-- `Level`: Minimum log level to send to Sentry. Defaults to `slog.LevelDebug`.
+- `EventLevel`: Minimum level to send logs as events to Sentry. Defaults to `slog.LevelError`.
+
+- `LogLevel`: Minimum level to send logs to Sentry. Defaults to `slog.LevelDebug`.
 
 - `Hub`: Custom Sentry hub to use; defaults to the current Sentry hub if not set.
 
@@ -77,7 +80,7 @@ The slog-sentry package offers several options to customize how logs are handled
 
 ```go
 handler := slogSentry.Option{
-	Level: slog.LevelWarn,
+	EventLevel: slog.LevelWarn,
 	Converter: func(addSource bool, replaceAttr func([]string, slog.Attr) slog.Attr, attrs []slog.Attr, groups []string, record *slog.Record, hub *sentry.Hub) *sentry.Event {
 		// Custom conversion logic
 		return &sentry.Event{
