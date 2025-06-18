@@ -46,14 +46,16 @@ func main() {
 
 	ctx := context.Background()
 	handler := sentryslog.Option{
-		LogLevel:   slog.LevelInfo,
-		EventLevel: slog.LevelError,
+		EventLevel: []slog.Level{slog.LevelError, sentryslog.LevelFatal}, // Only Error and Fatal as events
+		LogLevel:   []slog.Level{slog.LevelWarn, slog.LevelInfo},         // Only Warn and Info as logs
 	}.NewSentryHandler(ctx)
     logger := slog.New(handler)
 
 	// Example logging
-	logger.Info("This will be sent to sentry as a log")
-	logger.Error("An error occurred", "user", "test-user") // this will be sent both as an event & log
+	logger.Info("This will be sent to sentry as a Log entry")
+	logger.Error("An error occurred", "user", "test-user") // this will be sent as an Event
+	// These will be ignored
+	logger.Debug("This will be ignored")
 }
 ```
 
@@ -61,9 +63,9 @@ func main() {
 
 The slog-sentry package offers several options to customize how logs are handled and sent to Sentry. These are specified through the Option struct:
 
-- `EventLevel`: Minimum level to send logs as events to Sentry. Defaults to `slog.LevelError`.
+- `EventLevel`: Slice of specific levels to send `Events` to Sentry. Defaults to `[]slog.Level{slog.LevelError, LevelFatal}`.
 
-- `LogLevel`: Minimum level to send logs to Sentry. Defaults to `slog.LevelDebug`.
+- `LogLevel`: Slice of specific levels to send `Log` entries to Sentry. Defaults to `[]slog.Level{slog.LevelError, LevelFatal}`.
 
 - `Hub`: Custom Sentry hub to use; defaults to the current Sentry hub if not set.
 
@@ -91,6 +93,22 @@ handler := slogSentry.Option{
 }.NewSentryHandler()
 ```
 
+### Backwards Compatibility
+
+The old `Level` field is Deprecated but still works and will be converted to a slice of all levels starting from the minimum level:
+
+```go
+// Old way (still works)
+handler := sentryslog.Option{
+    Level: slog.LevelWarn, // Will be converted to EventLevel: [Warn, Error, Fatal]
+}.NewSentryHandler(ctx)
+
+// New way (preferred)
+handler := sentryslog.Option{
+    EventLevel: []slog.Level{slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
+    LogLevel:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
+}.NewSentryHandler(ctx)
+```
 ## Notes
 
 - Always call `Flush` or `FlushWithContext` to ensure all events are sent to Sentry before program termination

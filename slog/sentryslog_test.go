@@ -17,61 +17,67 @@ import (
 
 func TestSentryHandler_Enabled(t *testing.T) {
 	tests := map[string]struct {
-		eventLevel slog.Leveler
-		logLevel   slog.Leveler
-		checkLevel slog.Level
-		expected   bool
+		eventLevels []slog.Level
+		logLevels   []slog.Level
+		checkLevel  slog.Level
+		expected    bool
 	}{
-		"Event:Error, Log:Info, Check:Debug": {
-			eventLevel: slog.LevelError,
-			logLevel:   slog.LevelInfo,
-			checkLevel: slog.LevelDebug,
-			expected:   false, // Debug < Info and Debug < Error
+		"Specific levels: Info in log levels only": {
+			eventLevels: []slog.Level{slog.LevelError, LevelFatal},
+			logLevels:   []slog.Level{slog.LevelInfo, slog.LevelWarn},
+			checkLevel:  slog.LevelInfo,
+			expected:    true, // Info is in log levels
 		},
-		"Event:Error, Log:Info, Check:Info": {
-			eventLevel: slog.LevelError,
-			logLevel:   slog.LevelInfo,
-			checkLevel: slog.LevelInfo,
-			expected:   true, // Info >= Info
+		"Specific levels: Debug not in any levels": {
+			eventLevels: []slog.Level{slog.LevelError, LevelFatal},
+			logLevels:   []slog.Level{slog.LevelInfo, slog.LevelWarn},
+			checkLevel:  slog.LevelDebug,
+			expected:    false, // Debug is not in either slice
 		},
-		"Event:Error, Log:Info, Check:Warn": {
-			eventLevel: slog.LevelError,
-			logLevel:   slog.LevelInfo,
-			checkLevel: slog.LevelWarn,
-			expected:   true, // Warn >= Info
+		"Specific levels: Error in both levels": {
+			eventLevels: []slog.Level{slog.LevelError, LevelFatal},
+			logLevels:   []slog.Level{slog.LevelInfo, slog.LevelWarn, slog.LevelError},
+			checkLevel:  slog.LevelError,
+			expected:    true, // Error is in both slices
 		},
-		"Event:Error, Log:Info, Check:Error": {
-			eventLevel: slog.LevelError,
-			logLevel:   slog.LevelInfo,
-			checkLevel: slog.LevelError,
-			expected:   true, // Error >= Error (and Error >= Info)
+		"Empty event levels, Info in log levels": {
+			eventLevels: []slog.Level{},
+			logLevels:   []slog.Level{slog.LevelDebug, slog.LevelInfo},
+			checkLevel:  slog.LevelInfo,
+			expected:    true, // Info is in log levels
 		},
-		"Event:Debug, Log:Warn, Check:Info": {
-			eventLevel: slog.LevelDebug,
-			logLevel:   slog.LevelWarn,
-			checkLevel: slog.LevelInfo,
-			expected:   true, // Info >= Debug
+		"Empty log levels, Error in event levels": {
+			eventLevels: []slog.Level{slog.LevelError, LevelFatal},
+			logLevels:   []slog.Level{},
+			checkLevel:  slog.LevelError,
+			expected:    true, // Error is in event levels
 		},
-		"Only EventLevel (Debug), Check Info": {
-			eventLevel: slog.LevelDebug,
-			logLevel:   slog.Level(slog.LevelError + 100), // Effectively disable log level
-			checkLevel: slog.LevelInfo,
-			expected:   true,
+		"Both empty slices": {
+			eventLevels: []slog.Level{},
+			logLevels:   []slog.Level{},
+			checkLevel:  slog.LevelInfo,
+			expected:    false, // No levels enabled
 		},
-		"Only LogLevel (Debug), Check Info": {
-			eventLevel: slog.Level(slog.LevelError + 100), // Effectively disable event level
-			logLevel:   slog.LevelDebug,
-			checkLevel: slog.LevelInfo,
-			expected:   true,
+		"Only Fatal level enabled": {
+			eventLevels: []slog.Level{LevelFatal},
+			logLevels:   []slog.Level{},
+			checkLevel:  LevelFatal,
+			expected:    true, // Fatal is enabled
+		},
+		"Only Fatal level enabled, check Error": {
+			eventLevels: []slog.Level{LevelFatal},
+			logLevels:   []slog.Level{},
+			checkLevel:  slog.LevelError,
+			expected:    false, // Error is not enabled, only Fatal
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			option := Option{EventLevel: tt.eventLevel, LogLevel: tt.logLevel}
+			option := Option{EventLevel: tt.eventLevels, LogLevel: tt.logLevels}
 			h := option.NewSentryHandler(context.Background())
 			if got := h.Enabled(context.Background(), tt.checkLevel); got != tt.expected {
-				t.Errorf("Enabled() = %v, want %v (EventLevel: %s, LogLevel: %s, CheckLevel: %s)", got, tt.expected, tt.eventLevel, tt.logLevel, tt.checkLevel)
+				t.Errorf("Enabled() = %v, want %v (EventLevel: %v, LogLevel: %v, CheckLevel: %v)", got, tt.expected, tt.eventLevels, tt.logLevels, tt.checkLevel)
 			}
 		})
 	}
@@ -159,21 +165,21 @@ func TestOption_NewSentryHandler(t *testing.T) {
 		"Default options": {
 			option: Option{},
 			expected: Option{
-				EventLevel:      slog.LevelError,
-				LogLevel:        slog.LevelDebug,
+				EventLevel:      []slog.Level{slog.LevelError, LevelFatal},
+				LogLevel:        []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
 				Converter:       DefaultConverter,
 				AttrFromContext: []func(ctx context.Context) []slog.Attr{}},
 		},
 		"Custom options": {
 			option: Option{
-				EventLevel:      slog.LevelWarn,
-				LogLevel:        slog.LevelInfo,
+				EventLevel:      []slog.Level{slog.LevelWarn, slog.LevelError},
+				LogLevel:        []slog.Level{slog.LevelInfo, slog.LevelWarn},
 				Converter:       CustomConverter,
 				AttrFromContext: []func(ctx context.Context) []slog.Attr{customAttrFromContext},
 			},
 			expected: Option{
-				EventLevel:      slog.LevelWarn,
-				LogLevel:        slog.LevelInfo,
+				EventLevel:      []slog.Level{slog.LevelWarn, slog.LevelError},
+				LogLevel:        []slog.Level{slog.LevelInfo, slog.LevelWarn},
 				Converter:       CustomConverter,
 				AttrFromContext: []func(ctx context.Context) []slog.Attr{customAttrFromContext},
 			},
@@ -185,17 +191,70 @@ func TestOption_NewSentryHandler(t *testing.T) {
 			got := tt.option.NewSentryHandler(context.Background())
 			sh := got.(*SentryHandler)
 
-			if sh.eventHandler.option.EventLevel.Level() != tt.expected.EventLevel.Level() {
-				t.Errorf("eventHandler EventLevel = %v, want %v", sh.eventHandler.option.EventLevel.Level(), tt.expected.EventLevel.Level())
+			if !equalLevels(sh.eventHandler.option.EventLevel, tt.expected.EventLevel) {
+				t.Errorf("eventHandler EventLevel = %v, want %v", sh.eventHandler.option.EventLevel, tt.expected.EventLevel)
 			}
-			if sh.logHandler.option.LogLevel.Level() != tt.expected.LogLevel.Level() {
-				t.Errorf("logHandler LogLevel = %v, want %v", sh.logHandler.option.LogLevel.Level(), tt.expected.LogLevel.Level())
+			if !equalLevels(sh.logHandler.option.LogLevel, tt.expected.LogLevel) {
+				t.Errorf("logHandler LogLevel = %v, want %v", sh.logHandler.option.LogLevel, tt.expected.LogLevel)
 			}
 			if !equalFuncs(sh.eventHandler.option.AttrFromContext, tt.expected.AttrFromContext) {
 				t.Errorf("eventHandler AttrFromContext functions don't match")
 			}
 			if !equalFuncs(sh.logHandler.option.AttrFromContext, tt.expected.AttrFromContext) {
 				t.Errorf("logHandler AttrFromContext functions don't match")
+			}
+		})
+	}
+}
+
+// Test backwards compatibility with the deprecated Level field
+func TestOption_NewSentryHandler_BackwardsCompatibility(t *testing.T) {
+	tests := map[string]struct {
+		option        Option
+		expectedEvent []slog.Level
+		expectedLog   []slog.Level
+	}{
+		"Level set to Info": {
+			option: Option{
+				Level: slog.LevelInfo,
+			},
+			expectedEvent: []slog.Level{slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
+			expectedLog:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
+		},
+		"Level set to Error": {
+			option: Option{
+				Level: slog.LevelError,
+			},
+			expectedEvent: []slog.Level{slog.LevelError, LevelFatal},
+			expectedLog:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
+		},
+		"Level set to Debug": {
+			option: Option{
+				Level: slog.LevelDebug,
+			},
+			expectedEvent: []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
+			expectedLog:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
+		},
+		"EventLevel takes precedence over Level": {
+			option: Option{
+				Level:      slog.LevelError,
+				EventLevel: []slog.Level{slog.LevelWarn},
+			},
+			expectedEvent: []slog.Level{slog.LevelWarn},
+			expectedLog:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.option.NewSentryHandler(context.Background())
+			sh := got.(*SentryHandler)
+
+			if !equalLevels(sh.eventHandler.option.EventLevel, tt.expectedEvent) {
+				t.Errorf("eventHandler EventLevel = %v, want %v", sh.eventHandler.option.EventLevel, tt.expectedEvent)
+			}
+			if !equalLevels(sh.logHandler.option.LogLevel, tt.expectedLog) {
+				t.Errorf("logHandler LogLevel = %v, want %v", sh.logHandler.option.LogLevel, tt.expectedLog)
 			}
 		})
 	}
@@ -231,6 +290,18 @@ func equalFuncs(a, b []func(ctx context.Context) []slog.Attr) bool {
 	}
 	for i := range a {
 		if fmt.Sprintf("%p", a[i]) != fmt.Sprintf("%p", b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func equalLevels(a, b []slog.Level) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
 			return false
 		}
 	}
@@ -345,8 +416,8 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := newMockTransport()
 			handler := Option{
-				LogLevel:   slog.LevelDebug,       // Capture logs
-				EventLevel: slog.LevelError + 100, // Do not capture events for this test
+				LogLevel:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal}, // Capture logs
+				EventLevel: []slog.Level{},                                                                             // Do not capture events for this test
 			}.NewSentryHandler(ctx)
 			logger := slog.New(handler)
 			logger.InfoContext(ctx, "test message", tt.attr...)
@@ -368,8 +439,8 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 func TestSentryHandler_WithAttrsAndGroup(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 	baseHandler := Option{
-		LogLevel:   slog.LevelDebug,
-		EventLevel: slog.LevelError + 100,
+		LogLevel:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
+		EventLevel: []slog.Level{},
 	}.NewSentryHandler(ctx)
 	baseLogger := slog.New(baseHandler)
 
@@ -476,8 +547,8 @@ func TestSentryHandler_LogLevels(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := newMockTransport()
 			handler := Option{
-				LogLevel:   slog.LevelDebug,
-				EventLevel: slog.LevelError + 100,
+				LogLevel:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
+				EventLevel: []slog.Level{},
 			}.NewSentryHandler(ctx)
 			logger := slog.New(handler)
 
@@ -502,8 +573,8 @@ func TestSentryHandler_ReplaceAttr(t *testing.T) {
 	}
 	ctx, mockTransport := newMockTransport()
 	handler := Option{
-		LogLevel:    slog.LevelDebug,       // Capture as log
-		EventLevel:  slog.LevelError + 100, // Don't capture as event
+		LogLevel:    []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal}, // Capture as log
+		EventLevel:  []slog.Level{},                                                                             // Don't capture as event
 		ReplaceAttr: replaceAttr,
 	}.NewSentryHandler(ctx)
 
@@ -527,8 +598,8 @@ func TestSentryHandler_ReplaceAttr(t *testing.T) {
 func TestSentryHandler_AddSource(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 	handler := Option{
-		EventLevel: slog.LevelError + 100,
-		LogLevel:   slog.LevelDebug,
+		EventLevel: []slog.Level{},
+		LogLevel:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
 		AddSource:  true,
 	}.NewSentryHandler(ctx)
 
@@ -551,8 +622,8 @@ func TestSentryHandler_AddSource(t *testing.T) {
 func TestSentryHandler_EventType(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 	handler := Option{
-		EventLevel: slog.LevelInfo,
-		LogLevel:   slog.LevelError + 100,
+		EventLevel: []slog.Level{slog.LevelInfo}, // Changed to capture Info level as event
+		LogLevel:   []slog.Level{},               // No log capture for this test
 	}.NewSentryHandler(ctx)
 
 	logger := slog.New(handler)
@@ -580,8 +651,8 @@ func TestSentryHandler_EventTypeWithReplaceAttr(t *testing.T) {
 
 	ctx, mockTransport := newMockTransport()
 	handler := Option{
-		EventLevel:  slog.LevelDebug,       // Capture as event
-		LogLevel:    slog.LevelError + 100, // Don't capture as log
+		EventLevel:  []slog.Level{slog.LevelInfo}, // Changed to capture Info level as event
+		LogLevel:    []slog.Level{},               // No log capture for this test
 		ReplaceAttr: replaceAttr,
 	}.NewSentryHandler(ctx)
 
@@ -606,8 +677,8 @@ func TestSentryHandler_EventTypeWithReplaceAttr(t *testing.T) {
 func TestSentryHandler_CaptureAsEventAndLog(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 	handler := Option{
-		EventLevel: slog.LevelWarn,
-		LogLevel:   slog.LevelWarn,
+		EventLevel: []slog.Level{slog.LevelWarn}, // Capture Warn as event
+		LogLevel:   []slog.Level{slog.LevelWarn}, // Also capture Warn as log
 	}.NewSentryHandler(ctx)
 
 	logger := slog.New(handler)
@@ -681,8 +752,8 @@ func TestSentryHandler_CustomLogLevels(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := newMockTransport()
 			handler := Option{
-				LogLevel:   slog.Level(-10), // Capture all levels
-				EventLevel: slog.LevelError + 100,
+				LogLevel:   []slog.Level{tt.customLevel}, // Capture the specific custom level
+				EventLevel: []slog.Level{},
 			}.NewSentryHandler(ctx)
 			logger := slog.New(handler)
 
@@ -699,6 +770,62 @@ func TestSentryHandler_CustomLogLevels(t *testing.T) {
 			levelName, found := mockTransport.Events()[0].Logs[0].Attributes["level_name"]
 			assert.True(t, found, "level_name attribute not found for %s", tt.description)
 			assert.Equal(t, tt.name, levelName.Value, "level_name value mismatch for %s", tt.description)
+		})
+	}
+}
+
+// Test that Enabled returns false for levels not in the slices
+func TestSentryHandler_EnabledSpecificLevels(t *testing.T) {
+	tests := map[string]struct {
+		eventLevels []slog.Level
+		logLevels   []slog.Level
+		testLevel   slog.Level
+		expected    bool
+	}{
+		"Level in event slice": {
+			eventLevels: []slog.Level{slog.LevelWarn, slog.LevelError},
+			logLevels:   []slog.Level{slog.LevelDebug},
+			testLevel:   slog.LevelWarn,
+			expected:    true,
+		},
+		"Level in log slice": {
+			eventLevels: []slog.Level{slog.LevelError},
+			logLevels:   []slog.Level{slog.LevelDebug, slog.LevelInfo},
+			testLevel:   slog.LevelInfo,
+			expected:    true,
+		},
+		"Level in both slices": {
+			eventLevels: []slog.Level{slog.LevelWarn, slog.LevelError},
+			logLevels:   []slog.Level{slog.LevelWarn, slog.LevelInfo},
+			testLevel:   slog.LevelWarn,
+			expected:    true,
+		},
+		"Level not in any slice": {
+			eventLevels: []slog.Level{slog.LevelError},
+			logLevels:   []slog.Level{slog.LevelDebug},
+			testLevel:   slog.LevelInfo,
+			expected:    false,
+		},
+		"Empty slices": {
+			eventLevels: []slog.Level{},
+			logLevels:   []slog.Level{},
+			testLevel:   slog.LevelInfo,
+			expected:    false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			option := Option{
+				EventLevel: tt.eventLevels,
+				LogLevel:   tt.logLevels,
+			}
+			handler := option.NewSentryHandler(context.Background())
+
+			result := handler.Enabled(context.Background(), tt.testLevel)
+			assert.Equal(t, tt.expected, result,
+				"Expected Enabled(%v) = %v with EventLevel=%v, LogLevel=%v",
+				tt.testLevel, tt.expected, tt.eventLevels, tt.logLevels)
 		})
 	}
 }

@@ -49,15 +49,15 @@ const LevelFatal = slog.Level(12)
 type Option struct {
 	// Deprecated: Use EventLevel instead. Level is kept for backwards compatibility and defaults to EventLevel.
 	Level slog.Leveler
-	// EventLevel sets the minimum log level to capture and send to Sentry as an Event.
-	// Logs at this level and above will be processed as events.
-	// Defaults to slog.LevelError.
-	EventLevel slog.Leveler
+	// EventLevel specifies the exact log levels to capture and send to Sentry as Events.
+	// Only logs at these specific levels will be processed as events.
+	// Defaults to []slog.Level{slog.LevelError, LevelFatal}.
+	EventLevel []slog.Level
 
-	// LogLevel sets the minimum log level to capture and send to Sentry as a Log entry.
-	// Logs at this level and above will be processed as log entries.
-	// Defaults to slog.LevelDebug.
-	LogLevel slog.Leveler
+	// LogLevel specifies the exact log levels to capture and send to Sentry as Log entries.
+	// Only logs at these specific levels will be processed as log entries.
+	// Defaults to []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal}.
+	LogLevel []slog.Level
 
 	// Hub specifies the Sentry Hub to use for capturing events.
 	// If not provided, the current Hub is used by default.
@@ -86,13 +86,13 @@ func (o Option) NewSentryHandler(ctx context.Context) slog.Handler {
 	if o.EventLevel == nil {
 		// backwards compatibility
 		if o.Level != nil {
-			o.EventLevel = o.Level
+			o.EventLevel = levelsFromMinimum(o.Level.Level())
 		} else {
-			o.EventLevel = slog.LevelError
+			o.EventLevel = []slog.Level{slog.LevelError, LevelFatal}
 		}
 	}
 	if o.LogLevel == nil {
-		o.LogLevel = slog.LevelDebug
+		o.LogLevel = []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal}
 	}
 
 	if o.Converter == nil {
@@ -166,10 +166,12 @@ type eventHandler struct {
 }
 
 func (h *eventHandler) Enabled(_ context.Context, level slog.Level) bool {
-	if h.option.EventLevel == nil {
-		return false
+	for _, eventLevel := range h.option.EventLevel {
+		if level == eventLevel {
+			return true
+		}
 	}
-	return level >= h.option.EventLevel.Level()
+	return false
 }
 
 func (h *eventHandler) Handle(ctx context.Context, record slog.Record) error {
@@ -214,10 +216,12 @@ type logHandler struct {
 }
 
 func (h *logHandler) Enabled(_ context.Context, level slog.Level) bool {
-	if h.option.LogLevel == nil {
-		return false
+	for _, logLevel := range h.option.LogLevel {
+		if level == logLevel {
+			return true
+		}
 	}
-	return level >= h.option.LogLevel.Level()
+	return false
 }
 
 func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
@@ -280,4 +284,15 @@ func (h *logHandler) WithGroup(name string) *logHandler {
 		groups: append(h.groups, name),
 		logger: h.logger,
 	}
+}
+
+func levelsFromMinimum(minLevel slog.Level) []slog.Level {
+	allLevels := []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal}
+	var result []slog.Level
+	for _, level := range allLevels {
+		if level >= minLevel {
+			result = append(result, level)
+		}
+	}
+	return result
 }
