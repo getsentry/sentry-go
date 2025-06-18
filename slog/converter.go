@@ -4,9 +4,13 @@ import (
 	"encoding"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 )
 
 var (
@@ -128,4 +132,47 @@ func handleFingerprint(v slog.Value, event *sentry.Event) {
 	if fingerprint, ok := v.Any().([]string); ok {
 		event.Fingerprint = fingerprint
 	}
+}
+
+func attrToSentryLog(group string, a slog.Attr) []attribute.Builder {
+	key := group + a.Key
+	switch a.Value.Kind() {
+	case slog.KindAny:
+		return []attribute.Builder{attribute.String(key, fmt.Sprintf("%+v", a.Value.Any()))}
+	case slog.KindBool:
+		return []attribute.Builder{attribute.Bool(key, a.Value.Bool())}
+	case slog.KindDuration:
+		return []attribute.Builder{attribute.String(key, a.Value.Duration().String())}
+	case slog.KindFloat64:
+		return []attribute.Builder{attribute.Float64(key, a.Value.Float64())}
+	case slog.KindInt64:
+		return []attribute.Builder{attribute.Int64(key, a.Value.Int64())}
+	case slog.KindString:
+		return []attribute.Builder{attribute.String(key, a.Value.String())}
+	case slog.KindTime:
+		return []attribute.Builder{attribute.String(key, a.Value.Time().Format(time.RFC3339))}
+	case slog.KindUint64:
+		val := a.Value.Uint64()
+		if val <= math.MaxInt64 {
+			return []attribute.Builder{attribute.Int64(key, int64(val))}
+		} else {
+			return []attribute.Builder{attribute.String(key, strconv.FormatUint(val, 10))}
+		}
+	case slog.KindLogValuer:
+		return []attribute.Builder{attribute.String(key, a.Value.LogValuer().LogValue().String())}
+	case slog.KindGroup:
+		// Handle nested group attributes
+		var attrs []attribute.Builder
+		groupPrefix := key
+		if groupPrefix != "" {
+			groupPrefix += "."
+		}
+		for _, subAttr := range a.Value.Group() {
+			attrs = append(attrs, attrToSentryLog(groupPrefix, subAttr)...)
+		}
+		return attrs
+	}
+
+	sentry.DebugLogger.Printf("Invalid type: dropping attribute with key: %v and value: %v", a.Key, a.Value)
+	return []attribute.Builder{}
 }
