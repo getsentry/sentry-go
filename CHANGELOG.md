@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.34.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.34.0.
+
+### Breaking Changes
+
+- Logrus structured logging support replaces the `sentrylogrus.Hook` signature from a `*Hook` to an interface.
+
+### Features
+
+- Structured logging support for [slog](https://pkg.go.dev/log/slog). ([#1033](https://github.com/getsentry/sentry-go/pull/1033)).
+- Structured logging support for [logrus](https://github.com/sirupsen/logrus). ([#1036](https://github.com/getsentry/sentry-go/pull/1036)).
+- Add slog fingerprint handler. ([#1039](https://github.com/getsentry/sentry-go/pull/1039)). 
+- Implement flush with context. ([#935](https://github.com/getsentry/sentry-go/pull/935)).
+- Add more sensitive HTTP headers. ([#1008](https://github.com/getsentry/sentry-go/pull/1008)).
+
+### Deprecations
+- Slog structured logging support replaces `Level` option with `EventLevel` and `LogLevel` options, for specifying fine-grained levels for capturing events and logs.  
+
+```go 
+handler := sentryslog.Option{
+    EventLevel: []slog.Level{slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
+    LogLevel:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
+}.NewSentryHandler(ctx)
+```
+
+- Logrus structured logging support replaces `New` and `NewFromClient` functions to `NewEventHook`, `NewEventHookFromClient`, to match the newly added `NewLogHook` functions, and specify the hook type being created each time.
+
+```go
+logHook, err := sentrylogrus.NewLogHook(
+		[]logrus.Level{logrus.InfoLevel},
+		sentry.ClientOptions{})
+eventHook, err := sentrylogrus.NewEventHook([]logrus.Level{
+    logrus.ErrorLevel,
+    logrus.FatalLevel,
+    logrus.PanicLevel,
+}, sentry.ClientOptions{})
+```
+
+### Bug Fixes
+
+- Remove `sentry.origin` for sentry logger. ([#1038](https://github.com/getsentry/sentry-go/pull/1038)).
+- Continue from trace when `sentry-trace` does not exist. ([#1026](https://github.com/getsentry/sentry-go/pull/1026)).
+- fix(logs): Don't gate user behind `SendDefaultPII`. ([#1032](https://github.com/getsentry/sentry-go/pull/1032)).
+- Add user details when DefaultPII is enabled. ([#1018](https://github.com/getsentry/sentry-go/pull/1018)). 
+
+### Misc
+
+- build(deps): bump actions/create-github-app-token from 1.12.0 to 2.0.6. ([#1021](https://github.com/getsentry/sentry-go/pull/1021)). 
+- build(deps): bump golangci/golangci-lint-action from 7.0.0 to 8.0.0. ([#1020](https://github.com/getsentry/sentry-go/pull/1020)). 
+- build(deps): bump codecov/codecov-action from 5.4.2 to 5.4.3. ([#1022](https://github.com/getsentry/sentry-go/pull/1022)). 
+- chore: Rename bulider.go to builder.go. ([#1037](https://github.com/getsentry/sentry-go/pull/1037)). 
+- Fix use correct Level signature for logs. ([#1034](https://github.com/getsentry/sentry-go/pull/1034)). 
+
 ## 0.33.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.33.0.
