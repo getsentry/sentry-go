@@ -8,49 +8,61 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 
 - Logrus structured logging support replaces the `sentrylogrus.Hook` signature from a `*Hook` to an interface.
 
+```go
+var hook *sentrylogrus.Hook
+hook = sentrylogrus.New(
+    // ... your setup
+)
+
+// should change the definition to 
+var hook sentrylogrus.Hook
+hook = sentrylogrus.New(
+    // ... your setup
+)
+```
 
 ### Features
 
 - Structured logging support for [slog](https://pkg.go.dev/log/slog). ([#1033](https://github.com/getsentry/sentry-go/pull/1033))
 
 ```go
-	ctx := context.Background()
-    handler := sentryslog.Option{
-        EventLevel: []slog.Level{slog.LevelError, sentryslog.LevelFatal}, // Only Error and Fatal as events
-        LogLevel:   []slog.Level{slog.LevelWarn, slog.LevelInfo},         // Only Warn and Info as logs
-    }.NewSentryHandler(ctx)
-    logger := slog.New(handler)
-  logger.Info("User action", slog.String("user_id", "123"), slog.String("action", "login"))
+ctx := context.Background()
+handler := sentryslog.Option{
+    EventLevel: []slog.Level{slog.LevelError, sentryslog.LevelFatal}, // Only Error and Fatal as events
+    LogLevel:   []slog.Level{slog.LevelWarn, slog.LevelInfo},         // Only Warn and Info as logs
+}.NewSentryHandler(ctx)
+logger := slog.New(handler)
+logger.Info("hello"))
 ```
 
 - Structured logging support for [logrus](https://github.com/sirupsen/logrus). ([#1036](https://github.com/getsentry/sentry-go/pull/1036))
-  ```go
-  logHook, _ := sentrylogrus.NewLogHook(
-    []logrus.Level{logrus.InfoLevel, logrus.WarnLevel},
+```go
+logHook, _ := sentrylogrus.NewLogHook(
+    []logrus.Level{logrus.InfoLevel, logrus.WarnLevel}, 
     sentry.ClientOptions{
         Dsn: "your-dsn",
-        EnableLogs: true, // Required for log entries
+        EnableLogs: true, // Required for log entries    
     })
-  defer logHook.Flush(5 * time.Secod)
-  logrus.RegisterExitHandler(func() {
+defer logHook.Flush(5 * time.Secod)
+logrus.RegisterExitHandler(func() {
     logHook.Flush(5 * time.Second)
-  })
-  
-  logger := logrus.New()
-  logger.AddHook(logHook)
-  logger.Infof("hello")
-  ```
+})
+
+logger := logrus.New()
+logger.AddHook(logHook)
+logger.Infof("hello")
+```
 
 - Add support for flushing events with context using `FlushWithContext()`. ([#935](https://github.com/getsentry/sentry-go/pull/935))
 
-  ```go
-  ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-  defer cancel()
-  
-  if !sentry.FlushWithContext(ctx) {
-      // Handle timeout or cancellation
-  }
-  ```
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+if !sentry.FlushWithContext(ctx) {
+    // Handle timeout or cancellation
+}
+```
 
 - Add support for custom fingerprints in slog integration. ([#1039](https://github.com/getsentry/sentry-go/pull/1039))
 
