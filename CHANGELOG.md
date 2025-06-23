@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.34.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.34.0.
+
+### Features
+
+- **Enhanced Structured Logging Support**: Comprehensive structured logging support has been added for both `slog` and `logrus` integrations. ([#1033](https://github.com/getsentry/sentry-go/pull/1033), [#1036](https://github.com/getsentry/sentry-go/pull/1036))
+
+  The integrations now support sending log attributes as structured data to Sentry, making it easier to filter and search logs in the Sentry UI.
+
+  ```go
+  // slog example
+  logger := slog.New(sentryslog.Option{}.NewSentryHandler(slog.LevelDebug, nil))
+  logger.Info("User action", slog.String("user_id", "123"), slog.String("action", "login"))
+
+  // logrus example  
+  logrus.WithFields(logrus.Fields{
+      "user_id": "123",
+      "action":  "login",
+  }).Info("User action")
+  ```
+
+- **Context-aware Flush**: Add support for flushing events with context using `FlushWithContext()`. ([#935](https://github.com/getsentry/sentry-go/pull/935))
+
+  ```go
+  ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+  defer cancel()
+  
+  if !sentry.FlushWithContext(ctx) {
+      // Handle timeout or cancellation
+  }
+  ```
+
+- **Slog Fingerprint Handler**: Add support for custom fingerprints in slog integration. ([#1039](https://github.com/getsentry/sentry-go/pull/1039))
+
+### Bug Fixes
+
+- Fix issue where `ContinueTrace()` would panic when `sentry-trace` header does not exist. ([#1026](https://github.com/getsentry/sentry-go/pull/1026))
+- Fix incorrect log level signature in structured logging. ([#1034](https://github.com/getsentry/sentry-go/pull/1034))
+- Remove `sentry.origin` attribute from Sentry logger to prevent confusion in spans. ([#1038](https://github.com/getsentry/sentry-go/pull/1038))
+- Don't gate user information behind `SendDefaultPII` flag for logs. ([#1032](https://github.com/getsentry/sentry-go/pull/1032))
+
+### Misc
+
+- Add user details to events when `DefaultPII` is enabled. ([#1018](https://github.com/getsentry/sentry-go/pull/1018))
+- Add more sensitive HTTP headers to the default list of headers that are scrubbed by default. ([#1008](https://github.com/getsentry/sentry-go/pull/1008))
+- Fix typo: rename `bulider.go` to `builder.go`. ([#1037](https://github.com/getsentry/sentry-go/pull/1037))
+- Update various dependencies to their latest versions.
+
 ## 0.33.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.33.0.
