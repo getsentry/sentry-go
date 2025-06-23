@@ -335,32 +335,7 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 			h.logger.SetAttributes(attribute.String(k, fmt.Sprint(v)))
 		}
 	}
-	// Handle request field
-	key := h.key(FieldRequest)
-	if req, ok := entry.Data[key].(*http.Request); ok {
-		h.logger.SetAttributes(attribute.String("http.request.method", req.Method))
-		h.logger.SetAttributes(attribute.String("url.full", req.URL.String()))
-	}
 
-	// Handle error field
-	if err, ok := entry.Data[logrus.ErrorKey].(error); ok {
-		h.logger.SetAttributes(attribute.String("error.type", fmt.Sprintf("%T", err)))
-		h.logger.SetAttributes(attribute.String("error.message", err.Error()))
-	}
-
-	// Handle user field
-	key = h.key(FieldUser)
-	if user, ok := entry.Data[key].(sentry.User); ok {
-		if user.ID != "" {
-			h.logger.SetAttributes(attribute.String("user.id", user.ID))
-		}
-		if user.Email != "" {
-			h.logger.SetAttributes(attribute.String("user.email", user.Email))
-		}
-		if user.Name != "" {
-			h.logger.SetAttributes(attribute.String("user.name", user.Name))
-		}
-	}
 	h.logger.SetAttributes(attribute.String("sentry.origin", "auto.logger.logrus"))
 
 	switch entry.Level {
