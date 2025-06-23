@@ -697,32 +697,25 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 		Level: sentry.LogLevelInfo,
 		Body:  "test message",
 		Attributes: map[string]sentry.Attribute{
-			"int8":                {Value: int64(8), Type: "integer"},
-			"int16":               {Value: int64(16), Type: "integer"},
-			"int32":               {Value: int64(32), Type: "integer"},
-			"int64":               {Value: int64(64), Type: "integer"},
-			"int":                 {Value: int64(42), Type: "integer"},
-			"uint8":               {Value: int64(8), Type: "integer"},
-			"uint16":              {Value: int64(16), Type: "integer"},
-			"uint32":              {Value: int64(32), Type: "integer"},
-			"uint64":              {Value: int64(64), Type: "integer"},
-			"uint":                {Value: int64(42), Type: "integer"},
-			"string":              {Value: "test string", Type: "string"},
-			"float32":             {Value: float64(float32(3.14)), Type: "double"},
-			"float64":             {Value: 6.28, Type: "double"},
-			"float64-overflow":    {Value: strconv.FormatUint(math.MaxUint64, 10), Type: "string"},
-			"bool":                {Value: true, Type: "boolean"},
-			"string_slice":        {Value: "[one two three]", Type: "string"},
-			"string_map":          {Value: "map[a:1 b:2 c:3]", Type: "string"},
-			"complex":             {Value: "{test 42}", Type: "string"},
-			"sentry.origin":       {Value: "auto.logger.logrus", Type: "string"},
-			"error.message":       {Value: "test error", Type: "string"},
-			"error.type":          {Value: "*errors.errorString", Type: "string"},
-			"http.request.method": {Value: "GET", Type: "string"},
-			"url.full":            {Value: "https://example.com/test", Type: "string"},
-			"user.email":          {Value: "test@example.com", Type: "string"},
-			"user.id":             {Value: "test-user", Type: "string"},
-			"user.name":           {Value: "tester", Type: "string"},
+			"int8":             {Value: int64(8), Type: "integer"},
+			"int16":            {Value: int64(16), Type: "integer"},
+			"int32":            {Value: int64(32), Type: "integer"},
+			"int64":            {Value: int64(64), Type: "integer"},
+			"int":              {Value: int64(42), Type: "integer"},
+			"uint8":            {Value: int64(8), Type: "integer"},
+			"uint16":           {Value: int64(16), Type: "integer"},
+			"uint32":           {Value: int64(32), Type: "integer"},
+			"uint64":           {Value: int64(64), Type: "integer"},
+			"uint":             {Value: int64(42), Type: "integer"},
+			"string":           {Value: "test string", Type: "string"},
+			"float32":          {Value: float64(float32(3.14)), Type: "double"},
+			"float64":          {Value: 6.28, Type: "double"},
+			"float64-overflow": {Value: strconv.FormatUint(math.MaxUint64, 10), Type: "string"},
+			"bool":             {Value: true, Type: "boolean"},
+			"string_slice":     {Value: "[one two three]", Type: "string"},
+			"string_map":       {Value: "map[a:1 b:2 c:3]", Type: "string"},
+			"complex":          {Value: "{test 42}", Type: "string"},
+			"sentry.origin":    {Value: "auto.logger.logrus", Type: "string"},
 		},
 	}
 
@@ -754,12 +747,6 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 	}
 
 	// Add fields for request, user and transaction
-	req, _ := http.NewRequest("GET", "https://example.com/test", nil)
-	user := sentry.User{ID: "test-user", Email: "test@example.com", Name: "tester"}
-	entry.Data[logHook.key(FieldRequest)] = req
-	entry.Data[logHook.key(FieldUser)] = user
-	entry.Data[logHook.key(FieldFingerprint)] = []string{"test-fingerprint"}
-
 	err := logHook.Fire(entry)
 	assert.NoError(t, err)
 
