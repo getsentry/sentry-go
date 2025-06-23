@@ -29,7 +29,7 @@ import (
 	"log/slog"
 
 	"github.com/getsentry/sentry-go"
-	slogSentry "github.com/getsentry/sentry-go/slog"
+	sentryslog "github.com/getsentry/sentry-go/slog"
 )
 
 func main() {
@@ -37,22 +37,25 @@ func main() {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn: "your-public-dsn",
 		Debug: true,
+        EnableLogs: true, 
 	})
 	if err != nil {
 		panic(err)
 	}
 	defer sentry.Flush(5 * time.Second)
 
-	// Set up slog with Sentry handler
-	handler := slogSentry.Option{
-		Level: slog.LevelError, // Minimum log level
-		AddSource: true,        // Include file/line source info
-	}.NewSentryHandler()
-	logger := slog.New(handler)
+	ctx := context.Background()
+	handler := sentryslog.Option{
+		EventLevel: []slog.Level{slog.LevelError, sentryslog.LevelFatal}, // Only Error and Fatal as events
+		LogLevel:   []slog.Level{slog.LevelWarn, slog.LevelInfo},         // Only Warn and Info as logs
+	}.NewSentryHandler(ctx)
+    logger := slog.New(handler)
 
 	// Example logging
-	logger.Info("This will not be sent to Sentry")
-	logger.Error("An error occurred", "user", "test-user")
+	logger.Info("This will be sent to sentry as a Log entry")
+	logger.Error("An error occurred", "user", "test-user") // this will be sent as an Event
+	// These will be ignored
+	logger.Debug("This will be ignored")
 }
 ```
 
@@ -60,7 +63,9 @@ func main() {
 
 The slog-sentry package offers several options to customize how logs are handled and sent to Sentry. These are specified through the Option struct:
 
-- `Level`: Minimum log level to send to Sentry. Defaults to `slog.LevelDebug`.
+- `EventLevel`: Slice of specific levels to send `Events` to Sentry. Defaults to `[]slog.Level{slog.LevelError, LevelFatal}`.
+
+- `LogLevel`: Slice of specific levels to send `Log` entries to Sentry. Defaults to `[]slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal}`.
 
 - `Hub`: Custom Sentry hub to use; defaults to the current Sentry hub if not set.
 
@@ -77,7 +82,7 @@ The slog-sentry package offers several options to customize how logs are handled
 
 ```go
 handler := slogSentry.Option{
-	Level: slog.LevelWarn,
+	EventLevel: slog.LevelWarn,
 	Converter: func(addSource bool, replaceAttr func([]string, slog.Attr) slog.Attr, attrs []slog.Attr, groups []string, record *slog.Record, hub *sentry.Hub) *sentry.Event {
 		// Custom conversion logic
 		return &sentry.Event{
@@ -88,6 +93,22 @@ handler := slogSentry.Option{
 }.NewSentryHandler()
 ```
 
+### Backwards Compatibility
+
+The old `Level` field is Deprecated but still works and will be converted to a slice of all levels starting from the minimum level:
+
+```go
+// Old way (still works)
+handler := sentryslog.Option{
+    Level: slog.LevelWarn, // Will be converted to EventLevel: [Warn, Error, Fatal]
+}.NewSentryHandler(ctx)
+
+// New way (preferred)
+handler := sentryslog.Option{
+    EventLevel: []slog.Level{slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
+    LogLevel:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
+}.NewSentryHandler(ctx)
+```
 ## Notes
 
 - Always call `Flush` or `FlushWithContext` to ensure all events are sent to Sentry before program termination
