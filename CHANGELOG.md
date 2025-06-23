@@ -30,8 +30,8 @@ handler := sentryslog.Option{
 
 ```go
 logHook, err := sentrylogrus.NewLogHook(
-		[]logrus.Level{logrus.InfoLevel},
-		sentry.ClientOptions{})
+    []logrus.Level{logrus.InfoLevel},
+    sentry.ClientOptions{})
 eventHook, err := sentrylogrus.NewEventHook([]logrus.Level{
     logrus.ErrorLevel,
     logrus.FatalLevel,
