@@ -65,7 +65,7 @@ The slog-sentry package offers several options to customize how logs are handled
 
 - `EventLevel`: Slice of specific levels to send `Events` to Sentry. Defaults to `[]slog.Level{slog.LevelError, LevelFatal}`.
 
-- `LogLevel`: Slice of specific levels to send `Log` entries to Sentry. Defaults to `[]slog.Level{slog.LevelError, LevelFatal}`.
+- `LogLevel`: Slice of specific levels to send `Log` entries to Sentry. Defaults to `[]slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal}`.
 
 - `Hub`: Custom Sentry hub to use; defaults to the current Sentry hub if not set.
 
