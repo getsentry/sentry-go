@@ -99,10 +99,7 @@ eventHook, err := sentrylogrus.NewEventHook([]logrus.Level{
 
 ### Misc
 
-- Add user details to events when `DefaultPII` is enabled. ([#1018](https://github.com/getsentry/sentry-go/pull/1018))
 - Add more sensitive HTTP headers to the default list of headers that are scrubbed by default. ([#1008](https://github.com/getsentry/sentry-go/pull/1008))
-- Fix typo: rename `bulider.go` to `builder.go`. ([#1037](https://github.com/getsentry/sentry-go/pull/1037))
-- Update various dependencies to their latest versions.
 
 ## 0.33.0
 
