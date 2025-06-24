@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/attribute"
-	"github.com/rs/zerolog"
 	"math"
 	"strconv"
 	"time"
+
+	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
+	"github.com/rs/zerolog"
 )
 
 // NewLogWriter allows for sending zerolog events to Sentry as logs.
@@ -81,7 +82,7 @@ func (w *logWriter) Write(p []byte) (n int, err error) {
 }
 
 func (w *logWriter) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
-	return w.writeAsLog(level, p)
+	return w.writeAsLog(w.ctx, level, p)
 }
 
 // Close forces client to flush all pending events.
@@ -93,7 +94,7 @@ func (w *logWriter) Close() error {
 	return nil
 }
 
-func (w *logWriter) writeAsLog(level zerolog.Level, p []byte) (n int, err error) {
+func (w *logWriter) writeAsLog(ctx context.Context, level zerolog.Level, p []byte) (n int, err error) {
 	// Check if this log level is enabled
 	if _, enabled := w.levels[level]; !enabled {
 		// If level is not enabled, still return the number of bytes written
@@ -109,53 +110,35 @@ func (w *logWriter) writeAsLog(level zerolog.Level, p []byte) (n int, err error)
 	}
 
 	var message string
+	logger := sentry.NewLogger(ctx)
+
 	for k, value := range evt {
 		switch k {
-		case zerolog.LevelFieldName, zerolog.TimestampFieldName:
-		// Skip these as they're handled by Sentry
+		case zerolog.LevelFieldName, zerolog.TimestampFieldName, FieldGoVersion, FieldMaxProcs:
+			// fields that need to be skipped
 		case zerolog.MessageFieldName:
 			message, _ = value.(string)
-		case FieldUser:
-			m, ok := value.(map[string]any)
-			if !ok {
-				w.logger.SetAttributes(attribute.String(FieldUser, fmt.Sprint(value)))
-				continue
-			}
-			// converting to byte doesn't work, try to unmarshal manually.
-			if id, ok := m["id"]; ok {
-				w.logger.SetAttributes(attribute.String("user.id", fmt.Sprint(id)))
-			}
-			if email, ok := m["email"]; ok {
-				w.logger.SetAttributes(attribute.String("user.email", fmt.Sprint(email)))
-			}
-			if name, ok := m["name"]; ok {
-				w.logger.SetAttributes(attribute.String("user.name", fmt.Sprint(name)))
-			}
-		case zerolog.ErrorFieldName:
-			w.logger.SetAttributes(attribute.String("error", fmt.Sprint(value)))
-		case FieldGoVersion, FieldMaxProcs:
-			// Skip these fields
 		default:
 			switch val := value.(type) {
 			// json decode converts all numbers to float64, check if types satisfy int or float to convert properly.
 			case float64:
 				if math.Trunc(val) > math.MaxInt64 {
-					w.logger.SetAttributes(attribute.String(k, strconv.FormatUint(uint64(val), 10)))
+					logger.SetAttributes(attribute.String(k, strconv.FormatUint(uint64(val), 10)))
 					continue
 				}
 				// check if value is integer
 				if val == float64(int64(val)) {
-					w.logger.SetAttributes(attribute.Int64(k, int64(val)))
+					logger.SetAttributes(attribute.Int64(k, int64(val)))
 				} else {
-					w.logger.SetAttributes(attribute.Float64(k, val))
+					logger.SetAttributes(attribute.Float64(k, val))
 				}
 			case string:
-				w.logger.SetAttributes(attribute.String(k, val))
+				logger.SetAttributes(attribute.String(k, val))
 			case bool:
-				w.logger.SetAttributes(attribute.Bool(k, val))
+				logger.SetAttributes(attribute.Bool(k, val))
 			default:
 				// can't drop argument, fallback to string conversion
-				w.logger.SetAttributes(attribute.String(k, fmt.Sprint(value)))
+				logger.SetAttributes(attribute.String(k, fmt.Sprint(value)))
 			}
 		}
 	}
@@ -164,22 +147,22 @@ func (w *logWriter) writeAsLog(level zerolog.Level, p []byte) (n int, err error)
 		message = string(p)
 	}
 
-	w.logger.SetAttributes(attribute.String("sentry.origin", zerologOrigin))
+	logger.SetAttributes(attribute.String("sentry.origin", zerologOrigin))
 	switch level {
 	case zerolog.TraceLevel:
-		w.logger.Trace(w.ctx, message)
+		logger.Trace(ctx, message)
 	case zerolog.DebugLevel:
-		w.logger.Debug(w.ctx, message)
+		logger.Debug(ctx, message)
 	case zerolog.InfoLevel:
-		w.logger.Info(w.ctx, message)
+		logger.Info(ctx, message)
 	case zerolog.WarnLevel:
-		w.logger.Warn(w.ctx, message)
+		logger.Warn(ctx, message)
 	case zerolog.ErrorLevel:
-		w.logger.Error(w.ctx, message)
+		logger.Error(ctx, message)
 	case zerolog.FatalLevel:
-		w.logger.Fatal(w.ctx, message)
+		logger.Fatal(ctx, message)
 	case zerolog.PanicLevel:
-		w.logger.Panic(w.ctx, message)
+		logger.Panic(ctx, message)
 	default:
 		// skip on unknown level
 	}
