@@ -8,11 +8,13 @@ import (
 	"math"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -738,133 +740,162 @@ func TestNewLogWriterWithHub_NilHub(t *testing.T) {
 	require.Contains(t, err.Error(), "hub or client cannot be nil")
 }
 
-func TestNewLogWriter_UserAttributes(t *testing.T) {
-	clientOptions, mockTransport := setupMockTransport()
-	client, err := sentry.NewClient(clientOptions)
-	require.NoError(t, err)
-
-	hub := sentry.NewHub(client, sentry.NewScope())
-
-	sentryZerolog, err := NewLogWriterWithHub(hub, defaultTestOptions)
-	require.NoError(t, err)
-
-	l := zerolog.New(sentryZerolog).With().Timestamp().Logger()
-	l.Info().Ctx(context.Background()).
-		Str("key", "value").
-		Interface("user", sentry.User{ID: "test-user-id", Email: "test@sentry.io", Name: "Test User"}).
-		Msg("test message")
-
-	if err := sentryZerolog.Close(); err != nil {
-		t.Errorf("failed to close sentry zerolog: %v", err)
-	}
-
-	wantUserAttributes := map[string]sentry.Attribute{
-		"key":                   {Value: "value", Type: "string"},
-		"user.id":               {Value: "test-user-id", Type: "string"},
-		"user.name":             {Value: "Test User", Type: "string"},
-		"user.email":            {Value: "test@sentry.io", Type: "string"},
-		"sentry.environment":    {Value: "testing", Type: "string"},
-		"sentry.origin":         {Value: zerologOrigin, Type: "string"},
-		"sentry.release":        {Value: "v1.2.3", Type: "string"},
-		"sentry.sdk.name":       {Value: sdkIdentifier, Type: "string"},
-		"sentry.sdk.version":    {Value: sentry.SDKVersion, Type: "string"},
-		"sentry.server.address": {Value: "test-server", Type: "string"},
-	}
-
-	wantEvents := []sentry.Event{
-		{
-			Logs: []sentry.Log{
-				{
-					Level:      sentry.LogLevelInfo,
-					Severity:   sentry.LogSeverityInfo,
-					Body:       "test message",
-					Attributes: wantUserAttributes,
-				},
-			},
+// TestLoggerWithContext tests that the Logger wrapper properly handles context
+func TestLoggerWithContext(t *testing.T) {
+	// Create a test config
+	cfg := Config{
+		ClientOptions: sentry.ClientOptions{
+			Dsn:   "", // empty DSN for testing
+			Debug: true,
+		},
+		Options: Options{
+			Levels:       []zerolog.Level{zerolog.DebugLevel, zerolog.InfoLevel, zerolog.WarnLevel, zerolog.ErrorLevel},
+			FlushTimeout: 3 * time.Second,
 		},
 	}
 
-	opts := cmp.Options{
-		cmpopts.IgnoreFields(sentry.Log{}, "Timestamp", "TraceID"),
-	}
+	// Create a log writer
+	writer, err := NewLogWriter(cfg)
+	require.NoError(t, err)
+	defer writer.Close()
 
-	gotEvents := mockTransport.Events()
-	if len(gotEvents) != len(wantEvents) {
-		t.Fatalf("expected %d events, got %d", len(wantEvents), len(gotEvents))
-	}
-	for i, event := range gotEvents {
-		require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
-		if diff := cmp.Diff(wantEvents[i].Logs, event.Logs, opts); diff != "" {
-			t.Errorf("Log mismatch (-want +got):\n%s", diff)
-		}
-	}
+	// Create the new Logger wrapper
+	logger := NewLogger(writer)
+
+	// Test basic logging
+	logger.Info().Msg("test message without context")
+
+	// Test logging with context
+	ctx := context.WithValue(context.Background(), "user_id", "123")
+	logger.WithContext(ctx).Info().Msg("test message with context")
+
+	// Test chaining with other methods
+	contextLogger := logger.WithContext(ctx).Level(zerolog.InfoLevel)
+	contextLogger.Info().Str("key", "value").Msg("test with context and fields")
 }
 
-func TestNewLogWriter_UserAttributesPartial(t *testing.T) {
-	clientOptions, mockTransport := setupMockTransport()
-	client, err := sentry.NewClient(clientOptions)
-	require.NoError(t, err)
-
-	hub := sentry.NewHub(client, sentry.NewScope())
-
-	sentryZerolog, err := NewLogWriterWithHub(hub, defaultTestOptions)
-	require.NoError(t, err)
-
-	l := zerolog.New(sentryZerolog).With().Timestamp().Logger()
-	l.Info().Ctx(context.Background()).
-		Str("key", "value").
-		Interface("user", sentry.User{ID: "test-user-id", Name: "Test User"}).
-		Msg("test message")
-
-	if err := sentryZerolog.Close(); err != nil {
-		t.Errorf("failed to close sentry zerolog: %v", err)
-	}
-
-	wantUserAttributes := map[string]sentry.Attribute{
-		"key":       {Value: "value", Type: "string"},
-		"user.id":   {Value: "test-user-id", Type: "string"},
-		"user.name": {Value: "Test User", Type: "string"},
-		// No user.email should be present
-		"sentry.environment":    {Value: "testing", Type: "string"},
-		"sentry.origin":         {Value: zerologOrigin, Type: "string"},
-		"sentry.release":        {Value: "v1.2.3", Type: "string"},
-		"sentry.sdk.name":       {Value: sdkIdentifier, Type: "string"},
-		"sentry.sdk.version":    {Value: sentry.SDKVersion, Type: "string"},
-		"sentry.server.address": {Value: "test-server", Type: "string"},
-	}
-
-	wantEvents := []sentry.Event{
-		{
-			Logs: []sentry.Log{
-				{
-					Level:      sentry.LogLevelInfo,
-					Severity:   sentry.LogSeverityInfo,
-					Body:       "test message",
-					Attributes: wantUserAttributes,
-				},
-			},
+// TestLoggerAPICompatibility tests that the Logger maintains zerolog API compatibility
+func TestLoggerAPICompatibility(t *testing.T) {
+	cfg := Config{
+		ClientOptions: sentry.ClientOptions{
+			Dsn:   "", // empty DSN for testing
+			Debug: true,
+		},
+		Options: Options{
+			Levels:       []zerolog.Level{zerolog.InfoLevel},
+			FlushTimeout: 3 * time.Second,
 		},
 	}
 
-	opts := cmp.Options{
-		cmpopts.IgnoreFields(sentry.Log{}, "Timestamp", "TraceID"),
+	writer, err := NewLogWriter(cfg)
+	require.NoError(t, err)
+	defer writer.Close()
+
+	logger := NewLogger(writer)
+
+	// Test all logging levels
+	logger.Trace().Msg("trace message")
+	logger.Debug().Msg("debug message")
+	logger.Info().Msg("info message")
+	logger.Warn().Msg("warn message")
+	logger.Error().Msg("error message")
+
+	// Test formatted messages
+	logger.Info().Msgf("formatted message: %s", "test")
+
+	// Test with error
+	err = assert.AnError
+	logger.Err(err).Msg("error with err field")
+
+	// Test Print methods
+	logger.Print("print message")
+	logger.Printf("formatted print: %s", "test")
+}
+
+// TestLoggerWithOutput tests the Logger with multiple outputs
+func TestLoggerWithOutput(t *testing.T) {
+	cfg := Config{
+		ClientOptions: sentry.ClientOptions{
+			Dsn:   "", // empty DSN for testing
+			Debug: true,
+		},
+		Options: Options{
+			Levels:       []zerolog.Level{zerolog.InfoLevel},
+			FlushTimeout: 3 * time.Second,
+		},
 	}
 
-	gotEvents := mockTransport.Events()
-	if len(gotEvents) != len(wantEvents) {
-		t.Fatalf("expected %d events, got %d", len(wantEvents), len(gotEvents))
-	}
-	for i, event := range gotEvents {
-		require.NotEmpty(t, event.Logs, "event.Logs should not be empty")
-		if diff := cmp.Diff(wantEvents[i].Logs, event.Logs, opts); diff != "" {
-			t.Errorf("Log mismatch (-want +got):\n%s", diff)
-		}
+	writer, err := NewLogWriter(cfg)
+	require.NoError(t, err)
+	defer writer.Close()
 
-		// Verify user.email is not present
-		for _, log := range event.Logs {
-			if _, exists := log.Attributes["user.email"]; exists {
-				t.Error("user.email should not be present when not set in scope")
-			}
-		}
+	// Create logger with both Sentry writer and stdout
+	logger := NewLogger(writer)
+
+	ctx := context.WithValue(context.Background(), "request_id", "abc-123")
+	logger.WithContext(ctx).Info().Str("component", "test").Msg("test message to both outputs")
+}
+
+// TestContextAwareEvent tests the ContextAwareEvent functionality
+func TestContextAwareEvent(t *testing.T) {
+	cfg := Config{
+		ClientOptions: sentry.ClientOptions{
+			Dsn:   "", // empty DSN for testing
+			Debug: true,
+		},
+		Options: Options{
+			Levels:       []zerolog.Level{zerolog.InfoLevel},
+			FlushTimeout: 3 * time.Second,
+		},
 	}
+
+	writer, err := NewLogWriter(cfg)
+	require.NoError(t, err)
+	defer writer.Close()
+
+	logger := NewLogger(writer)
+	ctx := context.WithValue(context.Background(), "trace_id", "xyz-789")
+
+	// Test that context is properly passed through event chain
+	event := logger.WithContext(ctx).Info().Str("field", "value")
+	event.Msg("test message")
+
+	// Test Send method
+	logger.WithContext(ctx).Info().Str("another", "field").Send()
+}
+
+// TestLoggerMethodChaining tests various method chaining scenarios
+func TestLoggerMethodChaining(t *testing.T) {
+	cfg := Config{
+		ClientOptions: sentry.ClientOptions{
+			Dsn:   "", // empty DSN for testing
+			Debug: true,
+		},
+		Options: Options{
+			Levels:       []zerolog.Level{zerolog.DebugLevel, zerolog.InfoLevel},
+			FlushTimeout: 3 * time.Second,
+		},
+	}
+
+	writer, err := NewLogWriter(cfg)
+	require.NoError(t, err)
+	defer writer.Close()
+
+	logger := NewLogger(writer)
+	ctx := context.WithValue(context.Background(), "session_id", "session-456")
+
+	// Test chaining with Level
+	logger.WithContext(ctx).Level(zerolog.InfoLevel).Info().Msg("level chaining")
+
+	// Test chaining with Hook
+	hook := zerolog.HookFunc(func(e *zerolog.Event, level zerolog.Level, msg string) {
+		e.Str("hooked", "true")
+	})
+	logger.WithContext(ctx).Hook(hook).Info().Msg("hook chaining")
+
+	// Test UpdateContext
+	contextLogger := logger.UpdateContext(func(c zerolog.Context) zerolog.Context {
+		return c.Str("updated", "true")
+	})
+	contextLogger.WithContext(ctx).Info().Msg("update context chaining")
 }

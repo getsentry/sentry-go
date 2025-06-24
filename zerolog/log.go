@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"strconv"
 	"time"
@@ -14,6 +15,246 @@ import (
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/rs/zerolog"
 )
+
+// Logger wraps zerolog.Logger and provides context-aware logging for Sentry integration.
+// It maintains the same API as zerolog.Logger but ensures proper context handling for Sentry.
+type Logger struct {
+	zerolog.Logger
+	writer Writer
+	ctx    context.Context
+}
+
+// NewLogger creates a new context-aware Logger that wraps zerolog.Logger.
+// It uses the provided Writer (typically a logWriter) for Sentry integration.
+func NewLogger(writer Writer) Logger {
+	return Logger{
+		Logger: zerolog.New(writer),
+		writer: writer,
+		ctx:    context.Background(), // default context
+	}
+}
+
+// WithContext returns a new Logger with the specified context.
+// This context will be passed to the Sentry logger when events are written.
+func (l Logger) WithContext(ctx context.Context) Logger {
+	return Logger{
+		Logger: l.Logger,
+		writer: l.writer,
+		ctx:    ctx,
+	}
+}
+
+// With starts a new message with context fields
+func (l Logger) With() zerolog.Context {
+	return l.Logger.With()
+}
+
+// Level returns a new Logger with the specified level
+func (l Logger) Level(level zerolog.Level) Logger {
+	return Logger{
+		Logger: l.Logger.Level(level),
+		writer: l.writer,
+		ctx:    l.ctx,
+	}
+}
+
+// Sample returns a new Logger with sampling enabled
+func (l Logger) Sample(s zerolog.Sampler) Logger {
+	return Logger{
+		Logger: l.Logger.Sample(s),
+		writer: l.writer,
+		ctx:    l.ctx,
+	}
+}
+
+// Hook returns a new Logger with the specified hook
+func (l Logger) Hook(hook zerolog.Hook) Logger {
+	return Logger{
+		Logger: l.Logger.Hook(hook),
+		writer: l.writer,
+		ctx:    l.ctx,
+	}
+}
+
+// Output returns a new Logger with the specified output writer
+func (l Logger) Output(w io.Writer) Logger {
+	return Logger{
+		Logger: l.Logger.Output(w),
+		writer: l.writer,
+		ctx:    l.ctx,
+	}
+}
+
+// ContextAwareEvent wraps zerolog.Event and injects context when the event is sent
+type ContextAwareEvent struct {
+	*zerolog.Event
+	logger Logger
+}
+
+// Msg sends the event with message to the logger with proper context
+func (e *ContextAwareEvent) Msg(msg string) {
+	if e.Event != nil {
+		// Create a context-aware writer that uses the logger's context
+		if lw, ok := e.logger.writer.(*logWriter); ok {
+			// Temporarily update the logWriter's context
+			originalCtx := lw.ctx
+			lw.ctx = e.logger.ctx
+
+			// Send the message
+			e.Event.Msg(msg)
+
+			// Restore original context
+			lw.ctx = originalCtx
+		} else {
+			// Fallback for other writer types
+			e.Event.Msg(msg)
+		}
+	}
+}
+
+// Msgf sends the event with formatted message to the logger with proper context
+func (e *ContextAwareEvent) Msgf(format string, v ...interface{}) {
+	if e.Event != nil {
+		// Create a context-aware writer that uses the logger's context
+		if lw, ok := e.logger.writer.(*logWriter); ok {
+			// Temporarily update the logWriter's context
+			originalCtx := lw.ctx
+			lw.ctx = e.logger.ctx
+
+			// Send the formatted message
+			e.Event.Msgf(format, v...)
+
+			// Restore original context
+			lw.ctx = originalCtx
+		} else {
+			// Fallback for other writer types
+			e.Event.Msgf(format, v...)
+		}
+	}
+}
+
+// Trace starts a new message with trace level
+func (l Logger) Trace() *ContextAwareEvent {
+	return &ContextAwareEvent{
+		Event:  l.Logger.Trace(),
+		logger: l,
+	}
+}
+
+// Debug starts a new message with debug level
+func (l Logger) Debug() *ContextAwareEvent {
+	return &ContextAwareEvent{
+		Event:  l.Logger.Debug(),
+		logger: l,
+	}
+}
+
+// Info starts a new message with info level
+func (l Logger) Info() *ContextAwareEvent {
+	return &ContextAwareEvent{
+		Event:  l.Logger.Info(),
+		logger: l,
+	}
+}
+
+// Warn starts a new message with warn level
+func (l Logger) Warn() *ContextAwareEvent {
+	return &ContextAwareEvent{
+		Event:  l.Logger.Warn(),
+		logger: l,
+	}
+}
+
+// Error starts a new message with error level
+func (l Logger) Error() *ContextAwareEvent {
+	return &ContextAwareEvent{
+		Event:  l.Logger.Error(),
+		logger: l,
+	}
+}
+
+// Err starts a new message with error level and adds the error as a field
+func (l Logger) Err(err error) *ContextAwareEvent {
+	return &ContextAwareEvent{
+		Event:  l.Logger.Err(err),
+		logger: l,
+	}
+}
+
+// Fatal starts a new message with fatal level
+func (l Logger) Fatal() *ContextAwareEvent {
+	return &ContextAwareEvent{
+		Event:  l.Logger.Fatal(),
+		logger: l,
+	}
+}
+
+// Panic starts a new message with panic level
+func (l Logger) Panic() *ContextAwareEvent {
+	return &ContextAwareEvent{
+		Event:  l.Logger.Panic(),
+		logger: l,
+	}
+}
+
+// Log starts a new message with no level
+func (l Logger) Log() *ContextAwareEvent {
+	return &ContextAwareEvent{
+		Event:  l.Logger.Log(),
+		logger: l,
+	}
+}
+
+// Print sends a log event using debug level and no extra field
+func (l Logger) Print(v ...interface{}) {
+	l.Debug().Msg(fmt.Sprint(v...))
+}
+
+// Printf sends a log event using debug level and no extra field
+func (l Logger) Printf(format string, v ...interface{}) {
+	l.Debug().Msgf(format, v...)
+}
+
+// Write implements io.Writer interface
+func (l Logger) Write(p []byte) (n int, err error) {
+	return l.Logger.Write(p)
+}
+
+// WriteLevel writes a message at the specified level
+func (l Logger) WriteLevel(level zerolog.Level, p []byte) (n int, err error) {
+	if lw, ok := l.writer.(*logWriter); ok {
+		// Use context-aware WriteLevel
+		originalCtx := lw.ctx
+		lw.ctx = l.ctx
+		defer func() { lw.ctx = originalCtx }()
+
+		return lw.WriteLevel(level, p)
+	}
+
+	// Fallback for other writer types
+	if wl, ok := l.writer.(interface {
+		WriteLevel(zerolog.Level, []byte) (int, error)
+	}); ok {
+		return wl.WriteLevel(level, p)
+	}
+
+	return l.writer.Write(p)
+}
+
+// GetLevel returns the current logging level
+func (l Logger) GetLevel() zerolog.Level {
+	return l.Logger.GetLevel()
+}
+
+// UpdateContext updates the logger's internal context and returns a new logger
+func (l Logger) UpdateContext(update func(c zerolog.Context) zerolog.Context) Logger {
+	l.Logger.UpdateContext(update)
+	return Logger{
+		Logger: l.Logger,
+		writer: l.writer,
+		ctx:    l.ctx,
+	}
+}
 
 // NewLogWriter allows for sending zerolog events to Sentry as logs.
 //
