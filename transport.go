@@ -303,7 +303,8 @@ type HTTPTransport struct {
 	// current in-flight items and starts a new batch for subsequent events.
 	buffer chan batch
 
-	start sync.Once
+	start     sync.Once
+	closeOnce sync.Once
 
 	// Size of the transport buffer. Defaults to 30.
 	BufferSize int
@@ -506,7 +507,9 @@ fail:
 // Close should be called after Flush and before terminating the program
 // otherwise some events may be lost.
 func (t *HTTPTransport) Close() {
-	close(t.done)
+	t.closeOnce.Do(func() {
+		close(t.done)
+	})
 }
 
 func (t *HTTPTransport) worker() {
