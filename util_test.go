@@ -1,6 +1,8 @@
 package sentry
 
 import (
+	"errors"
+	"fmt"
 	"runtime/debug"
 	"testing"
 )
@@ -96,4 +98,57 @@ func TestPointer(t *testing.T) {
 	i := 5
 	v := Pointer(i)
 	assertEqual(t, *v, i)
+}
+
+func TestErrorUnwrapAll(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want []error
+	}{
+		{
+			name: "nil",
+			err:  nil,
+			want: nil,
+		},
+		{
+			name: "single",
+			err:  errors.New("some error"),
+			want: []error{errors.New("some error")},
+		},
+		{
+			name: "fmt_errorf",
+			err:  fmt.Errorf("some error: %w", errors.New("sub")),
+			want: []error{
+				fmt.Errorf("some error: %w", errors.New("sub")), errors.New("sub"),
+			},
+		},
+		{
+			name: "fmt_errorf_multi",
+			err:  fmt.Errorf("some error: %w and %w", errors.New("sub1"), errors.New("sub2")),
+			want: []error{
+				fmt.Errorf("some error: %w and %w", errors.New("sub1"), errors.New("sub2")), errors.New("sub1"), errors.New("sub2"),
+			},
+		},
+		{
+			name: "join",
+			err:  errors.Join(errors.New("sub1"), errors.New("sub2")),
+			want: []error{
+				errors.Join(errors.New("sub1"), errors.New("sub2")), errors.New("sub1"), errors.New("sub2"),
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var got []error
+			all := unwrapAll(c.err)
+			all(func(err error) bool {
+				got = append(got, err)
+				return true
+			})
+
+			assertEqual(t, got, c.want)
+		})
+	}
 }

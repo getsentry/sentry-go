@@ -116,3 +116,33 @@ func revisionFromBuildInfo(info *debug.BuildInfo) string {
 func Pointer[T any](v T) *T {
 	return &v
 }
+
+// unwrapAll is a Go-1.23 style iterator that unwraps errors and walks the results.
+func unwrapAll(err error) func(yield func(error) bool) {
+	pending := []error{err}
+	return func(yield func(error) bool) {
+		var head error
+		for len(pending) > 0 {
+			head, pending = pending[0], pending[1:]
+			if head == nil {
+				continue
+			}
+			if !yield(head) {
+				return
+			}
+
+			switch castErr := head.(type) {
+			case interface{ Unwrap() error }:
+				// Standard library's Unwrap method.
+				pending = append(pending, castErr.Unwrap())
+			case interface{ Unwrap() []error }:
+				// Standard library's errors.Join() and fmt.Errorf() with multiple %w produce these kinds of errors.
+				pending = append(pending, castErr.Unwrap()...)
+			case interface{ Cause() error }:
+				// The error implements the Cause method, indicating it may have been wrapped
+				// using the github.com/pkg/errors package.
+				pending = append(pending, castErr.Cause())
+			}
+		}
+	}
+}
