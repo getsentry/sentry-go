@@ -3,7 +3,6 @@ package sentry
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -427,37 +426,22 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 		return
 	}
 
-	err := exception
+	// Update to range-over-func when min required Go version is 1.23.
+	i := 0
+	unwrapAll(exception)(func(err error) bool {
+		if maxErrorDepth > 0 && i >= maxErrorDepth {
+			return false
+		}
+		i++
 
-	for i := 0; err != nil && (i < maxErrorDepth || maxErrorDepth == -1); i++ {
-		// Add the current error to the exception slice with its details
 		e.Exception = append(e.Exception, Exception{
 			Value:      err.Error(),
 			Type:       reflect.TypeOf(err).String(),
 			Stacktrace: ExtractStacktrace(err),
 		})
 
-		// Attempt to unwrap the error using the standard library's Unwrap method.
-		// If errors.Unwrap returns nil, it means either there is no error to unwrap,
-		// or the error does not implement the Unwrap method.
-		unwrappedErr := errors.Unwrap(err)
-
-		if unwrappedErr != nil {
-			// The error was successfully unwrapped using the standard library's Unwrap method.
-			err = unwrappedErr
-			continue
-		}
-
-		cause, ok := err.(interface{ Cause() error })
-		if !ok {
-			// We cannot unwrap the error further.
-			break
-		}
-
-		// The error implements the Cause method, indicating it may have been wrapped
-		// using the github.com/pkg/errors package.
-		err = cause.Cause()
-	}
+		return true
+	})
 
 	// Add a trace of the current stack to the most recent error in a chain if
 	// it doesn't have a stack trace yet.
