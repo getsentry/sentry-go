@@ -65,7 +65,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		{
 			name: "Trace level",
 			logFunc: func(ctx context.Context, l Logger) {
-				l.Tracef(ctx, "param matching: %v and %v", "param1", "param2")
+				l.Trace().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
 			wantEvents: []Event{
@@ -85,7 +85,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		{
 			name: "Debug level",
 			logFunc: func(ctx context.Context, l Logger) {
-				l.Debugf(ctx, "param matching: %v and %v", "param1", "param2")
+				l.Debug().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
 			wantEvents: []Event{
@@ -105,7 +105,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		{
 			name: "Info level",
 			logFunc: func(ctx context.Context, l Logger) {
-				l.Infof(ctx, "param matching: %v and %v", "param1", "param2")
+				l.Info().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
 			wantEvents: []Event{
@@ -125,7 +125,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		{
 			name: "Warn level",
 			logFunc: func(ctx context.Context, l Logger) {
-				l.Warnf(ctx, "param matching: %v and %v", "param1", "param2")
+				l.Warn().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
 			wantEvents: []Event{
@@ -145,7 +145,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		{
 			name: "Error level",
 			logFunc: func(ctx context.Context, l Logger) {
-				l.Errorf(ctx, "param matching: %v and %v", "param1", "param2")
+				l.Error().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
 			wantEvents: []Event{
@@ -217,7 +217,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		{
 			name: "Trace level",
 			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Trace(ctx, msg)
+				l.Trace().WithCtx(ctx).Emit(msg)
 			},
 			args: "trace",
 			wantEvents: []Event{
@@ -237,7 +237,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		{
 			name: "Debug level",
 			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Debug(ctx, msg)
+				l.Debug().WithCtx(ctx).Emit(msg)
 			},
 			args: "debug",
 			wantEvents: []Event{
@@ -257,7 +257,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		{
 			name: "Info level",
 			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Info(ctx, msg)
+				l.Info().WithCtx(ctx).Emit(msg)
 			},
 			args: "info",
 			wantEvents: []Event{
@@ -277,7 +277,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		{
 			name: "Warn level",
 			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Warn(ctx, msg)
+				l.Warn().WithCtx(ctx).Emit(msg)
 			},
 			args: "warn",
 			wantEvents: []Event{
@@ -297,7 +297,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		{
 			name: "Error level",
 			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Error(ctx, msg)
+				l.Error().WithCtx(ctx).Emit(msg)
 			},
 			args: "error",
 			wantEvents: []Event{
@@ -354,7 +354,7 @@ func Test_sentryLogger_Panic(t *testing.T) {
 		}()
 		ctx, _ := setupMockTransport()
 		l := NewLogger(ctx)
-		l.Panic(context.Background(), "panic message") // This should panic
+		l.Panic().Emit("panic message") // This should panic
 	})
 
 	t.Run("logger.Panicf", func(t *testing.T) {
@@ -367,7 +367,7 @@ func Test_sentryLogger_Panic(t *testing.T) {
 		}()
 		ctx, _ := setupMockTransport()
 		l := NewLogger(ctx)
-		l.Panicf(context.Background(), "panic message") // This should panic
+		l.Panic().Emitf("panic message") // This should panic
 	})
 }
 
@@ -422,10 +422,10 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx)
 	l.SetAttributes(attribute.Int("int", 42))
-	l.Info(ctx, msg)
+	l.Info().WithCtx(ctx).Emit(msg)
 
 	l.SetAttributes(attribute.String("string", "some str"))
-	l.Warn(ctx, msg)
+	l.Warn().WithCtx(ctx).Emit(msg)
 	Flush(20 * time.Millisecond)
 
 	gotEvents := mockTransport.Events()
@@ -434,8 +434,8 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 	}
 	event := gotEvents[0]
 	assertEqual(t, event.Logs[0].Attributes["int"].Value, int64(42))
-	if _, ok := event.Logs[1].Attributes["int"]; ok {
-		t.Fatalf("expected key to not exist")
+	if _, ok := event.Logs[1].Attributes["int"]; !ok {
+		t.Fatalf("expected key to exist")
 	}
 	assertEqual(t, event.Logs[1].Attributes["string"].Value, "some str")
 }
@@ -443,7 +443,7 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 func Test_batchLogger_Flush(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background())
-	l.Info(ctx, "context done log")
+	l.Info().WithCtx(ctx).Emit("context done log")
 	Flush(20 * time.Millisecond)
 
 	events := mockTransport.Events()
@@ -455,7 +455,7 @@ func Test_batchLogger_Flush(t *testing.T) {
 func Test_batchLogger_FlushWithContext(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background())
-	l.Info(ctx, "context done log")
+	l.Info().WithCtx(ctx).Emit("context done log")
 
 	cancelCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	FlushWithContext(cancelCtx)
@@ -491,7 +491,7 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 	ctx = SetHubOnContext(ctx, hub)
 
 	l := NewLogger(ctx)
-	l.Info(ctx, "context done log")
+	l.Info().WithCtx(ctx).Emit("context done log")
 	Flush(20 * time.Millisecond)
 
 	events := mockTransport.Events()
@@ -504,7 +504,7 @@ func Test_Logger_ExceedBatchSize(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background())
 	for i := 0; i < 100; i++ {
-		l.Info(ctx, "test")
+		l.Info().WithCtx(ctx).Emit("test")
 	}
 
 	// sleep to wait for events to propagate
@@ -526,7 +526,7 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 	expectedSpanID := txn.SpanID
 
 	logger := NewLogger(txn.Context())
-	logger.Info(txn.Context(), "message with tracing")
+	logger.Info().WithCtx(txn.Context()).Emit("message with tracing")
 
 	Flush(20 * time.Millisecond)
 
@@ -593,7 +593,7 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 			hub.BindClient(mockClient)
 
 			logger := NewLogger(ctx)
-			logger.Info(ctx, tt.message)
+			logger.Info().WithCtx(ctx).Emit(tt.message)
 
 			got := buf.String()
 			if !tt.debugEnabled {
@@ -632,7 +632,7 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 	ctx = SetHubOnContext(ctx, hub)
 
 	l := NewLogger(ctx)
-	l.Info(ctx, "test message with PII")
+	l.Info().WithCtx(ctx).Emit("test message with PII")
 	Flush(20 * time.Millisecond)
 
 	events := mockTransport.Events()

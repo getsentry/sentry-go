@@ -11,7 +11,7 @@ import (
 func main() {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:        "",
-		EnableLogs: true,
+		EnableLogs: true, // you need to have EnableLogs set to true
 	})
 	if err != nil {
 		panic(err)
@@ -19,19 +19,24 @@ func main() {
 	defer sentry.Flush(2 * time.Second)
 
 	ctx := context.Background()
-	logger := sentry.NewLogger(ctx)
-
-	// You can use the logger like [fmt.Print]
-	logger.Info(ctx, "Expecting ", 2, " params")
-	// or like [fmt.Printf]
-	logger.Infof(ctx, "format: %v", "value")
-
-	// Additionally, you can also set attributes on the log like this
-	logger.SetAttributes(
-		attribute.Int("key.int", 42),
-		attribute.Bool("key.boolean", true),
-		attribute.Float64("key.float", 42.4),
-		attribute.String("key.string", "string"),
+	loggerWithVersion := sentry.NewLogger(ctx)
+	// Setting  attributes (these persist across log calls)
+	loggerWithVersion.SetAttributes(
+		attribute.String("permanent.version", "1.0.0"),
 	)
-	logger.Warnf(ctx, "I have params %v and attributes", "example param")
+	// Add attributes to log entry
+	loggerWithVersion.Info().WithCtx(ctx).
+		String("key.string", "value").
+		Int("key.int", 42).
+		Bool("key.bool", true).
+		// don't forget to call Emit to send the logs to Sentry
+		Emitf("Message with parameters %d and %d", 1, 2)
+
+	logger := sentry.NewLogger(ctx)
+	// you can also use Attributes for setting many attributes in the log entry (these are temporary)
+	logger.Info().
+		Attributes(
+			attribute.String("key.temp.string", "value"),
+			attribute.Int("key.temp.int", 42),
+		).Emit("doesn't contain permanent.version")
 }

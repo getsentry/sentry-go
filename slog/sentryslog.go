@@ -189,10 +189,14 @@ func (h *eventHandler) Handle(ctx context.Context, record slog.Record) error {
 }
 
 func (h *eventHandler) WithAttrs(attrs []slog.Attr) *eventHandler {
+	// Create a copy of the groups slice to avoid sharing state
+	groupsCopy := make([]string, len(h.groups))
+	copy(groupsCopy, h.groups)
+
 	return &eventHandler{
 		option: h.option,
 		attrs:  appendAttrsToGroup(h.groups, h.attrs, attrs...),
-		groups: h.groups,
+		groups: groupsCopy,
 	}
 }
 
@@ -201,10 +205,15 @@ func (h *eventHandler) WithGroup(name string) *eventHandler {
 		return h
 	}
 
+	// Create a copy of the groups slice to avoid modifying the original
+	newGroups := make([]string, len(h.groups), len(h.groups)+1)
+	copy(newGroups, h.groups)
+	newGroups = append(newGroups, name)
+
 	return &eventHandler{
 		option: h.option,
 		attrs:  h.attrs,
-		groups: append(h.groups, name),
+		groups: newGroups,
 	}
 }
 
@@ -244,32 +253,36 @@ func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
 	switch {
 	case record.Level < slog.LevelDebug:
 		// Levels below Debug (e.g., Trace)
-		h.logger.Trace(ctx, record.Message)
+		h.logger.Trace().WithCtx(ctx).Emit(record.Message)
 	case record.Level < slog.LevelInfo:
 		// Debug level range: -4 to -1
-		h.logger.Debug(ctx, record.Message)
+		h.logger.Debug().WithCtx(ctx).Emit(record.Message)
 	case record.Level < slog.LevelWarn:
 		// Info level range: 0 to 3
-		h.logger.Info(ctx, record.Message)
+		h.logger.Info().WithCtx(ctx).Emit(record.Message)
 	case record.Level < slog.LevelError:
 		// Warn level range: 4 to 7
-		h.logger.Warn(ctx, record.Message)
+		h.logger.Warn().WithCtx(ctx).Emit(record.Message)
 	case record.Level < LevelFatal: // custom Fatal level, keep +4 increments
-		h.logger.Error(ctx, record.Message)
+		h.logger.Error().WithCtx(ctx).Emit(record.Message)
 	default:
 		// Fatal level range: 12 and above
-		h.logger.Fatal(ctx, record.Message)
+		h.logger.Fatal().WithCtx(ctx).Emit(record.Message)
 	}
 
 	return nil
 }
 
 func (h *logHandler) WithAttrs(attrs []slog.Attr) *logHandler {
+	// Create a copy of the groups slice to avoid sharing state
+	groupsCopy := make([]string, len(h.groups))
+	copy(groupsCopy, h.groups)
+
 	return &logHandler{
 		option: h.option,
 		attrs:  appendAttrsToGroup(h.groups, h.attrs, attrs...),
-		groups: h.groups,
-		logger: h.logger,
+		groups: groupsCopy,
+		logger: sentry.NewLogger(context.Background()),
 	}
 }
 
@@ -278,11 +291,16 @@ func (h *logHandler) WithGroup(name string) *logHandler {
 		return h
 	}
 
+	// Create a copy of the groups slice to avoid modifying the original
+	newGroups := make([]string, len(h.groups), len(h.groups)+1)
+	copy(newGroups, h.groups)
+	newGroups = append(newGroups, name)
+
 	return &logHandler{
 		option: h.option,
 		attrs:  h.attrs,
-		groups: append(h.groups, name),
-		logger: h.logger,
+		groups: newGroups,
+		logger: sentry.NewLogger(context.Background()),
 	}
 }
 

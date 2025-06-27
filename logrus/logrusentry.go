@@ -340,19 +340,19 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 
 	switch entry.Level {
 	case logrus.TraceLevel:
-		h.logger.Trace(ctx, entry.Message)
+		h.logger.Trace().WithCtx(ctx).Emit(entry.Message)
 	case logrus.DebugLevel:
-		h.logger.Debug(ctx, entry.Message)
+		h.logger.Debug().WithCtx(ctx).Emit(entry.Message)
 	case logrus.InfoLevel:
-		h.logger.Info(ctx, entry.Message)
+		h.logger.Info().WithCtx(ctx).Emit(entry.Message)
 	case logrus.WarnLevel:
-		h.logger.Warn(ctx, entry.Message)
+		h.logger.Warn().WithCtx(ctx).Emit(entry.Message)
 	case logrus.ErrorLevel:
-		h.logger.Error(ctx, entry.Message)
+		h.logger.Error().WithCtx(ctx).Emit(entry.Message)
 	case logrus.FatalLevel:
-		h.logger.Fatal(ctx, entry.Message)
+		h.logger.Fatal().WithCtx(ctx).Emit(entry.Message)
 	case logrus.PanicLevel:
-		h.logger.Panic(ctx, entry.Message)
+		h.logger.Panic().WithCtx(ctx).Emit(entry.Message)
 	default:
 		sentry.DebugLogger.Printf("Invalid logrus logging level: %v. Dropping log.", entry.Level)
 		if h.fallback != nil {
