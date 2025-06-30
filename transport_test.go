@@ -503,6 +503,14 @@ func TestHTTPTransport_CloseMultipleTimes(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		transport.Close()
 	}
+
+	// Verify the done channel is closed
+	select {
+	case <-transport.done:
+		// Expected - channel should be closed
+	case <-time.After(time.Second):
+		t.Fatal("tranposrt.done not closed")
+	}
 }
 
 func TestHTTPTransport_FlushWithContext(t *testing.T) {
