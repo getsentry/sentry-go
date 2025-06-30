@@ -174,7 +174,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	}
 }
 
-// SetAttributes permanently attaches attributes to the logger instance
+// SetAttributes permanently attaches attributes to the logger instance.
 func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
 	for _, v := range attrs {
 		t, ok := mapTypesToStr[v.Value.Type()]
@@ -261,7 +261,7 @@ func (l *sentryLogger) Panic() LogEntry {
 	}
 }
 
-// WithCtx sets the context for this log entry
+// WithCtx sets the context for this log entry.
 func (e *logEntry) WithCtx(ctx context.Context) LogEntry {
 	e.ctx = ctx
 	return e
@@ -292,7 +292,7 @@ func (e *logEntry) Bool(key string, value bool) LogEntry {
 	return e
 }
 
-// Attributes method for adding multiple attributes at once
+// Attributes method for adding multiple attributes at once.
 func (e *logEntry) Attributes(attrs ...attribute.Builder) LogEntry {
 	for _, v := range attrs {
 		t, ok := mapTypesToStr[v.Value.Type()]
@@ -308,20 +308,19 @@ func (e *logEntry) Attributes(attrs ...attribute.Builder) LogEntry {
 	return e
 }
 
-// Emit sends the log entry with the specified message
+// Emit sends the log entry with the specified message.
 func (e *logEntry) Emit(args ...interface{}) {
 	e.logger.log(e.ctx, e.level, e.severity, fmt.Sprint(args...), e.attributes)
 
 	if e.level == LogLevelFatal {
 		if e.shouldPanic {
 			panic(fmt.Sprint(args...))
-		} else {
-			os.Exit(1)
 		}
+		os.Exit(1)
 	}
 }
 
-// Emitf sends the log entry with a formatted message
+// Emitf sends the log entry with a formatted message.
 func (e *logEntry) Emitf(format string, args ...interface{}) {
 	e.logger.log(e.ctx, e.level, e.severity, format, e.attributes, args...)
 
@@ -329,8 +328,7 @@ func (e *logEntry) Emitf(format string, args ...interface{}) {
 		if e.shouldPanic {
 			formattedMessage := fmt.Sprintf(format, args...)
 			panic(formattedMessage)
-		} else {
-			os.Exit(1)
 		}
+		os.Exit(1)
 	}
 }

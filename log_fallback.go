@@ -10,7 +10,7 @@ import (
 // Fallback, no-op logger if logging is disabled.
 type noopLogger struct{}
 
-// noopLogEntry implements LogEntry for the no-op logger
+// noopLogEntry implements LogEntry for the no-op logger.
 type noopLogEntry struct {
 	level LogLevel
 }
