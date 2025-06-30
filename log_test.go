@@ -440,6 +440,34 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 	assertEqual(t, event.Logs[1].Attributes["string"].Value, "some str")
 }
 
+func TestSentryLogger_LogEntryAttributes(t *testing.T) {
+	msg := []byte("something")
+	ctx, mockTransport := setupMockTransport()
+	l := NewLogger(ctx)
+	l.Info().WithCtx(ctx).
+		String("key.string", "some str").
+		Int("key.int", 42).
+		Int64("key.int64", 17).
+		Float64("key.float", 42.2).
+		Bool("key.bool", true).
+		Attributes(attribute.Int("key.attr.int", 43)).
+		Emit(msg)
+
+	Flush(20 * time.Millisecond)
+
+	gotEvents := mockTransport.Events()
+	if len(gotEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(gotEvents))
+	}
+	event := gotEvents[0]
+	assertEqual(t, event.Logs[0].Attributes["key.int"].Value, int64(42))
+	assertEqual(t, event.Logs[0].Attributes["key.attr.int"].Value, int64(43))
+	assertEqual(t, event.Logs[0].Attributes["key.int64"].Value, int64(17))
+	assertEqual(t, event.Logs[0].Attributes["key.float"].Value, 42.2)
+	assertEqual(t, event.Logs[0].Attributes["key.bool"].Value, true)
+	assertEqual(t, event.Logs[0].Attributes["key.string"].Value, "some str")
+}
+
 func Test_batchLogger_Flush(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background())

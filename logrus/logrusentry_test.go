@@ -657,8 +657,6 @@ func TestLogHookFire(t *testing.T) {
 				Context: context.Background(),
 			}
 
-			// Since we're using a real logger, which is hard to verify,
-			// we're just checking that Fire doesn't error
 			err := logHook.Fire(entry)
 			assert.NoError(t, err)
 		})
