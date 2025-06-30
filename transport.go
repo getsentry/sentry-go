@@ -303,7 +303,7 @@ type HTTPTransport struct {
 	// current in-flight items and starts a new batch for subsequent events.
 	buffer chan batch
 
-	start     sync.Once
+	startOnce sync.Once
 	closeOnce sync.Once
 
 	// Size of the transport buffer. Defaults to 30.
@@ -365,7 +365,7 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		}
 	}
 
-	t.start.Do(func() {
+	t.startOnce.Do(func() {
 		go t.worker()
 	})
 }

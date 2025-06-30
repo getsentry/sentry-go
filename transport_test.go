@@ -509,7 +509,7 @@ func TestHTTPTransport_CloseMultipleTimes(t *testing.T) {
 	case <-transport.done:
 		// Expected - channel should be closed
 	case <-time.After(time.Second):
-		t.Fatal("tranposrt.done not closed")
+		t.Fatal("transport.done not closed")
 	}
 }
 
