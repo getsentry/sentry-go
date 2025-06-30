@@ -51,6 +51,8 @@ func (n *noopLogEntry) Emitf(_ string, _ ...interface{}) {
 	DebugLogger.Printf("Log with level=[%v] is being dropped. Turn on logging via EnableLogs", n.level)
 }
 
+func (n *noopLogger) GetCtx() context.Context { return context.Background() }
+
 func (*noopLogger) Trace() LogEntry {
 	return &noopLogEntry{level: LogLevelTrace}
 }

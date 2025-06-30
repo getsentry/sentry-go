@@ -282,7 +282,7 @@ func (h *logHandler) WithAttrs(attrs []slog.Attr) *logHandler {
 		option: h.option,
 		attrs:  appendAttrsToGroup(h.groups, h.attrs, attrs...),
 		groups: groupsCopy,
-		logger: sentry.NewLogger(context.Background()),
+		logger: sentry.NewLogger(h.logger.GetCtx()),
 	}
 }
 
@@ -300,7 +300,7 @@ func (h *logHandler) WithGroup(name string) *logHandler {
 		option: h.option,
 		attrs:  h.attrs,
 		groups: newGroups,
-		logger: sentry.NewLogger(context.Background()),
+		logger: sentry.NewLogger(h.logger.GetCtx()),
 	}
 }
 

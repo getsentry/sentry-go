@@ -128,6 +128,8 @@ type Logger interface {
 	Fatal() LogEntry
 	// Panic defines the [sentry.LogLevel] for the log entry.
 	Panic() LogEntry
+	// GetCtx returns the [context.Context] set on the logger.
+	GetCtx() context.Context
 }
 
 // LogEntry defines the interface for a log entry that supports chaining attributes.
