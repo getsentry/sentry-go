@@ -637,10 +637,10 @@ type AttrType string
 
 const (
 	AttributeInvalid AttrType = ""
-	AttributeBool             = "boolean"
-	AttributeInt              = "integer"
-	AttributeFloat            = "double"
-	AttributeString           = "string"
+	AttributeBool    AttrType = "boolean"
+	AttributeInt     AttrType = "integer"
+	AttributeFloat   AttrType = "double"
+	AttributeString  AttrType = "string"
 )
 
 type Attribute struct {

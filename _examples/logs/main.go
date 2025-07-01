@@ -53,7 +53,7 @@ type MyHandler struct {
 
 // ServeHTTP example of a handler
 // To correlate logs with transactions, [context.Context] needs to be passed to the [LogEntry] with the [WithCtx] func.
-// Assuming you are using and sentry tracing integration.
+// Assuming you are using a Sentry tracing integration.
 func (h MyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	// By using [WithCtx] the log entry will be associated with the transaction from the request
