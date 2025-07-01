@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -19,24 +20,43 @@ func main() {
 	defer sentry.Flush(2 * time.Second)
 
 	ctx := context.Background()
-	loggerWithVersion := sentry.NewLogger(ctx)
-	// Setting  attributes (these persist across log calls)
-	loggerWithVersion.SetAttributes(
-		attribute.String("permanent.version", "1.0.0"),
+	loggerWithAttrs := sentry.NewLogger(ctx)
+	// Attaching permanent attributes on the logger. The attributes are used for indexing reasons and thus, only
+	// the basic primitive types are supported.
+	loggerWithAttrs.SetAttributes(
+		attribute.String("version", "1.0.0"),
 	)
-	// Add attributes to log entry
-	loggerWithVersion.Info().WithCtx(ctx).
+
+	// It's also possible to attach attributes on the [LogEntry] itself.
+	loggerWithAttrs.Info().
 		String("key.string", "value").
 		Int("key.int", 42).
 		Bool("key.bool", true).
 		// don't forget to call Emit to send the logs to Sentry
 		Emitf("Message with parameters %d and %d", 1, 2)
 
+	// The [LogEntry] can also be precompiled, if you don't want to set the same attributes multiple times
+	logEntry := loggerWithAttrs.Info().Int("int", 1)
+	// And then call Emit multiple times
+	logEntry.Emit("once")
+	logEntry.Emit("twice")
+
+	// You can also create different loggers with different precompiled attributes
 	logger := sentry.NewLogger(ctx)
-	// you can also use Attributes for setting many attributes in the log entry (these are temporary)
 	logger.Info().
-		Attributes(
-			attribute.String("key.temp.string", "value"),
-			attribute.Int("key.temp.int", 42),
-		).Emit("doesn't contain permanent.version")
+		Emit("doesn't contain version") // this log does not contain the version attribute
+}
+
+type MyHandler struct {
+	logger sentry.Logger
+}
+
+// ServeHTTP example of a handler
+// To correlate logs with transactions, [context.Context] needs to be passed to the [LogEntry] with the [WithCtx] func.
+// Assuming you are using and sentry tracing integration.
+func (h MyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	// By using [WithCtx] the log entry will be associated with the transaction from the request
+	h.logger.Info().WithCtx(ctx).Emit("log inside handler")
+	w.WriteHeader(http.StatusOK)
 }

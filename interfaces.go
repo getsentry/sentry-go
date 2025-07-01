@@ -140,7 +140,6 @@ type LogEntry interface {
 	Int64(key string, value int64) LogEntry
 	Float64(key string, value float64) LogEntry
 	Bool(key string, value bool) LogEntry
-	Attributes(attrs ...attribute.Builder) LogEntry
 	Emit(args ...interface{})
 	Emitf(format string, args ...interface{})
 }
@@ -634,7 +633,17 @@ type Log struct {
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
 
+type AttrType string
+
+const (
+	AttributeInvalid AttrType = ""
+	AttributeBool             = "boolean"
+	AttributeInt              = "integer"
+	AttributeFloat            = "double"
+	AttributeString           = "string"
+)
+
 type Attribute struct {
-	Value any    `json:"value"`
-	Type  string `json:"type"`
+	Value any      `json:"value"`
+	Type  AttrType `json:"type"`
 }

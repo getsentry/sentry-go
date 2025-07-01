@@ -450,7 +450,6 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 		Int64("key.int64", 17).
 		Float64("key.float", 42.2).
 		Bool("key.bool", true).
-		Attributes(attribute.Int("key.attr.int", 43)).
 		Emit(msg)
 
 	Flush(20 * time.Millisecond)
@@ -461,7 +460,6 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 	}
 	event := gotEvents[0]
 	assertEqual(t, event.Logs[0].Attributes["key.int"].Value, int64(42))
-	assertEqual(t, event.Logs[0].Attributes["key.attr.int"].Value, int64(43))
 	assertEqual(t, event.Logs[0].Attributes["key.int64"].Value, int64(17))
 	assertEqual(t, event.Logs[0].Attributes["key.float"].Value, 42.2)
 	assertEqual(t, event.Logs[0].Attributes["key.bool"].Value, true)

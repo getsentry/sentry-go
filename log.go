@@ -30,12 +30,12 @@ const (
 	LogSeverityFatal   int = 21
 )
 
-var mapTypesToStr = map[attribute.Type]string{
-	attribute.INVALID: "",
-	attribute.BOOL:    "boolean",
-	attribute.INT64:   "integer",
-	attribute.FLOAT64: "double",
-	attribute.STRING:  "string",
+var mapTypesToStr = map[attribute.Type]AttrType{
+	attribute.INVALID: AttributeInvalid,
+	attribute.BOOL:    AttributeBool,
+	attribute.INT64:   AttributeInt,
+	attribute.FLOAT64: AttributeFloat,
+	attribute.STRING:  AttributeString,
 }
 
 type sentryLogger struct {
@@ -100,11 +100,11 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	attrs := map[string]Attribute{}
 	if len(args) > 0 {
 		attrs["sentry.message.template"] = Attribute{
-			Value: message, Type: "string",
+			Value: message, Type: AttributeString,
 		}
 		for i, p := range args {
 			attrs[fmt.Sprintf("sentry.message.parameters.%d", i)] = Attribute{
-				Value: fmt.Sprint(p), Type: "string",
+				Value: fmt.Sprint(p), Type: AttributeString,
 			}
 		}
 	}
@@ -118,39 +118,39 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 
 	// Set default attributes
 	if release := l.client.options.Release; release != "" {
-		attrs["sentry.release"] = Attribute{Value: release, Type: "string"}
+		attrs["sentry.release"] = Attribute{Value: release, Type: AttributeString}
 	}
 	if environment := l.client.options.Environment; environment != "" {
-		attrs["sentry.environment"] = Attribute{Value: environment, Type: "string"}
+		attrs["sentry.environment"] = Attribute{Value: environment, Type: AttributeString}
 	}
 	if serverName := l.client.options.ServerName; serverName != "" {
-		attrs["sentry.server.address"] = Attribute{Value: serverName, Type: "string"}
+		attrs["sentry.server.address"] = Attribute{Value: serverName, Type: AttributeString}
 	} else if serverAddr, err := os.Hostname(); err == nil {
-		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: "string"}
+		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: AttributeString}
 	}
 	scope := hub.Scope()
 	if scope != nil {
 		user := scope.user
 		if !user.IsEmpty() {
 			if user.ID != "" {
-				attrs["user.id"] = Attribute{Value: user.ID, Type: "string"}
+				attrs["user.id"] = Attribute{Value: user.ID, Type: AttributeString}
 			}
 			if user.Name != "" {
-				attrs["user.name"] = Attribute{Value: user.Name, Type: "string"}
+				attrs["user.name"] = Attribute{Value: user.Name, Type: AttributeString}
 			}
 			if user.Email != "" {
-				attrs["user.email"] = Attribute{Value: user.Email, Type: "string"}
+				attrs["user.email"] = Attribute{Value: user.Email, Type: AttributeString}
 			}
 		}
 	}
 	if spanID.String() != "0000000000000000" {
-		attrs["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: "string"}
+		attrs["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: AttributeString}
 	}
 	if sdkIdentifier := l.client.sdkIdentifier; sdkIdentifier != "" {
-		attrs["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: "string"}
+		attrs["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: AttributeString}
 	}
 	if sdkVersion := l.client.sdkVersion; sdkVersion != "" {
-		attrs["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: "string"}
+		attrs["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: AttributeString}
 	}
 
 	log := &Log{
@@ -271,42 +271,27 @@ func (e *logEntry) WithCtx(ctx context.Context) LogEntry {
 }
 
 func (e *logEntry) String(key, value string) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: "string"}
+	e.attributes[key] = Attribute{Value: value, Type: AttributeString}
 	return e
 }
 
 func (e *logEntry) Int(key string, value int) LogEntry {
-	e.attributes[key] = Attribute{Value: int64(value), Type: "integer"}
+	e.attributes[key] = Attribute{Value: int64(value), Type: AttributeInt}
 	return e
 }
 
 func (e *logEntry) Int64(key string, value int64) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: "integer"}
+	e.attributes[key] = Attribute{Value: value, Type: AttributeInt}
 	return e
 }
 
 func (e *logEntry) Float64(key string, value float64) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: "double"}
+	e.attributes[key] = Attribute{Value: value, Type: AttributeFloat}
 	return e
 }
 
 func (e *logEntry) Bool(key string, value bool) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: "boolean"}
-	return e
-}
-
-func (e *logEntry) Attributes(attrs ...attribute.Builder) LogEntry {
-	for _, v := range attrs {
-		t, ok := mapTypesToStr[v.Value.Type()]
-		if !ok || t == "" {
-			DebugLogger.Printf("invalid attribute type set: %v", t)
-			continue
-		}
-		e.attributes[v.Key] = Attribute{
-			Value: v.Value.AsInterface(),
-			Type:  t,
-		}
-	}
+	e.attributes[key] = Attribute{Value: value, Type: AttributeBool}
 	return e
 }
 
