@@ -73,7 +73,7 @@ func NewLogger(ctx context.Context) Logger {
 func (l *sentryLogger) Write(p []byte) (int, error) {
 	// Avoid sending double newlines to Sentry
 	msg := strings.TrimRight(string(p), "\n")
-	l.Info().WithCtx(context.Background()).Emit(msg)
+	l.Info().Emit(msg)
 	return len(p), nil
 }
 
@@ -193,7 +193,7 @@ func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
 func (l *sentryLogger) Trace() LogEntry {
 	return &logEntry{
 		logger:     l,
-		ctx:        context.Background(),
+		ctx:        l.ctx,
 		level:      LogLevelTrace,
 		severity:   LogSeverityTrace,
 		attributes: make(map[string]Attribute),
@@ -203,7 +203,7 @@ func (l *sentryLogger) Trace() LogEntry {
 func (l *sentryLogger) Debug() LogEntry {
 	return &logEntry{
 		logger:     l,
-		ctx:        context.Background(),
+		ctx:        l.ctx,
 		level:      LogLevelDebug,
 		severity:   LogSeverityDebug,
 		attributes: make(map[string]Attribute),
@@ -213,7 +213,7 @@ func (l *sentryLogger) Debug() LogEntry {
 func (l *sentryLogger) Info() LogEntry {
 	return &logEntry{
 		logger:     l,
-		ctx:        context.Background(),
+		ctx:        l.ctx,
 		level:      LogLevelInfo,
 		severity:   LogSeverityInfo,
 		attributes: make(map[string]Attribute),
@@ -223,7 +223,7 @@ func (l *sentryLogger) Info() LogEntry {
 func (l *sentryLogger) Warn() LogEntry {
 	return &logEntry{
 		logger:     l,
-		ctx:        context.Background(),
+		ctx:        l.ctx,
 		level:      LogLevelWarn,
 		severity:   LogSeverityWarning,
 		attributes: make(map[string]Attribute),
@@ -233,7 +233,7 @@ func (l *sentryLogger) Warn() LogEntry {
 func (l *sentryLogger) Error() LogEntry {
 	return &logEntry{
 		logger:     l,
-		ctx:        context.Background(),
+		ctx:        l.ctx,
 		level:      LogLevelError,
 		severity:   LogSeverityError,
 		attributes: make(map[string]Attribute),
@@ -243,7 +243,7 @@ func (l *sentryLogger) Error() LogEntry {
 func (l *sentryLogger) Fatal() LogEntry {
 	return &logEntry{
 		logger:     l,
-		ctx:        context.Background(),
+		ctx:        l.ctx,
 		level:      LogLevelFatal,
 		severity:   LogSeverityFatal,
 		attributes: make(map[string]Attribute),
@@ -253,7 +253,7 @@ func (l *sentryLogger) Fatal() LogEntry {
 func (l *sentryLogger) Panic() LogEntry {
 	return &logEntry{
 		logger:      l,
-		ctx:         context.Background(),
+		ctx:         l.ctx,
 		level:       LogLevelFatal,
 		severity:    LogSeverityFatal,
 		attributes:  make(map[string]Attribute),
