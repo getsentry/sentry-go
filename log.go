@@ -104,7 +104,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		}
 		for i, p := range args {
 			attrs[fmt.Sprintf("sentry.message.parameters.%d", i)] = Attribute{
-				Value: fmt.Sprint(p), Type: AttributeString,
+				Value: fmt.Sprintf("%+v", p), Type: AttributeString,
 			}
 		}
 	}

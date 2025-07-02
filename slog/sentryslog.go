@@ -44,7 +44,9 @@ var (
 	}
 )
 
+// LevelFatal is a custom [slog.Level] that maps to [sentry.LevelFatal]
 const LevelFatal = slog.Level(12)
+const SlogOrigin = "auto.logger.slog"
 
 type Option struct {
 	// Deprecated: Use EventLevel instead. Level is kept for backwards compatibility and defaults to EventLevel.
@@ -104,6 +106,8 @@ func (o Option) NewSentryHandler(ctx context.Context) slog.Handler {
 	}
 
 	logger := sentry.NewLogger(ctx)
+	logger.SetAttributes(attribute.String("sentry.origin", SlogOrigin))
+
 	eventHandler := &eventHandler{
 		option: o,
 		attrs:  []slog.Attr{},
@@ -242,32 +246,49 @@ func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
 	attrs = replaceAttrs(h.option.ReplaceAttr, []string{}, attrs...)
 	attrs = removeEmptyAttrs(attrs)
 
-	var sentryAttributes []attribute.Builder
-	for _, attr := range attrs {
-		sentryAttributes = append(sentryAttributes, attrToSentryLog("", attr)...)
-	}
-	h.logger.SetAttributes(sentryAttributes...)
-	h.logger.SetAttributes(attribute.String("sentry.origin", "auto.logger.slog"))
-
 	// Use level ranges instead of exact matches to support custom levels
 	switch {
 	case record.Level < slog.LevelDebug:
 		// Levels below Debug (e.g., Trace)
-		h.logger.Trace().WithCtx(ctx).Emit(record.Message)
+		logEntry := h.logger.Trace().WithCtx(ctx)
+		for _, attr := range attrs {
+			logEntry = slogAttrToLogEntry(logEntry, "", attr)
+		}
+		logEntry.Emit(record.Message)
 	case record.Level < slog.LevelInfo:
 		// Debug level range: -4 to -1
-		h.logger.Debug().WithCtx(ctx).Emit(record.Message)
+		logEntry := h.logger.Debug().WithCtx(ctx)
+		for _, attr := range attrs {
+			logEntry = slogAttrToLogEntry(logEntry, "", attr)
+		}
+		logEntry.Emit(record.Message)
 	case record.Level < slog.LevelWarn:
 		// Info level range: 0 to 3
-		h.logger.Info().WithCtx(ctx).Emit(record.Message)
+		logEntry := h.logger.Info().WithCtx(ctx)
+		for _, attr := range attrs {
+			logEntry = slogAttrToLogEntry(logEntry, "", attr)
+		}
+		logEntry.Emit(record.Message)
 	case record.Level < slog.LevelError:
 		// Warn level range: 4 to 7
-		h.logger.Warn().WithCtx(ctx).Emit(record.Message)
+		logEntry := h.logger.Warn().WithCtx(ctx)
+		for _, attr := range attrs {
+			logEntry = slogAttrToLogEntry(logEntry, "", attr)
+		}
+		logEntry.Emit(record.Message)
 	case record.Level < LevelFatal: // custom Fatal level, keep +4 increments
-		h.logger.Error().WithCtx(ctx).Emit(record.Message)
+		logEntry := h.logger.Error().WithCtx(ctx)
+		for _, attr := range attrs {
+			logEntry = slogAttrToLogEntry(logEntry, "", attr)
+		}
+		logEntry.Emit(record.Message)
 	default:
 		// Fatal level range: 12 and above
-		h.logger.Fatal().WithCtx(ctx).Emit(record.Message)
+		logEntry := h.logger.Fatal().WithCtx(ctx)
+		for _, attr := range attrs {
+			logEntry = slogAttrToLogEntry(logEntry, "", attr)
+		}
+		logEntry.Emit(record.Message)
 	}
 
 	return nil
