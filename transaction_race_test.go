@@ -217,7 +217,7 @@ func testSamplingDecisionRace(_ *testing.T) {
 	// Create a client with custom sampling
 	client, _ := NewClient(ClientOptions{
 		TracesSampleRate: 0.5,
-		TracesSampler: func(ctx SamplingContext) float64 {
+		TracesSampler: func(_ SamplingContext) float64 {
 			// Simulate some sampling logic that might have race conditions
 			return 1.0
 		},
@@ -264,27 +264,27 @@ func testPropagationContextRace(_ *testing.T) {
 	// Goroutines accessing and modifying propagation context
 	for i := 0; i < numGoroutines/3; i++ {
 		wg.Add(1)
-		go func(id int) {
+		go func() {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				// Get traceparent (reads propagation context)
 				_ = hub.GetTraceparent()
 				runtime.Gosched()
 			}
-		}(i)
+		}()
 	}
 
 	// Goroutines getting baggage
 	for i := 0; i < numGoroutines/3; i++ {
 		wg.Add(1)
-		go func(id int) {
+		go func() {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				// Get baggage (reads propagation context)
 				_ = hub.GetBaggage()
 				runtime.Gosched()
 			}
-		}(i)
+		}()
 	}
 
 	// Goroutines modifying scope (which affects propagation context)

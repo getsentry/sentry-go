@@ -107,14 +107,14 @@ func testHubStackManipulationRace(_ *testing.T) {
 	// Goroutines binding new clients
 	for i := 0; i < numGoroutines/3; i++ {
 		wg.Add(1)
-		go func(id int) {
+		go func() {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				newClient, _ := NewClient(ClientOptions{})
 				hub.BindClient(newClient)
 				runtime.Gosched()
 			}
-		}(i)
+		}()
 	}
 
 	wg.Wait()
@@ -170,13 +170,13 @@ func testScopeFieldAccessRace(_ *testing.T) {
 	// Goroutines cloning scope
 	for i := 0; i < numGoroutines/4; i++ {
 		wg.Add(1)
-		go func(id int) {
+		go func() {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				_ = scope.Clone()
 				runtime.Gosched()
 			}
-		}(i)
+		}()
 	}
 
 	wg.Wait()
@@ -226,7 +226,6 @@ func testHubWithScopeRace(_ *testing.T) {
 	wg.Wait()
 }
 
-// TestEventCaptureRace tests race conditions during event capture
 func testEventCaptureRace(_ *testing.T) {
 	const numGoroutines = 40
 	const iterations = 20
