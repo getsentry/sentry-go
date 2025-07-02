@@ -408,6 +408,9 @@ func (hub *Hub) FlushWithContext(ctx context.Context) bool {
 // on the current span, or the scope's propagation context.
 func (hub *Hub) GetTraceparent() string {
 	scope := hub.Scope()
+	if scope == nil {
+		return ""
+	}
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
@@ -427,6 +430,9 @@ func (hub *Hub) GetTraceparent() string {
 // on the current span or the scope's propagation context.
 func (hub *Hub) GetBaggage() string {
 	scope := hub.Scope()
+	if scope == nil {
+		return ""
+	}
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
