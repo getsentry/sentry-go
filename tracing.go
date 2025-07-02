@@ -305,6 +305,8 @@ func (s *Span) GetTransaction() *Span {
 // Use this function to propagate the TraceParentContext to a downstream SDK,
 // either as the value of the "sentry-trace" HTTP header, or as an html "sentry-trace" meta tag.
 func (s *Span) ToSentryTrace() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	// TODO(tracing): add instrumentation for outgoing HTTP requests using
 	// ToSentryTrace.
 	var b strings.Builder
@@ -322,6 +324,8 @@ func (s *Span) ToSentryTrace() string {
 // Use this function to propagate the DynamicSamplingContext to a downstream SDK,
 // either as the value of the "baggage" HTTP header, or as an html "baggage" meta tag.
 func (s *Span) ToBaggage() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	t := s.GetTransaction()
 	if t == nil {
 		return ""
@@ -606,7 +610,9 @@ func (s *Span) traceContext() *TraceContext {
 }
 
 // spanRecorder stores the span tree. Guaranteed to be non-nil.
-func (s *Span) spanRecorder() *spanRecorder { return s.recorder }
+func (s *Span) spanRecorder() *spanRecorder {
+	return s.recorder
+}
 
 // ParseTraceParentContext parses a sentry-trace header and builds a TraceParentContext from the
 // parsed values. If the header was parsed correctly, the second returned argument

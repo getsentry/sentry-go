@@ -416,8 +416,6 @@ func (hub *Hub) GetTraceparent() string {
 
 	span := scope.span
 	if span != nil {
-		span.mu.RLock()
-		defer span.mu.RUnlock()
 		return span.ToSentryTrace()
 	}
 
@@ -438,8 +436,6 @@ func (hub *Hub) GetBaggage() string {
 
 	span := scope.span
 	if span != nil {
-		span.mu.RLock()
-		defer span.mu.RUnlock()
 		return span.ToBaggage()
 	}
 
