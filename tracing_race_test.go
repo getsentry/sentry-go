@@ -13,7 +13,7 @@ func TestTransactionRaceConditions(t *testing.T) {
 	testCases := []struct {
 		name    string
 		timeout time.Duration
-		testFn  func(_ *testing.T)
+		testFn  func()
 	}{
 		{
 			name:    "TransactionContext",
@@ -53,7 +53,7 @@ func TestTransactionRaceConditions(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(_ *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			timeout := time.After(tc.timeout)
 			done := make(chan bool)
 
@@ -64,7 +64,7 @@ func TestTransactionRaceConditions(t *testing.T) {
 					}
 					done <- true
 				}()
-				tc.testFn(t)
+				tc.testFn()
 			}()
 
 			select {
@@ -77,7 +77,7 @@ func TestTransactionRaceConditions(t *testing.T) {
 	}
 }
 
-func testTransactionContextRace(_ *testing.T) {
+func testTransactionContextRace() {
 	const numGoroutines = 100
 	const iterations = 50
 
@@ -132,7 +132,7 @@ func testTransactionContextRace(_ *testing.T) {
 	wg.Wait()
 }
 
-func testSpanRecorderRace(_ *testing.T) {
+func testSpanRecorderRace() {
 	const numGoroutines = 100
 	const iterations = 25
 
@@ -177,7 +177,7 @@ func testSpanRecorderRace(_ *testing.T) {
 	wg.Wait()
 }
 
-func testSpanFinishRace(_ *testing.T) {
+func testSpanFinishRace() {
 	const numGoroutines = 100
 	const iterations = 50
 
@@ -210,7 +210,7 @@ func testSpanFinishRace(_ *testing.T) {
 	wg.Wait()
 }
 
-func testSamplingDecisionRace(_ *testing.T) {
+func testSamplingDecisionRace() {
 	const numGoroutines = 100
 	const iterations = 50
 
@@ -251,7 +251,7 @@ func testSamplingDecisionRace(_ *testing.T) {
 	wg.Wait()
 }
 
-func testPropagationContextRace(_ *testing.T) {
+func testPropagationContextRace() {
 	const numGoroutines = 100
 	const iterations = 50
 
@@ -308,7 +308,7 @@ func testPropagationContextRace(_ *testing.T) {
 	wg.Wait()
 }
 
-func testTransactionEventRace(_ *testing.T) {
+func testTransactionEventRace() {
 	const numGoroutines = 50
 	const iterations = 25
 
@@ -351,7 +351,7 @@ func testTransactionEventRace(_ *testing.T) {
 	wg.Wait()
 }
 
-func testConcurrentSpanOperationsRace(_ *testing.T) {
+func testConcurrentSpanOperationsRace() {
 	const numGoroutines = 100
 	const iterations = 25
 

@@ -12,7 +12,7 @@ func TestHubRaceConditions(t *testing.T) {
 	testCases := []struct {
 		name    string
 		timeout time.Duration
-		testFn  func(_ *testing.T)
+		testFn  func()
 	}{
 		{
 			name:    "HubStackManipulation",
@@ -42,7 +42,7 @@ func TestHubRaceConditions(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.name, func(_ *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			timeout := time.After(tc.timeout)
 			done := make(chan bool)
 
@@ -53,7 +53,7 @@ func TestHubRaceConditions(t *testing.T) {
 					}
 					done <- true
 				}()
-				tc.testFn(t)
+				tc.testFn()
 			}()
 
 			select {
@@ -66,7 +66,7 @@ func TestHubRaceConditions(t *testing.T) {
 	}
 }
 
-func testHubStackManipulationRace(_ *testing.T) {
+func testHubStackManipulationRace() {
 	const numGoroutines = 40
 	const iterations = 20
 
@@ -120,7 +120,7 @@ func testHubStackManipulationRace(_ *testing.T) {
 	wg.Wait()
 }
 
-func testScopeFieldAccessRace(_ *testing.T) {
+func testScopeFieldAccessRace() {
 	const numGoroutines = 40
 	const iterations = 20
 
@@ -182,7 +182,7 @@ func testScopeFieldAccessRace(_ *testing.T) {
 	wg.Wait()
 }
 
-func testHubWithScopeRace(_ *testing.T) {
+func testHubWithScopeRace() {
 	const numGoroutines = 40
 	const iterations = 20
 
@@ -226,7 +226,7 @@ func testHubWithScopeRace(_ *testing.T) {
 	wg.Wait()
 }
 
-func testEventCaptureRace(_ *testing.T) {
+func testEventCaptureRace() {
 	const numGoroutines = 40
 	const iterations = 20
 
@@ -291,7 +291,7 @@ func testEventCaptureRace(_ *testing.T) {
 	wg.Wait()
 }
 
-func testHubCloneRace(_ *testing.T) {
+func testHubCloneRace() {
 	const numGoroutines = 40
 	const iterations = 20
 
