@@ -140,7 +140,18 @@ func (hub *Hub) Client() *Client {
 
 // PushScope pushes a new scope for the current Hub and reuses previously bound Client.
 func (hub *Hub) PushScope() *Scope {
-	top := hub.stackTop()
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
+
+	if len(*hub.stack) == 0 {
+		// This should never happen, but be defensive
+		*hub.stack = append(*hub.stack, &layer{
+			client: nil,
+			scope:  NewScope(),
+		})
+		return (*hub.stack)[0].scope
+	}
+	top := (*hub.stack)[len(*hub.stack)-1]
 
 	var scope *Scope
 	if top.scope != nil {
@@ -148,9 +159,6 @@ func (hub *Hub) PushScope() *Scope {
 	} else {
 		scope = NewScope()
 	}
-
-	hub.mu.Lock()
-	defer hub.mu.Unlock()
 
 	*hub.stack = append(*hub.stack, &layer{
 		client: top.Client(),
@@ -214,11 +222,23 @@ func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
 	f(scope)
 }
 
+// getAtomicClientAndScope returns both the client and the scope in a single
+// atomic operation to avoid race conditions.
+func (hub *Hub) getAtomicClientAndScope() (*Client, *Scope) {
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+	if len(*hub.stack) == 0 {
+		return nil, nil
+	}
+	top := (*hub.stack)[len(*hub.stack)-1]
+	return top.Client(), top.scope
+}
+
 // CaptureEvent calls the method of a same name on currently bound Client instance
 // passing it a top-level Scope.
 // Returns EventID if successfully, or nil if there's no Scope or Client available.
 func (hub *Hub) CaptureEvent(event *Event) *EventID {
-	client, scope := hub.Client(), hub.Scope()
+	client, scope := hub.getAtomicClientAndScope()
 	if client == nil || scope == nil {
 		return nil
 	}
@@ -236,7 +256,7 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 // passing it a top-level Scope.
 // Returns EventID if successfully, or nil if there's no Scope or Client available.
 func (hub *Hub) CaptureMessage(message string) *EventID {
-	client, scope := hub.Client(), hub.Scope()
+	client, scope := hub.getAtomicClientAndScope()
 	if client == nil || scope == nil {
 		return nil
 	}
@@ -254,7 +274,7 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 // passing it a top-level Scope.
 // Returns EventID if successfully, or nil if there's no Scope or Client available.
 func (hub *Hub) CaptureException(exception error) *EventID {
-	client, scope := hub.Client(), hub.Scope()
+	client, scope := hub.getAtomicClientAndScope()
 	if client == nil || scope == nil {
 		return nil
 	}
@@ -272,7 +292,7 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 // passing it a top-level Scope.
 // Returns CheckInID if the check-in was captured successfully, or nil otherwise.
 func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
-	client, scope := hub.Client(), hub.Scope()
+	client, scope := hub.getAtomicClientAndScope()
 	if client == nil {
 		return nil
 	}
@@ -285,11 +305,12 @@ func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *
 // The total number of breadcrumbs that can be recorded are limited by the
 // configuration on the client.
 func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
-	client := hub.Client()
-
+	client, scope := hub.getAtomicClientAndScope()
 	// If there's no client, just store it on the scope straight away
 	if client == nil {
-		hub.Scope().AddBreadcrumb(breadcrumb, maxBreadcrumbs)
+		if scope != nil {
+			scope.AddBreadcrumb(breadcrumb, maxBreadcrumbs)
+		}
 		return
 	}
 
@@ -313,7 +334,9 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 		}
 	}
 
-	hub.Scope().AddBreadcrumb(breadcrumb, limit)
+	if scope != nil {
+		scope.AddBreadcrumb(breadcrumb, limit)
+	}
 }
 
 // Recover calls the method of a same name on currently bound Client instance
@@ -323,7 +346,7 @@ func (hub *Hub) Recover(err interface{}) *EventID {
 	if err == nil {
 		err = recover()
 	}
-	client, scope := hub.Client(), hub.Scope()
+	client, scope := hub.getAtomicClientAndScope()
 	if client == nil || scope == nil {
 		return nil
 	}
@@ -337,7 +360,7 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 	if err == nil {
 		err = recover()
 	}
-	client, scope := hub.Client(), hub.Scope()
+	client, scope := hub.getAtomicClientAndScope()
 	if client == nil || scope == nil {
 		return nil
 	}
@@ -393,11 +416,13 @@ func (hub *Hub) FlushWithContext(ctx context.Context) bool {
 // on the current span, or the scope's propagation context.
 func (hub *Hub) GetTraceparent() string {
 	scope := hub.Scope()
-
-	if scope.span != nil {
-		return scope.span.ToSentryTrace()
+	span := scope.GetSpan()
+	if span != nil {
+		return span.ToSentryTrace()
 	}
 
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
 	return fmt.Sprintf("%s-%s", scope.propagationContext.TraceID, scope.propagationContext.SpanID)
 }
 
@@ -407,11 +432,13 @@ func (hub *Hub) GetTraceparent() string {
 // on the current span or the scope's propagation context.
 func (hub *Hub) GetBaggage() string {
 	scope := hub.Scope()
-
-	if scope.span != nil {
-		return scope.span.ToBaggage()
+	span := scope.GetSpan()
+	if span != nil {
+		return span.ToBaggage()
 	}
 
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
 	return scope.propagationContext.DynamicSamplingContext.String()
 }
 
