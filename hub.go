@@ -140,18 +140,7 @@ func (hub *Hub) Client() *Client {
 
 // PushScope pushes a new scope for the current Hub and reuses previously bound Client.
 func (hub *Hub) PushScope() *Scope {
-	hub.mu.Lock()
-	defer hub.mu.Unlock()
-
-	if len(*hub.stack) == 0 {
-		// This should never happen, but be defensive
-		*hub.stack = append(*hub.stack, &layer{
-			client: nil,
-			scope:  NewScope(),
-		})
-		return (*hub.stack)[0].scope
-	}
-	top := (*hub.stack)[len(*hub.stack)-1]
+	top := hub.stackTop()
 
 	var scope *Scope
 	if top.scope != nil {
@@ -159,6 +148,9 @@ func (hub *Hub) PushScope() *Scope {
 	} else {
 		scope = NewScope()
 	}
+
+	hub.mu.Lock()
+	defer hub.mu.Unlock()
 
 	*hub.stack = append(*hub.stack, &layer{
 		client: top.Client(),
