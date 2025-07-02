@@ -565,6 +565,8 @@ func TestHubEmptyClientShouldBeSafe(t *testing.T) {
 		hub.CaptureMessage("something")
 		hub.CaptureException(err)
 		hub.CaptureCheckIn(nil, nil)
+		hub.GetBaggage()
+		hub.GetTraceparent()
 		hub.Recover(err)
 		hub.RecoverWithContext(context.Background(), err)
 	}, "Expected Hub to not panic")
