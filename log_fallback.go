@@ -3,6 +3,7 @@ package sentry
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/getsentry/sentry-go/attribute"
 )
@@ -12,7 +13,8 @@ type noopLogger struct{}
 
 // noopLogEntry implements LogEntry for the no-op logger.
 type noopLogEntry struct {
-	level LogLevel
+	level       LogLevel
+	shouldPanic bool
 }
 
 func (n *noopLogEntry) WithCtx(_ context.Context) LogEntry {
@@ -43,12 +45,24 @@ func (n *noopLogEntry) Attributes(_ ...attribute.Builder) LogEntry {
 	return n
 }
 
-func (n *noopLogEntry) Emit(_ ...interface{}) {
+func (n *noopLogEntry) Emit(args ...interface{}) {
 	DebugLogger.Printf("Log with level=[%v] is being dropped. Turn on logging via EnableLogs", n.level)
+	if n.level == LogLevelFatal {
+		if n.shouldPanic {
+			panic(args)
+		}
+		os.Exit(1)
+	}
 }
 
-func (n *noopLogEntry) Emitf(_ string, _ ...interface{}) {
+func (n *noopLogEntry) Emitf(message string, args ...interface{}) {
 	DebugLogger.Printf("Log with level=[%v] is being dropped. Turn on logging via EnableLogs", n.level)
+	if n.level == LogLevelFatal {
+		if n.shouldPanic {
+			panic(fmt.Sprintf(message, args...))
+		}
+		os.Exit(1)
+	}
 }
 
 func (n *noopLogger) GetCtx() context.Context { return context.Background() }
@@ -78,7 +92,7 @@ func (*noopLogger) Fatal() LogEntry {
 }
 
 func (*noopLogger) Panic() LogEntry {
-	return &noopLogEntry{level: LogLevelFatal}
+	return &noopLogEntry{level: LogLevelFatal, shouldPanic: true}
 }
 
 func (*noopLogger) SetAttributes(...attribute.Builder) {
