@@ -416,13 +416,16 @@ func (hub *Hub) FlushWithContext(ctx context.Context) bool {
 // on the current span, or the scope's propagation context.
 func (hub *Hub) GetTraceparent() string {
 	scope := hub.Scope()
-	span := scope.GetSpan()
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+
+	span := scope.span
 	if span != nil {
+		span.mu.RLock()
+		defer span.mu.RUnlock()
 		return span.ToSentryTrace()
 	}
 
-	scope.mu.RLock()
-	defer scope.mu.RUnlock()
 	return fmt.Sprintf("%s-%s", scope.propagationContext.TraceID, scope.propagationContext.SpanID)
 }
 
@@ -432,13 +435,16 @@ func (hub *Hub) GetTraceparent() string {
 // on the current span or the scope's propagation context.
 func (hub *Hub) GetBaggage() string {
 	scope := hub.Scope()
-	span := scope.GetSpan()
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+
+	span := scope.span
 	if span != nil {
+		span.mu.RLock()
+		defer span.mu.RUnlock()
 		return span.ToBaggage()
 	}
 
-	scope.mu.RLock()
-	defer scope.mu.RUnlock()
 	return scope.propagationContext.DynamicSamplingContext.String()
 }
 
