@@ -3,7 +3,6 @@ package sentry
 import (
 	"bytes"
 	"context"
-	"github.com/stretchr/testify/assert"
 	"log"
 	"strings"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
 )
 
 const (

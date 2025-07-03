@@ -21,8 +21,7 @@ func main() {
 
 	ctx := context.Background()
 	loggerWithAttrs := sentry.NewLogger(ctx)
-	// Attaching permanent attributes on the logger. The attributes are used for indexing reasons and thus, only
-	// the basic primitive types are supported.
+	// Attaching permanent attributes on the logger.
 	loggerWithAttrs.SetAttributes(
 		attribute.String("version", "1.0.0"),
 	)

@@ -134,13 +134,21 @@ type Logger interface {
 
 // LogEntry defines the interface for a log entry that supports chaining attributes.
 type LogEntry interface {
+	// WithCtx creates a new LogEntry with the specified context without overwriting the previous one.
 	WithCtx(ctx context.Context) LogEntry
+	// String adds a string attribute to the LogEntry.
 	String(key, value string) LogEntry
+	// Int adds an int attribute to the LogEntry.
 	Int(key string, value int) LogEntry
+	// Int64 adds an int64 attribute to the LogEntry.
 	Int64(key string, value int64) LogEntry
+	// Float64 adds a float64 attribute to the LogEntry.
 	Float64(key string, value float64) LogEntry
+	// Bool adds a bool attribute to the LogEntry.
 	Bool(key string, value bool) LogEntry
+	// Emit emits the LogEntry with the provided arguments.
 	Emit(args ...interface{})
+	// Emitf emits the LogEntry using a format string and arguments.
 	Emitf(format string, args ...interface{})
 }
 
