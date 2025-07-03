@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/attribute"
 )
 
 var (
@@ -134,45 +133,44 @@ func handleFingerprint(v slog.Value, event *sentry.Event) {
 	}
 }
 
-func attrToSentryLog(group string, a slog.Attr) []attribute.Builder {
+func slogAttrToLogEntry(logEntry sentry.LogEntry, group string, a slog.Attr) sentry.LogEntry {
 	key := group + a.Key
 	switch a.Value.Kind() {
 	case slog.KindAny:
-		return []attribute.Builder{attribute.String(key, fmt.Sprintf("%+v", a.Value.Any()))}
+		return logEntry.String(key, fmt.Sprintf("%+v", a.Value.Any()))
 	case slog.KindBool:
-		return []attribute.Builder{attribute.Bool(key, a.Value.Bool())}
+		return logEntry.Bool(key, a.Value.Bool())
 	case slog.KindDuration:
-		return []attribute.Builder{attribute.String(key, a.Value.Duration().String())}
+		return logEntry.String(key, a.Value.Duration().String())
 	case slog.KindFloat64:
-		return []attribute.Builder{attribute.Float64(key, a.Value.Float64())}
+		return logEntry.Float64(key, a.Value.Float64())
 	case slog.KindInt64:
-		return []attribute.Builder{attribute.Int64(key, a.Value.Int64())}
+		return logEntry.Int64(key, a.Value.Int64())
 	case slog.KindString:
-		return []attribute.Builder{attribute.String(key, a.Value.String())}
+		return logEntry.String(key, a.Value.String())
 	case slog.KindTime:
-		return []attribute.Builder{attribute.String(key, a.Value.Time().Format(time.RFC3339))}
+		return logEntry.String(key, a.Value.Time().Format(time.RFC3339))
 	case slog.KindUint64:
 		val := a.Value.Uint64()
 		if val <= math.MaxInt64 {
-			return []attribute.Builder{attribute.Int64(key, int64(val))}
+			return logEntry.Int64(key, int64(val))
 		} else {
-			return []attribute.Builder{attribute.String(key, strconv.FormatUint(val, 10))}
+			return logEntry.String(key, strconv.FormatUint(val, 10))
 		}
 	case slog.KindLogValuer:
-		return []attribute.Builder{attribute.String(key, a.Value.LogValuer().LogValue().String())}
+		return logEntry.String(key, a.Value.LogValuer().LogValue().String())
 	case slog.KindGroup:
 		// Handle nested group attributes
-		var attrs []attribute.Builder
 		groupPrefix := key
 		if groupPrefix != "" {
 			groupPrefix += "."
 		}
 		for _, subAttr := range a.Value.Group() {
-			attrs = append(attrs, attrToSentryLog(groupPrefix, subAttr)...)
+			logEntry = slogAttrToLogEntry(logEntry, groupPrefix, subAttr)
 		}
-		return attrs
+		return logEntry
 	}
 
 	sentry.DebugLogger.Printf("Invalid type: dropping attribute with key: %v and value: %v", a.Key, a.Value)
-	return []attribute.Builder{}
+	return logEntry
 }
