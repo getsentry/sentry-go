@@ -3,6 +3,7 @@ package sentry
 import (
 	"bytes"
 	"context"
+	"github.com/stretchr/testify/assert"
 	"log"
 	"strings"
 	"testing"
@@ -691,4 +692,22 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 	} else if val.Value != "test@example.com" {
 		t.Errorf("unexpected user.email: got %v, want %v", val.Value, "test@example.com")
 	}
+}
+
+func TestLogEntryWithCtx_ShouldCopy(t *testing.T) {
+	ctx, _ := setupMockTransport()
+	l := NewLogger(ctx)
+
+	// using WithCtx should return a new log entry with the new ctx
+	newCtx := context.Background()
+	lentry := l.Info().String("key", "value").(*logEntry)
+	newlentry := lentry.WithCtx(newCtx).(*logEntry)
+	lentry.String("key2", "value")
+
+	assert.Equal(t, lentry.ctx, ctx)
+	assert.Equal(t, newlentry.ctx, newCtx)
+	assert.Contains(t, lentry.attributes, "key")
+	assert.Contains(t, lentry.attributes, "key2")
+	assert.Contains(t, newlentry.attributes, "key")
+	assert.NotContains(t, newlentry.attributes, "key2")
 }

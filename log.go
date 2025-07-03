@@ -3,6 +3,7 @@ package sentry
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 	"time"
@@ -266,8 +267,14 @@ func (l *sentryLogger) GetCtx() context.Context {
 }
 
 func (e *logEntry) WithCtx(ctx context.Context) LogEntry {
-	e.ctx = ctx
-	return e
+	return &logEntry{
+		logger:      e.logger,
+		ctx:         ctx,
+		level:       e.level,
+		severity:    e.severity,
+		attributes:  maps.Clone(e.attributes),
+		shouldPanic: e.shouldPanic,
+	}
 }
 
 func (e *logEntry) String(key, value string) LogEntry {
