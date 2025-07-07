@@ -6,6 +6,45 @@ alwaysApply: false
 
 When creating or updating changelogs for the Sentry Go SDK, follow these rules:
 
+## Gathering Changes
+
+Before creating a changelog entry, collect all changes since the last release tag:
+
+### Find the Latest Release Tag
+```bash
+git tag --sort=-version:refname | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -1
+```
+
+### Get Commits Since Last Release
+```bash
+# Get commit hashes and messages since last tag
+git log --oneline $(git describe --tags --abbrev=0)..HEAD
+
+# Get detailed commit information
+git log --pretty=format:"%h %s (%an)" $(git describe --tags --abbrev=0)..HEAD
+```
+
+### Analyze Changes
+For each commit since the last release:
+1. Check if it's a merge commit from a PR: `git show --stat <commit_hash>`
+2. For PR commits, fetch the PR details to understand the full context
+3. Categorize changes as Breaking Changes, Features, Deprecations, Bug Fixes, or Misc
+4. Identify any commits that should be excluded (internal refactoring, test-only changes, etc.)
+
+### Example Workflow
+```bash
+# Check current branch and recent commits
+git log --oneline --since="2024-01-01" | head -10
+
+# Get PR information for specific commits
+git show <commit_hash> --stat
+
+# Look at file changes to understand scope
+git diff --name-only <last_tag>..HEAD
+```
+
+Always base changelog entries on the complete set of commits since the last release tag to ensure no changes are missed.
+
 ## Version Structure
 
 Use semantic versioning (e.g., `0.34.0`) with this format:
