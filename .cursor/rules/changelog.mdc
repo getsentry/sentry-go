@@ -1,10 +1,14 @@
+---
+globs: CHANGELOG.md
+alwaysApply: false
+---
 # Changelog Creation Guidelines
 
 When creating or updating changelogs for the Sentry Go SDK, follow these rules:
 
 ## Version Structure
 
-Use semantic versioning (e.g., `0.34.1`, `1.0.0`) with this format:
+Use semantic versioning (e.g., `0.34.0`) with this format:
 
 ```markdown
 ## [VERSION]
@@ -17,8 +21,8 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 Include sections in this exact order (only include sections that have content):
 
 1. **Breaking Changes** - Changes requiring code modifications
-2. **Features** - New functionality and enhancements  
-3. **Deprecations** - Features marked for future removal
+2. **Deprecations** - Features marked for future removal
+3. **Features** - New functionality and enhancements  
 4. **Bug Fixes** - Fixes for existing functionality
 5. **Misc** - Other changes
 
