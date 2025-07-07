@@ -144,7 +144,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 			}
 		}
 	}
-	if spanID.String() != "0000000000000000" {
+	if span != nil {
 		attrs["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: AttributeString}
 	}
 	if sdkIdentifier := l.client.sdkIdentifier; sdkIdentifier != "" {
