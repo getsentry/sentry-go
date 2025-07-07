@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -177,7 +178,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 			// invalid attribute should be dropped
 			l.SetAttributes(attribute.Builder{Key: "key.invalid", Value: attribute.Value{}})
 			tt.logFunc(ctx, l)
-			Flush(20 * time.Millisecond)
+			Flush(testutils.FlushTimeout())
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
@@ -321,7 +322,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
 			l := NewLogger(ctx)
 			tt.logFunc(ctx, l, tt.args)
-			Flush(20 * time.Millisecond)
+			Flush(testutils.FlushTimeout())
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
@@ -400,7 +401,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 	if n != len(msg) {
 		t.Errorf("Write returned wrong byte count: got %d, want %d", n, len(msg))
 	}
-	Flush(20 * time.Millisecond)
+	Flush(testutils.FlushTimeout())
 
 	gotEvents := mockTransport.Events()
 	if len(gotEvents) != 1 {
@@ -426,7 +427,7 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 
 	l.SetAttributes(attribute.String("string", "some str"))
 	l.Warn(ctx, msg)
-	Flush(20 * time.Millisecond)
+	Flush(testutils.FlushTimeout())
 
 	gotEvents := mockTransport.Events()
 	if len(gotEvents) != 1 {
@@ -444,7 +445,7 @@ func Test_batchLogger_Flush(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background())
 	l.Info(ctx, "context done log")
-	Flush(20 * time.Millisecond)
+	Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -457,13 +458,95 @@ func Test_batchLogger_FlushWithContext(t *testing.T) {
 	l := NewLogger(context.Background())
 	l.Info(ctx, "context done log")
 
-	cancelCtx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	cancelCtx, cancel := context.WithTimeout(context.Background(), testutils.FlushTimeout())
 	FlushWithContext(cancelCtx)
 	defer cancel()
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+}
+
+func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	l := NewLogger(ctx)
+
+	for i := 0; i < 5; i++ {
+		l.Info(ctx, "test")
+	}
+
+	Flush(testutils.FlushTimeout())
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Logf("Got %d events instead of 1", len(events))
+		for i, event := range events {
+			t.Logf("Event %d: %d logs", i, len(event.Logs))
+		}
+		t.Fatalf("expected 1 event after first flush, got %d", len(events))
+	}
+	if len(events[0].Logs) != 5 {
+		t.Fatalf("expected 5 logs in first batch, got %d", len(events[0].Logs))
+	}
+
+	mockTransport.events = nil
+
+	for i := 0; i < 3; i++ {
+		l.Info(ctx, "test")
+	}
+
+	Flush(testutils.FlushTimeout())
+	events = mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event after second flush, got %d", len(events))
+	}
+	if len(events[0].Logs) != 3 {
+		t.Fatalf("expected 3 logs in second batch, got %d", len(events[0].Logs))
+	}
+
+	mockTransport.events = nil
+
+	Flush(testutils.FlushTimeout())
+	events = mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected 0 events after third flush with no logs, got %d", len(events))
+	}
+}
+
+func Test_batchLogger_Shutdown(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	l := NewLogger(ctx)
+	for i := 0; i < 3; i++ {
+		l.Info(ctx, "test")
+	}
+
+	hub := GetHubFromContext(ctx)
+	hub.Client().batchLogger.Shutdown()
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event after shutdown, got %d", len(events))
+	}
+	if len(events[0].Logs) != 3 {
+		t.Fatalf("expected 3 logs in shutdown batch, got %d", len(events[0].Logs))
+	}
+
+	mockTransport.events = nil
+
+	// Test that shutdown can be called multiple times safely
+	hub.Client().batchLogger.Shutdown()
+	hub.Client().batchLogger.Shutdown()
+
+	events = mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected 0 events after multiple shutdowns, got %d", len(events))
+	}
+
+	Flush(testutils.FlushTimeout())
+	events = mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected 0 events after flush on shutdown logger, got %d", len(events))
 	}
 }
 
@@ -492,7 +575,7 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 
 	l := NewLogger(ctx)
 	l.Info(ctx, "context done log")
-	Flush(20 * time.Millisecond)
+	Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 0 {
@@ -528,7 +611,7 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 	logger := NewLogger(txn.Context())
 	logger.Info(txn.Context(), "message with tracing")
 
-	Flush(20 * time.Millisecond)
+	Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
