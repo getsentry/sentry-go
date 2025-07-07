@@ -519,6 +519,9 @@ func (client *Client) Flush(timeout time.Duration) bool {
 		client.batchLogger.Flush(timeoutCh)
 		// update the timeout with the time passed
 		timeout -= time.Since(start)
+		if timeout <= 0 {
+			return false
+		}
 	}
 	return client.Transport.Flush(timeout)
 }
