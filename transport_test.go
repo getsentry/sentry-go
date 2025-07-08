@@ -490,6 +490,28 @@ func TestHTTPTransport(t *testing.T) {
 		wg.Wait()
 	})
 }
+func TestHTTPTransport_CloseMultipleTimes(t *testing.T) {
+	server := newTestHTTPServer(t)
+	defer server.Close()
+	transport := NewHTTPTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        fmt.Sprintf("https://test@%s/1", server.Listener.Addr()),
+		HTTPClient: server.Client(),
+	})
+
+	// Closing multiple times should not panic.
+	for i := 0; i < 10; i++ {
+		transport.Close()
+	}
+
+	// Verify the done channel is closed
+	select {
+	case <-transport.done:
+		// Expected - channel should be closed
+	case <-time.After(time.Second):
+		t.Fatal("transport.done not closed")
+	}
+}
 
 func TestHTTPTransport_FlushWithContext(t *testing.T) {
 	server := newTestHTTPServer(t)
