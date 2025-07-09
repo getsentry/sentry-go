@@ -608,7 +608,7 @@ func TestMalformedURLNoPanic(t *testing.T) {
 	}
 
 	app := fiber.New()
-	app.Use(sentryfiber.New(sentryfiber.Options{Timeout: 3 * time.Second}))
+	app.Use(sentryfiber.New(sentryfiber.Options{Timeout: 3 * time.Second, WaitForDelivery: true}))
 
 	app.Get("/*", func(c *fiber.Ctx) error {
 		return c.SendString("OK")
