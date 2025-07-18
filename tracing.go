@@ -33,6 +33,14 @@ const (
 	SpanOriginNegroni  = "auto.http.negroni"
 )
 
+// A Measurement is a numeric value that can be attached to a span. It is
+// typically used to record performance metrics, such as the duration of an
+// operation, the size of a response, or the number of items processed.
+type Measurement struct {
+	Value float64 `json:"value"`
+	Unit  string  `json:"unit,omitempty"`
+}
+
 // A Span is the building block of a Sentry transaction. Spans build up a tree
 // structure of timed operations. The span tree makes up a transaction event
 // that is sent to Sentry when the root span is finished.
@@ -75,6 +83,8 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	finishOnce sync.Once
 	// explicitSampled is a flag for configuring sampling by using `WithSpanSampled` option.
 	explicitSampled Sampled
+	// measurements stores the span's measurements.
+	measurements map[string]Measurement
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -235,6 +245,19 @@ func (s *Span) SetTag(name, value string) {
 		s.Tags = make(map[string]string)
 	}
 	s.Tags[name] = value
+}
+
+// SetMeasurement sets a measurement on the span. It is recommended to use
+// SetMeasurement instead of accessing the measurements map directly as
+// SetMeasurement takes care of initializing the map when necessary.
+func (s *Span) SetMeasurement(name string, value float64, unit string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.measurements == nil {
+		s.measurements = make(map[string]Measurement)
+	}
+	s.measurements[name] = Measurement{Value: value, Unit: unit}
 }
 
 // SetData sets a data on the span. It is recommended to use SetData instead of
@@ -576,7 +599,7 @@ func (s *Span) toEvent() *Event {
 		transactionSource = SourceCustom
 	}
 
-	return &Event{
+	event := &Event{
 		Type:        transactionType,
 		Transaction: s.Name,
 		Contexts:    contexts,
@@ -591,6 +614,15 @@ func (s *Span) toEvent() *Event {
 			dsc: s.dynamicSamplingContext,
 		},
 	}
+
+	if len(s.measurements) > 0 {
+		event.Measurements = make(map[string]Measurement)
+		for k, v := range s.measurements {
+			event.Measurements[k] = v
+		}
+	}
+
+	return event
 }
 
 func (s *Span) traceContext() *TraceContext {

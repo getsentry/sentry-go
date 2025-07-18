@@ -360,6 +360,34 @@ func TestSetData(t *testing.T) {
 	}
 }
 
+func TestSetMeasurement(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing: true,
+	})
+	tx := StartTransaction(ctx, "TestTransaction")
+	tx.SetMeasurement("tokens_used", 1234.56, "token")
+	tx.Finish()
+
+	if tx.measurements["tokens_used"].Value != 1234.56 {
+		t.Fatalf("Expected tokens_used = 1234.56, got %v", tx.measurements["tokens_used"].Value)
+	}
+	if tx.measurements["tokens_used"].Unit != "token" {
+		t.Fatalf("Expected unit = token, got %s", tx.measurements["tokens_used"].Unit)
+	}
+
+	events := GetHubFromContext(ctx).Client().Transport.(*MockTransport).Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	meas := events[0].Measurements
+	if meas["tokens_used"].Value != 1234.56 {
+		t.Errorf("Expected measurement value to be 1234.56, got %f", meas["tokens_used"].Value)
+	}
+	if meas["tokens_used"].Unit != "token" {
+		t.Errorf("Expected measurement unit to be token, got %s", meas["tokens_used"].Unit)
+	}
+}
+
 func TestWithDescription(t *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing: true,

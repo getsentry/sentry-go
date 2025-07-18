@@ -372,30 +372,31 @@ type Context = map[string]interface{}
 
 // Event is the fundamental data structure that is sent to Sentry.
 type Event struct {
-	Breadcrumbs []*Breadcrumb          `json:"breadcrumbs,omitempty"`
-	Contexts    map[string]Context     `json:"contexts,omitempty"`
-	Dist        string                 `json:"dist,omitempty"`
-	Environment string                 `json:"environment,omitempty"`
-	EventID     EventID                `json:"event_id,omitempty"`
-	Extra       map[string]interface{} `json:"extra,omitempty"`
-	Fingerprint []string               `json:"fingerprint,omitempty"`
-	Level       Level                  `json:"level,omitempty"`
-	Message     string                 `json:"message,omitempty"`
-	Platform    string                 `json:"platform,omitempty"`
-	Release     string                 `json:"release,omitempty"`
-	Sdk         SdkInfo                `json:"sdk,omitempty"`
-	ServerName  string                 `json:"server_name,omitempty"`
-	Threads     []Thread               `json:"threads,omitempty"`
-	Tags        map[string]string      `json:"tags,omitempty"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Transaction string                 `json:"transaction,omitempty"`
-	User        User                   `json:"user,omitempty"`
-	Logger      string                 `json:"logger,omitempty"`
-	Modules     map[string]string      `json:"modules,omitempty"`
-	Request     *Request               `json:"request,omitempty"`
-	Exception   []Exception            `json:"exception,omitempty"`
-	DebugMeta   *DebugMeta             `json:"debug_meta,omitempty"`
-	Attachments []*Attachment          `json:"-"`
+	Breadcrumbs  []*Breadcrumb          `json:"breadcrumbs,omitempty"`
+	Contexts     map[string]Context     `json:"contexts,omitempty"`
+	Dist         string                 `json:"dist,omitempty"`
+	Environment  string                 `json:"environment,omitempty"`
+	EventID      EventID                `json:"event_id,omitempty"`
+	Extra        map[string]interface{} `json:"extra,omitempty"`
+	Fingerprint  []string               `json:"fingerprint,omitempty"`
+	Level        Level                  `json:"level,omitempty"`
+	Message      string                 `json:"message,omitempty"`
+	Platform     string                 `json:"platform,omitempty"`
+	Release      string                 `json:"release,omitempty"`
+	Sdk          SdkInfo                `json:"sdk,omitempty"`
+	ServerName   string                 `json:"server_name,omitempty"`
+	Threads      []Thread               `json:"threads,omitempty"`
+	Tags         map[string]string      `json:"tags,omitempty"`
+	Measurements map[string]Measurement `json:"measurements,omitempty"`
+	Timestamp    time.Time              `json:"timestamp"`
+	Transaction  string                 `json:"transaction,omitempty"`
+	User         User                   `json:"user,omitempty"`
+	Logger       string                 `json:"logger,omitempty"`
+	Modules      map[string]string      `json:"modules,omitempty"`
+	Request      *Request               `json:"request,omitempty"`
+	Exception    []Exception            `json:"exception,omitempty"`
+	DebugMeta    *DebugMeta             `json:"debug_meta,omitempty"`
+	Attachments  []*Attachment          `json:"-"`
 
 	// The fields below are only relevant for transactions.
 
