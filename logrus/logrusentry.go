@@ -43,6 +43,8 @@ const (
 	// These fields are simply omitted, as they are duplicated by the Sentry SDK.
 	FieldGoVersion = "go_version"
 	FieldMaxProcs  = "go_maxprocs"
+
+	LogrusOrigin = "auto.logger.logrus"
 )
 
 var levelMap = map[logrus.Level]sentry.Level{
@@ -289,12 +291,76 @@ func (h *logHook) key(key string) string {
 	return key
 }
 
+func logrusFieldToLogEntry(logEntry sentry.LogEntry, key string, value interface{}) sentry.LogEntry {
+	switch val := value.(type) {
+	case int8:
+		return logEntry.Int64(key, int64(val))
+	case int16:
+		return logEntry.Int64(key, int64(val))
+	case int32:
+		return logEntry.Int64(key, int64(val))
+	case int64:
+		return logEntry.Int64(key, val)
+	case int:
+		return logEntry.Int64(key, int64(val))
+	case uint, uint8, uint16, uint32, uint64:
+		uval := reflect.ValueOf(val).Convert(reflect.TypeOf(uint64(0))).Uint()
+		if uval <= math.MaxInt64 {
+			return logEntry.Int64(key, int64(uval))
+		} else {
+			// For values larger than int64 can handle, we use string
+			return logEntry.String(key, strconv.FormatUint(uval, 10))
+		}
+	case string:
+		return logEntry.String(key, val)
+	case float32:
+		return logEntry.Float64(key, float64(val))
+	case float64:
+		return logEntry.Float64(key, val)
+	case bool:
+		return logEntry.Bool(key, val)
+	case time.Time:
+		return logEntry.String(key, val.Format(time.RFC3339))
+	case time.Duration:
+		return logEntry.String(key, val.String())
+	default:
+		// Fallback to string conversion for unknown types
+		return logEntry.String(key, fmt.Sprint(value))
+	}
+}
+
 func (h *logHook) Fire(entry *logrus.Entry) error {
 	ctx := context.Background()
 	if entry.Context != nil {
 		ctx = entry.Context
 	}
 
+	// Create the base log entry for the appropriate level
+	var logEntry sentry.LogEntry
+	switch entry.Level {
+	case logrus.TraceLevel:
+		logEntry = h.logger.Trace().WithCtx(ctx)
+	case logrus.DebugLevel:
+		logEntry = h.logger.Debug().WithCtx(ctx)
+	case logrus.InfoLevel:
+		logEntry = h.logger.Info().WithCtx(ctx)
+	case logrus.WarnLevel:
+		logEntry = h.logger.Warn().WithCtx(ctx)
+	case logrus.ErrorLevel:
+		logEntry = h.logger.Error().WithCtx(ctx)
+	case logrus.FatalLevel:
+		logEntry = h.logger.Fatal().WithCtx(ctx)
+	case logrus.PanicLevel:
+		logEntry = h.logger.Panic().WithCtx(ctx)
+	default:
+		sentry.DebugLogger.Printf("Invalid logrus logging level: %v. Dropping log.", entry.Level)
+		if h.fallback != nil {
+			return h.fallback(entry)
+		}
+		return errors.New("invalid log level")
+	}
+
+	// Add all the fields as attributes to this specific log entry
 	for k, v := range entry.Data {
 		// Skip specific fields that might be handled separately
 		if k == h.key(FieldRequest) || k == h.key(FieldUser) ||
@@ -303,63 +369,11 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 			continue
 		}
 
-		switch val := v.(type) {
-		case int8:
-			h.logger.SetAttributes(attribute.Int(k, int(val)))
-		case int16:
-			h.logger.SetAttributes(attribute.Int(k, int(val)))
-		case int32:
-			h.logger.SetAttributes(attribute.Int(k, int(val)))
-		case int64:
-			h.logger.SetAttributes(attribute.Int(k, int(val)))
-		case int:
-			h.logger.SetAttributes(attribute.Int(k, val))
-		case uint, uint8, uint16, uint32, uint64:
-			uval := reflect.ValueOf(val).Convert(reflect.TypeOf(uint64(0))).Uint()
-			if uval <= math.MaxInt64 {
-				h.logger.SetAttributes(attribute.Int64(k, int64(uval)))
-			} else {
-				// For values larger than int64 can handle, we are using string.
-				h.logger.SetAttributes(attribute.String(k, strconv.FormatUint(uval, 10)))
-			}
-		case string:
-			h.logger.SetAttributes(attribute.String(k, val))
-		case float32:
-			h.logger.SetAttributes(attribute.Float64(k, float64(val)))
-		case float64:
-			h.logger.SetAttributes(attribute.Float64(k, val))
-		case bool:
-			h.logger.SetAttributes(attribute.Bool(k, val))
-		default:
-			// can't drop argument, fallback to string conversion
-			h.logger.SetAttributes(attribute.String(k, fmt.Sprint(v)))
-		}
+		logEntry = logrusFieldToLogEntry(logEntry, k, v)
 	}
 
-	h.logger.SetAttributes(attribute.String("sentry.origin", "auto.logger.logrus"))
-
-	switch entry.Level {
-	case logrus.TraceLevel:
-		h.logger.Trace(ctx, entry.Message)
-	case logrus.DebugLevel:
-		h.logger.Debug(ctx, entry.Message)
-	case logrus.InfoLevel:
-		h.logger.Info(ctx, entry.Message)
-	case logrus.WarnLevel:
-		h.logger.Warn(ctx, entry.Message)
-	case logrus.ErrorLevel:
-		h.logger.Error(ctx, entry.Message)
-	case logrus.FatalLevel:
-		h.logger.Fatal(ctx, entry.Message)
-	case logrus.PanicLevel:
-		h.logger.Panic(ctx, entry.Message)
-	default:
-		sentry.DebugLogger.Printf("Invalid logrus logging level: %v. Dropping log.", entry.Level)
-		if h.fallback != nil {
-			return h.fallback(entry)
-		}
-		return errors.New("invalid log level")
-	}
+	// Emit the log entry with the message
+	logEntry.Emit(entry.Message)
 	return nil
 }
 
@@ -395,8 +409,11 @@ func NewLogHook(levels []logrus.Level, opts sentry.ClientOptions) (Hook, error) 
 func NewLogHookFromClient(levels []logrus.Level, client *sentry.Client) Hook {
 	defaultHub := sentry.NewHub(client, sentry.NewScope())
 	ctx := sentry.SetHubOnContext(context.Background(), defaultHub)
+	logger := sentry.NewLogger(ctx)
+	logger.SetAttributes(attribute.String("sentry.origin", LogrusOrigin))
+
 	return &logHook{
-		logger: sentry.NewLogger(ctx),
+		logger: logger,
 		levels: levels,
 		hubProvider: func() *sentry.Hub {
 			// Default to using the same hub if no specific provider is set
