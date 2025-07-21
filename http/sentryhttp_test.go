@@ -405,3 +405,29 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestHandler_HandleFunc_With_RecoveredErrorHandler_Option(t *testing.T) {
+	var gotErr any
+	sentryHandler := sentryhttp.New(sentryhttp.Options{
+		RecoveredErrorHandler: func(err any) { gotErr = err },
+	})
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		panic("test panic")
+	}
+	srv := httptest.NewServer(sentryHandler.HandleFunc(handler))
+	defer srv.Close()
+
+	req, err := http.NewRequest(http.MethodGet, srv.URL, http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if gotErr != "test panic" {
+		t.Errorf("got error %v, want 'test panic'", gotErr)
+	}
+}

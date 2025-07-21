@@ -18,9 +18,10 @@ const sdkIdentifier = "sentry.go.http"
 // A Handler is an HTTP middleware factory that provides integration with
 // Sentry.
 type Handler struct {
-	repanic         bool
-	waitForDelivery bool
-	timeout         time.Duration
+	repanic               bool
+	recoveredErrorHandler func(err any)
+	waitForDelivery       bool
+	timeout               time.Duration
 }
 
 // Options configure a Handler.
@@ -30,6 +31,9 @@ type Options struct {
 	// behavior from Go's http package, as documented in
 	// https://golang.org/pkg/net/http/#Handler.
 	Repanic bool
+	// RecoveredErrorHandler is called when an error is recovered from a panic in the HTTP handler.
+	// For example, it allows you to log the error to your logging system.
+	RecoveredErrorHandler func(err any)
 	// WaitForDelivery indicates, in case of a panic, whether to block the
 	// current goroutine and wait until the panic event has been reported to
 	// Sentry before repanicking or resuming normal execution.
@@ -58,9 +62,10 @@ func New(options Options) *Handler {
 	}
 
 	return &Handler{
-		repanic:         options.Repanic,
-		timeout:         options.Timeout,
-		waitForDelivery: options.WaitForDelivery,
+		repanic:               options.Repanic,
+		recoveredErrorHandler: options.RecoveredErrorHandler,
+		timeout:               options.Timeout,
+		waitForDelivery:       options.WaitForDelivery,
 	}
 }
 
@@ -133,6 +138,9 @@ func (h *Handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 		)
 		if eventID != nil && h.waitForDelivery {
 			hub.Flush(h.timeout)
+		}
+		if h.recoveredErrorHandler != nil {
+			h.recoveredErrorHandler(err)
 		}
 		if h.repanic {
 			panic(err)

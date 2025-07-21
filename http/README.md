@@ -54,12 +54,14 @@ if err := http.ListenAndServe(":3000", nil); err != nil {
 
 `sentryhttp` accepts a struct of `Options` that allows you to configure how the handler will behave.
 
-Currently it respects 3 options:
+Currently it respects 4 options:
 
 ```go
 // Whether Sentry should repanic after recovery, in most cases it should be set to true,
 // and you should gracefully handle http responses.
 Repanic         bool
+// Whether you want to take additional action on the recovered error, you can pass your own function.
+RecoveredErrorHandler func(err any)
 // Whether you want to block the request before moving forward with the response.
 // Useful, when you want to restart the process after it panics.
 WaitForDelivery bool
