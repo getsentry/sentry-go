@@ -595,10 +595,12 @@ func (e *Event) checkInMarshalJSON() ([]byte, error) {
 
 	if e.MonitorConfig != nil {
 		checkIn.MonitorConfig = &MonitorConfig{
-			Schedule:      e.MonitorConfig.Schedule,
-			CheckInMargin: e.MonitorConfig.CheckInMargin,
-			MaxRuntime:    e.MonitorConfig.MaxRuntime,
-			Timezone:      e.MonitorConfig.Timezone,
+			Schedule:              e.MonitorConfig.Schedule,
+			CheckInMargin:         e.MonitorConfig.CheckInMargin,
+			MaxRuntime:            e.MonitorConfig.MaxRuntime,
+			Timezone:              e.MonitorConfig.Timezone,
+			FailureIssueThreshold: e.MonitorConfig.FailureIssueThreshold,
+			RecoveryThreshold:     e.MonitorConfig.RecoveryThreshold,
 		}
 	}
 
