@@ -299,11 +299,16 @@ func (h *logHandler) WithAttrs(attrs []slog.Attr) *logHandler {
 	groupsCopy := make([]string, len(h.groups))
 	copy(groupsCopy, h.groups)
 
+	// Create a new logger to avoid sharing state between handlers
+	ctx := context.Background()
+	logger := sentry.NewLogger(ctx)
+	logger.SetAttributes(attribute.String("sentry.origin", SlogOrigin))
+
 	return &logHandler{
 		option: h.option,
 		attrs:  appendAttrsToGroup(h.groups, h.attrs, attrs...),
 		groups: groupsCopy,
-		logger: h.logger,
+		logger: logger,
 	}
 }
 
@@ -317,11 +322,16 @@ func (h *logHandler) WithGroup(name string) *logHandler {
 	copy(newGroups, h.groups)
 	newGroups = append(newGroups, name)
 
+	// Create a new logger to avoid sharing state between handlers
+	ctx := context.Background()
+	logger := sentry.NewLogger(ctx)
+	logger.SetAttributes(attribute.String("sentry.origin", SlogOrigin))
+
 	return &logHandler{
 		option: h.option,
 		attrs:  h.attrs,
 		groups: newGroups,
-		logger: h.logger,
+		logger: logger,
 	}
 }
 
