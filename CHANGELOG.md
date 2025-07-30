@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.35.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.0.
+
+### Features
+
+- Improve logging API ([#1046](https://github.com/getsentry/sentry-go/pull/1046))
+
+The logging API now supports a fluent/chaining interface for structured logging with attributes:
+
+```go
+ctx := context.Background()
+logger := sentry.NewLogger(ctx)
+
+// Set permanent attributes on the logger
+logger.SetAttributes(
+    attribute.String("version", "1.0.0"),
+)
+
+// Chain attributes on individual log entries
+logger.Info().
+    String("key.string", "value").
+    Int("key.int", 42).
+    Bool("key.bool", true).
+    Emitf("Message with parameters %d and %d", 1, 2)
+```
+
+### Bug Fixes
+
+- Include FailureIssueThreshold and RecoveryThreshold in MonitorConfig JSON ([#1060](https://github.com/getsentry/sentry-go/pull/1060))
+
 ## 0.34.1
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.34.1.
