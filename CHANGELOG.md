@@ -4,13 +4,22 @@
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.0.
 
-### Features
+### Breaking Changes
 
-- Improve logging API ([#1046](https://github.com/getsentry/sentry-go/pull/1046))
+- Changes to the logging API ([#1046](https://github.com/getsentry/sentry-go/pull/1046))
 
-The logging API now supports a fluent/chaining interface for structured logging with attributes:
+The logging API now supports a fluent interface for structured logging with attributes:
 
 ```go
+// usage before
+logger := sentry.NewLogger(ctx)
+// attributes weren't being set permanently
+logger.SetAttributes(
+    attribute.String("version", "1.0.0"),
+)
+logger.Infof(ctx, "Message with parameters %d and %d", 1, 2)
+
+// new behavior
 ctx := context.Background()
 logger := sentry.NewLogger(ctx)
 
