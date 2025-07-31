@@ -38,7 +38,7 @@ logger.Info().
 
 ### Bug Fixes
 
-- Include FailureIssueThreshold and RecoveryThreshold in MonitorConfig JSON ([#1060](https://github.com/getsentry/sentry-go/pull/1060))
+- Correctly serialize `FailureIssueThreshold` and `RecoveryThreshold` onto check-in payloads ([#1060](https://github.com/getsentry/sentry-go/pull/1060))
 
 ## 0.34.1
 
