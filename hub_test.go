@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
 )
 
 const testDsn = "http://whatever@example.com/1337"
@@ -552,4 +554,20 @@ func TestHub_FlushWithContext(t *testing.T) {
 	if gotEvents[0].Message != wantEvent.Message {
 		t.Fatalf("expected message to be %v, got %v", wantEvent.Message, gotEvents[0].Message)
 	}
+}
+
+func TestHubEmptyClientShouldBeSafe(t *testing.T) {
+	hub := NewHub(nil, nil)
+	assert.NotPanics(t, func() {
+		wantEvent := Event{Message: "something"}
+		err := errors.New("some error")
+		hub.CaptureEvent(&wantEvent)
+		hub.CaptureMessage("something")
+		hub.CaptureException(err)
+		hub.CaptureCheckIn(nil, nil)
+		hub.GetBaggage()
+		hub.GetTraceparent()
+		hub.Recover(err)
+		hub.RecoverWithContext(context.Background(), err)
+	}, "Expected Hub to not panic")
 }
