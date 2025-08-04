@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
@@ -43,6 +44,7 @@ type sentryLogger struct {
 	ctx        context.Context
 	client     *Client
 	attributes map[string]Attribute
+	mu         sync.RWMutex
 }
 
 type logEntry struct {
@@ -64,7 +66,12 @@ func NewLogger(ctx context.Context) Logger {
 
 	client := hub.Client()
 	if client != nil && client.batchLogger != nil {
-		return &sentryLogger{ctx, client, make(map[string]Attribute)}
+		return &sentryLogger{
+			ctx:        ctx,
+			client:     client,
+			attributes: make(map[string]Attribute),
+			mu:         sync.RWMutex{},
+		}
 	}
 
 	DebugLogger.Println("fallback to noopLogger: enableLogs disabled")
@@ -110,9 +117,12 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		}
 	}
 
+	l.mu.RLock()
 	for k, v := range l.attributes {
 		attrs[k] = v
 	}
+	l.mu.RUnlock()
+
 	for k, v := range entryAttrs {
 		attrs[k] = v
 	}
@@ -177,6 +187,9 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 }
 
 func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	for _, v := range attrs {
 		t, ok := mapTypesToStr[v.Value.Type()]
 		if !ok || t == "" {
