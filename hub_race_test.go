@@ -7,8 +7,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/getsentry/sentry-go/internal/testutils"
 )
 
 const (
@@ -24,17 +22,17 @@ func TestHubRaceConditions(t *testing.T) {
 	}{
 		{
 			name:    "HubCloneWithStackModification",
-			timeout: testutils.FlushTimeout(),
+			timeout: 5 * time.Second,
 			testFn:  testHubCloneRace,
 		},
 		{
 			name:    "SpanFinishWithHubAccess",
-			timeout: testutils.FlushTimeout(),
+			timeout: 5 * time.Second,
 			testFn:  testSpanFinishHubRace,
 		},
 		{
 			name:    "ConcurrentGoroutineIsolation",
-			timeout: testutils.FlushTimeout(),
+			timeout: 5 * time.Second,
 			testFn:  testConcurrentGoroutineIsolation,
 		},
 	}

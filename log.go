@@ -96,13 +96,21 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 
 	var traceID TraceID
 	var spanID SpanID
+	var span *Span
+	var user User
 
-	span := hub.Scope().span
-	if span != nil {
-		traceID = span.TraceID
-		spanID = span.SpanID
-	} else {
-		traceID = hub.Scope().propagationContext.TraceID
+	scope := hub.Scope()
+	if scope != nil {
+		scope.mu.Lock()
+		span = scope.span
+		if span != nil {
+			traceID = span.TraceID
+			spanID = span.SpanID
+		} else {
+			traceID = hub.Scope().propagationContext.TraceID
+		}
+		user = scope.user
+		scope.mu.Unlock()
 	}
 
 	attrs := map[string]Attribute{}
@@ -139,19 +147,16 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	} else if serverAddr, err := os.Hostname(); err == nil {
 		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: AttributeString}
 	}
-	scope := hub.Scope()
-	if scope != nil {
-		user := scope.user
-		if !user.IsEmpty() {
-			if user.ID != "" {
-				attrs["user.id"] = Attribute{Value: user.ID, Type: AttributeString}
-			}
-			if user.Name != "" {
-				attrs["user.name"] = Attribute{Value: user.Name, Type: AttributeString}
-			}
-			if user.Email != "" {
-				attrs["user.email"] = Attribute{Value: user.Email, Type: AttributeString}
-			}
+
+	if !user.IsEmpty() {
+		if user.ID != "" {
+			attrs["user.id"] = Attribute{Value: user.ID, Type: AttributeString}
+		}
+		if user.Name != "" {
+			attrs["user.name"] = Attribute{Value: user.Name, Type: AttributeString}
+		}
+		if user.Email != "" {
+			attrs["user.email"] = Attribute{Value: user.Email, Type: AttributeString}
 		}
 	}
 	if span != nil {
