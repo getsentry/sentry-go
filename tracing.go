@@ -333,14 +333,19 @@ func (s *Span) ToBaggage() string {
 
 	// In case there is currently no frozen DynamicSamplingContext attached to the transaction,
 	// create one from the properties of the transaction.
-	if !s.dynamicSamplingContext.IsFrozen() {
+	t.mu.RLock()
+	if !t.dynamicSamplingContext.IsFrozen() {
+		t.mu.RUnlock()
 		// This will return a frozen DynamicSamplingContext.
 		if dsc := DynamicSamplingContextFromTransaction(t); dsc.HasEntries() {
 			t.SetDynamicSamplingContext(dsc)
 		}
+		t.mu.RLock()
 	}
 
-	return t.dynamicSamplingContext.String()
+	result := t.dynamicSamplingContext.String()
+	t.mu.RUnlock()
+	return result
 }
 
 // SetDynamicSamplingContext sets the given dynamic sampling context on the
