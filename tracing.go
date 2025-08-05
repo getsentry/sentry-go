@@ -277,6 +277,8 @@ func (s *Span) IsTransaction() bool {
 // For transaction spans it returns itself. For spans that were created manually
 // the method returns "nil".
 func (s *Span) GetTransaction() *Span {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	spanRecorder := s.spanRecorder()
 	if spanRecorder == nil {
 		// This probably means that the Span was created manually (not via
@@ -305,6 +307,8 @@ func (s *Span) GetTransaction() *Span {
 // Use this function to propagate the TraceParentContext to a downstream SDK,
 // either as the value of the "sentry-trace" HTTP header, or as an html "sentry-trace" meta tag.
 func (s *Span) ToSentryTrace() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	// TODO(tracing): add instrumentation for outgoing HTTP requests using
 	// ToSentryTrace.
 	var b strings.Builder
@@ -332,7 +336,7 @@ func (s *Span) ToBaggage() string {
 	if !s.dynamicSamplingContext.IsFrozen() {
 		// This will return a frozen DynamicSamplingContext.
 		if dsc := DynamicSamplingContextFromTransaction(t); dsc.HasEntries() {
-			t.dynamicSamplingContext = dsc
+			t.SetDynamicSamplingContext(dsc)
 		}
 	}
 
@@ -343,6 +347,8 @@ func (s *Span) ToBaggage() string {
 // current transaction.
 func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
 	if s.IsTransaction() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		s.dynamicSamplingContext = dsc
 	}
 }
@@ -606,7 +612,9 @@ func (s *Span) traceContext() *TraceContext {
 }
 
 // spanRecorder stores the span tree. Guaranteed to be non-nil.
-func (s *Span) spanRecorder() *spanRecorder { return s.recorder }
+func (s *Span) spanRecorder() *spanRecorder {
+	return s.recorder
+}
 
 // ParseTraceParentContext parses a sentry-trace header and builds a TraceParentContext from the
 // parsed values. If the header was parsed correctly, the second returned argument

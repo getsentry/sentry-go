@@ -64,7 +64,8 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			hub = sentry.CurrentHub().Clone()
 		}
 
-		if client := hub.Client(); client != nil {
+		client, scope := hub.GetAtomicClientAndScope()
+		if client != nil {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
@@ -91,7 +92,6 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 
 		transaction.SetData("http.request.method", r.Method)
 
-		scope := hub.Scope()
 		scope.SetRequest(r)
 		scope.SetRequestBody(ctx.Request.Body())
 		ctx.SetUserValue(valuesKey, hub)

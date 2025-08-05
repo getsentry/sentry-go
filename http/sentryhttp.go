@@ -90,8 +90,8 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			hub = sentry.CurrentHub().Clone()
 			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
-
-		if client := hub.Client(); client != nil {
+		client, scope := hub.GetAtomicClientAndScope()
+		if client != nil {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
@@ -117,7 +117,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			transaction.Finish()
 		}()
 
-		hub.Scope().SetRequest(r)
+		scope.SetRequest(r)
 		r = r.WithContext(transaction.Context())
 		defer h.recoverWithSentry(hub, r)
 
