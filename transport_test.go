@@ -792,7 +792,7 @@ func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
 		Dsn: "https://test@foobar/1",
 	})
 
-	transport.Flush(0)
+	transport.Flush(time.Millisecond)
 	transport.Close()
 }
 
