@@ -90,7 +90,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			hub = sentry.CurrentHub().Clone()
 			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
-		client, scope := hub.GetAtomicClientAndScope()
+		client, scope := hub.GetClientAndScope()
 		if client != nil {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}

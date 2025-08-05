@@ -63,7 +63,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			hub = sentry.CurrentHub().Clone()
 		}
 
-		client, scope := hub.GetAtomicClientAndScope()
+		client, scope := hub.GetClientAndScope()
 		if client != nil {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}

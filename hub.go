@@ -214,9 +214,9 @@ func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
 	f(scope)
 }
 
-// GetAtomicClientAndScope returns both the client and the scope in a single
+// GetClientAndScope returns both the client and the scope in a single
 // atomic operation to avoid race conditions.
-func (hub *Hub) GetAtomicClientAndScope() (*Client, *Scope) {
+func (hub *Hub) GetClientAndScope() (*Client, *Scope) {
 	hub.mu.RLock()
 	defer hub.mu.RUnlock()
 	if len(*hub.stack) == 0 {
@@ -230,7 +230,7 @@ func (hub *Hub) GetAtomicClientAndScope() (*Client, *Scope) {
 // passing it a top-level Scope.
 // Returns EventID if successfully, or nil if there's no Scope or Client available.
 func (hub *Hub) CaptureEvent(event *Event) *EventID {
-	client, scope := hub.GetAtomicClientAndScope()
+	client, scope := hub.GetClientAndScope()
 	if client == nil || scope == nil {
 		return nil
 	}
@@ -248,7 +248,7 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 // passing it a top-level Scope.
 // Returns EventID if successfully, or nil if there's no Scope or Client available.
 func (hub *Hub) CaptureMessage(message string) *EventID {
-	client, scope := hub.GetAtomicClientAndScope()
+	client, scope := hub.GetClientAndScope()
 	if client == nil || scope == nil {
 		return nil
 	}
@@ -266,7 +266,7 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 // passing it a top-level Scope.
 // Returns EventID if successfully, or nil if there's no Scope or Client available.
 func (hub *Hub) CaptureException(exception error) *EventID {
-	client, scope := hub.GetAtomicClientAndScope()
+	client, scope := hub.GetClientAndScope()
 	if client == nil || scope == nil {
 		return nil
 	}
@@ -284,7 +284,7 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 // passing it a top-level Scope.
 // Returns CheckInID if the check-in was captured successfully, or nil otherwise.
 func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
-	client, scope := hub.GetAtomicClientAndScope()
+	client, scope := hub.GetClientAndScope()
 	if client == nil {
 		return nil
 	}
@@ -297,7 +297,7 @@ func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *
 // The total number of breadcrumbs that can be recorded are limited by the
 // configuration on the client.
 func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
-	client, scope := hub.GetAtomicClientAndScope()
+	client, scope := hub.GetClientAndScope()
 	// If there's no client, just store it on the scope straight away
 	if client == nil {
 		if scope != nil {
@@ -338,7 +338,7 @@ func (hub *Hub) Recover(err interface{}) *EventID {
 	if err == nil {
 		err = recover()
 	}
-	client, scope := hub.GetAtomicClientAndScope()
+	client, scope := hub.GetClientAndScope()
 	if client == nil || scope == nil {
 		return nil
 	}
@@ -352,7 +352,7 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 	if err == nil {
 		err = recover()
 	}
-	client, scope := hub.GetAtomicClientAndScope()
+	client, scope := hub.GetClientAndScope()
 	if client == nil || scope == nil {
 		return nil
 	}
