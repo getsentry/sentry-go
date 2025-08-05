@@ -277,6 +277,8 @@ func (s *Span) IsTransaction() bool {
 // For transaction spans it returns itself. For spans that were created manually
 // the method returns "nil".
 func (s *Span) GetTransaction() *Span {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	spanRecorder := s.spanRecorder()
 	if spanRecorder == nil {
 		// This probably means that the Span was created manually (not via
@@ -324,8 +326,6 @@ func (s *Span) ToSentryTrace() string {
 // Use this function to propagate the DynamicSamplingContext to a downstream SDK,
 // either as the value of the "baggage" HTTP header, or as an html "baggage" meta tag.
 func (s *Span) ToBaggage() string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	t := s.GetTransaction()
 	if t == nil {
 		return ""
@@ -336,7 +336,7 @@ func (s *Span) ToBaggage() string {
 	if !s.dynamicSamplingContext.IsFrozen() {
 		// This will return a frozen DynamicSamplingContext.
 		if dsc := DynamicSamplingContextFromTransaction(t); dsc.HasEntries() {
-			t.dynamicSamplingContext = dsc
+			t.SetDynamicSamplingContext(dsc)
 		}
 	}
 
@@ -347,6 +347,8 @@ func (s *Span) ToBaggage() string {
 // current transaction.
 func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
 	if s.IsTransaction() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 		s.dynamicSamplingContext = dsc
 	}
 }
