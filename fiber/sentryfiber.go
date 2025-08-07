@@ -63,7 +63,8 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 		hub = sentry.CurrentHub().Clone()
 	}
 
-	if client := hub.Client(); client != nil {
+	client, scope := hub.GetClientAndScope()
+	if client != nil {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
@@ -94,7 +95,6 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	transaction.SetData("http.request.method", r.Method)
 
-	scope := hub.Scope()
 	scope.SetRequest(r)
 	scope.SetRequestBody(ctx.Request().Body())
 	ctx.Locals(valuesKey, hub)

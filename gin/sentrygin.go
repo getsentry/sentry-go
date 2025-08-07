@@ -63,7 +63,8 @@ func (h *handler) handle(c *gin.Context) {
 		hub = sentry.CurrentHub().Clone()
 	}
 
-	if client := hub.Client(); client != nil {
+	client, scope := hub.GetClientAndScope()
+	if client != nil {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
@@ -98,7 +99,7 @@ func (h *handler) handle(c *gin.Context) {
 	}()
 
 	c.Request = c.Request.WithContext(transaction.Context())
-	hub.Scope().SetRequest(c.Request)
+	scope.SetRequest(c.Request)
 	c.Set(valuesKey, hub)
 	c.Set(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, c.Request)

@@ -40,8 +40,7 @@ func DynamicSamplingContextFromHeader(header []byte) (DynamicSamplingContext, er
 
 func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	hub := hubFromContext(span.Context())
-	scope := hub.Scope()
-	client := hub.Client()
+	client, scope := hub.GetClientAndScope()
 
 	if client == nil || scope == nil {
 		return DynamicSamplingContext{
