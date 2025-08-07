@@ -107,7 +107,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 			traceID = span.TraceID
 			spanID = span.SpanID
 		} else {
-			traceID = hub.Scope().propagationContext.TraceID
+			traceID = scope.propagationContext.TraceID
 		}
 		user = scope.user
 		scope.mu.Unlock()

@@ -789,7 +789,8 @@ func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
 
 	transport := NewHTTPTransport()
 	transport.Configure(ClientOptions{
-		Dsn: "https://test@foobar/1",
+		Dsn:        "https://test@foobar/1",
+		HTTPClient: http.DefaultClient,
 	})
 
 	transport.Flush(0)
