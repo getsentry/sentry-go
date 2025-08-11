@@ -151,9 +151,9 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 
 	r.Method = string(ctx.Method())
 
-	r.URL = &url.URL{Path: "/"}
-
 	uri := ctx.URI()
+	r.URL = &url.URL{Path: string(uri.Path())}
+
 	if parsedURL, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path())); err == nil {
 		r.URL = parsedURL
 		r.URL.RawQuery = string(uri.QueryString())
