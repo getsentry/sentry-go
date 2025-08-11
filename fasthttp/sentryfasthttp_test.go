@@ -571,3 +571,35 @@ func TestSetHubOnContext(t *testing.T) {
 		t.Fatalf("expected hub to be %v, but got %v", hub, retrievedHub)
 	}
 }
+
+// TestMalformedURLNoPanic verifies that malformed URLs don't cause panics
+// when tracing is enabled
+func TestMalformedURLNoPanic(t *testing.T) {
+	err := sentry.Init(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sentryHandler := sentryfasthttp.New(sentryfasthttp.Options{})
+
+	handler := sentryHandler.Handle(func(ctx *fasthttp.RequestCtx) {
+		ctx.SetStatusCode(fasthttp.StatusOK)
+		ctx.SetBodyString("OK")
+	})
+
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Request.SetRequestURI("http://localhost/%zz")
+	ctx.Request.Header.SetMethod("GET")
+	ctx.Request.SetHost("localhost")
+	ctx.Request.Header.Set("User-Agent", "fasthttp")
+
+	handler(ctx)
+
+	// Should complete successfully without panic
+	if ctx.Response.StatusCode() != fasthttp.StatusOK {
+		t.Errorf("Expected 200, got %d", ctx.Response.StatusCode())
+	}
+}

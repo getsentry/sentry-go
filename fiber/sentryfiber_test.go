@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -592,5 +593,42 @@ func TestSetHubOnContext(t *testing.T) {
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+}
+
+// TestMalformedURLNoPanic verifies that malformed URLs don't cause panics
+// when tracing is enabled,
+func TestMalformedURLNoPanic(t *testing.T) {
+	err := sentry.Init(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app := fiber.New()
+	app.Use(sentryfiber.New(sentryfiber.Options{Timeout: 3 * time.Second, WaitForDelivery: true}))
+
+	app.Get("/*", func(c *fiber.Ctx) error {
+		return c.SendString("OK")
+	})
+
+	req := &http.Request{
+		Method: "GET",
+		URL:    &url.URL{Scheme: "http", Host: "localhost", Path: "/%zz"},
+		Header: make(http.Header),
+		Host:   "localhost",
+	}
+	req.Header.Set("User-Agent", "fiber")
+
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected 200, got %d", resp.StatusCode)
 	}
 }

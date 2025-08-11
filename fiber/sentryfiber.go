@@ -152,9 +152,11 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	r.Method = utils.CopyString(ctx.Method())
 
 	uri := ctx.Request().URI()
-	url, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
-	if err == nil {
-		r.URL = url
+	r.URL = &url.URL{Path: string(uri.Path())}
+	r.URL.RawQuery = string(uri.QueryString())
+
+	if parsedURL, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path())); err == nil {
+		r.URL = parsedURL
 		r.URL.RawQuery = string(uri.QueryString())
 	}
 
