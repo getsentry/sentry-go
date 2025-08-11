@@ -3,7 +3,6 @@ package sentry
 import (
 	"bytes"
 	"context"
-	"log"
 	"strings"
 	"testing"
 	"time"
@@ -663,12 +662,6 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 
 func TestSentryLogger_DebugLogging(t *testing.T) {
 	var buf bytes.Buffer
-	debugLogger := log.New(&buf, "", 0)
-	originalLogger := DebugLogger
-	DebugLogger = debugLogger
-	defer func() {
-		DebugLogger = originalLogger
-	}()
 
 	tests := []struct {
 		name          string
