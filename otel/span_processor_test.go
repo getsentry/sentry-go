@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"testing"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/testutils"
@@ -398,4 +399,35 @@ func TestParseSpanAttributesHttpServer(t *testing.T) {
 	assertEqual(t, sentrySpan.Description, "POST /api/checkout2")
 	assertEqual(t, sentrySpan.Op, "http.server")
 	assertEqual(t, sentrySpan.Source, sentry.TransactionSource(""))
+}
+
+func TestSpanBecomesChildOfExistingTransaction(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+	ctx, otelRootSpan := tracer.Start(
+		emptyContextWithSentry(),
+		"rootSpan",
+	)
+	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
+
+	_, childSpan1 := tracer.Start(
+		ctx,
+		"span name 1",
+	)
+	sentrySpan1, _ := sentrySpanMap.Get(childSpan1.SpanContext().SpanID())
+	time.Sleep(time.Millisecond)
+	childSpan1.End()
+
+	_, childSpan2 := tracer.Start(
+		ctx,
+		"span name 2",
+	)
+	sentrySpan2, _ := sentrySpanMap.Get(childSpan2.SpanContext().SpanID())
+	time.Sleep(time.Millisecond)
+	childSpan2.End()
+
+	otelRootSpan.End()
+
+	assertEqual(t, sentryTransaction.IsTransaction(), true)
+	assertEqual(t, sentrySpan1.IsTransaction(), false)
+	assertEqual(t, sentrySpan2.IsTransaction(), false)
 }
