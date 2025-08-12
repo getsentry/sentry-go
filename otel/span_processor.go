@@ -45,9 +45,11 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 
 	var parentSpan *sentry.Span
 	sentrySpanMap.mu.RLock()
-	for _, sentrySpan := range sentrySpanMap.spanMap {
-		if sentrySpan.TraceID == sentry.TraceID(otelTraceID) && sentrySpan.IsTransaction() {
-			parentSpan = sentrySpan
+	for _, entry := range sentrySpanMap.spanMap {
+		if entry != nil && entry.Span != nil {
+			if entry.Span.TraceID == sentry.TraceID(otelTraceID) && entry.Span.IsTransaction() {
+				parentSpan = entry.Span
+			}
 		}
 	}
 	sentrySpanMap.mu.RUnlock()
@@ -100,7 +102,20 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	sentrySpan.EndTime = s.EndTime()
 	sentrySpan.Finish()
 
-	sentrySpanMap.Delete(otelSpanId)
+	sentrySpanMap.MarkFinished(otelSpanId)
+
+	// If this is a parent span (has no parent), clean up its finished children
+	otelParentSpanID := s.Parent().SpanID()
+	if !otelParentSpanID.IsValid() || sentrySpan.ParentSpanID == (sentry.SpanID{}) {
+		sentrySpanMap.CleanupFinishedChildrenOf(otelSpanId)
+	} else {
+		// Check if the parent is finished, and if so, clean up this span and its siblings
+		if parentSpan, ok := sentrySpanMap.Get(otelParentSpanID); ok && parentSpan != nil {
+			if sentrySpanMap.IsFinished(otelParentSpanID) {
+				sentrySpanMap.CleanupFinishedChildrenOf(otelParentSpanID)
+			}
+		}
+	}
 }
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown-1
