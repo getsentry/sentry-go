@@ -3,7 +3,7 @@ package sentry
 import (
 	"bytes"
 	"context"
-	"log"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -662,54 +662,48 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 }
 
 func TestSentryLogger_DebugLogging(t *testing.T) {
-	var buf bytes.Buffer
-	debugLogger := log.New(&buf, "", 0)
-	originalLogger := DebugLogger
-	DebugLogger = debugLogger
-	defer func() {
-		DebugLogger = originalLogger
-	}()
-
 	tests := []struct {
-		name          string
-		debugEnabled  bool
-		message       string
-		expectedDebug string
+		name       string
+		enableLogs bool
+		message    string
 	}{
 		{
-			name:          "Debug enabled",
-			debugEnabled:  true,
-			message:       "test message",
-			expectedDebug: "test message\n",
+			name:       "Debug enabled",
+			enableLogs: true,
+			message:    "test message",
 		},
 		{
-			name:          "Debug disabled",
-			debugEnabled:  false,
-			message:       "test message",
-			expectedDebug: "",
+			name:       "Debug disabled",
+			enableLogs: false,
+			message:    "test message",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf.Reset()
+			var buf bytes.Buffer
+
 			ctx := context.Background()
 			mockClient, _ := NewClient(ClientOptions{
 				Transport:  &MockTransport{},
-				EnableLogs: true,
-				Debug:      tt.debugEnabled,
+				EnableLogs: tt.enableLogs,
+				Debug:      true,
 			})
 			hub := CurrentHub()
 			hub.BindClient(mockClient)
+
+			// set the debug logger output after NewClient, so that it doesn't change.
+			DebugLogger.SetOutput(&buf)
+			defer DebugLogger.SetOutput(io.Discard)
 
 			logger := NewLogger(ctx)
 			logger.Info().WithCtx(ctx).Emit(tt.message)
 
 			got := buf.String()
-			if !tt.debugEnabled {
-				assertEqual(t, len(got), 0)
-			} else if strings.Contains(got, tt.expectedDebug) {
-				t.Errorf("Debug output = %q, want %q", got, tt.expectedDebug)
+			if tt.enableLogs {
+				assertEqual(t, strings.Contains(got, "test message"), true)
+			} else {
+				assertEqual(t, strings.Contains(got, "test message"), false)
 			}
 		})
 	}
