@@ -21,7 +21,7 @@ func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
 		return sentrySpanProcessorInstance
 	}
 	sentry.AddGlobalEventProcessor(linkTraceContextToErrorEvent)
-	sentrySpanProcessorInstance := &sentrySpanProcessor{}
+	sentrySpanProcessorInstance = &sentrySpanProcessor{}
 	return sentrySpanProcessorInstance
 }
 
