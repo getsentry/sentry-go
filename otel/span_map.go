@@ -17,8 +17,9 @@ type SpanEntry struct {
 // It helps Sentry span processor and propagator to keep track of unfinished
 // Sentry spans and to establish parent-child links between spans.
 type SentrySpanMap struct {
-	spanMap map[otelTrace.SpanID]*SpanEntry
-	mu      sync.RWMutex
+	spanMap     map[otelTrace.SpanID]*SpanEntry
+	childrenMap map[sentry.SpanID][]otelTrace.SpanID
+	mu          sync.RWMutex
 }
 
 func (ssm *SentrySpanMap) Get(otelSpandID otelTrace.SpanID) (*sentry.Span, bool) {
@@ -38,11 +39,19 @@ func (ssm *SentrySpanMap) Set(otelSpandID otelTrace.SpanID, sentrySpan *sentry.S
 		Span:     sentrySpan,
 		Finished: false,
 	}
+
+	if sentrySpan.ParentSpanID != (sentry.SpanID{}) {
+		ssm.childrenMap[sentrySpan.ParentSpanID] = append(ssm.childrenMap[sentrySpan.ParentSpanID], otelSpandID)
+	}
 }
 
 func (ssm *SentrySpanMap) Delete(otelSpandID otelTrace.SpanID) {
 	ssm.mu.Lock()
 	defer ssm.mu.Unlock()
+
+	if entry, ok := ssm.spanMap[otelSpandID]; ok && entry != nil && entry.Span != nil {
+		delete(ssm.childrenMap, entry.Span.SpanID)
+	}
 	delete(ssm.spanMap, otelSpandID)
 }
 
@@ -50,6 +59,7 @@ func (ssm *SentrySpanMap) Clear() {
 	ssm.mu.Lock()
 	defer ssm.mu.Unlock()
 	ssm.spanMap = make(map[otelTrace.SpanID]*SpanEntry)
+	ssm.childrenMap = make(map[sentry.SpanID][]otelTrace.SpanID)
 }
 
 func (ssm *SentrySpanMap) Len() int {
@@ -75,26 +85,53 @@ func (ssm *SentrySpanMap) IsFinished(otelSpandID otelTrace.SpanID) bool {
 	return false
 }
 
-func (ssm *SentrySpanMap) CleanupFinishedChildrenOf(otelSpandID otelTrace.SpanID) {
+func (ssm *SentrySpanMap) CleanupFinishedSpan(otelSpandID otelTrace.SpanID) {
 	ssm.mu.Lock()
 	defer ssm.mu.Unlock()
 
-	parentEntry, ok := ssm.spanMap[otelSpandID]
-	if !ok || parentEntry == nil {
+	entry, ok := ssm.spanMap[otelSpandID]
+	if !ok || entry == nil || entry.Span == nil {
 		return
 	}
 
-	parentSpan := parentEntry.Span
+	sentrySpanID := entry.Span.SpanID
+	parentSpanID := entry.Span.ParentSpanID
 
-	for spanID, entry := range ssm.spanMap {
-		if entry != nil && entry.Span != nil && entry.Finished {
-			if entry.Span.ParentSpanID == parentSpan.SpanID {
-				delete(ssm.spanMap, spanID)
+	if children, hasChildren := ssm.childrenMap[sentrySpanID]; hasChildren && len(children) > 0 {
+		return
+	}
+
+	delete(ssm.childrenMap, sentrySpanID)
+	delete(ssm.spanMap, otelSpandID)
+
+	if parentSpanID != (sentry.SpanID{}) {
+		if children, ok := ssm.childrenMap[parentSpanID]; ok {
+			newChildren := make([]otelTrace.SpanID, 0, len(children)-1)
+			for _, childID := range children {
+				if childID != otelSpandID {
+					newChildren = append(newChildren, childID)
+				}
+			}
+
+			if len(newChildren) == 0 {
+				delete(ssm.childrenMap, parentSpanID)
+
+				for otelID, entry := range ssm.spanMap {
+					if entry != nil && entry.Span != nil && entry.Span.SpanID == parentSpanID {
+						if entry.Finished {
+							delete(ssm.spanMap, otelID)
+						}
+						break
+					}
+				}
+			} else {
+				ssm.childrenMap[parentSpanID] = newChildren
 			}
 		}
 	}
-
-	delete(ssm.spanMap, otelSpandID)
 }
 
-var sentrySpanMap = SentrySpanMap{spanMap: make(map[otelTrace.SpanID]*SpanEntry)}
+var sentrySpanMap = SentrySpanMap{
+	spanMap:     make(map[otelTrace.SpanID]*SpanEntry),
+	childrenMap: make(map[sentry.SpanID][]otelTrace.SpanID),
+}

@@ -103,19 +103,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	sentrySpan.Finish()
 
 	sentrySpanMap.MarkFinished(otelSpanId)
-
-	// If this is a parent span (has no parent), clean up its finished children
-	otelParentSpanID := s.Parent().SpanID()
-	if !otelParentSpanID.IsValid() || sentrySpan.ParentSpanID == (sentry.SpanID{}) {
-		sentrySpanMap.CleanupFinishedChildrenOf(otelSpanId)
-	} else {
-		// Check if the parent is finished, and if so, clean up this span and its siblings
-		if parentSpan, ok := sentrySpanMap.Get(otelParentSpanID); ok && parentSpan != nil {
-			if sentrySpanMap.IsFinished(otelParentSpanID) {
-				sentrySpanMap.CleanupFinishedChildrenOf(otelParentSpanID)
-			}
-		}
-	}
+	sentrySpanMap.CleanupFinishedSpan(otelSpanId)
 }
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown-1

@@ -401,7 +401,7 @@ func TestParseSpanAttributesHttpServer(t *testing.T) {
 	assertEqual(t, sentrySpan.Source, sentry.TransactionSource(""))
 }
 
-func TestSpanBecomesChildOfExistingTransaction(t *testing.T) {
+func TestSpanBecomesChildOfFinishedSpan(t *testing.T) {
 	_, _, tracer := setupSpanProcessorTest()
 	ctx, otelRootSpan := tracer.Start(
 		emptyContextWithSentry(),
@@ -409,7 +409,7 @@ func TestSpanBecomesChildOfExistingTransaction(t *testing.T) {
 	)
 	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
 
-	_, childSpan1 := tracer.Start(
+	ctx, childSpan1 := tracer.Start(
 		ctx,
 		"span name 1",
 	)
@@ -428,6 +428,31 @@ func TestSpanBecomesChildOfExistingTransaction(t *testing.T) {
 	otelRootSpan.End()
 
 	assertEqual(t, sentryTransaction.IsTransaction(), true)
-	assertEqual(t, sentrySpan1.IsTransaction(), false)
-	assertEqual(t, sentrySpan2.IsTransaction(), false)
+	assertEqual(t, sentrySpan1.ParentSpanID, sentryTransaction.SpanID)
+	assertEqual(t, sentrySpan2.ParentSpanID, sentrySpan1.SpanID)
+}
+
+func TestSpanWithFinishedParentShouldBeDeleted(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+
+	ctx, parent := tracer.Start(context.Background(), "parent")
+	parentSpanID := parent.SpanContext().SpanID()
+	_, child := tracer.Start(ctx, "child")
+	childSpanID := child.SpanContext().SpanID()
+
+	_, parentExists := sentrySpanMap.Get(parentSpanID)
+	_, childExists := sentrySpanMap.Get(childSpanID)
+	assertEqual(t, parentExists, true)
+	assertEqual(t, childExists, true)
+
+	parent.End()
+	_, parentExists = sentrySpanMap.Get(parentSpanID)
+	assertEqual(t, parentExists, true)
+	_, childExists = sentrySpanMap.Get(childSpanID)
+	assertEqual(t, childExists, true)
+
+	child.End()
+	_, childExists = sentrySpanMap.Get(childSpanID)
+	assertEqual(t, childExists, false)
+	assertEqual(t, sentrySpanMap.Len(), 0)
 }
