@@ -102,7 +102,6 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	sentrySpan.EndTime = s.EndTime()
 	sentrySpan.Finish()
 
-	sentrySpanMap.MarkFinished(otelSpanId)
 	sentrySpanMap.CleanupFinishedSpan(otelSpanId)
 }
 
