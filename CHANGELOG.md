@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.35.1
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.1.
+
+### Bug Fixes
+
+- Fix race conditions when accessing scope during logging operations ([#1050](https://github.com/getsentry/sentry-go/pull/1050))
+- Fix nil pointer dereference with malformed URLs when tracing is enabled in `fasthttp` and `fiber` integrations ([#1055](https://github.com/getsentry/sentry-go/pull/1055))
+
 ## 0.35.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.0.
