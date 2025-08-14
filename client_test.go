@@ -871,8 +871,8 @@ func TestSDKIdentifier(t *testing.T) {
 }
 
 func TestClientSetsUpTransport(t *testing.T) {
-	client, _ := NewClient(ClientOptions{Dsn: testDsn})
-	require.IsType(t, &HTTPTransport{}, client.Transport)
+	client, _, _ := setupClientTest()
+	require.IsType(t, &MockTransport{}, client.Transport)
 
 	client, _ = NewClient(ClientOptions{})
 	require.IsType(t, &noopTransport{}, client.Transport)
