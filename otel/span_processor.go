@@ -102,7 +102,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	sentrySpan.EndTime = s.EndTime()
 	sentrySpan.Finish()
 
-	sentrySpanMap.CleanupFinishedSpan(otelSpanId)
+	sentrySpanMap.Delete(otelSpanId)
 }
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown-1
