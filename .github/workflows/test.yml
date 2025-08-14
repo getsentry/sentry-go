@@ -45,8 +45,9 @@ jobs:
           key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-${{ matrix.go }}-
-      - name: Tidy
-        run: go mod tidy
+      - name: Tidy for min version
+        run: make mod-tidy
+        if: ${{ matrix.go == '1.22' }}
       - name: Build
         run: make build
       - name: Vet
@@ -58,7 +59,6 @@ jobs:
         with:
           directory: .coverage
           token: ${{ secrets.CODECOV_TOKEN }}
-        if: ${{ !matrix.race }}
     timeout-minutes: 15
     strategy:
       matrix:
