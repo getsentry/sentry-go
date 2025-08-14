@@ -4,7 +4,6 @@ on:
     branches:
       - master
       - release/**
-      - test-flaky
   pull_request:
 permissions:
   contents: read
