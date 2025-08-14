@@ -81,7 +81,7 @@ func testConcurrentLoggerSetAttributes(t *testing.T) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:        testDsn,
 		EnableLogs: true,
-		Transport:  &MockTransport{}, // Use mock transport to avoid real network calls
+		Transport:  &MockTransport{},
 	})
 	hub := NewHub(client, NewScope())
 	ctx := SetHubOnContext(context.Background(), hub)
