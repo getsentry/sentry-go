@@ -793,7 +793,7 @@ func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
 		Dsn: "https://test@foobar/1",
 		HTTPClient: &http.Client{
 			Transport: &http.Transport{
-				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
 					return nil, fmt.Errorf("mock transport - no real connections")
 				},
 			},
@@ -810,7 +810,7 @@ func TestHTTPTransportClose(t *testing.T) {
 		Dsn: "https://test@foobar/1",
 		HTTPClient: &http.Client{
 			Transport: &http.Transport{
-				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
 					return nil, fmt.Errorf("mock transport - no real connections")
 				},
 			},
