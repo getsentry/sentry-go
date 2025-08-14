@@ -49,38 +49,15 @@ func (ssm *SentrySpanMap) Delete(otelSpandID otelTrace.SpanID) {
 	ssm.mu.Lock()
 	defer ssm.mu.Unlock()
 
-	if entry, ok := ssm.spanMap[otelSpandID]; ok && entry != nil {
-		entry.Finished = true
+	entry, ok := ssm.spanMap[otelSpandID]
+	if !ok || entry == nil {
+		delete(ssm.spanMap, otelSpandID)
+		return
 	}
 
-	var rootSpans []otelTrace.SpanID
-	for otelID, entry := range ssm.spanMap {
-		if entry == nil || entry.Span == nil {
-			continue
-		}
-
-		isRoot := entry.Span.IsTransaction()
-		if !isRoot {
-			parentFound := false
-			for _, parentEntry := range ssm.spanMap {
-				if parentEntry != nil && parentEntry.Span != nil &&
-					parentEntry.Span.SpanID == entry.Span.ParentSpanID {
-					parentFound = true
-					break
-				}
-			}
-			isRoot = !parentFound
-		}
-
-		if isRoot {
-			rootSpans = append(rootSpans, otelID)
-		}
-	}
-
-	for _, rootOtelID := range rootSpans {
-		if ssm.isSubtreeFinished(rootOtelID) {
-			ssm.deleteSpanLocked(otelSpandID, true)
-		}
+	entry.Finished = true
+	if ssm.isSubtreeFinished(otelSpandID) {
+		ssm.deleteSpanLocked(otelSpandID)
 	}
 }
 
@@ -100,7 +77,7 @@ func (ssm *SentrySpanMap) isSubtreeFinished(otelSpandID otelTrace.SpanID) bool {
 	return true
 }
 
-func (ssm *SentrySpanMap) deleteSpanLocked(otelSpandID otelTrace.SpanID, recursive bool) {
+func (ssm *SentrySpanMap) deleteSpanLocked(otelSpandID otelTrace.SpanID) {
 	entry, ok := ssm.spanMap[otelSpandID]
 	if !ok || entry == nil || entry.Span == nil {
 		delete(ssm.spanMap, otelSpandID)
@@ -110,14 +87,11 @@ func (ssm *SentrySpanMap) deleteSpanLocked(otelSpandID otelTrace.SpanID, recursi
 	sentrySpanID := entry.Span.SpanID
 	parentSpanID := entry.Span.ParentSpanID
 
-	if recursive {
-		if children, hasChildren := ssm.childrenMap[sentrySpanID]; hasChildren {
-			for _, childOtelID := range children {
-				ssm.deleteSpanLocked(childOtelID, true)
-			}
-		}
+	for _, childOtelID := range ssm.childrenMap[sentrySpanID] {
+		ssm.deleteSpanLocked(childOtelID)
 	}
 
+	// cleanup remaining parent spans that finished
 	if parentSpanID != (sentry.SpanID{}) {
 		if children, ok := ssm.childrenMap[parentSpanID]; ok {
 			newChildren := make([]otelTrace.SpanID, 0, len(children))
