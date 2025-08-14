@@ -50,15 +50,39 @@ func (ssm *SentrySpanMap) Delete(otelSpandID otelTrace.SpanID) {
 	defer ssm.mu.Unlock()
 
 	entry, ok := ssm.spanMap[otelSpandID]
-	if !ok || entry == nil {
+	if !ok || entry == nil || entry.Span == nil {
 		delete(ssm.spanMap, otelSpandID)
 		return
 	}
 
 	entry.Finished = true
-	if ssm.isSubtreeFinished(otelSpandID) {
-		ssm.deleteSpanLocked(otelSpandID)
+
+	root := ssm.findFurthestFinishedParent(otelSpandID)
+	if ssm.isSubtreeFinished(root) {
+		ssm.deleteSpanLocked(root)
 	}
+}
+
+func (ssm *SentrySpanMap) findFurthestFinishedParent(otelSpandID otelTrace.SpanID) otelTrace.SpanID {
+	furthest := otelSpandID
+	currentSpanID := otelSpandID
+
+	for {
+		entry, ok := ssm.spanMap[currentSpanID]
+		if !ok || entry == nil || entry.Span == nil || !entry.Finished {
+			break
+		}
+
+		furthest = currentSpanID
+		parentSpanID := entry.Span.ParentSpanID
+		if parentSpanID == (sentry.SpanID{}) {
+			break
+		}
+
+		currentSpanID = otelTrace.SpanID(parentSpanID)
+	}
+
+	return furthest
 }
 
 func (ssm *SentrySpanMap) isSubtreeFinished(otelSpandID otelTrace.SpanID) bool {
