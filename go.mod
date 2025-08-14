@@ -1,6 +1,6 @@
 module github.com/getsentry/sentry-go
 
-go 1.21
+go 1.22
 
 require (
 	github.com/go-errors/errors v1.4.2
