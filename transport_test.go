@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
@@ -789,19 +790,31 @@ func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
 
 	transport := NewHTTPTransport()
 	transport.Configure(ClientOptions{
-		Dsn:        "https://test@foobar/1",
-		HTTPClient: http.DefaultClient,
+		Dsn: "https://test@foobar/1",
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return nil, fmt.Errorf("mock transport - no real connections")
+				},
+			},
+		},
 	})
 
-	transport.Flush(0)
+	transport.Flush(testutils.FlushTimeout())
 	transport.Close()
 }
 
 func TestHTTPTransportClose(t *testing.T) {
 	transport := NewHTTPTransport()
 	transport.Configure(ClientOptions{
-		Dsn:        "https://test@foobar/1",
-		HTTPClient: http.DefaultClient,
+		Dsn: "https://test@foobar/1",
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return nil, fmt.Errorf("mock transport - no real connections")
+				},
+			},
+		},
 	})
 
 	transport.Close()

@@ -81,6 +81,7 @@ func testConcurrentLoggerSetAttributes(t *testing.T) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:        testDsn,
 		EnableLogs: true,
+		Transport:  &MockTransport{},
 	})
 	hub := NewHub(client, NewScope())
 	ctx := SetHubOnContext(context.Background(), hub)
@@ -130,6 +131,7 @@ func testConcurrentLogEmission(_ *testing.T) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:        testDsn,
 		EnableLogs: true,
+		Transport:  &MockTransport{},
 	})
 	hub := NewHub(client, NewScope())
 	ctx := SetHubOnContext(context.Background(), hub)
@@ -208,6 +210,7 @@ func testConcurrentLogEntryOperations(t *testing.T) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:        testDsn,
 		EnableLogs: true,
+		Transport:  &MockTransport{},
 	})
 	hub := NewHub(client, NewScope())
 	ctx := SetHubOnContext(context.Background(), hub)
@@ -263,6 +266,7 @@ func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:        testDsn,
 		EnableLogs: true,
+		Transport:  &MockTransport{},
 	})
 	hub := NewHub(client, NewScope())
 
@@ -315,6 +319,7 @@ func testConcurrentLogWithSpanOperations(_ *testing.T) {
 		EnableLogs:       true,
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
+		Transport:        &MockTransport{},
 	})
 	hub := NewHub(client, NewScope())
 	ctx := SetHubOnContext(context.Background(), hub)
