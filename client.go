@@ -513,7 +513,7 @@ func (client *Client) Flush(timeout time.Duration) bool {
 	if client.batchLogger != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		client.batchLogger.Flush(ctx.Done())
+		return client.FlushWithContext(ctx)
 	}
 	return client.Transport.Flush(timeout)
 }
