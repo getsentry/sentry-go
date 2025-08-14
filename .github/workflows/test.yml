@@ -59,6 +59,7 @@ jobs:
         with:
           directory: .coverage
           token: ${{ secrets.CODECOV_TOKEN }}
+        if: ${{ matrix.go == '1.24' && matrix.os == 'ubuntu' }}
     timeout-minutes: 15
     strategy:
       matrix:
