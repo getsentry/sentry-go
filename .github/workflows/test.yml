@@ -20,6 +20,11 @@ jobs:
     env:
       GO111MODULE: "on"
       GOFLAGS: "-mod=readonly"
+      # The race detector adds considerable runtime overhead. To save time on
+      # pull requests, only run this step for a single job in the matrix. For
+      # all other workflow triggers (e.g., pushes to a release branch) run
+      # this step for the whole matrix.
+      RUN_RACE_TESTS: ${{ github.event_name != 'pull_request' || (matrix.go == '1.24' && matrix.os == 'ubuntu') }}
     steps:
       - uses: actions/setup-go@v5
         with:
@@ -40,27 +45,20 @@ jobs:
           key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-${{ matrix.go }}-
+      - name: Tidy for min version
+        run: make mod-tidy
+        if: ${{ matrix.go == '1.22' }}
       - name: Build
         run: make build
       - name: Vet
         run: make vet
-      - name: Check go.mod Tidiness
-        run: make mod-tidy
-        if: ${{ matrix.go == '1.21' }}
-      - name: Test
-        run: make test-coverage
+      - name: Test${{ env.RUN_RACE_TESTS == 'true' && ' (with race detection)' || '' }}
+        run: ${{ env.RUN_RACE_TESTS == 'true' && 'make test-race-coverage' || 'make test-coverage' }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # pin@v5.4.3
         with:
           directory: .coverage
           token: ${{ secrets.CODECOV_TOKEN }}
-      - name: Test (with race detection)
-        run: make test-race
-        # The race detector adds considerable runtime overhead. To save time on
-        # pull requests, only run this step for a single job in the matrix. For
-        # all other workflow triggers (e.g., pushes to a release branch) run
-        # this step for the whole matrix.
-        if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.23' && matrix.os == 'ubuntu') }}
     timeout-minutes: 15
     strategy:
       matrix:
