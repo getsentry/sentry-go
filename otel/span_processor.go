@@ -32,52 +32,34 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 	otelTraceID := otelSpanContext.TraceID()
 	otelParentSpanID := s.Parent().SpanID()
 
-	if otelParentSpanID.IsValid() {
-		if sentryParentSpan, ok := sentrySpanMap.Get(otelParentSpanID); ok {
-			span := sentryParentSpan.StartChild(s.Name())
-			span.SpanID = sentry.SpanID(otelSpanID)
-			span.StartTime = s.StartTime()
-
-			sentrySpanMap.Set(otelSpanID, span)
-			return
-		}
+	var sentryParentSpan *sentry.Span
+	if otelSpanContext.IsValid() {
+		sentryParentSpan, _ = sentrySpanMap.Get(otelParentSpanID)
 	}
 
-	var parentSpan *sentry.Span
-	sentrySpanMap.mu.RLock()
-	for _, entry := range sentrySpanMap.spanMap {
-		if entry != nil && entry.Span != nil {
-			if entry.Span.TraceID == sentry.TraceID(otelTraceID) && entry.Span.IsTransaction() {
-				parentSpan = entry.Span
-			}
-		}
-	}
-	sentrySpanMap.mu.RUnlock()
-
-	if parentSpan != nil {
-		span := parentSpan.StartChild(s.Name())
+	if sentryParentSpan != nil {
+		span := sentryParentSpan.StartChild(s.Name())
 		span.SpanID = sentry.SpanID(otelSpanID)
 		span.StartTime = s.StartTime()
 
-		sentrySpanMap.Set(otelSpanID, span)
-		return
-	}
+		sentrySpanMap.Set(otelSpanID, span, otelParentSpanID)
+	} else {
+		traceParentContext := getTraceParentContext(parent)
+		transaction := sentry.StartTransaction(
+			parent,
+			s.Name(),
+			sentry.WithSpanSampled(traceParentContext.Sampled),
+		)
+		transaction.SpanID = sentry.SpanID(otelSpanID)
+		transaction.TraceID = sentry.TraceID(otelTraceID)
+		transaction.ParentSpanID = sentry.SpanID(otelParentSpanID)
+		transaction.StartTime = s.StartTime()
+		if dynamicSamplingContext, valid := parent.Value(dynamicSamplingContextKey{}).(sentry.DynamicSamplingContext); valid {
+			transaction.SetDynamicSamplingContext(dynamicSamplingContext)
+		}
 
-	traceParentContext := getTraceParentContext(parent)
-	transaction := sentry.StartTransaction(
-		parent,
-		s.Name(),
-		sentry.WithSpanSampled(traceParentContext.Sampled),
-	)
-	transaction.SpanID = sentry.SpanID(otelSpanID)
-	transaction.TraceID = sentry.TraceID(otelTraceID)
-	transaction.ParentSpanID = sentry.SpanID(otelParentSpanID)
-	transaction.StartTime = s.StartTime()
-	if dynamicSamplingContext, valid := parent.Value(dynamicSamplingContextKey{}).(sentry.DynamicSamplingContext); valid {
-		transaction.SetDynamicSamplingContext(dynamicSamplingContext)
+		sentrySpanMap.Set(otelSpanID, transaction, otelParentSpanID)
 	}
-
-	sentrySpanMap.Set(otelSpanID, transaction)
 }
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onendspan
@@ -89,7 +71,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	}
 
 	if utils.IsSentryRequestSpan(sentrySpan.Context(), s) {
-		sentrySpanMap.Delete(otelSpanId)
+		sentrySpanMap.MarkFinished(otelSpanId)
 		return
 	}
 
@@ -102,7 +84,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	sentrySpan.EndTime = s.EndTime()
 	sentrySpan.Finish()
 
-	sentrySpanMap.Delete(otelSpanId)
+	sentrySpanMap.MarkFinished(otelSpanId)
 }
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown-1

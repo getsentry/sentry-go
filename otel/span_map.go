@@ -7,140 +7,111 @@ import (
 	otelTrace "go.opentelemetry.io/otel/trace"
 )
 
-// SpanEntry represents a span in the map along with its state
-type SpanEntry struct {
-	Span     *sentry.Span
-	Finished bool
+type spanInfo struct {
+	span     *sentry.Span
+	finished bool
+	children map[otelTrace.SpanID]struct{}
+	parentID otelTrace.SpanID
 }
 
 // SentrySpanMap is a mapping between OpenTelemetry spans and Sentry spans.
 // It helps Sentry span processor and propagator to keep track of unfinished
 // Sentry spans and to establish parent-child links between spans.
 type SentrySpanMap struct {
-	spanMap     map[otelTrace.SpanID]*SpanEntry
-	childrenMap map[sentry.SpanID][]otelTrace.SpanID
-	mu          sync.RWMutex
+	spanMap map[otelTrace.SpanID]*spanInfo
+	mu      sync.RWMutex
 }
 
 func (ssm *SentrySpanMap) Get(otelSpandID otelTrace.SpanID) (*sentry.Span, bool) {
 	ssm.mu.RLock()
 	defer ssm.mu.RUnlock()
-	entry, ok := ssm.spanMap[otelSpandID]
-	if !ok || entry == nil {
+	info, ok := ssm.spanMap[otelSpandID]
+	if !ok {
 		return nil, false
 	}
-	return entry.Span, ok
+	return info.span, true
 }
 
-func (ssm *SentrySpanMap) Set(otelSpandID otelTrace.SpanID, sentrySpan *sentry.Span) {
-	ssm.mu.Lock()
-	defer ssm.mu.Unlock()
-	ssm.spanMap[otelSpandID] = &SpanEntry{
-		Span:     sentrySpan,
-		Finished: false,
-	}
-
-	if sentrySpan.ParentSpanID != (sentry.SpanID{}) {
-		ssm.childrenMap[sentrySpan.ParentSpanID] = append(ssm.childrenMap[sentrySpan.ParentSpanID], otelSpandID)
-	}
-}
-
-func (ssm *SentrySpanMap) Delete(otelSpandID otelTrace.SpanID) {
+func (ssm *SentrySpanMap) Set(otelSpandID otelTrace.SpanID, sentrySpan *sentry.Span, parentID otelTrace.SpanID) {
 	ssm.mu.Lock()
 	defer ssm.mu.Unlock()
 
-	entry, ok := ssm.spanMap[otelSpandID]
-	if !ok || entry == nil || entry.Span == nil {
-		delete(ssm.spanMap, otelSpandID)
+	info := &spanInfo{
+		span:     sentrySpan,
+		finished: false,
+		children: make(map[otelTrace.SpanID]struct{}),
+		parentID: parentID,
+	}
+	ssm.spanMap[otelSpandID] = info
+
+	if parentID != (otelTrace.SpanID{}) {
+		if parentInfo, ok := ssm.spanMap[parentID]; ok {
+			parentInfo.children[otelSpandID] = struct{}{}
+		}
+	}
+}
+
+func (ssm *SentrySpanMap) MarkFinished(otelSpandID otelTrace.SpanID) {
+	ssm.mu.Lock()
+	defer ssm.mu.Unlock()
+
+	info, ok := ssm.spanMap[otelSpandID]
+	if !ok {
 		return
 	}
 
-	entry.Finished = true
-
-	root := ssm.findFurthestFinishedParent(otelSpandID)
-	if ssm.isSubtreeFinished(root) {
-		ssm.deleteSpanLocked(root)
-	}
+	info.finished = true
+	ssm.tryCleanupSpan(otelSpandID)
 }
 
-func (ssm *SentrySpanMap) findFurthestFinishedParent(otelSpandID otelTrace.SpanID) otelTrace.SpanID {
-	furthest := otelSpandID
-	currentSpanID := otelSpandID
-
-	for {
-		entry, ok := ssm.spanMap[currentSpanID]
-		if !ok || entry == nil || entry.Span == nil || !entry.Finished {
-			break
-		}
-
-		furthest = currentSpanID
-		parentSpanID := entry.Span.ParentSpanID
-		if parentSpanID == (sentry.SpanID{}) {
-			break
-		}
-
-		currentSpanID = otelTrace.SpanID(parentSpanID)
-	}
-
-	return furthest
-}
-
-func (ssm *SentrySpanMap) isSubtreeFinished(otelSpandID otelTrace.SpanID) bool {
-	entry, ok := ssm.spanMap[otelSpandID]
-	if !ok || entry == nil || entry.Span == nil || !entry.Finished {
-		return false
-	}
-
-	if children, hasChildren := ssm.childrenMap[entry.Span.SpanID]; hasChildren {
-		for _, childOtelID := range children {
-			if !ssm.isSubtreeFinished(childOtelID) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func (ssm *SentrySpanMap) deleteSpanLocked(otelSpandID otelTrace.SpanID) {
-	entry, ok := ssm.spanMap[otelSpandID]
-	if !ok || entry == nil || entry.Span == nil {
-		delete(ssm.spanMap, otelSpandID)
+// tryCleanupSpan deletes a parent and all children only if the whole subtree is marked finished.
+// Must be called with lock held.
+func (ssm *SentrySpanMap) tryCleanupSpan(spanID otelTrace.SpanID) {
+	info, ok := ssm.spanMap[spanID]
+	if !ok || !info.finished {
 		return
 	}
 
-	sentrySpanID := entry.Span.SpanID
-	parentSpanID := entry.Span.ParentSpanID
-
-	for _, childOtelID := range ssm.childrenMap[sentrySpanID] {
-		ssm.deleteSpanLocked(childOtelID)
-	}
-
-	// cleanup remaining parent spans that finished
-	if parentSpanID != (sentry.SpanID{}) {
-		if children, ok := ssm.childrenMap[parentSpanID]; ok {
-			newChildren := make([]otelTrace.SpanID, 0, len(children))
-			for _, childID := range children {
-				if childID != otelSpandID {
-					newChildren = append(newChildren, childID)
-				}
-			}
-			if len(newChildren) == 0 {
-				delete(ssm.childrenMap, parentSpanID)
-			} else {
-				ssm.childrenMap[parentSpanID] = newChildren
+	if !info.span.IsTransaction() {
+		parentID := info.parentID
+		if parentID != (otelTrace.SpanID{}) {
+			if parentInfo, parentExists := ssm.spanMap[parentID]; parentExists && !parentInfo.finished {
+				return
 			}
 		}
 	}
 
-	delete(ssm.childrenMap, sentrySpanID)
-	delete(ssm.spanMap, otelSpandID)
+	// We need to have a lookup first to see if every child is marked as finished to actually cleanup everything.
+	// There probably is a better way to do this
+	for childID := range info.children {
+		if childInfo, exists := ssm.spanMap[childID]; exists && !childInfo.finished {
+			return
+		}
+	}
+
+	parentID := info.parentID
+	if parentID != (otelTrace.SpanID{}) {
+		if parentInfo, ok := ssm.spanMap[parentID]; ok {
+			delete(parentInfo.children, spanID)
+		}
+	}
+
+	for childID := range info.children {
+		if childInfo, exists := ssm.spanMap[childID]; exists && childInfo.finished {
+			ssm.tryCleanupSpan(childID)
+		}
+	}
+
+	delete(ssm.spanMap, spanID)
+	if parentID != (otelTrace.SpanID{}) {
+		ssm.tryCleanupSpan(parentID)
+	}
 }
 
 func (ssm *SentrySpanMap) Clear() {
 	ssm.mu.Lock()
 	defer ssm.mu.Unlock()
-	ssm.spanMap = make(map[otelTrace.SpanID]*SpanEntry)
-	ssm.childrenMap = make(map[sentry.SpanID][]otelTrace.SpanID)
+	ssm.spanMap = make(map[otelTrace.SpanID]*spanInfo)
 }
 
 func (ssm *SentrySpanMap) Len() int {
@@ -149,7 +120,4 @@ func (ssm *SentrySpanMap) Len() int {
 	return len(ssm.spanMap)
 }
 
-var sentrySpanMap = SentrySpanMap{
-	spanMap:     make(map[otelTrace.SpanID]*SpanEntry),
-	childrenMap: make(map[sentry.SpanID][]otelTrace.SpanID),
-}
+var sentrySpanMap = SentrySpanMap{spanMap: make(map[otelTrace.SpanID]*spanInfo)}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"testing"
-	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/testutils"
@@ -76,7 +75,7 @@ func TestSpanProcessorShutdown(t *testing.T) {
 
 	assertEqual(t, sentrySpanMap.Len(), 1)
 
-	spanProcessor.Shutdown(ctx)
+	_ = spanProcessor.Shutdown(ctx)
 
 	// The span map should be empty
 	assertEqual(t, sentrySpanMap.Len(), 0)
@@ -414,7 +413,6 @@ func TestSpanBecomesChildOfFinishedSpan(t *testing.T) {
 		"span name 1",
 	)
 	sentrySpan1, _ := sentrySpanMap.Get(childSpan1.SpanContext().SpanID())
-	time.Sleep(time.Millisecond)
 	childSpan1.End()
 
 	_, childSpan2 := tracer.Start(
@@ -422,13 +420,14 @@ func TestSpanBecomesChildOfFinishedSpan(t *testing.T) {
 		"span name 2",
 	)
 	sentrySpan2, _ := sentrySpanMap.Get(childSpan2.SpanContext().SpanID())
-	time.Sleep(time.Millisecond)
 	childSpan2.End()
 
 	otelRootSpan.End()
 
 	assertEqual(t, sentryTransaction.IsTransaction(), true)
+	assertEqual(t, sentrySpan1.IsTransaction(), false)
 	assertEqual(t, sentrySpan1.ParentSpanID, sentryTransaction.SpanID)
+	assertEqual(t, sentrySpan2.IsTransaction(), false)
 	assertEqual(t, sentrySpan2.ParentSpanID, sentrySpan1.SpanID)
 }
 
