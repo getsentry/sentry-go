@@ -4,12 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"slices"
+)
+
+const (
+	MechanismTypeGeneric string = "generic"
+	MechanismTypeChained string = "chained"
+
+	MechanismSourceCause string = "cause"
 )
 
 type ErrorTree struct {
-	Value    error
-	Children []*ErrorTree
+	Value         error
+	Children      []*ErrorTree
+	Source        string
+	MechanismType string
 }
 
 func createErrorTree(value error) *ErrorTree {
@@ -18,8 +26,9 @@ func createErrorTree(value error) *ErrorTree {
 	}
 
 	root := &ErrorTree{
-		Value:    value,
-		Children: make([]*ErrorTree, 0),
+		Value:         value,
+		Children:      make([]*ErrorTree, 0),
+		MechanismType: MechanismTypeGeneric,
 	}
 
 	errorTreeHelper(root)
@@ -34,11 +43,13 @@ func errorTreeHelper(node *ErrorTree) {
 	switch v := node.Value.(type) {
 	case interface{ Unwrap() []error }:
 		unwrapped := v.Unwrap()
-		for _, err := range unwrapped {
+		for i, err := range unwrapped {
 			if err != nil {
 				child := &ErrorTree{
-					Value:    err,
-					Children: make([]*ErrorTree, 0),
+					Value:         err,
+					Children:      make([]*ErrorTree, 0),
+					Source:        fmt.Sprintf("errors[%d]", i),
+					MechanismType: MechanismTypeChained,
 				}
 				node.Children = append(node.Children, child)
 				errorTreeHelper(child)
@@ -48,8 +59,10 @@ func errorTreeHelper(node *ErrorTree) {
 		unwrapped := v.Unwrap()
 		if unwrapped != nil {
 			child := &ErrorTree{
-				Value:    unwrapped,
-				Children: make([]*ErrorTree, 0),
+				Value:         unwrapped,
+				Children:      make([]*ErrorTree, 0),
+				Source:        MechanismSourceCause,
+				MechanismType: MechanismTypeChained,
 			}
 			node.Children = append(node.Children, child)
 			errorTreeHelper(child)
@@ -58,12 +71,16 @@ func errorTreeHelper(node *ErrorTree) {
 		cause := v.Cause()
 		if cause != nil && !errors.Is(cause, node.Value) { // Avoid infinite recursion
 			child := &ErrorTree{
-				Value:    cause,
-				Children: make([]*ErrorTree, 0),
+				Value:         cause,
+				Children:      make([]*ErrorTree, 0),
+				Source:        MechanismSourceCause,
+				MechanismType: MechanismTypeChained,
 			}
 			node.Children = append(node.Children, child)
 			errorTreeHelper(child)
 		}
+	default:
+		node.MechanismType = ""
 	}
 }
 
@@ -121,61 +138,56 @@ func convertTreeToExceptions(tree *ErrorTree) []Exception {
 	}
 
 	var exceptions []Exception
-	var idCounter int
 
-	convertNodeDFS(tree, &exceptions, &idCounter, nil, "")
+	convertNodePostOrder(tree, &exceptions)
 
-	slices.Reverse(exceptions)
-	for i := range exceptions {
-		exceptions[i].Mechanism.ExceptionID = len(exceptions) - 1 - i
+	if len(exceptions) > 1 {
+		for i := range exceptions {
+			if exceptions[i].Mechanism != nil {
+				if i == 0 {
+					exceptions[i].Mechanism.Source = ""
+				} else {
+					parentID := i - 1
+					exceptions[i].Mechanism.ParentID = &parentID
+				}
+			}
+		}
+	} else if len(exceptions) == 1 {
+		exceptions[0].Mechanism = nil
 	}
 
 	return exceptions
 }
 
-func convertNodeDFS(node *ErrorTree, exceptions *[]Exception, idCounter *int, parentID *int, source string) {
+func convertNodePostOrder(node *ErrorTree, exceptions *[]Exception) {
 	if node == nil || node.Value == nil {
 		return
 	}
 
-	currentID := *idCounter
-	*idCounter++
+	// to adhere with the post order search we need to reverse all the children originating from errors.Join.
+	if _, isJoin := node.Value.(interface{ Unwrap() []error }); isJoin {
+		for i := len(node.Children) - 1; i >= 0; i-- {
+			convertNodePostOrder(node.Children[i], exceptions)
+		}
+	} else {
+		for _, child := range node.Children {
+			convertNodePostOrder(child, exceptions)
+		}
+	}
 
 	exception := Exception{
 		Value:      node.Value.Error(),
 		Type:       reflect.TypeOf(node.Value).String(),
 		Stacktrace: ExtractStacktrace(node.Value),
-		Mechanism: &Mechanism{
-			Type:        "generic",
-			ExceptionID: currentID,
-			ParentID:    parentID,
-			Source:      source,
-		},
 	}
 
-	if _, ok := node.Value.(interface{ Unwrap() []error }); ok {
-		exception.Mechanism.IsExceptionGroup = true
+	exception.Mechanism = &Mechanism{
+		Type:             node.MechanismType,
+		ExceptionID:      len(*exceptions),
+		ParentID:         nil, // Will be set in post-processing
+		Source:           node.Source,
+		IsExceptionGroup: true,
 	}
 
 	*exceptions = append(*exceptions, exception)
-
-	for i, child := range node.Children {
-		var childSource string
-
-		switch node.Value.(type) {
-		case interface{ Unwrap() []error }:
-			// Multiple errors, like from errors.Join
-			childSource = fmt.Sprintf("errors[%d]", i)
-		case interface{ Unwrap() error }:
-			// Single wrapped error, like from fmt.Errorf
-			childSource = "cause"
-		case interface{ Cause() error }:
-			// pkg/errors style
-			childSource = "cause"
-		default:
-			childSource = "unknown"
-		}
-
-		convertNodeDFS(child, exceptions, idCounter, &currentID, childSource)
-	}
 }
