@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 )
 
 const (
@@ -25,6 +26,9 @@ func convertErrorToExceptions(err error) []Exception {
 	if len(exceptions) == 1 {
 		exceptions[0].Mechanism = nil
 	}
+
+	// Reverse the array so root exception (ID 0) is at the end
+	slices.Reverse(exceptions)
 
 	return exceptions
 }

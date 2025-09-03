@@ -164,6 +164,17 @@ func TestCaptureException(t *testing.T) {
 			err:  pkgErrors.WithStack(&customErr{}),
 			want: []Exception{
 				{
+					Type:  "*sentry.customErr",
+					Value: "wat",
+					Mechanism: &Mechanism{
+						Type:             MechanismTypeChained,
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						Source:           "cause",
+						IsExceptionGroup: false,
+					},
+				},
+				{
 					Type:       "*errors.withStack",
 					Value:      "wat",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
@@ -172,17 +183,6 @@ func TestCaptureException(t *testing.T) {
 						ExceptionID:      0,
 						ParentID:         nil,
 						Source:           "",
-						IsExceptionGroup: false,
-					},
-				},
-				{
-					Type:  "*sentry.customErr",
-					Value: "wat",
-					Mechanism: &Mechanism{
-						Type:             MechanismTypeChained,
-						ExceptionID:      1,
-						ParentID:         Pointer(0),
-						Source:           "cause",
 						IsExceptionGroup: false,
 					},
 				},
@@ -204,6 +204,17 @@ func TestCaptureException(t *testing.T) {
 			err:  &customErrWithCause{cause: &customErr{}},
 			want: []Exception{
 				{
+					Type:  "*sentry.customErr",
+					Value: "wat",
+					Mechanism: &Mechanism{
+						Type:             MechanismTypeChained,
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						Source:           "cause",
+						IsExceptionGroup: false,
+					},
+				},
+				{
 					Type:       "*sentry.customErrWithCause",
 					Value:      "err",
 					Stacktrace: nil,
@@ -215,9 +226,15 @@ func TestCaptureException(t *testing.T) {
 						IsExceptionGroup: false,
 					},
 				},
+			},
+		},
+		{
+			name: "Go113Unwrap",
+			err:  wrappedError{original: errors.New("original")},
+			want: []Exception{
 				{
-					Type:  "*sentry.customErr",
-					Value: "wat",
+					Type:  "*errors.errorString",
+					Value: "original",
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeChained,
 						ExceptionID:      1,
@@ -226,12 +243,6 @@ func TestCaptureException(t *testing.T) {
 						IsExceptionGroup: false,
 					},
 				},
-			},
-		},
-		{
-			name: "Go113Unwrap",
-			err:  wrappedError{original: errors.New("original")},
-			want: []Exception{
 				{
 					Type:       "sentry.wrappedError",
 					Value:      "wrapped: original",
@@ -241,17 +252,6 @@ func TestCaptureException(t *testing.T) {
 						ExceptionID:      0,
 						ParentID:         nil,
 						Source:           "",
-						IsExceptionGroup: false,
-					},
-				},
-				{
-					Type:  "*errors.errorString",
-					Value: "original",
-					Mechanism: &Mechanism{
-						Type:             MechanismTypeChained,
-						ExceptionID:      1,
-						ParentID:         Pointer(0),
-						Source:           "cause",
 						IsExceptionGroup: false,
 					},
 				},
