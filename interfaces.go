@@ -421,12 +421,14 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 		return
 	}
 
-	errorTree := createErrorTree(exception)
-	if errorTree == nil {
-		return
+	exceptions := convertErrorToExceptions(exception)
+
+	// Apply maxErrorDepth limit if specified
+	if maxErrorDepth >= 0 && len(exceptions) > maxErrorDepth {
+		exceptions = exceptions[:maxErrorDepth]
 	}
-	limitTreeDepth(errorTree, maxErrorDepth)
-	e.Exception = convertTreeToExceptions(errorTree)
+
+	e.Exception = exceptions
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,

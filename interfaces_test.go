@@ -256,9 +256,8 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 3,
 			expected: []Exception{
 				{
-					Value:      "base error",
-					Type:       "*errors.errorString",
-					Stacktrace: nil,
+					Value: "level 2: level 1: base error",
+					Type:  "*fmt.wrapError",
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",
@@ -279,11 +278,12 @@ func TestSetException(t *testing.T) {
 					},
 				},
 				{
-					Value: "level 2: level 1: base error",
-					Type:  "*fmt.wrapError",
+					Value:      "base error",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "",
+						Source:           MechanismSourceCause,
 						ExceptionID:      2,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: false,
@@ -313,9 +313,8 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 3,
 			expected: []Exception{
 				{
-					Value:      "the cause",
-					Type:       "*errors.errorString",
-					Stacktrace: nil,
+					Value: "outer error: error with cause",
+					Type:  "*fmt.wrapError",
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",
@@ -336,11 +335,12 @@ func TestSetException(t *testing.T) {
 					},
 				},
 				{
-					Value: "outer error: error with cause",
-					Type:  "*fmt.wrapError",
+					Value:      "the cause",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "",
+						Source:           MechanismSourceCause,
 						ExceptionID:      2,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: false,
@@ -353,13 +353,25 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 5,
 			expected: []Exception{
 				{
-					Value: "error 3",
-					Type:  "*errors.errorString",
+					Value:      "error 1\nerror 2\nerror 3",
+					Type:       "*errors.joinError",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,
+						IsExceptionGroup: true,
+					},
+				},
+				{
+					Value: "error 3",
+					Type:  "*errors.errorString",
+					Mechanism: &Mechanism{
+						Type:             "chained",
+						Source:           "errors[2]",
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
 						IsExceptionGroup: false,
 					},
 				},
@@ -369,7 +381,7 @@ func TestSetException(t *testing.T) {
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[1]",
-						ExceptionID:      1,
+						ExceptionID:      2,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: false,
 					},
@@ -380,21 +392,9 @@ func TestSetException(t *testing.T) {
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[0]",
-						ExceptionID:      2,
-						ParentID:         Pointer(1),
-						IsExceptionGroup: false,
-					},
-				},
-				{
-					Value:      "error 1\nerror 2\nerror 3",
-					Type:       "*errors.joinError",
-					Stacktrace: nil,
-					Mechanism: &Mechanism{
-						Type:             "chained",
-						Source:           "",
 						ExceptionID:      3,
-						ParentID:         Pointer(2),
-						IsExceptionGroup: true,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: false,
 					},
 				},
 			},
@@ -404,8 +404,9 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 5,
 			expected: []Exception{
 				{
-					Value: "error B",
-					Type:  "*errors.errorString",
+					Value:      "wrapper: error A\nerror B",
+					Type:       "*fmt.wrapError",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",
@@ -415,36 +416,35 @@ func TestSetException(t *testing.T) {
 					},
 				},
 				{
-					Value: "error A",
-					Type:  "*errors.errorString",
-					Mechanism: &Mechanism{
-						Type:             "chained",
-						Source:           "errors[0]",
-						ExceptionID:      1,
-						ParentID:         Pointer(0),
-						IsExceptionGroup: false,
-					},
-				},
-				{
 					Value: "error A\nerror B",
 					Type:  "*errors.joinError",
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           MechanismSourceCause,
-						ExceptionID:      2,
-						ParentID:         Pointer(1),
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
 						IsExceptionGroup: true,
 					},
 				},
 				{
-					Value:      "wrapper: error A\nerror B",
-					Type:       "*fmt.wrapError",
-					Stacktrace: nil,
+					Value: "error B",
+					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "",
+						Source:           "errors[1]",
+						ExceptionID:      2,
+						ParentID:         Pointer(1),
+						IsExceptionGroup: false,
+					},
+				},
+				{
+					Value: "error A",
+					Type:  "*errors.errorString",
+					Mechanism: &Mechanism{
+						Type:             "chained",
+						Source:           "errors[0]",
 						ExceptionID:      3,
-						ParentID:         Pointer(2),
+						ParentID:         Pointer(1),
 						IsExceptionGroup: false,
 					},
 				},
