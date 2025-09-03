@@ -35,22 +35,22 @@ func TestConvertErrorToExceptions(t *testing.T) {
 			err:  errors.Join(errors.New("error A"), errors.New("error B")),
 			expected: []Exception{
 				{
-					Value: "error A",
+					Value: "error B",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[0]",
+						Source:           "errors[1]",
 						ExceptionID:      2,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: false,
 					},
 				},
 				{
-					Value: "error B",
+					Value: "error A",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[1]",
+						Source:           "errors[0]",
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: false,
@@ -74,22 +74,22 @@ func TestConvertErrorToExceptions(t *testing.T) {
 			err:  fmt.Errorf("wrapper: %w", errors.Join(errors.New("error A"), errors.New("error B"))),
 			expected: []Exception{
 				{
-					Value: "error A",
+					Value: "error B",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[0]",
+						Source:           "errors[1]",
 						ExceptionID:      3,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: false,
 					},
 				},
 				{
-					Value: "error B",
+					Value: "error A",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[1]",
+						Source:           "errors[0]",
 						ExceptionID:      2,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: false,
@@ -176,11 +176,11 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 			},
 			expected: []Exception{
 				{
-					Value: "network timeout",
+					Value: "rate limit exceeded",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[0]",
+						Source:           "errors[2]",
 						ExceptionID:      3,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: false,
@@ -198,11 +198,11 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 					},
 				},
 				{
-					Value: "rate limit exceeded",
+					Value: "network timeout",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[2]",
+						Source:           "errors[0]",
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: false,
@@ -232,22 +232,22 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 			}),
 			expected: []Exception{
 				{
-					Value: "field 'email' is required",
+					Value: "field 'password' is too short",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[0]",
+						Source:           "errors[1]",
 						ExceptionID:      3,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: false,
 					},
 				},
 				{
-					Value: "field 'password' is too short",
+					Value: "field 'email' is required",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[1]",
+						Source:           "errors[0]",
 						ExceptionID:      2,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: false,

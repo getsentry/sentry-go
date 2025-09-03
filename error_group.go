@@ -70,7 +70,7 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 	switch v := err.(type) {
 	case interface{ Unwrap() []error }:
 		unwrapped := v.Unwrap()
-		for i := len(unwrapped) - 1; i >= 0; i-- {
+		for i := range unwrapped {
 			if unwrapped[i] != nil {
 				childSource := fmt.Sprintf("errors[%d]", i)
 				convertErrorDFS(unwrapped[i], exceptions, &currentID, childSource)

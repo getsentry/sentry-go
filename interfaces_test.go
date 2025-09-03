@@ -353,11 +353,11 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 5,
 			expected: []Exception{
 				{
-					Value: "error 1",
+					Value: "error 3",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[0]",
+						Source:           "errors[2]",
 						ExceptionID:      3,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: false,
@@ -375,11 +375,11 @@ func TestSetException(t *testing.T) {
 					},
 				},
 				{
-					Value: "error 3",
+					Value: "error 1",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[2]",
+						Source:           "errors[0]",
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: false,
@@ -404,22 +404,22 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 5,
 			expected: []Exception{
 				{
-					Value: "error A",
+					Value: "error B",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[0]",
+						Source:           "errors[1]",
 						ExceptionID:      3,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: false,
 					},
 				},
 				{
-					Value: "error B",
+					Value: "error A",
 					Type:  "*errors.errorString",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "errors[1]",
+						Source:           "errors[0]",
 						ExceptionID:      2,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: false,
