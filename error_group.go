@@ -22,12 +22,10 @@ func convertErrorToExceptions(err error) []Exception {
 	var exceptions []Exception
 	convertErrorDFS(err, &exceptions, nil, "")
 
-	// For single exceptions, remove the mechanism
 	if len(exceptions) == 1 {
 		exceptions[0].Mechanism = nil
 	}
 
-	// Reverse the array so root exception (ID 0) is at the end
 	slices.Reverse(exceptions)
 
 	return exceptions
@@ -38,7 +36,16 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 		return
 	}
 
-	_, isExceptionGroup := err.(interface{ Unwrap() []error })
+	var isExceptionGroup bool
+
+	switch err.(type) {
+	case interface{ Unwrap() []error }:
+		isExceptionGroup = true
+	case interface{ Unwrap() error }:
+		isExceptionGroup = true
+	case interface{ Cause() error }:
+		isExceptionGroup = true
+	}
 
 	exception := Exception{
 		Value:      err.Error(),
