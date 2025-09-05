@@ -141,7 +141,7 @@ func TestConvertErrorToExceptions(t *testing.T) {
 }
 
 // AggregateError represents multiple errors occurring together
-// This simulates JavaScript's AggregateError for testing purposes
+// This simulates JavaScript's AggregateError for testing purposes.
 type AggregateError struct {
 	Message string
 	Errors  []error
