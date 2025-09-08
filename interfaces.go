@@ -484,6 +484,98 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 	}
 }
 
+// ToEnvelope converts the Event to a Sentry envelope.
+// This includes the event data and any attachments as separate envelope items.
+func (e *Event) ToEnvelope(dsn *Dsn) (*Envelope, error) {
+	return e.ToEnvelopeWithTime(dsn, time.Now())
+}
+
+// ToEnvelopeWithTime converts the Event to a Sentry envelope with a specific sentAt time.
+// This is primarily useful for testing with predictable timestamps.
+func (e *Event) ToEnvelopeWithTime(dsn *Dsn, sentAt time.Time) (*Envelope, error) {
+	// Create envelope header with trace context
+	trace := make(map[string]string)
+	if dsc := e.sdkMetaData.dsc; dsc.HasEntries() {
+		for k, v := range dsc.Entries {
+			trace[k] = v
+		}
+	}
+
+	header := &EnvelopeHeader{
+		EventID: e.EventID,
+		SentAt:  sentAt,
+		Trace:   trace,
+	}
+
+	// Add DSN if provided
+	if dsn != nil {
+		header.Dsn = dsn.String()
+	}
+
+	// Add SDK info
+	if e.Sdk.Name != "" || e.Sdk.Version != "" {
+		header.Sdk = &SdkInfo{
+			Name:    e.Sdk.Name,
+			Version: e.Sdk.Version,
+		}
+	}
+
+	envelope := NewEnvelope(header)
+
+	// Serialize the event body with fallback handling
+	eventBody, err := json.Marshal(e)
+	if err != nil {
+		// Try fallback: remove problematic fields and retry
+		originalBreadcrumbs := e.Breadcrumbs
+		originalContexts := e.Contexts
+		originalExtra := e.Extra
+
+		e.Breadcrumbs = nil
+		e.Contexts = nil
+		e.Extra = map[string]interface{}{
+			"info": fmt.Sprintf("Could not encode original event as JSON. "+
+				"Succeeded by removing Breadcrumbs, Contexts and Extra. "+
+				"Please verify the data you attach to the scope. "+
+				"Error: %s", err),
+		}
+
+		eventBody, err = json.Marshal(e)
+		if err != nil {
+			// Restore original values and return error if even fallback fails
+			e.Breadcrumbs = originalBreadcrumbs
+			e.Contexts = originalContexts
+			e.Extra = originalExtra
+			return nil, fmt.Errorf("event could not be marshaled even with fallback: %w", err)
+		}
+
+		// Keep the fallback state since it worked
+		DebugLogger.Printf("Event marshaling succeeded with fallback after removing problematic fields")
+	}
+
+	// Create the main event item based on event type
+	var mainItem *EnvelopeItem
+	switch e.Type {
+	case transactionType:
+		mainItem = NewEnvelopeItem(EnvelopeItemTypeTransaction, eventBody)
+	case checkInType:
+		mainItem = NewEnvelopeItem(EnvelopeItemTypeCheckIn, eventBody)
+	case logEvent.Type:
+		mainItem = NewLogItem(e.Logs, eventBody)
+	default:
+		mainItem = NewEnvelopeItem(EnvelopeItemTypeEvent, eventBody)
+	}
+
+	envelope.AddItem(mainItem)
+
+	// Add attachments as separate items
+	for _, attachment := range e.Attachments {
+		attachmentItem := NewAttachmentItem(attachment)
+		envelope.AddItem(attachmentItem)
+	}
+
+	return envelope, nil
+}
+
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
 // to prevent accidentally storing T when we mean *T.
 // For example, the TraceContext must be stored as *TraceContext to pick up the
