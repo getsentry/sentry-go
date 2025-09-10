@@ -75,7 +75,7 @@ func TestSpanProcessorShutdown(t *testing.T) {
 
 	assertEqual(t, sentrySpanMap.Len(), 1)
 
-	spanProcessor.Shutdown(ctx)
+	_ = spanProcessor.Shutdown(ctx)
 
 	// The span map should be empty
 	assertEqual(t, sentrySpanMap.Len(), 0)
@@ -398,4 +398,60 @@ func TestParseSpanAttributesHttpServer(t *testing.T) {
 	assertEqual(t, sentrySpan.Description, "POST /api/checkout2")
 	assertEqual(t, sentrySpan.Op, "http.server")
 	assertEqual(t, sentrySpan.Source, sentry.TransactionSource(""))
+}
+
+func TestSpanBecomesChildOfFinishedSpan(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+	ctx, otelRootSpan := tracer.Start(
+		emptyContextWithSentry(),
+		"rootSpan",
+	)
+	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
+
+	ctx, childSpan1 := tracer.Start(
+		ctx,
+		"span name 1",
+	)
+	sentrySpan1, _ := sentrySpanMap.Get(childSpan1.SpanContext().SpanID())
+	childSpan1.End()
+
+	_, childSpan2 := tracer.Start(
+		ctx,
+		"span name 2",
+	)
+	sentrySpan2, _ := sentrySpanMap.Get(childSpan2.SpanContext().SpanID())
+	childSpan2.End()
+
+	otelRootSpan.End()
+
+	assertEqual(t, sentryTransaction.IsTransaction(), true)
+	assertEqual(t, sentrySpan1.IsTransaction(), false)
+	assertEqual(t, sentrySpan1.ParentSpanID, sentryTransaction.SpanID)
+	assertEqual(t, sentrySpan2.IsTransaction(), false)
+	assertEqual(t, sentrySpan2.ParentSpanID, sentrySpan1.SpanID)
+}
+
+func TestSpanWithFinishedParentShouldBeDeleted(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+
+	ctx, parent := tracer.Start(context.Background(), "parent")
+	parentSpanID := parent.SpanContext().SpanID()
+	_, child := tracer.Start(ctx, "child")
+	childSpanID := child.SpanContext().SpanID()
+
+	_, parentExists := sentrySpanMap.Get(parentSpanID)
+	_, childExists := sentrySpanMap.Get(childSpanID)
+	assertEqual(t, parentExists, true)
+	assertEqual(t, childExists, true)
+
+	parent.End()
+	_, parentExists = sentrySpanMap.Get(parentSpanID)
+	assertEqual(t, parentExists, true)
+	_, childExists = sentrySpanMap.Get(childSpanID)
+	assertEqual(t, childExists, true)
+
+	child.End()
+	_, childExists = sentrySpanMap.Get(childSpanID)
+	assertEqual(t, childExists, false)
+	assertEqual(t, sentrySpanMap.Len(), 0)
 }

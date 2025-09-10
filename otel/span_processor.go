@@ -21,7 +21,7 @@ func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
 		return sentrySpanProcessorInstance
 	}
 	sentry.AddGlobalEventProcessor(linkTraceContextToErrorEvent)
-	sentrySpanProcessorInstance := &sentrySpanProcessor{}
+	sentrySpanProcessorInstance = &sentrySpanProcessor{}
 	return sentrySpanProcessorInstance
 }
 
@@ -42,7 +42,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 		span.SpanID = sentry.SpanID(otelSpanID)
 		span.StartTime = s.StartTime()
 
-		sentrySpanMap.Set(otelSpanID, span)
+		sentrySpanMap.Set(otelSpanID, span, otelParentSpanID)
 	} else {
 		traceParentContext := getTraceParentContext(parent)
 		transaction := sentry.StartTransaction(
@@ -58,7 +58,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 			transaction.SetDynamicSamplingContext(dynamicSamplingContext)
 		}
 
-		sentrySpanMap.Set(otelSpanID, transaction)
+		sentrySpanMap.Set(otelSpanID, transaction, otelParentSpanID)
 	}
 }
 
@@ -71,7 +71,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	}
 
 	if utils.IsSentryRequestSpan(sentrySpan.Context(), s) {
-		sentrySpanMap.Delete(otelSpanId)
+		sentrySpanMap.MarkFinished(otelSpanId)
 		return
 	}
 
@@ -84,7 +84,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	sentrySpan.EndTime = s.EndTime()
 	sentrySpan.Finish()
 
-	sentrySpanMap.Delete(otelSpanId)
+	sentrySpanMap.MarkFinished(otelSpanId)
 }
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown-1
