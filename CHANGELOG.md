@@ -6,7 +6,7 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
 
 ### Bug Fixes
 
-- [otel] Fix OpenTelemetry spans being created as transactions instead of child spans ([#1073](https://github.com/getsentry/sentry-go/pull/1073))
+- Fix OpenTelemetry spans being created as transactions instead of child spans ([#1073](https://github.com/getsentry/sentry-go/pull/1073))
 
 ### Misc
 
