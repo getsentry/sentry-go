@@ -413,8 +413,8 @@ type Event struct {
 
 // SetException appends the unwrapped errors to the event's exception list.
 //
-// MaxErrorDepth is the maximum depth of the error chain we will look
-// into while unwrapping the errors. If MaxErrorDepth is -1, we will
+// maxErrorDepth is the maximum depth of the error chain we will look
+// into while unwrapping the errors. If maxErrorDepth is -1, we will
 // unwrap all errors in the chain.
 func (e *Event) SetException(exception error, maxErrorDepth int) {
 	if exception == nil {

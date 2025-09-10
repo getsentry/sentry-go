@@ -20,12 +20,14 @@ import (
 // The identifier of the SDK.
 const sdkIdentifier = "sentry.go"
 
-// MaxErrorDepth is the maximum number of errors reported in a chain of errors.
+// maxErrorDepth is the maximum number of errors reported in a chain of errors.
 // This protects the SDK from an arbitrarily long chain of wrapped errors.
 //
-// with the addition of exception groups, it doesn't make sense to keep a
-// global limit for chained errors, because they get hidden if inside a group.
-const MaxErrorDepth = -1
+// An additional consideration is that arguably reporting a long chain of errors
+// is of little use when debugging production errors with Sentry. The Sentry UI
+// is not optimized for long chains either. The top-level error together with a
+// stack trace is often the most useful information.
+const maxErrorDepth = 10
 
 // defaultMaxSpans limits the default number of recorded spans per transaction. The limit is
 // meant to bound memory usage and prevent too large transaction events that
@@ -295,7 +297,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	if options.MaxErrorDepth == 0 {
-		options.MaxErrorDepth = MaxErrorDepth
+		options.MaxErrorDepth = maxErrorDepth
 	}
 
 	if options.MaxSpans == 0 {
