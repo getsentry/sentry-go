@@ -1,7 +1,6 @@
 package sentry
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -20,7 +19,8 @@ func convertErrorToExceptions(err error) []Exception {
 	}
 
 	var exceptions []Exception
-	convertErrorDFS(err, &exceptions, nil, "")
+	visited := make(map[error]bool)
+	convertErrorDFS(err, &exceptions, nil, "", visited)
 
 	if len(exceptions) == 1 {
 		exceptions[0].Mechanism = nil
@@ -31,10 +31,15 @@ func convertErrorToExceptions(err error) []Exception {
 	return exceptions
 }
 
-func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source string) {
+func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source string, visited map[error]bool) {
 	if err == nil {
 		return
 	}
+
+	if visited[err] {
+		return
+	}
+	visited[err] = true
 
 	var isExceptionGroup bool
 
@@ -80,18 +85,18 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 		for i := range unwrapped {
 			if unwrapped[i] != nil {
 				childSource := fmt.Sprintf("errors[%d]", i)
-				convertErrorDFS(unwrapped[i], exceptions, &currentID, childSource)
+				convertErrorDFS(unwrapped[i], exceptions, &currentID, childSource, visited)
 			}
 		}
 	case interface{ Unwrap() error }:
 		unwrapped := v.Unwrap()
 		if unwrapped != nil {
-			convertErrorDFS(unwrapped, exceptions, &currentID, MechanismSourceCause)
+			convertErrorDFS(unwrapped, exceptions, &currentID, MechanismSourceCause, visited)
 		}
 	case interface{ Cause() error }:
 		cause := v.Cause()
-		if cause != nil && !errors.Is(cause, err) { // Avoid infinite recursion
-			convertErrorDFS(cause, exceptions, &currentID, MechanismSourceCause)
+		if cause != nil {
+			convertErrorDFS(cause, exceptions, &currentID, MechanismSourceCause, visited)
 		}
 	}
 }
