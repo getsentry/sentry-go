@@ -14,10 +14,6 @@ const (
 )
 
 func convertErrorToExceptions(err error) []Exception {
-	if err == nil {
-		return nil
-	}
-
 	var exceptions []Exception
 	visited := make(map[error]bool)
 	convertErrorDFS(err, &exceptions, nil, "", visited)
@@ -44,11 +40,7 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 	var isExceptionGroup bool
 
 	switch err.(type) {
-	case interface{ Unwrap() []error }:
-		isExceptionGroup = true
-	case interface{ Unwrap() error }:
-		isExceptionGroup = true
-	case interface{ Cause() error }:
+	case interface{ Unwrap() []error }, interface{ Unwrap() error }, interface{ Cause() error }:
 		isExceptionGroup = true
 	}
 
