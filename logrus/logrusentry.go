@@ -182,7 +182,7 @@ func (h *eventHook) entryToEvent(l *logrus.Entry) *sentry.Event {
 
 	if err, ok := s.Extra[logrus.ErrorKey].(error); ok {
 		delete(s.Extra, logrus.ErrorKey)
-		s.SetException(err, -1)
+		s.SetException(err, sentry.MaxErrorDepth)
 	}
 
 	key = h.key(FieldUser)

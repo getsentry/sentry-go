@@ -41,7 +41,7 @@ func DefaultConverter(addSource bool, replaceAttr func(groups []string, a slog.A
 	event.Level = LogLevels[record.Level]
 	event.Message = record.Message
 	event.Logger = name
-	event.SetException(err, 10)
+	event.SetException(err, sentry.MaxErrorDepth)
 
 	for i := range attrs {
 		attrToSentryEvent(attrs[i], event)
