@@ -14,32 +14,49 @@ import (
 // and, therefore, rate limited.
 type Category string
 
-// Known rate limit categories. As a special case, the CategoryAll applies to
-// all known payload types.
+// Known rate limit categories that are specified in rate limit headers.
 const (
-	CategoryAll         Category = ""
+	CategoryAll         Category = "" // Special category for empty categories (applies to all)
+	CategoryDefault     Category = "default"
 	CategoryError       Category = "error"
 	CategoryTransaction Category = "transaction"
+	CategoryLog         Category = "log_item"
+	CategoryUptime      Category = "uptime"
 )
 
 // knownCategories is the set of currently known categories. Other categories
 // are ignored for the purpose of rate-limiting.
 var knownCategories = map[Category]struct{}{
 	CategoryAll:         {},
+	CategoryDefault:     {},
 	CategoryError:       {},
 	CategoryTransaction: {},
+	CategoryLog:         {},
+	CategoryUptime:      {},
 }
 
 // String returns the category formatted for debugging.
 func (c Category) String() string {
-	if c == "" {
+	switch c {
+	case CategoryAll:
 		return "CategoryAll"
+	case CategoryDefault:
+		return "CategoryDefault"
+	case CategoryError:
+		return "CategoryError"
+	case CategoryTransaction:
+		return "CategoryTransaction"
+	case CategoryLog:
+		return "CategoryLog"
+	case CategoryUptime:
+		return "CategoryUptime"
+	default:
+		// For unknown categories, use the original formatting logic
+		caser := cases.Title(language.English)
+		rv := "Category"
+		for _, w := range strings.Fields(string(c)) {
+			rv += caser.String(w)
+		}
+		return rv
 	}
-
-	caser := cases.Title(language.English)
-	rv := "Category"
-	for _, w := range strings.Fields(string(c)) {
-		rv += caser.String(w)
-	}
-	return rv
 }

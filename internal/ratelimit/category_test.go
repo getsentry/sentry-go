@@ -1,23 +1,62 @@
 package ratelimit
 
-import "testing"
+import (
+	"testing"
+)
 
-func TestCategoryString(t *testing.T) {
+func TestCategory_String(t *testing.T) {
 	tests := []struct {
-		Category Category
-		want     string
+		category Category
+		expected string
 	}{
-		{CategoryAll, "CategoryAll"},
+		{CategoryDefault, "CategoryDefault"},
 		{CategoryError, "CategoryError"},
 		{CategoryTransaction, "CategoryTransaction"},
-		{Category("unknown"), "CategoryUnknown"},
-		{Category("two words"), "CategoryTwoWords"},
+		{CategoryUptime, "CategoryUptime"},
+		{CategoryLog, "CategoryLog"},
+		{Category("custom type"), "CategoryCustomType"},
+		{Category("multi word type"), "CategoryMultiWordType"},
 	}
+
 	for _, tt := range tests {
-		t.Run(tt.want, func(t *testing.T) {
-			got := tt.Category.String()
-			if got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
+		t.Run(string(tt.category), func(t *testing.T) {
+			result := tt.category.String()
+			if result != tt.expected {
+				t.Errorf("Category(%q).String() = %q, want %q", tt.category, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestKnownCategories(t *testing.T) {
+	expectedCategories := []Category{
+		CategoryAll,
+		CategoryDefault,
+		CategoryError,
+		CategoryTransaction,
+		CategoryUptime,
+		CategoryLog,
+	}
+
+	for _, category := range expectedCategories {
+		t.Run(string(category), func(t *testing.T) {
+			if _, exists := knownCategories[category]; !exists {
+				t.Errorf("Category %q should be in knownCategories map", category)
+			}
+		})
+	}
+
+	// Test that unknown categories are not in the map
+	unknownCategories := []Category{
+		Category("unknown"),
+		Category("custom"),
+		Category("random"),
+	}
+
+	for _, category := range unknownCategories {
+		t.Run("unknown_"+string(category), func(t *testing.T) {
+			if _, exists := knownCategories[category]; exists {
+				t.Errorf("Unknown category %q should not be in knownCategories map", category)
 			}
 		})
 	}
