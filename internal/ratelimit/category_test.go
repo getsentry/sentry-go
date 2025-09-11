@@ -9,6 +9,7 @@ func TestCategory_String(t *testing.T) {
 		category Category
 		expected string
 	}{
+		{CategoryAll, "CategoryAll"},
 		{CategoryError, "CategoryError"},
 		{CategoryTransaction, "CategoryTransaction"},
 		{CategoryMonitor, "CategoryMonitor"},
