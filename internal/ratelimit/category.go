@@ -16,23 +16,22 @@ type Category string
 
 // Known rate limit categories that are specified in rate limit headers.
 const (
-	CategoryAll         Category = "" // Special category for empty categories (applies to all)
-	CategoryDefault     Category = "default"
+	CategoryUnknown     Category = "unknown" // Unknown category should not get rate limited
+	CategoryAll         Category = ""        // Special category for empty categories (applies to all)
 	CategoryError       Category = "error"
 	CategoryTransaction Category = "transaction"
 	CategoryLog         Category = "log_item"
-	CategoryUptime      Category = "uptime"
+	CategoryMonitor     Category = "monitor"
 )
 
 // knownCategories is the set of currently known categories. Other categories
 // are ignored for the purpose of rate-limiting.
 var knownCategories = map[Category]struct{}{
 	CategoryAll:         {},
-	CategoryDefault:     {},
 	CategoryError:       {},
 	CategoryTransaction: {},
 	CategoryLog:         {},
-	CategoryUptime:      {},
+	CategoryMonitor:     {},
 }
 
 // String returns the category formatted for debugging.
@@ -40,16 +39,14 @@ func (c Category) String() string {
 	switch c {
 	case CategoryAll:
 		return "CategoryAll"
-	case CategoryDefault:
-		return "CategoryDefault"
 	case CategoryError:
 		return "CategoryError"
 	case CategoryTransaction:
 		return "CategoryTransaction"
 	case CategoryLog:
 		return "CategoryLog"
-	case CategoryUptime:
-		return "CategoryUptime"
+	case CategoryMonitor:
+		return "CategoryMonitor"
 	default:
 		// For unknown categories, use the original formatting logic
 		caser := cases.Title(language.English)

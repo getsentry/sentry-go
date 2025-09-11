@@ -614,9 +614,9 @@ func (e *Event) ToCategory() ratelimit.Category {
 	case logEvent.Type:
 		return ratelimit.CategoryLog
 	case checkInType:
-		return ratelimit.CategoryUptime
+		return ratelimit.CategoryMonitor
 	default:
-		return ratelimit.CategoryDefault
+		return ratelimit.CategoryUnknown
 	}
 }
 

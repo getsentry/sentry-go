@@ -9,10 +9,9 @@ func TestCategory_String(t *testing.T) {
 		category Category
 		expected string
 	}{
-		{CategoryDefault, "CategoryDefault"},
 		{CategoryError, "CategoryError"},
 		{CategoryTransaction, "CategoryTransaction"},
-		{CategoryUptime, "CategoryUptime"},
+		{CategoryMonitor, "CategoryMonitor"},
 		{CategoryLog, "CategoryLog"},
 		{Category("custom type"), "CategoryCustomType"},
 		{Category("multi word type"), "CategoryMultiWordType"},
@@ -31,10 +30,9 @@ func TestCategory_String(t *testing.T) {
 func TestKnownCategories(t *testing.T) {
 	expectedCategories := []Category{
 		CategoryAll,
-		CategoryDefault,
 		CategoryError,
 		CategoryTransaction,
-		CategoryUptime,
+		CategoryMonitor,
 		CategoryLog,
 	}
 
