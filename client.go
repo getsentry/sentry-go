@@ -529,7 +529,6 @@ func (client *Client) Flush(timeout time.Duration) bool {
 // Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
 // CaptureException, or CaptureMessage. To send events synchronously over the network,
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
-
 func (client *Client) FlushWithContext(ctx context.Context) bool {
 	if client.batchLogger != nil {
 		client.batchLogger.Flush(ctx.Done())
