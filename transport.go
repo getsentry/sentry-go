@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
@@ -316,6 +317,10 @@ type HTTPTransport struct {
 
 	// receiving signal will terminate worker.
 	done chan struct{}
+
+	// Transport queue metrics (atomic counters for thread-safety)
+	offeredEvents int64
+	droppedEvents int64
 }
 
 // NewHTTPTransport returns a new pre-configured instance of HTTPTransport.
@@ -405,6 +410,9 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	// channel (used as a queue).
 	b := <-t.buffer
 
+	// Track that an event was offered to the transport
+	atomic.AddInt64(&t.offeredEvents, 1)
+
 	select {
 	case b.items <- batchItem{
 		request:  request,
@@ -424,6 +432,8 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 			t.dsn.projectID,
 		)
 	default:
+		// Track that an event was dropped due to buffer being full
+		atomic.AddInt64(&t.droppedEvents, 1)
 		DebugLogger.Println("Event dropped due to transport buffer being full.")
 	}
 
@@ -508,6 +518,30 @@ func (t *HTTPTransport) Close() {
 	t.closeOnce.Do(func() {
 		close(t.done)
 	})
+}
+
+// OfferedEventsCount returns the total number of events offered to this transport
+func (t *HTTPTransport) OfferedEventsCount() int64 {
+	return atomic.LoadInt64(&t.offeredEvents)
+}
+
+// DroppedEventsCount returns the total number of events dropped by this transport
+func (t *HTTPTransport) DroppedEventsCount() int64 {
+	return atomic.LoadInt64(&t.droppedEvents)
+}
+
+// BufferUtilization returns the current buffer utilization as a percentage (0-100)
+func (t *HTTPTransport) BufferUtilization() float64 {
+	if t.BufferSize <= 0 {
+		return 0.0
+	}
+
+	// Get current buffer usage by checking how many items are waiting
+	b := <-t.buffer
+	currentSize := len(b.items)
+	t.buffer <- b
+
+	return float64(currentSize) / float64(t.BufferSize) * 100.0
 }
 
 func (t *HTTPTransport) worker() {
