@@ -279,6 +279,13 @@ type ClientOptions struct {
 	// IMPORTANT: to not ignore any status codes, the option should be an empty slice and not nil. The nil option is
 	// used for defaulting to 404 ignores.
 	TraceIgnoreStatusCodes [][]int
+	// Enable Spotlight for local development debugging.
+	// When enabled, events are sent to the local Spotlight sidecar.
+	// Default Spotlight URL is http://localhost:8969/
+	Spotlight bool
+	// SpotlightURL is the URL to send events to when Spotlight is enabled.
+	// Defaults to http://localhost:8969/stream
+	SpotlightURL string
 	// DisableTelemetryBuffer disables the telemetry buffer layer for prioritizing events and uses the old transport layer.
 	DisableTelemetryBuffer bool
 }
@@ -436,6 +443,12 @@ func NewClient(options ClientOptions) (*Client, error) {
 }
 
 func (client *Client) setupTransport() {
+	if !client.options.Spotlight {
+		if spotlightEnv := os.Getenv("SENTRY_SPOTLIGHT"); spotlightEnv == "true" || spotlightEnv == "1" {
+			client.options.Spotlight = true
+		}
+	}
+
 	opts := client.options
 	transport := opts.Transport
 
@@ -461,6 +474,10 @@ func (client *Client) setupTransport() {
 			tr.recorder = client.reportRecorder
 			tr.provider = client.reportProvider
 		}
+	}
+
+	if opts.Spotlight {
+		transport = NewSpotlightTransport(transport)
 	}
 
 	transport.Configure(opts)
@@ -528,6 +545,7 @@ func (client *Client) setupIntegrations() {
 		new(ignoreErrorsIntegration),
 		new(ignoreTransactionsIntegration),
 		new(globalTagsIntegration),
+		new(spotlightIntegration),
 	}
 
 	if client.options.Integrations != nil {

@@ -65,6 +65,7 @@ The SDK supports reporting errors and tracking application performance.
 To get started, have a look at one of our [examples](_examples/):
 - [Basic error instrumentation](_examples/basic/main.go)
 - [Error and tracing for HTTP servers](_examples/http/main.go)
+- [Local development debugging with Spotlight](_examples/spotlight/main.go)
 
 We also provide a [complete API reference](https://pkg.go.dev/github.com/getsentry/sentry-go).
 
