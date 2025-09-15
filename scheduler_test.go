@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -42,6 +43,22 @@ func (m *mockTelemetryTransport) IsRateLimited(category ratelimit.Category) bool
 		return false
 	}
 	return m.rateLimited[string(category)]
+}
+
+func (m *mockTelemetryTransport) Flush(timeout time.Duration) bool {
+	return true
+}
+
+func (m *mockTelemetryTransport) FlushWithContext(ctx context.Context) bool {
+	return true
+}
+
+func (m *mockTelemetryTransport) Configure(options ClientOptions) {
+	// No-op for mock
+}
+
+func (m *mockTelemetryTransport) Close() {
+	// No-op for mock
 }
 
 func (m *mockTelemetryTransport) GetSentEnvelopes() []*Envelope {
