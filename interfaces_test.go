@@ -537,7 +537,7 @@ func TestEvent_ToCategory(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := &Event{Type: tc.eventType}
-			got := e.ToCategory()
+			got := e.toCategory()
 			if got != tc.want {
 				t.Errorf("Type %q: got %v, want %v", tc.eventType, got, tc.want)
 			}

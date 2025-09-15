@@ -605,7 +605,7 @@ func (e *Event) checkInMarshalJSON() ([]byte, error) {
 	return json.Marshal(checkIn)
 }
 
-func (e *Event) ToCategory() ratelimit.Category {
+func (e *Event) toCategory() ratelimit.Category {
 	switch e.Type {
 	case "":
 		return ratelimit.CategoryError

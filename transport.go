@@ -370,7 +370,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		return
 	}
 
-	category := event.ToCategory()
+	category := event.toCategory()
 
 	if t.disabled(category) {
 		return
@@ -642,7 +642,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		return
 	}
 
-	if t.disabled(event.ToCategory()) {
+	if t.disabled(event.toCategory()) {
 		return
 	}
 
