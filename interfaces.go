@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
-	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/protocol"
 )
 
 const eventType = "event"
@@ -74,14 +74,6 @@ type Breadcrumb struct {
 
 // TODO: provide constants for known breadcrumb types.
 // See https://develop.sentry.dev/sdk/event-payloads/breadcrumbs/#breadcrumb-types.
-
-// EnvelopeConvertible represents any type that can be converted to a Sentry envelope.
-// This interface allows the telemetry buffers to be generic while still working with
-// concrete types like Event.
-type EnvelopeConvertible interface {
-	// ToEnvelope converts the item to a Sentry envelope.
-	ToEnvelope(dsn *Dsn) (*Envelope, error)
-}
 
 // MarshalJSON converts the Breadcrumb struct to JSON.
 func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
@@ -257,9 +249,9 @@ var sensitiveHeaders = map[string]struct{}{
 // NewRequest avoids operations that depend on network access. In particular, it
 // does not read r.Body.
 func NewRequest(r *http.Request) *Request {
-	protocol := schemeHTTP
+	protocol := "http"
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		protocol = schemeHTTPS
+		protocol = "https"
 	}
 	url := fmt.Sprintf("%s://%s%s", protocol, r.Host, r.URL.Path)
 
@@ -495,13 +487,13 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 
 // ToEnvelope converts the Event to a Sentry envelope.
 // This includes the event data and any attachments as separate envelope items.
-func (e *Event) ToEnvelope(dsn *Dsn) (*Envelope, error) {
+func (e *Event) ToEnvelope(dsn *protocol.Dsn) (*protocol.Envelope, error) {
 	return e.ToEnvelopeWithTime(dsn, time.Now())
 }
 
 // ToEnvelopeWithTime converts the Event to a Sentry envelope with a specific sentAt time.
 // This is primarily useful for testing with predictable timestamps.
-func (e *Event) ToEnvelopeWithTime(dsn *Dsn, sentAt time.Time) (*Envelope, error) {
+func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protocol.Envelope, error) {
 	// Create envelope header with trace context
 	trace := make(map[string]string)
 	if dsc := e.sdkMetaData.dsc; dsc.HasEntries() {
@@ -510,8 +502,8 @@ func (e *Event) ToEnvelopeWithTime(dsn *Dsn, sentAt time.Time) (*Envelope, error
 		}
 	}
 
-	header := &EnvelopeHeader{
-		EventID: e.EventID,
+	header := &protocol.EnvelopeHeader{
+		EventID: string(e.EventID),
 		SentAt:  sentAt,
 		Trace:   trace,
 	}
@@ -523,13 +515,10 @@ func (e *Event) ToEnvelopeWithTime(dsn *Dsn, sentAt time.Time) (*Envelope, error
 
 	// Add SDK info
 	if e.Sdk.Name != "" || e.Sdk.Version != "" {
-		header.Sdk = &SdkInfo{
-			Name:    e.Sdk.Name,
-			Version: e.Sdk.Version,
-		}
+		header.Sdk = e.Sdk
 	}
 
-	envelope := NewEnvelope(header)
+	envelope := protocol.NewEnvelope(header)
 
 	// Serialize the event body with fallback handling
 	eventBody, err := json.Marshal(e)
@@ -562,23 +551,23 @@ func (e *Event) ToEnvelopeWithTime(dsn *Dsn, sentAt time.Time) (*Envelope, error
 	}
 
 	// Create the main event item based on event type
-	var mainItem *EnvelopeItem
+	var mainItem *protocol.EnvelopeItem
 	switch e.Type {
 	case transactionType:
-		mainItem = NewEnvelopeItem(EnvelopeItemTypeTransaction, eventBody)
+		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeTransaction, eventBody)
 	case checkInType:
-		mainItem = NewEnvelopeItem(EnvelopeItemTypeCheckIn, eventBody)
+		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
 	case logEvent.Type:
-		mainItem = NewLogItem(e.Logs, eventBody)
+		mainItem = protocol.NewLogItem(len(e.Logs), eventBody)
 	default:
-		mainItem = NewEnvelopeItem(EnvelopeItemTypeEvent, eventBody)
+		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
 	}
 
 	envelope.AddItem(mainItem)
 
 	// Add attachments as separate items
 	for _, attachment := range e.Attachments {
-		attachmentItem := NewAttachmentItem(attachment)
+		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
 		envelope.AddItem(attachmentItem)
 	}
 
@@ -757,28 +746,4 @@ const (
 type Attribute struct {
 	Value any      `json:"value"`
 	Type  AttrType `json:"type"`
-}
-
-// TelemetryTransport represents the envelope-first transport interface.
-// This interface is designed for the telemetry buffer system and provides
-// non-blocking sends with backpressure signals.
-type TelemetryTransport interface {
-	// SendEnvelope sends an envelope to Sentry. Returns immediately with
-	// backpressure error if the queue is full.
-	SendEnvelope(envelope *Envelope) error
-
-	// IsRateLimited checks if a specific category is currently rate limited
-	IsRateLimited(category ratelimit.Category) bool
-
-	// Configure configures the transport with client options
-	Configure(options ClientOptions)
-
-	// Flush waits for all pending envelopes to be sent, with timeout
-	Flush(timeout time.Duration) bool
-
-	// FlushWithContext waits for all pending envelopes to be sent
-	FlushWithContext(ctx context.Context) bool
-
-	// Close shuts down the transport gracefully
-	Close()
 }

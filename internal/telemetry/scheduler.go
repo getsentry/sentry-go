@@ -1,22 +1,42 @@
-package sentry
+package telemetry
 
 import (
 	"context"
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/telemetry"
 )
 
-// Scheduler implements a weighted round-robin scheduler for processing buffered events.
-// It works with any type that implements EnvelopeConvertible.
-type Scheduler struct {
-	buffers   map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible]
-	transport TelemetryTransport
-	dsn       *Dsn
+// DebugLogger interface allows the scheduler to log debug messages
+// This avoids importing the main sentry package
+type DebugLogger interface {
+	Printf(format string, v ...interface{})
+}
 
-	currentCycle []telemetry.Priority
+// defaultDebugLogger is a no-op logger
+type defaultDebugLogger struct{}
+
+func (d defaultDebugLogger) Printf(format string, v ...interface{}) {
+	// No-op by default, can be set by client
+}
+
+var debugLogger DebugLogger = defaultDebugLogger{}
+
+// SetDebugLogger sets the debug logger for the scheduler
+func SetDebugLogger(logger DebugLogger) {
+	debugLogger = logger
+}
+
+// Scheduler implements a weighted round-robin scheduler for processing buffered events.
+// It works with any type that implements protocol.EnvelopeConvertible.
+type Scheduler struct {
+	buffers   map[DataCategory]*Buffer[protocol.EnvelopeConvertible]
+	transport protocol.TelemetryTransport
+	dsn       *protocol.Dsn
+
+	currentCycle []Priority
 	cyclePos     int
 
 	ctx          context.Context
@@ -30,21 +50,21 @@ type Scheduler struct {
 
 // NewScheduler creates a new telemetry scheduler.
 func NewScheduler(
-	buffers map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible],
-	transport TelemetryTransport,
-	dsn *Dsn,
+	buffers map[DataCategory]*Buffer[protocol.EnvelopeConvertible],
+	transport protocol.TelemetryTransport,
+	dsn *protocol.Dsn,
 ) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	priorityWeights := map[telemetry.Priority]int{
-		telemetry.PriorityCritical: 5,
-		telemetry.PriorityHigh:     4,
-		telemetry.PriorityMedium:   3,
-		telemetry.PriorityLow:      2,
-		telemetry.PriorityLowest:   1,
+	priorityWeights := map[Priority]int{
+		PriorityCritical: 5,
+		PriorityHigh:     4,
+		PriorityMedium:   3,
+		PriorityLow:      2,
+		PriorityLowest:   1,
 	}
 
-	var currentCycle []telemetry.Priority
+	var currentCycle []Priority
 	for priority, weight := range priorityWeights {
 		hasBuffers := false
 		for _, buffer := range buffers {
@@ -158,7 +178,7 @@ func (s *Scheduler) processNextEnvelope() {
 }
 
 // processOneItem processes a single item from the buffer
-func (s *Scheduler) processOneItem(category telemetry.DataCategory, buffer *telemetry.Buffer[EnvelopeConvertible]) {
+func (s *Scheduler) processOneItem(category DataCategory, buffer *Buffer[protocol.EnvelopeConvertible]) {
 	if item, ok := buffer.Poll(); ok {
 		if !s.isRateLimited(category) {
 			s.sendItem(item)
@@ -167,14 +187,14 @@ func (s *Scheduler) processOneItem(category telemetry.DataCategory, buffer *tele
 }
 
 // sendItem converts an item to an envelope and sends it via transport
-func (s *Scheduler) sendItem(item EnvelopeConvertible) {
+func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
 	envelope, err := item.ToEnvelope(s.dsn)
 	if err != nil {
-		DebugLogger.Printf("error converting item to envelope: %e", err)
+		debugLogger.Printf("error converting item to envelope: %v", err)
 		return
 	}
 	if err := s.transport.SendEnvelope(envelope); err != nil {
-		DebugLogger.Printf("error sending envelope: %e", err)
+		debugLogger.Printf("error sending envelope: %v", err)
 	}
 }
 
@@ -188,7 +208,7 @@ func (s *Scheduler) flushAllBuffers() {
 }
 
 // flushBuffer drains a specific buffer and sends all its contents
-func (s *Scheduler) flushBuffer(category telemetry.DataCategory, buffer *telemetry.Buffer[EnvelopeConvertible]) {
+func (s *Scheduler) flushBuffer(category DataCategory, buffer *Buffer[protocol.EnvelopeConvertible]) {
 	items := buffer.Drain()
 	if len(items) == 0 {
 		return
@@ -202,6 +222,6 @@ func (s *Scheduler) flushBuffer(category telemetry.DataCategory, buffer *telemet
 }
 
 // isRateLimited checks if the given category is currently rate limited
-func (s *Scheduler) isRateLimited(category telemetry.DataCategory) bool {
+func (s *Scheduler) isRateLimited(category DataCategory) bool {
 	return s.transport.IsRateLimited(ratelimit.Category(string(category)))
 }

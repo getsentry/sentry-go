@@ -4,16 +4,19 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
@@ -51,6 +54,46 @@ var (
 	ErrTransportClosed = errors.New("transport is closed")
 )
 
+// TelemetryTransportConfig provides configuration options for telemetry transport
+// without depending on main sentry package to avoid cyclic imports.
+type TelemetryTransportConfig struct {
+	// DSN for the Sentry project
+	DSN string
+
+	// WorkerCount is the number of HTTP workers (2-5 recommended)
+	WorkerCount int
+
+	// QueueSize is the capacity of the send queue
+	QueueSize int
+
+	// RequestTimeout is the HTTP request timeout
+	RequestTimeout time.Duration
+
+	// MaxRetries is the maximum number of retry attempts
+	MaxRetries int
+
+	// RetryBackoff is the initial retry backoff duration
+	RetryBackoff time.Duration
+
+	// HTTPClient to use for requests
+	HTTPClient *http.Client
+
+	// HTTPTransport to use for requests
+	HTTPTransport http.RoundTripper
+
+	// HTTPProxy URL
+	HTTPProxy string
+
+	// HTTPSProxy URL
+	HTTPSProxy string
+
+	// CaCerts for TLS verification
+	CaCerts *x509.CertPool
+
+	// Debug enables debug logging
+	Debug bool
+}
+
 // TransportConfig provides configuration options for the transport.
 type TransportConfig struct {
 	// WorkerCount is the number of HTTP workers (2-5 recommended)
@@ -69,42 +112,61 @@ type TransportConfig struct {
 	RetryBackoff time.Duration
 }
 
-func getProxyConfig(options sentry.ClientOptions) func(*http.Request) (*url.URL, error) {
-	if options.HTTPSProxy != "" {
+// debugLogger is used for debug output to avoid importing the main sentry package
+var debugLogger = log.New(os.Stderr, "[Sentry] ", log.LstdFlags)
+
+func getProxyConfig(httpsProxy, httpProxy string) func(*http.Request) (*url.URL, error) {
+	if httpsProxy != "" {
 		return func(*http.Request) (*url.URL, error) {
-			return url.Parse(options.HTTPSProxy)
+			return url.Parse(httpsProxy)
 		}
 	}
 
-	if options.HTTPProxy != "" {
+	if httpProxy != "" {
 		return func(*http.Request) (*url.URL, error) {
-			return url.Parse(options.HTTPProxy)
+			return url.Parse(httpProxy)
 		}
 	}
 
 	return http.ProxyFromEnvironment
 }
 
-func getTLSConfig(options sentry.ClientOptions) *tls.Config {
-	if options.CaCerts != nil {
+func getTLSConfig(caCerts *x509.CertPool) *tls.Config {
+	if caCerts != nil {
 		// #nosec G402 -- We should be using `MinVersion: tls.VersionTLS12`,
 		// 				 but we don't want to break peoples code without the major bump.
 		return &tls.Config{
-			RootCAs: options.CaCerts,
+			RootCAs: caCerts,
 		}
 	}
 
 	return nil
 }
 
-func getSentryRequestFromEnvelope(ctx context.Context, dsn *sentry.Dsn, envelope *sentry.Envelope) (r *http.Request, err error) {
+func getSentryRequestFromEnvelope(ctx context.Context, dsn *protocol.Dsn, envelope *protocol.Envelope) (r *http.Request, err error) {
 	defer func() {
 		if r != nil {
-			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", envelope.Header.Sdk.Name, envelope.Header.Sdk.Version))
+			// Extract SDK info from envelope header
+			sdkName := "sentry.go"
+			sdkVersion := "unknown"
+
+			// Try to extract from envelope header if available
+			if envelope.Header.Sdk != nil {
+				if sdkMap, ok := envelope.Header.Sdk.(map[string]interface{}); ok {
+					if name, ok := sdkMap["name"].(string); ok {
+						sdkName = name
+					}
+					if version, ok := sdkMap["version"].(string); ok {
+						sdkVersion = version
+					}
+				}
+			}
+
+			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", sdkName, sdkVersion))
 			r.Header.Set("Content-Type", "application/x-sentry-envelope")
 
 			auth := fmt.Sprintf("Sentry sentry_version=%d, "+
-				"sentry_client=%s/%s, sentry_key=%s", apiVersion, envelope.Header.Sdk.Name, envelope.Header.Sdk.Version, dsn.GetPublicKey())
+				"sentry_client=%s/%s, sentry_key=%s", apiVersion, sdkName, sdkVersion, dsn.GetPublicKey())
 
 			// The key sentry_secret is effectively deprecated and no longer needs to be set.
 			// However, since it was required in older self-hosted versions,
@@ -139,7 +201,7 @@ func getSentryRequestFromEnvelope(ctx context.Context, dsn *sentry.Dsn, envelope
 // categoryFromEnvelope determines the rate limiting category from an envelope.
 // Maps envelope item types to official Sentry rate limiting categories as per:
 // https://develop.sentry.dev/sdk/expected-features/rate-limiting/#definitions
-func categoryFromEnvelope(envelope *sentry.Envelope) ratelimit.Category {
+func categoryFromEnvelope(envelope *protocol.Envelope) ratelimit.Category {
 	if envelope == nil || len(envelope.Items) == 0 {
 		return ratelimit.CategoryAll
 	}
@@ -151,11 +213,11 @@ func categoryFromEnvelope(envelope *sentry.Envelope) ratelimit.Category {
 		}
 
 		switch item.Header.Type {
-		case sentry.EnvelopeItemTypeEvent:
+		case protocol.EnvelopeItemTypeEvent:
 			return ratelimit.CategoryError
-		case sentry.EnvelopeItemTypeTransaction:
+		case protocol.EnvelopeItemTypeTransaction:
 			return ratelimit.CategoryTransaction
-		case sentry.EnvelopeItemTypeAttachment:
+		case protocol.EnvelopeItemTypeAttachment:
 			// Skip attachments and look for the main content type
 			continue
 		default:
@@ -185,7 +247,7 @@ func categoryFromEnvelope(envelope *sentry.Envelope) ratelimit.Category {
 //
 // For most cases, prefer AsyncTransport.
 type SyncTransport struct {
-	dsn       *sentry.Dsn
+	dsn       *protocol.Dsn
 	client    *http.Client
 	transport http.RoundTripper
 
@@ -206,38 +268,54 @@ func NewSyncTransport() *SyncTransport {
 	return &transport
 }
 
-var _ sentry.TelemetryTransport = (*SyncTransport)(nil)
+var _ protocol.TelemetryTransport = (*SyncTransport)(nil)
 
-// Configure is called by the Client itself, providing it, its own ClientOptions.
-func (t *SyncTransport) Configure(options sentry.ClientOptions) {
-	dsn, err := sentry.NewDsn(options.Dsn)
-	if err != nil {
-		sentry.DebugLogger.Printf("%v\n", err)
-		return
+// Configure implements protocol.TelemetryTransport
+func (t *SyncTransport) Configure(options interface{}) error {
+	config, ok := options.(TelemetryTransportConfig)
+	if !ok {
+		return fmt.Errorf("invalid config type, expected TelemetryTransportConfig")
 	}
-	t.dsn = dsn
+	return t.configureWithTelemetryConfig(config)
+}
 
-	if options.HTTPTransport != nil {
-		t.transport = options.HTTPTransport
+// configureWithTelemetryConfig configures the SyncTransport with TelemetryTransportConfig
+func (t *SyncTransport) configureWithTelemetryConfig(config TelemetryTransportConfig) error {
+	// Parse DSN
+	if config.DSN != "" {
+		dsn, err := protocol.NewDsn(config.DSN)
+		if err != nil {
+			debugLogger.Printf("Failed to parse DSN: %v\n", err)
+			return err
+		}
+		t.dsn = dsn
+	}
+
+	// Configure HTTP transport
+	if config.HTTPTransport != nil {
+		t.transport = config.HTTPTransport
 	} else {
 		t.transport = &http.Transport{
-			Proxy:           getProxyConfig(options),
-			TLSClientConfig: getTLSConfig(options),
+			Proxy:           getProxyConfig(config.HTTPSProxy, config.HTTPProxy),
+			TLSClientConfig: getTLSConfig(config.CaCerts),
 		}
 	}
 
-	if options.HTTPClient != nil {
-		t.client = options.HTTPClient
+	// Configure HTTP client
+	if config.HTTPClient != nil {
+		t.client = config.HTTPClient
 	} else {
 		t.client = &http.Client{
 			Transport: t.transport,
 			Timeout:   t.Timeout,
 		}
 	}
+
+	return nil
 }
 
 // SendEnvelope assembles a new packet out of an Envelope and sends it to the remote server.
-func (t *SyncTransport) SendEnvelope(envelope *sentry.Envelope) error {
+func (t *SyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	return t.SendEnvelopeWithContext(context.Background(), envelope)
 }
 
@@ -249,7 +327,7 @@ func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
 }
 
 // SendEnvelopeWithContext assembles a new packet out of an Envelope and sends it to the remote server.
-func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *sentry.Envelope) error {
+func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *protocol.Envelope) error {
 	if t.dsn == nil {
 		return nil
 	}
@@ -262,20 +340,20 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *s
 
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
 	if err != nil {
-		sentry.DebugLogger.Printf("There was an issue creating the request: %v", err)
+		debugLogger.Printf("There was an issue creating the request: %v", err)
 		return err
 	}
 	response, err := t.client.Do(request)
 	if err != nil {
-		sentry.DebugLogger.Printf("There was an issue with sending an event: %v", err)
+		debugLogger.Printf("There was an issue with sending an event: %v", err)
 		return err
 	}
 	if response.StatusCode >= 400 && response.StatusCode <= 599 {
 		b, err := io.ReadAll(response.Body)
 		if err != nil {
-			sentry.DebugLogger.Printf("Error while reading response code: %v", err)
+			debugLogger.Printf("Error while reading response code: %v", err)
 		}
-		sentry.DebugLogger.Printf("Sending %s failed with the following error: %s", envelope.Header.EventID, string(b))
+		debugLogger.Printf("Sending %s failed with the following error: %s", envelope.Header.EventID, string(b))
 	}
 
 	t.mu.Lock()
@@ -307,7 +385,7 @@ func (t *SyncTransport) disabled(c ratelimit.Category) bool {
 	defer t.mu.Unlock()
 	disabled := t.limits.IsRateLimited(c)
 	if disabled {
-		sentry.DebugLogger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
+		debugLogger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
 	}
 	return disabled
 }
@@ -323,12 +401,12 @@ type Worker struct {
 // AsyncTransport uses a bounded worker pool for controlled concurrency and provides
 // backpressure when the queue is full.
 type AsyncTransport struct {
-	dsn       *sentry.Dsn
+	dsn       *protocol.Dsn
 	client    *http.Client
 	transport http.RoundTripper
 	config    TransportConfig
 
-	sendQueue   chan *sentry.Envelope
+	sendQueue   chan *protocol.Envelope
 	workers     []*Worker
 	workerCount int
 
@@ -344,7 +422,7 @@ type AsyncTransport struct {
 	errorCount   int64
 }
 
-var _ sentry.TelemetryTransport = (*AsyncTransport)(nil)
+var _ protocol.TelemetryTransport = (*AsyncTransport)(nil)
 
 func NewAsyncTransport() *AsyncTransport {
 	return NewAsyncTransportWithConfig(TransportConfig{
@@ -378,7 +456,7 @@ func NewAsyncTransportWithConfig(config TransportConfig) *AsyncTransport {
 
 	transport := &AsyncTransport{
 		config:      config,
-		sendQueue:   make(chan *sentry.Envelope, config.QueueSize),
+		sendQueue:   make(chan *protocol.Envelope, config.QueueSize),
 		workers:     make([]*Worker, config.WorkerCount),
 		workerCount: config.WorkerCount,
 		done:        make(chan struct{}),
@@ -388,28 +466,43 @@ func NewAsyncTransportWithConfig(config TransportConfig) *AsyncTransport {
 	return transport
 }
 
-func (t *AsyncTransport) Configure(options sentry.ClientOptions) {
-	dsn, err := sentry.NewDsn(options.Dsn)
-	if err != nil {
-		sentry.DebugLogger.Printf("Failed to parse DSN: %v\n", err)
-		return
+// Configure implements protocol.TelemetryTransport
+func (t *AsyncTransport) Configure(options interface{}) error {
+	config, ok := options.(TelemetryTransportConfig)
+	if !ok {
+		return fmt.Errorf("invalid config type, expected TelemetryTransportConfig")
 	}
-	t.dsn = dsn
+	return t.configureWithTelemetryConfig(config)
+}
 
-	if options.HTTPTransport != nil {
-		t.transport = options.HTTPTransport
+// configureWithTelemetryConfig configures the AsyncTransport with TelemetryTransportConfig
+func (t *AsyncTransport) configureWithTelemetryConfig(config TelemetryTransportConfig) error {
+	// Parse DSN
+	if config.DSN != "" {
+		dsn, err := protocol.NewDsn(config.DSN)
+		if err != nil {
+			debugLogger.Printf("Failed to parse DSN: %v\n", err)
+			return err
+		}
+		t.dsn = dsn
+	}
+
+	// Configure HTTP transport
+	if config.HTTPTransport != nil {
+		t.transport = config.HTTPTransport
 	} else {
 		t.transport = &http.Transport{
-			Proxy:               getProxyConfig(options),
-			TLSClientConfig:     getTLSConfig(options),
+			Proxy:               getProxyConfig(config.HTTPSProxy, config.HTTPProxy),
+			TLSClientConfig:     getTLSConfig(config.CaCerts),
 			MaxIdleConns:        100,
 			MaxIdleConnsPerHost: 10,
 			IdleConnTimeout:     90 * time.Second,
 		}
 	}
 
-	if options.HTTPClient != nil {
-		t.client = options.HTTPClient
+	// Configure HTTP client
+	if config.HTTPClient != nil {
+		t.client = config.HTTPClient
 	} else {
 		t.client = &http.Client{
 			Transport: t.transport,
@@ -418,9 +511,10 @@ func (t *AsyncTransport) Configure(options sentry.ClientOptions) {
 	}
 
 	t.startWorkers()
+	return nil
 }
 
-func (t *AsyncTransport) SendEnvelope(envelope *sentry.Envelope) error {
+func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	if t.dsn == nil {
 		return errors.New("transport not configured")
 	}
@@ -540,7 +634,7 @@ func (w *Worker) run() {
 	}
 }
 
-func (w *Worker) processEnvelope(envelope *sentry.Envelope) {
+func (w *Worker) processEnvelope(envelope *protocol.Envelope) {
 	maxRetries := w.transport.config.MaxRetries
 	backoff := w.transport.config.RetryBackoff
 
@@ -561,10 +655,10 @@ func (w *Worker) processEnvelope(envelope *sentry.Envelope) {
 	}
 
 	atomic.AddInt64(&w.transport.errorCount, 1)
-	sentry.DebugLogger.Printf("Failed to send envelope after %d attempts", maxRetries+1)
+	debugLogger.Printf("Failed to send envelope after %d attempts", maxRetries+1)
 }
 
-func (w *Worker) sendEnvelopeHTTP(envelope *sentry.Envelope) bool {
+func (w *Worker) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
 	// Check rate limiting before processing
 	category := categoryFromEnvelope(envelope)
 	if w.transport.isRateLimited(category) {
@@ -576,13 +670,13 @@ func (w *Worker) sendEnvelopeHTTP(envelope *sentry.Envelope) bool {
 
 	request, err := getSentryRequestFromEnvelope(ctx, w.transport.dsn, envelope)
 	if err != nil {
-		sentry.DebugLogger.Printf("Failed to create request from envelope: %v", err)
+		debugLogger.Printf("Failed to create request from envelope: %v", err)
 		return false
 	}
 
 	response, err := w.transport.client.Do(request)
 	if err != nil {
-		sentry.DebugLogger.Printf("HTTP request failed: %v", err)
+		debugLogger.Printf("HTTP request failed: %v", err)
 		return false
 	}
 	defer response.Body.Close()
@@ -605,17 +699,17 @@ func (w *Worker) handleResponse(response *http.Response) bool {
 
 	if response.StatusCode >= 400 && response.StatusCode < 500 {
 		if body, err := io.ReadAll(io.LimitReader(response.Body, maxDrainResponseBytes)); err == nil {
-			sentry.DebugLogger.Printf("Client error %d: %s", response.StatusCode, string(body))
+			debugLogger.Printf("Client error %d: %s", response.StatusCode, string(body))
 		}
 		return false
 	}
 
 	if response.StatusCode >= 500 {
-		sentry.DebugLogger.Printf("Server error %d - will retry", response.StatusCode)
+		debugLogger.Printf("Server error %d - will retry", response.StatusCode)
 		return false
 	}
 
-	sentry.DebugLogger.Printf("Unexpected status code %d", response.StatusCode)
+	debugLogger.Printf("Unexpected status code %d", response.StatusCode)
 	return false
 }
 
@@ -624,7 +718,43 @@ func (t *AsyncTransport) isRateLimited(category ratelimit.Category) bool {
 	defer t.mu.RUnlock()
 	limited := t.limits.IsRateLimited(category)
 	if limited {
-		sentry.DebugLogger.Printf("Rate limited for category %q until %v", category, t.limits.Deadline(category))
+		debugLogger.Printf("Rate limited for category %q until %v", category, t.limits.Deadline(category))
 	}
 	return limited
+}
+
+// NewAsyncTransportWithTelemetryConfig creates a new AsyncTransport with TelemetryTransportConfig
+func NewAsyncTransportWithTelemetryConfig(config TelemetryTransportConfig) (*AsyncTransport, error) {
+	// Set defaults from config
+	transportConfig := TransportConfig{
+		WorkerCount:    config.WorkerCount,
+		QueueSize:      config.QueueSize,
+		RequestTimeout: config.RequestTimeout,
+		MaxRetries:     config.MaxRetries,
+		RetryBackoff:   config.RetryBackoff,
+	}
+
+	// Apply defaults if not set
+	if transportConfig.WorkerCount <= 0 {
+		transportConfig.WorkerCount = defaultWorkerCount
+	}
+	if transportConfig.QueueSize <= 0 {
+		transportConfig.QueueSize = defaultQueueSize
+	}
+	if transportConfig.RequestTimeout <= 0 {
+		transportConfig.RequestTimeout = defaultRequestTimeout
+	}
+	if transportConfig.MaxRetries < 0 {
+		transportConfig.MaxRetries = defaultMaxRetries
+	}
+	if transportConfig.RetryBackoff <= 0 {
+		transportConfig.RetryBackoff = defaultRetryBackoff
+	}
+
+	transport := NewAsyncTransportWithConfig(transportConfig)
+	if err := transport.configureWithTelemetryConfig(config); err != nil {
+		return nil, err
+	}
+
+	return transport, nil
 }

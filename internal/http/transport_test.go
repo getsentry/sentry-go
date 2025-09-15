@@ -8,14 +8,26 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
+
+// Helper function to create a test transport config
+func testTelemetryConfig(dsn string) TelemetryTransportConfig {
+	return TelemetryTransportConfig{
+		DSN:            dsn,
+		WorkerCount:    1,
+		QueueSize:      100,
+		RequestTimeout: time.Second,
+		MaxRetries:     1,
+		RetryBackoff:   time.Millisecond,
+	}
+}
 
 func TestCategoryFromEnvelope(t *testing.T) {
 	tests := []struct {
 		name     string
-		envelope *sentry.Envelope
+		envelope *protocol.Envelope
 		expected ratelimit.Category
 	}{
 		{
@@ -25,20 +37,20 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "empty envelope",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items:  []*sentry.EnvelopeItem{},
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items:  []*protocol.EnvelopeItem{},
 			},
 			expected: ratelimit.CategoryAll,
 		},
 		{
 			name: "error event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeEvent,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeEvent,
 						},
 					},
 				},
@@ -47,12 +59,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "transaction event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeTransaction,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeTransaction,
 						},
 					},
 				},
@@ -61,12 +73,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "span event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeSpan,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeSpan,
 						},
 					},
 				},
@@ -75,12 +87,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "session event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeSession,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeSession,
 						},
 					},
 				},
@@ -89,12 +101,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "profile event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeProfile,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeProfile,
 						},
 					},
 				},
@@ -103,12 +115,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "replay event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeReplay,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeReplay,
 						},
 					},
 				},
@@ -117,12 +129,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "metrics event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeMetrics,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeMetrics,
 						},
 					},
 				},
@@ -131,12 +143,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "statsd event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeStatsd,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeStatsd,
 						},
 					},
 				},
@@ -145,12 +157,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "check-in event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeCheckIn,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeCheckIn,
 						},
 					},
 				},
@@ -159,12 +171,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "log event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeLog,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeLog,
 						},
 					},
 				},
@@ -173,12 +185,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "attachment only (skipped)",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeAttachment,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeAttachment,
 						},
 					},
 				},
@@ -187,17 +199,17 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "attachment with error event",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeAttachment,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeAttachment,
 						},
 					},
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemTypeEvent,
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeEvent,
 						},
 					},
 				},
@@ -206,12 +218,12 @@ func TestCategoryFromEnvelope(t *testing.T) {
 		},
 		{
 			name: "unknown item type",
-			envelope: &sentry.Envelope{
-				Header: &sentry.EnvelopeHeader{},
-				Items: []*sentry.EnvelopeItem{
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
 					{
-						Header: &sentry.EnvelopeItemHeader{
-							Type: sentry.EnvelopeItemType("unknown"),
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemType("unknown"),
 						},
 					},
 				},
@@ -234,9 +246,9 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("unconfigured transport", func(t *testing.T) {
 		transport := NewAsyncTransport()
 
-		envelope := &sentry.Envelope{
-			Header: &sentry.EnvelopeHeader{},
-			Items:  []*sentry.EnvelopeItem{},
+		envelope := &protocol.Envelope{
+			Header: &protocol.EnvelopeHeader{},
+			Items:  []*protocol.EnvelopeItem{},
 		}
 
 		err := transport.SendEnvelope(envelope)
@@ -250,14 +262,12 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 
 	t.Run("closed transport", func(t *testing.T) {
 		transport := NewAsyncTransport()
-		transport.Configure(sentry.ClientOptions{
-			Dsn: "https://key@sentry.io/123",
-		})
+		transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
 		transport.Close()
 
-		envelope := &sentry.Envelope{
-			Header: &sentry.EnvelopeHeader{},
-			Items:  []*sentry.EnvelopeItem{},
+		envelope := &protocol.Envelope{
+			Header: &protocol.EnvelopeHeader{},
+			Items:  []*protocol.EnvelopeItem{},
 		}
 
 		err := transport.SendEnvelope(envelope)
@@ -276,23 +286,21 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			RetryBackoff:   time.Millisecond,
 		})
 
-		transport.Configure(sentry.ClientOptions{
-			Dsn: "https://key@sentry.io/123",
-		})
+		transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
 		defer transport.Close()
 
-		envelope := &sentry.Envelope{
-			Header: &sentry.EnvelopeHeader{
-				EventID: sentry.EventID("test-event-id"),
-				Sdk: &sentry.SdkInfo{
-					Name:    "test",
-					Version: "1.0.0",
+		envelope := &protocol.Envelope{
+			Header: &protocol.EnvelopeHeader{
+				EventID: "test-event-id",
+				Sdk: map[string]interface{}{
+					"name":    "test",
+					"version": "1.0.0",
 				},
 			},
-			Items: []*sentry.EnvelopeItem{
+			Items: []*protocol.EnvelopeItem{
 				{
-					Header: &sentry.EnvelopeItemHeader{
-						Type: sentry.EnvelopeItemTypeEvent,
+					Header: &protocol.EnvelopeItemHeader{
+						Type: protocol.EnvelopeItemTypeEvent,
 					},
 					Payload: []byte(`{"message": "test"}`),
 				},
@@ -318,26 +326,24 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 
 	t.Run("rate limited envelope", func(t *testing.T) {
 		transport := NewAsyncTransport()
-		transport.Configure(sentry.ClientOptions{
-			Dsn: "https://key@sentry.io/123",
-		})
+		transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
 		defer transport.Close()
 
 		// Set up rate limiting
 		transport.limits[ratelimit.CategoryError] = ratelimit.Deadline(time.Now().Add(time.Hour))
 
-		envelope := &sentry.Envelope{
-			Header: &sentry.EnvelopeHeader{
-				EventID: sentry.EventID("test-event-id"),
-				Sdk: &sentry.SdkInfo{
-					Name:    "test",
-					Version: "1.0.0",
+		envelope := &protocol.Envelope{
+			Header: &protocol.EnvelopeHeader{
+				EventID: "test-event-id",
+				Sdk: map[string]interface{}{
+					"name":    "test",
+					"version": "1.0.0",
 				},
 			},
-			Items: []*sentry.EnvelopeItem{
+			Items: []*protocol.EnvelopeItem{
 				{
-					Header: &sentry.EnvelopeItemHeader{
-						Type: sentry.EnvelopeItemTypeEvent,
+					Header: &protocol.EnvelopeItemHeader{
+						Type: protocol.EnvelopeItemTypeEvent,
 					},
 					Payload: []byte(`{"message": "test"}`),
 				},
@@ -371,23 +377,21 @@ func TestAsyncTransport_Workers(t *testing.T) {
 		RetryBackoff:   time.Millisecond,
 	})
 
-	transport.Configure(sentry.ClientOptions{
-		Dsn: "http://key@" + server.URL[7:] + "/123", // Use http like test server
-	})
+	transport.Configure(testTelemetryConfig("http://key@" + server.URL[7:] + "/123"))
 	defer transport.Close()
 
-	envelope := &sentry.Envelope{
-		Header: &sentry.EnvelopeHeader{
-			EventID: sentry.EventID("test-event-id"),
-			Sdk: &sentry.SdkInfo{
-				Name:    "test",
-				Version: "1.0.0",
+	envelope := &protocol.Envelope{
+		Header: &protocol.EnvelopeHeader{
+			EventID: "test-event-id",
+			Sdk: map[string]interface{}{
+				"name":    "test",
+				"version": "1.0.0",
 			},
 		},
-		Items: []*sentry.EnvelopeItem{
+		Items: []*protocol.EnvelopeItem{
 			{
-				Header: &sentry.EnvelopeItemHeader{
-					Type: sentry.EnvelopeItemTypeEvent,
+				Header: &protocol.EnvelopeItemHeader{
+					Type: protocol.EnvelopeItemTypeEvent,
 				},
 				Payload: []byte(`{"message": "test"}`),
 			},
@@ -434,23 +438,23 @@ func TestAsyncTransport_Flush(t *testing.T) {
 	defer server.Close()
 
 	transport := NewAsyncTransport()
-	transport.Configure(sentry.ClientOptions{
-		Dsn: "http://key@" + server.URL[7:] + "/123",
+	transport.Configure(map[string]interface{}{
+		"dsn": "http://key@" + server.URL[7:] + "/123",
 	})
 	defer transport.Close()
 
-	envelope := &sentry.Envelope{
-		Header: &sentry.EnvelopeHeader{
-			EventID: sentry.EventID("test-event-id"),
-			Sdk: &sentry.SdkInfo{
-				Name:    "test",
-				Version: "1.0.0",
+	envelope := &protocol.Envelope{
+		Header: &protocol.EnvelopeHeader{
+			EventID: "test-event-id",
+			Sdk: map[string]interface{}{
+				"name":    "test",
+				"version": "1.0.0",
 			},
 		},
-		Items: []*sentry.EnvelopeItem{
+		Items: []*protocol.EnvelopeItem{
 			{
-				Header: &sentry.EnvelopeItemHeader{
-					Type: sentry.EnvelopeItemTypeEvent,
+				Header: &protocol.EnvelopeItemHeader{
+					Type: protocol.EnvelopeItemTypeEvent,
 				},
 				Payload: []byte(`{"message": "test"}`),
 			},
@@ -495,23 +499,21 @@ func TestAsyncTransport_ErrorHandling(t *testing.T) {
 		RetryBackoff:   time.Millisecond,
 	})
 
-	transport.Configure(sentry.ClientOptions{
-		Dsn: "http://key@" + server.URL[7:] + "/123",
-	})
+	transport.Configure(testTelemetryConfig("http://key@" + server.URL[7:] + "/123"))
 	defer transport.Close()
 
-	envelope := &sentry.Envelope{
-		Header: &sentry.EnvelopeHeader{
-			EventID: sentry.EventID("test-event-id"),
-			Sdk: &sentry.SdkInfo{
-				Name:    "test",
-				Version: "1.0.0",
+	envelope := &protocol.Envelope{
+		Header: &protocol.EnvelopeHeader{
+			EventID: "test-event-id",
+			Sdk: map[string]interface{}{
+				"name":    "test",
+				"version": "1.0.0",
 			},
 		},
-		Items: []*sentry.EnvelopeItem{
+		Items: []*protocol.EnvelopeItem{
 			{
-				Header: &sentry.EnvelopeItemHeader{
-					Type: sentry.EnvelopeItemTypeEvent,
+				Header: &protocol.EnvelopeItemHeader{
+					Type: protocol.EnvelopeItemTypeEvent,
 				},
 				Payload: []byte(`{"message": "test"}`),
 			},
@@ -535,9 +537,9 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("unconfigured transport", func(t *testing.T) {
 		transport := NewSyncTransport()
 
-		envelope := &sentry.Envelope{
-			Header: &sentry.EnvelopeHeader{},
-			Items:  []*sentry.EnvelopeItem{},
+		envelope := &protocol.Envelope{
+			Header: &protocol.EnvelopeHeader{},
+			Items:  []*protocol.EnvelopeItem{},
 		}
 
 		err := transport.SendEnvelope(envelope)
@@ -553,22 +555,22 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 		defer server.Close()
 
 		transport := NewSyncTransport()
-		transport.Configure(sentry.ClientOptions{
-			Dsn: "http://key@" + server.URL[7:] + "/123",
+		transport.Configure(map[string]interface{}{
+			"dsn": "http://key@" + server.URL[7:] + "/123",
 		})
 
-		envelope := &sentry.Envelope{
-			Header: &sentry.EnvelopeHeader{
-				EventID: sentry.EventID("test-event-id"),
-				Sdk: &sentry.SdkInfo{
-					Name:    "test",
-					Version: "1.0.0",
+		envelope := &protocol.Envelope{
+			Header: &protocol.EnvelopeHeader{
+				EventID: "test-event-id",
+				Sdk: map[string]interface{}{
+					"name":    "test",
+					"version": "1.0.0",
 				},
 			},
-			Items: []*sentry.EnvelopeItem{
+			Items: []*protocol.EnvelopeItem{
 				{
-					Header: &sentry.EnvelopeItemHeader{
-						Type: sentry.EnvelopeItemTypeEvent,
+					Header: &protocol.EnvelopeItemHeader{
+						Type: protocol.EnvelopeItemTypeEvent,
 					},
 					Payload: []byte(`{"message": "test"}`),
 				},
@@ -583,25 +585,23 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 
 	t.Run("rate limited envelope", func(t *testing.T) {
 		transport := NewSyncTransport()
-		transport.Configure(sentry.ClientOptions{
-			Dsn: "https://key@sentry.io/123",
-		})
+		transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
 
 		// Set up rate limiting
 		transport.limits[ratelimit.CategoryError] = ratelimit.Deadline(time.Now().Add(time.Hour))
 
-		envelope := &sentry.Envelope{
-			Header: &sentry.EnvelopeHeader{
-				EventID: sentry.EventID("test-event-id"),
-				Sdk: &sentry.SdkInfo{
-					Name:    "test",
-					Version: "1.0.0",
+		envelope := &protocol.Envelope{
+			Header: &protocol.EnvelopeHeader{
+				EventID: "test-event-id",
+				Sdk: map[string]interface{}{
+					"name":    "test",
+					"version": "1.0.0",
 				},
 			},
-			Items: []*sentry.EnvelopeItem{
+			Items: []*protocol.EnvelopeItem{
 				{
-					Header: &sentry.EnvelopeItemHeader{
-						Type: sentry.EnvelopeItemTypeEvent,
+					Header: &protocol.EnvelopeItemHeader{
+						Type: protocol.EnvelopeItemTypeEvent,
 					},
 					Payload: []byte(`{"message": "test"}`),
 				},

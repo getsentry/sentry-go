@@ -1,4 +1,4 @@
-package sentry
+package telemetry
 
 import (
 	"context"
@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/telemetry"
 )
 
-// mockTelemetryTransport is a test implementation of TelemetryTransport
+// mockTelemetryTransport is a test implementation of protocol.TelemetryTransport
 type mockTelemetryTransport struct {
-	sentEnvelopes    []*Envelope
+	sentEnvelopes    []*protocol.Envelope
 	rateLimited      map[string]bool
 	sendError        error
 	mu               sync.Mutex
@@ -21,7 +21,7 @@ type mockTelemetryTransport struct {
 	rateLimitedCalls int64
 }
 
-func (m *mockTelemetryTransport) SendEnvelope(envelope *Envelope) error {
+func (m *mockTelemetryTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	atomic.AddInt64(&m.sendCount, 1)
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -53,18 +53,19 @@ func (m *mockTelemetryTransport) FlushWithContext(ctx context.Context) bool {
 	return true
 }
 
-func (m *mockTelemetryTransport) Configure(options ClientOptions) {
+func (m *mockTelemetryTransport) Configure(options interface{}) error {
 	// No-op for mock
+	return nil
 }
 
 func (m *mockTelemetryTransport) Close() {
 	// No-op for mock
 }
 
-func (m *mockTelemetryTransport) GetSentEnvelopes() []*Envelope {
+func (m *mockTelemetryTransport) GetSentEnvelopes() []*protocol.Envelope {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	result := make([]*Envelope, len(m.sentEnvelopes))
+	result := make([]*protocol.Envelope, len(m.sentEnvelopes))
 	copy(result, m.sentEnvelopes)
 	return result
 }
@@ -95,27 +96,27 @@ func (m *mockTelemetryTransport) Reset() {
 	atomic.StoreInt64(&m.rateLimitedCalls, 0)
 }
 
-// testTelemetryItem is a test implementation of EnvelopeConvertible for scheduler tests
+// testTelemetryItem is a test implementation of protocol.EnvelopeConvertible for scheduler tests
 type testTelemetryItem struct {
 	id       int
 	data     string
-	envelope *Envelope
+	envelope *protocol.Envelope
 }
 
-func (t *testTelemetryItem) ToEnvelope(dsn *Dsn) (*Envelope, error) {
+func (t *testTelemetryItem) ToEnvelope(dsn *protocol.Dsn) (*protocol.Envelope, error) {
 	if t.envelope != nil {
 		return t.envelope, nil
 	}
 
 	// Create a simple test envelope
-	envelope := &Envelope{
-		Header: &EnvelopeHeader{
-			EventID: EventID(t.data),
+	envelope := &protocol.Envelope{
+		Header: &protocol.EnvelopeHeader{
+			EventID: t.data,
 		},
-		Items: []*EnvelopeItem{
+		Items: []*protocol.EnvelopeItem{
 			{
-				Header: &EnvelopeItemHeader{
-					Type: EnvelopeItemTypeEvent,
+				Header: &protocol.EnvelopeItemHeader{
+					Type: protocol.EnvelopeItemTypeEvent,
 				},
 				Payload: []byte(`{"message": "` + t.data + `"}`),
 			},
@@ -126,11 +127,11 @@ func (t *testTelemetryItem) ToEnvelope(dsn *Dsn) (*Envelope, error) {
 
 func TestNewTelemetryScheduler(t *testing.T) {
 	transport := &mockTelemetryTransport{}
-	dsn := &Dsn{}
+	dsn := &protocol.Dsn{}
 
-	buffers := map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible]{
-		telemetry.DataCategoryError: telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryError, 10, telemetry.OverflowPolicyDropOldest),
-		telemetry.DataCategoryLog:   telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryLog, 10, telemetry.OverflowPolicyDropOldest),
+	buffers := map[DataCategory]*Buffer[protocol.EnvelopeConvertible]{
+		DataCategoryError: NewBuffer[protocol.EnvelopeConvertible](DataCategoryError, 10, OverflowPolicyDropOldest),
+		DataCategoryLog:   NewBuffer[protocol.EnvelopeConvertible](DataCategoryLog, 10, OverflowPolicyDropOldest),
 	}
 
 	scheduler := NewScheduler(buffers, transport, dsn)
@@ -156,9 +157,9 @@ func TestNewTelemetryScheduler(t *testing.T) {
 	criticalCount := 0
 	mediumCount := 0
 	for _, priority := range scheduler.currentCycle {
-		if priority == telemetry.PriorityCritical {
+		if priority == PriorityCritical {
 			criticalCount++
-		} else if priority == telemetry.PriorityMedium {
+		} else if priority == PriorityMedium {
 			mediumCount++
 		}
 	}
@@ -170,11 +171,11 @@ func TestNewTelemetryScheduler(t *testing.T) {
 
 func TestTelemetrySchedulerBasicOperation(t *testing.T) {
 	transport := &mockTelemetryTransport{}
-	dsn := &Dsn{}
+	dsn := &protocol.Dsn{}
 
-	buffer := telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryError, 10, telemetry.OverflowPolicyDropOldest)
-	buffers := map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible]{
-		telemetry.DataCategoryError: buffer,
+	buffer := NewBuffer[protocol.EnvelopeConvertible](DataCategoryError, 10, OverflowPolicyDropOldest)
+	buffers := map[DataCategory]*Buffer[protocol.EnvelopeConvertible]{
+		DataCategoryError: buffer,
 	}
 
 	scheduler := NewScheduler(buffers, transport, dsn)
@@ -200,11 +201,11 @@ func TestTelemetrySchedulerBasicOperation(t *testing.T) {
 
 func TestTelemetrySchedulerFlush(t *testing.T) {
 	transport := &mockTelemetryTransport{}
-	dsn := &Dsn{}
+	dsn := &protocol.Dsn{}
 
-	buffer := telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryError, 10, telemetry.OverflowPolicyDropOldest)
-	buffers := map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible]{
-		telemetry.DataCategoryError: buffer,
+	buffer := NewBuffer[protocol.EnvelopeConvertible](DataCategoryError, 10, OverflowPolicyDropOldest)
+	buffers := map[DataCategory]*Buffer[protocol.EnvelopeConvertible]{
+		DataCategoryError: buffer,
 	}
 
 	scheduler := NewScheduler(buffers, transport, dsn)
@@ -229,11 +230,11 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 
 func TestTelemetrySchedulerRateLimiting(t *testing.T) {
 	transport := &mockTelemetryTransport{}
-	dsn := &Dsn{}
+	dsn := &protocol.Dsn{}
 
-	buffer := telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryError, 10, telemetry.OverflowPolicyDropOldest)
-	buffers := map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible]{
-		telemetry.DataCategoryError: buffer,
+	buffer := NewBuffer[protocol.EnvelopeConvertible](DataCategoryError, 10, OverflowPolicyDropOldest)
+	buffers := map[DataCategory]*Buffer[protocol.EnvelopeConvertible]{
+		DataCategoryError: buffer,
 	}
 
 	scheduler := NewScheduler(buffers, transport, dsn)
@@ -265,17 +266,17 @@ func TestTelemetrySchedulerRateLimiting(t *testing.T) {
 
 func TestTelemetrySchedulerPriorityOrdering(t *testing.T) {
 	transport := &mockTelemetryTransport{}
-	dsn := &Dsn{}
+	dsn := &protocol.Dsn{}
 
 	// Create buffers for different priority categories
-	errorBuffer := telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryError, 10, telemetry.OverflowPolicyDropOldest)   // Critical
-	logBuffer := telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryLog, 10, telemetry.OverflowPolicyDropOldest)       // Medium
-	replayBuffer := telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryReplay, 10, telemetry.OverflowPolicyDropOldest) // Lowest
+	errorBuffer := NewBuffer[protocol.EnvelopeConvertible](DataCategoryError, 10, OverflowPolicyDropOldest)   // Critical
+	logBuffer := NewBuffer[protocol.EnvelopeConvertible](DataCategoryLog, 10, OverflowPolicyDropOldest)       // Medium
+	replayBuffer := NewBuffer[protocol.EnvelopeConvertible](DataCategoryReplay, 10, OverflowPolicyDropOldest) // Lowest
 
-	buffers := map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible]{
-		telemetry.DataCategoryError:  errorBuffer,
-		telemetry.DataCategoryLog:    logBuffer,
-		telemetry.DataCategoryReplay: replayBuffer,
+	buffers := map[DataCategory]*Buffer[protocol.EnvelopeConvertible]{
+		DataCategoryError:  errorBuffer,
+		DataCategoryLog:    logBuffer,
+		DataCategoryReplay: replayBuffer,
 	}
 
 	scheduler := NewScheduler(buffers, transport, dsn)
@@ -308,11 +309,11 @@ func TestTelemetrySchedulerPriorityOrdering(t *testing.T) {
 
 func TestTelemetrySchedulerStartStop(t *testing.T) {
 	transport := &mockTelemetryTransport{}
-	dsn := &Dsn{}
+	dsn := &protocol.Dsn{}
 
-	buffer := telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryError, 10, telemetry.OverflowPolicyDropOldest)
-	buffers := map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible]{
-		telemetry.DataCategoryError: buffer,
+	buffer := NewBuffer[protocol.EnvelopeConvertible](DataCategoryError, 10, OverflowPolicyDropOldest)
+	buffers := map[DataCategory]*Buffer[protocol.EnvelopeConvertible]{
+		DataCategoryError: buffer,
 	}
 
 	scheduler := NewScheduler(buffers, transport, dsn)
@@ -337,12 +338,12 @@ func TestTelemetrySchedulerStartStop(t *testing.T) {
 
 func TestTelemetrySchedulerEmptyBuffers(t *testing.T) {
 	transport := &mockTelemetryTransport{}
-	dsn := &Dsn{}
+	dsn := &protocol.Dsn{}
 
 	// Empty buffers
-	buffers := map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible]{
-		telemetry.DataCategoryError: telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryError, 10, telemetry.OverflowPolicyDropOldest),
-		telemetry.DataCategoryLog:   telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryLog, 10, telemetry.OverflowPolicyDropOldest),
+	buffers := map[DataCategory]*Buffer[protocol.EnvelopeConvertible]{
+		DataCategoryError: NewBuffer[protocol.EnvelopeConvertible](DataCategoryError, 10, OverflowPolicyDropOldest),
+		DataCategoryLog:   NewBuffer[protocol.EnvelopeConvertible](DataCategoryLog, 10, OverflowPolicyDropOldest),
 	}
 
 	scheduler := NewScheduler(buffers, transport, dsn)
@@ -362,17 +363,17 @@ func TestTelemetrySchedulerEmptyBuffers(t *testing.T) {
 
 func TestTelemetrySchedulerMultipleCategories(t *testing.T) {
 	transport := &mockTelemetryTransport{}
-	dsn := &Dsn{}
+	dsn := &protocol.Dsn{}
 
-	categories := []telemetry.DataCategory{
-		telemetry.DataCategoryError, telemetry.DataCategoryTransaction, telemetry.DataCategorySession,
-		telemetry.DataCategoryCheckIn, telemetry.DataCategoryLog, telemetry.DataCategorySpan,
-		telemetry.DataCategoryProfile, telemetry.DataCategoryReplay, telemetry.DataCategoryFeedback,
+	categories := []DataCategory{
+		DataCategoryError, DataCategoryTransaction, DataCategorySession,
+		DataCategoryCheckIn, DataCategoryLog, DataCategorySpan,
+		DataCategoryProfile, DataCategoryReplay, DataCategoryFeedback,
 	}
 
-	buffers := make(map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible])
+	buffers := make(map[DataCategory]*Buffer[protocol.EnvelopeConvertible])
 	for _, category := range categories {
-		buffers[category] = telemetry.NewBuffer[EnvelopeConvertible](category, 10, telemetry.OverflowPolicyDropOldest)
+		buffers[category] = NewBuffer[protocol.EnvelopeConvertible](category, 10, OverflowPolicyDropOldest)
 	}
 
 	scheduler := NewScheduler(buffers, transport, dsn)
@@ -394,11 +395,11 @@ func TestTelemetrySchedulerMultipleCategories(t *testing.T) {
 
 func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	transport := &mockTelemetryTransport{}
-	dsn := &Dsn{}
+	dsn := &protocol.Dsn{}
 
-	buffer := telemetry.NewBuffer[EnvelopeConvertible](telemetry.DataCategoryError, 10, telemetry.OverflowPolicyDropOldest)
-	buffers := map[telemetry.DataCategory]*telemetry.Buffer[EnvelopeConvertible]{
-		telemetry.DataCategoryError: buffer,
+	buffer := NewBuffer[protocol.EnvelopeConvertible](DataCategoryError, 10, OverflowPolicyDropOldest)
+	buffers := map[DataCategory]*Buffer[protocol.EnvelopeConvertible]{
+		DataCategoryError: buffer,
 	}
 
 	scheduler := NewScheduler(buffers, transport, dsn)
