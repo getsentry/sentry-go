@@ -487,7 +487,11 @@ started:
 	}
 
 fail:
-	debuglog.Println("Buffer flushing was canceled or timed out.")
+	if itemCount := len(b.items); itemCount > 0 {
+		debuglog.Printf("Buffer flushing was canceled or timed out. %d items were not flushed.", itemCount)
+	} else {
+		debuglog.Println("Buffer flushing was canceled or timed out. No items were pending.")
+	}
 	return false
 }
 
@@ -745,6 +749,102 @@ func (noopTransport) FlushWithContext(context.Context) bool {
 }
 
 func (noopTransport) Close() {}
+
+// SpotlightTransport decorates Transport to also send events to Spotlight.
+type SpotlightTransport struct {
+	underlying   Transport
+	client       *http.Client
+	spotlightURL string
+}
+
+func NewSpotlightTransport(underlying Transport) *SpotlightTransport {
+	return &SpotlightTransport{
+		underlying: underlying,
+		client: &http.Client{
+			Timeout: 5 * time.Second,
+		},
+		spotlightURL: "http://localhost:8969/stream",
+	}
+}
+
+func (st *SpotlightTransport) Configure(options ClientOptions) {
+	st.underlying.Configure(options)
+
+	if options.SpotlightURL != "" {
+		st.spotlightURL = options.SpotlightURL
+	}
+}
+
+func (st *SpotlightTransport) SendEvent(event *Event) {
+	// Send to the underlying transport (Sentry) unless it's noopTransport
+	if _, isNoop := st.underlying.(noopTransport); !isNoop {
+		st.underlying.SendEvent(event)
+	}
+
+	// Always send to Spotlight
+	st.sendToSpotlight(event)
+}
+
+func (st *SpotlightTransport) sendToSpotlight(event *Event) {
+	dsn, _ := NewDsn("https://placeholder@localhost/1")
+
+	eventBody := getRequestBodyFromEvent(event)
+	if eventBody == nil {
+		DebugLogger.Println("Failed to serialize event for Spotlight")
+		return
+	}
+
+	envelope, err := envelopeFromBody(event, dsn, time.Now(), eventBody)
+	if err != nil {
+		DebugLogger.Printf("Failed to create Spotlight envelope: %v", err)
+		return
+	}
+
+	req, err := http.NewRequest("POST", st.spotlightURL, envelope)
+	if err != nil {
+		DebugLogger.Printf("Failed to create Spotlight request: %v", err)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/x-sentry-envelope")
+	req.Header.Set("User-Agent", "sentry-go/"+SDKVersion)
+
+	DebugLogger.Printf("Sending event to Spotlight at %s", st.spotlightURL)
+
+	resp, err := st.client.Do(req)
+	if err != nil {
+		DebugLogger.Printf("Failed to send event to Spotlight: %v", err)
+		return
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			DebugLogger.Printf("Failed to close Spotlight response body: %v", closeErr)
+		}
+	}()
+
+	DebugLogger.Printf("Spotlight response status: %d", resp.StatusCode)
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		DebugLogger.Printf("Spotlight returned non-2xx status: %d", resp.StatusCode)
+		if body, err := io.ReadAll(resp.Body); err == nil && len(body) > 0 {
+			DebugLogger.Printf("Spotlight error response: %s", string(body))
+		}
+	} else {
+		DebugLogger.Printf("Successfully sent event to Spotlight")
+	}
+}
+
+func (st *SpotlightTransport) Flush(timeout time.Duration) bool {
+	return st.underlying.Flush(timeout)
+}
+
+func (st *SpotlightTransport) FlushWithContext(ctx context.Context) bool {
+	return st.underlying.FlushWithContext(ctx)
+}
+
+func (st *SpotlightTransport) Close() {
+	st.underlying.Close()
+}
 
 // ================================
 // Internal Transport Adapters
