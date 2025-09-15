@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -516,6 +517,29 @@ func TestStructSnapshots(t *testing.T) {
 
 			if diff := cmp.Diff(want, got); diff != "" {
 				t.Errorf("struct %s mismatch (-want +got):\n%s", test.testName, diff)
+			}
+		})
+	}
+}
+
+func TestEvent_ToCategory(t *testing.T) {
+	cases := []struct {
+		name      string
+		eventType string
+		want      ratelimit.Category
+	}{
+		{"error", "", ratelimit.CategoryError},
+		{"transaction", transactionType, ratelimit.CategoryTransaction},
+		{"log", logEvent.Type, ratelimit.CategoryLog},
+		{"checkin", checkInType, ratelimit.CategoryMonitor},
+		{"unknown", "foobar", ratelimit.CategoryUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := &Event{Type: tc.eventType}
+			got := e.toCategory()
+			if got != tc.want {
+				t.Errorf("Type %q: got %v, want %v", tc.eventType, got, tc.want)
 			}
 		})
 	}
