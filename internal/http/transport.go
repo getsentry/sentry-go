@@ -26,8 +26,8 @@ const (
 	apiVersion = 7
 
 	// Default configuration for Async Transport
-	defaultWorkerCount    = 3                // Balanced concurrency
-	defaultQueueSize      = 100              // Transport queue capacity
+	defaultWorkerCount    = 5                // Increased workers for scalability test
+	defaultQueueSize      = 2000             // Transport queue capacity (increased for high throughput)
 	defaultRequestTimeout = 30 * time.Second // HTTP request timeout
 	defaultMaxRetries     = 3                // Maximum retry attempts
 	defaultRetryBackoff   = time.Second      // Initial retry backoff

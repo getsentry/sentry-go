@@ -15,6 +15,9 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debug"
+	internalHttp "github.com/getsentry/sentry-go/internal/http"
+	"github.com/getsentry/sentry-go/internal/protocol"
+	"github.com/getsentry/sentry-go/internal/telemetry"
 )
 
 // The identifier of the SDK.
@@ -228,6 +231,9 @@ type ClientOptions struct {
 	Tags map[string]string
 	// EnableLogs controls when logs should be emitted.
 	EnableLogs bool
+	// EnableTelemetryBuffers enables the new AsyncTransport with telemetry scheduling
+	// and buffering for improved performance (uses 1 worker by default).
+	EnableTelemetryBuffers bool
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -242,8 +248,12 @@ type Client struct {
 	sdkVersion      string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
-	Transport   Transport
-	batchLogger *BatchLogger
+	Transport          Transport
+	batchLogger        *BatchLogger
+	telemetryBuffers   map[telemetry.DataCategory]*telemetry.Buffer[protocol.EnvelopeConvertible]
+	telemetryTransport protocol.TelemetryTransport
+	telemetryScheduler *telemetry.Scheduler
+	telemetryEnabled   bool
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -343,11 +353,16 @@ func NewClient(options ClientOptions) (*Client, error) {
 		sdkVersion:    SDKVersion,
 	}
 
-	if options.EnableLogs {
+	if options.EnableLogs && !options.EnableTelemetryBuffers {
 		client.batchLogger = NewBatchLogger(&client)
 		client.batchLogger.Start()
 	}
 
+	if options.EnableTelemetryBuffers {
+		client.setupTelemetryBuffers()
+		client.setupTelemetryTransport()
+		client.startTelemetryScheduler()
+	}
 	client.setupTransport()
 	client.setupIntegrations()
 
@@ -368,6 +383,152 @@ func (client *Client) setupTransport() {
 
 	transport.Configure(opts)
 	client.Transport = transport
+}
+
+func (client *Client) setupTelemetryTransport() {
+	if client.dsn == nil {
+		DebugLogger.Printf("Cannot setup telemetry transport: no DSN")
+		return
+	}
+
+	// Create telemetry transport config
+	config := internalHttp.TelemetryTransportConfig{
+		DSN:            client.dsn.String(),
+		WorkerCount:    1,   // Default for telemetry
+		QueueSize:      400, // Reduced to match standard transport memory usage
+		RequestTimeout: 30 * time.Second,
+		MaxRetries:     3,
+		RetryBackoff:   time.Second,
+		HTTPTransport:  client.options.HTTPTransport,
+		HTTPClient:     client.options.HTTPClient,
+		HTTPSProxy:     client.options.HTTPSProxy,
+		HTTPProxy:      client.options.HTTPProxy,
+		CaCerts:        client.options.CaCerts,
+		Debug:          client.options.Debug,
+	}
+
+	telemetryTransport, err := internalHttp.NewAsyncTransportWithTelemetryConfig(config)
+	if err != nil {
+		DebugLogger.Printf("Failed to create telemetry transport: %v", err)
+		return
+	}
+
+	client.telemetryTransport = telemetryTransport
+}
+
+func (client *Client) setupTelemetryBuffers() {
+	client.telemetryEnabled = true
+	client.telemetryBuffers = make(map[telemetry.DataCategory]*telemetry.Buffer[protocol.EnvelopeConvertible])
+
+	categories := []telemetry.DataCategory{
+		telemetry.DataCategoryError, telemetry.DataCategoryTransaction, telemetry.DataCategorySession,
+		telemetry.DataCategoryCheckIn, telemetry.DataCategoryLog, telemetry.DataCategorySpan,
+		telemetry.DataCategoryProfile, telemetry.DataCategoryReplay, telemetry.DataCategoryFeedback,
+	}
+
+	for _, category := range categories {
+		capacity := client.getBufferCapacity(category)
+		buffer := telemetry.NewBuffer[protocol.EnvelopeConvertible](category, capacity, telemetry.OverflowPolicyDropOldest)
+		client.telemetryBuffers[category] = buffer
+	}
+
+	DebugLogger.Printf("Created %d telemetry buffers", len(client.telemetryBuffers))
+}
+
+func (client *Client) getBufferCapacity(category telemetry.DataCategory) int {
+	// Reduced capacities to match standard transport memory usage (~200MB)
+	switch category {
+	case telemetry.DataCategoryError, telemetry.DataCategoryFeedback:
+		return 8000
+	case telemetry.DataCategoryLog, telemetry.DataCategorySpan:
+		return 3000
+	case telemetry.DataCategoryReplay:
+		return 100
+	default:
+		return 6000 // Reduced from 15000 (Transaction, Session, Profile, Checkin)
+	}
+}
+
+func (client *Client) startTelemetryScheduler() {
+	if client.dsn == nil {
+		DebugLogger.Printf("Cannot start telemetry scheduler: no DSN")
+		return
+	}
+
+	if len(client.telemetryBuffers) == 0 {
+		DebugLogger.Printf("No telemetry buffers available for scheduler")
+		return
+	}
+
+	if client.telemetryTransport == nil {
+		DebugLogger.Printf("No telemetry transport available, scheduler disabled")
+		return
+	}
+
+	// Set the debug logger for telemetry package
+	telemetry.SetDebugLogger(DebugLogger)
+
+	// Create the telemetry scheduler
+	scheduler := telemetry.NewScheduler(client.telemetryBuffers, client.telemetryTransport, client.dsn.Dsn)
+	client.telemetryScheduler = scheduler
+	client.telemetryScheduler.Start()
+	DebugLogger.Printf("Telemetry scheduler started")
+}
+
+func (client *Client) submitToTelemetryBuffer(event *Event) *EventID {
+	category := client.getEventCategory(event)
+
+	if client.isRateLimited(category) {
+		DebugLogger.Printf("Event dropped due to rate limiting: %s", category)
+		// TODO: Record client report for RATELIMIT_BACKOFF
+		return &event.EventID
+	}
+
+	buffer, exists := client.telemetryBuffers[category]
+	if !exists {
+		DebugLogger.Printf("No buffer for category %s, falling back to direct transport", category)
+		client.Transport.SendEvent(event)
+		return &event.EventID
+	}
+
+	if !buffer.Offer(event) {
+		DebugLogger.Printf("Event dropped due to buffer overflow: %s", category)
+		// TODO: Record client report for QUEUE_OVERFLOW
+	}
+
+	return &event.EventID
+}
+
+func (client *Client) getEventCategory(event *Event) telemetry.DataCategory {
+	switch event.Type {
+	case "transaction":
+		return telemetry.DataCategoryTransaction
+	case "check_in":
+		return telemetry.DataCategoryCheckIn
+	case "log":
+		return telemetry.DataCategoryLog
+	default:
+		return telemetry.DataCategoryError // Default for error events
+	}
+}
+
+// isRateLimited checks if the given category is currently rate limited.
+// This implements the early rate limiting check required by the telemetry buffer spec.
+func (client *Client) isRateLimited(category telemetry.DataCategory) bool {
+	// We need to check with the transport's rate limiter
+	// Different transport types expose rate limiting differently
+
+	// Try to get rate limit info from the transport
+	// Most transports that implement rate limiting will have this method
+	if rateLimitChecker, ok := client.Transport.(interface {
+		IsRateLimited(category string) bool
+	}); ok {
+		return rateLimitChecker.IsRateLimited(string(category))
+	}
+
+	// If the transport doesn't expose rate limiting info, assume not rate limited
+	// This maintains backward compatibility
+	return false
 }
 
 func (client *Client) setupIntegrations() {
@@ -515,6 +676,11 @@ func (client *Client) Flush(timeout time.Duration) bool {
 		defer cancel()
 		return client.FlushWithContext(ctx)
 	}
+
+	if client.options.EnableTelemetryBuffers && client.telemetryScheduler != nil {
+		client.telemetryScheduler.Flush()
+	}
+
 	return client.Transport.Flush(timeout)
 }
 
@@ -533,6 +699,11 @@ func (client *Client) FlushWithContext(ctx context.Context) bool {
 	if client.batchLogger != nil {
 		client.batchLogger.Flush(ctx.Done())
 	}
+
+	if client.options.EnableTelemetryBuffers && client.telemetryScheduler != nil {
+		client.telemetryScheduler.Flush()
+	}
+
 	return client.Transport.FlushWithContext(ctx)
 }
 
@@ -541,6 +712,10 @@ func (client *Client) FlushWithContext(ctx context.Context) bool {
 // Close should be called after Flush and before terminating the program
 // otherwise some events may be lost.
 func (client *Client) Close() {
+	if client.telemetryScheduler != nil {
+		client.telemetryScheduler.Stop(5 * time.Second)
+	}
+
 	client.Transport.Close()
 }
 
@@ -661,8 +836,10 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		}
 	}
 
+	if client.options.EnableTelemetryBuffers && client.telemetryBuffers != nil {
+		return client.submitToTelemetryBuffer(event)
+	}
 	client.Transport.SendEvent(event)
-
 	return &event.EventID
 }
 
@@ -754,6 +931,116 @@ func (client *Client) integrationAlreadyInstalled(name string) bool {
 		}
 	}
 	return false
+}
+
+// TelemetryBufferMetrics contains metrics for telemetry buffers
+type TelemetryBufferMetrics struct {
+	Enabled bool                                            `json:"enabled"`
+	Buffers map[telemetry.DataCategory]TelemetryBufferStats `json:"buffers"`
+}
+
+// TelemetryBufferStats contains statistics for a single telemetry buffer
+type TelemetryBufferStats struct {
+	Category           string  `json:"category"`
+	Priority           string  `json:"priority"`
+	Size               int     `json:"size"`
+	Capacity           int     `json:"capacity"`
+	OfferedCount       int64   `json:"offered_count"`
+	DroppedCount       int64   `json:"dropped_count"`
+	UtilizationPercent float64 `json:"utilization_percent"`
+}
+
+// GetTelemetryBufferMetrics returns current telemetry buffer statistics
+func (client *Client) GetTelemetryBufferMetrics() TelemetryBufferMetrics {
+	client.mu.RLock()
+	defer client.mu.RUnlock()
+
+	metrics := TelemetryBufferMetrics{
+		Enabled: client.telemetryEnabled,
+		Buffers: make(map[telemetry.DataCategory]TelemetryBufferStats),
+	}
+
+	if !client.telemetryEnabled || client.telemetryBuffers == nil {
+		return metrics
+	}
+
+	for category, buffer := range client.telemetryBuffers {
+		if buffer == nil {
+			continue
+		}
+
+		utilization := 0.0
+		if buffer.Capacity() > 0 {
+			utilization = float64(buffer.Size()) / float64(buffer.Capacity()) * 100.0
+		}
+
+		metrics.Buffers[category] = TelemetryBufferStats{
+			Category:           category.String(),
+			Priority:           buffer.Priority().String(),
+			Size:               buffer.Size(),
+			Capacity:           buffer.Capacity(),
+			OfferedCount:       buffer.OfferedCount(),
+			DroppedCount:       buffer.DroppedCount(),
+			UtilizationPercent: utilization,
+		}
+	}
+
+	return metrics
+}
+
+// TransportQueueMetrics contains metrics for the transport queue
+type TransportQueueMetrics struct {
+	Enabled            bool    `json:"enabled"`
+	OfferedEvents      int64   `json:"offered_events"`
+	DroppedEvents      int64   `json:"dropped_events"`
+	DropRatePercent    float64 `json:"drop_rate_percent"`
+	BufferSize         int     `json:"buffer_size"`
+	UtilizationPercent float64 `json:"utilization_percent"`
+}
+
+// GetTransportQueueMetrics returns current transport queue statistics
+func (client *Client) GetTransportQueueMetrics() TransportQueueMetrics {
+	client.mu.RLock()
+	defer client.mu.RUnlock()
+
+	metrics := TransportQueueMetrics{Enabled: false}
+
+	if client.Transport == nil {
+		return metrics
+	}
+
+	// Check if the transport is HTTPTransport and has metrics
+	if httpTransport, ok := client.Transport.(*HTTPTransport); ok {
+		metrics.Enabled = true
+		metrics.OfferedEvents = httpTransport.OfferedEventsCount()
+		metrics.DroppedEvents = httpTransport.DroppedEventsCount()
+		metrics.BufferSize = httpTransport.BufferSize
+		metrics.UtilizationPercent = httpTransport.BufferUtilization()
+
+		if metrics.OfferedEvents > 0 {
+			metrics.DropRatePercent = float64(metrics.DroppedEvents) / float64(metrics.OfferedEvents) * 100.0
+		}
+	}
+
+	return metrics
+}
+
+// GetCurrentTelemetryBufferMetrics returns telemetry buffer metrics from the current hub's client
+func GetCurrentTelemetryBufferMetrics() TelemetryBufferMetrics {
+	hub := CurrentHub()
+	if hub == nil || hub.Client() == nil {
+		return TelemetryBufferMetrics{Enabled: false, Buffers: make(map[telemetry.DataCategory]TelemetryBufferStats)}
+	}
+	return hub.Client().GetTelemetryBufferMetrics()
+}
+
+// GetCurrentTransportQueueMetrics returns transport queue metrics from the current hub's client
+func GetCurrentTransportQueueMetrics() TransportQueueMetrics {
+	hub := CurrentHub()
+	if hub == nil || hub.Client() == nil {
+		return TransportQueueMetrics{Enabled: false}
+	}
+	return hub.Client().GetTransportQueueMetrics()
 }
 
 // sample returns true with the given probability, which must be in the range

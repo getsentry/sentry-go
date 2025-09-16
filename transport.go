@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	defaultBufferSize = 1000
+	defaultBufferSize = 3000
 	defaultTimeout    = time.Second * 30
 )
 
