@@ -702,7 +702,7 @@ func TestIgnoreTransactions(t *testing.T) {
 func TestTraceIgnoreStatusCodes(t *testing.T) {
 	tests := map[string]struct {
 		ignoreStatusCodes []int
-		statusCode        int
+		statusCode        interface{}
 		expectDrop        bool
 	}{
 		"No ignored codes": {

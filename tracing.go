@@ -347,7 +347,7 @@ func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
 	}
 }
 
-// shouldIgnoreStatusCode checks if the transaction should be ignored based on HTTP status code
+// shouldIgnoreStatusCode checks if the transaction should be ignored based on HTTP status code.
 func (s *Span) shouldIgnoreStatusCode(hub *Hub) bool {
 	if !s.IsTransaction() {
 		return false
@@ -371,15 +371,8 @@ func (s *Span) shouldIgnoreStatusCode(hub *Hub) bool {
 		return false
 	}
 
-	var statusCode int
-	switch v := statusCodeData.(type) {
-	case int:
-		statusCode = v
-	case int64:
-		statusCode = int(v)
-	case float64:
-		statusCode = int(v)
-	default:
+	statusCode, ok := statusCodeData.(int)
+	if !ok {
 		return false
 	}
 
