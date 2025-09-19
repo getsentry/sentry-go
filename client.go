@@ -228,6 +228,13 @@ type ClientOptions struct {
 	Tags map[string]string
 	// EnableLogs controls when logs should be emitted.
 	EnableLogs bool
+	// TraceIgnoreStatusCodes is a list of HTTP status codes that should not be traced.
+	// When an HTTP request results in one of these status codes, the transaction will
+	// not be sent to Sentry.
+	//
+	// This is useful for ignoring expected errors like 404s.
+	// By default, this is empty and all status codes are traced.
+	TraceIgnoreStatusCodes []int
 }
 
 // Client is the underlying processor that is used by the main API and Hub

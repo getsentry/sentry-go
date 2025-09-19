@@ -699,6 +699,66 @@ func TestIgnoreTransactions(t *testing.T) {
 	}
 }
 
+func TestTraceIgnoreStatusCodes(t *testing.T) {
+	tests := map[string]struct {
+		ignoreStatusCodes []int
+		statusCode        int
+		expectDrop        bool
+	}{
+		"No ignored codes": {
+			statusCode:        404,
+			ignoreStatusCodes: []int{},
+			expectDrop:        false,
+		},
+		"Status code not in ignore list": {
+			statusCode:        500,
+			ignoreStatusCodes: []int{404, 403},
+			expectDrop:        false,
+		},
+		"404 in ignore list": {
+			statusCode:        404,
+			ignoreStatusCodes: []int{404, 403},
+			expectDrop:        true,
+		},
+		"403 in ignore list": {
+			statusCode:        403,
+			ignoreStatusCodes: []int{404, 403},
+			expectDrop:        true,
+		},
+		"200 not ignored": {
+			statusCode:        200,
+			ignoreStatusCodes: []int{404, 403},
+			expectDrop:        false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			transport := &MockTransport{}
+			ctx := NewTestContext(ClientOptions{
+				EnableTracing:          true,
+				TracesSampleRate:       1.0,
+				Transport:              transport,
+				TraceIgnoreStatusCodes: tt.ignoreStatusCodes,
+			})
+
+			transaction := StartTransaction(ctx, "test")
+			// Simulate HTTP response data like the integrations do
+			transaction.SetData("http.response.status_code", tt.statusCode)
+			transaction.Finish()
+
+			dropped := transport.lastEvent == nil
+			if tt.expectDrop != dropped {
+				if tt.expectDrop {
+					t.Errorf("expected transaction with status code %d to be dropped", tt.statusCode)
+				} else {
+					t.Errorf("expected transaction with status code %d not to be dropped", tt.statusCode)
+				}
+			}
+		})
+	}
+}
+
 func TestSampleRate(t *testing.T) {
 	tests := []struct {
 		SampleRate float64

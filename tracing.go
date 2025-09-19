@@ -347,6 +347,51 @@ func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
 	}
 }
 
+// shouldIgnoreStatusCode checks if the transaction should be ignored based on HTTP status code
+func (s *Span) shouldIgnoreStatusCode(hub *Hub) bool {
+	if !s.IsTransaction() {
+		return false
+	}
+
+	client := hub.Client()
+	if client == nil {
+		return false
+	}
+
+	ignoreStatusCodes := client.options.TraceIgnoreStatusCodes
+	if len(ignoreStatusCodes) == 0 {
+		return false
+	}
+
+	s.mu.Lock()
+	statusCodeData, exists := s.Data["http.response.status_code"]
+	s.mu.Unlock()
+
+	if !exists {
+		return false
+	}
+
+	var statusCode int
+	switch v := statusCodeData.(type) {
+	case int:
+		statusCode = v
+	case int64:
+		statusCode = int(v)
+	case float64:
+		statusCode = int(v)
+	default:
+		return false
+	}
+
+	for _, ignoredCode := range ignoreStatusCodes {
+		if statusCode == ignoredCode {
+			return true
+		}
+	}
+
+	return false
+}
+
 // doFinish runs the actual Span.Finish() logic.
 func (s *Span) doFinish() {
 	if s.EndTime.IsZero() {
@@ -360,7 +405,7 @@ func (s *Span) doFinish() {
 		}
 	}
 
-	if !s.Sampled.Bool() {
+	if !s.Sampled.Bool() || s.shouldIgnoreStatusCode(hub) {
 		return
 	}
 	event := s.toEvent()
