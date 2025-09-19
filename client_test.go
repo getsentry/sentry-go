@@ -699,6 +699,22 @@ func TestIgnoreTransactions(t *testing.T) {
 	}
 }
 
+func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
+	transport := &MockTransport{}
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+	})
+
+	transaction := StartTransaction(ctx, "test")
+	// Transaction has no http.response.status_code
+	transaction.Finish()
+
+	dropped := transport.lastEvent == nil
+	assertEqual(t, dropped, false, "expected transaction to not be dropped")
+}
+
 func TestTraceIgnoreStatusCodes(t *testing.T) {
 	tests := map[string]struct {
 		ignoreStatusCodes []int
@@ -728,6 +744,11 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 		"200 not ignored": {
 			statusCode:        200,
 			ignoreStatusCodes: []int{404, 403},
+			expectDrop:        false,
+		},
+		"wrong code not ignored": {
+			statusCode:        "something",
+			ignoreStatusCodes: []int{404},
 			expectDrop:        false,
 		},
 	}
