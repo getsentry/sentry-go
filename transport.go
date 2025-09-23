@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	defaultBufferSize = 3000
+	defaultBufferSize = 12000 // Increased for fair comparison with telemetry buffers
 	defaultTimeout    = time.Second * 30
 )
 

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -115,6 +116,9 @@ type Integration interface {
 }
 
 // ClientOptions that configures a SDK Client.
+//
+// Note: The telemetry buffer system can be enabled by setting EnableTelemetryBuffers to true.
+// When enabled, events are buffered using priority-based scheduling and batched for improved performance.
 type ClientOptions struct {
 	// The DSN to use. If the DSN is not set, the client is effectively
 	// disabled.
@@ -394,8 +398,8 @@ func (client *Client) setupTelemetryTransport() {
 	// Create telemetry transport config
 	config := internalHttp.TelemetryTransportConfig{
 		DSN:            client.dsn.String(),
-		WorkerCount:    1,   // Default for telemetry
-		QueueSize:      400, // Reduced to match standard transport memory usage
+		WorkerCount:    2,
+		QueueSize:      8000, // Increased to match larger buffer capacities
 		RequestTimeout: 30 * time.Second,
 		MaxRetries:     3,
 		RetryBackoff:   time.Second,
@@ -421,9 +425,8 @@ func (client *Client) setupTelemetryBuffers() {
 	client.telemetryBuffers = make(map[telemetry.DataCategory]*telemetry.Buffer[protocol.EnvelopeConvertible])
 
 	categories := []telemetry.DataCategory{
-		telemetry.DataCategoryError, telemetry.DataCategoryTransaction, telemetry.DataCategorySession,
-		telemetry.DataCategoryCheckIn, telemetry.DataCategoryLog, telemetry.DataCategorySpan,
-		telemetry.DataCategoryProfile, telemetry.DataCategoryReplay, telemetry.DataCategoryFeedback,
+		telemetry.DataCategoryError, telemetry.DataCategoryTransaction,
+		telemetry.DataCategoryCheckIn, telemetry.DataCategoryLog,
 	}
 
 	for _, category := range categories {
@@ -435,17 +438,39 @@ func (client *Client) setupTelemetryBuffers() {
 	DebugLogger.Printf("Created %d telemetry buffers", len(client.telemetryBuffers))
 }
 
+// getEnvInt retrieves an integer value from environment variable, returns defaultValue if not set or invalid
+func getEnvInt(envVar string, defaultValue int) int {
+	if value := os.Getenv(envVar); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
 func (client *Client) getBufferCapacity(category telemetry.DataCategory) int {
-	// Reduced capacities to match standard transport memory usage (~200MB)
+	// Check for custom environment variables first
 	switch category {
-	case telemetry.DataCategoryError, telemetry.DataCategoryFeedback:
-		return 8000
-	case telemetry.DataCategoryLog, telemetry.DataCategorySpan:
-		return 3000
-	case telemetry.DataCategoryReplay:
-		return 100
+	case telemetry.DataCategoryError:
+		if customSize := getEnvInt("SENTRY_CUSTOM_ERROR_BUFFER", 0); customSize > 0 {
+			DebugLogger.Printf("Using custom error buffer size: %d", customSize)
+			return customSize
+		}
+		return 8000 // Increased for fair comparison with standard transport
+	case telemetry.DataCategoryTransaction:
+		if customSize := getEnvInt("SENTRY_CUSTOM_TRANSACTION_BUFFER", 0); customSize > 0 {
+			DebugLogger.Printf("Using custom transaction buffer size: %d", customSize)
+			return customSize
+		}
+		return 8000 // Increased for fair comparison with standard transport
+	case telemetry.DataCategoryLog:
+		if customSize := getEnvInt("SENTRY_CUSTOM_LOG_BUFFER", 0); customSize > 0 {
+			DebugLogger.Printf("Using custom log buffer size: %d", customSize)
+			return customSize
+		}
+		return 4000 // Increased proportionally
 	default:
-		return 6000 // Reduced from 15000 (Transaction, Session, Profile, Checkin)
+		return 200 // Increased minimum for other categories
 	}
 }
 
@@ -677,10 +702,12 @@ func (client *Client) Flush(timeout time.Duration) bool {
 		return client.FlushWithContext(ctx)
 	}
 
+	// When telemetry buffers are enabled, use telemetry system for flushing
 	if client.options.EnableTelemetryBuffers && client.telemetryScheduler != nil {
-		client.telemetryScheduler.Flush()
+		return client.telemetryScheduler.FlushWithTimeout(timeout)
 	}
 
+	// Otherwise use regular transport
 	return client.Transport.Flush(timeout)
 }
 
@@ -700,10 +727,12 @@ func (client *Client) FlushWithContext(ctx context.Context) bool {
 		client.batchLogger.Flush(ctx.Done())
 	}
 
+	// When telemetry buffers are enabled, use telemetry system for flushing
 	if client.options.EnableTelemetryBuffers && client.telemetryScheduler != nil {
-		client.telemetryScheduler.Flush()
+		return client.telemetryScheduler.FlushWithContext(ctx)
 	}
 
+	// Otherwise use regular transport
 	return client.Transport.FlushWithContext(ctx)
 }
 

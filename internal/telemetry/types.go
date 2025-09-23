@@ -32,13 +32,13 @@ type DataCategory string
 const (
 	DataCategoryError       DataCategory = "error"
 	DataCategoryTransaction DataCategory = "transaction"
-	DataCategorySession     DataCategory = "session"
 	DataCategoryCheckIn     DataCategory = "checkin"
 	DataCategoryLog         DataCategory = "log"
-	DataCategorySpan        DataCategory = "span"
-	DataCategoryProfile     DataCategory = "profile"
-	DataCategoryReplay      DataCategory = "replay"
-	DataCategoryFeedback    DataCategory = "feedback"
+	//DataCategorySpan        DataCategory = "span"
+	//DataCategorySession     DataCategory = "session"
+	//DataCategoryProfile     DataCategory = "profile"
+	//DataCategoryReplay      DataCategory = "replay"
+	//DataCategoryFeedback    DataCategory = "feedback"
 )
 
 func (dc DataCategory) String() string {
@@ -47,16 +47,16 @@ func (dc DataCategory) String() string {
 
 func (dc DataCategory) GetPriority() Priority {
 	switch dc {
-	case DataCategoryError, DataCategoryFeedback:
+	case DataCategoryError:
 		return PriorityCritical
-	case DataCategorySession, DataCategoryCheckIn:
+	case DataCategoryCheckIn:
 		return PriorityHigh
-	case DataCategoryLog, DataCategorySpan:
+	case DataCategoryLog:
 		return PriorityMedium
-	case DataCategoryTransaction, DataCategoryProfile:
+	case DataCategoryTransaction:
 		return PriorityLow
-	case DataCategoryReplay:
-		return PriorityLowest
+	//case DataCategoryReplay:
+	//	return PriorityLowest
 	default:
 		return PriorityMedium
 	}

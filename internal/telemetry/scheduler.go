@@ -108,7 +108,8 @@ func (s *Scheduler) Stop(timeout time.Duration) {
 		go func() {
 			defer close(done)
 			s.processingWg.Wait()
-			s.flushAllBuffers()
+			// Use the new flush method that waits for transport completion
+			s.FlushWithTimeout(timeout)
 		}()
 
 		select {
@@ -118,9 +119,42 @@ func (s *Scheduler) Stop(timeout time.Duration) {
 	})
 }
 
-// Flush processes all items in all buffers immediately
+// Flush processes all items in all buffers immediately with a default timeout
 func (s *Scheduler) Flush() {
+	s.FlushWithTimeout(30 * time.Second)
+}
+
+// FlushWithTimeout processes all items in all buffers and waits for transport operations to complete
+func (s *Scheduler) FlushWithTimeout(timeout time.Duration) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return s.FlushWithContext(ctx)
+}
+
+// FlushWithContext processes all items in all buffers and waits for transport operations to complete
+func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
+	// First, drain all buffers to the transport
 	s.flushAllBuffers()
+
+	// Then wait for the underlying transport to complete its operations
+	if flusher, ok := s.transport.(interface{ FlushWithContext(context.Context) bool }); ok {
+		return flusher.FlushWithContext(ctx)
+	}
+
+	// Fallback for transports that don't support context-based flushing
+	if flusher, ok := s.transport.(interface{ Flush(time.Duration) bool }); ok {
+		deadline, hasDeadline := ctx.Deadline()
+		if hasDeadline {
+			timeout := time.Until(deadline)
+			if timeout > 0 {
+				return flusher.Flush(timeout)
+			}
+		}
+		return flusher.Flush(30 * time.Second) // default timeout
+	}
+
+	// If transport doesn't support flushing, assume immediate completion
+	return true
 }
 
 // run is the main processing loop
