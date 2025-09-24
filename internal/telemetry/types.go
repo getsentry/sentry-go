@@ -55,7 +55,7 @@ func (dc DataCategory) GetPriority() Priority {
 	}
 }
 
-// OverflowPolicy defines how the ring buffer handles overflow
+// OverflowPolicy defines how the ring buffer handles overflow.
 type OverflowPolicy int
 
 const (

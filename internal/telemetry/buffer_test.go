@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// testItem is a simple test item for the buffer
 type testItem struct {
 	id   int
 	data string

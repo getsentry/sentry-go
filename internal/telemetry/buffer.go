@@ -107,7 +107,7 @@ func (b *Buffer[T]) Poll() (T, bool) {
 	return item, true
 }
 
-// PollBatch removes and returns up to maxItems
+// PollBatch removes and returns up to maxItems.
 func (b *Buffer[T]) PollBatch(maxItems int) []T {
 	if maxItems <= 0 {
 		return nil
@@ -138,7 +138,7 @@ func (b *Buffer[T]) PollBatch(maxItems int) []T {
 	return result
 }
 
-// Drain removes and returns all items
+// Drain removes and returns all items.
 func (b *Buffer[T]) Drain() []T {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -165,7 +165,7 @@ func (b *Buffer[T]) Drain() []T {
 	return result
 }
 
-// Peek returns the oldest item without removing it, false if empty
+// Peek returns the oldest item without removing it, false if empty.
 func (b *Buffer[T]) Peek() (T, bool) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
