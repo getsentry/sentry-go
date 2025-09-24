@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -348,7 +349,7 @@ func TestBufferStressTest(t *testing.T) {
 
 	// Start consumers
 	wg.Add(numConsumers)
-	consumedCount := int64(0)
+	var consumedCount int64
 	for i := 0; i < numConsumers; i++ {
 		go func() {
 			defer wg.Done()
@@ -361,13 +362,13 @@ func TestBufferStressTest(t *testing.T) {
 						if !ok {
 							break
 						}
-						consumedCount++
+						atomic.AddInt64(&consumedCount, 1)
 					}
 					return
 				default:
 					_, ok := buffer.Poll()
 					if ok {
-						consumedCount++
+						atomic.AddInt64(&consumedCount, 1)
 					}
 				}
 			}
@@ -380,13 +381,13 @@ func TestBufferStressTest(t *testing.T) {
 	wg.Wait()
 
 	t.Logf("Stress test results: offered=%d, dropped=%d, consumed=%d",
-		buffer.OfferedCount(), buffer.DroppedCount(), consumedCount)
+		buffer.OfferedCount(), buffer.DroppedCount(), atomic.LoadInt64(&consumedCount))
 
 	// Basic sanity checks
 	if buffer.OfferedCount() <= 0 {
 		t.Error("Expected some items to be offered")
 	}
-	if consumedCount <= 0 {
+	if atomic.LoadInt64(&consumedCount) <= 0 {
 		t.Error("Expected some items to be consumed")
 	}
 }

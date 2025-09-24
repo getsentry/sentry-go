@@ -8,7 +8,7 @@ import (
 
 const defaultCapacity = 100
 
-// Buffer is a thread-safe ring buffer with overflow policies
+// Buffer is a thread-safe ring buffer with overflow policies.
 type Buffer[T any] struct {
 	mu       sync.RWMutex
 	items    []T
@@ -46,7 +46,7 @@ func (b *Buffer[T]) SetDroppedCallback(callback func(item T, reason string)) {
 	b.onDropped = callback
 }
 
-// Offer adds an item to the buffer, returns false if dropped due to overflow
+// Offer adds an item to the buffer, returns false if dropped due to overflow.
 func (b *Buffer[T]) Offer(item T) bool {
 	atomic.AddInt64(&b.offered, 1)
 
@@ -89,7 +89,7 @@ func (b *Buffer[T]) Offer(item T) bool {
 	}
 }
 
-// Poll removes and returns the oldest item, false if empty
+// Poll removes and returns the oldest item, false if empty.
 func (b *Buffer[T]) Poll() (T, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -251,6 +251,7 @@ func (b *Buffer[T]) Clear() {
 func (b *Buffer[T]) GetMetrics() BufferMetrics {
 	b.mu.RLock()
 	size := b.size
+	util := float64(b.size) / float64(b.capacity)
 	b.mu.RUnlock()
 
 	return BufferMetrics{
@@ -258,7 +259,7 @@ func (b *Buffer[T]) GetMetrics() BufferMetrics {
 		Priority:      b.priority,
 		Capacity:      b.capacity,
 		Size:          size,
-		Utilization:   b.Utilization(),
+		Utilization:   util,
 		OfferedCount:  b.OfferedCount(),
 		DroppedCount:  b.DroppedCount(),
 		AcceptedCount: b.AcceptedCount(),
