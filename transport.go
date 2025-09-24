@@ -227,13 +227,13 @@ func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (r *http.R
 			r.Header.Set("Content-Type", "application/x-sentry-envelope")
 
 			auth := fmt.Sprintf("Sentry sentry_version=%s, "+
-				"sentry_client=%s/%s, sentry_key=%s", apiVersion, event.Sdk.Name, event.Sdk.Version, dsn.publicKey)
+				"sentry_client=%s/%s, sentry_key=%s", apiVersion, event.Sdk.Name, event.Sdk.Version, dsn.GetPublicKey())
 
 			// The key sentry_secret is effectively deprecated and no longer needs to be set.
 			// However, since it was required in older self-hosted versions,
 			// it should still passed through to Sentry if set.
-			if dsn.secretKey != "" {
-				auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.secretKey)
+			if dsn.GetSecretKey() != "" {
+				auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.GetSecretKey())
 			}
 
 			r.Header.Set("X-Sentry-Auth", auth)
@@ -409,8 +409,8 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 			"Sending %s [%s] to %s project: %s",
 			eventType,
 			event.EventID,
-			t.dsn.host,
-			t.dsn.projectID,
+			t.dsn.GetHost(),
+			t.dsn.GetProjectID(),
 		)
 	default:
 		DebugLogger.Println("Event dropped due to transport buffer being full.")
@@ -664,8 +664,8 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		"Sending %s [%s] to %s project: %s",
 		eventIdentifier,
 		event.EventID,
-		t.dsn.host,
-		t.dsn.projectID,
+		t.dsn.GetHost(),
+		t.dsn.GetProjectID(),
 	)
 
 	response, err := t.client.Do(request)

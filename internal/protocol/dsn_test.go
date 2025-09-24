@@ -1,4 +1,4 @@
-package sentry
+package protocol
 
 import (
 	"encoding/json"
@@ -20,7 +20,7 @@ var dsnTests = map[string]DsnTest{
 	"AllFields": {
 		in: "https://public:secret@domain:8888/foo/bar/42",
 		dsn: &Dsn{
-			scheme:    schemeHTTPS,
+			scheme:    SchemeHTTPS,
 			publicKey: "public",
 			secretKey: "secret",
 			host:      "domain",
@@ -34,7 +34,7 @@ var dsnTests = map[string]DsnTest{
 	"MinimalSecure": {
 		in: "https://public@domain/42",
 		dsn: &Dsn{
-			scheme:    schemeHTTPS,
+			scheme:    SchemeHTTPS,
 			publicKey: "public",
 			host:      "domain",
 			port:      443,
@@ -46,7 +46,7 @@ var dsnTests = map[string]DsnTest{
 	"MinimalInsecure": {
 		in: "http://public@domain/42",
 		dsn: &Dsn{
-			scheme:    schemeHTTP,
+			scheme:    SchemeHTTP,
 			publicKey: "public",
 			host:      "domain",
 			port:      80,
@@ -65,7 +65,7 @@ func TestNewDsn(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewDsn() error: %q", err)
 			}
-			// Internal fields
+			// Compare internal fields directly since we're in the same package
 			if diff := cmp.Diff(tt.dsn, dsn, cmp.AllowUnexported(Dsn{})); diff != "" {
 				t.Errorf("NewDsn() mismatch (-want +got):\n%s", diff)
 			}
@@ -153,16 +153,17 @@ func TestRequestHeadersWithoutSecretKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	headers := dsn.RequestHeaders()
+	headers := dsn.RequestHeaders("1.0.0")
 	authRegexp := regexp.MustCompile("^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
-		"sentry_client=sentry.go/.+, sentry_key=public$")
+		"sentry_client=sentry\\.go/1\\.0\\.0, sentry_key=public$")
 
 	if len(headers) != 2 {
 		t.Error("expected request to have 2 headers")
 	}
 	assertEqual(t, "application/json", headers["Content-Type"])
+	t.Logf("Actual auth header: %q", headers["X-Sentry-Auth"])
 	if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
-		t.Error("expected auth header to fulfill provided pattern")
+		t.Errorf("expected auth header to fulfill provided pattern. Got: %q", headers["X-Sentry-Auth"])
 	}
 }
 
@@ -172,16 +173,17 @@ func TestRequestHeadersWithSecretKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	headers := dsn.RequestHeaders()
+	headers := dsn.RequestHeaders("1.0.0")
 	authRegexp := regexp.MustCompile("^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
-		"sentry_client=sentry.go/.+, sentry_key=public, sentry_secret=secret$")
+		"sentry_client=sentry\\.go/1\\.0\\.0, sentry_key=public, sentry_secret=secret$")
 
 	if len(headers) != 2 {
 		t.Error("expected request to have 2 headers")
 	}
 	assertEqual(t, "application/json", headers["Content-Type"])
+	t.Logf("Actual auth header: %q", headers["X-Sentry-Auth"])
 	if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
-		t.Error("expected auth header to fulfill provided pattern")
+		t.Errorf("expected auth header to fulfill provided pattern. Got: %q", headers["X-Sentry-Auth"])
 	}
 }
 
@@ -299,5 +301,12 @@ func TestGetProjectID(t *testing.T) {
 			t.Fatal(err)
 		}
 		assertEqual(t, dsn.GetProjectID(), tt.want)
+	}
+}
+
+// Helper function for tests
+func assertEqual(t *testing.T, expected, actual interface{}) {
+	if expected != actual {
+		t.Errorf("Expected %v, got %v", expected, actual)
 	}
 }
