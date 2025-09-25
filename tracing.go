@@ -348,17 +348,12 @@ func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
 }
 
 // shouldIgnoreStatusCode checks if the transaction should be ignored based on HTTP status code.
-func (s *Span) shouldIgnoreStatusCode(hub *Hub) bool {
+func (s *Span) shouldIgnoreStatusCode() bool {
 	if !s.IsTransaction() {
 		return false
 	}
 
-	client := hub.Client()
-	if client == nil {
-		return false
-	}
-
-	ignoreStatusCodes := client.options.TraceIgnoreStatusCodes
+	ignoreStatusCodes := s.clientOptions().TraceIgnoreStatusCodes
 	if len(ignoreStatusCodes) == 0 {
 		return false
 	}
@@ -398,7 +393,12 @@ func (s *Span) doFinish() {
 		}
 	}
 
-	if !s.Sampled.Bool() || s.shouldIgnoreStatusCode(hub) {
+	if s.shouldIgnoreStatusCode() {
+		s.Sampled = SampledFalse
+		return
+	}
+
+	if !s.Sampled.Bool() {
 		return
 	}
 	event := s.toEvent()
