@@ -95,8 +95,9 @@ func (e *Envelope) AddItem(item *EnvelopeItem) {
 }
 
 // Serialize serializes the envelope to the Sentry envelope format.
+//
 // Format: Headers "\n" { Item } [ "\n" ]
-// Item: Headers "\n" Payload "\n"
+// Item: Headers "\n" Payload "\n".
 func (e *Envelope) Serialize() ([]byte, error) {
 	var buf bytes.Buffer
 
@@ -176,7 +177,7 @@ func (h *EnvelopeHeader) MarshalJSON() ([]byte, error) {
 	return json.Marshal((*header)(h))
 }
 
-// MarshalJSON provides custom JSON marshaling to handle field ordering for different item types
+// MarshalJSON provides custom JSON marshaling to handle field ordering for different item types.
 func (h *EnvelopeItemHeader) MarshalJSON() ([]byte, error) {
 	switch h.Type {
 	case EnvelopeItemTypeLog:
@@ -228,7 +229,7 @@ func NewEnvelopeItem(itemType EnvelopeItemType, payload []byte) *EnvelopeItem {
 }
 
 // NewAttachmentItem creates a new envelope item for an attachment.
-// Parameters: filename, contentType, payload
+// Parameters: filename, contentType, payload.
 func NewAttachmentItem(filename, contentType string, payload []byte) *EnvelopeItem {
 	length := len(payload)
 	return &EnvelopeItem{

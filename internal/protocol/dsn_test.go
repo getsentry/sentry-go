@@ -304,7 +304,6 @@ func TestGetProjectID(t *testing.T) {
 	}
 }
 
-// Helper function for tests
 func assertEqual(t *testing.T, expected, actual interface{}) {
 	if expected != actual {
 		t.Errorf("Expected %v, got %v", expected, actual)

@@ -12,7 +12,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
-// Helper function to create a test transport config
+// Helper function to create a test transport config.
 func testTelemetryConfig(dsn string) TelemetryTransportConfig {
 	return TelemetryTransportConfig{
 		DSN:            dsn,
@@ -262,7 +262,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 
 	t.Run("closed transport", func(t *testing.T) {
 		transport := NewAsyncTransport()
-		transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
+		_ = transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
 		transport.Close()
 
 		envelope := &protocol.Envelope{
@@ -286,7 +286,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			RetryBackoff:   time.Millisecond,
 		})
 
-		transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
+		_ = transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
 		defer transport.Close()
 
 		envelope := &protocol.Envelope{
@@ -326,7 +326,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 
 	t.Run("rate limited envelope", func(t *testing.T) {
 		transport := NewAsyncTransport()
-		transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
+		_ = transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
 		defer transport.Close()
 
 		// Set up rate limiting
@@ -361,7 +361,7 @@ func TestAsyncTransport_Workers(t *testing.T) {
 	var requestCount int
 	var mu sync.Mutex
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()
 		requestCount++
 		mu.Unlock()
@@ -377,7 +377,7 @@ func TestAsyncTransport_Workers(t *testing.T) {
 		RetryBackoff:   time.Millisecond,
 	})
 
-	transport.Configure(testTelemetryConfig("http://key@" + server.URL[7:] + "/123"))
+	_ = transport.Configure(testTelemetryConfig("http://key@" + server.URL[7:] + "/123"))
 	defer transport.Close()
 
 	envelope := &protocol.Envelope{
@@ -427,7 +427,7 @@ func TestAsyncTransport_Flush(t *testing.T) {
 	var requestCount int
 	var mu sync.Mutex
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()
 		requestCount++
 		mu.Unlock()
@@ -438,7 +438,7 @@ func TestAsyncTransport_Flush(t *testing.T) {
 	defer server.Close()
 
 	transport := NewAsyncTransport()
-	transport.Configure(map[string]interface{}{
+	_ = transport.Configure(map[string]interface{}{
 		"dsn": "http://key@" + server.URL[7:] + "/123",
 	})
 	defer transport.Close()
@@ -486,7 +486,7 @@ func TestAsyncTransport_Flush(t *testing.T) {
 }
 
 func TestAsyncTransport_ErrorHandling(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
@@ -499,7 +499,7 @@ func TestAsyncTransport_ErrorHandling(t *testing.T) {
 		RetryBackoff:   time.Millisecond,
 	})
 
-	transport.Configure(testTelemetryConfig("http://key@" + server.URL[7:] + "/123"))
+	_ = transport.Configure(testTelemetryConfig("http://key@" + server.URL[7:] + "/123"))
 	defer transport.Close()
 
 	envelope := &protocol.Envelope{
@@ -549,13 +549,13 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 	})
 
 	t.Run("successful send", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
 
 		transport := NewSyncTransport()
-		transport.Configure(map[string]interface{}{
+		_ = transport.Configure(map[string]interface{}{
 			"dsn": "http://key@" + server.URL[7:] + "/123",
 		})
 
@@ -585,7 +585,7 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 
 	t.Run("rate limited envelope", func(t *testing.T) {
 		transport := NewSyncTransport()
-		transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
+		_ = transport.Configure(testTelemetryConfig("https://key@sentry.io/123"))
 
 		// Set up rate limiting
 		transport.limits[ratelimit.CategoryError] = ratelimit.Deadline(time.Now().Add(time.Hour))

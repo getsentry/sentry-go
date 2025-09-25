@@ -25,12 +25,11 @@ const (
 
 	apiVersion = 7
 
-	// Default configuration for Async Transport
-	defaultWorkerCount    = 5                // Increased workers for scalability test
-	defaultQueueSize      = 2000             // Transport queue capacity (increased for high throughput)
-	defaultRequestTimeout = 30 * time.Second // HTTP request timeout
-	defaultMaxRetries     = 3                // Maximum retry attempts
-	defaultRetryBackoff   = time.Second      // Initial retry backoff
+	defaultWorkerCount    = 5
+	defaultQueueSize      = 2000
+	defaultRequestTimeout = 30 * time.Second
+	defaultMaxRetries     = 3
+	defaultRetryBackoff   = time.Second
 )
 
 // maxDrainResponseBytes is the maximum number of bytes that transport
@@ -44,7 +43,6 @@ const (
 // server is misbehaving) and reusing TCP connections.
 const maxDrainResponseBytes = 16 << 10
 
-// Transport Errors
 var (
 	// ErrTransportQueueFull is returned when the transport queue is full,
 	// providing backpressure signal to the caller.
@@ -112,7 +110,7 @@ type TransportConfig struct {
 	RetryBackoff time.Duration
 }
 
-// debugLogger is used for debug output to avoid importing the main sentry package
+// debugLogger is used for debug output to avoid importing the main sentry package.
 var debugLogger = log.New(os.Stderr, "[Sentry] ", log.LstdFlags)
 
 func getProxyConfig(httpsProxy, httpProxy string) func(*http.Request) (*url.URL, error) {
@@ -270,7 +268,7 @@ func NewSyncTransport() *SyncTransport {
 
 var _ protocol.TelemetryTransport = (*SyncTransport)(nil)
 
-// Configure implements protocol.TelemetryTransport
+// Configure implements protocol.TelemetryTransport.
 func (t *SyncTransport) Configure(options interface{}) error {
 	config, ok := options.(TelemetryTransportConfig)
 	if !ok {
@@ -279,7 +277,7 @@ func (t *SyncTransport) Configure(options interface{}) error {
 	return t.configureWithTelemetryConfig(config)
 }
 
-// configureWithTelemetryConfig configures the SyncTransport with TelemetryTransportConfig
+// configureWithTelemetryConfig configures the SyncTransport with TelemetryTransportConfig.
 func (t *SyncTransport) configureWithTelemetryConfig(config TelemetryTransportConfig) error {
 	// Parse DSN
 	if config.DSN != "" {
@@ -321,7 +319,7 @@ func (t *SyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 
 func (t *SyncTransport) Close() {}
 
-// IsRateLimited checks if a specific category is currently rate limited
+// IsRateLimited checks if a specific category is currently rate limited.
 func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
 	return t.disabled(category)
 }
@@ -466,7 +464,7 @@ func NewAsyncTransportWithConfig(config TransportConfig) *AsyncTransport {
 	return transport
 }
 
-// Configure implements protocol.TelemetryTransport
+// Configure implements protocol.TelemetryTransport.
 func (t *AsyncTransport) Configure(options interface{}) error {
 	config, ok := options.(TelemetryTransportConfig)
 	if !ok {
@@ -475,7 +473,7 @@ func (t *AsyncTransport) Configure(options interface{}) error {
 	return t.configureWithTelemetryConfig(config)
 }
 
-// configureWithTelemetryConfig configures the AsyncTransport with TelemetryTransportConfig
+// configureWithTelemetryConfig configures the AsyncTransport with TelemetryTransportConfig.
 func (t *AsyncTransport) configureWithTelemetryConfig(config TelemetryTransportConfig) error {
 	// Parse DSN
 	if config.DSN != "" {
@@ -598,7 +596,7 @@ func (t *AsyncTransport) Close() {
 	t.wg.Wait()
 }
 
-// IsRateLimited checks if a specific category is currently rate limited
+// IsRateLimited checks if a specific category is currently rate limited.
 func (t *AsyncTransport) IsRateLimited(category ratelimit.Category) bool {
 	return t.isRateLimited(category)
 }
@@ -723,7 +721,7 @@ func (t *AsyncTransport) isRateLimited(category ratelimit.Category) bool {
 	return limited
 }
 
-// NewAsyncTransportWithTelemetryConfig creates a new AsyncTransport with TelemetryTransportConfig
+// NewAsyncTransportWithTelemetryConfig creates a new AsyncTransport with TelemetryTransportConfig.
 func NewAsyncTransportWithTelemetryConfig(config TelemetryTransportConfig) (*AsyncTransport, error) {
 	// Set defaults from config
 	transportConfig := TransportConfig{
