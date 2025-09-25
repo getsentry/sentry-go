@@ -181,13 +181,15 @@ func (h *EnvelopeHeader) MarshalJSON() ([]byte, error) {
 func (h *EnvelopeItemHeader) MarshalJSON() ([]byte, error) {
 	switch h.Type {
 	case EnvelopeItemTypeLog:
-		// For log items, use the correct field order: type, item_count, content_type
+		// For log items, use the correct field order: type, length, item_count, content_type
 		return json.Marshal(struct {
 			Type        EnvelopeItemType `json:"type"`
+			Length      *int             `json:"length,omitempty"`
 			ItemCount   *int             `json:"item_count,omitempty"`
 			ContentType string           `json:"content_type,omitempty"`
 		}{
 			Type:        h.Type,
+			Length:      h.Length,
 			ItemCount:   h.ItemCount,
 			ContentType: h.ContentType,
 		})

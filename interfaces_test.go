@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/google/go-cmp/cmp"
 )
@@ -542,5 +543,168 @@ func TestEvent_ToCategory(t *testing.T) {
 				t.Errorf("Type %q: got %v, want %v", tc.eventType, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEvent_ToEnvelope(t *testing.T) {
+	tests := []struct {
+		name      string
+		event     *Event
+		dsn       *protocol.Dsn
+		wantError bool
+	}{
+		{
+			name: "basic event",
+			event: &Event{
+				EventID:   "12345678901234567890123456789012",
+				Message:   "test message",
+				Level:     LevelError,
+				Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+			},
+			dsn:       nil,
+			wantError: false,
+		},
+		{
+			name: "event with attachments",
+			event: &Event{
+				EventID:   "12345678901234567890123456789012",
+				Message:   "test message",
+				Level:     LevelError,
+				Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+				Attachments: []*Attachment{
+					{
+						Filename:    "test.txt",
+						ContentType: "text/plain",
+						Payload:     []byte("test content"),
+					},
+				},
+			},
+			dsn:       nil,
+			wantError: false,
+		},
+		{
+			name: "transaction event",
+			event: &Event{
+				EventID:     "12345678901234567890123456789012",
+				Type:        "transaction",
+				Transaction: "test transaction",
+				StartTime:   time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+				Timestamp:   time.Date(2023, 1, 1, 12, 0, 1, 0, time.UTC),
+			},
+			dsn:       nil,
+			wantError: false,
+		},
+		{
+			name: "check-in event",
+			event: &Event{
+				EventID: "12345678901234567890123456789012",
+				Type:    "check_in",
+				CheckIn: &CheckIn{
+					ID:          "checkin123",
+					MonitorSlug: "test-monitor",
+					Status:      CheckInStatusOK,
+					Duration:    5 * time.Second,
+				},
+			},
+			dsn:       nil,
+			wantError: false,
+		},
+		{
+			name: "log event",
+			event: &Event{
+				EventID: "12345678901234567890123456789012",
+				Type:    "log",
+				Logs: []Log{
+					{
+						Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+						Level:     LogLevelInfo,
+						Body:      "test log message",
+					},
+				},
+			},
+			dsn:       nil,
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			envelope, err := tt.event.ToEnvelope(tt.dsn)
+
+			if (err != nil) != tt.wantError {
+				t.Errorf("ToEnvelope() error = %v, wantError %v", err, tt.wantError)
+				return
+			}
+
+			if err != nil {
+				return // Expected error, nothing more to check
+			}
+
+			// Basic envelope validation
+			if envelope == nil {
+				t.Error("ToEnvelope() returned nil envelope")
+				return
+			}
+
+			if envelope.Header == nil {
+				t.Error("Envelope header is nil")
+				return
+			}
+
+			if envelope.Header.EventID != string(tt.event.EventID) {
+				t.Errorf("Expected EventID %s, got %s", tt.event.EventID, envelope.Header.EventID)
+			}
+
+			// Check that items were created
+			expectedItems := 1 // Main event item
+			if tt.event.Attachments != nil {
+				expectedItems += len(tt.event.Attachments)
+			}
+
+			if len(envelope.Items) != expectedItems {
+				t.Errorf("Expected %d items, got %d", expectedItems, len(envelope.Items))
+			}
+
+			// Verify the envelope can be serialized
+			data, err := envelope.Serialize()
+			if err != nil {
+				t.Errorf("Failed to serialize envelope: %v", err)
+			}
+
+			if len(data) == 0 {
+				t.Error("Serialized envelope is empty")
+			}
+		})
+	}
+}
+
+func TestEvent_ToEnvelopeWithTime(t *testing.T) {
+	event := &Event{
+		EventID:   "12345678901234567890123456789012",
+		Message:   "test message",
+		Level:     LevelError,
+		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+	}
+
+	sentAt := time.Date(2023, 1, 1, 15, 0, 0, 0, time.UTC)
+	envelope, err := event.ToEnvelopeWithTime(nil, sentAt)
+
+	if err != nil {
+		t.Errorf("ToEnvelopeWithTime() error = %v", err)
+		return
+	}
+
+	if envelope == nil {
+		t.Error("ToEnvelopeWithTime() returned nil envelope")
+		return
+	}
+
+	if envelope.Header == nil {
+		t.Error("Envelope header is nil")
+		return
+	}
+
+	if !envelope.Header.SentAt.Equal(sentAt) {
+		t.Errorf("Expected SentAt %v, got %v", sentAt, envelope.Header.SentAt)
 	}
 }
