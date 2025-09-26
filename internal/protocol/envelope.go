@@ -30,7 +30,7 @@ type EnvelopeHeader struct {
 
 	// Sdk carries the same payload as the sdk interface in the event payload but can be carried for all events.
 	// This means that SDK information can be carried for minidumps, session data and other submissions.
-	Sdk interface{} `json:"sdk,omitempty"`
+	Sdk *SdkInfo `json:"sdk,omitempty"`
 
 	// Trace contains trace context information for distributed tracing
 	Trace map[string]string `json:"trace,omitempty"`

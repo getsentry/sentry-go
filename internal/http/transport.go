@@ -24,34 +24,19 @@ const (
 
 	apiVersion = 7
 
-	defaultWorkerCount    = 1
 	defaultQueueSize      = 1000
 	defaultRequestTimeout = 30 * time.Second
 	defaultMaxRetries     = 3
 	defaultRetryBackoff   = time.Second
 )
 
-// maxDrainResponseBytes is the maximum number of bytes that transport
-// implementations will read from response bodies when draining them.
-//
-// Sentry's ingestion API responses are typically short and the SDK doesn't need
-// the contents of the response body. However, the net/http HTTP client requires
-// response bodies to be fully drained (and closed) for TCP keep-alive to work.
-//
-// maxDrainResponseBytes strikes a balance between reading too much data (if the
-// server is misbehaving) and reusing TCP connections.
 const maxDrainResponseBytes = 16 << 10
 
 var (
-	// ErrTransportQueueFull is returned when the transport queue is full,
-	// providing backpressure signal to the caller.
 	ErrTransportQueueFull = errors.New("transport queue full")
-
-	// ErrTransportClosed is returned when trying to send on a closed transport.
-	ErrTransportClosed = errors.New("transport is closed")
+	ErrTransportClosed    = errors.New("transport is closed")
 )
 
-// TransportOptions contains the configuration needed by the internal HTTP transports.
 type TransportOptions struct {
 	Dsn           string
 	HTTPClient    *http.Client
@@ -93,21 +78,8 @@ func getTLSConfig(options TransportOptions) *tls.Config {
 func getSentryRequestFromEnvelope(ctx context.Context, dsn *protocol.Dsn, envelope *protocol.Envelope) (r *http.Request, err error) {
 	defer func() {
 		if r != nil {
-			// Extract SDK info from envelope header
-			sdkName := "sentry.go"
-			sdkVersion := "unknown"
-
-			// Try to extract from envelope header if available
-			if envelope.Header.Sdk != nil {
-				if sdkMap, ok := envelope.Header.Sdk.(map[string]interface{}); ok {
-					if name, ok := sdkMap["name"].(string); ok {
-						sdkName = name
-					}
-					if version, ok := sdkMap["version"].(string); ok {
-						sdkVersion = version
-					}
-				}
-			}
+			sdkName := envelope.Header.Sdk.Name
+			sdkVersion := envelope.Header.Sdk.Version
 
 			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", sdkName, sdkVersion))
 			r.Header.Set("Content-Type", "application/x-sentry-envelope")
@@ -115,9 +87,6 @@ func getSentryRequestFromEnvelope(ctx context.Context, dsn *protocol.Dsn, envelo
 			auth := fmt.Sprintf("Sentry sentry_version=%d, "+
 				"sentry_client=%s/%s, sentry_key=%s", apiVersion, sdkName, sdkVersion, dsn.GetPublicKey())
 
-			// The key sentry_secret is effectively deprecated and no longer needs to be set.
-			// However, since it was required in older self-hosted versions,
-			// it should still be passed through to Sentry if set.
 			if dsn.GetSecretKey() != "" {
 				auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.GetSecretKey())
 			}
@@ -130,7 +99,6 @@ func getSentryRequestFromEnvelope(ctx context.Context, dsn *protocol.Dsn, envelo
 		ctx = context.Background()
 	}
 
-	// Serialize envelope to get request body
 	var buf bytes.Buffer
 	_, err = envelope.WriteTo(&buf)
 	if err != nil {
@@ -145,15 +113,11 @@ func getSentryRequestFromEnvelope(ctx context.Context, dsn *protocol.Dsn, envelo
 	)
 }
 
-// categoryFromEnvelope determines the rate limiting category from an envelope.
-// Maps envelope item types to official Sentry rate limiting categories as per:
-// https://develop.sentry.dev/sdk/expected-features/rate-limiting/#definitions
 func categoryFromEnvelope(envelope *protocol.Envelope) ratelimit.Category {
 	if envelope == nil || len(envelope.Items) == 0 {
 		return ratelimit.CategoryAll
 	}
 
-	// Find the first non-attachment item to determine the primary category
 	for _, item := range envelope.Items {
 		if item == nil || item.Header == nil {
 			continue
@@ -164,35 +128,20 @@ func categoryFromEnvelope(envelope *protocol.Envelope) ratelimit.Category {
 			return ratelimit.CategoryError
 		case protocol.EnvelopeItemTypeTransaction:
 			return ratelimit.CategoryTransaction
+		case protocol.EnvelopeItemTypeCheckIn:
+			return ratelimit.CategoryMonitor
+		case protocol.EnvelopeItemTypeLog:
+			return ratelimit.CategoryLog
 		case protocol.EnvelopeItemTypeAttachment:
-			// Skip attachments and look for the main content type
 			continue
 		default:
-			// All other types (sessions, profiles, replays, check-ins, logs, metrics, etc.)
-			// fall back to CategoryAll since we only support error and transaction specifically
 			return ratelimit.CategoryAll
 		}
 	}
 
-	// If we only found attachments or no valid items
 	return ratelimit.CategoryAll
 }
 
-// ================================
-// SyncTransport
-// ================================
-
-// SyncTransport is a blocking implementation of Transport.
-//
-// Clients using this transport will send requests to Sentry sequentially and
-// block until a response is returned.
-//
-// The blocking behavior is useful in a limited set of use cases. For example,
-// use it when deploying code to a Function as a Service ("Serverless")
-// platform, where any work happening in a background goroutine is not
-// guaranteed to execute.
-//
-// For most cases, prefer AsyncTransport.
 type SyncTransport struct {
 	dsn       *protocol.Dsn
 	client    *http.Client
@@ -202,11 +151,9 @@ type SyncTransport struct {
 	mu     sync.Mutex
 	limits ratelimit.Map
 
-	// HTTP Client request timeout. Defaults to 30 seconds.
 	Timeout time.Duration
 }
 
-// NewSyncTransport returns a new instance of SyncTransport configured with the given options.
 func NewSyncTransport(options TransportOptions) *SyncTransport {
 	transport := &SyncTransport{
 		Timeout: defaultTimeout,
@@ -244,25 +191,21 @@ func NewSyncTransport(options TransportOptions) *SyncTransport {
 	return transport
 }
 
-// SendEnvelope assembles a new packet out of an Envelope and sends it to the remote server.
 func (t *SyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	return t.SendEnvelopeWithContext(context.Background(), envelope)
 }
 
 func (t *SyncTransport) Close() {}
 
-// IsRateLimited checks if a specific category is currently rate limited.
 func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
 	return t.disabled(category)
 }
 
-// SendEnvelopeWithContext assembles a new packet out of an Envelope and sends it to the remote server.
 func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *protocol.Envelope) error {
 	if t.dsn == nil {
 		return nil
 	}
 
-	// Check rate limiting
 	category := categoryFromEnvelope(envelope)
 	if t.disabled(category) {
 		return nil
@@ -302,18 +245,14 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 	t.limits.Merge(ratelimit.FromResponse(response))
 	t.mu.Unlock()
 
-	// Drain body up to a limit and close it, allowing the
-	// transport to reuse TCP connections.
 	_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
 	return response.Body.Close()
 }
 
-// Flush is a no-op for SyncTransport. It always returns true immediately.
 func (t *SyncTransport) Flush(_ time.Duration) bool {
 	return true
 }
 
-// FlushWithContext is a no-op for SyncTransport. It always returns true immediately.
 func (t *SyncTransport) FlushWithContext(_ context.Context) bool {
 	return true
 }
@@ -330,56 +269,44 @@ func (t *SyncTransport) disabled(c ratelimit.Category) bool {
 	return disabled
 }
 
-// Worker represents a single HTTP worker that processes envelopes.
-type Worker struct {
-	id        int
-	transport *AsyncTransport
-	done      chan struct{}
-	wg        *sync.WaitGroup
-}
-
-// AsyncTransport uses a bounded worker pool for controlled concurrency and provides
-// backpressure when the queue is full.
 type AsyncTransport struct {
 	dsn       *protocol.Dsn
 	client    *http.Client
 	transport http.RoundTripper
 	logger    *log.Logger
 
-	sendQueue   chan *protocol.Envelope
-	workers     []*Worker
-	workerCount int
+	queue chan *protocol.Envelope
 
 	mu     sync.RWMutex
 	limits ratelimit.Map
 
-	done   chan struct{}
-	wg     sync.WaitGroup
-	closed bool
+	done chan struct{}
+	wg   sync.WaitGroup
+
+	flushRequest chan chan struct{}
 
 	sentCount    int64
 	droppedCount int64
 	errorCount   int64
 
-	// QueueSize is the capacity of the send queue
 	QueueSize int
-	// Timeout is the HTTP request timeout
-	Timeout time.Duration
+	Timeout   time.Duration
 
 	startOnce sync.Once
+	closeOnce sync.Once
 }
 
 func NewAsyncTransport(options TransportOptions) *AsyncTransport {
 	transport := &AsyncTransport{
-		sendQueue:   make(chan *protocol.Envelope, defaultQueueSize),
-		workers:     make([]*Worker, defaultWorkerCount),
-		workerCount: defaultWorkerCount,
-		done:        make(chan struct{}),
-		limits:      make(ratelimit.Map),
-		QueueSize:   defaultQueueSize,
-		Timeout:     defaultTimeout,
-		logger:      options.DebugLogger,
+		QueueSize: defaultQueueSize,
+		Timeout:   defaultTimeout,
+		done:      make(chan struct{}),
+		limits:    make(ratelimit.Map),
+		logger:    options.DebugLogger,
 	}
+
+	transport.queue = make(chan *protocol.Envelope, transport.QueueSize)
+	transport.flushRequest = make(chan chan struct{})
 
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil {
@@ -411,10 +338,10 @@ func NewAsyncTransport(options TransportOptions) *AsyncTransport {
 	return transport
 }
 
-// Start starts the worker goroutines. This method can only be called once.
 func (t *AsyncTransport) Start() {
 	t.startOnce.Do(func() {
-		t.startWorkers()
+		t.wg.Add(1)
+		go t.worker()
 	})
 }
 
@@ -429,14 +356,13 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	default:
 	}
 
-	// Check rate limiting before queuing
 	category := categoryFromEnvelope(envelope)
 	if t.isRateLimited(category) {
-		return nil // Silently drop rate-limited envelopes
+		return nil
 	}
 
 	select {
-	case t.sendQueue <- envelope:
+	case t.queue <- envelope:
 		return nil
 	default:
 		atomic.AddInt64(&t.droppedCount, 1)
@@ -451,106 +377,86 @@ func (t *AsyncTransport) Flush(timeout time.Duration) bool {
 }
 
 func (t *AsyncTransport) FlushWithContext(ctx context.Context) bool {
-	// Check if transport is configured
 	if t.dsn == nil {
 		return true
 	}
 
-	flushDone := make(chan struct{})
-
-	go func() {
-		defer close(flushDone)
-
-		// First, wait for queue to drain
-	drainLoop:
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				if len(t.sendQueue) == 0 {
-					break drainLoop
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
-		}
-
-		// Then wait a bit longer for in-flight requests to complete
-		// Since workers process asynchronously, we need to wait for active workers
-		time.Sleep(100 * time.Millisecond)
-	}()
-
+	flushResponse := make(chan struct{})
 	select {
-	case <-flushDone:
-		return true
+	case t.flushRequest <- flushResponse:
+		select {
+		case <-flushResponse:
+			return true
+		case <-ctx.Done():
+			return false
+		}
 	case <-ctx.Done():
 		return false
 	}
 }
 
 func (t *AsyncTransport) Close() {
-	t.mu.Lock()
-	if t.closed {
-		t.mu.Unlock()
-		return
-	}
-	t.closed = true
-	t.mu.Unlock()
-
-	close(t.done)
-	close(t.sendQueue)
-	t.wg.Wait()
+	t.closeOnce.Do(func() {
+		close(t.done)
+		close(t.queue)
+		close(t.flushRequest)
+		t.wg.Wait()
+	})
 }
 
-// IsRateLimited checks if a specific category is currently rate limited.
 func (t *AsyncTransport) IsRateLimited(category ratelimit.Category) bool {
 	return t.isRateLimited(category)
 }
 
-func (t *AsyncTransport) startWorkers() {
-	for i := 0; i < t.workerCount; i++ {
-		worker := &Worker{
-			id:        i,
-			transport: t,
-			done:      t.done,
-			wg:        &t.wg,
-		}
-		t.workers[i] = worker
-
-		t.wg.Add(1)
-		go worker.run()
-	}
-}
-
-func (w *Worker) run() {
-	defer w.wg.Done()
+func (t *AsyncTransport) worker() {
+	defer t.wg.Done()
 
 	for {
 		select {
-		case <-w.done:
+		case <-t.done:
 			return
-		case envelope, open := <-w.transport.sendQueue:
+		case envelope, open := <-t.queue:
 			if !open {
 				return
 			}
-			w.processEnvelope(envelope)
+			t.processEnvelope(envelope)
+		case flushResponse, open := <-t.flushRequest:
+			if !open {
+				return
+			}
+			t.drainQueue()
+			close(flushResponse)
 		}
 	}
 }
 
-func (w *Worker) processEnvelope(envelope *protocol.Envelope) {
+func (t *AsyncTransport) drainQueue() {
+	for {
+		select {
+		case envelope, open := <-t.queue:
+			if !open {
+				return
+			}
+			t.processEnvelope(envelope)
+		default:
+			return
+		}
+	}
+}
+
+func (t *AsyncTransport) processEnvelope(envelope *protocol.Envelope) {
 	maxRetries := defaultMaxRetries
 	backoff := defaultRetryBackoff
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if w.sendEnvelopeHTTP(envelope) {
-			atomic.AddInt64(&w.transport.sentCount, 1)
+		if t.sendEnvelopeHTTP(envelope) {
+			atomic.AddInt64(&t.sentCount, 1)
 			return
 		}
 
 		if attempt < maxRetries {
 			select {
-			case <-w.done:
+			case <-t.done:
 				return
 			case <-time.After(backoff):
 				backoff *= 2
@@ -558,73 +464,74 @@ func (w *Worker) processEnvelope(envelope *protocol.Envelope) {
 		}
 	}
 
-	atomic.AddInt64(&w.transport.errorCount, 1)
-	if w.transport.logger != nil {
-		w.transport.logger.Printf("Failed to send envelope after %d attempts", maxRetries+1)
+	atomic.AddInt64(&t.errorCount, 1)
+	if t.logger != nil {
+		t.logger.Printf("Failed to send envelope after %d attempts", maxRetries+1)
 	}
 }
 
-func (w *Worker) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
-	// Check rate limiting before processing
+func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
 	category := categoryFromEnvelope(envelope)
-	if w.transport.isRateLimited(category) {
+	if t.isRateLimited(category) {
 		return false
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultRequestTimeout)
 	defer cancel()
 
-	request, err := getSentryRequestFromEnvelope(ctx, w.transport.dsn, envelope)
+	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
 	if err != nil {
-		if w.transport.logger != nil {
-			w.transport.logger.Printf("Failed to create request from envelope: %v", err)
+		if t.logger != nil {
+			t.logger.Printf("Failed to create request from envelope: %v", err)
 		}
 		return false
 	}
 
-	response, err := w.transport.client.Do(request)
+	response, err := t.client.Do(request)
 	if err != nil {
-		if w.transport.logger != nil {
-			w.transport.logger.Printf("HTTP request failed: %v", err)
+		if t.logger != nil {
+			t.logger.Printf("HTTP request failed: %v", err)
 		}
 		return false
 	}
 	defer response.Body.Close()
 
-	success := w.handleResponse(response)
+	success := t.handleResponse(response)
 
-	w.transport.mu.Lock()
-	w.transport.limits.Merge(ratelimit.FromResponse(response))
-	w.transport.mu.Unlock()
+	t.mu.Lock()
+	if t.limits == nil {
+		t.limits = make(ratelimit.Map)
+	}
+	t.limits.Merge(ratelimit.FromResponse(response))
+	t.mu.Unlock()
 
 	_, _ = io.CopyN(io.Discard, response.Body, maxDrainResponseBytes)
-
 	return success
 }
 
-func (w *Worker) handleResponse(response *http.Response) bool {
+func (t *AsyncTransport) handleResponse(response *http.Response) bool {
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
 		return true
 	}
 
 	if response.StatusCode >= 400 && response.StatusCode < 500 {
 		if body, err := io.ReadAll(io.LimitReader(response.Body, maxDrainResponseBytes)); err == nil {
-			if w.transport.logger != nil {
-				w.transport.logger.Printf("Client error %d: %s", response.StatusCode, string(body))
+			if t.logger != nil {
+				t.logger.Printf("Client error %d: %s", response.StatusCode, string(body))
 			}
 		}
 		return false
 	}
 
 	if response.StatusCode >= 500 {
-		if w.transport.logger != nil {
-			w.transport.logger.Printf("Server error %d - will retry", response.StatusCode)
+		if t.logger != nil {
+			t.logger.Printf("Server error %d - will retry", response.StatusCode)
 		}
 		return false
 	}
 
-	if w.transport.logger != nil {
-		w.transport.logger.Printf("Unexpected status code %d", response.StatusCode)
+	if t.logger != nil {
+		t.logger.Printf("Unexpected status code %d", response.StatusCode)
 	}
 	return false
 }

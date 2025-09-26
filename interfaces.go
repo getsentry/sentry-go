@@ -42,18 +42,8 @@ const (
 )
 
 // SdkInfo contains all metadata about the SDK.
-type SdkInfo struct {
-	Name         string       `json:"name,omitempty"`
-	Version      string       `json:"version,omitempty"`
-	Integrations []string     `json:"integrations,omitempty"`
-	Packages     []SdkPackage `json:"packages,omitempty"`
-}
-
-// SdkPackage describes a package that was installed.
-type SdkPackage struct {
-	Name    string `json:"name,omitempty"`
-	Version string `json:"version,omitempty"`
-}
+type SdkInfo = protocol.SdkInfo
+type SdkPackage = protocol.SdkPackage
 
 // TODO: This type could be more useful, as map of interface{} is too generic
 // and requires a lot of type assertions in beforeBreadcrumb calls
@@ -516,7 +506,7 @@ func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protoc
 
 	// Add SDK info
 	if e.Sdk.Name != "" || e.Sdk.Version != "" {
-		header.Sdk = e.Sdk
+		header.Sdk = &e.Sdk
 	}
 
 	envelope := protocol.NewEnvelope(header)

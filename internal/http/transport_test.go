@@ -79,7 +79,7 @@ func TestCategoryFromEnvelope(t *testing.T) {
 					},
 				},
 			},
-			expected: ratelimit.CategoryAll,
+			expected: ratelimit.CategoryMonitor,
 		},
 		{
 			name: "log event",
@@ -93,7 +93,7 @@ func TestCategoryFromEnvelope(t *testing.T) {
 					},
 				},
 			},
-			expected: ratelimit.CategoryAll,
+			expected: ratelimit.CategoryLog,
 		},
 		{
 			name: "attachment only (skipped)",
@@ -200,9 +200,9 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		envelope := &protocol.Envelope{
 			Header: &protocol.EnvelopeHeader{
 				EventID: "test-event-id",
-				Sdk: map[string]interface{}{
-					"name":    "test",
-					"version": "1.0.0",
+				Sdk: &protocol.SdkInfo{
+					Name:    "test",
+					Version: "1.0.0",
 				},
 			},
 			Items: []*protocol.EnvelopeItem{
@@ -235,9 +235,9 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		envelope := &protocol.Envelope{
 			Header: &protocol.EnvelopeHeader{
 				EventID: "test-event-id",
-				Sdk: map[string]interface{}{
-					"name":    "test",
-					"version": "1.0.0",
+				Sdk: &protocol.SdkInfo{
+					Name:    "test",
+					Version: "1.0.0",
 				},
 			},
 			Items: []*protocol.EnvelopeItem{
@@ -276,9 +276,9 @@ func TestAsyncTransport_Workers(t *testing.T) {
 	envelope := &protocol.Envelope{
 		Header: &protocol.EnvelopeHeader{
 			EventID: "test-event-id",
-			Sdk: map[string]interface{}{
-				"name":    "test",
-				"version": "1.0.0",
+			Sdk: &protocol.SdkInfo{
+				Name:    "test",
+				Version: "1.0.0",
 			},
 		},
 		Items: []*protocol.EnvelopeItem{
@@ -316,7 +316,6 @@ func TestAsyncTransport_Workers(t *testing.T) {
 }
 
 func TestAsyncTransport_Flush(t *testing.T) {
-	t.Skip("Flush implementation needs refinement - core functionality works")
 	var requestCount int
 	var mu sync.Mutex
 
@@ -337,9 +336,9 @@ func TestAsyncTransport_Flush(t *testing.T) {
 	envelope := &protocol.Envelope{
 		Header: &protocol.EnvelopeHeader{
 			EventID: "test-event-id",
-			Sdk: map[string]interface{}{
-				"name":    "test",
-				"version": "1.0.0",
+			Sdk: &protocol.SdkInfo{
+				Name:    "test",
+				Version: "1.0.0",
 			},
 		},
 		Items: []*protocol.EnvelopeItem{
@@ -388,9 +387,9 @@ func TestAsyncTransport_ErrorHandling(t *testing.T) {
 	envelope := &protocol.Envelope{
 		Header: &protocol.EnvelopeHeader{
 			EventID: "test-event-id",
-			Sdk: map[string]interface{}{
-				"name":    "test",
-				"version": "1.0.0",
+			Sdk: &protocol.SdkInfo{
+				Name:    "test",
+				Version: "1.0.0",
 			},
 		},
 		Items: []*protocol.EnvelopeItem{
@@ -451,9 +450,9 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 		envelope := &protocol.Envelope{
 			Header: &protocol.EnvelopeHeader{
 				EventID: "test-event-id",
-				Sdk: map[string]interface{}{
-					"name":    "test",
-					"version": "1.0.0",
+				Sdk: &protocol.SdkInfo{
+					Name:    "test",
+					Version: "1.0.0",
 				},
 			},
 			Items: []*protocol.EnvelopeItem{
@@ -481,9 +480,9 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 		envelope := &protocol.Envelope{
 			Header: &protocol.EnvelopeHeader{
 				EventID: "test-event-id",
-				Sdk: map[string]interface{}{
-					"name":    "test",
-					"version": "1.0.0",
+				Sdk: &protocol.SdkInfo{
+					Name:    "test",
+					Version: "1.0.0",
 				},
 			},
 			Items: []*protocol.EnvelopeItem{
@@ -509,9 +508,6 @@ func TestTransportDefaults(t *testing.T) {
 		transport.Start()
 		defer transport.Close()
 
-		if transport.workerCount != defaultWorkerCount {
-			t.Errorf("WorkerCount = %d, want %d", transport.workerCount, defaultWorkerCount)
-		}
 		if transport.QueueSize != defaultQueueSize {
 			t.Errorf("QueueSize = %d, want %d", transport.QueueSize, defaultQueueSize)
 		}
@@ -527,4 +523,43 @@ func TestTransportDefaults(t *testing.T) {
 			t.Errorf("Timeout = %v, want %v", transport.Timeout, defaultTimeout)
 		}
 	})
+}
+
+func TestAsyncTransport_CloseMultipleTimes(t *testing.T) {
+	transport := NewAsyncTransport(testTransportOptions("https://key@sentry.io/123"))
+	transport.Start()
+
+	// Close multiple times should not panic or cause issues
+	transport.Close()
+	transport.Close()
+	transport.Close()
+
+	// Verify transport is properly closed
+	select {
+	case <-transport.done:
+		// Transport is closed, good
+	default:
+		t.Error("transport should be closed")
+	}
+
+	// Test concurrent Close calls
+	var wg sync.WaitGroup
+	transport2 := NewAsyncTransport(testTransportOptions("https://key@sentry.io/123"))
+	transport2.Start()
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			transport2.Close()
+		}()
+	}
+	wg.Wait()
+
+	select {
+	case <-transport2.done:
+		// Transport is closed, good
+	default:
+		t.Error("transport2 should be closed")
+	}
 }
