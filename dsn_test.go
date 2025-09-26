@@ -271,9 +271,9 @@ func TestDsn_UnmarshalJSON_TopLevel(t *testing.T) {
 			if err == nil && strings.HasPrefix(tt.jsonData, `"`) && strings.HasSuffix(tt.jsonData, `"`) {
 				// For valid JSON string cases, verify the DSN was properly reconstructed
 				var expectedDsnString string
-				json.Unmarshal([]byte(tt.jsonData), &expectedDsnString)
-
-				if dsn.String() != expectedDsnString {
+				if unmarshErr := json.Unmarshal([]byte(tt.jsonData), &expectedDsnString); unmarshErr != nil {
+					t.Errorf("json.Unmarshal failed: %v", unmarshErr)
+				} else if dsn.String() != expectedDsnString {
 					t.Errorf("UnmarshalJSON() result = %s, want %s", dsn.String(), expectedDsnString)
 				}
 			}

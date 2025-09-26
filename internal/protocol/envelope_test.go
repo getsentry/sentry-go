@@ -68,10 +68,14 @@ func TestEnvelope_ItemsAndSerialization(t *testing.T) {
 			}
 
 			var envelopeHeader map[string]interface{}
-			json.Unmarshal([]byte(lines[0]), &envelopeHeader)
+			if err := json.Unmarshal([]byte(lines[0]), &envelopeHeader); err != nil {
+				t.Fatalf("Failed to unmarshal envelope header: %v", err)
+			}
 
 			var itemHeader map[string]interface{}
-			json.Unmarshal([]byte(lines[1]), &itemHeader)
+			if err := json.Unmarshal([]byte(lines[1]), &itemHeader); err != nil {
+				t.Fatalf("Failed to unmarshal item header: %v", err)
+			}
 
 			if itemHeader["type"] != string(tt.itemType) {
 				t.Errorf("Expected type %s, got %v", tt.itemType, itemHeader["type"])
