@@ -17,7 +17,7 @@ type Envelope struct {
 // EnvelopeHeader represents the header of a Sentry envelope.
 type EnvelopeHeader struct {
 	// EventID is the unique identifier for this event
-	EventID string `json:"event_id,omitempty"`
+	EventID string `json:"event_id"`
 
 	// SentAt is the timestamp when the event was sent from the SDK as string in RFC 3339 format.
 	// Used for clock drift correction of the event timestamp. The time zone must be UTC.
@@ -45,13 +45,7 @@ const (
 	EnvelopeItemTypeTransaction EnvelopeItemType = "transaction"
 	EnvelopeItemTypeCheckIn     EnvelopeItemType = "check_in"
 	EnvelopeItemTypeAttachment  EnvelopeItemType = "attachment"
-	EnvelopeItemTypeSession     EnvelopeItemType = "session"
 	EnvelopeItemTypeLog         EnvelopeItemType = "log"
-	EnvelopeItemTypeProfile     EnvelopeItemType = "profile"
-	EnvelopeItemTypeReplay      EnvelopeItemType = "replay"
-	EnvelopeItemTypeSpan        EnvelopeItemType = "span"
-	EnvelopeItemTypeStatsd      EnvelopeItemType = "statsd"
-	EnvelopeItemTypeMetrics     EnvelopeItemType = "metrics"
 )
 
 // EnvelopeItemHeader represents the header of an envelope item.
@@ -175,47 +169,6 @@ func (e *Envelope) Size() (int, error) {
 func (h *EnvelopeHeader) MarshalJSON() ([]byte, error) {
 	type header EnvelopeHeader
 	return json.Marshal((*header)(h))
-}
-
-// MarshalJSON provides custom JSON marshaling to handle field ordering for different item types.
-func (h *EnvelopeItemHeader) MarshalJSON() ([]byte, error) {
-	switch h.Type {
-	case EnvelopeItemTypeLog:
-		// For log items, use the correct field order: type, length, item_count, content_type
-		return json.Marshal(struct {
-			Type        EnvelopeItemType `json:"type"`
-			Length      *int             `json:"length,omitempty"`
-			ItemCount   *int             `json:"item_count,omitempty"`
-			ContentType string           `json:"content_type,omitempty"`
-		}{
-			Type:        h.Type,
-			Length:      h.Length,
-			ItemCount:   h.ItemCount,
-			ContentType: h.ContentType,
-		})
-	case EnvelopeItemTypeAttachment:
-		// For attachments, use the correct field order: type, length, filename, content_type
-		return json.Marshal(struct {
-			Type        EnvelopeItemType `json:"type"`
-			Length      *int             `json:"length,omitempty"`
-			Filename    string           `json:"filename,omitempty"`
-			ContentType string           `json:"content_type,omitempty"`
-		}{
-			Type:        h.Type,
-			Length:      h.Length,
-			Filename:    h.Filename,
-			ContentType: h.ContentType,
-		})
-	default:
-		// For other item types, use standard field order: type, length
-		return json.Marshal(struct {
-			Type   EnvelopeItemType `json:"type"`
-			Length *int             `json:"length,omitempty"`
-		}{
-			Type:   h.Type,
-			Length: h.Length,
-		})
-	}
 }
 
 // NewEnvelopeItem creates a new envelope item with the specified type and payload.
