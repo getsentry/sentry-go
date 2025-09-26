@@ -26,10 +26,6 @@ type TelemetryTransport interface {
 	// IsRateLimited checks if a specific category is currently rate limited
 	IsRateLimited(category ratelimit.Category) bool
 
-	// Configure configures the transport with client options
-	// Uses interface{} to allow different transport implementations to define their own config types
-	Configure(options interface{}) error
-
 	// Flush waits for all pending envelopes to be sent, with timeout
 	Flush(timeout time.Duration) bool
 
