@@ -200,6 +200,12 @@ func (t *SyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 
 func (t *SyncTransport) Close() {}
 
+func (t *SyncTransport) SendEvent(event protocol.EnvelopeConvertible) {
+	if envelope, err := event.ToEnvelope(t.dsn); err == nil && envelope != nil {
+		_ = t.SendEnvelope(envelope)
+	}
+}
+
 func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
 	return t.disabled(category)
 }
@@ -363,6 +369,12 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	default:
 		atomic.AddInt64(&t.droppedCount, 1)
 		return ErrTransportQueueFull
+	}
+}
+
+func (t *AsyncTransport) SendEvent(event protocol.EnvelopeConvertible) {
+	if envelope, err := event.ToEnvelope(t.dsn); err == nil && envelope != nil {
+		_ = t.SendEnvelope(envelope)
 	}
 }
 

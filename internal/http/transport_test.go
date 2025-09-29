@@ -12,6 +12,16 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
+// Mock EnvelopeConvertible for testing SendEvent.
+type mockEnvelopeConvertible struct {
+	envelope *protocol.Envelope
+	err      error
+}
+
+func (m *mockEnvelopeConvertible) ToEnvelope(_ *protocol.Dsn) (*protocol.Envelope, error) {
+	return m.envelope, m.err
+}
+
 // Helper function to create test transport options.
 func testTransportOptions(dsn string) TransportOptions {
 	return TransportOptions{
@@ -597,4 +607,69 @@ func TestAsyncTransport_CloseMultipleTimes(t *testing.T) {
 	default:
 		t.Error("transport2 should be closed")
 	}
+}
+
+func TestSyncTransport_SendEvent(_ *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	transport := NewSyncTransport(testTransportOptions("http://key@" + server.URL[7:] + "/123"))
+
+	envelope := &protocol.Envelope{
+		Header: &protocol.EnvelopeHeader{
+			EventID: "test-event-id",
+			Sdk: &protocol.SdkInfo{
+				Name:    "test",
+				Version: "1.0.0",
+			},
+		},
+		Items: []*protocol.EnvelopeItem{
+			{
+				Header: &protocol.EnvelopeItemHeader{
+					Type: protocol.EnvelopeItemTypeEvent,
+				},
+				Payload: []byte(`{"message": "test"}`),
+			},
+		},
+	}
+
+	event := &mockEnvelopeConvertible{envelope: envelope}
+	transport.SendEvent(event) // Should not panic and complete successfully
+}
+
+func TestAsyncTransport_SendEvent(_ *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	transport := NewAsyncTransport(testTransportOptions("http://key@" + server.URL[7:] + "/123"))
+	transport.Start()
+	defer transport.Close()
+
+	envelope := &protocol.Envelope{
+		Header: &protocol.EnvelopeHeader{
+			EventID: "test-event-id",
+			Sdk: &protocol.SdkInfo{
+				Name:    "test",
+				Version: "1.0.0",
+			},
+		},
+		Items: []*protocol.EnvelopeItem{
+			{
+				Header: &protocol.EnvelopeItemHeader{
+					Type: protocol.EnvelopeItemTypeEvent,
+				},
+				Payload: []byte(`{"message": "test"}`),
+			},
+		},
+	}
+
+	event := &mockEnvelopeConvertible{envelope: envelope}
+	transport.SendEvent(event) // Should not panic and complete successfully
+
+	// Give the async transport time to process
+	transport.Flush(time.Second)
 }
