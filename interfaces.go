@@ -499,26 +499,17 @@ func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protoc
 		Trace:   trace,
 	}
 
-	// Add DSN if provided
 	if dsn != nil {
 		header.Dsn = dsn.String()
 	}
 
-	// Add SDK info
-	if e.Sdk.Name != "" || e.Sdk.Version != "" {
-		header.Sdk = &e.Sdk
-	}
+	header.Sdk = &e.Sdk
 
 	envelope := protocol.NewEnvelope(header)
 
-	// Serialize the event body with fallback handling
 	eventBody, err := json.Marshal(e)
 	if err != nil {
 		// Try fallback: remove problematic fields and retry
-		originalBreadcrumbs := e.Breadcrumbs
-		originalContexts := e.Contexts
-		originalExtra := e.Extra
-
 		e.Breadcrumbs = nil
 		e.Contexts = nil
 		e.Extra = map[string]interface{}{
@@ -530,18 +521,12 @@ func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protoc
 
 		eventBody, err = json.Marshal(e)
 		if err != nil {
-			// Restore original values and return error if even fallback fails
-			e.Breadcrumbs = originalBreadcrumbs
-			e.Contexts = originalContexts
-			e.Extra = originalExtra
 			return nil, fmt.Errorf("event could not be marshaled even with fallback: %w", err)
 		}
 
-		// Keep the fallback state since it worked
 		DebugLogger.Printf("Event marshaling succeeded with fallback after removing problematic fields")
 	}
 
-	// Create the main event item based on event type
 	var mainItem *protocol.EnvelopeItem
 	switch e.Type {
 	case transactionType:
@@ -555,8 +540,6 @@ func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protoc
 	}
 
 	envelope.AddItem(mainItem)
-
-	// Add attachments as separate items
 	for _, attachment := range e.Attachments {
 		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
 		envelope.AddItem(attachmentItem)

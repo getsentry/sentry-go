@@ -708,3 +708,59 @@ func TestEvent_ToEnvelopeWithTime(t *testing.T) {
 		t.Errorf("Expected SentAt %v, got %v", sentAt, envelope.Header.SentAt)
 	}
 }
+
+func TestEvent_ToEnvelope_FallbackOnMarshalError(t *testing.T) {
+	unmarshalableFunc := func() string { return "test" }
+
+	event := &Event{
+		EventID:   "12345678901234567890123456789012",
+		Message:   "test message with fallback",
+		Level:     LevelError,
+		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+		Extra: map[string]interface{}{
+			"bad_data": unmarshalableFunc,
+		},
+	}
+
+	envelope, err := event.ToEnvelope(nil)
+
+	if err != nil {
+		t.Errorf("ToEnvelope() should not error even with unmarshalable data, got: %v", err)
+		return
+	}
+
+	if envelope == nil {
+		t.Error("ToEnvelope() should not return a nil envelope")
+		return
+	}
+
+	data, _ := envelope.Serialize()
+
+	lines := strings.Split(string(data), "\n")
+	if len(lines) < 2 {
+		t.Error("Expected at least 2 lines in serialized envelope")
+		return
+	}
+
+	var eventData map[string]interface{}
+	if err := json.Unmarshal([]byte(lines[2]), &eventData); err != nil {
+		t.Errorf("Failed to unmarshal event data: %v", err)
+		return
+	}
+
+	extra, exists := eventData["extra"].(map[string]interface{})
+	if !exists {
+		t.Error("Expected extra field after fallback")
+		return
+	}
+
+	info, exists := extra["info"].(string)
+	if !exists {
+		t.Error("Expected info field in extra after fallback")
+		return
+	}
+
+	if !strings.Contains(info, "Could not encode original event as JSON") {
+		t.Error("Expected fallback info message in extra field")
+	}
+}
