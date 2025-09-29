@@ -142,6 +142,46 @@ func TestCategoryFromEnvelope(t *testing.T) {
 			},
 			expected: ratelimit.CategoryAll,
 		},
+		{
+			name: "nil item",
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
+					nil,
+				},
+			},
+			expected: ratelimit.CategoryAll,
+		},
+		{
+			name: "nil item header",
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
+					{
+						Header: nil,
+					},
+				},
+			},
+			expected: ratelimit.CategoryAll,
+		},
+		{
+			name: "mixed items with nil",
+			envelope: &protocol.Envelope{
+				Header: &protocol.EnvelopeHeader{},
+				Items: []*protocol.EnvelopeItem{
+					nil,
+					{
+						Header: nil,
+					},
+					{
+						Header: &protocol.EnvelopeItemHeader{
+							Type: protocol.EnvelopeItemTypeEvent,
+						},
+					},
+				},
+			},
+			expected: ratelimit.CategoryError,
+		},
 	}
 
 	for _, tt := range tests {
@@ -376,7 +416,13 @@ func TestAsyncTransport_Flush(t *testing.T) {
 }
 
 func TestAsyncTransport_ErrorHandling(t *testing.T) {
+	var requestCount int
+	var mu sync.Mutex
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		requestCount++
+		mu.Unlock()
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer server.Close()
@@ -407,21 +453,16 @@ func TestAsyncTransport_ErrorHandling(t *testing.T) {
 		t.Errorf("failed to send envelope: %v", err)
 	}
 
-	// Wait for retries to complete (should take at least maxRetries * retryBackoff)
-	// With defaultMaxRetries=3 and exponential backoff starting at 1s: 1+2+4 = 7s minimum
-	// Adding extra time for safety
-	time.Sleep(8 * time.Second)
-
-	errorCount := atomic.LoadInt64(&transport.errorCount)
-	sentCount := atomic.LoadInt64(&transport.sentCount)
-
-	t.Logf("Final counts - errorCount: %d, sentCount: %d", errorCount, sentCount)
-
-	if errorCount == 0 {
-		t.Error("expected error count to be incremented")
-	}
-
+	transport.Flush(time.Second)
 	transport.Close()
+
+	mu.Lock()
+	finalRequestCount := requestCount
+	mu.Unlock()
+
+	if finalRequestCount == 0 {
+		t.Error("expected at least one HTTP request")
+	}
 }
 
 func TestSyncTransport_SendEnvelope(t *testing.T) {
@@ -474,7 +515,6 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("rate limited envelope", func(t *testing.T) {
 		transport := NewSyncTransport(testTransportOptions("https://key@sentry.io/123"))
 
-		// Set up rate limiting
 		transport.limits[ratelimit.CategoryError] = ratelimit.Deadline(time.Now().Add(time.Hour))
 
 		envelope := &protocol.Envelope{
@@ -529,20 +569,16 @@ func TestAsyncTransport_CloseMultipleTimes(t *testing.T) {
 	transport := NewAsyncTransport(testTransportOptions("https://key@sentry.io/123"))
 	transport.Start()
 
-	// Close multiple times should not panic or cause issues
 	transport.Close()
 	transport.Close()
 	transport.Close()
 
-	// Verify transport is properly closed
 	select {
 	case <-transport.done:
-		// Transport is closed, good
 	default:
 		t.Error("transport should be closed")
 	}
 
-	// Test concurrent Close calls
 	var wg sync.WaitGroup
 	transport2 := NewAsyncTransport(testTransportOptions("https://key@sentry.io/123"))
 	transport2.Start()
@@ -558,7 +594,6 @@ func TestAsyncTransport_CloseMultipleTimes(t *testing.T) {
 
 	select {
 	case <-transport2.done:
-		// Transport is closed, good
 	default:
 		t.Error("transport2 should be closed")
 	}

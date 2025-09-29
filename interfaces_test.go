@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -35,6 +36,9 @@ func TestUserIsEmpty(t *testing.T) {
 		{input: User{Name: "My Name"}, want: false},
 		{input: User{Data: map[string]string{"foo": "bar"}}, want: false},
 		{input: User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Data: map[string]string{"foo": "bar"}}, want: false},
+		// Edge cases
+		{input: User{Data: map[string]string{}}, want: true},   // Empty but non-nil map should be empty
+		{input: User{ID: "   ", Username: "   "}, want: false}, // Whitespace-only fields should not be empty
 	}
 
 	for _, test := range tests {
@@ -75,39 +79,74 @@ func TestNewRequest(t *testing.T) {
 	// Unbind the client afterwards, to not affect other tests
 	defer currentHub.stackTop().SetClient(nil)
 
-	const payload = `{"test_data": true}`
-	r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
-	r.Header.Add("Authorization", "Bearer 1234567890")
-	r.Header.Add("Proxy-Authorization", "Bearer 123")
-	r.Header.Add("Cookie", "foo=bar")
-	r.Header.Add("X-Forwarded-For", "127.0.0.1")
-	r.Header.Add("X-Real-Ip", "127.0.0.1")
-	r.Header.Add("Some-Header", "some-header value")
+	t.Run("standard request", func(t *testing.T) {
+		const payload = `{"test_data": true}`
+		r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
+		r.Header.Add("Authorization", "Bearer 1234567890")
+		r.Header.Add("Proxy-Authorization", "Bearer 123")
+		r.Header.Add("Cookie", "foo=bar")
+		r.Header.Add("X-Forwarded-For", "127.0.0.1")
+		r.Header.Add("X-Real-Ip", "127.0.0.1")
+		r.Header.Add("Some-Header", "some-header value")
 
-	got := NewRequest(r)
-	want := &Request{
-		URL:         "http://example.com/test/",
-		Method:      "POST",
-		Data:        "",
-		QueryString: "q=sentry",
-		Cookies:     "foo=bar",
-		Headers: map[string]string{
-			"Authorization":       "Bearer 1234567890",
-			"Proxy-Authorization": "Bearer 123",
-			"Cookie":              "foo=bar",
-			"Host":                "example.com",
-			"X-Forwarded-For":     "127.0.0.1",
-			"X-Real-Ip":           "127.0.0.1",
-			"Some-Header":         "some-header value",
-		},
-		Env: map[string]string{
-			"REMOTE_ADDR": "192.0.2.1",
-			"REMOTE_PORT": "1234",
-		},
-	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Request mismatch (-want +got):\n%s", diff)
-	}
+		got := NewRequest(r)
+		want := &Request{
+			URL:         "http://example.com/test/",
+			Method:      "POST",
+			Data:        "",
+			QueryString: "q=sentry",
+			Cookies:     "foo=bar",
+			Headers: map[string]string{
+				"Authorization":       "Bearer 1234567890",
+				"Proxy-Authorization": "Bearer 123",
+				"Cookie":              "foo=bar",
+				"Host":                "example.com",
+				"X-Forwarded-For":     "127.0.0.1",
+				"X-Real-Ip":           "127.0.0.1",
+				"Some-Header":         "some-header value",
+			},
+			Env: map[string]string{
+				"REMOTE_ADDR": "192.0.2.1",
+				"REMOTE_PORT": "1234",
+			},
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Request mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("request with TLS", func(t *testing.T) {
+		r := httptest.NewRequest("POST", "https://example.com/test", nil)
+		r.TLS = &tls.ConnectionState{} // Simulate TLS connection
+
+		got := NewRequest(r)
+
+		if !strings.HasPrefix(got.URL, "https://") {
+			t.Errorf("Request with TLS should have HTTPS URL, got %s", got.URL)
+		}
+	})
+
+	t.Run("request with X-Forwarded-Proto header", func(t *testing.T) {
+		r := httptest.NewRequest("POST", "http://example.com/test", nil)
+		r.Header.Set("X-Forwarded-Proto", "https")
+
+		got := NewRequest(r)
+
+		if !strings.HasPrefix(got.URL, "https://") {
+			t.Errorf("Request with X-Forwarded-Proto: https should have HTTPS URL, got %s", got.URL)
+		}
+	})
+
+	t.Run("request with malformed RemoteAddr", func(t *testing.T) {
+		r := httptest.NewRequest("POST", "http://example.com/test", nil)
+		r.RemoteAddr = "malformed-address" // Invalid format
+
+		got := NewRequest(r)
+
+		if got.Env != nil {
+			t.Error("Request with malformed RemoteAddr should not set Env")
+		}
+	})
 }
 
 func TestNewRequestWithNoPII(t *testing.T) {
@@ -241,6 +280,11 @@ func TestSetException(t *testing.T) {
 		maxErrorDepth int
 		expected      []Exception
 	}{
+		"Nil exception": {
+			exception:     nil,
+			maxErrorDepth: 5,
+			expected:      []Exception{},
+		},
 		"Single error without unwrap": {
 			exception:     errors.New("simple error"),
 			maxErrorDepth: 1,

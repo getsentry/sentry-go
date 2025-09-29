@@ -155,17 +155,20 @@ type SyncTransport struct {
 }
 
 func NewSyncTransport(options TransportOptions) *SyncTransport {
+	logger := options.DebugLogger
+	if options.DebugLogger == nil {
+		logger = log.New(io.Discard, "", log.LstdFlags)
+	}
+
 	transport := &SyncTransport{
 		Timeout: defaultTimeout,
 		limits:  make(ratelimit.Map),
-		logger:  options.DebugLogger,
+		logger:  logger,
 	}
 
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil {
-		if transport.logger != nil {
-			transport.logger.Printf("%v\n", err)
-		}
+		transport.logger.Printf("%v\n", err)
 		return transport
 	}
 	transport.dsn = dsn
@@ -213,28 +216,20 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
 	if err != nil {
-		if t.logger != nil {
-			t.logger.Printf("There was an issue creating the request: %v", err)
-		}
+		t.logger.Printf("There was an issue creating the request: %v", err)
 		return err
 	}
 	response, err := t.client.Do(request)
 	if err != nil {
-		if t.logger != nil {
-			t.logger.Printf("There was an issue with sending an event: %v", err)
-		}
+		t.logger.Printf("There was an issue with sending an event: %v", err)
 		return err
 	}
 	if response.StatusCode >= 400 && response.StatusCode <= 599 {
 		b, err := io.ReadAll(response.Body)
 		if err != nil {
-			if t.logger != nil {
-				t.logger.Printf("Error while reading response code: %v", err)
-			}
+			t.logger.Printf("Error while reading response code: %v", err)
 		}
-		if t.logger != nil {
-			t.logger.Printf("Sending %s failed with the following error: %s", envelope.Header.EventID, string(b))
-		}
+		t.logger.Printf("Sending %s failed with the following error: %s", envelope.Header.EventID, string(b))
 	}
 
 	t.mu.Lock()
@@ -262,9 +257,7 @@ func (t *SyncTransport) disabled(c ratelimit.Category) bool {
 	defer t.mu.Unlock()
 	disabled := t.limits.IsRateLimited(c)
 	if disabled {
-		if t.logger != nil {
-			t.logger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
-		}
+		t.logger.Printf("Too many requests for %q, backing off till: %v", c, t.limits.Deadline(c))
 	}
 	return disabled
 }
@@ -297,12 +290,17 @@ type AsyncTransport struct {
 }
 
 func NewAsyncTransport(options TransportOptions) *AsyncTransport {
+	logger := options.DebugLogger
+	if options.DebugLogger == nil {
+		logger = log.New(io.Discard, "", log.LstdFlags)
+	}
+
 	transport := &AsyncTransport{
 		QueueSize: defaultQueueSize,
 		Timeout:   defaultTimeout,
 		done:      make(chan struct{}),
 		limits:    make(ratelimit.Map),
-		logger:    options.DebugLogger,
+		logger:    logger,
 	}
 
 	transport.queue = make(chan *protocol.Envelope, transport.QueueSize)
@@ -310,9 +308,7 @@ func NewAsyncTransport(options TransportOptions) *AsyncTransport {
 
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil {
-		if transport.logger != nil {
-			transport.logger.Printf("%v\n", err)
-		}
+		transport.logger.Printf("%v\n", err)
 		return transport
 	}
 	transport.dsn = dsn
@@ -465,9 +461,7 @@ func (t *AsyncTransport) processEnvelope(envelope *protocol.Envelope) {
 	}
 
 	atomic.AddInt64(&t.errorCount, 1)
-	if t.logger != nil {
-		t.logger.Printf("Failed to send envelope after %d attempts", maxRetries+1)
-	}
+	t.logger.Printf("Failed to send envelope after %d attempts", maxRetries+1)
 }
 
 func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
@@ -481,17 +475,13 @@ func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
 
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
 	if err != nil {
-		if t.logger != nil {
-			t.logger.Printf("Failed to create request from envelope: %v", err)
-		}
+		t.logger.Printf("Failed to create request from envelope: %v", err)
 		return false
 	}
 
 	response, err := t.client.Do(request)
 	if err != nil {
-		if t.logger != nil {
-			t.logger.Printf("HTTP request failed: %v", err)
-		}
+		t.logger.Printf("HTTP request failed: %v", err)
 		return false
 	}
 	defer response.Body.Close()
@@ -516,23 +506,17 @@ func (t *AsyncTransport) handleResponse(response *http.Response) bool {
 
 	if response.StatusCode >= 400 && response.StatusCode < 500 {
 		if body, err := io.ReadAll(io.LimitReader(response.Body, maxDrainResponseBytes)); err == nil {
-			if t.logger != nil {
-				t.logger.Printf("Client error %d: %s", response.StatusCode, string(body))
-			}
+			t.logger.Printf("Client error %d: %s", response.StatusCode, string(body))
 		}
 		return false
 	}
 
 	if response.StatusCode >= 500 {
-		if t.logger != nil {
-			t.logger.Printf("Server error %d - will retry", response.StatusCode)
-		}
+		t.logger.Printf("Server error %d - will retry", response.StatusCode)
 		return false
 	}
 
-	if t.logger != nil {
-		t.logger.Printf("Unexpected status code %d", response.StatusCode)
-	}
+	t.logger.Printf("Unexpected status code %d", response.StatusCode)
 	return false
 }
 
@@ -541,9 +525,7 @@ func (t *AsyncTransport) isRateLimited(category ratelimit.Category) bool {
 	defer t.mu.RUnlock()
 	limited := t.limits.IsRateLimited(category)
 	if limited {
-		if t.logger != nil {
-			t.logger.Printf("Rate limited for category %q until %v", category, t.limits.Deadline(category))
-		}
+		t.logger.Printf("Rate limited for category %q until %v", category, t.limits.Deadline(category))
 	}
 	return limited
 }
