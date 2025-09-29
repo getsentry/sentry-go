@@ -373,6 +373,8 @@ func (s *Span) shouldIgnoreStatusCode() bool {
 
 	for _, ignoredCode := range ignoreStatusCodes {
 		if statusCode == ignoredCode {
+			s.Sampled = SampledFalse
+			DebugLogger.Printf("dropping transaction with status code %v: found in TraceIgnoreStatusCodes", statusCode)
 			return true
 		}
 	}
@@ -394,7 +396,6 @@ func (s *Span) doFinish() {
 	}
 
 	if s.shouldIgnoreStatusCode() {
-		s.Sampled = SampledFalse
 		return
 	}
 
