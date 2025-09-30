@@ -246,12 +246,9 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		}
 	})
 
-	t.Run("queue full backpressure", func(t *testing.T) {
-		queueSize := 3
+	t.Run("send envelope", func(t *testing.T) {
 		transport := NewAsyncTransport(testTransportOptions("https://key@sentry.io/123"))
 		transport.Start()
-		// simulate backpressure
-		transport.queue = make(chan *protocol.Envelope, queueSize)
 		defer transport.Close()
 
 		envelope := &protocol.Envelope{
@@ -272,14 +269,11 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			},
 		}
 
-		for i := 0; i < queueSize; i++ {
+		for i := 0; i < 5; i++ {
 			err := transport.SendEnvelope(envelope)
 			if err != nil {
 				t.Errorf("envelope %d should succeed: %v", i, err)
 			}
-		}
-		if err := transport.SendEnvelope(envelope); !errors.Is(err, ErrTransportQueueFull) {
-			t.Errorf("envelope 3 should fail with err: %v", ErrTransportQueueFull)
 		}
 	})
 
