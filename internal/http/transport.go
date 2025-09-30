@@ -20,17 +20,15 @@ import (
 )
 
 const (
-	defaultTimeout = time.Second * 30
-
 	apiVersion = 7
 
-	defaultQueueSize      = 1000
-	defaultRequestTimeout = 30 * time.Second
-	defaultMaxRetries     = 3
-	defaultRetryBackoff   = time.Second
-)
+	defaultTimeout   = time.Second * 30
+	defaultQueueSize = 1000
 
-const maxDrainResponseBytes = 16 << 10
+	// maxDrainResponseBytes is the maximum number of bytes that transport
+	// implementations will read from response bodies when draining them.
+	maxDrainResponseBytes = 16 << 10
+)
 
 var (
 	ErrTransportQueueFull = errors.New("transport queue full")
@@ -48,13 +46,13 @@ type TransportOptions struct {
 }
 
 func getProxyConfig(options TransportOptions) func(*http.Request) (*url.URL, error) {
-	if options.HTTPSProxy != "" {
+	if len(options.HTTPSProxy) > 0 {
 		return func(*http.Request) (*url.URL, error) {
 			return url.Parse(options.HTTPSProxy)
 		}
 	}
 
-	if options.HTTPProxy != "" {
+	if len(options.HTTPProxy) > 0 {
 		return func(*http.Request) (*url.URL, error) {
 			return url.Parse(options.HTTPProxy)
 		}
@@ -94,10 +92,6 @@ func getSentryRequestFromEnvelope(ctx context.Context, dsn *protocol.Dsn, envelo
 			r.Header.Set("X-Sentry-Auth", auth)
 		}
 	}()
-
-	if ctx == nil {
-		ctx = context.Background()
-	}
 
 	var buf bytes.Buffer
 	_, err = envelope.WriteTo(&buf)
@@ -453,27 +447,11 @@ func (t *AsyncTransport) drainQueue() {
 }
 
 func (t *AsyncTransport) processEnvelope(envelope *protocol.Envelope) {
-	maxRetries := defaultMaxRetries
-	backoff := defaultRetryBackoff
-
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if t.sendEnvelopeHTTP(envelope) {
-			atomic.AddInt64(&t.sentCount, 1)
-			return
-		}
-
-		if attempt < maxRetries {
-			select {
-			case <-t.done:
-				return
-			case <-time.After(backoff):
-				backoff *= 2
-			}
-		}
+	if t.sendEnvelopeHTTP(envelope) {
+		atomic.AddInt64(&t.sentCount, 1)
+	} else {
+		atomic.AddInt64(&t.errorCount, 1)
 	}
-
-	atomic.AddInt64(&t.errorCount, 1)
-	t.logger.Printf("Failed to send envelope after %d attempts", maxRetries+1)
 }
 
 func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
@@ -482,7 +460,7 @@ func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
 		return false
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultRequestTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
