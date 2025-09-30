@@ -699,6 +699,132 @@ func TestIgnoreTransactions(t *testing.T) {
 	}
 }
 
+func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
+	transport := &MockTransport{}
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+	})
+
+	transaction := StartTransaction(ctx, "test")
+	// Transaction has no http.response.status_code
+	transaction.Finish()
+
+	dropped := transport.lastEvent == nil
+	assertEqual(t, dropped, false, "expected transaction to not be dropped")
+}
+
+func TestTraceIgnoreStatusCodes(t *testing.T) {
+	tests := map[string]struct {
+		ignoreStatusCodes [][]int
+		statusCode        interface{}
+		expectDrop        bool
+	}{
+		"No ignored codes": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{},
+			expectDrop:        false,
+		},
+		"Status code not in ignore ranges": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        false,
+		},
+		"404 in ignore range": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        true,
+		},
+		"403 in ignore range": {
+			statusCode:        403,
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        true,
+		},
+		"200 not ignored": {
+			statusCode:        200,
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        false,
+		},
+		"wrong code not ignored": {
+			statusCode:        "something",
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        false,
+		},
+		"Single status code as single-element slice": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{404}},
+			expectDrop:        true,
+		},
+		"Single status code not in single-element slice": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{404}},
+			expectDrop:        false,
+		},
+		"Multiple single codes": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{404}, {500}},
+			expectDrop:        true,
+		},
+		"Multiple ranges - code in first range": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{400, 405}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Multiple ranges - code in second range": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{400, 405}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Multiple ranges - code not in any range": {
+			statusCode:        200,
+			ignoreStatusCodes: [][]int{{400, 405}, {500, 599}},
+			expectDrop:        false,
+		},
+		"Mixed single codes and ranges": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{404}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Mixed single codes and ranges - code in range": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{404}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Mixed single codes and ranges - code not matched": {
+			statusCode:        200,
+			ignoreStatusCodes: [][]int{{404}, {500, 599}},
+			expectDrop:        false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			transport := &MockTransport{}
+			ctx := NewTestContext(ClientOptions{
+				EnableTracing:          true,
+				TracesSampleRate:       1.0,
+				Transport:              transport,
+				TraceIgnoreStatusCodes: tt.ignoreStatusCodes,
+			})
+
+			transaction := StartTransaction(ctx, "test")
+			// Simulate HTTP response data like the integrations do
+			transaction.SetData("http.response.status_code", tt.statusCode)
+			transaction.Finish()
+
+			dropped := transport.lastEvent == nil
+			if tt.expectDrop != dropped {
+				if tt.expectDrop {
+					t.Errorf("expected transaction with status code %d to be dropped", tt.statusCode)
+				} else {
+					t.Errorf("expected transaction with status code %d not to be dropped", tt.statusCode)
+				}
+			}
+		})
+	}
+}
+
 func TestSampleRate(t *testing.T) {
 	tests := []struct {
 		SampleRate float64
