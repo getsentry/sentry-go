@@ -1,8 +1,6 @@
 package sentry
 
 import (
-	"encoding/json"
-
 	"github.com/getsentry/sentry-go/internal/protocol"
 )
 
@@ -10,7 +8,7 @@ import (
 
 // Dsn is used as the remote address source to client transport.
 type Dsn struct {
-	*protocol.Dsn
+	protocol.Dsn
 }
 
 // DsnParseError represents an error that occurs if a Sentry
@@ -25,7 +23,7 @@ func NewDsn(rawURL string) (*Dsn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Dsn{Dsn: protocolDsn}, nil
+	return &Dsn{Dsn: *protocolDsn}, nil
 }
 
 // RequestHeaders returns all the necessary headers that have to be used in the transport when sending events
@@ -36,21 +34,4 @@ func NewDsn(rawURL string) (*Dsn, error) {
 // against the /envelope endpoint are added automatically.
 func (dsn *Dsn) RequestHeaders() map[string]string {
 	return dsn.Dsn.RequestHeaders(SDKVersion)
-}
-
-// MarshalJSON converts the Dsn struct to JSON.
-func (dsn *Dsn) MarshalJSON() ([]byte, error) {
-	return json.Marshal(dsn.String())
-}
-
-// UnmarshalJSON converts JSON data to the Dsn struct.
-func (dsn *Dsn) UnmarshalJSON(data []byte) error {
-	var str string
-	_ = json.Unmarshal(data, &str)
-	newDsn, err := NewDsn(str)
-	if err != nil {
-		return err
-	}
-	*dsn = *newDsn
-	return nil
 }
