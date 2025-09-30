@@ -371,13 +371,28 @@ func (s *Span) shouldIgnoreStatusCode() bool {
 		return false
 	}
 
-	for _, ignoredCode := range ignoreStatusCodes {
-		if statusCode == ignoredCode {
-			s.mu.Lock()
-			s.Sampled = SampledFalse
-			s.mu.Unlock()
-			DebugLogger.Printf("dropping transaction with status code %v: found in TraceIgnoreStatusCodes", statusCode)
-			return true
+	for _, ignoredRange := range ignoreStatusCodes {
+		switch len(ignoredRange) {
+		case 1:
+			// Single status code
+			if statusCode == ignoredRange[0] {
+				s.mu.Lock()
+				s.Sampled = SampledFalse
+				s.mu.Unlock()
+				DebugLogger.Printf("dropping transaction with status code %v: found in TraceIgnoreStatusCodes", statusCode)
+				return true
+			}
+		case 2:
+			// Range of status codes [min, max]
+			if ignoredRange[0] <= statusCode && statusCode <= ignoredRange[1] {
+				s.mu.Lock()
+				s.Sampled = SampledFalse
+				s.mu.Unlock()
+				DebugLogger.Printf("dropping transaction with status code %v: found in TraceIgnoreStatusCodes range [%d, %d]", statusCode, ignoredRange[0], ignoredRange[1])
+				return true
+			}
+		default:
+			DebugLogger.Printf("incorrect TraceIgnoreStatusCodes format: %v", ignoredRange)
 		}
 	}
 

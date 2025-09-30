@@ -229,12 +229,20 @@ type ClientOptions struct {
 	// EnableLogs controls when logs should be emitted.
 	EnableLogs bool
 	// TraceIgnoreStatusCodes is a list of HTTP status codes that should not be traced.
-	// When an HTTP request results in one of these status codes, the transaction will
-	// not be sent to Sentry.
+	// Each element can be either:
+	// - A single-element slice [code] for a specific status code
+	// - A two-element slice [min, max] for a range of status codes (inclusive)
+	// When an HTTP request results in a status code that matches any of these codes or ranges,
+	// the transaction will not be sent to Sentry.
 	//
-	// This is useful for ignoring expected errors like 404s.
+	// Examples:
+	//   [][]int{{404}}                           // ignore only status code 404
+	//   [][]int{{400, 405}}                     // ignore status codes 400-405
+	//   [][]int{{404}, {500}}                   // ignore status codes 404 and 500
+	//   [][]int{{404}, {400, 405}, {500, 599}}  // ignore 404, range 400-405, and range 500-599
+	//
 	// By default, this is empty and all status codes are traced.
-	TraceIgnoreStatusCodes []int
+	TraceIgnoreStatusCodes [][]int
 }
 
 // Client is the underlying processor that is used by the main API and Hub

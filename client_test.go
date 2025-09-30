@@ -717,38 +717,83 @@ func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
 
 func TestTraceIgnoreStatusCodes(t *testing.T) {
 	tests := map[string]struct {
-		ignoreStatusCodes []int
+		ignoreStatusCodes [][]int
 		statusCode        interface{}
 		expectDrop        bool
 	}{
 		"No ignored codes": {
 			statusCode:        404,
-			ignoreStatusCodes: []int{},
+			ignoreStatusCodes: [][]int{},
 			expectDrop:        false,
 		},
-		"Status code not in ignore list": {
+		"Status code not in ignore ranges": {
 			statusCode:        500,
-			ignoreStatusCodes: []int{404, 403},
+			ignoreStatusCodes: [][]int{{400, 405}},
 			expectDrop:        false,
 		},
-		"404 in ignore list": {
+		"404 in ignore range": {
 			statusCode:        404,
-			ignoreStatusCodes: []int{404, 403},
+			ignoreStatusCodes: [][]int{{400, 405}},
 			expectDrop:        true,
 		},
-		"403 in ignore list": {
+		"403 in ignore range": {
 			statusCode:        403,
-			ignoreStatusCodes: []int{404, 403},
+			ignoreStatusCodes: [][]int{{400, 405}},
 			expectDrop:        true,
 		},
 		"200 not ignored": {
 			statusCode:        200,
-			ignoreStatusCodes: []int{404, 403},
+			ignoreStatusCodes: [][]int{{400, 405}},
 			expectDrop:        false,
 		},
 		"wrong code not ignored": {
 			statusCode:        "something",
-			ignoreStatusCodes: []int{404},
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        false,
+		},
+		"Single status code as single-element slice": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{404}},
+			expectDrop:        true,
+		},
+		"Single status code not in single-element slice": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{404}},
+			expectDrop:        false,
+		},
+		"Multiple single codes": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{404}, {500}},
+			expectDrop:        true,
+		},
+		"Multiple ranges - code in first range": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{400, 405}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Multiple ranges - code in second range": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{400, 405}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Multiple ranges - code not in any range": {
+			statusCode:        200,
+			ignoreStatusCodes: [][]int{{400, 405}, {500, 599}},
+			expectDrop:        false,
+		},
+		"Mixed single codes and ranges": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{404}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Mixed single codes and ranges - code in range": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{404}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Mixed single codes and ranges - code not matched": {
+			statusCode:        200,
+			ignoreStatusCodes: [][]int{{404}, {500, 599}},
 			expectDrop:        false,
 		},
 	}
