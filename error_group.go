@@ -18,6 +18,8 @@ func convertErrorToExceptions(err error) []Exception {
 	visited := make(map[error]bool)
 	convertErrorDFS(err, &exceptions, nil, "", visited)
 
+	// mechanism type is used for debugging purposes, but since we can't really distinguish the origin of who invoked
+	// captureException, we set it to nil if the error is not chained.
 	if len(exceptions) == 1 {
 		exceptions[0].Mechanism = nil
 	}
@@ -83,7 +85,14 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 	case interface{ Unwrap() error }:
 		unwrapped := v.Unwrap()
 		if unwrapped != nil {
-			convertErrorDFS(unwrapped, exceptions, &currentID, MechanismSourceCause, visited)
+			unwrappedTypeStr := reflect.TypeOf(unwrapped).String()
+			currentTypeStr := reflect.TypeOf(err).String()
+			// This specifically catches cases like go-errors.New() where the error wraps a string
+			if unwrapped.Error() == err.Error() && unwrappedTypeStr == "*errors.errorString" && currentTypeStr == "*errors.Error" {
+				exception.Mechanism.IsExceptionGroup = false
+			} else {
+				convertErrorDFS(unwrapped, exceptions, &currentID, MechanismSourceCause, visited)
+			}
 		}
 	case interface{ Cause() error }:
 		cause := v.Cause()
