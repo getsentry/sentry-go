@@ -259,7 +259,7 @@ func TestSetException(t *testing.T) {
 				{
 					Value:      "base error",
 					Type:       "*errors.errorString",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           MechanismSourceCause,
@@ -280,8 +280,9 @@ func TestSetException(t *testing.T) {
 					},
 				},
 				{
-					Value: "level 2: level 1: base error",
-					Type:  "*fmt.wrapError",
+					Value:      "level 2: level 1: base error",
+					Type:       "*fmt.wrapError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",
@@ -316,7 +317,7 @@ func TestSetException(t *testing.T) {
 				{
 					Value:      "the cause",
 					Type:       "*errors.errorString",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           MechanismSourceCause,
@@ -337,8 +338,9 @@ func TestSetException(t *testing.T) {
 					},
 				},
 				{
-					Value: "outer error: error with cause",
-					Type:  "*fmt.wrapError",
+					Value:      "outer error: error with cause",
+					Type:       "*fmt.wrapError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",
@@ -356,7 +358,7 @@ func TestSetException(t *testing.T) {
 				{
 					Value:      "error 3",
 					Type:       "*errors.errorString",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[2]",
@@ -390,7 +392,7 @@ func TestSetException(t *testing.T) {
 				{
 					Value:      "error 1\nerror 2\nerror 3",
 					Type:       "*errors.joinError",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",
@@ -408,7 +410,7 @@ func TestSetException(t *testing.T) {
 				{
 					Value:      "error B",
 					Type:       "*errors.errorString",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[1]",
@@ -442,7 +444,7 @@ func TestSetException(t *testing.T) {
 				{
 					Value:      "wrapper: error A\nerror B",
 					Type:       "*fmt.wrapError",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",

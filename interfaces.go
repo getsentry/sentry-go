@@ -423,13 +423,13 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 	}
 
 	exceptions := convertErrorToExceptions(exception)
-
-	// Add a trace of the current stack to the most recent error in a chain if
+	exceptionsLen := len(exceptions) - 1
+	// Add a trace of the current stack to the top level(outermost) error in a chain if
 	// it doesn't have a stack trace yet.
 	// We only add to the most recent error to avoid duplication and because the
 	// current stack is most likely unrelated to errors deeper in the chain.
-	if exceptions[0].Stacktrace == nil {
-		exceptions[0].Stacktrace = NewStacktrace()
+	if exceptions[exceptionsLen].Stacktrace == nil {
+		exceptions[exceptionsLen].Stacktrace = NewStacktrace()
 	}
 
 	// Apply MaxErrorDepth limit if specified

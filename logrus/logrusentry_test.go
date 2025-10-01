@@ -375,7 +375,7 @@ func TestEventHook_entryToEvent(t *testing.T) {
 					{
 						Type:       "*errors.errorString",
 						Value:      "failure",
-						Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}},
+						Stacktrace: nil,
 						Mechanism: &sentry.Mechanism{
 							ExceptionID:      1,
 							IsExceptionGroup: false,

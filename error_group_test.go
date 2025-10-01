@@ -179,7 +179,7 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 				{
 					Value:      "rate limit exceeded",
 					Type:       "*errors.errorString",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[2]",
@@ -211,8 +211,9 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 					},
 				},
 				{
-					Value: "Request failed due to multiple errors",
-					Type:  "*sentry.AggregateError",
+					Value:      "Request failed due to multiple errors",
+					Type:       "*sentry.AggregateError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",
@@ -236,7 +237,7 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 				{
 					Value:      "field 'password' is too short",
 					Type:       "*errors.errorString",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[1]",
@@ -268,8 +269,9 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 					},
 				},
 				{
-					Value: "operation failed: Multiple validation errors",
-					Type:  "*fmt.wrapError",
+					Value:      "operation failed: Multiple validation errors",
+					Type:       "*fmt.wrapError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",

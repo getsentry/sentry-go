@@ -166,7 +166,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "*sentry.customErr",
 					Value:      "wat",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeChained,
 						ExceptionID:      1,
@@ -207,7 +207,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "*sentry.customErr",
 					Value:      "wat",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeChained,
 						ExceptionID:      1,
@@ -219,7 +219,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "*sentry.customErrWithCause",
 					Value:      "err",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeGeneric,
 						ExceptionID:      0,
@@ -237,7 +237,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "*errors.errorString",
 					Value:      "original",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeChained,
 						ExceptionID:      1,
@@ -249,7 +249,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "sentry.wrappedError",
 					Value:      "wrapped: original",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeGeneric,
 						ExceptionID:      0,
