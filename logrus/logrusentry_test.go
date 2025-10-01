@@ -392,7 +392,7 @@ func TestEventHook_entryToEvent(t *testing.T) {
 						},
 						Mechanism: &sentry.Mechanism{
 							ExceptionID:      0,
-							IsExceptionGroup: true,
+							IsExceptionGroup: false,
 							ParentID:         nil,
 							Type:             sentry.MechanismTypeGeneric,
 							Source:           "",

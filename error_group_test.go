@@ -27,7 +27,7 @@ func TestConvertErrorToExceptions(t *testing.T) {
 				{
 					Value:      "single error",
 					Type:       "*errors.errorString",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 				},
 			},
 		},
@@ -36,8 +36,9 @@ func TestConvertErrorToExceptions(t *testing.T) {
 			err:  errors.Join(errors.New("error A"), errors.New("error B")),
 			expected: []Exception{
 				{
-					Value: "error B",
-					Type:  "*errors.errorString",
+					Value:      "error B",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[1]",
@@ -58,8 +59,9 @@ func TestConvertErrorToExceptions(t *testing.T) {
 					},
 				},
 				{
-					Value: "error A\nerror B",
-					Type:  "*errors.joinError",
+					Value:      "error A\nerror B",
+					Type:       "*errors.joinError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",
@@ -75,8 +77,9 @@ func TestConvertErrorToExceptions(t *testing.T) {
 			err:  fmt.Errorf("wrapper: %w", errors.Join(errors.New("error A"), errors.New("error B"))),
 			expected: []Exception{
 				{
-					Value: "error B",
-					Type:  "*errors.errorString",
+					Value:      "error B",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[1]",
@@ -110,13 +113,13 @@ func TestConvertErrorToExceptions(t *testing.T) {
 				{
 					Value:      "wrapper: error A\nerror B",
 					Type:       "*fmt.wrapError",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,
-						IsExceptionGroup: true,
+						IsExceptionGroup: false,
 					},
 				},
 			},
@@ -125,7 +128,7 @@ func TestConvertErrorToExceptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertErrorToExceptions(tt.err)
+			result := convertErrorToExceptions(tt.err, -1)
 
 			if tt.expected == nil {
 				if result != nil {
@@ -277,7 +280,7 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,
-						IsExceptionGroup: true,
+						IsExceptionGroup: false,
 					},
 				},
 			},
@@ -345,7 +348,7 @@ func TestCircularReferenceProtection(t *testing.T) {
 			err := tt.setupError()
 
 			start := time.Now()
-			exceptions := convertErrorToExceptions(err)
+			exceptions := convertErrorToExceptions(err, -1)
 			duration := time.Since(start)
 
 			if duration > 100*time.Millisecond {

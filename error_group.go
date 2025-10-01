@@ -13,10 +13,10 @@ const (
 	MechanismSourceCause string = "cause"
 )
 
-func convertErrorToExceptions(err error) []Exception {
+func convertErrorToExceptions(err error, maxErrorDepth int) []Exception {
 	var exceptions []Exception
 	visited := make(map[error]bool)
-	convertErrorDFS(err, &exceptions, nil, "", visited)
+	convertErrorDFS(err, &exceptions, nil, "", visited, maxErrorDepth, 0)
 
 	// mechanism type is used for debugging purposes, but since we can't really distinguish the origin of who invoked
 	// captureException, we set it to nil if the error is not chained.
@@ -26,10 +26,18 @@ func convertErrorToExceptions(err error) []Exception {
 
 	slices.Reverse(exceptions)
 
+	// Add a trace of the current stack to the top level(outermost) error in a chain if
+	// it doesn't have a stack trace yet.
+	// We only add to the most recent error to avoid duplication and because the
+	// current stack is most likely unrelated to errors deeper in the chain.
+	if len(exceptions) > 0 && exceptions[len(exceptions)-1].Stacktrace == nil {
+		exceptions[len(exceptions)-1].Stacktrace = NewStacktrace()
+	}
+
 	return exceptions
 }
 
-func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source string, visited map[error]bool) {
+func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source string, visited map[error]bool, maxErrorDepth int, currentDepth int) {
 	if err == nil {
 		return
 	}
@@ -42,7 +50,7 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 	var isExceptionGroup bool
 
 	switch err.(type) {
-	case interface{ Unwrap() []error }, interface{ Unwrap() error }, interface{ Cause() error }:
+	case interface{ Unwrap() []error }:
 		isExceptionGroup = true
 	}
 
@@ -73,31 +81,28 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 
 	*exceptions = append(*exceptions, exception)
 
+	if maxErrorDepth >= 0 && currentDepth >= maxErrorDepth {
+		return
+	}
+
 	switch v := err.(type) {
 	case interface{ Unwrap() []error }:
 		unwrapped := v.Unwrap()
 		for i := range unwrapped {
 			if unwrapped[i] != nil {
 				childSource := fmt.Sprintf("errors[%d]", i)
-				convertErrorDFS(unwrapped[i], exceptions, &currentID, childSource, visited)
+				convertErrorDFS(unwrapped[i], exceptions, &currentID, childSource, visited, maxErrorDepth, currentDepth+1)
 			}
 		}
 	case interface{ Unwrap() error }:
 		unwrapped := v.Unwrap()
 		if unwrapped != nil {
-			unwrappedTypeStr := reflect.TypeOf(unwrapped).String()
-			currentTypeStr := reflect.TypeOf(err).String()
-			// This specifically catches cases like go-errors.New() where the error wraps a string
-			if unwrapped.Error() == err.Error() && unwrappedTypeStr == "*errors.errorString" && currentTypeStr == "*errors.Error" {
-				exception.Mechanism.IsExceptionGroup = false
-			} else {
-				convertErrorDFS(unwrapped, exceptions, &currentID, MechanismSourceCause, visited)
-			}
+			convertErrorDFS(unwrapped, exceptions, &currentID, MechanismSourceCause, visited, maxErrorDepth, currentDepth+1)
 		}
 	case interface{ Cause() error }:
 		cause := v.Cause()
 		if cause != nil {
-			convertErrorDFS(cause, exceptions, &currentID, MechanismSourceCause, visited)
+			convertErrorDFS(cause, exceptions, &currentID, MechanismSourceCause, visited, maxErrorDepth, currentDepth+1)
 		}
 	}
 }
