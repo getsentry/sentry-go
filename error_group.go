@@ -47,12 +47,7 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 	}
 	visited[err] = true
 
-	var isExceptionGroup bool
-
-	switch err.(type) {
-	case interface{ Unwrap() []error }:
-		isExceptionGroup = true
-	}
+	_, isExceptionGroup := err.(interface{ Unwrap() []error })
 
 	exception := Exception{
 		Value:      err.Error(),
