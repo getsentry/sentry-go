@@ -424,6 +424,9 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 
 	exceptions := convertErrorToExceptions(exception)
 	exceptionsLen := len(exceptions) - 1
+	if exceptionsLen < 0 {
+		return
+	}
 	// Add a trace of the current stack to the top level(outermost) error in a chain if
 	// it doesn't have a stack trace yet.
 	// We only add to the most recent error to avoid duplication and because the
