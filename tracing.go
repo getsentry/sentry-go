@@ -347,6 +347,58 @@ func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
 	}
 }
 
+// shouldIgnoreStatusCode checks if the transaction should be ignored based on HTTP status code.
+func (s *Span) shouldIgnoreStatusCode() bool {
+	if !s.IsTransaction() {
+		return false
+	}
+
+	ignoreStatusCodes := s.clientOptions().TraceIgnoreStatusCodes
+	if len(ignoreStatusCodes) == 0 {
+		return false
+	}
+
+	s.mu.Lock()
+	statusCodeData, exists := s.Data["http.response.status_code"]
+	s.mu.Unlock()
+
+	if !exists {
+		return false
+	}
+
+	statusCode, ok := statusCodeData.(int)
+	if !ok {
+		return false
+	}
+
+	for _, ignoredRange := range ignoreStatusCodes {
+		switch len(ignoredRange) {
+		case 1:
+			// Single status code
+			if statusCode == ignoredRange[0] {
+				s.mu.Lock()
+				s.Sampled = SampledFalse
+				s.mu.Unlock()
+				DebugLogger.Printf("dropping transaction with status code %v: found in TraceIgnoreStatusCodes", statusCode)
+				return true
+			}
+		case 2:
+			// Range of status codes [min, max]
+			if ignoredRange[0] <= statusCode && statusCode <= ignoredRange[1] {
+				s.mu.Lock()
+				s.Sampled = SampledFalse
+				s.mu.Unlock()
+				DebugLogger.Printf("dropping transaction with status code %v: found in TraceIgnoreStatusCodes range [%d, %d]", statusCode, ignoredRange[0], ignoredRange[1])
+				return true
+			}
+		default:
+			DebugLogger.Printf("incorrect TraceIgnoreStatusCodes format: %v", ignoredRange)
+		}
+	}
+
+	return false
+}
+
 // doFinish runs the actual Span.Finish() logic.
 func (s *Span) doFinish() {
 	if s.EndTime.IsZero() {
@@ -358,6 +410,10 @@ func (s *Span) doFinish() {
 		if s.parent != nil {
 			hub.Scope().SetSpan(s.parent)
 		}
+	}
+
+	if s.shouldIgnoreStatusCode() {
+		return
 	}
 
 	if !s.Sampled.Bool() {
