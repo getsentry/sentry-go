@@ -177,8 +177,9 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 			},
 			expected: []Exception{
 				{
-					Value: "rate limit exceeded",
-					Type:  "*errors.errorString",
+					Value:      "rate limit exceeded",
+					Type:       "*errors.errorString",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[2]",
@@ -233,8 +234,9 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 			}),
 			expected: []Exception{
 				{
-					Value: "field 'password' is too short",
-					Type:  "*errors.errorString",
+					Value:      "field 'password' is too short",
+					Type:       "*errors.errorString",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[1]",

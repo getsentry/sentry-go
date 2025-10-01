@@ -76,7 +76,7 @@ func TestCaptureMessageEmptyString(t *testing.T) {
 			{
 				Type:       "sentry.usageError",
 				Value:      "CaptureMessage called with empty message",
-				Stacktrace: nil,
+				Stacktrace: &Stacktrace{Frames: []Frame{}},
 			},
 		},
 	}
@@ -141,7 +141,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "sentry.usageError",
 					Value:      "CaptureException called with nil error",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 				},
 			},
 		},
@@ -152,7 +152,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "*errors.errorString",
 					Value:      "custom error",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 				},
 			},
 		},
@@ -164,8 +164,9 @@ func TestCaptureException(t *testing.T) {
 			err:  pkgErrors.WithStack(&customErr{}),
 			want: []Exception{
 				{
-					Type:  "*sentry.customErr",
-					Value: "wat",
+					Type:       "*sentry.customErr",
+					Value:      "wat",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeChained,
 						ExceptionID:      1,
@@ -195,7 +196,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "*sentry.customErrWithCause",
 					Value:      "err",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 				},
 			},
 		},
@@ -204,8 +205,9 @@ func TestCaptureException(t *testing.T) {
 			err:  &customErrWithCause{cause: &customErr{}},
 			want: []Exception{
 				{
-					Type:  "*sentry.customErr",
-					Value: "wat",
+					Type:       "*sentry.customErr",
+					Value:      "wat",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeChained,
 						ExceptionID:      1,
@@ -233,8 +235,9 @@ func TestCaptureException(t *testing.T) {
 			err:  wrappedError{original: errors.New("original")},
 			want: []Exception{
 				{
-					Type:  "*errors.errorString",
-					Value: "original",
+					Type:       "*errors.errorString",
+					Value:      "original",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeChained,
 						ExceptionID:      1,
@@ -350,7 +353,7 @@ func TestCaptureEventNil(t *testing.T) {
 			{
 				Type:       "sentry.usageError",
 				Value:      "CaptureEvent called with nil event",
-				Stacktrace: nil,
+				Stacktrace: &Stacktrace{Frames: []Frame{}},
 			},
 		},
 	}
@@ -788,7 +791,7 @@ func TestRecover(t *testing.T) {
 					{
 						Type:       "*errors.errorString",
 						Value:      "panic error",
-						Stacktrace: nil,
+						Stacktrace: &Stacktrace{Frames: []Frame{}},
 					},
 				},
 			},

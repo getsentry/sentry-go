@@ -343,7 +343,7 @@ func TestEventHook_entryToEvent(t *testing.T) {
 				Level: sentry.LevelFatal,
 				Extra: map[string]any{},
 				Exception: []sentry.Exception{
-					{Type: "*errors.errorString", Value: "things failed", Stacktrace: nil},
+					{Type: "*errors.errorString", Value: "things failed", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 				},
 				Logger: name,
 			},
@@ -373,8 +373,9 @@ func TestEventHook_entryToEvent(t *testing.T) {
 				Extra: map[string]any{},
 				Exception: []sentry.Exception{
 					{
-						Type:  "*errors.errorString",
-						Value: "failure",
+						Type:       "*errors.errorString",
+						Value:      "failure",
+						Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}},
 						Mechanism: &sentry.Mechanism{
 							ExceptionID:      1,
 							IsExceptionGroup: false,

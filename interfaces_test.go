@@ -247,7 +247,7 @@ func TestSetException(t *testing.T) {
 				{
 					Value:      "simple error",
 					Type:       "*errors.errorString",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism:  nil,
 				},
 			},
@@ -259,7 +259,7 @@ func TestSetException(t *testing.T) {
 				{
 					Value:      "base error",
 					Type:       "*errors.errorString",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           MechanismSourceCause,
@@ -301,7 +301,7 @@ func TestSetException(t *testing.T) {
 				{
 					Value:      "custom error message",
 					Type:       "*sentry.customError",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism:  nil,
 				},
 			},
@@ -316,7 +316,7 @@ func TestSetException(t *testing.T) {
 				{
 					Value:      "the cause",
 					Type:       "*errors.errorString",
-					Stacktrace: nil,
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           MechanismSourceCause,
@@ -354,8 +354,9 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 5,
 			expected: []Exception{
 				{
-					Value: "error 3",
-					Type:  "*errors.errorString",
+					Value:      "error 3",
+					Type:       "*errors.errorString",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[2]",
@@ -405,8 +406,9 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 5,
 			expected: []Exception{
 				{
-					Value: "error B",
-					Type:  "*errors.errorString",
+					Value:      "error B",
+					Type:       "*errors.errorString",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "chained",
 						Source:           "errors[1]",
