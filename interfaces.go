@@ -293,7 +293,7 @@ func NewRequest(r *http.Request) *Request {
 
 // Mechanism is the mechanism by which an exception was generated and handled.
 type Mechanism struct {
-	Type             string         `json:"type,omitempty"`
+	Type             string         `json:"type"`
 	Description      string         `json:"description,omitempty"`
 	HelpLink         string         `json:"help_link,omitempty"`
 	Source           string         `json:"source,omitempty"`

@@ -27,7 +27,7 @@ const sdkIdentifier = "sentry.go"
 // is of little use when debugging production errors with Sentry. The Sentry UI
 // is not optimized for long chains either. The top-level error together with a
 // stack trace is often the most useful information.
-const maxErrorDepth = 10
+const maxErrorDepth = 100
 
 // defaultMaxSpans limits the default number of recorded spans per transaction. The limit is
 // meant to bound memory usage and prevent too large transaction events that

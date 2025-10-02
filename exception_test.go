@@ -104,7 +104,7 @@ func TestConvertErrorToExceptions(t *testing.T) {
 					Type:  "*errors.joinError",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "cause",
+						Source:           MechanismTypeUnwrap,
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: true,
@@ -265,7 +265,7 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 					Type:  "*sentry.AggregateError",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           "cause",
+						Source:           MechanismTypeUnwrap,
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: true,

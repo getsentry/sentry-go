@@ -9,7 +9,7 @@ import (
 const (
 	MechanismTypeGeneric string = "generic"
 	MechanismTypeChained string = "chained"
-
+	MechanismTypeUnwrap  string = "unwrap"
 	MechanismSourceCause string = "cause"
 )
 
@@ -92,7 +92,7 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 	case interface{ Unwrap() error }:
 		unwrapped := v.Unwrap()
 		if unwrapped != nil {
-			convertErrorDFS(unwrapped, exceptions, &currentID, MechanismSourceCause, visited, maxErrorDepth, currentDepth+1)
+			convertErrorDFS(unwrapped, exceptions, &currentID, MechanismTypeUnwrap, visited, maxErrorDepth, currentDepth+1)
 		}
 	case interface{ Cause() error }:
 		cause := v.Cause()

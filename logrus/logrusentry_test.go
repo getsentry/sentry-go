@@ -381,7 +381,7 @@ func TestEventHook_entryToEvent(t *testing.T) {
 							IsExceptionGroup: false,
 							ParentID:         sentry.Pointer(0),
 							Type:             sentry.MechanismTypeChained,
-							Source:           sentry.MechanismSourceCause,
+							Source:           sentry.MechanismTypeUnwrap,
 						},
 					},
 					{

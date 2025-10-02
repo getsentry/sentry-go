@@ -262,7 +262,7 @@ func TestSetException(t *testing.T) {
 					Stacktrace: nil,
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           MechanismSourceCause,
+						Source:           MechanismTypeUnwrap,
 						ExceptionID:      2,
 						ParentID:         Pointer(1),
 						IsExceptionGroup: false,
@@ -273,7 +273,7 @@ func TestSetException(t *testing.T) {
 					Type:  "*fmt.wrapError",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           MechanismSourceCause,
+						Source:           MechanismTypeUnwrap,
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: false,
@@ -331,7 +331,7 @@ func TestSetException(t *testing.T) {
 					Type:  "*sentry.withCause",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           MechanismSourceCause,
+						Source:           MechanismTypeUnwrap,
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: false,
@@ -435,7 +435,7 @@ func TestSetException(t *testing.T) {
 					Type:  "*errors.joinError",
 					Mechanism: &Mechanism{
 						Type:             "chained",
-						Source:           MechanismSourceCause,
+						Source:           MechanismTypeUnwrap,
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
 						IsExceptionGroup: true,
