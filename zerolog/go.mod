@@ -1,6 +1,6 @@
 module github.com/getsentry/sentry-go/zerolog
 
-go 1.22
+go 1.23
 
 replace github.com/getsentry/sentry-go => ../
 
