@@ -20,19 +20,25 @@ import (
 // The identifier of the SDK.
 const sdkIdentifier = "sentry.go"
 
-// maxErrorDepth is the maximum number of errors reported in a chain of errors.
-// This protects the SDK from an arbitrarily long chain of wrapped errors.
-//
-// An additional consideration is that arguably reporting a long chain of errors
-// is of little use when debugging production errors with Sentry. The Sentry UI
-// is not optimized for long chains either. The top-level error together with a
-// stack trace is often the most useful information.
-const maxErrorDepth = 10
+const (
+	// maxErrorDepth is the maximum number of errors reported in a chain of errors.
+	// This protects the SDK from an arbitrarily long chain of wrapped errors.
+	//
+	// An additional consideration is that arguably reporting a long chain of errors
+	// is of little use when debugging production errors with Sentry. The Sentry UI
+	// is not optimized for long chains either. The top-level error together with a
+	// stack trace is often the most useful information.
+	maxErrorDepth = 10
 
-// defaultMaxSpans limits the default number of recorded spans per transaction. The limit is
-// meant to bound memory usage and prevent too large transaction events that
-// would be rejected by Sentry.
-const defaultMaxSpans = 1000
+	// defaultMaxSpans limits the default number of recorded spans per transaction. The limit is
+	// meant to bound memory usage and prevent too large transaction events that
+	// would be rejected by Sentry.
+	defaultMaxSpans = 1000
+
+	// defaultMaxBreadcrumbs is the default maximum number of breadcrumbs added to
+	// an event. Can be overwritten with the MaxBreadcrumbs option.
+	defaultMaxBreadcrumbs = 100
+)
 
 // hostname is the host name reported by the kernel. It is precomputed once to
 // avoid syscalls when capturing events.
