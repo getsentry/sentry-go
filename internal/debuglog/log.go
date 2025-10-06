@@ -7,13 +7,9 @@ import (
 )
 
 var (
-	logger *log.Logger
+	logger = log.New(io.Discard, "[Sentry] ", log.LstdFlags)
 	mu     sync.RWMutex
 )
-
-func init() {
-	logger = log.New(io.Discard, "[Sentry] ", log.LstdFlags)
-}
 
 // SetLogger replaces the current debug logger with a new one.
 // This function is thread-safe and can be called concurrently.

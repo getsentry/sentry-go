@@ -74,7 +74,7 @@ func TestPrint(t *testing.T) {
 	}
 }
 
-func TestConcurrentAccess(t *testing.T) {
+func TestConcurrentAccess(_ *testing.T) {
 	original := GetLogger()
 	defer SetLogger(original)
 
@@ -124,10 +124,11 @@ func TestInitialization(t *testing.T) {
 	Print("test")
 }
 
-func TestNilLogger(t *testing.T) {
+func TestNilLogger(_ *testing.T) {
 	original := GetLogger()
 	defer SetLogger(original)
 
+	// a nil logger should not panic
 	SetLogger(nil)
 	Printf("test")
 	Println("test")
