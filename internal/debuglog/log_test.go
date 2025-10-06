@@ -3,24 +3,10 @@ package debuglog
 import (
 	"bytes"
 	"io"
-	stdlog "log"
 	"strings"
 	"sync"
 	"testing"
 )
-
-func TestSetLogger(t *testing.T) {
-	original := GetLogger()
-	defer SetLogger(original)
-
-	var buf bytes.Buffer
-	newLogger := stdlog.New(&buf, "[Test] ", stdlog.LstdFlags)
-	SetLogger(newLogger)
-
-	if GetLogger() != newLogger {
-		t.Error("SetLogger did not set the logger correctly")
-	}
-}
 
 func TestGetLogger(t *testing.T) {
 	logger := GetLogger()
@@ -29,13 +15,24 @@ func TestGetLogger(t *testing.T) {
 	}
 }
 
-func TestPrintf(t *testing.T) {
-	original := GetLogger()
-	defer SetLogger(original)
-
+func TestSetOutput(t *testing.T) {
 	var buf bytes.Buffer
-	testLogger := stdlog.New(&buf, "", 0)
-	SetLogger(testLogger)
+	SetOutput(&buf)
+	defer SetOutput(io.Discard)
+
+	Printf("test %s %d", "message", 42)
+
+	output := buf.String()
+	if !strings.Contains(output, "test message 42") {
+		t.Errorf("Printf output incorrect: got %q", output)
+	}
+}
+
+func TestPrintf(t *testing.T) {
+	var buf bytes.Buffer
+	SetOutput(&buf)
+	defer SetOutput(io.Discard)
+
 	Printf("test %s %d", "message", 42)
 
 	output := buf.String()
@@ -45,12 +42,10 @@ func TestPrintf(t *testing.T) {
 }
 
 func TestPrintln(t *testing.T) {
-	original := GetLogger()
-	defer SetLogger(original)
-
 	var buf bytes.Buffer
-	testLogger := stdlog.New(&buf, "", 0)
-	SetLogger(testLogger)
+	SetOutput(&buf)
+	defer SetOutput(io.Discard)
+
 	Println("test", "message")
 
 	output := buf.String()
@@ -60,12 +55,10 @@ func TestPrintln(t *testing.T) {
 }
 
 func TestPrint(t *testing.T) {
-	original := GetLogger()
-	defer SetLogger(original)
-
 	var buf bytes.Buffer
-	testLogger := stdlog.New(&buf, "", 0)
-	SetLogger(testLogger)
+	SetOutput(&buf)
+	defer SetOutput(io.Discard)
+
 	Print("test", "message")
 
 	output := buf.String()
@@ -75,11 +68,8 @@ func TestPrint(t *testing.T) {
 }
 
 func TestConcurrentAccess(_ *testing.T) {
-	original := GetLogger()
-	defer SetLogger(original)
-
 	var wg sync.WaitGroup
-	iterations := 100
+	iterations := 1000
 
 	for i := 0; i < iterations; i++ {
 		wg.Add(1)
@@ -101,8 +91,7 @@ func TestConcurrentAccess(_ *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			newLogger := stdlog.New(io.Discard, "[Test] ", stdlog.LstdFlags)
-			SetLogger(newLogger)
+			SetOutput(io.Discard)
 		}()
 	}
 
@@ -117,20 +106,15 @@ func TestInitialization(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	testLogger := stdlog.New(&buf, "", 0)
-	SetLogger(testLogger)
+	SetOutput(&buf)
+	defer SetOutput(io.Discard)
+
 	Printf("test")
 	Println("test")
 	Print("test")
-}
 
-func TestNilLogger(_ *testing.T) {
-	original := GetLogger()
-	defer SetLogger(original)
-
-	// a nil logger should not panic
-	SetLogger(nil)
-	Printf("test")
-	Println("test")
-	Print("test")
+	output := buf.String()
+	if !strings.Contains(output, "test") {
+		t.Errorf("Expected output to contain 'test', got %q", output)
+	}
 }
