@@ -13,6 +13,8 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
+const maxErrorDepth = 100
+
 var (
 	sourceKey = "source"
 	errorKeys = map[string]struct{}{
@@ -24,7 +26,7 @@ var (
 
 type Converter func(addSource bool, replaceAttr func(groups []string, a slog.Attr) slog.Attr, loggerAttr []slog.Attr, groups []string, record *slog.Record, hub *sentry.Hub) *sentry.Event
 
-func DefaultConverter(addSource bool, replaceAttr func(groups []string, a slog.Attr) slog.Attr, loggerAttr []slog.Attr, groups []string, record *slog.Record, _ *sentry.Hub) *sentry.Event {
+func DefaultConverter(addSource bool, replaceAttr func(groups []string, a slog.Attr) slog.Attr, loggerAttr []slog.Attr, groups []string, record *slog.Record, hub *sentry.Hub) *sentry.Event {
 	// aggregate all attributes
 	attrs := appendRecordAttrsToAttrs(loggerAttr, groups, record)
 
@@ -42,7 +44,14 @@ func DefaultConverter(addSource bool, replaceAttr func(groups []string, a slog.A
 	event.Level = LogLevels[record.Level]
 	event.Message = record.Message
 	event.Logger = name
-	event.SetException(err, 10)
+
+	errorDepth := maxErrorDepth
+	if hub != nil {
+		if client := hub.Client(); client != nil {
+			errorDepth = client.Options().MaxErrorDepth
+		}
+	}
+	event.SetException(err, errorDepth)
 
 	for i := range attrs {
 		attrToSentryEvent(attrs[i], event)

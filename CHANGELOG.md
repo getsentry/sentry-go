@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.36.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.36.0.
+
+### Breaking Changes
+
+- The changes to error handling ([#1075](https://github.com/getsentry/sentry-go/pull/1075)) will affect issue grouping. It is expected that any wrapped and complex errors will be grouped under a new issue group.
+
+### Features
+
+- Add support for improved issue grouping with enhanced error chain handling ([#1075](https://github.com/getsentry/sentry-go/pull/1075))
+
+  The SDK now provides better handling of complex error scenarios, particularly when dealing with multiple related errors or error chains. This feature automatically detects and properly structures errors created with Go's `errors.Join()` function and other multi-error patterns.
+
+  ```go
+  // Multiple errors are now properly grouped and displayed in Sentry
+  err1 := errors.New("err1")
+  err2 := errors.New("err2") 
+  combinedErr := errors.Join(err1, err2)
+  
+  // When captured, these will be shown as related exceptions in Sentry
+  sentry.CaptureException(combinedErr)
+  ```
+
 ## 0.35.3
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.3.

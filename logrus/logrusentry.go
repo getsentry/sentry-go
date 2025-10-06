@@ -22,6 +22,8 @@ const (
 	sdkIdentifier = "sentry.go.logrus"
 	// the name of the logger.
 	name = "logrus"
+
+	maxErrorDepth = 100
 )
 
 // These default log field keys are used to pass specific metadata in a way that
@@ -183,7 +185,14 @@ func (h *eventHook) entryToEvent(l *logrus.Entry) *sentry.Event {
 
 	if err, ok := s.Extra[logrus.ErrorKey].(error); ok {
 		delete(s.Extra, logrus.ErrorKey)
-		s.SetException(err, -1)
+
+		errorDepth := maxErrorDepth
+		if hub := h.hubProvider(); hub != nil {
+			if client := hub.Client(); client != nil {
+				errorDepth = client.Options().MaxErrorDepth
+			}
+		}
+		s.SetException(err, errorDepth)
 	}
 
 	key = h.key(FieldUser)
