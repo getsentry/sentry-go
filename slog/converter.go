@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 var (
@@ -171,6 +172,6 @@ func slogAttrToLogEntry(logEntry sentry.LogEntry, group string, a slog.Attr) sen
 		return logEntry
 	}
 
-	sentry.DebugLogger.Printf("Invalid type: dropping attribute with key: %v and value: %v", a.Key, a.Value)
+	debuglog.Printf("Invalid type: dropping attribute with key: %v and value: %v", a.Key, a.Value)
 	return logEntry
 }

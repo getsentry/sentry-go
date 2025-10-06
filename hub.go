@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 type contextKey int
@@ -308,7 +310,7 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 			hint = &BreadcrumbHint{}
 		}
 		if breadcrumb = client.options.BeforeBreadcrumb(breadcrumb, hint); breadcrumb == nil {
-			DebugLogger.Println("breadcrumb dropped due to BeforeBreadcrumb callback.")
+			debuglog.Println("breadcrumb dropped due to BeforeBreadcrumb callback.")
 			return
 		}
 	}

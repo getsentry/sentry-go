@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"testing"
+
+	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 func Test_spanRecorder_record(t *testing.T) {
@@ -32,8 +34,8 @@ func Test_spanRecorder_record(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			logBuffer := bytes.Buffer{}
-			DebugLogger.SetOutput(&logBuffer)
-			defer DebugLogger.SetOutput(io.Discard)
+			debuglog.SetOutput(&logBuffer)
+			defer debuglog.SetOutput(io.Discard)
 			spanRecorder := spanRecorder{}
 
 			currentHub.BindClient(&Client{
@@ -54,7 +56,7 @@ func Test_spanRecorder_record(t *testing.T) {
 			} else {
 				assertEqual(t, len(spanRecorder.spans), tt.toRecordSpans, "expected no overflow")
 			}
-			// check if DebugLogger was called for overflow messages
+			// check if debuglog was called for overflow messages
 			if bytes.Contains(logBuffer.Bytes(), []byte("Too many spans")) && !tt.expectOverflow {
 				t.Error("unexpected overflow log")
 			}
