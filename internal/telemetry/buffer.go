@@ -4,6 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
 const defaultCapacity = 100
@@ -17,8 +19,8 @@ type Buffer[T any] struct {
 	size     int
 	capacity int
 
-	category       DataCategory
-	priority       Priority
+	category       ratelimit.Category
+	priority       ratelimit.Priority
 	overflowPolicy OverflowPolicy
 
 	offered   int64
@@ -26,7 +28,7 @@ type Buffer[T any] struct {
 	onDropped func(item T, reason string)
 }
 
-func NewBuffer[T any](category DataCategory, capacity int, overflowPolicy OverflowPolicy) *Buffer[T] {
+func NewBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy) *Buffer[T] {
 	if capacity <= 0 {
 		capacity = defaultCapacity
 	}
@@ -188,11 +190,11 @@ func (b *Buffer[T]) Capacity() int {
 	return b.capacity
 }
 
-func (b *Buffer[T]) Category() DataCategory {
+func (b *Buffer[T]) Category() ratelimit.Category {
 	return b.category
 }
 
-func (b *Buffer[T]) Priority() Priority {
+func (b *Buffer[T]) Priority() ratelimit.Priority {
 	return b.priority
 }
 
@@ -269,14 +271,14 @@ func (b *Buffer[T]) GetMetrics() BufferMetrics {
 }
 
 type BufferMetrics struct {
-	Category      DataCategory `json:"category"`
-	Priority      Priority     `json:"priority"`
-	Capacity      int          `json:"capacity"`
-	Size          int          `json:"size"`
-	Utilization   float64      `json:"utilization"`
-	OfferedCount  int64        `json:"offered_count"`
-	DroppedCount  int64        `json:"dropped_count"`
-	AcceptedCount int64        `json:"accepted_count"`
-	DropRate      float64      `json:"drop_rate"`
-	LastUpdated   time.Time    `json:"last_updated"`
+	Category      ratelimit.Category `json:"category"`
+	Priority      ratelimit.Priority `json:"priority"`
+	Capacity      int                `json:"capacity"`
+	Size          int                `json:"size"`
+	Utilization   float64            `json:"utilization"`
+	OfferedCount  int64              `json:"offered_count"`
+	DroppedCount  int64              `json:"dropped_count"`
+	AcceptedCount int64              `json:"accepted_count"`
+	DropRate      float64            `json:"drop_rate"`
+	LastUpdated   time.Time          `json:"last_updated"`
 }

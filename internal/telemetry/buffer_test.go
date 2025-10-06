@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
 type testItem struct {
@@ -14,27 +16,27 @@ type testItem struct {
 
 func TestNewBuffer(t *testing.T) {
 	t.Run("with valid capacity", func(t *testing.T) {
-		buffer := NewBuffer[*testItem](DataCategoryError, 50, OverflowPolicyDropOldest)
+		buffer := NewBuffer[*testItem](ratelimit.CategoryError, 50, OverflowPolicyDropOldest)
 		if buffer.Capacity() != 50 {
 			t.Errorf("Expected capacity 50, got %d", buffer.Capacity())
 		}
-		if buffer.Category() != DataCategoryError {
+		if buffer.Category() != ratelimit.CategoryError {
 			t.Errorf("Expected category error, got %s", buffer.Category())
 		}
-		if buffer.Priority() != PriorityCritical {
+		if buffer.Priority() != ratelimit.PriorityCritical {
 			t.Errorf("Expected priority critical, got %s", buffer.Priority())
 		}
 	})
 
 	t.Run("with zero capacity", func(t *testing.T) {
-		buffer := NewBuffer[*testItem](DataCategoryLog, 0, OverflowPolicyDropOldest)
+		buffer := NewBuffer[*testItem](ratelimit.CategoryLog, 0, OverflowPolicyDropOldest)
 		if buffer.Capacity() != 100 {
 			t.Errorf("Expected default capacity 100, got %d", buffer.Capacity())
 		}
 	})
 
 	t.Run("with negative capacity", func(t *testing.T) {
-		buffer := NewBuffer[*testItem](DataCategoryLog, -10, OverflowPolicyDropOldest)
+		buffer := NewBuffer[*testItem](ratelimit.CategoryLog, -10, OverflowPolicyDropOldest)
 		if buffer.Capacity() != 100 {
 			t.Errorf("Expected default capacity 100, got %d", buffer.Capacity())
 		}
@@ -42,7 +44,7 @@ func TestNewBuffer(t *testing.T) {
 }
 
 func TestBufferBasicOperations(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 3, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 3, OverflowPolicyDropOldest)
 
 	// Test empty buffer
 	if !buffer.IsEmpty() {
@@ -81,7 +83,7 @@ func TestBufferBasicOperations(t *testing.T) {
 }
 
 func TestBufferPollOperation(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 3, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 3, OverflowPolicyDropOldest)
 
 	// Test polling from empty buffer
 	item, ok := buffer.Poll()
@@ -124,7 +126,7 @@ func TestBufferPollOperation(t *testing.T) {
 }
 
 func TestBufferOverflow(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 2, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropOldest)
 
 	// Fill buffer to capacity
 	item1 := &testItem{id: 1, data: "first"}
@@ -168,7 +170,7 @@ func TestBufferOverflow(t *testing.T) {
 }
 
 func TestBufferDrain(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 5, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 5, OverflowPolicyDropOldest)
 
 	// Drain empty buffer
 	items := buffer.Drain()
@@ -204,7 +206,7 @@ func TestBufferDrain(t *testing.T) {
 }
 
 func TestBufferMetrics(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 2, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropOldest)
 
 	// Initial metrics
 	if buffer.OfferedCount() != 0 {
@@ -228,7 +230,7 @@ func TestBufferMetrics(t *testing.T) {
 }
 
 func TestBufferConcurrency(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 100, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 100, OverflowPolicyDropOldest)
 
 	const numGoroutines = 10
 	const itemsPerGoroutine = 50
@@ -288,13 +290,13 @@ func TestBufferConcurrency(t *testing.T) {
 
 func TestBufferDifferentCategories(t *testing.T) {
 	testCases := []struct {
-		category         DataCategory
-		expectedPriority Priority
+		category         ratelimit.Category
+		expectedPriority ratelimit.Priority
 	}{
-		{DataCategoryError, PriorityCritical},
-		{DataCategoryCheckIn, PriorityHigh},
-		{DataCategoryLog, PriorityMedium},
-		{DataCategoryTransaction, PriorityLow},
+		{ratelimit.CategoryError, ratelimit.PriorityCritical},
+		{ratelimit.CategoryMonitor, ratelimit.PriorityHigh},
+		{ratelimit.CategoryLog, ratelimit.PriorityMedium},
+		{ratelimit.CategoryTransaction, ratelimit.PriorityLow},
 	}
 
 	for _, tc := range testCases {
@@ -315,7 +317,7 @@ func TestBufferStressTest(t *testing.T) {
 		t.Skip("Skipping stress test in short mode")
 	}
 
-	buffer := NewBuffer[*testItem](DataCategoryError, 1000, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 1000, OverflowPolicyDropOldest)
 
 	const duration = 100 * time.Millisecond
 	const numProducers = 5
@@ -392,7 +394,7 @@ func TestBufferStressTest(t *testing.T) {
 }
 
 func TestOverflowPolicyDropOldest(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 2, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropOldest)
 
 	// Fill buffer to capacity
 	item1 := &testItem{id: 1, data: "first"}
@@ -432,7 +434,7 @@ func TestOverflowPolicyDropOldest(t *testing.T) {
 }
 
 func TestOverflowPolicyDropNewest(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 2, OverflowPolicyDropNewest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropNewest)
 
 	// Fill buffer to capacity
 	item1 := &testItem{id: 1, data: "first"}
@@ -472,7 +474,7 @@ func TestOverflowPolicyDropNewest(t *testing.T) {
 }
 
 func TestBufferDroppedCallback(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 2, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropOldest)
 
 	var droppedItems []*testItem
 	var dropReasons []string
@@ -510,7 +512,7 @@ func TestBufferDroppedCallback(t *testing.T) {
 }
 
 func TestBufferPollBatch(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 5, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 5, OverflowPolicyDropOldest)
 
 	// Add some items
 	for i := 1; i <= 5; i++ {
@@ -538,7 +540,7 @@ func TestBufferPollBatch(t *testing.T) {
 }
 
 func TestBufferPeek(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 3, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 3, OverflowPolicyDropOldest)
 
 	// Test peek on empty buffer
 	_, ok := buffer.Peek()
@@ -565,11 +567,11 @@ func TestBufferPeek(t *testing.T) {
 }
 
 func TestBufferAdvancedMetrics(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 2, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropOldest)
 
 	// Test initial metrics
 	metrics := buffer.GetMetrics()
-	if metrics.Category != DataCategoryError {
+	if metrics.Category != ratelimit.CategoryError {
 		t.Errorf("Expected category error, got %s", metrics.Category)
 	}
 	if metrics.Capacity != 2 {
@@ -609,7 +611,7 @@ func TestBufferAdvancedMetrics(t *testing.T) {
 }
 
 func TestBufferClear(t *testing.T) {
-	buffer := NewBuffer[*testItem](DataCategoryError, 3, OverflowPolicyDropOldest)
+	buffer := NewBuffer[*testItem](ratelimit.CategoryError, 3, OverflowPolicyDropOldest)
 
 	// Add some items
 	buffer.Offer(&testItem{id: 1, data: "test"})
