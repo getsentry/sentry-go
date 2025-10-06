@@ -1,6 +1,6 @@
 module github.com/getsentry/sentry-go/otel
 
-go 1.22
+go 1.23
 
 replace github.com/getsentry/sentry-go => ../
 

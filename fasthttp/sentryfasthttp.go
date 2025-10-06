@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/valyala/fasthttp"
 )
 
@@ -143,7 +144,7 @@ func GetSpanFromContext(ctx *fasthttp.RequestCtx) *sentry.Span {
 func convert(ctx *fasthttp.RequestCtx) *http.Request {
 	defer func() {
 		if err := recover(); err != nil {
-			sentry.DebugLogger.Printf("%v", err)
+			debuglog.Printf("%v", err)
 		}
 	}()
 
