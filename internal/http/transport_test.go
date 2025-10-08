@@ -182,13 +182,34 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 	})
 
 	t.Run("queue overflow", func(t *testing.T) {
+		blockChan := make(chan struct{})
+		requestReceived := make(chan struct{})
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			select {
+			case requestReceived <- struct{}{}:
+			default:
+			}
+			<-blockChan
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
 		transport := NewAsyncTransport(TransportOptions{
-			Dsn: "https://key@sentry.io/123",
+			Dsn: "http://key@" + server.URL[7:] + "/123",
 		})
 		transport.QueueSize = 2
 		transport.queue = make(chan *protocol.Envelope, transport.QueueSize)
 		transport.Start()
-		defer transport.Close()
+		defer func() {
+			close(blockChan)
+			transport.Close()
+		}()
+
+		if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
+			t.Fatalf("first send should succeed: %v", err)
+		}
+
+		<-requestReceived
 
 		for i := 0; i < transport.QueueSize; i++ {
 			if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
@@ -384,7 +405,7 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("server error", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("internal error"))
+			_, _ = w.Write([]byte("internal error"))
 		}))
 		defer server.Close()
 
@@ -428,7 +449,7 @@ func TestSyncTransport_SendEvent(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -559,7 +580,7 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusOK)
 			}))
