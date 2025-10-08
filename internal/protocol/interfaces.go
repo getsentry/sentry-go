@@ -23,8 +23,7 @@ type TelemetryTransport interface {
 	// backpressure error if the queue is full.
 	SendEnvelope(envelope *Envelope) error
 
-	// SendEvent sends an event to Sentry. Returns immediately with
-	// backpressure error if the queue is full.
+	// SendEvent sends an event to Sentry.
 	SendEvent(event EnvelopeConvertible)
 
 	// IsRateLimited checks if a specific category is currently rate limited

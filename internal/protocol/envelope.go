@@ -32,7 +32,7 @@ type EnvelopeHeader struct {
 	// This means that SDK information can be carried for minidumps, session data and other submissions.
 	Sdk *SdkInfo `json:"sdk,omitempty"`
 
-	// Trace contains trace context information for distributed tracing
+	// Trace contains the [Dynamic Sampling Context](https://develop.sentry.dev/sdk/telemetry/traces/dynamic-sampling-context/)
 	Trace map[string]string `json:"trace,omitempty"`
 }
 
@@ -165,7 +165,7 @@ func (e *Envelope) Size() (int, error) {
 	return len(data), nil
 }
 
-// MarshalJSON converts the EnvelopeHeader to JSON and ensures it's a single line.
+// MarshalJSON converts the EnvelopeHeader to JSON.
 func (h *EnvelopeHeader) MarshalJSON() ([]byte, error) {
 	type header EnvelopeHeader
 	return json.Marshal((*header)(h))

@@ -134,6 +134,17 @@ func categoryFromEnvelope(envelope *protocol.Envelope) ratelimit.Category {
 	return ratelimit.CategoryAll
 }
 
+// SyncTransport is a blocking implementation of Transport.
+//
+// Clients using this transport will send requests to Sentry sequentially and
+// block until a response is returned.
+//
+// The blocking behavior is useful in a limited set of use cases. For example,
+// use it when deploying code to a Function as a Service ("Serverless")
+// platform, where any work happening in a background goroutine is not
+// guaranteed to execute.
+//
+// For most cases, prefer AsyncTransport.
 type SyncTransport struct {
 	dsn       *protocol.Dsn
 	client    *http.Client
@@ -153,7 +164,7 @@ func NewSyncTransport(options TransportOptions) *SyncTransport {
 
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil {
-		debuglog.Printf("failed to create transport: invalid dsn: %v\n", err)
+		debuglog.Printf("Transport is disabled: invalid dsn: %v\n", err)
 		return transport
 	}
 	transport.dsn = dsn
@@ -186,8 +197,19 @@ func (t *SyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 func (t *SyncTransport) Close() {}
 
 func (t *SyncTransport) SendEvent(event protocol.EnvelopeConvertible) {
-	if envelope, err := event.ToEnvelope(t.dsn); err == nil && envelope != nil {
-		_ = t.SendEnvelope(envelope)
+	envelope, err := event.ToEnvelope(t.dsn)
+	if err != nil {
+		debuglog.Printf("Failed to convert to envelope: %v", err)
+		return
+	}
+
+	if envelope == nil {
+		debuglog.Printf("Error: event with empty envelope")
+		return
+	}
+
+	if err := t.SendEnvelope(envelope); err != nil {
+		debuglog.Printf("Error sending the envelope: %v", err)
 	}
 }
 
@@ -197,6 +219,11 @@ func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
 
 func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *protocol.Envelope) error {
 	if t.dsn == nil {
+		debuglog.Printf("Dropping envelope: invalid dsn")
+		return nil
+	}
+	if envelope == nil {
+		debuglog.Printf("Error: provided empty envelope")
 		return nil
 	}
 
@@ -218,7 +245,7 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 	if response.StatusCode >= 400 && response.StatusCode <= 599 {
 		b, err := io.ReadAll(response.Body)
 		if err != nil {
-			debuglog.Printf("Error while reading response code: %v", err)
+			debuglog.Printf("Error while reading response body: %v", err)
 		}
 		debuglog.Printf("Sending %s failed with the following error: %s", envelope.Header.EventID, string(b))
 	}
@@ -253,6 +280,11 @@ func (t *SyncTransport) disabled(c ratelimit.Category) bool {
 	return disabled
 }
 
+// AsyncTransport is the default, non-blocking, implementation of Transport.
+//
+// Clients using this transport will enqueue requests in a queue and return to
+// the caller before any network communication has happened. Requests are sent
+// to Sentry sequentially from a background goroutine.
 type AsyncTransport struct {
 	dsn       *protocol.Dsn
 	client    *http.Client
@@ -292,7 +324,7 @@ func NewAsyncTransport(options TransportOptions) *AsyncTransport {
 
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil {
-		debuglog.Printf("%v\n", err)
+		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)
 		return transport
 	}
 	transport.dsn = dsn
@@ -351,8 +383,19 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 }
 
 func (t *AsyncTransport) SendEvent(event protocol.EnvelopeConvertible) {
-	if envelope, err := event.ToEnvelope(t.dsn); err == nil && envelope != nil {
-		_ = t.SendEnvelope(envelope)
+	envelope, err := event.ToEnvelope(t.dsn)
+	if err != nil {
+		debuglog.Printf("Failed to convert to envelope: %v", err)
+		return
+	}
+
+	if envelope == nil {
+		debuglog.Printf("Error: event with empty envelope")
+		return
+	}
+
+	if err := t.SendEnvelope(envelope); err != nil {
+		debuglog.Printf("Error sending the envelope: %v", err)
 	}
 }
 
@@ -486,7 +529,7 @@ func (t *AsyncTransport) handleResponse(response *http.Response) bool {
 	}
 
 	if response.StatusCode >= 500 {
-		debuglog.Printf("Server error %d - will retry", response.StatusCode)
+		debuglog.Printf("Server error %d", response.StatusCode)
 		return false
 	}
 
