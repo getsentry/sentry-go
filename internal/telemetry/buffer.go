@@ -23,14 +23,26 @@ type Buffer[T any] struct {
 	priority       ratelimit.Priority
 	overflowPolicy OverflowPolicy
 
+	batchSize     int
+	timeout       time.Duration
+	lastFlushTime time.Time
+
 	offered   int64
 	dropped   int64
 	onDropped func(item T, reason string)
 }
 
-func NewBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy) *Buffer[T] {
+func NewBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration) *Buffer[T] {
 	if capacity <= 0 {
 		capacity = defaultCapacity
+	}
+
+	if batchSize <= 0 {
+		batchSize = 1
+	}
+
+	if timeout < 0 {
+		timeout = 0
 	}
 
 	return &Buffer[T]{
@@ -39,6 +51,9 @@ func NewBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy 
 		category:       category,
 		priority:       category.GetPriority(),
 		overflowPolicy: overflowPolicy,
+		batchSize:      batchSize,
+		timeout:        timeout,
+		lastFlushTime:  time.Now(),
 	}
 }
 
@@ -48,7 +63,6 @@ func (b *Buffer[T]) SetDroppedCallback(callback func(item T, reason string)) {
 	b.onDropped = callback
 }
 
-// Offer adds an item to the buffer, returns false if dropped due to overflow.
 func (b *Buffer[T]) Offer(item T) bool {
 	atomic.AddInt64(&b.offered, 1)
 
@@ -91,7 +105,6 @@ func (b *Buffer[T]) Offer(item T) bool {
 	}
 }
 
-// Poll removes and returns the oldest item, false if empty.
 func (b *Buffer[T]) Poll() (T, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -109,7 +122,6 @@ func (b *Buffer[T]) Poll() (T, bool) {
 	return item, true
 }
 
-// PollBatch removes and returns up to maxItems.
 func (b *Buffer[T]) PollBatch(maxItems int) []T {
 	if maxItems <= 0 {
 		return nil
@@ -140,7 +152,6 @@ func (b *Buffer[T]) PollBatch(maxItems int) []T {
 	return result
 }
 
-// Drain removes and returns all items.
 func (b *Buffer[T]) Drain() []T {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -167,7 +178,6 @@ func (b *Buffer[T]) Drain() []T {
 	return result
 }
 
-// Peek returns the oldest item without removing it, false if empty.
 func (b *Buffer[T]) Peek() (T, bool) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -187,14 +197,20 @@ func (b *Buffer[T]) Size() int {
 }
 
 func (b *Buffer[T]) Capacity() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	return b.capacity
 }
 
 func (b *Buffer[T]) Category() ratelimit.Category {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	return b.category
 }
 
 func (b *Buffer[T]) Priority() ratelimit.Priority {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	return b.priority
 }
 
@@ -268,6 +284,65 @@ func (b *Buffer[T]) GetMetrics() BufferMetrics {
 		DropRate:      b.DropRate(),
 		LastUpdated:   time.Now(),
 	}
+}
+
+func (b *Buffer[T]) IsReadyToFlush() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if b.size == 0 {
+		return false
+	}
+
+	if b.size >= b.batchSize {
+		return true
+	}
+
+	if b.timeout > 0 && time.Since(b.lastFlushTime) >= b.timeout {
+		return true
+	}
+
+	return false
+}
+
+func (b *Buffer[T]) MarkFlushed() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.lastFlushTime = time.Now()
+}
+
+func (b *Buffer[T]) PollIfReady() []T {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.size == 0 {
+		return nil
+	}
+
+	ready := b.size >= b.batchSize ||
+		(b.timeout > 0 && time.Since(b.lastFlushTime) >= b.timeout)
+
+	if !ready {
+		return nil
+	}
+
+	itemCount := b.batchSize
+	if itemCount > b.size {
+		itemCount = b.size
+	}
+
+	result := make([]T, itemCount)
+	var zero T
+
+	for i := 0; i < itemCount; i++ {
+		result[i] = b.items[b.head]
+		b.items[b.head] = zero
+		b.head = (b.head + 1) % b.capacity
+		b.size--
+	}
+
+	b.lastFlushTime = time.Now()
+	return result
 }
 
 type BufferMetrics struct {
