@@ -399,6 +399,7 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 		transport := NewSyncTransport(TransportOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		})
+		defer transport.Close()
 
 		for _, tt := range tests {
 			if err := transport.SendEnvelope(testEnvelope(tt.itemType)); err != nil {

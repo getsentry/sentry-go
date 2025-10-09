@@ -750,11 +750,11 @@ func (noopTransport) Close() {}
 // Internal Transport Adapters
 // ================================
 
-// newInternalAsyncTransport creates a new AsyncTransport from internal/http
+// NewInternalAsyncTransport creates a new AsyncTransport from internal/http
 // wrapped to satisfy the Transport interface.
 //
 // This is not yet exposed in the public API and is for internal experimentation.
-func newInternalAsyncTransport() Transport {
+func NewInternalAsyncTransport() Transport {
 	return &internalAsyncTransportAdapter{}
 }
 

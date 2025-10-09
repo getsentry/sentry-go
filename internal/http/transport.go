@@ -218,10 +218,6 @@ func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
 }
 
 func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *protocol.Envelope) error {
-	if t.dsn == nil {
-		debuglog.Printf("Dropping envelope: invalid dsn")
-		return nil
-	}
 	if envelope == nil {
 		debuglog.Printf("Error: provided empty envelope")
 		return nil
@@ -359,10 +355,6 @@ func (t *AsyncTransport) start() {
 }
 
 func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
-	if t.dsn == nil {
-		return errors.New("transport not configured")
-	}
-
 	select {
 	case <-t.done:
 		return ErrTransportClosed
@@ -407,10 +399,6 @@ func (t *AsyncTransport) Flush(timeout time.Duration) bool {
 }
 
 func (t *AsyncTransport) FlushWithContext(ctx context.Context) bool {
-	if t.dsn == nil {
-		return true
-	}
-
 	flushResponse := make(chan struct{})
 	select {
 	case t.flushRequest <- flushResponse:
