@@ -156,18 +156,18 @@ type SyncTransport struct {
 	Timeout time.Duration
 }
 
-func NewSyncTransport(options TransportOptions) *SyncTransport {
+func NewSyncTransport(options TransportOptions) protocol.TelemetryTransport {
+	dsn, err := protocol.NewDsn(options.Dsn)
+	if err != nil || dsn == nil {
+		debuglog.Printf("Transport is disabled: invalid dsn: %v\n", err)
+		return NewNoopTransport()
+	}
+
 	transport := &SyncTransport{
 		Timeout: defaultTimeout,
 		limits:  make(ratelimit.Map),
+		dsn:     dsn,
 	}
-
-	dsn, err := protocol.NewDsn(options.Dsn)
-	if err != nil {
-		debuglog.Printf("Transport is disabled: invalid dsn: %v\n", err)
-		return transport
-	}
-	transport.dsn = dsn
 
 	if options.HTTPTransport != nil {
 		transport.transport = options.HTTPTransport
@@ -311,23 +311,23 @@ type AsyncTransport struct {
 	closeOnce sync.Once
 }
 
-func NewAsyncTransport(options TransportOptions) *AsyncTransport {
+func NewAsyncTransport(options TransportOptions) protocol.TelemetryTransport {
+	dsn, err := protocol.NewDsn(options.Dsn)
+	if err != nil || dsn == nil {
+		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)
+		return NewNoopTransport()
+	}
+
 	transport := &AsyncTransport{
 		QueueSize: defaultQueueSize,
 		Timeout:   defaultTimeout,
 		done:      make(chan struct{}),
 		limits:    make(ratelimit.Map),
+		dsn:       dsn,
 	}
 
 	transport.queue = make(chan *protocol.Envelope, transport.QueueSize)
 	transport.flushRequest = make(chan chan struct{})
-
-	dsn, err := protocol.NewDsn(options.Dsn)
-	if err != nil {
-		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)
-		return transport
-	}
-	transport.dsn = dsn
 
 	if options.HTTPTransport != nil {
 		transport.transport = options.HTTPTransport
@@ -347,6 +347,7 @@ func NewAsyncTransport(options TransportOptions) *AsyncTransport {
 		}
 	}
 
+	transport.Start()
 	return transport
 }
 
@@ -545,4 +546,38 @@ func (t *AsyncTransport) isRateLimited(category ratelimit.Category) bool {
 		debuglog.Printf("Rate limited for category %q until %v", category, t.limits.Deadline(category))
 	}
 	return limited
+}
+
+// NoopTransport is a transport implementation that drops all events.
+// Used internally when an empty or invalid DSN is provided.
+type NoopTransport struct{}
+
+func NewNoopTransport() *NoopTransport {
+	debuglog.Println("Transport initialized with invalid DSN. Using NoopTransport. No events will be delivered.")
+	return &NoopTransport{}
+}
+
+func (t *NoopTransport) SendEnvelope(_ *protocol.Envelope) error {
+	debuglog.Println("Envelope dropped due to NoopTransport usage.")
+	return nil
+}
+
+func (t *NoopTransport) SendEvent(_ protocol.EnvelopeConvertible) {
+	debuglog.Println("Event dropped due to NoopTransport usage.")
+}
+
+func (t *NoopTransport) IsRateLimited(_ ratelimit.Category) bool {
+	return false
+}
+
+func (t *NoopTransport) Flush(_ time.Duration) bool {
+	return true
+}
+
+func (t *NoopTransport) FlushWithContext(_ context.Context) bool {
+	return true
+}
+
+func (t *NoopTransport) Close() {
+	// Nothing to close
 }
