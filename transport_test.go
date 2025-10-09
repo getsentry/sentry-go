@@ -895,39 +895,3 @@ func TestInternalAsyncTransportAdapter_WithValidDSN(_ *testing.T) {
 
 	transport.Close()
 }
-
-func TestInternalSyncTransportAdapter(t *testing.T) {
-	transport := NewInternalSyncTransport()
-
-	transport.Configure(ClientOptions{
-		Dsn: "",
-	})
-
-	event := NewEvent()
-	event.Message = "test message"
-	transport.SendEvent(event)
-
-	if !transport.Flush(time.Second) {
-		t.Error("Flush should return true")
-	}
-
-	if !transport.FlushWithContext(context.Background()) {
-		t.Error("FlushWithContext should return true")
-	}
-
-	transport.Close()
-}
-
-func TestInternalSyncTransportAdapter_WithValidDSN(_ *testing.T) {
-	transport := NewInternalSyncTransport()
-
-	transport.Configure(ClientOptions{
-		Dsn: "https://public@example.com/1",
-	})
-
-	event := NewEvent()
-	event.Message = "test message"
-	transport.SendEvent(event)
-
-	transport.Close()
-}
