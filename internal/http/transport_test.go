@@ -208,15 +208,20 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		}))
 		defer server.Close()
 
-		tr := NewAsyncTransport(TransportOptions{
-			Dsn: "http://key@" + server.URL[7:] + "/123",
-		})
-		transport, ok := tr.(*AsyncTransport)
-		if !ok {
-			t.Fatalf("expected *AsyncTransport, got %T", tr)
+		dsn, _ := protocol.NewDsn("http://key@" + server.URL[7:] + "/123")
+		transport := &AsyncTransport{
+			QueueSize: 2,
+			Timeout:   defaultTimeout,
+			done:      make(chan struct{}),
+			limits:    make(ratelimit.Map),
+			dsn:       dsn,
+			transport: &http.Transport{},
+			client:    &http.Client{Timeout: defaultTimeout},
 		}
-		transport.QueueSize = 2
+		// manually set the queue size to simulate overflow
 		transport.queue = make(chan *protocol.Envelope, transport.QueueSize)
+		transport.flushRequest = make(chan chan struct{})
+		transport.start()
 		defer func() {
 			close(blockChan)
 			transport.Close()

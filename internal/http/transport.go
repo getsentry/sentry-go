@@ -347,11 +347,11 @@ func NewAsyncTransport(options TransportOptions) protocol.TelemetryTransport {
 		}
 	}
 
-	transport.Start()
+	transport.start()
 	return transport
 }
 
-func (t *AsyncTransport) Start() {
+func (t *AsyncTransport) start() {
 	t.startOnce.Do(func() {
 		t.wg.Add(1)
 		go t.worker()
