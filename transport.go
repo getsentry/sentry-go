@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	httpinternal "github.com/getsentry/sentry-go/internal/http"
+	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
@@ -743,3 +745,143 @@ func (noopTransport) FlushWithContext(context.Context) bool {
 }
 
 func (noopTransport) Close() {}
+
+// ================================
+// Internal Transport Adapters
+// ================================
+
+// NewInternalAsyncTransport creates a new AsyncTransport from internal/http
+// wrapped to satisfy the Transport interface.
+//
+// This is not yet exposed in the public API and is for internal experimentation.
+func NewInternalAsyncTransport() Transport {
+	return &internalAsyncTransportAdapter{}
+}
+
+// internalAsyncTransportAdapter wraps the internal AsyncTransport to implement
+// the root-level Transport interface.
+type internalAsyncTransportAdapter struct {
+	transport protocol.TelemetryTransport
+	dsn       *protocol.Dsn
+}
+
+func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
+	transportOptions := httpinternal.TransportOptions{
+		Dsn:           options.Dsn,
+		HTTPClient:    options.HTTPClient,
+		HTTPTransport: options.HTTPTransport,
+		HTTPProxy:     options.HTTPProxy,
+		HTTPSProxy:    options.HTTPSProxy,
+		CaCerts:       options.CaCerts,
+	}
+
+	a.transport = httpinternal.NewAsyncTransport(transportOptions)
+
+	if options.Dsn != "" {
+		dsn, err := protocol.NewDsn(options.Dsn)
+		if err != nil {
+			debuglog.Printf("Failed to parse DSN in adapter: %v\n", err)
+		} else {
+			a.dsn = dsn
+		}
+	}
+}
+
+func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
+	if a.transport == nil {
+		debuglog.Println("Transport not configured")
+		return
+	}
+
+	a.transport.SendEvent(event)
+}
+
+func (a *internalAsyncTransportAdapter) Flush(timeout time.Duration) bool {
+	if a.transport == nil {
+		return true
+	}
+	return a.transport.Flush(timeout)
+}
+
+func (a *internalAsyncTransportAdapter) FlushWithContext(ctx context.Context) bool {
+	if a.transport == nil {
+		return true
+	}
+	return a.transport.FlushWithContext(ctx)
+}
+
+func (a *internalAsyncTransportAdapter) Close() {
+	if a.transport != nil {
+		a.transport.Close()
+	}
+}
+
+// NewInternalSyncTransport creates a new SyncTransport from internal/http
+// wrapped to satisfy the Transport interface.
+//
+// This is not yet exposed in the public API and is for internal experimentation.
+func NewInternalSyncTransport() Transport {
+	return &internalSyncTransportAdapter{}
+}
+
+// internalSyncTransportAdapter wraps the internal SyncTransport to implement
+// the root-level Transport interface, avoiding cyclic imports.
+type internalSyncTransportAdapter struct {
+	transport protocol.TelemetryTransport
+	dsn       *protocol.Dsn
+}
+
+func (a *internalSyncTransportAdapter) Configure(options ClientOptions) {
+	// Convert root ClientOptions to internal TransportOptions
+	transportOptions := httpinternal.TransportOptions{
+		Dsn:           options.Dsn,
+		HTTPClient:    options.HTTPClient,
+		HTTPTransport: options.HTTPTransport,
+		HTTPProxy:     options.HTTPProxy,
+		HTTPSProxy:    options.HTTPSProxy,
+		CaCerts:       options.CaCerts,
+	}
+
+	a.transport = httpinternal.NewSyncTransport(transportOptions)
+
+	// Parse and store the protocol.Dsn for Event conversion
+	if options.Dsn != "" {
+		dsn, err := protocol.NewDsn(options.Dsn)
+		if err != nil {
+			debuglog.Printf("Failed to parse DSN in adapter: %v\n", err)
+		} else {
+			a.dsn = dsn
+		}
+	}
+}
+
+func (a *internalSyncTransportAdapter) SendEvent(event *Event) {
+	if a.transport == nil {
+		debuglog.Println("Transport not configured")
+		return
+	}
+
+	// Event already implements protocol.EnvelopeConvertible
+	// The internal transport will call event.ToEnvelope(dsn)
+	a.transport.SendEvent(event)
+}
+
+func (a *internalSyncTransportAdapter) Flush(timeout time.Duration) bool {
+	if a.transport == nil {
+		return true
+	}
+	return a.transport.Flush(timeout)
+}
+
+func (a *internalSyncTransportAdapter) FlushWithContext(ctx context.Context) bool {
+	if a.transport == nil {
+		return true
+	}
+	return a.transport.FlushWithContext(ctx)
+}
+
+func (a *internalSyncTransportAdapter) Close() {
+	if a.transport != nil {
+		a.transport.Close()
+	}
+}
