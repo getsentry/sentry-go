@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.36.0
+
+### Breaking Changes
+
+- Behavioral change for the `MaxBreadcrumbs` client option. Removed the hard limit of 100 breadcrumbs, allowing users to set a larger limit and also changed the default limit from 30 to 100 ([#1106](https://github.com/getsentry/sentry-go/pull/1106)))
+
 ## 0.35.3
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.3.

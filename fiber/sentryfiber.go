@@ -13,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v2/utils"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 const (
@@ -143,7 +144,7 @@ func GetSpanFromContext(ctx *fiber.Ctx) *sentry.Span {
 func convert(ctx *fiber.Ctx) *http.Request {
 	defer func() {
 		if err := recover(); err != nil {
-			sentry.DebugLogger.Printf("%v", err)
+			debuglog.Printf("%v", err)
 		}
 	}()
 

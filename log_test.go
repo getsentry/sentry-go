@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -693,8 +694,8 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 			hub.BindClient(mockClient)
 
 			// set the debug logger output after NewClient, so that it doesn't change.
-			DebugLogger.SetOutput(&buf)
-			defer DebugLogger.SetOutput(io.Discard)
+			debuglog.SetOutput(&buf)
+			defer debuglog.SetOutput(io.Discard)
 
 			logger := NewLogger(ctx)
 			logger.Info().WithCtx(ctx).Emit(tt.message)
