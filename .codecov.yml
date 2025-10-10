@@ -13,3 +13,4 @@ coverage:
         threshold: 0.5%
 ignore:
   - "log_fallback.go"
+  - "internal/testutils"
