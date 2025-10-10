@@ -788,7 +788,25 @@ func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
 }
 
 func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
-	a.transport.SendEvent(event)
+	envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{event}, a.dsn)
+	if err != nil {
+		debuglog.Printf("Failed to create envelope from event: %v", err)
+		return
+	}
+
+	if envelope == nil {
+		debuglog.Printf("Error: event resulted in empty envelope")
+		return
+	}
+
+	for _, attachment := range event.Attachments {
+		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
+		envelope.AddItem(attachmentItem)
+	}
+
+	if err := a.transport.SendEnvelope(envelope); err != nil {
+		debuglog.Printf("Error sending envelope: %v", err)
+	}
 }
 
 func (a *internalAsyncTransportAdapter) Flush(timeout time.Duration) bool {

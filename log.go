@@ -10,7 +10,8 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
-	debuglog "github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
 type LogLevel string
@@ -66,7 +67,7 @@ func NewLogger(ctx context.Context) Logger {
 	}
 
 	client := hub.Client()
-	if client != nil && client.batchLogger != nil {
+	if client != nil && client.options.EnableLogs && (client.batchLogger != nil || client.telemetryScheduler != nil) {
 		return &sentryLogger{
 			ctx:        ctx,
 			client:     client,
@@ -76,11 +77,10 @@ func NewLogger(ctx context.Context) Logger {
 	}
 
 	debuglog.Println("fallback to noopLogger: enableLogs disabled")
-	return &noopLogger{} // fallback: does nothing
+	return &noopLogger{}
 }
 
 func (l *sentryLogger) Write(p []byte) (int, error) {
-	// Avoid sending double newlines to Sentry
 	msg := strings.TrimRight(string(p), "\n")
 	l.Info().Emit(msg)
 	return len(p), nil
@@ -135,8 +135,6 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	for k, v := range entryAttrs {
 		attrs[k] = v
 	}
-
-	// Set default attributes
 	if release := l.client.options.Release; release != "" {
 		attrs["sentry.release"] = Attribute{Value: release, Type: AttributeString}
 	}
@@ -184,7 +182,19 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	}
 
 	if log != nil {
-		l.client.batchLogger.logCh <- *log
+		if l.client.telemetryScheduler != nil {
+			// TODO: this is a temp workaround. Since everything is anchored on the event type.
+			event := NewEvent()
+			event.Type = logEvent.Type
+			event.Logs = []Log{*log}
+
+			if buffer, ok := l.client.telemetryBuffers[ratelimit.CategoryLog]; ok {
+				buffer.Offer(event)
+				l.client.telemetryScheduler.Signal()
+			}
+		} else if l.client.batchLogger != nil {
+			l.client.batchLogger.logCh <- *log
+		}
 	}
 
 	if l.client.options.Debug {
@@ -277,7 +287,7 @@ func (l *sentryLogger) Panic() LogEntry {
 		level:       LogLevelFatal,
 		severity:    LogSeverityFatal,
 		attributes:  make(map[string]Attribute),
-		shouldPanic: true, // this should panic instead of exit
+		shouldPanic: true,
 	}
 }
 

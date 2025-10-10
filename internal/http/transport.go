@@ -196,23 +196,6 @@ func (t *SyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 
 func (t *SyncTransport) Close() {}
 
-func (t *SyncTransport) SendEvent(event protocol.EnvelopeConvertible) {
-	envelope, err := event.ToEnvelope(t.dsn)
-	if err != nil {
-		debuglog.Printf("Failed to convert to envelope: %v", err)
-		return
-	}
-
-	if envelope == nil {
-		debuglog.Printf("Error: event with empty envelope")
-		return
-	}
-
-	if err := t.SendEnvelope(envelope); err != nil {
-		debuglog.Printf("Error sending the envelope: %v", err)
-	}
-}
-
 func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
 	return t.disabled(category)
 }
@@ -375,23 +358,6 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	}
 }
 
-func (t *AsyncTransport) SendEvent(event protocol.EnvelopeConvertible) {
-	envelope, err := event.ToEnvelope(t.dsn)
-	if err != nil {
-		debuglog.Printf("Failed to convert to envelope: %v", err)
-		return
-	}
-
-	if envelope == nil {
-		debuglog.Printf("Error: event with empty envelope")
-		return
-	}
-
-	if err := t.SendEnvelope(envelope); err != nil {
-		debuglog.Printf("Error sending the envelope: %v", err)
-	}
-}
-
 func (t *AsyncTransport) Flush(timeout time.Duration) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -548,10 +514,6 @@ func NewNoopTransport() *NoopTransport {
 func (t *NoopTransport) SendEnvelope(_ *protocol.Envelope) error {
 	debuglog.Println("Envelope dropped due to NoopTransport usage.")
 	return nil
-}
-
-func (t *NoopTransport) SendEvent(_ protocol.EnvelopeConvertible) {
-	debuglog.Println("Event dropped due to NoopTransport usage.")
 }
 
 func (t *NoopTransport) IsRateLimited(_ ratelimit.Category) bool {
