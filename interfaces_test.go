@@ -590,7 +590,7 @@ func TestEvent_ToCategory(t *testing.T) {
 	}
 }
 
-func TestEvent_ToEnvelope(t *testing.T) {
+func TestEvent_CreateEnvelopeFromItems(t *testing.T) {
 	tests := []struct {
 		name      string
 		event     *Event
@@ -673,20 +673,25 @@ func TestEvent_ToEnvelope(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			envelope, err := tt.event.ToEnvelope(tt.dsn)
+			envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{tt.event}, tt.dsn)
 
 			if (err != nil) != tt.wantError {
-				t.Errorf("ToEnvelope() error = %v, wantError %v", err, tt.wantError)
+				t.Errorf("CreateEnvelopeFromItems() error = %v, wantError %v", err, tt.wantError)
 				return
 			}
 
 			if err != nil {
-				return // Expected error, nothing more to check
+				return
+			}
+
+			for _, attachment := range tt.event.Attachments {
+				attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
+				envelope.AddItem(attachmentItem)
 			}
 
 			// Basic envelope validation
 			if envelope == nil {
-				t.Error("ToEnvelope() returned nil envelope")
+				t.Error("CreateEnvelopeFromItems() returned nil envelope")
 				return
 			}
 
@@ -699,8 +704,7 @@ func TestEvent_ToEnvelope(t *testing.T) {
 				t.Errorf("Expected EventID %s, got %s", tt.event.EventID, envelope.Header.EventID)
 			}
 
-			// Check that items were created
-			expectedItems := 1 // Main event item
+			expectedItems := 1
 			if tt.event.Attachments != nil {
 				expectedItems += len(tt.event.Attachments)
 			}
@@ -709,7 +713,6 @@ func TestEvent_ToEnvelope(t *testing.T) {
 				t.Errorf("Expected %d items, got %d", expectedItems, len(envelope.Items))
 			}
 
-			// Verify the envelope can be serialized
 			data, err := envelope.Serialize()
 			if err != nil {
 				t.Errorf("Failed to serialize envelope: %v", err)
@@ -719,37 +722,6 @@ func TestEvent_ToEnvelope(t *testing.T) {
 				t.Error("Serialized envelope is empty")
 			}
 		})
-	}
-}
-
-func TestEvent_ToEnvelopeWithTime(t *testing.T) {
-	event := &Event{
-		EventID:   "12345678901234567890123456789012",
-		Message:   "test message",
-		Level:     LevelError,
-		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-	}
-
-	sentAt := time.Date(2023, 1, 1, 15, 0, 0, 0, time.UTC)
-	envelope, err := event.ToEnvelopeWithTime(nil, sentAt)
-
-	if err != nil {
-		t.Errorf("ToEnvelopeWithTime() error = %v", err)
-		return
-	}
-
-	if envelope == nil {
-		t.Error("ToEnvelopeWithTime() returned nil envelope")
-		return
-	}
-
-	if envelope.Header == nil {
-		t.Error("Envelope header is nil")
-		return
-	}
-
-	if !envelope.Header.SentAt.Equal(sentAt) {
-		t.Errorf("Expected SentAt %v, got %v", sentAt, envelope.Header.SentAt)
 	}
 }
 
@@ -766,15 +738,15 @@ func TestEvent_ToEnvelope_FallbackOnMarshalError(t *testing.T) {
 		},
 	}
 
-	envelope, err := event.ToEnvelope(nil)
+	envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{event}, nil)
 
 	if err != nil {
-		t.Errorf("ToEnvelope() should not error even with unmarshalable data, got: %v", err)
+		t.Errorf("CreateEnvelopeFromItems() should not error even with unmarshalable data, got: %v", err)
 		return
 	}
 
 	if envelope == nil {
-		t.Error("ToEnvelope() should not return a nil envelope")
+		t.Error("CreateEnvelopeFromItems() should not return a nil envelope")
 		return
 	}
 

@@ -12,7 +12,7 @@ import (
 
 // Scheduler implements a weighted round-robin scheduler for processing buffered events.
 type Scheduler struct {
-	buffers   map[ratelimit.Category]*Buffer[protocol.EnvelopeConvertible]
+	buffers   map[ratelimit.Category]*Buffer[protocol.EnvelopeItemConvertible]
 	transport protocol.TelemetryTransport
 	dsn       *protocol.Dsn
 
@@ -30,7 +30,7 @@ type Scheduler struct {
 }
 
 func NewScheduler(
-	buffers map[ratelimit.Category]*Buffer[protocol.EnvelopeConvertible],
+	buffers map[ratelimit.Category]*Buffer[protocol.EnvelopeItemConvertible],
 	transport protocol.TelemetryTransport,
 	dsn *protocol.Dsn,
 ) *Scheduler {
@@ -174,10 +174,12 @@ func (s *Scheduler) processNextBatch() {
 	priority := s.currentCycle[s.cyclePos]
 	s.cyclePos = (s.cyclePos + 1) % len(s.currentCycle)
 
-	var bufferToProcess *Buffer[protocol.EnvelopeConvertible]
+	var bufferToProcess *Buffer[protocol.EnvelopeItemConvertible]
+	var categoryToProcess ratelimit.Category
 	for category, buffer := range s.buffers {
 		if buffer.Priority() == priority && !s.isRateLimited(category) && buffer.IsReadyToFlush() {
 			bufferToProcess = buffer
+			categoryToProcess = category
 			break
 		}
 	}
@@ -185,12 +187,12 @@ func (s *Scheduler) processNextBatch() {
 	s.mu.Unlock()
 
 	if bufferToProcess != nil {
-		s.processItems(bufferToProcess, false)
+		s.processItems(bufferToProcess, categoryToProcess, false)
 	}
 }
 
-func (s *Scheduler) processItems(buffer *Buffer[protocol.EnvelopeConvertible], force bool) {
-	var items []protocol.EnvelopeConvertible
+func (s *Scheduler) processItems(buffer *Buffer[protocol.EnvelopeItemConvertible], category ratelimit.Category, force bool) {
+	var items []protocol.EnvelopeItemConvertible
 
 	if force {
 		items = buffer.Drain()
@@ -198,15 +200,29 @@ func (s *Scheduler) processItems(buffer *Buffer[protocol.EnvelopeConvertible], f
 		items = buffer.PollIfReady()
 	}
 
-	for _, item := range items {
-		s.sendItem(item)
+	if len(items) == 0 {
+		return
+	}
+
+	if category == ratelimit.CategoryLog && len(items) > 1 {
+		s.sendItems(items)
+	} else {
+		// if the buffers are properly configured, buffer.PollIfReady should return a single item for every category
+		// other than logs. We still iterate over the items just in case, because we don't want to send broken envelopes.
+		for _, item := range items {
+			s.sendItems([]protocol.EnvelopeItemConvertible{item})
+		}
 	}
 }
 
-func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
-	envelope, err := item.ToEnvelope(s.dsn)
+func (s *Scheduler) sendItems(items []protocol.EnvelopeItemConvertible) {
+	if len(items) == 0 {
+		return
+	}
+
+	envelope, err := protocol.CreateEnvelopeFromItems(items, s.dsn)
 	if err != nil {
-		debuglog.Printf("error converting item to envelope: %v", err)
+		debuglog.Printf("error creating envelope from items: %v", err)
 		return
 	}
 	if err := s.transport.SendEnvelope(envelope); err != nil {
@@ -215,9 +231,9 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
 }
 
 func (s *Scheduler) flushBuffers() {
-	for _, buffer := range s.buffers {
+	for category, buffer := range s.buffers {
 		if !buffer.IsEmpty() {
-			s.processItems(buffer, true)
+			s.processItems(buffer, category, true)
 		}
 	}
 }

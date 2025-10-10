@@ -211,3 +211,40 @@ func NewLogItem(itemCount int, payload []byte) *EnvelopeItem {
 		Payload: payload,
 	}
 }
+
+// CreateEnvelopeFromItems creates a new envelope from a slice of EnvelopeItemConvertible items.
+// It batches items together into a single envelope and uses metadata from the first item for the header.
+// For log items, it will create a single batched log envelope item.
+func CreateEnvelopeFromItems(items []EnvelopeItemConvertible, dsn *Dsn) (*Envelope, error) {
+	if len(items) == 0 {
+		return nil, fmt.Errorf("cannot create envelope from empty items")
+	}
+
+	firstItem := items[0]
+
+	header := &EnvelopeHeader{
+		EventID: firstItem.GetEventID(),
+		SentAt:  time.Now(),
+		Trace:   firstItem.GetDynamicSamplingContext(),
+	}
+
+	if dsn != nil {
+		header.Dsn = dsn.String()
+	}
+
+	if sdkInfo := firstItem.GetSdkInfo(); sdkInfo != nil {
+		header.Sdk = sdkInfo
+	}
+
+	envelope := NewEnvelope(header)
+
+	for _, item := range items {
+		envelopeItem, err := item.ToEnvelopeItem()
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert item to envelope item: %w", err)
+		}
+		envelope.AddItem(envelopeItem)
+	}
+
+	return envelope, nil
+}

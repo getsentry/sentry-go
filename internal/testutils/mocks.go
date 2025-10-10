@@ -19,15 +19,6 @@ type MockTelemetryTransport struct {
 	rateLimitedCalls int64
 }
 
-func (m *MockTelemetryTransport) SendEvent(event protocol.EnvelopeConvertible) {
-	atomic.AddInt64(&m.sendCount, 1)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	envelope, _ := event.ToEnvelope(&protocol.Dsn{})
-	m.sentEnvelopes = append(m.sentEnvelopes, envelope)
-}
-
 func (m *MockTelemetryTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	atomic.AddInt64(&m.sendCount, 1)
 	m.mu.Lock()

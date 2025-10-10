@@ -271,7 +271,7 @@ type Client struct {
 	// not supported, create a new client instead.
 	Transport          Transport
 	batchLogger        *BatchLogger
-	telemetryBuffers   map[ratelimit.Category]*telemetry.Buffer[protocol.EnvelopeConvertible]
+	telemetryBuffers   map[ratelimit.Category]*telemetry.Buffer[protocol.EnvelopeItemConvertible]
 	telemetryScheduler *telemetry.Scheduler
 }
 
@@ -372,13 +372,15 @@ func NewClient(options ClientOptions) (*Client, error) {
 		sdkVersion:    SDKVersion,
 	}
 
-	if options.EnableLogs {
+	client.setupTransport()
+
+	if options.EnableTelemetryBuffer {
+		client.setupTelemetryBuffer()
+	} else if options.EnableLogs {
 		client.batchLogger = NewBatchLogger(&client)
 		client.batchLogger.Start()
 	}
 
-	client.setupTransport()
-	client.setupTelemetryBuffer()
 	client.setupIntegrations()
 
 	return &client, nil
@@ -420,11 +422,11 @@ func (client *Client) setupTelemetryBuffer() {
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
-	client.telemetryBuffers = map[ratelimit.Category]*telemetry.Buffer[protocol.EnvelopeConvertible]{
-		ratelimit.CategoryError:       telemetry.NewBuffer[protocol.EnvelopeConvertible](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryTransaction: telemetry.NewBuffer[protocol.EnvelopeConvertible](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryLog:         telemetry.NewBuffer[protocol.EnvelopeConvertible](ratelimit.CategoryLog, 100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
-		ratelimit.CategoryMonitor:     telemetry.NewBuffer[protocol.EnvelopeConvertible](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+	client.telemetryBuffers = map[ratelimit.Category]*telemetry.Buffer[protocol.EnvelopeItemConvertible]{
+		ratelimit.CategoryError:       telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTransaction: telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryLog:         telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryLog, 100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+		ratelimit.CategoryMonitor:     telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
 	}
 
 	client.telemetryScheduler = telemetry.NewScheduler(client.telemetryBuffers, transport, &client.dsn.Dsn)
@@ -736,6 +738,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 			client.telemetryScheduler.Signal()
 		} else {
 			// fallback if we get an event type with unknown category. this shouldn't happen
+			debuglog.Printf("Unknown category for event type %s, sending directly", event.Type)
 			client.Transport.SendEvent(event)
 		}
 	} else {
