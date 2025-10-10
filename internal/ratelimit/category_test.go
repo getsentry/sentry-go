@@ -60,3 +60,42 @@ func TestKnownCategories(t *testing.T) {
 		})
 	}
 }
+
+func TestPriority_String(t *testing.T) {
+	tests := []struct {
+		priority Priority
+		expected string
+	}{
+		{PriorityCritical, "critical"},
+		{PriorityHigh, "high"},
+		{PriorityMedium, "medium"},
+		{PriorityLow, "low"},
+		{PriorityLowest, "lowest"},
+		{Priority(999), "unknown"},
+	}
+
+	for _, tt := range tests {
+		if got := tt.priority.String(); got != tt.expected {
+			t.Errorf("Priority(%d).String() = %q, want %q", tt.priority, got, tt.expected)
+		}
+	}
+}
+
+func TestCategory_GetPriority(t *testing.T) {
+	tests := []struct {
+		category Category
+		expected Priority
+	}{
+		{CategoryError, PriorityCritical},
+		{CategoryMonitor, PriorityHigh},
+		{CategoryLog, PriorityMedium},
+		{CategoryTransaction, PriorityLow},
+		{Category("unknown"), PriorityMedium},
+	}
+
+	for _, tt := range tests {
+		if got := tt.category.GetPriority(); got != tt.expected {
+			t.Errorf("Category(%q).GetPriority() = %s, want %s", tt.category, got, tt.expected)
+		}
+	}
+}
