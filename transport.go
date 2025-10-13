@@ -404,7 +404,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		if event.Type == transactionType {
 			eventType = "transaction"
 		} else {
-			eventType = fmt.Sprintf("%s event", event.Level)
+			eventType = fmt.Sprintf("%s event", event.Type)
 		}
 		debuglog.Printf(
 			"Sending %s [%s] to %s project: %s",
