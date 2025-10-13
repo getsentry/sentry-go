@@ -186,6 +186,8 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 			if buffer, ok := l.client.telemetryBuffers[ratelimit.CategoryLog]; ok {
 				buffer.Offer(log)
 				l.client.telemetryScheduler.Signal()
+			} else {
+				debuglog.Print("Dropping event: log category buffer missing")
 			}
 		} else if l.client.batchLogger != nil {
 			l.client.batchLogger.logCh <- *log
