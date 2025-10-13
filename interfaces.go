@@ -476,37 +476,8 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 	}
 }
 
-// ToEnvelope converts the Event to a Sentry envelope.
-// This includes the event data and any attachments as separate envelope items.
-func (e *Event) ToEnvelope(dsn *protocol.Dsn) (*protocol.Envelope, error) {
-	return e.ToEnvelopeWithTime(dsn, time.Now())
-}
-
-// ToEnvelopeWithTime converts the Event to a Sentry envelope with a specific sentAt time.
-// This is primarily useful for testing with predictable timestamps.
-func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protocol.Envelope, error) {
-	// Create envelope header with trace context
-	trace := make(map[string]string)
-	if dsc := e.sdkMetaData.dsc; dsc.HasEntries() {
-		for k, v := range dsc.Entries {
-			trace[k] = v
-		}
-	}
-
-	header := &protocol.EnvelopeHeader{
-		EventID: string(e.EventID),
-		SentAt:  sentAt,
-		Trace:   trace,
-	}
-
-	if dsn != nil {
-		header.Dsn = dsn.String()
-	}
-
-	header.Sdk = &e.Sdk
-
-	envelope := protocol.NewEnvelope(header)
-
+// ToEnvelopeItem converts the Event to a Sentry envelope item.
+func (e *Event) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	eventBody, err := json.Marshal(e)
 	if err != nil {
 		// Try fallback: remove problematic fields and retry
@@ -527,25 +498,46 @@ func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protoc
 		DebugLogger.Printf("Event marshaling succeeded with fallback after removing problematic fields")
 	}
 
-	var mainItem *protocol.EnvelopeItem
+	// TODO: all event types should be abstracted to implement EnvelopeItemConvertible and convert themselves.
+	var item *protocol.EnvelopeItem
 	switch e.Type {
 	case transactionType:
-		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeTransaction, eventBody)
+		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeTransaction, eventBody)
 	case checkInType:
-		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
+		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
 	case logEvent.Type:
-		mainItem = protocol.NewLogItem(len(e.Logs), eventBody)
+		item = protocol.NewLogItem(len(e.Logs), eventBody)
 	default:
-		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
+		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
 	}
 
-	envelope.AddItem(mainItem)
-	for _, attachment := range e.Attachments {
-		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
-		envelope.AddItem(attachmentItem)
-	}
+	return item, nil
+}
 
-	return envelope, nil
+// GetCategory returns the rate limit category for this event.
+func (e *Event) GetCategory() ratelimit.Category {
+	return e.toCategory()
+}
+
+// GetEventID returns the event ID.
+func (e *Event) GetEventID() string {
+	return string(e.EventID)
+}
+
+// GetSdkInfo returns SDK information for the envelope header.
+func (e *Event) GetSdkInfo() *protocol.SdkInfo {
+	return &e.Sdk
+}
+
+// GetDynamicSamplingContext returns trace context for the envelope header.
+func (e *Event) GetDynamicSamplingContext() map[string]string {
+	trace := make(map[string]string)
+	if dsc := e.sdkMetaData.dsc; dsc.HasEntries() {
+		for k, v := range dsc.Entries {
+			trace[k] = v
+		}
+	}
+	return trace
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
@@ -720,6 +712,40 @@ type Log struct {
 	Severity   int                  `json:"severity_number,omitempty"`
 	Body       string               `json:"body,omitempty"`
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
+}
+
+// ToEnvelopeItem converts the Log to a Sentry envelope item.
+func (l *Log) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
+	logData, err := json.Marshal(l)
+	if err != nil {
+		return nil, err
+	}
+	return &protocol.EnvelopeItem{
+		Header: &protocol.EnvelopeItemHeader{
+			Type: protocol.EnvelopeItemTypeLog,
+		},
+		Payload: logData,
+	}, nil
+}
+
+// GetCategory returns the rate limit category for logs.
+func (l *Log) GetCategory() ratelimit.Category {
+	return ratelimit.CategoryLog
+}
+
+// GetEventID returns empty string (event ID set when batching).
+func (l *Log) GetEventID() string {
+	return ""
+}
+
+// GetSdkInfo returns nil (SDK info set when batching).
+func (l *Log) GetSdkInfo() *protocol.SdkInfo {
+	return nil
+}
+
+// GetDynamicSamplingContext returns nil (trace context set when batching).
+func (l *Log) GetDynamicSamplingContext() map[string]string {
+	return nil
 }
 
 type AttrType string

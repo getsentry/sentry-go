@@ -127,5 +127,6 @@ func (l *BatchLogger) processEvent(logs []Log) {
 	event.Timestamp = time.Now()
 	event.Type = logEvent.Type
 	event.Logs = logs
-	l.client.CaptureEvent(event, nil, nil)
+	l.client.Transport.SendEvent(event)
+	//l.client.CaptureEvent(event, nil, nil)
 }
