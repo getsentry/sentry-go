@@ -736,19 +736,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		}
 	}
 
-	if client.telemetryScheduler != nil {
-		category := event.toCategory()
-		if buffer, ok := client.telemetryBuffers[category]; ok {
-			buffer.Offer(event)
-			client.telemetryScheduler.Signal()
-		} else {
-			// fallback if we get an event type with unknown category. this shouldn't happen
-			debuglog.Printf("Unknown category for event type %s, sending directly", event.Type)
-			client.Transport.SendEvent(event)
-		}
-	} else {
-		client.Transport.SendEvent(event)
-	}
+	client.Transport.SendEvent(event)
 
 	return &event.EventID
 }
