@@ -598,7 +598,7 @@ func (client *Client) FlushWithContext(ctx context.Context) bool {
 		client.batchLogger.Flush(ctx.Done())
 	}
 	if client.telemetryScheduler != nil {
-		client.telemetryScheduler.FlushWithContext(ctx)
+		return client.telemetryScheduler.FlushWithContext(ctx)
 	}
 	return client.Transport.FlushWithContext(ctx)
 }
