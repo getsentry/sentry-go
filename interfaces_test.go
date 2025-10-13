@@ -673,7 +673,7 @@ func TestEvent_CreateEnvelopeFromItems(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{tt.event}, tt.dsn)
+			envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{tt.event}, tt.dsn, nil)
 
 			if (err != nil) != tt.wantError {
 				t.Errorf("CreateEnvelopeFromItems() error = %v, wantError %v", err, tt.wantError)
@@ -738,7 +738,7 @@ func TestEvent_ToEnvelope_FallbackOnMarshalError(t *testing.T) {
 		},
 	}
 
-	envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{event}, nil)
+	envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{event}, nil, nil)
 
 	if err != nil {
 		t.Errorf("CreateEnvelopeFromItems() should not error even with unmarshalable data, got: %v", err)

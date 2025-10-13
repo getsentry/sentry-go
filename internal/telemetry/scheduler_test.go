@@ -16,11 +16,18 @@ type testTelemetryItem struct {
 }
 
 func (t *testTelemetryItem) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
+	var payload string
+	if t.GetCategory() == ratelimit.CategoryLog {
+		payload = `{"type": "log", "timestamp": "2023-01-01T00:00:00Z", "logs": [{"level": "info", "body": "` + t.data + `"}]}`
+	} else {
+		payload = `{"message": "` + t.data + `"}`
+	}
+
 	return &protocol.EnvelopeItem{
 		Header: &protocol.EnvelopeItemHeader{
 			Type: protocol.EnvelopeItemTypeEvent,
 		},
-		Payload: []byte(`{"message": "` + t.data + `"}`),
+		Payload: []byte(payload),
 	}, nil
 }
 
@@ -55,7 +62,12 @@ func TestNewTelemetryScheduler(t *testing.T) {
 		ratelimit.CategoryLog:   NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryLog, 10, OverflowPolicyDropOldest, 100, 5*time.Second),
 	}
 
-	scheduler := NewScheduler(buffers, transport, dsn)
+	sdkInfo := &protocol.SdkInfo{
+		Name:    "test-sdk",
+		Version: "1.0.0",
+	}
+
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
 
 	if scheduler == nil {
 		t.Fatal("Expected non-nil scheduler")
@@ -134,7 +146,7 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			addItems: func(buffers map[ratelimit.Category]*Buffer[protocol.EnvelopeItemConvertible]) {
 				i := 0
 				for category, buffer := range buffers {
-					buffer.Offer(&testTelemetryItem{id: i + 1, data: string(category)})
+					buffer.Offer(&testTelemetryItem{id: i + 1, data: string(category), category: category})
 					i++
 				}
 			},
@@ -149,8 +161,8 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 				}
 			},
 			addItems: func(buffers map[ratelimit.Category]*Buffer[protocol.EnvelopeItemConvertible]) {
-				buffers[ratelimit.CategoryError].Offer(&testTelemetryItem{id: 1, data: "error"})
-				buffers[ratelimit.CategoryLog].Offer(&testTelemetryItem{id: 2, data: "log"})
+				buffers[ratelimit.CategoryError].Offer(&testTelemetryItem{id: 1, data: "error", category: ratelimit.CategoryError})
+				buffers[ratelimit.CategoryLog].Offer(&testTelemetryItem{id: 2, data: "log", category: ratelimit.CategoryLog})
 			},
 			expectedCount: 2,
 		},
@@ -160,9 +172,10 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &testutils.MockTelemetryTransport{}
 			dsn := &protocol.Dsn{}
+			sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
 			buffers := tt.setupBuffers()
-			scheduler := NewScheduler(buffers, transport, dsn)
+			scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
 
 			tt.addItems(buffers)
 
@@ -189,8 +202,9 @@ func TestTelemetrySchedulerRateLimiting(t *testing.T) {
 	buffers := map[ratelimit.Category]*Buffer[protocol.EnvelopeItemConvertible]{
 		ratelimit.CategoryError: buffer,
 	}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
 
 	transport.SetRateLimited("error", true)
 
@@ -220,8 +234,9 @@ func TestTelemetrySchedulerStartStop(t *testing.T) {
 	buffers := map[ratelimit.Category]*Buffer[protocol.EnvelopeItemConvertible]{
 		ratelimit.CategoryError: buffer,
 	}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
 
 	scheduler.Start()
 	scheduler.Start()
@@ -246,8 +261,9 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	buffers := map[ratelimit.Category]*Buffer[protocol.EnvelopeItemConvertible]{
 		ratelimit.CategoryError: buffer,
 	}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
 
 	scheduler.Start()
 

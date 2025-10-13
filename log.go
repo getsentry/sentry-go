@@ -183,13 +183,8 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 
 	if log != nil {
 		if l.client.telemetryScheduler != nil {
-			// TODO: this is a temp workaround. Since everything is anchored on the event type.
-			event := NewEvent()
-			event.Type = logEvent.Type
-			event.Logs = []Log{*log}
-
 			if buffer, ok := l.client.telemetryBuffers[ratelimit.CategoryLog]; ok {
-				buffer.Offer(event)
+				buffer.Offer(log)
 				l.client.telemetryScheduler.Signal()
 			}
 		} else if l.client.batchLogger != nil {

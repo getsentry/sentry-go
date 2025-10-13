@@ -714,6 +714,40 @@ type Log struct {
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
 
+// ToEnvelopeItem converts the Log to a Sentry envelope item.
+func (l *Log) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
+	logData, err := json.Marshal(l)
+	if err != nil {
+		return nil, err
+	}
+	return &protocol.EnvelopeItem{
+		Header: &protocol.EnvelopeItemHeader{
+			Type: protocol.EnvelopeItemTypeLog,
+		},
+		Payload: logData,
+	}, nil
+}
+
+// GetCategory returns the rate limit category for logs.
+func (l *Log) GetCategory() ratelimit.Category {
+	return ratelimit.CategoryLog
+}
+
+// GetEventID returns empty string (event ID set when batching).
+func (l *Log) GetEventID() string {
+	return ""
+}
+
+// GetSdkInfo returns nil (SDK info set when batching).
+func (l *Log) GetSdkInfo() *protocol.SdkInfo {
+	return nil
+}
+
+// GetDynamicSamplingContext returns nil (trace context set when batching).
+func (l *Log) GetDynamicSamplingContext() map[string]string {
+	return nil
+}
+
 type AttrType string
 
 const (

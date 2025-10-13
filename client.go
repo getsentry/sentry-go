@@ -429,7 +429,12 @@ func (client *Client) setupTelemetryBuffer() {
 		ratelimit.CategoryMonitor:     telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
 	}
 
-	client.telemetryScheduler = telemetry.NewScheduler(client.telemetryBuffers, transport, &client.dsn.Dsn)
+	sdkInfo := &protocol.SdkInfo{
+		Name:    client.sdkIdentifier,
+		Version: client.sdkVersion,
+	}
+
+	client.telemetryScheduler = telemetry.NewScheduler(client.telemetryBuffers, transport, &client.dsn.Dsn, sdkInfo)
 	client.telemetryScheduler.Start()
 }
 

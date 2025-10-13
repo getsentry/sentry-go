@@ -214,16 +214,23 @@ func NewLogItem(itemCount int, payload []byte) *EnvelopeItem {
 
 // CreateEnvelopeFromItems creates a new envelope from a slice of EnvelopeItemConvertible items.
 // It batches items together into a single envelope and uses metadata from the first item for the header.
-// For log items, it will create a single batched log envelope item.
-func CreateEnvelopeFromItems(items []EnvelopeItemConvertible, dsn *Dsn) (*Envelope, error) {
+//
+// Event ID is taken from the first item, or generated if empty (e.g., for batched logs).
+// SDK info is taken from the first item if available (e.g., from integrations), otherwise uses the provided sdkInfo.
+func CreateEnvelopeFromItems(items []EnvelopeItemConvertible, dsn *Dsn, sdkInfo *SdkInfo) (*Envelope, error) {
 	if len(items) == 0 {
 		return nil, fmt.Errorf("cannot create envelope from empty items")
 	}
 
 	firstItem := items[0]
 
+	eventID := firstItem.GetEventID()
+	if eventID == "" {
+		eventID = GenerateEventID()
+	}
+
 	header := &EnvelopeHeader{
-		EventID: firstItem.GetEventID(),
+		EventID: eventID,
 		SentAt:  time.Now(),
 		Trace:   firstItem.GetDynamicSamplingContext(),
 	}
@@ -232,7 +239,9 @@ func CreateEnvelopeFromItems(items []EnvelopeItemConvertible, dsn *Dsn) (*Envelo
 		header.Dsn = dsn.String()
 	}
 
-	if sdkInfo := firstItem.GetSdkInfo(); sdkInfo != nil {
+	if itemSdkInfo := firstItem.GetSdkInfo(); itemSdkInfo != nil {
+		header.Sdk = itemSdkInfo
+	} else if sdkInfo != nil {
 		header.Sdk = sdkInfo
 	}
 

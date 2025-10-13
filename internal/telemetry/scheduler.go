@@ -15,6 +15,7 @@ type Scheduler struct {
 	buffers   map[ratelimit.Category]*Buffer[protocol.EnvelopeItemConvertible]
 	transport protocol.TelemetryTransport
 	dsn       *protocol.Dsn
+	sdkInfo   *protocol.SdkInfo
 
 	currentCycle []ratelimit.Priority
 	cyclePos     int
@@ -33,6 +34,7 @@ func NewScheduler(
 	buffers map[ratelimit.Category]*Buffer[protocol.EnvelopeItemConvertible],
 	transport protocol.TelemetryTransport,
 	dsn *protocol.Dsn,
+	sdkInfo *protocol.SdkInfo,
 ) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -65,6 +67,7 @@ func NewScheduler(
 		buffers:      buffers,
 		transport:    transport,
 		dsn:          dsn,
+		sdkInfo:      sdkInfo,
 		currentCycle: currentCycle,
 		ctx:          ctx,
 		cancel:       cancel,
@@ -204,7 +207,7 @@ func (s *Scheduler) processItems(buffer *Buffer[protocol.EnvelopeItemConvertible
 		return
 	}
 
-	if category == ratelimit.CategoryLog && len(items) > 1 {
+	if category == ratelimit.CategoryLog {
 		s.sendItems(items)
 	} else {
 		// if the buffers are properly configured, buffer.PollIfReady should return a single item for every category
@@ -220,7 +223,7 @@ func (s *Scheduler) sendItems(items []protocol.EnvelopeItemConvertible) {
 		return
 	}
 
-	envelope, err := protocol.CreateEnvelopeFromItems(items, s.dsn)
+	envelope, err := protocol.CreateEnvelopeFromItems(items, s.dsn, s.sdkInfo)
 	if err != nil {
 		debuglog.Printf("error creating envelope from items: %v", err)
 		return

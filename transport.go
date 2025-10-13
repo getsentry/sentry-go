@@ -788,7 +788,7 @@ func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
 }
 
 func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
-	envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{event}, a.dsn)
+	envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{event}, a.dsn, nil)
 	if err != nil {
 		debuglog.Printf("Failed to create envelope from event: %v", err)
 		return
