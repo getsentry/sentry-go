@@ -26,10 +26,10 @@ jobs:
       # this step for the whole matrix.
       RUN_RACE_TESTS: ${{ github.event_name != 'pull_request' || (matrix.go == '1.24' && matrix.os == 'ubuntu') }}
     steps:
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/cache@v4
         with:
           # In order:
@@ -47,7 +47,7 @@ jobs:
             ${{ runner.os }}-go-${{ matrix.go }}-
       - name: Tidy for min version
         run: make mod-tidy
-        if: ${{ matrix.go == '1.22' }}
+        if: ${{ matrix.go == '1.23' }}
       - name: Build
         run: make build
       - name: Vet
@@ -62,6 +62,6 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        go: ["1.24", "1.23", "1.22"]
+        go: ["1.25", "1.24", "1.23"]
         os: [ubuntu, windows, macos]
       fail-fast: false

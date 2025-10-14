@@ -13,6 +13,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/sirupsen/logrus"
 )
 
@@ -362,7 +363,7 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 	case logrus.PanicLevel:
 		logEntry = h.logger.Panic().WithCtx(ctx)
 	default:
-		sentry.DebugLogger.Printf("Invalid logrus logging level: %v. Dropping log.", entry.Level)
+		debuglog.Printf("Invalid logrus logging level: %v. Dropping log.", entry.Level)
 		if h.fallback != nil {
 			return h.fallback(entry)
 		}
