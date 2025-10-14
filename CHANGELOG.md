@@ -26,6 +26,20 @@ The Sentry SDK team is happy to announce the immediate availability of Sentry Go
   sentry.CaptureException(combinedErr)
   ```
 
+- Add `TraceIgnoreStatusCodes` option to allow filtering of HTTP transactions based on status codes ([#1089](https://github.com/getsentry/sentry-go/pull/1089))
+  - Configure which HTTP status codes should not be traced by providing single codes or ranges
+  - Example: `TraceIgnoreStatusCodes: [][]int{{404}, {500, 599}}` ignores 404 and server errors 500-599
+
+### Bug Fixes
+
+- Fix logs being incorrectly filtered by `BeforeSend` callback ([#1109](https://github.com/getsentry/sentry-go/pull/1109))
+  - Logs now bypass the `processEvent` method and are sent directly to the transport
+  - This ensures logs are only filtered by `BeforeSendLog`, not by the error/message `BeforeSend` callback
+
+### Misc
+
+- Add support for Go 1.25 and drop support for Go 1.22 ([#1103](https://github.com/getsentry/sentry-go/pull/1103))
+
 ## 0.35.3
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.3.
