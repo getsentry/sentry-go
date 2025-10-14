@@ -5,7 +5,7 @@ go 1.23
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.35.3
+	github.com/getsentry/sentry-go v0.36.0
 	github.com/google/go-cmp v0.5.9
 	github.com/stretchr/testify v1.8.4
 	go.opentelemetry.io/otel v1.11.0
