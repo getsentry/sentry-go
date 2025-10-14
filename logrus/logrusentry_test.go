@@ -373,12 +373,15 @@ func TestEventHook_entryToEvent(t *testing.T) {
 				Extra: map[string]any{},
 				Exception: []sentry.Exception{
 					{
-						Type:  "*errors.errorString",
-						Value: "failure",
+						Type:       "*errors.errorString",
+						Value:      "failure",
+						Stacktrace: nil,
 						Mechanism: &sentry.Mechanism{
-							ExceptionID:      0,
-							IsExceptionGroup: true,
-							Type:             "generic",
+							ExceptionID:      1,
+							IsExceptionGroup: false,
+							ParentID:         sentry.Pointer(0),
+							Type:             sentry.MechanismTypeChained,
+							Source:           sentry.MechanismTypeUnwrap,
 						},
 					},
 					{
@@ -388,10 +391,11 @@ func TestEventHook_entryToEvent(t *testing.T) {
 							Frames: []sentry.Frame{},
 						},
 						Mechanism: &sentry.Mechanism{
-							ExceptionID:      1,
-							IsExceptionGroup: true,
-							ParentID:         sentry.Pointer(0),
-							Type:             "generic",
+							ExceptionID:      0,
+							IsExceptionGroup: false,
+							ParentID:         nil,
+							Type:             sentry.MechanismTypeGeneric,
+							Source:           "",
 						},
 					},
 				},
