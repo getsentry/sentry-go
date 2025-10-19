@@ -97,6 +97,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	scope := hub.Scope()
 	scope.SetRequest(r)
+	scope.SetSpan(transaction)
 	scope.SetRequestBody(ctx.Request().Body())
 	ctx.Locals(valuesKey, hub)
 	ctx.Locals(transactionKey, transaction)
