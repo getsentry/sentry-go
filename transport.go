@@ -788,16 +788,20 @@ func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
 }
 
 func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
-	envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{event}, a.dsn, nil)
+	header := &protocol.EnvelopeHeader{EventID: string(event.EventID), SentAt: time.Now(), Sdk: &protocol.SdkInfo{Name: event.Sdk.Name, Version: event.Sdk.Version}}
+	if a.dsn != nil {
+		header.Dsn = a.dsn.String()
+	}
+	if header.EventID == "" {
+		header.EventID = protocol.GenerateEventID()
+	}
+	envelope := protocol.NewEnvelope(header)
+	item, err := event.ToEnvelopeItem()
 	if err != nil {
-		debuglog.Printf("Failed to create envelope from event: %v", err)
+		debuglog.Printf("Failed to convert event to envelope item: %v", err)
 		return
 	}
-
-	if envelope == nil {
-		debuglog.Printf("Error: event resulted in empty envelope")
-		return
-	}
+	envelope.AddItem(item)
 
 	for _, attachment := range event.Attachments {
 		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)

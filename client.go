@@ -271,7 +271,7 @@ type Client struct {
 	// not supported, create a new client instead.
 	Transport          Transport
 	batchLogger        *BatchLogger
-	telemetryBuffers   map[ratelimit.Category]*telemetry.Buffer[protocol.EnvelopeItemConvertible]
+	telemetryBuffers   map[ratelimit.Category]telemetry.BufferInterface[protocol.EnvelopeItemConvertible]
 	telemetryScheduler *telemetry.Scheduler
 }
 
@@ -422,7 +422,7 @@ func (client *Client) setupTelemetryBuffer() {
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
-	client.telemetryBuffers = map[ratelimit.Category]*telemetry.Buffer[protocol.EnvelopeItemConvertible]{
+	client.telemetryBuffers = map[ratelimit.Category]telemetry.BufferInterface[protocol.EnvelopeItemConvertible]{
 		ratelimit.CategoryError:       telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
 		ratelimit.CategoryTransaction: telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
 		ratelimit.CategoryLog:         telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryLog, 100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),

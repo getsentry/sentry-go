@@ -728,6 +728,22 @@ func (l *Log) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	}, nil
 }
 
+// ToLogPayload converts the Log to a protocol.LogPayload for batching.
+func (l *Log) ToLogPayload() protocol.LogPayload {
+	attrs := make(map[string]protocol.LogAttribute, len(l.Attributes))
+	for k, v := range l.Attributes {
+		attrs[k] = protocol.LogAttribute{Value: v.Value, Type: string(v.Type)}
+	}
+	return protocol.LogPayload{
+		Timestamp:  l.Timestamp,
+		TraceID:    l.TraceID.String(),
+		Level:      string(l.Level),
+		Severity:   l.Severity,
+		Body:       l.Body,
+		Attributes: attrs,
+	}
+}
+
 // GetCategory returns the rate limit category for logs.
 func (l *Log) GetCategory() ratelimit.Category {
 	return ratelimit.CategoryLog

@@ -673,10 +673,19 @@ func TestEvent_CreateEnvelopeFromItems(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{tt.event}, tt.dsn, nil)
+			header := &protocol.EnvelopeHeader{EventID: string(tt.event.EventID), SentAt: time.Now(), Sdk: &protocol.SdkInfo{Name: tt.event.Sdk.Name, Version: tt.event.Sdk.Version}}
+			if tt.dsn != nil {
+				header.Dsn = tt.dsn.String()
+			}
+			env := protocol.NewEnvelope(header)
+			item, err := tt.event.ToEnvelopeItem()
+			if err == nil {
+				env.AddItem(item)
+			}
+			envelope := env
 
 			if (err != nil) != tt.wantError {
-				t.Errorf("CreateEnvelopeFromItems() error = %v, wantError %v", err, tt.wantError)
+				t.Errorf("ToEnvelopeItem() error = %v, wantError %v", err, tt.wantError)
 				return
 			}
 
@@ -691,7 +700,7 @@ func TestEvent_CreateEnvelopeFromItems(t *testing.T) {
 
 			// Basic envelope validation
 			if envelope == nil {
-				t.Error("CreateEnvelopeFromItems() returned nil envelope")
+				t.Error("Envelope should not be nil")
 				return
 			}
 
@@ -738,15 +747,21 @@ func TestEvent_ToEnvelope_FallbackOnMarshalError(t *testing.T) {
 		},
 	}
 
-	envelope, err := protocol.CreateEnvelopeFromItems([]protocol.EnvelopeItemConvertible{event}, nil, nil)
+	header := &protocol.EnvelopeHeader{EventID: string(event.EventID), SentAt: time.Now()}
+	env := protocol.NewEnvelope(header)
+	item, err := event.ToEnvelopeItem()
+	if err == nil {
+		env.AddItem(item)
+	}
+	envelope := env
 
 	if err != nil {
-		t.Errorf("CreateEnvelopeFromItems() should not error even with unmarshalable data, got: %v", err)
+		t.Errorf("ToEnvelopeItem() should not error even with unmarshalable data, got: %v", err)
 		return
 	}
 
 	if envelope == nil {
-		t.Error("CreateEnvelopeFromItems() should not return a nil envelope")
+		t.Error("Envelope should not be nil")
 		return
 	}
 
