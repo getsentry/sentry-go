@@ -215,7 +215,7 @@ func (s *Scheduler) processItems(buffer BufferInterface[protocol.EnvelopeItemCon
 				envItems = append(envItems, lp.ToLogPayload())
 			} else {
 				debuglog.Printf("Invalid envelope item; cannot convert to log: %v", it)
-				return
+				continue
 			}
 		}
 		if len(envItems) == 0 {
