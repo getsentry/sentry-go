@@ -377,3 +377,21 @@ func TestCircularReferenceProtection(t *testing.T) {
 		})
 	}
 }
+
+// unhashableSliceError is a non-comparable error type.
+type unhashableSliceError []string
+
+func (e unhashableSliceError) Error() string {
+	return "unhashable slice error"
+}
+
+func TestConvertErrorToExceptions_UnhashableError_NoPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("convertErrorToExceptions panicked for unhashable error: %v", r)
+		}
+	}()
+
+	err := unhashableSliceError{"a", "b"}
+	_ = convertErrorToExceptions(err, -1)
+}
