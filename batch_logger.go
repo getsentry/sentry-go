@@ -128,5 +128,4 @@ func (l *BatchLogger) processEvent(logs []Log) {
 	event.Type = logEvent.Type
 	event.Logs = logs
 	l.client.Transport.SendEvent(event)
-	//l.client.CaptureEvent(event, nil, nil)
 }
