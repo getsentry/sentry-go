@@ -53,6 +53,13 @@ func (t *testTelemetryItem) GetDynamicSamplingContext() map[string]string {
 	return nil
 }
 
+func (t *testTelemetryItem) ToLogPayload() protocol.LogItem {
+	return protocol.LogItem{
+		Level: "info",
+		Body:  t.data,
+	}
+}
+
 func TestNewTelemetryScheduler(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
@@ -148,7 +155,7 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 					i++
 				}
 			},
-			expectedCount: 4,
+			expectedCount: 3,
 		},
 		{
 			name: "priority ordering - error and log",

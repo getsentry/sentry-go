@@ -209,9 +209,9 @@ func (s *Scheduler) processItems(buffer BufferInterface[protocol.EnvelopeItemCon
 
 	switch category {
 	case ratelimit.CategoryLog:
-		envItems := make([]protocol.LogPayload, 0, len(items))
+		envItems := make([]protocol.LogItem, 0, len(items))
 		for _, it := range items {
-			if lp, ok := any(it).(interface{ ToLogPayload() protocol.LogPayload }); ok {
+			if lp, ok := any(it).(interface{ ToLogPayload() protocol.LogItem }); ok {
 				envItems = append(envItems, lp.ToLogPayload())
 			} else {
 				debuglog.Printf("Invalid envelope item; cannot convert to log: %v", it)
@@ -243,7 +243,6 @@ func (s *Scheduler) processItems(buffer BufferInterface[protocol.EnvelopeItemCon
 			s.sendItems(it)
 		}
 	}
-
 }
 
 func (s *Scheduler) sendItems(item protocol.EnvelopeItemConvertible) {

@@ -13,9 +13,9 @@ type LogAttribute struct {
 	Type  string `json:"type"`
 }
 
-// LogPayload represents the serialized shape of a single log record inside a batched
+// LogItem represents the serialized shape of a single log record inside a batched
 // log envelope item. Keep in sync with sentry.Log fields that are meant to be emitted.
-type LogPayload struct {
+type LogItem struct {
 	Timestamp  time.Time               `json:"timestamp,omitempty"`
 	TraceID    string                  `json:"trace_id,omitempty"`
 	Level      string                  `json:"level"`
@@ -24,13 +24,13 @@ type LogPayload struct {
 	Attributes map[string]LogAttribute `json:"attributes,omitempty"`
 }
 
-// LogPayloader is implemented by items that can convert to a LogPayload for batching.
+// LogPayloader is implemented by items that can convert to a LogItem for batching.
 type LogPayloader interface {
-	ToLogPayload() LogPayload
+	ToLogPayload() LogItem
 }
 
 // MarshalJSON encodes timestamp as seconds since epoch per Sentry logs spec.
-func (lp LogPayload) MarshalJSON() ([]byte, error) {
+func (lp LogItem) MarshalJSON() ([]byte, error) {
 	// Convert time.Time to seconds float if set
 	var ts *float64
 	if !lp.Timestamp.IsZero() {
@@ -56,13 +56,13 @@ func (lp LogPayload) MarshalJSON() ([]byte, error) {
 	return json.Marshal(out)
 }
 
-// Logs is a container for multiple LogPayload items which knows how to convert
+// Logs is a container for multiple LogItem items which knows how to convert
 // itself into a single batched log envelope item.
-type Logs []LogPayload
+type Logs []LogItem
 
 func (ls Logs) ToEnvelopeItem() (*EnvelopeItem, error) {
 	wrapper := struct {
-		Items []LogPayload `json:"items"`
+		Items []LogItem `json:"items"`
 	}{Items: ls}
 
 	payload, err := json.Marshal(wrapper)

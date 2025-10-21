@@ -728,13 +728,13 @@ func (l *Log) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	}, nil
 }
 
-// ToLogPayload converts the Log to a protocol.LogPayload for batching.
-func (l *Log) ToLogPayload() protocol.LogPayload {
+// ToLogPayload converts the Log to a protocol.LogItem for batching.
+func (l *Log) ToLogPayload() protocol.LogItem {
 	attrs := make(map[string]protocol.LogAttribute, len(l.Attributes))
 	for k, v := range l.Attributes {
 		attrs[k] = protocol.LogAttribute{Value: v.Value, Type: string(v.Type)}
 	}
-	return protocol.LogPayload{
+	return protocol.LogItem{
 		Timestamp:  l.Timestamp,
 		TraceID:    l.TraceID.String(),
 		Level:      string(l.Level),
