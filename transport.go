@@ -406,7 +406,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		if event.Type == transactionType {
 			eventType = "transaction"
 		} else {
-			eventType = fmt.Sprintf("%s event", event.Level)
+			eventType = fmt.Sprintf("%s event", event.Type)
 		}
 		debuglog.Printf(
 			"Sending %s [%s] to %s project: %s",
@@ -750,11 +750,11 @@ func (noopTransport) Close() {}
 // Internal Transport Adapters
 // ================================
 
-// NewInternalAsyncTransport creates a new AsyncTransport from internal/http
+// newInternalAsyncTransport creates a new AsyncTransport from internal/http
 // wrapped to satisfy the Transport interface.
 //
 // This is not yet exposed in the public API and is for internal experimentation.
-func NewInternalAsyncTransport() Transport {
+func newInternalAsyncTransport() Transport {
 	return &internalAsyncTransportAdapter{}
 }
 

@@ -859,7 +859,7 @@ func TestHTTPSyncTransport_FlushWithContext(_ *testing.T) {
 }
 
 func TestInternalAsyncTransportAdapter(t *testing.T) {
-	transport := NewInternalAsyncTransport()
+	transport := newInternalAsyncTransport()
 
 	transport.Configure(ClientOptions{
 		Dsn: "",
@@ -881,7 +881,7 @@ func TestInternalAsyncTransportAdapter(t *testing.T) {
 }
 
 func TestInternalAsyncTransportAdapter_WithValidDSN(_ *testing.T) {
-	transport := NewInternalAsyncTransport()
+	transport := newInternalAsyncTransport()
 
 	transport.Configure(ClientOptions{
 		Dsn: "https://public@example.com/1",

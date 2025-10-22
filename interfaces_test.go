@@ -293,6 +293,7 @@ func TestSetException(t *testing.T) {
 					Value:      "simple error",
 					Type:       "*errors.errorString",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism:  nil,
 				},
 			},
 		},
@@ -301,22 +302,26 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 3,
 			expected: []Exception{
 				{
-					Value: "base error",
-					Type:  "*errors.errorString",
+					Value:      "base error",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
-						Type:             "generic",
-						ExceptionID:      0,
-						IsExceptionGroup: true,
+						Type:             "chained",
+						Source:           MechanismTypeUnwrap,
+						ExceptionID:      2,
+						ParentID:         Pointer(1),
+						IsExceptionGroup: false,
 					},
 				},
 				{
 					Value: "level 1: base error",
 					Type:  "*fmt.wrapError",
 					Mechanism: &Mechanism{
-						Type:             "generic",
+						Type:             "chained",
+						Source:           MechanismTypeUnwrap,
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
-						IsExceptionGroup: true,
+						IsExceptionGroup: false,
 					},
 				},
 				{
@@ -325,9 +330,10 @@ func TestSetException(t *testing.T) {
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
-						ExceptionID:      2,
-						ParentID:         Pointer(1),
-						IsExceptionGroup: true,
+						Source:           "",
+						ExceptionID:      0,
+						ParentID:         nil,
+						IsExceptionGroup: false,
 					},
 				},
 			},
@@ -342,6 +348,7 @@ func TestSetException(t *testing.T) {
 					Value:      "custom error message",
 					Type:       "*sentry.customError",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism:  nil,
 				},
 			},
 		},
@@ -353,22 +360,26 @@ func TestSetException(t *testing.T) {
 			maxErrorDepth: 3,
 			expected: []Exception{
 				{
-					Value: "the cause",
-					Type:  "*errors.errorString",
+					Value:      "the cause",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
-						Type:             "generic",
-						ExceptionID:      0,
-						IsExceptionGroup: true,
+						Type:             "chained",
+						Source:           MechanismSourceCause,
+						ExceptionID:      2,
+						ParentID:         Pointer(1),
+						IsExceptionGroup: false,
 					},
 				},
 				{
 					Value: "error with cause",
 					Type:  "*sentry.withCause",
 					Mechanism: &Mechanism{
-						Type:             "generic",
+						Type:             "chained",
+						Source:           MechanismTypeUnwrap,
 						ExceptionID:      1,
 						ParentID:         Pointer(0),
-						IsExceptionGroup: true,
+						IsExceptionGroup: false,
 					},
 				},
 				{
@@ -377,9 +388,114 @@ func TestSetException(t *testing.T) {
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
+						Source:           "",
+						ExceptionID:      0,
+						ParentID:         nil,
+						IsExceptionGroup: false,
+					},
+				},
+			},
+		},
+		"errors.Join with multiple errors": {
+			exception:     errors.Join(errors.New("error 1"), errors.New("error 2"), errors.New("error 3")),
+			maxErrorDepth: 5,
+			expected: []Exception{
+				{
+					Value:      "error 3",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
+					Mechanism: &Mechanism{
+						Type:             "chained",
+						Source:           "errors[2]",
+						ExceptionID:      3,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: false,
+					},
+				},
+				{
+					Value: "error 2",
+					Type:  "*errors.errorString",
+					Mechanism: &Mechanism{
+						Type:             "chained",
+						Source:           "errors[1]",
+						ExceptionID:      2,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: false,
+					},
+				},
+				{
+					Value: "error 1",
+					Type:  "*errors.errorString",
+					Mechanism: &Mechanism{
+						Type:             "chained",
+						Source:           "errors[0]",
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						IsExceptionGroup: false,
+					},
+				},
+				{
+					Value:      "error 1\nerror 2\nerror 3",
+					Type:       "*errors.joinError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						Type:             "generic",
+						Source:           "",
+						ExceptionID:      0,
+						ParentID:         nil,
+						IsExceptionGroup: true,
+					},
+				},
+			},
+		},
+		"Nested errors.Join with fmt.Errorf": {
+			exception:     fmt.Errorf("wrapper: %w", errors.Join(errors.New("error A"), errors.New("error B"))),
+			maxErrorDepth: 5,
+			expected: []Exception{
+				{
+					Value:      "error B",
+					Type:       "*errors.errorString",
+					Stacktrace: nil,
+					Mechanism: &Mechanism{
+						Type:             "chained",
+						Source:           "errors[1]",
+						ExceptionID:      3,
+						ParentID:         Pointer(1),
+						IsExceptionGroup: false,
+					},
+				},
+				{
+					Value: "error A",
+					Type:  "*errors.errorString",
+					Mechanism: &Mechanism{
+						Type:             "chained",
+						Source:           "errors[0]",
 						ExceptionID:      2,
 						ParentID:         Pointer(1),
+						IsExceptionGroup: false,
+					},
+				},
+				{
+					Value: "error A\nerror B",
+					Type:  "*errors.joinError",
+					Mechanism: &Mechanism{
+						Type:             "chained",
+						Source:           MechanismTypeUnwrap,
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
 						IsExceptionGroup: true,
+					},
+				},
+				{
+					Value:      "wrapper: error A\nerror B",
+					Type:       "*fmt.wrapError",
+					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						Type:             "generic",
+						Source:           "",
+						ExceptionID:      0,
+						ParentID:         nil,
+						IsExceptionGroup: false,
 					},
 				},
 			},
@@ -590,7 +706,7 @@ func TestEvent_ToCategory(t *testing.T) {
 	}
 }
 
-func TestEvent_CreateEnvelopeFromItems(t *testing.T) {
+func TestEvent_ToEnvelope(t *testing.T) {
 	tests := []struct {
 		name      string
 		event     *Event
@@ -673,34 +789,20 @@ func TestEvent_CreateEnvelopeFromItems(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			header := &protocol.EnvelopeHeader{EventID: string(tt.event.EventID), SentAt: time.Now(), Sdk: &protocol.SdkInfo{Name: tt.event.Sdk.Name, Version: tt.event.Sdk.Version}}
-			if tt.dsn != nil {
-				header.Dsn = tt.dsn.String()
-			}
-			env := protocol.NewEnvelope(header)
-			item, err := tt.event.ToEnvelopeItem()
-			if err == nil {
-				env.AddItem(item)
-			}
-			envelope := env
+			envelope, err := tt.event.ToEnvelope(tt.dsn)
 
 			if (err != nil) != tt.wantError {
-				t.Errorf("ToEnvelopeItem() error = %v, wantError %v", err, tt.wantError)
+				t.Errorf("ToEnvelope() error = %v, wantError %v", err, tt.wantError)
 				return
 			}
 
 			if err != nil {
-				return
-			}
-
-			for _, attachment := range tt.event.Attachments {
-				attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
-				envelope.AddItem(attachmentItem)
+				return // Expected error, nothing more to check
 			}
 
 			// Basic envelope validation
 			if envelope == nil {
-				t.Error("Envelope should not be nil")
+				t.Error("ToEnvelope() returned nil envelope")
 				return
 			}
 
@@ -713,7 +815,8 @@ func TestEvent_CreateEnvelopeFromItems(t *testing.T) {
 				t.Errorf("Expected EventID %s, got %s", tt.event.EventID, envelope.Header.EventID)
 			}
 
-			expectedItems := 1
+			// Check that items were created
+			expectedItems := 1 // Main event item
 			if tt.event.Attachments != nil {
 				expectedItems += len(tt.event.Attachments)
 			}
@@ -722,6 +825,7 @@ func TestEvent_CreateEnvelopeFromItems(t *testing.T) {
 				t.Errorf("Expected %d items, got %d", expectedItems, len(envelope.Items))
 			}
 
+			// Verify the envelope can be serialized
 			data, err := envelope.Serialize()
 			if err != nil {
 				t.Errorf("Failed to serialize envelope: %v", err)
@@ -731,6 +835,37 @@ func TestEvent_CreateEnvelopeFromItems(t *testing.T) {
 				t.Error("Serialized envelope is empty")
 			}
 		})
+	}
+}
+
+func TestEvent_ToEnvelopeWithTime(t *testing.T) {
+	event := &Event{
+		EventID:   "12345678901234567890123456789012",
+		Message:   "test message",
+		Level:     LevelError,
+		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+	}
+
+	sentAt := time.Date(2023, 1, 1, 15, 0, 0, 0, time.UTC)
+	envelope, err := event.ToEnvelopeWithTime(nil, sentAt)
+
+	if err != nil {
+		t.Errorf("ToEnvelopeWithTime() error = %v", err)
+		return
+	}
+
+	if envelope == nil {
+		t.Error("ToEnvelopeWithTime() returned nil envelope")
+		return
+	}
+
+	if envelope.Header == nil {
+		t.Error("Envelope header is nil")
+		return
+	}
+
+	if !envelope.Header.SentAt.Equal(sentAt) {
+		t.Errorf("Expected SentAt %v, got %v", sentAt, envelope.Header.SentAt)
 	}
 }
 
@@ -747,21 +882,15 @@ func TestEvent_ToEnvelope_FallbackOnMarshalError(t *testing.T) {
 		},
 	}
 
-	header := &protocol.EnvelopeHeader{EventID: string(event.EventID), SentAt: time.Now()}
-	env := protocol.NewEnvelope(header)
-	item, err := event.ToEnvelopeItem()
-	if err == nil {
-		env.AddItem(item)
-	}
-	envelope := env
+	envelope, err := event.ToEnvelope(nil)
 
 	if err != nil {
-		t.Errorf("ToEnvelopeItem() should not error even with unmarshalable data, got: %v", err)
+		t.Errorf("ToEnvelope() should not error even with unmarshalable data, got: %v", err)
 		return
 	}
 
 	if envelope == nil {
-		t.Error("Envelope should not be nil")
+		t.Error("ToEnvelope() should not return a nil envelope")
 		return
 	}
 

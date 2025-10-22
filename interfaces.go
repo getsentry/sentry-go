@@ -3,12 +3,9 @@ package sentry
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
-	"reflect"
-	"slices"
 	"strings"
 	"time"
 
@@ -287,7 +284,7 @@ func NewRequest(r *http.Request) *Request {
 
 // Mechanism is the mechanism by which an exception was generated and handled.
 type Mechanism struct {
-	Type             string         `json:"type,omitempty"`
+	Type             string         `json:"type"`
 	Description      string         `json:"description,omitempty"`
 	HelpLink         string         `json:"help_link,omitempty"`
 	Source           string         `json:"source,omitempty"`
@@ -416,64 +413,84 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 		return
 	}
 
-	err := exception
-
-	for i := 0; err != nil && (i < maxErrorDepth || maxErrorDepth == -1); i++ {
-		// Add the current error to the exception slice with its details
-		e.Exception = append(e.Exception, Exception{
-			Value:      err.Error(),
-			Type:       reflect.TypeOf(err).String(),
-			Stacktrace: ExtractStacktrace(err),
-		})
-
-		// Attempt to unwrap the error using the standard library's Unwrap method.
-		// If errors.Unwrap returns nil, it means either there is no error to unwrap,
-		// or the error does not implement the Unwrap method.
-		unwrappedErr := errors.Unwrap(err)
-
-		if unwrappedErr != nil {
-			// The error was successfully unwrapped using the standard library's Unwrap method.
-			err = unwrappedErr
-			continue
-		}
-
-		cause, ok := err.(interface{ Cause() error })
-		if !ok {
-			// We cannot unwrap the error further.
-			break
-		}
-
-		// The error implements the Cause method, indicating it may have been wrapped
-		// using the github.com/pkg/errors package.
-		err = cause.Cause()
-	}
-
-	// Add a trace of the current stack to the most recent error in a chain if
-	// it doesn't have a stack trace yet.
-	// We only add to the most recent error to avoid duplication and because the
-	// current stack is most likely unrelated to errors deeper in the chain.
-	if e.Exception[0].Stacktrace == nil {
-		e.Exception[0].Stacktrace = NewStacktrace()
-	}
-
-	if len(e.Exception) <= 1 {
+	exceptions := convertErrorToExceptions(exception, maxErrorDepth)
+	if len(exceptions) == 0 {
 		return
 	}
 
-	// event.Exception should be sorted such that the most recent error is last.
-	slices.Reverse(e.Exception)
+	e.Exception = exceptions
+}
 
-	for i := range e.Exception {
-		e.Exception[i].Mechanism = &Mechanism{
-			IsExceptionGroup: true,
-			ExceptionID:      i,
-			Type:             "generic",
+// ToEnvelope converts the Event to a Sentry envelope.
+// This includes the event data and any attachments as separate envelope items.
+func (e *Event) ToEnvelope(dsn *protocol.Dsn) (*protocol.Envelope, error) {
+	return e.ToEnvelopeWithTime(dsn, time.Now())
+}
+
+// ToEnvelopeWithTime converts the Event to a Sentry envelope with a specific sentAt time.
+// This is primarily useful for testing with predictable timestamps.
+func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protocol.Envelope, error) {
+	// Create envelope header with trace context
+	trace := make(map[string]string)
+	if dsc := e.sdkMetaData.dsc; dsc.HasEntries() {
+		for k, v := range dsc.Entries {
+			trace[k] = v
 		}
-		if i == 0 {
-			continue
-		}
-		e.Exception[i].Mechanism.ParentID = Pointer(i - 1)
 	}
+
+	header := &protocol.EnvelopeHeader{
+		EventID: string(e.EventID),
+		SentAt:  sentAt,
+		Trace:   trace,
+	}
+
+	if dsn != nil {
+		header.Dsn = dsn.String()
+	}
+
+	header.Sdk = &e.Sdk
+
+	envelope := protocol.NewEnvelope(header)
+
+	eventBody, err := json.Marshal(e)
+	if err != nil {
+		// Try fallback: remove problematic fields and retry
+		e.Breadcrumbs = nil
+		e.Contexts = nil
+		e.Extra = map[string]interface{}{
+			"info": fmt.Sprintf("Could not encode original event as JSON. "+
+				"Succeeded by removing Breadcrumbs, Contexts and Extra. "+
+				"Please verify the data you attach to the scope. "+
+				"Error: %s", err),
+		}
+
+		eventBody, err = json.Marshal(e)
+		if err != nil {
+			return nil, fmt.Errorf("event could not be marshaled even with fallback: %w", err)
+		}
+
+		DebugLogger.Printf("Event marshaling succeeded with fallback after removing problematic fields")
+	}
+
+	var mainItem *protocol.EnvelopeItem
+	switch e.Type {
+	case transactionType:
+		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeTransaction, eventBody)
+	case checkInType:
+		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
+	case logEvent.Type:
+		mainItem = protocol.NewLogItem(len(e.Logs), eventBody)
+	default:
+		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
+	}
+
+	envelope.AddItem(mainItem)
+	for _, attachment := range e.Attachments {
+		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
+		envelope.AddItem(attachmentItem)
+	}
+
+	return envelope, nil
 }
 
 // ToEnvelopeItem converts the Event to a Sentry envelope item.
