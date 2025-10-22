@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/google/go-cmp/cmp"
 )
@@ -34,6 +36,9 @@ func TestUserIsEmpty(t *testing.T) {
 		{input: User{Name: "My Name"}, want: false},
 		{input: User{Data: map[string]string{"foo": "bar"}}, want: false},
 		{input: User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Data: map[string]string{"foo": "bar"}}, want: false},
+		// Edge cases
+		{input: User{Data: map[string]string{}}, want: true},   // Empty but non-nil map should be empty
+		{input: User{ID: "   ", Username: "   "}, want: false}, // Whitespace-only fields should not be empty
 	}
 
 	for _, test := range tests {
@@ -74,39 +79,74 @@ func TestNewRequest(t *testing.T) {
 	// Unbind the client afterwards, to not affect other tests
 	defer currentHub.stackTop().SetClient(nil)
 
-	const payload = `{"test_data": true}`
-	r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
-	r.Header.Add("Authorization", "Bearer 1234567890")
-	r.Header.Add("Proxy-Authorization", "Bearer 123")
-	r.Header.Add("Cookie", "foo=bar")
-	r.Header.Add("X-Forwarded-For", "127.0.0.1")
-	r.Header.Add("X-Real-Ip", "127.0.0.1")
-	r.Header.Add("Some-Header", "some-header value")
+	t.Run("standard request", func(t *testing.T) {
+		const payload = `{"test_data": true}`
+		r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
+		r.Header.Add("Authorization", "Bearer 1234567890")
+		r.Header.Add("Proxy-Authorization", "Bearer 123")
+		r.Header.Add("Cookie", "foo=bar")
+		r.Header.Add("X-Forwarded-For", "127.0.0.1")
+		r.Header.Add("X-Real-Ip", "127.0.0.1")
+		r.Header.Add("Some-Header", "some-header value")
 
-	got := NewRequest(r)
-	want := &Request{
-		URL:         "http://example.com/test/",
-		Method:      "POST",
-		Data:        "",
-		QueryString: "q=sentry",
-		Cookies:     "foo=bar",
-		Headers: map[string]string{
-			"Authorization":       "Bearer 1234567890",
-			"Proxy-Authorization": "Bearer 123",
-			"Cookie":              "foo=bar",
-			"Host":                "example.com",
-			"X-Forwarded-For":     "127.0.0.1",
-			"X-Real-Ip":           "127.0.0.1",
-			"Some-Header":         "some-header value",
-		},
-		Env: map[string]string{
-			"REMOTE_ADDR": "192.0.2.1",
-			"REMOTE_PORT": "1234",
-		},
-	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Request mismatch (-want +got):\n%s", diff)
-	}
+		got := NewRequest(r)
+		want := &Request{
+			URL:         "http://example.com/test/",
+			Method:      "POST",
+			Data:        "",
+			QueryString: "q=sentry",
+			Cookies:     "foo=bar",
+			Headers: map[string]string{
+				"Authorization":       "Bearer 1234567890",
+				"Proxy-Authorization": "Bearer 123",
+				"Cookie":              "foo=bar",
+				"Host":                "example.com",
+				"X-Forwarded-For":     "127.0.0.1",
+				"X-Real-Ip":           "127.0.0.1",
+				"Some-Header":         "some-header value",
+			},
+			Env: map[string]string{
+				"REMOTE_ADDR": "192.0.2.1",
+				"REMOTE_PORT": "1234",
+			},
+		}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("Request mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("request with TLS", func(t *testing.T) {
+		r := httptest.NewRequest("POST", "https://example.com/test", nil)
+		r.TLS = &tls.ConnectionState{} // Simulate TLS connection
+
+		got := NewRequest(r)
+
+		if !strings.HasPrefix(got.URL, "https://") {
+			t.Errorf("Request with TLS should have HTTPS URL, got %s", got.URL)
+		}
+	})
+
+	t.Run("request with X-Forwarded-Proto header", func(t *testing.T) {
+		r := httptest.NewRequest("POST", "http://example.com/test", nil)
+		r.Header.Set("X-Forwarded-Proto", "https")
+
+		got := NewRequest(r)
+
+		if !strings.HasPrefix(got.URL, "https://") {
+			t.Errorf("Request with X-Forwarded-Proto: https should have HTTPS URL, got %s", got.URL)
+		}
+	})
+
+	t.Run("request with malformed RemoteAddr", func(t *testing.T) {
+		r := httptest.NewRequest("POST", "http://example.com/test", nil)
+		r.RemoteAddr = "malformed-address" // Invalid format
+
+		got := NewRequest(r)
+
+		if got.Env != nil {
+			t.Error("Request with malformed RemoteAddr should not set Env")
+		}
+	})
 }
 
 func TestNewRequestWithNoPII(t *testing.T) {
@@ -240,6 +280,11 @@ func TestSetException(t *testing.T) {
 		maxErrorDepth int
 		expected      []Exception
 	}{
+		"Nil exception": {
+			exception:     nil,
+			maxErrorDepth: 5,
+			expected:      []Exception{},
+		},
 		"Single error without unwrap": {
 			exception:     errors.New("simple error"),
 			maxErrorDepth: 1,
@@ -658,5 +703,224 @@ func TestEvent_ToCategory(t *testing.T) {
 				t.Errorf("Type %q: got %v, want %v", tc.eventType, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEvent_ToEnvelope(t *testing.T) {
+	tests := []struct {
+		name      string
+		event     *Event
+		dsn       *protocol.Dsn
+		wantError bool
+	}{
+		{
+			name: "basic event",
+			event: &Event{
+				EventID:   "12345678901234567890123456789012",
+				Message:   "test message",
+				Level:     LevelError,
+				Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+			},
+			dsn:       nil,
+			wantError: false,
+		},
+		{
+			name: "event with attachments",
+			event: &Event{
+				EventID:   "12345678901234567890123456789012",
+				Message:   "test message",
+				Level:     LevelError,
+				Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+				Attachments: []*Attachment{
+					{
+						Filename:    "test.txt",
+						ContentType: "text/plain",
+						Payload:     []byte("test content"),
+					},
+				},
+			},
+			dsn:       nil,
+			wantError: false,
+		},
+		{
+			name: "transaction event",
+			event: &Event{
+				EventID:     "12345678901234567890123456789012",
+				Type:        "transaction",
+				Transaction: "test transaction",
+				StartTime:   time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+				Timestamp:   time.Date(2023, 1, 1, 12, 0, 1, 0, time.UTC),
+			},
+			dsn:       nil,
+			wantError: false,
+		},
+		{
+			name: "check-in event",
+			event: &Event{
+				EventID: "12345678901234567890123456789012",
+				Type:    "check_in",
+				CheckIn: &CheckIn{
+					ID:          "checkin123",
+					MonitorSlug: "test-monitor",
+					Status:      CheckInStatusOK,
+					Duration:    5 * time.Second,
+				},
+			},
+			dsn:       nil,
+			wantError: false,
+		},
+		{
+			name: "log event",
+			event: &Event{
+				EventID: "12345678901234567890123456789012",
+				Type:    "log",
+				Logs: []Log{
+					{
+						Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+						Level:     LogLevelInfo,
+						Body:      "test log message",
+					},
+				},
+			},
+			dsn:       nil,
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			envelope, err := tt.event.ToEnvelope(tt.dsn)
+
+			if (err != nil) != tt.wantError {
+				t.Errorf("ToEnvelope() error = %v, wantError %v", err, tt.wantError)
+				return
+			}
+
+			if err != nil {
+				return // Expected error, nothing more to check
+			}
+
+			// Basic envelope validation
+			if envelope == nil {
+				t.Error("ToEnvelope() returned nil envelope")
+				return
+			}
+
+			if envelope.Header == nil {
+				t.Error("Envelope header is nil")
+				return
+			}
+
+			if envelope.Header.EventID != string(tt.event.EventID) {
+				t.Errorf("Expected EventID %s, got %s", tt.event.EventID, envelope.Header.EventID)
+			}
+
+			// Check that items were created
+			expectedItems := 1 // Main event item
+			if tt.event.Attachments != nil {
+				expectedItems += len(tt.event.Attachments)
+			}
+
+			if len(envelope.Items) != expectedItems {
+				t.Errorf("Expected %d items, got %d", expectedItems, len(envelope.Items))
+			}
+
+			// Verify the envelope can be serialized
+			data, err := envelope.Serialize()
+			if err != nil {
+				t.Errorf("Failed to serialize envelope: %v", err)
+			}
+
+			if len(data) == 0 {
+				t.Error("Serialized envelope is empty")
+			}
+		})
+	}
+}
+
+func TestEvent_ToEnvelopeWithTime(t *testing.T) {
+	event := &Event{
+		EventID:   "12345678901234567890123456789012",
+		Message:   "test message",
+		Level:     LevelError,
+		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+	}
+
+	sentAt := time.Date(2023, 1, 1, 15, 0, 0, 0, time.UTC)
+	envelope, err := event.ToEnvelopeWithTime(nil, sentAt)
+
+	if err != nil {
+		t.Errorf("ToEnvelopeWithTime() error = %v", err)
+		return
+	}
+
+	if envelope == nil {
+		t.Error("ToEnvelopeWithTime() returned nil envelope")
+		return
+	}
+
+	if envelope.Header == nil {
+		t.Error("Envelope header is nil")
+		return
+	}
+
+	if !envelope.Header.SentAt.Equal(sentAt) {
+		t.Errorf("Expected SentAt %v, got %v", sentAt, envelope.Header.SentAt)
+	}
+}
+
+func TestEvent_ToEnvelope_FallbackOnMarshalError(t *testing.T) {
+	unmarshalableFunc := func() string { return "test" }
+
+	event := &Event{
+		EventID:   "12345678901234567890123456789012",
+		Message:   "test message with fallback",
+		Level:     LevelError,
+		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+		Extra: map[string]interface{}{
+			"bad_data": unmarshalableFunc,
+		},
+	}
+
+	envelope, err := event.ToEnvelope(nil)
+
+	if err != nil {
+		t.Errorf("ToEnvelope() should not error even with unmarshalable data, got: %v", err)
+		return
+	}
+
+	if envelope == nil {
+		t.Error("ToEnvelope() should not return a nil envelope")
+		return
+	}
+
+	data, _ := envelope.Serialize()
+
+	lines := strings.Split(string(data), "\n")
+	if len(lines) < 2 {
+		t.Error("Expected at least 2 lines in serialized envelope")
+		return
+	}
+
+	var eventData map[string]interface{}
+	if err := json.Unmarshal([]byte(lines[2]), &eventData); err != nil {
+		t.Errorf("Failed to unmarshal event data: %v", err)
+		return
+	}
+
+	extra, exists := eventData["extra"].(map[string]interface{})
+	if !exists {
+		t.Error("Expected extra field after fallback")
+		return
+	}
+
+	info, exists := extra["info"].(string)
+	if !exists {
+		t.Error("Expected info field in extra after fallback")
+		return
+	}
+
+	if !strings.Contains(info, "Could not encode original event as JSON") {
+		t.Error("Expected fallback info message in extra field")
 	}
 }

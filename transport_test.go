@@ -857,3 +857,41 @@ func TestHTTPSyncTransport_FlushWithContext(_ *testing.T) {
 	tr := noopTransport{}
 	tr.FlushWithContext(cancelCtx)
 }
+
+func TestInternalAsyncTransportAdapter(t *testing.T) {
+	transport := newInternalAsyncTransport()
+
+	transport.Configure(ClientOptions{
+		Dsn: "",
+	})
+
+	event := NewEvent()
+	event.Message = "test message"
+	transport.SendEvent(event)
+
+	if !transport.Flush(time.Second) {
+		t.Error("Flush should return true")
+	}
+
+	if !transport.FlushWithContext(context.Background()) {
+		t.Error("FlushWithContext should return true")
+	}
+
+	transport.Close()
+}
+
+func TestInternalAsyncTransportAdapter_WithValidDSN(_ *testing.T) {
+	transport := newInternalAsyncTransport()
+
+	transport.Configure(ClientOptions{
+		Dsn: "https://public@example.com/1",
+	})
+
+	event := NewEvent()
+	event.Message = "test message"
+	transport.SendEvent(event)
+
+	transport.Flush(100 * time.Millisecond)
+
+	transport.Close()
+}
