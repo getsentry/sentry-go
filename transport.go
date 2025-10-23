@@ -167,6 +167,23 @@ func encodeEnvelopeLogs(enc *json.Encoder, itemsLength int, body json.RawMessage
 	return err
 }
 
+func encodeEnvelopeTraceMetrics(enc *json.Encoder, itemsLength int, body json.RawMessage) error {
+	err := enc.Encode(
+		struct {
+			Type        string `json:"type"`
+			ItemCount   int    `json:"item_count"`
+			ContentType string `json:"content_type"`
+		}{
+			Type:        traceMetricEvent.Type,
+			ItemCount:   itemsLength,
+			ContentType: traceMetricEvent.ContentType,
+		})
+	if err == nil {
+		err = enc.Encode(body)
+	}
+	return err
+}
+
 func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -205,6 +222,8 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		err = encodeEnvelopeItem(enc, event.Type, body)
 	case logEvent.Type:
 		err = encodeEnvelopeLogs(enc, len(event.Logs), body)
+	case traceMetricEvent.Type:
+		err = encodeEnvelopeTraceMetrics(enc, len(event.Metrics), body)
 	default:
 		err = encodeEnvelopeItem(enc, eventType, body)
 	}

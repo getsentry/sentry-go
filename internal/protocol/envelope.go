@@ -41,11 +41,12 @@ type EnvelopeItemType string
 
 // Constants for envelope item types as defined in the Sentry documentation.
 const (
-	EnvelopeItemTypeEvent       EnvelopeItemType = "event"
-	EnvelopeItemTypeTransaction EnvelopeItemType = "transaction"
-	EnvelopeItemTypeCheckIn     EnvelopeItemType = "check_in"
-	EnvelopeItemTypeAttachment  EnvelopeItemType = "attachment"
-	EnvelopeItemTypeLog         EnvelopeItemType = "log"
+	EnvelopeItemTypeEvent        EnvelopeItemType = "event"
+	EnvelopeItemTypeTransaction  EnvelopeItemType = "transaction"
+	EnvelopeItemTypeCheckIn      EnvelopeItemType = "check_in"
+	EnvelopeItemTypeAttachment   EnvelopeItemType = "attachment"
+	EnvelopeItemTypeLog          EnvelopeItemType = "log"
+	EnvelopeItemTypeTraceMetrics EnvelopeItemType = "trace_metric"
 )
 
 // EnvelopeItemHeader represents the header of an envelope item.
@@ -207,6 +208,19 @@ func NewLogItem(itemCount int, payload []byte) *EnvelopeItem {
 			Length:      &length,
 			ItemCount:   &itemCount,
 			ContentType: "application/vnd.sentry.items.log+json",
+		},
+		Payload: payload,
+	}
+}
+
+func NewTraceMetricsItem(itemCount int, payload []byte) *EnvelopeItem {
+	length := len(payload)
+	return &EnvelopeItem{
+		Header: &EnvelopeItemHeader{
+			Type:        EnvelopeItemTypeTraceMetrics,
+			Length:      &length,
+			ItemCount:   &itemCount,
+			ContentType: "application/vnd.sentry.items.trace_metric+json",
 		},
 		Payload: payload,
 	}
