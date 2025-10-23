@@ -24,19 +24,19 @@ func NewBatchMeter(client *Client) *BatchMeter {
 	}
 }
 
-func (l *BatchMeter) Start() {
-	l.startOnce.Do(func() {
+func (m *BatchMeter) Start() {
+	m.startOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
-		l.cancel = cancel
-		l.wg.Add(1)
-		go l.run(ctx)
+		m.cancel = cancel
+		m.wg.Add(1)
+		go m.run(ctx)
 	})
 }
 
-func (l *BatchMeter) Flush(timeout <-chan struct{}) {
+func (m *BatchMeter) Flush(timeout <-chan struct{}) {
 	done := make(chan struct{})
 	select {
-	case l.flushCh <- done:
+	case m.flushCh <- done:
 		select {
 		case <-done:
 		case <-timeout:
@@ -45,27 +45,27 @@ func (l *BatchMeter) Flush(timeout <-chan struct{}) {
 	}
 }
 
-func (l *BatchMeter) Shutdown() {
-	l.shutdownOnce.Do(func() {
-		if l.cancel != nil {
-			l.cancel()
-			l.wg.Wait()
+func (m *BatchMeter) Shutdown() {
+	m.shutdownOnce.Do(func() {
+		if m.cancel != nil {
+			m.cancel()
+			m.wg.Wait()
 		}
 	})
 }
 
-func (l *BatchMeter) run(ctx context.Context) {
-	defer l.wg.Done()
+func (m *BatchMeter) run(ctx context.Context) {
+	defer m.wg.Done()
 	var metrics []Metric
 	timer := time.NewTimer(batchTimeout)
 	defer timer.Stop()
 
 	for {
 		select {
-		case metric := <-l.metricsCh:
+		case metric := <-m.metricsCh:
 			metrics = append(metrics, metric)
 			if len(metrics) >= batchSize {
-				l.processEvent(metrics)
+				m.processEvent(metrics)
 				metrics = nil
 				if !timer.Stop() {
 					<-timer.C
@@ -74,15 +74,15 @@ func (l *BatchMeter) run(ctx context.Context) {
 			}
 		case <-timer.C:
 			if len(metrics) > 0 {
-				l.processEvent(metrics)
+				m.processEvent(metrics)
 				metrics = nil
 			}
 			timer.Reset(batchTimeout)
-		case done := <-l.flushCh:
+		case done := <-m.flushCh:
 		flushDrain:
 			for {
 				select {
-				case metric := <-l.metricsCh:
+				case metric := <-m.metricsCh:
 					metrics = append(metrics, metric)
 				default:
 					break flushDrain
@@ -90,7 +90,7 @@ func (l *BatchMeter) run(ctx context.Context) {
 			}
 
 			if len(metrics) > 0 {
-				l.processEvent(metrics)
+				m.processEvent(metrics)
 				metrics = nil
 			}
 			if !timer.Stop() {
@@ -102,7 +102,7 @@ func (l *BatchMeter) run(ctx context.Context) {
 		drain:
 			for {
 				select {
-				case metric := <-l.metricsCh:
+				case metric := <-m.metricsCh:
 					metrics = append(metrics, metric)
 				default:
 					break drain
@@ -110,18 +110,18 @@ func (l *BatchMeter) run(ctx context.Context) {
 			}
 
 			if len(metrics) > 0 {
-				l.processEvent(metrics)
+				m.processEvent(metrics)
 			}
 			return
 		}
 	}
 }
 
-func (l *BatchMeter) processEvent(metrics []Metric) {
+func (m *BatchMeter) processEvent(metrics []Metric) {
 	event := NewEvent()
 	event.Timestamp = time.Now()
 	event.EventID = EventID(uuid())
 	event.Type = traceMetricEvent.Type
 	event.Metrics = metrics
-	l.client.Transport.SendEvent(event)
+	m.client.Transport.SendEvent(event)
 }
