@@ -423,11 +423,12 @@ type Event struct {
 	CheckIn       *CheckIn       `json:"check_in,omitempty"`
 	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
 
+	Items interface{} `json:"items,omitempty"`
 	// The fields below are only relevant for logs
-	Logs []Log `json:"items,omitempty"`
+	Logs []Log `json:"-"`
 
 	// The fields below are only relevant for metrics
-	Metrics []Metric `json:"items,omitempty"`
+	Metrics []Metric `json:"-"`
 
 	// The fields below are not part of the final JSON payload.
 
@@ -511,6 +512,8 @@ func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protoc
 		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
 	case logEvent.Type:
 		mainItem = protocol.NewLogItem(len(e.Logs), eventBody)
+	case traceMetricEvent.Type:
+		mainItem = protocol.NewTraceMetricsItem(len(e.Metrics), eventBody)
 	default:
 		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
 	}
@@ -546,6 +549,15 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 	if e.Type == checkInType {
 		return e.checkInMarshalJSON()
 	}
+
+	// HACK: Logs & metrics uses the same JSON key. This is not possible in Go.
+	// Since metrics is experimental, we'll try to prioritize logs.
+	if e.Logs != nil {
+		e.Items = e.Logs
+	} else {
+		e.Items = e.Metrics
+	}
+
 	return e.defaultMarshalJSON()
 }
 
