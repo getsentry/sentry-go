@@ -20,11 +20,16 @@ jobs:
     env:
       GO111MODULE: "on"
       GOFLAGS: "-mod=readonly"
+      # The race detector adds considerable runtime overhead. To save time on
+      # pull requests, only run this step for a single job in the matrix. For
+      # all other workflow triggers (e.g., pushes to a release branch) run
+      # this step for the whole matrix.
+      RUN_RACE_TESTS: ${{ github.event_name != 'pull_request' || (matrix.go == '1.24' && matrix.os == 'ubuntu') }}
     steps:
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/cache@v4
         with:
           # In order:
@@ -40,30 +45,23 @@ jobs:
           key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-${{ matrix.go }}-
+      - name: Tidy for min version
+        run: make mod-tidy
+        if: ${{ matrix.go == '1.23' }}
       - name: Build
         run: make build
       - name: Vet
         run: make vet
-      - name: Check go.mod Tidiness
-        run: make mod-tidy
-        if: ${{ matrix.go == '1.21' }}
-      - name: Test
-        run: make test-coverage
+      - name: Test${{ env.RUN_RACE_TESTS == 'true' && ' (with race detection)' || '' }}
+        run: ${{ env.RUN_RACE_TESTS == 'true' && 'make test-race-coverage' || 'make test-coverage' }}
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # pin@v5.4.0
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # pin@v5.5.1
         with:
           directory: .coverage
           token: ${{ secrets.CODECOV_TOKEN }}
-      - name: Test (with race detection)
-        run: make test-race
-        # The race detector adds considerable runtime overhead. To save time on
-        # pull requests, only run this step for a single job in the matrix. For
-        # all other workflow triggers (e.g., pushes to a release branch) run
-        # this step for the whole matrix.
-        if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.23' && matrix.os == 'ubuntu') }}
     timeout-minutes: 15
     strategy:
       matrix:
-        go: ["1.24", "1.23", "1.22"]
+        go: ["1.25", "1.24", "1.23"]
         os: [ubuntu, windows, macos]
       fail-fast: false

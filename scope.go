@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 // Scope holds contextual data for the current scope.
@@ -302,6 +304,14 @@ func (scope *Scope) SetPropagationContext(propagationContext PropagationContext)
 	scope.propagationContext = propagationContext
 }
 
+// GetSpan returns the span from the current scope.
+func (scope *Scope) GetSpan() *Span {
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+
+	return scope.span
+}
+
 // SetSpan sets a span for the current scope.
 func (scope *Scope) SetSpan(span *Span) {
 	scope.mu.Lock()
@@ -464,7 +474,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			Logger.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
+			debuglog.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
 			return nil
 		}
 	}

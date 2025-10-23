@@ -180,6 +180,28 @@ func TestCheckInEventMarshalJSON(t *testing.T) {
 				Timezone:      "America/Los_Angeles",
 			},
 		},
+		{
+			Release:     "1.0.0",
+			Environment: "dev",
+			Type:        checkInType,
+			CheckIn: &CheckIn{
+				ID:          "c2f0ce1334c74564bf6631f6161173f5",
+				MonitorSlug: "my-monitor",
+				Status:      "ok",
+				Duration:    time.Second * 10,
+			},
+			MonitorConfig: &MonitorConfig{
+				Schedule: &crontabSchedule{
+					Type:  "crontab",
+					Value: "* * * * *",
+				},
+				CheckInMargin:         2,
+				MaxRuntime:            1,
+				Timezone:              "UTC",
+				FailureIssueThreshold: 5,
+				RecoveryThreshold:     1,
+			},
+		},
 	}
 
 	var buf bytes.Buffer
