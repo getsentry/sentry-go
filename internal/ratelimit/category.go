@@ -8,7 +8,7 @@ import (
 )
 
 // Reference:
-// https://github.com/getsentry/relay/blob/0424a2e017d193a93918053c90cdae9472d164bf/relay-common/src/constants.rs#L116-L127
+// https://github.com/getsentry/relay/blob/46dfaa850b8717a6e22c3e9a275ba17fe673b9da/relay-base-schema/src/data_category.rs#L231-L271
 
 // Category classifies supported payload types that can be ingested by Sentry
 // and, therefore, rate limited.
@@ -22,6 +22,7 @@ const (
 	CategoryTransaction Category = "transaction"
 	CategoryLog         Category = "log_item"
 	CategoryMonitor     Category = "monitor"
+	CategoryTraceMetric Category = "trace_metric"
 )
 
 // knownCategories is the set of currently known categories. Other categories
@@ -47,6 +48,8 @@ func (c Category) String() string {
 		return "CategoryLog"
 	case CategoryMonitor:
 		return "CategoryMonitor"
+	case CategoryTraceMetric:
+		return "CategoryTraceMetric"
 	default:
 		// For unknown categories, use the original formatting logic
 		caser := cases.Title(language.English)
