@@ -3,14 +3,17 @@ package sentry
 import (
 	"bytes"
 	"context"
-	"log"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -46,7 +49,6 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		"sentry.server.address":       {Value: "test-server", Type: "string"},
 		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
 		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
-		"sentry.origin":               {Value: "auto.logger.log", Type: "string"},
 		"sentry.message.template":     {Value: "param matching: %v and %v", Type: "string"},
 		"sentry.message.parameters.0": {Value: "param1", Type: "string"},
 		"sentry.message.parameters.1": {Value: "param2", Type: "string"},
@@ -66,7 +68,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		{
 			name: "Trace level",
 			logFunc: func(ctx context.Context, l Logger) {
-				l.Tracef(ctx, "param matching: %v and %v", "param1", "param2")
+				l.Trace().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
 			wantEvents: []Event{
@@ -86,7 +88,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		{
 			name: "Debug level",
 			logFunc: func(ctx context.Context, l Logger) {
-				l.Debugf(ctx, "param matching: %v and %v", "param1", "param2")
+				l.Debug().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
 			wantEvents: []Event{
@@ -106,7 +108,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		{
 			name: "Info level",
 			logFunc: func(ctx context.Context, l Logger) {
-				l.Infof(ctx, "param matching: %v and %v", "param1", "param2")
+				l.Info().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
 			wantEvents: []Event{
@@ -126,7 +128,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		{
 			name: "Warn level",
 			logFunc: func(ctx context.Context, l Logger) {
-				l.Warnf(ctx, "param matching: %v and %v", "param1", "param2")
+				l.Warn().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
 			wantEvents: []Event{
@@ -146,7 +148,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		{
 			name: "Error level",
 			logFunc: func(ctx context.Context, l Logger) {
-				l.Errorf(ctx, "param matching: %v and %v", "param1", "param2")
+				l.Error().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
 			wantEvents: []Event{
@@ -178,7 +180,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 			// invalid attribute should be dropped
 			l.SetAttributes(attribute.Builder{Key: "key.invalid", Value: attribute.Value{}})
 			tt.logFunc(ctx, l)
-			Flush(20 * time.Millisecond)
+			Flush(testutils.FlushTimeout())
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
@@ -207,7 +209,6 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		"sentry.server.address": {Value: "test-server", Type: "string"},
 		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
 		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
-		"sentry.origin":         {Value: "auto.logger.log", Type: "string"},
 	}
 
 	tests := []struct {
@@ -219,7 +220,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		{
 			name: "Trace level",
 			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Trace(ctx, msg)
+				l.Trace().WithCtx(ctx).Emit(msg)
 			},
 			args: "trace",
 			wantEvents: []Event{
@@ -239,7 +240,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		{
 			name: "Debug level",
 			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Debug(ctx, msg)
+				l.Debug().WithCtx(ctx).Emit(msg)
 			},
 			args: "debug",
 			wantEvents: []Event{
@@ -259,7 +260,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		{
 			name: "Info level",
 			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Info(ctx, msg)
+				l.Info().WithCtx(ctx).Emit(msg)
 			},
 			args: "info",
 			wantEvents: []Event{
@@ -279,7 +280,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		{
 			name: "Warn level",
 			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Warn(ctx, msg)
+				l.Warn().WithCtx(ctx).Emit(msg)
 			},
 			args: "warn",
 			wantEvents: []Event{
@@ -299,7 +300,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		{
 			name: "Error level",
 			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Error(ctx, msg)
+				l.Error().WithCtx(ctx).Emit(msg)
 			},
 			args: "error",
 			wantEvents: []Event{
@@ -323,7 +324,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
 			l := NewLogger(ctx)
 			tt.logFunc(ctx, l, tt.args)
-			Flush(20 * time.Millisecond)
+			Flush(testutils.FlushTimeout())
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
@@ -356,7 +357,7 @@ func Test_sentryLogger_Panic(t *testing.T) {
 		}()
 		ctx, _ := setupMockTransport()
 		l := NewLogger(ctx)
-		l.Panic(context.Background(), "panic message") // This should panic
+		l.Panic().Emit("panic message") // This should panic
 	})
 
 	t.Run("logger.Panicf", func(t *testing.T) {
@@ -369,7 +370,7 @@ func Test_sentryLogger_Panic(t *testing.T) {
 		}()
 		ctx, _ := setupMockTransport()
 		l := NewLogger(ctx)
-		l.Panicf(context.Background(), "panic message") // This should panic
+		l.Panic().Emitf("panic message") // This should panic
 	})
 }
 
@@ -381,7 +382,6 @@ func Test_sentryLogger_Write(t *testing.T) {
 		"sentry.server.address": {Value: "test-server", Type: "string"},
 		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
 		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
-		"sentry.origin":         {Value: "auto.logger.log", Type: "string"},
 	}
 	wantLogs := []Log{
 		{
@@ -403,7 +403,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 	if n != len(msg) {
 		t.Errorf("Write returned wrong byte count: got %d, want %d", n, len(msg))
 	}
-	Flush(20 * time.Millisecond)
+	Flush(testutils.FlushTimeout())
 
 	gotEvents := mockTransport.Events()
 	if len(gotEvents) != 1 {
@@ -425,11 +425,11 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx)
 	l.SetAttributes(attribute.Int("int", 42))
-	l.Info(ctx, msg)
+	l.Info().WithCtx(ctx).Emit(msg)
 
 	l.SetAttributes(attribute.String("string", "some str"))
-	l.Warn(ctx, msg)
-	Flush(20 * time.Millisecond)
+	l.Warn().WithCtx(ctx).Emit(msg)
+	Flush(testutils.FlushTimeout())
 
 	gotEvents := mockTransport.Events()
 	if len(gotEvents) != 1 {
@@ -437,21 +437,144 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 	}
 	event := gotEvents[0]
 	assertEqual(t, event.Logs[0].Attributes["int"].Value, int64(42))
-	if _, ok := event.Logs[1].Attributes["int"]; ok {
-		t.Fatalf("expected key to not exist")
+	if _, ok := event.Logs[1].Attributes["int"]; !ok {
+		t.Fatalf("expected key to exist")
 	}
 	assertEqual(t, event.Logs[1].Attributes["string"].Value, "some str")
+}
+
+func TestSentryLogger_LogEntryAttributes(t *testing.T) {
+	msg := []byte("something")
+	ctx, mockTransport := setupMockTransport()
+	l := NewLogger(ctx)
+	l.Info().WithCtx(ctx).
+		String("key.string", "some str").
+		Int("key.int", 42).
+		Int64("key.int64", 17).
+		Float64("key.float", 42.2).
+		Bool("key.bool", true).
+		Emit(msg)
+
+	Flush(20 * time.Millisecond)
+
+	gotEvents := mockTransport.Events()
+	if len(gotEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(gotEvents))
+	}
+	event := gotEvents[0]
+	assertEqual(t, event.Logs[0].Attributes["key.int"].Value, int64(42))
+	assertEqual(t, event.Logs[0].Attributes["key.int64"].Value, int64(17))
+	assertEqual(t, event.Logs[0].Attributes["key.float"].Value, 42.2)
+	assertEqual(t, event.Logs[0].Attributes["key.bool"].Value, true)
+	assertEqual(t, event.Logs[0].Attributes["key.string"].Value, "some str")
 }
 
 func Test_batchLogger_Flush(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background())
-	l.Info(ctx, "context done log")
-	Flush(20 * time.Millisecond)
+	l.Info().WithCtx(ctx).Emit("context done log")
+	Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+}
+
+func Test_batchLogger_FlushWithContext(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	l := NewLogger(context.Background())
+	l.Info().WithCtx(ctx).Emit("context done log")
+
+	cancelCtx, cancel := context.WithTimeout(context.Background(), testutils.FlushTimeout())
+	FlushWithContext(cancelCtx)
+	defer cancel()
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+}
+
+func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	l := NewLogger(ctx)
+
+	for i := 0; i < 5; i++ {
+		l.Info().WithCtx(ctx).Emit("test")
+	}
+
+	Flush(testutils.FlushTimeout())
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Logf("Got %d events instead of 1", len(events))
+		for i, event := range events {
+			t.Logf("Event %d: %d logs", i, len(event.Logs))
+		}
+		t.Fatalf("expected 1 event after first flush, got %d", len(events))
+	}
+	if len(events[0].Logs) != 5 {
+		t.Fatalf("expected 5 logs in first batch, got %d", len(events[0].Logs))
+	}
+
+	mockTransport.events = nil
+
+	for i := 0; i < 3; i++ {
+		l.Info().WithCtx(ctx).Emit("test")
+	}
+
+	Flush(testutils.FlushTimeout())
+	events = mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event after second flush, got %d", len(events))
+	}
+	if len(events[0].Logs) != 3 {
+		t.Fatalf("expected 3 logs in second batch, got %d", len(events[0].Logs))
+	}
+
+	mockTransport.events = nil
+
+	Flush(testutils.FlushTimeout())
+	events = mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected 0 events after third flush with no logs, got %d", len(events))
+	}
+}
+
+func Test_batchLogger_Shutdown(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	l := NewLogger(ctx)
+	for i := 0; i < 3; i++ {
+		l.Info().WithCtx(ctx).Emit("test")
+	}
+
+	hub := GetHubFromContext(ctx)
+	hub.Client().batchLogger.Shutdown()
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event after shutdown, got %d", len(events))
+	}
+	if len(events[0].Logs) != 3 {
+		t.Fatalf("expected 3 logs in shutdown batch, got %d", len(events[0].Logs))
+	}
+
+	mockTransport.events = nil
+
+	// Test that shutdown can be called multiple times safely
+	hub.Client().batchLogger.Shutdown()
+	hub.Client().batchLogger.Shutdown()
+
+	events = mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected 0 events after multiple shutdowns, got %d", len(events))
+	}
+
+	Flush(testutils.FlushTimeout())
+	events = mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected 0 events after flush on shutdown logger, got %d", len(events))
 	}
 }
 
@@ -479,8 +602,8 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 	ctx = SetHubOnContext(ctx, hub)
 
 	l := NewLogger(ctx)
-	l.Info(ctx, "context done log")
-	Flush(20 * time.Millisecond)
+	l.Info().WithCtx(ctx).Emit("context done log")
+	Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 0 {
@@ -492,7 +615,7 @@ func Test_Logger_ExceedBatchSize(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(context.Background())
 	for i := 0; i < 100; i++ {
-		l.Info(ctx, "test")
+		l.Info().WithCtx(ctx).Emit("test")
 	}
 
 	// sleep to wait for events to propagate
@@ -514,9 +637,9 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 	expectedSpanID := txn.SpanID
 
 	logger := NewLogger(txn.Context())
-	logger.Info(txn.Context(), "message with tracing")
+	logger.Info().WithCtx(txn.Context()).Emit("message with tracing")
 
-	Flush(20 * time.Millisecond)
+	Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -540,55 +663,129 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 }
 
 func TestSentryLogger_DebugLogging(t *testing.T) {
-	var buf bytes.Buffer
-	debugLogger := log.New(&buf, "", 0)
-	originalLogger := DebugLogger
-	DebugLogger = debugLogger
-	defer func() {
-		DebugLogger = originalLogger
-	}()
-
 	tests := []struct {
-		name          string
-		debugEnabled  bool
-		message       string
-		expectedDebug string
+		name       string
+		enableLogs bool
+		message    string
 	}{
 		{
-			name:          "Debug enabled",
-			debugEnabled:  true,
-			message:       "test message",
-			expectedDebug: "test message\n",
+			name:       "Debug enabled",
+			enableLogs: true,
+			message:    "test message",
 		},
 		{
-			name:          "Debug disabled",
-			debugEnabled:  false,
-			message:       "test message",
-			expectedDebug: "",
+			name:       "Debug disabled",
+			enableLogs: false,
+			message:    "test message",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf.Reset()
+			var buf bytes.Buffer
+
 			ctx := context.Background()
 			mockClient, _ := NewClient(ClientOptions{
 				Transport:  &MockTransport{},
-				EnableLogs: true,
-				Debug:      tt.debugEnabled,
+				EnableLogs: tt.enableLogs,
+				Debug:      true,
 			})
 			hub := CurrentHub()
 			hub.BindClient(mockClient)
 
+			// set the debug logger output after NewClient, so that it doesn't change.
+			debuglog.SetOutput(&buf)
+			defer debuglog.SetOutput(io.Discard)
+
 			logger := NewLogger(ctx)
-			logger.Info(ctx, tt.message)
+			logger.Info().WithCtx(ctx).Emit(tt.message)
 
 			got := buf.String()
-			if !tt.debugEnabled {
-				assertEqual(t, len(got), 0)
-			} else if strings.Contains(got, tt.expectedDebug) {
-				t.Errorf("Debug output = %q, want %q", got, tt.expectedDebug)
+			if tt.enableLogs {
+				assertEqual(t, strings.Contains(got, "test message"), true)
+			} else {
+				assertEqual(t, strings.Contains(got, "test message"), false)
 			}
 		})
 	}
+}
+
+func Test_sentryLogger_UserAttributes(t *testing.T) {
+	ctx := context.Background()
+	mockTransport := &MockTransport{}
+	mockClient, _ := NewClient(ClientOptions{
+		Dsn:           testDsn,
+		Transport:     mockTransport,
+		Release:       "v1.2.3",
+		Environment:   "testing",
+		ServerName:    "test-server",
+		EnableLogs:    true,
+		EnableTracing: true,
+	})
+	mockClient.sdkIdentifier = "sentry.go"
+	mockClient.sdkVersion = "0.10.0"
+	hub := CurrentHub()
+	hub.BindClient(mockClient)
+	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+
+	hub.Scope().SetUser(User{
+		ID:    "user123",
+		Name:  "Test User",
+		Email: "test@example.com",
+	})
+
+	ctx = SetHubOnContext(ctx, hub)
+
+	l := NewLogger(ctx)
+	l.Info().WithCtx(ctx).Emit("test message with PII")
+	Flush(20 * time.Millisecond)
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	logs := events[0].Logs
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 log, got %d", len(logs))
+	}
+
+	log := logs[0]
+	attrs := log.Attributes
+
+	if val, ok := attrs["user.id"]; !ok {
+		t.Error("missing user.id attribute")
+	} else if val.Value != "user123" {
+		t.Errorf("unexpected user.id: got %v, want %v", val.Value, "user123")
+	}
+
+	if val, ok := attrs["user.name"]; !ok {
+		t.Error("missing user.name attribute")
+	} else if val.Value != "Test User" {
+		t.Errorf("unexpected user.name: got %v, want %v", val.Value, "Test User")
+	}
+
+	if val, ok := attrs["user.email"]; !ok {
+		t.Error("missing user.email attribute")
+	} else if val.Value != "test@example.com" {
+		t.Errorf("unexpected user.email: got %v, want %v", val.Value, "test@example.com")
+	}
+}
+
+func TestLogEntryWithCtx_ShouldCopy(t *testing.T) {
+	ctx, _ := setupMockTransport()
+	l := NewLogger(ctx)
+
+	// using WithCtx should return a new log entry with the new ctx
+	newCtx := context.Background()
+	lentry := l.Info().String("key", "value").(*logEntry)
+	newlentry := lentry.WithCtx(newCtx).(*logEntry)
+	lentry.String("key2", "value")
+
+	assert.Equal(t, lentry.ctx, ctx)
+	assert.Equal(t, newlentry.ctx, newCtx)
+	assert.Contains(t, lentry.attributes, "key")
+	assert.Contains(t, lentry.attributes, "key2")
+	assert.Contains(t, newlentry.attributes, "key")
+	assert.NotContains(t, newlentry.attributes, "key2")
 }

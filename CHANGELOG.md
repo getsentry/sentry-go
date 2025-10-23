@@ -1,5 +1,237 @@
 # Changelog
 
+## 0.36.1
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.36.1.
+
+### Bug Fixes
+
+- Prevent panic when converting error chains containing non-comparable error types by using a safe fallback for visited detection in exception conversion ([#1113](https://github.com/getsentry/sentry-go/pull/1113))
+
+## 0.36.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.36.0.
+
+### Breaking Changes
+
+- Behavioral change for the `MaxBreadcrumbs` client option. Removed the hard limit of 100 breadcrumbs, allowing users to set a larger limit and also changed the default limit from 30 to 100 ([#1106](https://github.com/getsentry/sentry-go/pull/1106)))
+
+- The changes to error handling ([#1075](https://github.com/getsentry/sentry-go/pull/1075)) will affect issue grouping. It is expected that any wrapped and complex errors will be grouped under a new issue group.
+
+### Features
+
+- Add support for improved issue grouping with enhanced error chain handling ([#1075](https://github.com/getsentry/sentry-go/pull/1075))
+
+  The SDK now provides better handling of complex error scenarios, particularly when dealing with multiple related errors or error chains. This feature automatically detects and properly structures errors created with Go's `errors.Join()` function and other multi-error patterns.
+
+  ```go
+  // Multiple errors are now properly grouped and displayed in Sentry
+  err1 := errors.New("err1")
+  err2 := errors.New("err2") 
+  combinedErr := errors.Join(err1, err2)
+  
+  // When captured, these will be shown as related exceptions in Sentry
+  sentry.CaptureException(combinedErr)
+  ```
+
+- Add `TraceIgnoreStatusCodes` option to allow filtering of HTTP transactions based on status codes ([#1089](https://github.com/getsentry/sentry-go/pull/1089))
+  - Configure which HTTP status codes should not be traced by providing single codes or ranges
+  - Example: `TraceIgnoreStatusCodes: [][]int{{404}, {500, 599}}` ignores 404 and server errors 500-599
+
+### Bug Fixes
+
+- Fix logs being incorrectly filtered by `BeforeSend` callback ([#1109](https://github.com/getsentry/sentry-go/pull/1109))
+  - Logs now bypass the `processEvent` method and are sent directly to the transport
+  - This ensures logs are only filtered by `BeforeSendLog`, not by the error/message `BeforeSend` callback
+
+### Misc
+
+- Add support for Go 1.25 and drop support for Go 1.22 ([#1103](https://github.com/getsentry/sentry-go/pull/1103))
+
+## 0.35.3
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.3.
+
+### Bug Fixes
+
+- Add missing rate limit categories ([#1082](https://github.com/getsentry/sentry-go/pull/1082))
+
+## 0.35.2
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.2.
+
+### Bug Fixes
+
+- Fix OpenTelemetry spans being created as transactions instead of child spans ([#1073](https://github.com/getsentry/sentry-go/pull/1073))
+
+### Misc
+
+- Add `MockTransport` to test clients for improved testing ([#1071](https://github.com/getsentry/sentry-go/pull/1071))
+
+## 0.35.1
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.1.
+
+### Bug Fixes
+
+- Fix race conditions when accessing the scope during logging operations ([#1050](https://github.com/getsentry/sentry-go/pull/1050))
+- Fix nil pointer dereference with malformed URLs when tracing is enabled in `fasthttp` and `fiber` integrations ([#1055](https://github.com/getsentry/sentry-go/pull/1055))
+
+### Misc
+
+- Bump `github.com/gofiber/fiber/v2` from 2.52.5 to 2.52.9 in `/fiber` ([#1067](https://github.com/getsentry/sentry-go/pull/1067))
+
+## 0.35.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.35.0.
+
+### Breaking Changes
+
+- Changes to the logging API ([#1046](https://github.com/getsentry/sentry-go/pull/1046))
+
+The logging API now supports a fluent interface for structured logging with attributes:
+
+```go
+// usage before
+logger := sentry.NewLogger(ctx)
+// attributes weren't being set permanently
+logger.SetAttributes(
+    attribute.String("version", "1.0.0"),
+)
+logger.Infof(ctx, "Message with parameters %d and %d", 1, 2)
+
+// new behavior
+ctx := context.Background()
+logger := sentry.NewLogger(ctx)
+
+// Set permanent attributes on the logger
+logger.SetAttributes(
+    attribute.String("version", "1.0.0"),
+)
+
+// Chain attributes on individual log entries
+logger.Info().
+    String("key.string", "value").
+    Int("key.int", 42).
+    Bool("key.bool", true).
+    Emitf("Message with parameters %d and %d", 1, 2)
+```
+
+### Bug Fixes
+
+- Correctly serialize `FailureIssueThreshold` and `RecoveryThreshold` onto check-in payloads ([#1060](https://github.com/getsentry/sentry-go/pull/1060))
+
+## 0.34.1
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.34.1.
+
+### Bug Fixes
+
+- Allow flush to be used multiple times without issues, particularly for the batch logger ([#1051](https://github.com/getsentry/sentry-go/pull/1051))
+- Fix race condition in `Scope.GetSpan()` method by adding proper mutex locking ([#1044](https://github.com/getsentry/sentry-go/pull/1044))
+- Guard transport on `Close()` to prevent panic when called multiple times ([#1044](https://github.com/getsentry/sentry-go/pull/1044))
+
+## 0.34.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.34.0.
+
+### Breaking Changes
+
+- Logrus structured logging support replaces the `sentrylogrus.Hook` signature from a `*Hook` to an interface.
+
+```go
+var hook *sentrylogrus.Hook
+hook = sentrylogrus.New(
+    // ... your setup
+)
+
+// should change the definition to 
+var hook sentrylogrus.Hook
+hook = sentrylogrus.New(
+    // ... your setup
+)
+```
+
+### Features
+
+- Structured logging support for [slog](https://pkg.go.dev/log/slog). ([#1033](https://github.com/getsentry/sentry-go/pull/1033))
+
+```go
+ctx := context.Background()
+handler := sentryslog.Option{
+    EventLevel: []slog.Level{slog.LevelError, sentryslog.LevelFatal}, // Only Error and Fatal as events
+    LogLevel:   []slog.Level{slog.LevelWarn, slog.LevelInfo},         // Only Warn and Info as logs
+}.NewSentryHandler(ctx)
+logger := slog.New(handler)
+logger.Info("hello"))
+```
+
+- Structured logging support for [logrus](https://github.com/sirupsen/logrus). ([#1036](https://github.com/getsentry/sentry-go/pull/1036))
+```go
+logHook, _ := sentrylogrus.NewLogHook(
+    []logrus.Level{logrus.InfoLevel, logrus.WarnLevel}, 
+    sentry.ClientOptions{
+        Dsn: "your-dsn",
+        EnableLogs: true, // Required for log entries    
+    })
+defer logHook.Flush(5 * time.Secod)
+logrus.RegisterExitHandler(func() {
+    logHook.Flush(5 * time.Second)
+})
+
+logger := logrus.New()
+logger.AddHook(logHook)
+logger.Infof("hello")
+```
+
+- Add support for flushing events with context using `FlushWithContext()`. ([#935](https://github.com/getsentry/sentry-go/pull/935))
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+if !sentry.FlushWithContext(ctx) {
+    // Handle timeout or cancellation
+}
+```
+
+- Add support for custom fingerprints in slog integration. ([#1039](https://github.com/getsentry/sentry-go/pull/1039))
+
+### Deprecations 
+
+- Slog structured logging support replaces `Level` option with `EventLevel` and `LogLevel` options, for specifying fine-grained levels for capturing events and logs.
+
+```go 
+handler := sentryslog.Option{
+    EventLevel: []slog.Level{slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
+    LogLevel:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
+}.NewSentryHandler(ctx)
+```
+
+- Logrus structured logging support replaces `New` and `NewFromClient` functions to `NewEventHook`, `NewEventHookFromClient`, to match the newly added `NewLogHook` functions, and specify the hook type being created each time.
+
+```go
+logHook, err := sentrylogrus.NewLogHook(
+    []logrus.Level{logrus.InfoLevel},
+    sentry.ClientOptions{})
+eventHook, err := sentrylogrus.NewEventHook([]logrus.Level{
+    logrus.ErrorLevel,
+    logrus.FatalLevel,
+    logrus.PanicLevel,
+}, sentry.ClientOptions{})
+```
+
+### Bug Fixes
+
+- Fix issue where `ContinueTrace()` would panic when `sentry-trace` header does not exist. ([#1026](https://github.com/getsentry/sentry-go/pull/1026))
+- Fix incorrect log level signature in structured logging. ([#1034](https://github.com/getsentry/sentry-go/pull/1034))
+- Remove `sentry.origin` attribute from Sentry logger to prevent confusion in spans. ([#1038](https://github.com/getsentry/sentry-go/pull/1038))
+- Don't gate user information behind `SendDefaultPII` flag for logs. ([#1032](https://github.com/getsentry/sentry-go/pull/1032))
+
+### Misc
+
+- Add more sensitive HTTP headers to the default list of headers that are scrubbed by default. ([#1008](https://github.com/getsentry/sentry-go/pull/1008))
+
 ## 0.33.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.33.0.

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/valyala/fasthttp"
 )
 
@@ -143,7 +144,7 @@ func GetSpanFromContext(ctx *fasthttp.RequestCtx) *sentry.Span {
 func convert(ctx *fasthttp.RequestCtx) *http.Request {
 	defer func() {
 		if err := recover(); err != nil {
-			sentry.DebugLogger.Printf("%v", err)
+			debuglog.Printf("%v", err)
 		}
 	}()
 
@@ -152,9 +153,11 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 	r.Method = string(ctx.Method())
 
 	uri := ctx.URI()
-	url, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path()))
-	if err == nil {
-		r.URL = url
+	r.URL = &url.URL{Path: string(uri.Path())}
+	r.URL.RawQuery = string(uri.QueryString())
+
+	if parsedURL, err := url.Parse(fmt.Sprintf("%s://%s%s", uri.Scheme(), uri.Host(), uri.Path())); err == nil {
+		r.URL = parsedURL
 		r.URL.RawQuery = string(uri.QueryString())
 	}
 

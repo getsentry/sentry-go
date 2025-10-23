@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -15,24 +14,31 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debug"
+	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 // The identifier of the SDK.
 const sdkIdentifier = "sentry.go"
 
-// maxErrorDepth is the maximum number of errors reported in a chain of errors.
-// This protects the SDK from an arbitrarily long chain of wrapped errors.
-//
-// An additional consideration is that arguably reporting a long chain of errors
-// is of little use when debugging production errors with Sentry. The Sentry UI
-// is not optimized for long chains either. The top-level error together with a
-// stack trace is often the most useful information.
-const maxErrorDepth = 10
+const (
+	// maxErrorDepth is the maximum number of errors reported in a chain of errors.
+	// This protects the SDK from an arbitrarily long chain of wrapped errors.
+	//
+	// An additional consideration is that arguably reporting a long chain of errors
+	// is of little use when debugging production errors with Sentry. The Sentry UI
+	// is not optimized for long chains either. The top-level error together with a
+	// stack trace is often the most useful information.
+	maxErrorDepth = 100
 
-// defaultMaxSpans limits the default number of recorded spans per transaction. The limit is
-// meant to bound memory usage and prevent too large transaction events that
-// would be rejected by Sentry.
-const defaultMaxSpans = 1000
+	// defaultMaxSpans limits the default number of recorded spans per transaction. The limit is
+	// meant to bound memory usage and prevent too large transaction events that
+	// would be rejected by Sentry.
+	defaultMaxSpans = 1000
+
+	// defaultMaxBreadcrumbs is the default maximum number of breadcrumbs added to
+	// an event. Can be overwritten with the MaxBreadcrumbs option.
+	defaultMaxBreadcrumbs = 100
+)
 
 // hostname is the host name reported by the kernel. It is precomputed once to
 // avoid syscalls when capturing events.
@@ -78,8 +84,8 @@ type usageError struct {
 }
 
 // DebugLogger is an instance of log.Logger that is used to provide debug information about running Sentry Client
-// can be enabled by either using DebugLogger.SetOutput directly or with Debug client option.
-var DebugLogger = log.New(io.Discard, "[Sentry] ", log.LstdFlags)
+// can be enabled by either using debuglog.SetOutput directly or with Debug client option.
+var DebugLogger = debuglog.GetLogger()
 
 // EventProcessor is a function that processes an event.
 // Event processors are used to change an event before it is sent to Sentry.
@@ -230,6 +236,21 @@ type ClientOptions struct {
 	Tags map[string]string
 	// EnableLogs controls when logs should be emitted.
 	EnableLogs bool
+	// TraceIgnoreStatusCodes is a list of HTTP status codes that should not be traced.
+	// Each element can be either:
+	// - A single-element slice [code] for a specific status code
+	// - A two-element slice [min, max] for a range of status codes (inclusive)
+	// When an HTTP request results in a status code that matches any of these codes or ranges,
+	// the transaction will not be sent to Sentry.
+	//
+	// Examples:
+	//   [][]int{{404}}                           // ignore only status code 404
+	//   [][]int{{400, 405}}                     // ignore status codes 400-405
+	//   [][]int{{404}, {500}}                   // ignore status codes 404 and 500
+	//   [][]int{{404}, {400, 405}, {500, 599}}  // ignore 404, range 400-405, and range 500-599
+	//
+	// By default, this is empty and all status codes are traced.
+	TraceIgnoreStatusCodes [][]int
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -283,7 +304,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		if debugWriter == nil {
 			debugWriter = os.Stderr
 		}
-		DebugLogger.SetOutput(debugWriter)
+		debuglog.SetOutput(debugWriter)
 	}
 
 	if options.Dsn == "" {
@@ -388,12 +409,12 @@ func (client *Client) setupIntegrations() {
 
 	for _, integration := range integrations {
 		if client.integrationAlreadyInstalled(integration.Name()) {
-			DebugLogger.Printf("Integration %s is already installed\n", integration.Name())
+			debuglog.Printf("Integration %s is already installed\n", integration.Name())
 			continue
 		}
 		client.integrations = append(client.integrations, integration)
 		integration.SetupOnce(client)
-		DebugLogger.Printf("Integration installed: %s\n", integration.Name())
+		debuglog.Printf("Integration installed: %s\n", integration.Name())
 	}
 
 	sort.Slice(client.integrations, func(i, j int) bool {
@@ -513,9 +534,30 @@ func (client *Client) RecoverWithContext(
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
 	if client.batchLogger != nil {
-		client.batchLogger.Flush()
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		return client.FlushWithContext(ctx)
 	}
 	return client.Transport.Flush(timeout)
+}
+
+// FlushWithContext waits until the underlying Transport sends any buffered events
+// to the Sentry server, blocking for at most the duration specified by the context.
+// It returns false if the context is canceled before the events are sent. In such a case,
+// some events may not be delivered.
+//
+// FlushWithContext should be called before terminating the program to ensure no
+// events are unintentionally dropped.
+//
+// Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
+// CaptureException, or CaptureMessage. To send events synchronously over the network,
+// configure the SDK to use HTTPSyncTransport during initialization with Init.
+
+func (client *Client) FlushWithContext(ctx context.Context) bool {
+	if client.batchLogger != nil {
+		client.batchLogger.Flush(ctx.Done())
+	}
+	return client.Transport.FlushWithContext(ctx)
 }
 
 // Close clean up underlying Transport resources.
@@ -613,7 +655,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	// options.TracesSampler when they are started. Other events
 	// (errors, messages) are sampled here. Does not apply to check-ins.
 	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
-		DebugLogger.Println("Event dropped due to SampleRate hit.")
+		debuglog.Println("Event dropped due to SampleRate hit.")
 		return nil
 	}
 
@@ -629,7 +671,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	case transactionType:
 		if client.options.BeforeSendTransaction != nil {
 			if event = client.options.BeforeSendTransaction(event, hint); event == nil {
-				DebugLogger.Println("Transaction dropped due to BeforeSendTransaction callback.")
+				debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
 				return nil
 			}
 		}
@@ -637,7 +679,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	default:
 		if client.options.BeforeSend != nil {
 			if event = client.options.BeforeSend(event, hint); event == nil {
-				DebugLogger.Println("Event dropped due to BeforeSend callback.")
+				debuglog.Println("Event dropped due to BeforeSend callback.")
 				return nil
 			}
 		}
@@ -704,7 +746,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			DebugLogger.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
+			debuglog.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
 			return nil
 		}
 	}
@@ -713,7 +755,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		id := event.EventID
 		event = processor(event, hint)
 		if event == nil {
-			DebugLogger.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
+			debuglog.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
 			return nil
 		}
 	}

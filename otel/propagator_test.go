@@ -41,9 +41,9 @@ func createTransactionAndMaybeSpan(transactionContext transactionTestContext, wi
 		// we "swap" span IDs from the transaction and the child span.
 		transaction.SpanID = span.SpanID
 		span.SpanID = SpanIDFromHex(transactionContext.spanID)
-		sentrySpanMap.Set(trace.SpanID(span.SpanID), span)
+		sentrySpanMap.Set(trace.SpanID(span.SpanID), span, trace.SpanID{})
 	}
-	sentrySpanMap.Set(trace.SpanID(transaction.SpanID), transaction)
+	sentrySpanMap.Set(trace.SpanID(transaction.SpanID), transaction, trace.SpanID{})
 
 	otelContext := trace.SpanContextConfig{
 		TraceID:    otelTraceIDFromHex(transactionContext.traceID),

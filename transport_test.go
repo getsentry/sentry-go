@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
@@ -490,6 +491,120 @@ func TestHTTPTransport(t *testing.T) {
 		wg.Wait()
 	})
 }
+func TestHTTPTransport_CloseMultipleTimes(t *testing.T) {
+	server := newTestHTTPServer(t)
+	defer server.Close()
+	transport := NewHTTPTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        fmt.Sprintf("https://test@%s/1", server.Listener.Addr()),
+		HTTPClient: server.Client(),
+	})
+
+	// Closing multiple times should not panic.
+	for i := 0; i < 10; i++ {
+		transport.Close()
+	}
+
+	// Verify the done channel is closed
+	select {
+	case <-transport.done:
+		// Expected - channel should be closed
+	case <-time.After(time.Second):
+		t.Fatal("transport.done not closed")
+	}
+}
+
+func TestHTTPTransport_FlushWithContext(t *testing.T) {
+	server := newTestHTTPServer(t)
+	defer server.Close()
+
+	transport := NewHTTPTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        fmt.Sprintf("https://test@%s/1", server.Listener.Addr()),
+		HTTPClient: server.Client(),
+	})
+
+	// Helpers
+
+	transportSendTestEvent := func(t *testing.T) (id string) {
+		t.Helper()
+
+		e := NewEvent()
+		id = uuid()
+		e.EventID = EventID(id)
+
+		transport.SendEvent(e)
+
+		t.Logf("[CLIENT] {%.4s} event sent", e.EventID)
+		return id
+	}
+
+	transportMustFlushWithCtx := func(t *testing.T, id string) {
+		t.Helper()
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ok := transport.FlushWithContext(cancelCtx)
+		if !ok {
+			t.Fatalf("[CLIENT] {%.4s} Flush() timed out", id)
+		}
+	}
+
+	serverEventCountMustBe := func(t *testing.T, n uint64) {
+		t.Helper()
+
+		count := server.EventCount()
+		if count != n {
+			t.Fatalf("[SERVER] event count = %d, want %d", count, n)
+		}
+	}
+
+	testSendSingleEvent := func(t *testing.T) {
+		// Sending a single event should increase the server event count by
+		// exactly one.
+
+		initialCount := server.EventCount()
+		id := transportSendTestEvent(t)
+
+		// Server is blocked waiting for us, right now count must not have
+		// changed yet.
+		serverEventCountMustBe(t, initialCount)
+
+		// After unblocking the server, Flush must guarantee that the server
+		// event count increased by one.
+		server.Unblock()
+		transportMustFlushWithCtx(t, id)
+		serverEventCountMustBe(t, initialCount+1)
+	}
+
+	// Actual tests
+	t.Run("SendSingleEvent", testSendSingleEvent)
+
+	t.Run("FlushMultipleTimes", func(t *testing.T) {
+		// Flushing multiple times should not increase the server event count.
+
+		initialCount := server.EventCount()
+		for i := 0; i < 10; i++ {
+			transportMustFlushWithCtx(t, fmt.Sprintf("loop%d", i))
+		}
+		serverEventCountMustBe(t, initialCount)
+	})
+
+	t.Run("ConcurrentSendAndFlush", func(t *testing.T) {
+		// It should be safe to send events and flush concurrently.
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			testSendSingleEvent(t)
+		}()
+		go func() {
+			defer wg.Done()
+			transportMustFlushWithCtx(t, "from goroutine")
+		}()
+		wg.Wait()
+	})
+}
 
 // httptraceRoundTripper implements http.RoundTripper by wrapping
 // http.DefaultTransport and keeps track of whether TCP connections have been
@@ -675,19 +790,31 @@ func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
 
 	transport := NewHTTPTransport()
 	transport.Configure(ClientOptions{
-		Dsn:        "https://test@foobar/1",
-		HTTPClient: http.DefaultClient,
+		Dsn: "https://test@foobar/1",
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return nil, fmt.Errorf("mock transport - no real connections")
+				},
+			},
+		},
 	})
 
-	transport.Flush(0)
+	transport.Flush(testutils.FlushTimeout())
 	transport.Close()
 }
 
 func TestHTTPTransportClose(t *testing.T) {
 	transport := NewHTTPTransport()
 	transport.Configure(ClientOptions{
-		Dsn:        "https://test@foobar/1",
-		HTTPClient: http.DefaultClient,
+		Dsn: "https://test@foobar/1",
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return nil, fmt.Errorf("mock transport - no real connections")
+				},
+			},
+		},
 	})
 
 	transport.Close()
@@ -706,4 +833,65 @@ func TestHTTPSyncTransportClose(_ *testing.T) {
 
 	tr := noopTransport{}
 	tr.Close()
+}
+
+func TestHTTPSyncTransport_Flush(t *testing.T) {
+	// Flush does not do anything for HTTPSyncTransport, added for coverage.
+	transport := HTTPSyncTransport{}
+	transport.Flush(testutils.FlushTimeout())
+
+	tr := noopTransport{}
+	ret := tr.Flush(testutils.FlushTimeout())
+	if ret != true {
+		t.Fatalf("expected Flush to be true, got: %v", ret)
+	}
+}
+
+func TestHTTPSyncTransport_FlushWithContext(_ *testing.T) {
+	// FlushWithContext does not do anything for HTTPSyncTransport, added for coverage.
+	transport := HTTPSyncTransport{}
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	transport.FlushWithContext(cancelCtx)
+
+	tr := noopTransport{}
+	tr.FlushWithContext(cancelCtx)
+}
+
+func TestInternalAsyncTransportAdapter(t *testing.T) {
+	transport := newInternalAsyncTransport()
+
+	transport.Configure(ClientOptions{
+		Dsn: "",
+	})
+
+	event := NewEvent()
+	event.Message = "test message"
+	transport.SendEvent(event)
+
+	if !transport.Flush(time.Second) {
+		t.Error("Flush should return true")
+	}
+
+	if !transport.FlushWithContext(context.Background()) {
+		t.Error("FlushWithContext should return true")
+	}
+
+	transport.Close()
+}
+
+func TestInternalAsyncTransportAdapter_WithValidDSN(_ *testing.T) {
+	transport := newInternalAsyncTransport()
+
+	transport.Configure(ClientOptions{
+		Dsn: "https://public@example.com/1",
+	})
+
+	event := NewEvent()
+	event.Message = "test message"
+	transport.SendEvent(event)
+
+	transport.Flush(100 * time.Millisecond)
+
+	transport.Close()
 }
