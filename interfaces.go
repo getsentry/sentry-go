@@ -423,7 +423,7 @@ type Event struct {
 	CheckIn       *CheckIn       `json:"check_in,omitempty"`
 	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
 
-	Items interface{} `json:"items,omitempty"`
+	Items *sentryItems `json:"items,omitempty"`
 	// The fields below are only relevant for logs
 	Logs []Log `json:"-"`
 
@@ -433,6 +433,30 @@ type Event struct {
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
+}
+
+// sentryItems is a wrapper for the Items field of the Event struct.
+// It is used to prevent the empty interface from being marshaled.
+type sentryItems struct {
+	valid   bool
+	t       string
+	metrics []Metric
+	logs    []Log
+}
+
+func (items *sentryItems) MarshalJSON() ([]byte, error) {
+	if !items.valid {
+		return nil, nil
+	}
+
+	switch items.t {
+	case traceMetricEvent.Type:
+		return json.Marshal(items.metrics)
+	case logEvent.Type:
+		return json.Marshal(items.logs)
+	default:
+		return nil, nil
+	}
 }
 
 // SetException appends the unwrapped errors to the event's exception list.
@@ -553,9 +577,19 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 	// HACK: Logs & metrics uses the same JSON key. This is not possible in Go.
 	// Since metrics is experimental, we'll try to prioritize logs.
 	if e.Logs != nil {
-		e.Items = e.Logs
-	} else {
-		e.Items = e.Metrics
+		e.Items = &sentryItems{
+			valid:   true,
+			t:       logEvent.Type,
+			metrics: nil,
+			logs:    e.Logs,
+		}
+	} else if e.Metrics != nil {
+		e.Items = &sentryItems{
+			valid:   true,
+			t:       traceMetricEvent.Type,
+			metrics: e.Metrics,
+			logs:    nil,
+		}
 	}
 
 	return e.defaultMarshalJSON()

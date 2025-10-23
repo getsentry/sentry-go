@@ -14,6 +14,7 @@ func TestCategory_String(t *testing.T) {
 		{CategoryTransaction, "CategoryTransaction"},
 		{CategoryMonitor, "CategoryMonitor"},
 		{CategoryLog, "CategoryLog"},
+		{CategoryTraceMetric, "CategoryTraceMetric"},
 		{Category("custom type"), "CategoryCustomType"},
 		{Category("multi word type"), "CategoryMultiWordType"},
 	}
@@ -35,6 +36,7 @@ func TestKnownCategories(t *testing.T) {
 		CategoryTransaction,
 		CategoryMonitor,
 		CategoryLog,
+		CategoryTraceMetric,
 	}
 
 	for _, category := range expectedCategories {

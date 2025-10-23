@@ -120,7 +120,7 @@ func (s *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		Name:       name,
 		Value:      value,
 		Unit:       unit,
-		Attributes: attributes,
+		Attributes: attrs,
 	}
 	s.client.batchMeter.metricsCh <- *metric
 
@@ -169,7 +169,7 @@ func (s *sentryMeter) Distribution(name string, sample float64, options MeterOpt
 		}
 	}
 
-	s.emit(s.ctx, MetricTypeDistribution, name, sample, "", attrs)
+	s.emit(s.ctx, MetricTypeDistribution, name, sample, options.Unit, attrs)
 }
 
 // FGauge implements Meter.
@@ -190,7 +190,7 @@ func (s *sentryMeter) FGauge(name string, value float64, options MeterOptions) {
 		}
 	}
 
-	s.emit(s.ctx, MetricTypeGauge, name, value, "", attrs)
+	s.emit(s.ctx, MetricTypeGauge, name, value, options.Unit, attrs)
 }
 
 // Gauge implements Meter.
@@ -211,7 +211,7 @@ func (s *sentryMeter) Gauge(name string, value int64, options MeterOptions) {
 		}
 	}
 
-	s.emit(s.ctx, MetricTypeGauge, name, float64(value), "", attrs)
+	s.emit(s.ctx, MetricTypeGauge, name, float64(value), options.Unit, attrs)
 }
 
 // GetCtx implements Meter.
@@ -243,19 +243,19 @@ type noopMeter struct{}
 var _ Meter = (*noopMeter)(nil)
 
 // Count implements Meter.
-func (n *noopMeter) Count(name string, count int64, options MeterOptions) {
+func (n *noopMeter) Count(_ string, _ int64, _ MeterOptions) {
 }
 
 // Distribution implements Meter.
-func (n *noopMeter) Distribution(name string, sample float64, options MeterOptions) {
+func (n *noopMeter) Distribution(_ string, _ float64, _ MeterOptions) {
 }
 
 // FGauge implements Meter.
-func (n *noopMeter) FGauge(name string, value float64, options MeterOptions) {
+func (n *noopMeter) FGauge(_ string, _ float64, _ MeterOptions) {
 }
 
 // Gauge implements Meter.
-func (n *noopMeter) Gauge(name string, value int64, options MeterOptions) {
+func (n *noopMeter) Gauge(_ string, _ int64, _ MeterOptions) {
 }
 
 // GetCtx implements Meter.

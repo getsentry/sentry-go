@@ -33,6 +33,7 @@ var knownCategories = map[Category]struct{}{
 	CategoryTransaction: {},
 	CategoryLog:         {},
 	CategoryMonitor:     {},
+	CategoryTraceMetric: {},
 }
 
 // String returns the category formatted for debugging.
@@ -97,6 +98,8 @@ func (c Category) GetPriority() Priority {
 	case CategoryMonitor:
 		return PriorityHigh
 	case CategoryLog:
+		return PriorityMedium
+	case CategoryTraceMetric:
 		return PriorityMedium
 	case CategoryTransaction:
 		return PriorityLow

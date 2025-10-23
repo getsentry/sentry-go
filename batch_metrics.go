@@ -121,7 +121,7 @@ func (l *BatchMeter) processEvent(metrics []Metric) {
 	event := NewEvent()
 	event.Timestamp = time.Now()
 	event.EventID = EventID(uuid())
-	event.Type = logEvent.Type
+	event.Type = traceMetricEvent.Type
 	event.Metrics = metrics
 	l.client.Transport.SendEvent(event)
 }
