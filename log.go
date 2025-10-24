@@ -11,7 +11,6 @@ import (
 
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
 type LogLevel string
@@ -67,7 +66,7 @@ func NewLogger(ctx context.Context) Logger {
 	}
 
 	client := hub.Client()
-	if client != nil && client.options.EnableLogs && (client.batchLogger != nil || client.telemetryScheduler != nil) {
+	if client != nil && client.options.EnableLogs && (client.batchLogger != nil || client.telemetryBuffer != nil) {
 		return &sentryLogger{
 			ctx:        ctx,
 			client:     client,
@@ -182,12 +181,9 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	}
 
 	if log != nil {
-		if l.client.telemetryScheduler != nil {
-			if buffer, ok := l.client.telemetryBuffers[ratelimit.CategoryLog]; ok {
-				buffer.Offer(log)
-				l.client.telemetryScheduler.Signal()
-			} else {
-				debuglog.Print("Dropping event: log category buffer missing")
+		if l.client.telemetryBuffer != nil {
+			if !l.client.telemetryBuffer.Add(log) {
+				debuglog.Print("Dropping event: log buffer full or category missing")
 			}
 		} else if l.client.batchLogger != nil {
 			l.client.batchLogger.logCh <- *log

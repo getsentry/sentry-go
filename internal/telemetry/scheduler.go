@@ -12,7 +12,7 @@ import (
 
 // Scheduler implements a weighted round-robin scheduler for processing buffered events.
 type Scheduler struct {
-	buffers   map[ratelimit.Category]BufferInterface[protocol.EnvelopeItemConvertible]
+	buffers   map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible]
 	transport protocol.TelemetryTransport
 	dsn       *protocol.Dsn
 	sdkInfo   *protocol.SdkInfo
@@ -31,7 +31,7 @@ type Scheduler struct {
 }
 
 func NewScheduler(
-	buffers map[ratelimit.Category]BufferInterface[protocol.EnvelopeItemConvertible],
+	buffers map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible],
 	transport protocol.TelemetryTransport,
 	dsn *protocol.Dsn,
 	sdkInfo *protocol.SdkInfo,
@@ -116,10 +116,7 @@ func (s *Scheduler) Flush(timeout time.Duration) bool {
 }
 
 func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
-	s.mu.Lock()
 	s.flushBuffers()
-	s.mu.Unlock()
-
 	return s.transport.FlushWithContext(ctx)
 }
 
@@ -167,17 +164,14 @@ func (s *Scheduler) hasWork() bool {
 }
 
 func (s *Scheduler) processNextBatch() {
-	s.mu.Lock()
-
 	if len(s.currentCycle) == 0 {
-		s.mu.Unlock()
 		return
 	}
 
 	priority := s.currentCycle[s.cyclePos]
 	s.cyclePos = (s.cyclePos + 1) % len(s.currentCycle)
 
-	var bufferToProcess BufferInterface[protocol.EnvelopeItemConvertible]
+	var bufferToProcess Storage[protocol.EnvelopeItemConvertible]
 	var categoryToProcess ratelimit.Category
 	for category, buffer := range s.buffers {
 		if buffer.Priority() == priority && !s.isRateLimited(category) && buffer.IsReadyToFlush() {
@@ -187,14 +181,12 @@ func (s *Scheduler) processNextBatch() {
 		}
 	}
 
-	s.mu.Unlock()
-
 	if bufferToProcess != nil {
 		s.processItems(bufferToProcess, categoryToProcess, false)
 	}
 }
 
-func (s *Scheduler) processItems(buffer BufferInterface[protocol.EnvelopeItemConvertible], category ratelimit.Category, force bool) {
+func (s *Scheduler) processItems(buffer Storage[protocol.EnvelopeItemConvertible], category ratelimit.Category, force bool) {
 	var items []protocol.EnvelopeItemConvertible
 
 	if force {
@@ -209,24 +201,13 @@ func (s *Scheduler) processItems(buffer BufferInterface[protocol.EnvelopeItemCon
 
 	switch category {
 	case ratelimit.CategoryLog:
-		envItems := make([]protocol.LogItem, 0, len(items))
-		for _, it := range items {
-			if lp, ok := any(it).(interface{ ToLogPayload() protocol.LogItem }); ok {
-				envItems = append(envItems, lp.ToLogPayload())
-			} else {
-				debuglog.Printf("Invalid envelope item; cannot convert to log: %v", it)
-				continue
-			}
-		}
-		if len(envItems) == 0 {
-			return
-		}
+		logs := protocol.Logs(items)
 		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Sdk: s.sdkInfo}
 		if s.dsn != nil {
 			header.Dsn = s.dsn.String()
 		}
 		envelope := protocol.NewEnvelope(header)
-		item, err := protocol.Logs(envItems).ToEnvelopeItem()
+		item, err := logs.ToEnvelopeItem()
 		if err != nil {
 			debuglog.Printf("error creating log batch envelope item: %v", err)
 			return
@@ -240,13 +221,18 @@ func (s *Scheduler) processItems(buffer BufferInterface[protocol.EnvelopeItemCon
 		// if the buffers are properly configured, buffer.PollIfReady should return a single item for every category
 		// other than logs. We still iterate over the items just in case, because we don't want to send broken envelopes.
 		for _, it := range items {
-			s.sendItems(it)
+			s.sendItem(it)
 		}
 	}
 }
 
-func (s *Scheduler) sendItems(item protocol.EnvelopeItemConvertible) {
-	header := &protocol.EnvelopeHeader{EventID: item.GetEventID(), SentAt: time.Now(), Trace: item.GetDynamicSamplingContext(), Sdk: s.sdkInfo}
+func (s *Scheduler) sendItem(item protocol.EnvelopeItemConvertible) {
+	header := &protocol.EnvelopeHeader{
+		EventID: item.GetEventID(),
+		SentAt:  time.Now(),
+		Trace:   item.GetDynamicSamplingContext(),
+		Sdk:     s.sdkInfo,
+	}
 	if header.EventID == "" {
 		header.EventID = protocol.GenerateEventID()
 	}
@@ -256,7 +242,7 @@ func (s *Scheduler) sendItems(item protocol.EnvelopeItemConvertible) {
 	envelope := protocol.NewEnvelope(header)
 	envItem, err := item.ToEnvelopeItem()
 	if err != nil {
-		debuglog.Printf("error converting item: %v", err)
+		debuglog.Printf("error converting item to envelope: %v", err)
 		return
 	}
 	envelope.AddItem(envItem)

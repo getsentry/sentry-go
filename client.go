@@ -269,10 +269,9 @@ type Client struct {
 	sdkVersion      string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
-	Transport          Transport
-	batchLogger        *BatchLogger
-	telemetryBuffers   map[ratelimit.Category]telemetry.BufferInterface[protocol.EnvelopeItemConvertible]
-	telemetryScheduler *telemetry.Scheduler
+	Transport       Transport
+	batchLogger     *BatchLogger
+	telemetryBuffer *telemetry.Buffer
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -422,11 +421,11 @@ func (client *Client) setupTelemetryBuffer() {
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
-	client.telemetryBuffers = map[ratelimit.Category]telemetry.BufferInterface[protocol.EnvelopeItemConvertible]{
-		ratelimit.CategoryError:       telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryTransaction: telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryLog:         telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryLog, 100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
-		ratelimit.CategoryMonitor:     telemetry.NewBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+	storage := map[ratelimit.Category]telemetry.Storage[protocol.EnvelopeItemConvertible]{
+		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryLog, 100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
 	}
 
 	sdkInfo := &protocol.SdkInfo{
@@ -434,8 +433,7 @@ func (client *Client) setupTelemetryBuffer() {
 		Version: client.sdkVersion,
 	}
 
-	client.telemetryScheduler = telemetry.NewScheduler(client.telemetryBuffers, transport, &client.dsn.Dsn, sdkInfo)
-	client.telemetryScheduler.Start()
+	client.telemetryBuffer = telemetry.NewBuffer(storage, transport, &client.dsn.Dsn, sdkInfo)
 }
 
 func (client *Client) setupIntegrations() {
@@ -578,7 +576,7 @@ func (client *Client) RecoverWithContext(
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
-	if client.batchLogger != nil || client.telemetryScheduler != nil {
+	if client.batchLogger != nil || client.telemetryBuffer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		return client.FlushWithContext(ctx)
@@ -602,8 +600,8 @@ func (client *Client) FlushWithContext(ctx context.Context) bool {
 	if client.batchLogger != nil {
 		client.batchLogger.Flush(ctx.Done())
 	}
-	if client.telemetryScheduler != nil {
-		return client.telemetryScheduler.FlushWithContext(ctx)
+	if client.telemetryBuffer != nil {
+		return client.telemetryBuffer.FlushWithContext(ctx)
 	}
 	return client.Transport.FlushWithContext(ctx)
 }
@@ -613,8 +611,8 @@ func (client *Client) FlushWithContext(ctx context.Context) bool {
 // Close should be called after Flush and before terminating the program
 // otherwise some events may be lost.
 func (client *Client) Close() {
-	if client.telemetryScheduler != nil {
-		client.telemetryScheduler.Stop(5 * time.Second)
+	if client.telemetryBuffer != nil {
+		client.telemetryBuffer.Close(5 * time.Second)
 	}
 	client.Transport.Close()
 }
@@ -736,7 +734,13 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		}
 	}
 
-	client.Transport.SendEvent(event)
+	if client.telemetryBuffer != nil {
+		if !client.telemetryBuffer.Add(event) {
+			debuglog.Println("Event dropped: telemetry buffer full or unavailable")
+		}
+	} else {
+		client.Transport.SendEvent(event)
+	}
 
 	return &event.EventID
 }

@@ -731,34 +731,47 @@ type Log struct {
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
 
-// ToEnvelopeItem converts the Log to a Sentry envelope item.
+// ToEnvelopeItem converts the Log to a Sentry envelope item for batching.
 func (l *Log) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
-	logData, err := json.Marshal(l)
+	type logJSON struct {
+		Timestamp  *float64                         `json:"timestamp,omitempty"`
+		TraceID    string                           `json:"trace_id,omitempty"`
+		Level      string                           `json:"level"`
+		Severity   int                              `json:"severity_number,omitempty"`
+		Body       string                           `json:"body,omitempty"`
+		Attributes map[string]protocol.LogAttribute `json:"attributes,omitempty"`
+	}
+
+	// Convert time.Time to seconds float if set
+	var ts *float64
+	if !l.Timestamp.IsZero() {
+		sec := float64(l.Timestamp.UnixNano()) / 1e9
+		ts = &sec
+	}
+
+	attrs := make(map[string]protocol.LogAttribute, len(l.Attributes))
+	for k, v := range l.Attributes {
+		attrs[k] = protocol.LogAttribute{Value: v.Value, Type: string(v.Type)}
+	}
+
+	logData, err := json.Marshal(logJSON{
+		Timestamp:  ts,
+		TraceID:    l.TraceID.String(),
+		Level:      string(l.Level),
+		Severity:   l.Severity,
+		Body:       l.Body,
+		Attributes: attrs,
+	})
 	if err != nil {
 		return nil, err
 	}
+
 	return &protocol.EnvelopeItem{
 		Header: &protocol.EnvelopeItemHeader{
 			Type: protocol.EnvelopeItemTypeLog,
 		},
 		Payload: logData,
 	}, nil
-}
-
-// ToLogPayload converts the Log to a protocol.LogItem for batching.
-func (l *Log) ToLogPayload() protocol.LogItem {
-	attrs := make(map[string]protocol.LogAttribute, len(l.Attributes))
-	for k, v := range l.Attributes {
-		attrs[k] = protocol.LogAttribute{Value: v.Value, Type: string(v.Type)}
-	}
-	return protocol.LogItem{
-		Timestamp:  l.Timestamp,
-		TraceID:    l.TraceID.String(),
-		Level:      string(l.Level),
-		Severity:   l.Severity,
-		Body:       l.Body,
-		Attributes: attrs,
-	}
 }
 
 // GetCategory returns the rate limit category for logs.
