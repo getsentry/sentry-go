@@ -31,7 +31,7 @@ var traceMetricEvent = struct {
 	ContentType string
 }{
 	"trace_metric",
-	"application/vnd.sentry.items.trace_metric+json",
+	"application/vnd.sentry.items.trace-metric+json",
 }
 
 // Level marks the severity of the event.
