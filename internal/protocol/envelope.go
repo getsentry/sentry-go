@@ -220,7 +220,7 @@ func NewTraceMetricsItem(itemCount int, payload []byte) *EnvelopeItem {
 			Type:        EnvelopeItemTypeTraceMetrics,
 			Length:      &length,
 			ItemCount:   &itemCount,
-			ContentType: "application/vnd.sentry.items.trace_metric+json",
+			ContentType: "application/vnd.sentry.items.trace-metric+json",
 		},
 		Payload: payload,
 	}
