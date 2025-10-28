@@ -101,6 +101,9 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	}
 	hub := GetHubFromContext(ctx)
 	if hub == nil {
+		hub = GetHubFromContext(l.ctx)
+	}
+	if hub == nil {
 		hub = CurrentHub()
 	}
 
