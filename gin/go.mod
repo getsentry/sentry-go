@@ -5,7 +5,7 @@ go 1.23
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.36.1
+	github.com/getsentry/sentry-go v0.36.2
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/go-cmp v0.5.9
 )
