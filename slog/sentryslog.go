@@ -46,7 +46,7 @@ var (
 
 // LevelFatal is a custom [slog.Level] that maps to [sentry.LevelFatal]
 const LevelFatal = slog.Level(12)
-const SlogOrigin = "auto.logger.slog"
+const SlogOrigin = "auto.log.slog"
 
 type Option struct {
 	// Deprecated: Use EventLevel instead. Level is kept for backwards compatibility and defaults to EventLevel.
