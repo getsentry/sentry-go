@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
@@ -1026,4 +1028,47 @@ func TestClientSetsUpTransport(t *testing.T) {
 
 	client, _ = NewClient(ClientOptions{})
 	require.IsType(t, &noopTransport{}, client.Transport)
+}
+
+func TestClient_SetupTelemetryBuffer_WithDSN(t *testing.T) {
+	client, err := NewClient(ClientOptions{
+		Dsn:                   "https://public@localhost/1",
+		EnableTelemetryBuffer: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if client.telemetryBuffer == nil {
+		t.Fatal("expected telemetryBuffer to be initialized")
+	}
+
+	if _, ok := client.Transport.(*internalAsyncTransportAdapter); !ok {
+		t.Fatalf("expected internalAsyncTransportAdapter, got %T", client.Transport)
+	}
+
+	if !client.telemetryBuffer.Add(NewEvent()) {
+		t.Fatal("expected Add to succeed with default buffers")
+	}
+}
+
+func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
+	var buf bytes.Buffer
+	debuglog.SetOutput(&buf)
+	defer debuglog.SetOutput(&bytes.Buffer{})
+
+	client, err := NewClient(ClientOptions{
+		EnableTelemetryBuffer: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if client.telemetryBuffer != nil {
+		t.Fatal("expected telemetryBuffer to be nil when DSN is missing")
+	}
+
+	if _, ok := client.Transport.(*noopTransport); !ok {
+		t.Fatalf("expected noopTransport, got %T", client.Transport)
+	}
 }

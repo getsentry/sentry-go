@@ -21,15 +21,6 @@ import (
 	"go.uber.org/goleak"
 )
 
-type mockEnvelopeConvertible struct {
-	envelope *protocol.Envelope
-	err      error
-}
-
-func (m *mockEnvelopeConvertible) ToEnvelope(_ *protocol.Dsn) (*protocol.Envelope, error) {
-	return m.envelope, m.err
-}
-
 func testEnvelope(itemType protocol.EnvelopeItemType) *protocol.Envelope {
 	return &protocol.Envelope{
 		Header: &protocol.EnvelopeHeader{
@@ -50,6 +41,7 @@ func testEnvelope(itemType protocol.EnvelopeItemType) *protocol.Envelope {
 	}
 }
 
+// nolint:gocyclo
 func TestAsyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("invalid DSN", func(t *testing.T) {
 		transport := NewAsyncTransport(TransportOptions{})
@@ -244,61 +236,42 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			t.Errorf("expected ErrTransportQueueFull, got %v", err)
 		}
 	})
-}
 
-func TestAsyncTransport_SendEvent(t *testing.T) {
-	tests := []struct {
-		name  string
-		event *mockEnvelopeConvertible
-	}{
-		{
-			name: "conversion error",
-			event: &mockEnvelopeConvertible{
-				envelope: nil,
-				err:      errors.New("conversion error"),
-			},
-		},
-		{
-			name: "nil envelope",
-			event: &mockEnvelopeConvertible{
-				envelope: nil,
-				err:      nil,
-			},
-		},
-		{
-			name: "success",
-			event: &mockEnvelopeConvertible{
-				envelope: testEnvelope(protocol.EnvelopeItemTypeEvent),
-				err:      nil,
-			},
-		},
-	}
+	t.Run("FlushMultipleTimes", func(t *testing.T) {
+		var count int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			atomic.AddInt64(&count, 1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusOK)
-			}))
-			defer server.Close()
-
-			tr := NewAsyncTransport(TransportOptions{
-				Dsn: "http://key@" + server.URL[7:] + "/123",
-			})
-			transport, ok := tr.(*AsyncTransport)
-			if !ok {
-				t.Fatalf("expected *AsyncTransport, got %T", tr)
-			}
-			defer transport.Close()
-
-			transport.SendEvent(tt.event)
-
-			if tt.event.err == nil && tt.event.envelope != nil {
-				if !transport.Flush(testutils.FlushTimeout()) {
-					t.Fatal("Flush timed out")
-				}
-			}
+		tr := NewAsyncTransport(TransportOptions{
+			Dsn: "http://key@" + server.URL[7:] + "/123",
 		})
-	}
+		transport, ok := tr.(*AsyncTransport)
+		if !ok {
+			t.Fatalf("expected *AsyncTransport, got %T", tr)
+		}
+		defer transport.Close()
+
+		if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
+			t.Fatalf("failed to send envelope: %v", err)
+		}
+		if !transport.Flush(testutils.FlushTimeout()) {
+			t.Fatal("Flush timed out")
+		}
+
+		initial := atomic.LoadInt64(&count)
+		for i := 0; i < 10; i++ {
+			if !transport.Flush(testutils.FlushTimeout()) {
+				t.Fatalf("Flush %d timed out", i)
+			}
+		}
+
+		if got := atomic.LoadInt64(&count); got != initial {
+			t.Errorf("expected %d requests after multiple flushes, got %d", initial, got)
+		}
+	})
 }
 
 func TestAsyncTransport_FlushWithContext(t *testing.T) {
@@ -453,50 +426,6 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 			t.Errorf("server error should not return error, got %v", err)
 		}
 	})
-}
-
-func TestSyncTransport_SendEvent(t *testing.T) {
-	tests := []struct {
-		name  string
-		event *mockEnvelopeConvertible
-	}{
-		{
-			name: "conversion error",
-			event: &mockEnvelopeConvertible{
-				envelope: nil,
-				err:      errors.New("conversion error"),
-			},
-		},
-		{
-			name: "nil envelope",
-			event: &mockEnvelopeConvertible{
-				envelope: nil,
-				err:      nil,
-			},
-		},
-		{
-			name: "success",
-			event: &mockEnvelopeConvertible{
-				envelope: testEnvelope(protocol.EnvelopeItemTypeEvent),
-				err:      nil,
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(_ *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.WriteHeader(http.StatusOK)
-			}))
-			defer server.Close()
-
-			transport := NewSyncTransport(TransportOptions{
-				Dsn: "http://key@" + server.URL[7:] + "/123",
-			})
-
-			transport.SendEvent(tt.event)
-		})
-	}
 }
 
 func TestSyncTransport_Flush(t *testing.T) {
