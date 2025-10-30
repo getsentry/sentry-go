@@ -41,6 +41,7 @@ func testEnvelope(itemType protocol.EnvelopeItemType) *protocol.Envelope {
 	}
 }
 
+// nolint:gocyclo
 func TestAsyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("invalid DSN", func(t *testing.T) {
 		transport := NewAsyncTransport(TransportOptions{})
@@ -233,6 +234,42 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
 		if !errors.Is(err, ErrTransportQueueFull) {
 			t.Errorf("expected ErrTransportQueueFull, got %v", err)
+		}
+	})
+
+	t.Run("FlushMultipleTimes", func(t *testing.T) {
+		var count int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			atomic.AddInt64(&count, 1)
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		tr := NewAsyncTransport(TransportOptions{
+			Dsn: "http://key@" + server.URL[7:] + "/123",
+		})
+		transport, ok := tr.(*AsyncTransport)
+		if !ok {
+			t.Fatalf("expected *AsyncTransport, got %T", tr)
+		}
+		defer transport.Close()
+
+		if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
+			t.Fatalf("failed to send envelope: %v", err)
+		}
+		if !transport.Flush(testutils.FlushTimeout()) {
+			t.Fatal("Flush timed out")
+		}
+
+		initial := atomic.LoadInt64(&count)
+		for i := 0; i < 10; i++ {
+			if !transport.Flush(testutils.FlushTimeout()) {
+				t.Fatalf("Flush %d timed out", i)
+			}
+		}
+
+		if got := atomic.LoadInt64(&count); got != initial {
+			t.Errorf("expected %d requests after multiple flushes, got %d", initial, got)
 		}
 	})
 }
