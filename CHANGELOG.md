@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased Changes 
+
+### Breaking Cahnges 
+
+- Behavioral change for the `TraceIgnoreStatusCodes` option. The option now defaults to ignoring 404 status codes.
+
 ## 0.36.2
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.36.2.
