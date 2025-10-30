@@ -234,6 +234,9 @@ type ClientOptions struct {
 	Tags map[string]string
 	// EnableLogs controls when logs should be emitted.
 	EnableLogs bool
+	// ExperimentalEnableTraceMetric controls when trace metrics should be emitted.
+	// This is an experimental feature that is subject to change.
+	ExperimentalEnableTraceMetric bool
 	// TraceIgnoreStatusCodes is a list of HTTP status codes that should not be traced.
 	// Each element can be either:
 	// - A single-element slice [code] for a specific status code
@@ -265,6 +268,7 @@ type Client struct {
 	// not supported, create a new client instead.
 	Transport   Transport
 	batchLogger *BatchLogger
+	batchMeter  *BatchMeter
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -367,6 +371,11 @@ func NewClient(options ClientOptions) (*Client, error) {
 	if options.EnableLogs {
 		client.batchLogger = NewBatchLogger(&client)
 		client.batchLogger.Start()
+	}
+
+	if options.ExperimentalEnableTraceMetric {
+		client.batchMeter = NewBatchMeter(&client)
+		client.batchMeter.Start()
 	}
 
 	client.setupTransport()
@@ -531,7 +540,7 @@ func (client *Client) RecoverWithContext(
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
-	if client.batchLogger != nil {
+	if client.batchLogger != nil || client.batchMeter != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		return client.FlushWithContext(ctx)
@@ -554,6 +563,9 @@ func (client *Client) Flush(timeout time.Duration) bool {
 func (client *Client) FlushWithContext(ctx context.Context) bool {
 	if client.batchLogger != nil {
 		client.batchLogger.Flush(ctx.Done())
+	}
+	if client.batchMeter != nil {
+		client.batchMeter.Flush(ctx.Done())
 	}
 	return client.Transport.FlushWithContext(ctx)
 }
