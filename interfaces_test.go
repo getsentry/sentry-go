@@ -920,6 +920,44 @@ func TestEvent_ToEnvelope_FallbackOnMarshalError(t *testing.T) {
 	}
 }
 
+func TestEvent_ToEnvelopeItem_FallbackOnMarshalError(t *testing.T) {
+	unmarshalableFunc := func() string { return "test" }
+
+	event := &Event{
+		EventID:   "12345678901234567890123456789012",
+		Message:   "test message with fallback",
+		Level:     LevelError,
+		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+		Extra: map[string]interface{}{
+			"bad_data": unmarshalableFunc,
+		},
+	}
+
+	item, err := event.ToEnvelopeItem()
+	if err != nil {
+		t.Errorf("ToEnvelopeItem() should not error even with unmarshalable data, got: %v", err)
+		return
+	}
+	if item == nil {
+		t.Fatal("ToEnvelopeItem() returned nil item")
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(item.Payload, &payload); err != nil {
+		t.Fatalf("Failed to unmarshal item payload: %v", err)
+	}
+
+	extra, exists := payload["extra"].(map[string]interface{})
+	if !exists {
+		t.Fatal("Expected extra field after fallback in ToEnvelopeItem")
+	}
+
+	info, exists := extra["info"].(string)
+	if !exists || !strings.Contains(info, "Could not encode original event as JSON") {
+		t.Fatal("Expected fallback info message in extra field for ToEnvelopeItem")
+	}
+}
+
 func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 	ts := time.Unix(1700000000, 500_000_000).UTC()
 	trace := TraceIDFromHex("d6c4f03650bd47699ec65c84352b6208")
