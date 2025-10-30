@@ -249,7 +249,7 @@ type ClientOptions struct {
 	//
 	// By default, this ignores 404 status codes.
 	//
-	// ⚠️ IMPORTANT: to not ignore any status codes, the option should be an empty slice and not nil. The nil option is
+	// IMPORTANT: to not ignore any status codes, the option should be an empty slice and not nil. The nil option is
 	// used for defaulting to 404 ignores.
 	TraceIgnoreStatusCodes [][]int
 }

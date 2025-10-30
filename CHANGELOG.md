@@ -2,7 +2,7 @@
 
 ## Unreleased Changes 
 
-### Breaking Cahnges 
+### Breaking Changes
 
 - Behavioral change for the `TraceIgnoreStatusCodes` option. The option now defaults to ignoring 404 status codes.
 
