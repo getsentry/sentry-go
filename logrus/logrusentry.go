@@ -47,7 +47,7 @@ const (
 	FieldGoVersion = "go_version"
 	FieldMaxProcs  = "go_maxprocs"
 
-	LogrusOrigin = "auto.logger.logrus"
+	LogrusOrigin = "auto.log.logrus"
 )
 
 var levelMap = map[logrus.Level]sentry.Level{

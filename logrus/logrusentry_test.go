@@ -717,7 +717,7 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 			"string_slice":     {Value: "[one two three]", Type: "string"},
 			"string_map":       {Value: "map[a:1 b:2 c:3]", Type: "string"},
 			"complex":          {Value: "{test 42}", Type: "string"},
-			"sentry.origin":    {Value: "auto.logger.logrus", Type: "string"},
+			"sentry.origin":    {Value: "auto.log.logrus", Type: "string"},
 		},
 	}
 
