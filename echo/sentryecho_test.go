@@ -356,8 +356,9 @@ func TestIntegration(t *testing.T) {
 	transactionsCh := make(chan *sentry.Event, len(tests))
 
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		EnableTracing:          true,
+		TracesSampleRate:       1.0,
+		TraceIgnoreStatusCodes: make([][]int, 0), // don't ignore any status codes
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
