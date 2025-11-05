@@ -109,6 +109,20 @@ func (s *Scheduler) Signal() {
 	s.cond.Signal()
 }
 
+func (s *Scheduler) Add(item protocol.EnvelopeItemConvertible) bool {
+	category := item.GetCategory()
+	buffer, exists := s.buffers[category]
+	if !exists {
+		return false
+	}
+
+	accepted := buffer.Offer(item)
+	if accepted {
+		s.Signal()
+	}
+	return accepted
+}
+
 func (s *Scheduler) Flush(timeout time.Duration) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
