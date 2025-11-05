@@ -256,7 +256,7 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeItemConvertible) {
 	envelope := protocol.NewEnvelope(header)
 	envItem, err := item.ToEnvelopeItem()
 	if err != nil {
-		debuglog.Printf("error converting item to envelope: %v", err)
+		debuglog.Printf("error while converting to envelope item: %v", err)
 		return
 	}
 	envelope.AddItem(envItem)
