@@ -295,8 +295,8 @@ func TestBufferDifferentCategories(t *testing.T) {
 	}{
 		{ratelimit.CategoryError, ratelimit.PriorityCritical},
 		{ratelimit.CategoryMonitor, ratelimit.PriorityHigh},
-		{ratelimit.CategoryLog, ratelimit.PriorityMedium},
-		{ratelimit.CategoryTransaction, ratelimit.PriorityLow},
+		{ratelimit.CategoryLog, ratelimit.PriorityLow},
+		{ratelimit.CategoryTransaction, ratelimit.PriorityMedium},
 	}
 
 	for _, tc := range testCases {
