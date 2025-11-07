@@ -30,7 +30,7 @@ func NewBuffer(
 
 // Add adds an EnvelopeItemConvertible to the appropriate buffer based on its category.
 func (b *Buffer) Add(item protocol.EnvelopeItemConvertible) bool {
-    return b.scheduler.Add(item)
+	return b.scheduler.Add(item)
 }
 
 // Flush forces all buffers to flush within the given timeout.
