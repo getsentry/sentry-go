@@ -253,8 +253,8 @@ type ClientOptions struct {
 	//
 	// By default, this is empty and all status codes are traced.
 	TraceIgnoreStatusCodes [][]int
-	// EnableTelemetryBuffer enables the telemetry buffer layer for prioritized delivery of events.
-	EnableTelemetryBuffer bool
+	// DisableTelemetryBuffer disables the telemetry buffer layer for prioritizing events and uses the old transport layer.
+	DisableTelemetryBuffer bool
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -373,7 +373,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	client.setupTransport()
 
-	if options.EnableTelemetryBuffer {
+	if !options.DisableTelemetryBuffer {
 		client.setupTelemetryBuffer()
 	} else if options.EnableLogs {
 		client.batchLogger = NewBatchLogger(&client)
@@ -402,12 +402,23 @@ func (client *Client) setupTransport() {
 }
 
 func (client *Client) setupTelemetryBuffer() {
-	if !client.options.EnableTelemetryBuffer {
+	if client.options.DisableTelemetryBuffer {
 		return
 	}
 
 	if client.dsn == nil {
 		debuglog.Println("Telemetry buffer disabled: no DSN configured")
+		return
+	}
+
+	// We currently disallow using custom Transport with the new Telemetry Buffer, due to the difference in transport signatures.
+	// The option should be enabled when the new Transport interface signature changes.
+	if client.options.Transport != nil {
+		debuglog.Println("Cannot enable Telemetry Buffer with custom Transport: fallback to old transport")
+		if client.options.EnableLogs {
+			client.batchLogger = NewBatchLogger(client)
+			client.batchLogger.Start()
+		}
 		return
 	}
 
@@ -424,7 +435,7 @@ func (client *Client) setupTelemetryBuffer() {
 	storage := map[ratelimit.Category]telemetry.Storage[protocol.EnvelopeItemConvertible]{
 		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
 		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryLog, 100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
 		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
 	}
 

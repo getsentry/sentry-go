@@ -66,7 +66,7 @@ func NewLogger(ctx context.Context) Logger {
 	}
 
 	client := hub.Client()
-	if client != nil && client.options.EnableLogs && (client.batchLogger != nil || client.telemetryBuffer != nil) {
+	if client != nil && client.options.EnableLogs {
 		return &sentryLogger{
 			ctx:        ctx,
 			client:     client,

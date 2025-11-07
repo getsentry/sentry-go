@@ -51,6 +51,7 @@ func setupClientTest() (*Client, *MockScope, *MockTransport) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:       "http://whatever@example.com/1337",
 		Transport: transport,
+		// keep default buffers enabled
 		Integrations: func(_ []Integration) []Integration {
 			return []Integration{}
 		},
@@ -1032,8 +1033,7 @@ func TestClientSetsUpTransport(t *testing.T) {
 
 func TestClient_SetupTelemetryBuffer_WithDSN(t *testing.T) {
 	client, err := NewClient(ClientOptions{
-		Dsn:                   "https://public@localhost/1",
-		EnableTelemetryBuffer: true,
+		Dsn: "https://public@localhost/1",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1057,9 +1057,7 @@ func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
 	debuglog.SetOutput(&buf)
 	defer debuglog.SetOutput(&bytes.Buffer{})
 
-	client, err := NewClient(ClientOptions{
-		EnableTelemetryBuffer: true,
-	})
+	client, err := NewClient(ClientOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
