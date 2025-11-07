@@ -35,13 +35,12 @@ func setupSpanProcessorTest() (otelSdkTrace.SpanProcessor, *otelSdkTrace.TracerP
 
 func emptyContextWithSentry() context.Context {
 	client, _ := sentry.NewClient(sentry.ClientOptions{
-		Dsn:                    "https://abc@example.com/123",
-		Environment:            "testing",
-		Release:                "1.2.3",
-		EnableTracing:          true,
-		TracesSampleRate:       1.0,
-		Transport:              &sentry.MockTransport{},
-		DisableTelemetryBuffer: true,
+		Dsn:              "https://abc@example.com/123",
+		Environment:      "testing",
+		Release:          "1.2.3",
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        &sentry.MockTransport{},
 	})
 	hub := sentry.NewHub(client, sentry.NewScope())
 	return sentry.SetHubOnContext(context.Background(), hub)

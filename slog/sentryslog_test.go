@@ -321,10 +321,9 @@ func newMockTransport() (context.Context, *sentry.MockTransport) {
 	ctx := context.Background()
 	mockTransport := &sentry.MockTransport{}
 	mockClient, _ := sentry.NewClient(sentry.ClientOptions{
-		Dsn:                    "https://public@example.com/1",
-		Transport:              mockTransport,
-		EnableLogs:             true,
-		DisableTelemetryBuffer: true,
+		Dsn:        "https://public@example.com/1",
+		Transport:  mockTransport,
+		EnableLogs: true,
 	})
 	hub := sentry.CurrentHub()
 	hub.BindClient(mockClient)
