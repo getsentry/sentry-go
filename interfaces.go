@@ -26,6 +26,14 @@ var logEvent = struct {
 	"application/vnd.sentry.items.log+json",
 }
 
+var traceMetricEvent = struct {
+	Type        string
+	ContentType string
+}{
+	"trace_metric",
+	"application/vnd.sentry.items.trace-metric+json",
+}
+
 // Level marks the severity of the event.
 type Level string
 
@@ -139,6 +147,26 @@ type LogEntry interface {
 	Emit(args ...interface{})
 	// Emitf emits the LogEntry using a format string and arguments.
 	Emitf(format string, args ...interface{})
+}
+
+type MeterOptions struct {
+	// Attributes are key/value pairs that will be added to the metric.
+	// The attributes set here will take precedence over the attributes
+	// set from the Meter.
+	Attributes []attribute.Builder
+	// The unit of measurements, for "gauge" and "distribution" metrics.
+	Unit string
+}
+
+type Meter interface {
+	// GetCtx returns the [context.Context] set on the meter.
+	GetCtx() context.Context
+	// SetAttributes allows attaching parameters to the meter using the attribute API.
+	SetAttributes(...attribute.Builder)
+	Count(name string, count int64, options MeterOptions)
+	Gauge(name string, value int64, options MeterOptions)
+	FGauge(name string, value float64, options MeterOptions)
+	Distribution(name string, sample float64, options MeterOptions)
 }
 
 // Attachment allows associating files with your events to aid in investigation.
@@ -395,12 +423,40 @@ type Event struct {
 	CheckIn       *CheckIn       `json:"check_in,omitempty"`
 	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
 
+	Items *sentryItems `json:"items,omitempty"`
 	// The fields below are only relevant for logs
-	Logs []Log `json:"items,omitempty"`
+	Logs []Log `json:"-"`
+
+	// The fields below are only relevant for metrics
+	Metrics []Metric `json:"-"`
 
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
+}
+
+// sentryItems is a wrapper for the Items field of the Event struct.
+// It is used to prevent the empty interface from being marshaled.
+type sentryItems struct {
+	valid   bool
+	t       string
+	metrics []Metric
+	logs    []Log
+}
+
+func (items *sentryItems) MarshalJSON() ([]byte, error) {
+	if !items.valid {
+		return nil, nil
+	}
+
+	switch items.t {
+	case traceMetricEvent.Type:
+		return json.Marshal(items.metrics)
+	case logEvent.Type:
+		return json.Marshal(items.logs)
+	default:
+		return nil, nil
+	}
 }
 
 // SetException appends the unwrapped errors to the event's exception list.
@@ -480,6 +536,8 @@ func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protoc
 		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
 	case logEvent.Type:
 		mainItem = protocol.NewLogItem(len(e.Logs), eventBody)
+	case traceMetricEvent.Type:
+		mainItem = protocol.NewTraceMetricsItem(len(e.Metrics), eventBody)
 	default:
 		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
 	}
@@ -515,6 +573,25 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 	if e.Type == checkInType {
 		return e.checkInMarshalJSON()
 	}
+
+	// HACK: Logs & metrics uses the same JSON key. This is not possible in Go.
+	// Since metrics is experimental, we'll try to prioritize logs.
+	if e.Logs != nil {
+		e.Items = &sentryItems{
+			valid:   true,
+			t:       logEvent.Type,
+			metrics: nil,
+			logs:    e.Logs,
+		}
+	} else if e.Metrics != nil {
+		e.Items = &sentryItems{
+			valid:   true,
+			t:       traceMetricEvent.Type,
+			metrics: e.Metrics,
+			logs:    nil,
+		}
+	}
+
 	return e.defaultMarshalJSON()
 }
 
@@ -623,6 +700,8 @@ func (e *Event) toCategory() ratelimit.Category {
 		return ratelimit.CategoryLog
 	case checkInType:
 		return ratelimit.CategoryMonitor
+	case traceMetricEvent.Type:
+		return ratelimit.CategoryTraceMetric
 	default:
 		return ratelimit.CategoryUnknown
 	}
@@ -680,4 +759,23 @@ const (
 type Attribute struct {
 	Value any      `json:"value"`
 	Type  AttrType `json:"type"`
+}
+
+type MetricType string
+
+const (
+	MetricTypeInvalid      MetricType = ""
+	MetricTypeCounter      MetricType = "counter"
+	MetricTypeGauge        MetricType = "gauge"
+	MetricTypeDistribution MetricType = "distribution"
+)
+
+type Metric struct {
+	Timestamp  time.Time            `json:"timestamp"`
+	TraceID    TraceID              `json:"trace_id,omitempty"`
+	Type       MetricType           `json:"type"`
+	Name       string               `json:"name,omitempty"`
+	Value      float64              `json:"value"`
+	Unit       string               `json:"unit,omitempty"`
+	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
