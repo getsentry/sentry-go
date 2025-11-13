@@ -203,6 +203,7 @@ func (h *eventHandler) WithAttrs(attrs []slog.Attr) *eventHandler {
 	copy(groupsCopy, h.groups)
 
 	return &eventHandler{
+		ctx:    h.ctx,
 		option: h.option,
 		attrs:  appendAttrsToGroup(h.groups, h.attrs, attrs...),
 		groups: groupsCopy,
@@ -220,6 +221,7 @@ func (h *eventHandler) WithGroup(name string) *eventHandler {
 	newGroups = append(newGroups, name)
 
 	return &eventHandler{
+		ctx:    h.ctx,
 		option: h.option,
 		attrs:  h.attrs,
 		groups: newGroups,
