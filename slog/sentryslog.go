@@ -109,6 +109,7 @@ func (o Option) NewSentryHandler(ctx context.Context) slog.Handler {
 	logger.SetAttributes(attribute.String("sentry.origin", SlogOrigin))
 
 	eventHandler := &eventHandler{
+		ctx:    ctx,
 		option: o,
 		attrs:  []slog.Attr{},
 		groups: []string{},
@@ -164,6 +165,7 @@ func (h *SentryHandler) WithGroup(name string) slog.Handler {
 }
 
 type eventHandler struct {
+	ctx    context.Context
 	option Option
 	attrs  []slog.Attr
 	groups []string
@@ -179,7 +181,10 @@ func (h *eventHandler) Enabled(_ context.Context, level slog.Level) bool {
 }
 
 func (h *eventHandler) Handle(ctx context.Context, record slog.Record) error {
-	hub := sentry.CurrentHub()
+	hub := sentry.GetHubFromContext(h.ctx)
+	if hub == nil {
+		hub = sentry.CurrentHub()
+	}
 	if hubFromContext := sentry.GetHubFromContext(ctx); hubFromContext != nil {
 		hub = hubFromContext
 	} else if h.option.Hub != nil {
@@ -198,6 +203,7 @@ func (h *eventHandler) WithAttrs(attrs []slog.Attr) *eventHandler {
 	copy(groupsCopy, h.groups)
 
 	return &eventHandler{
+		ctx:    h.ctx,
 		option: h.option,
 		attrs:  appendAttrsToGroup(h.groups, h.attrs, attrs...),
 		groups: groupsCopy,
@@ -215,6 +221,7 @@ func (h *eventHandler) WithGroup(name string) *eventHandler {
 	newGroups = append(newGroups, name)
 
 	return &eventHandler{
+		ctx:    h.ctx,
 		option: h.option,
 		attrs:  h.attrs,
 		groups: newGroups,
