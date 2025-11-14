@@ -188,7 +188,7 @@ func (s *Scheduler) processNextBatch() {
 	var bufferToProcess Storage[protocol.EnvelopeItemConvertible]
 	var categoryToProcess ratelimit.Category
 	for category, buffer := range s.buffers {
-		if buffer.Priority() == priority && !s.isRateLimited(category) && buffer.IsReadyToFlush() {
+		if buffer.Priority() == priority && !s.isRateLimited(category) && buffer.IsReadyToFlush() && s.transport.HasCapacity() {
 			bufferToProcess = buffer
 			categoryToProcess = category
 			break

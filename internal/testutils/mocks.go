@@ -17,6 +17,7 @@ type MockTelemetryTransport struct {
 	mu               sync.Mutex
 	sendCount        int64
 	rateLimitedCalls int64
+	capacity         int
 }
 
 func (m *MockTelemetryTransport) SendEnvelope(envelope *protocol.Envelope) error {
@@ -41,6 +42,15 @@ func (m *MockTelemetryTransport) IsRateLimited(category ratelimit.Category) bool
 		return false
 	}
 	return m.rateLimited[string(category)]
+}
+
+func (m *MockTelemetryTransport) HasCapacity() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.capacity == 0 {
+		return true
+	}
+	return int(m.sendCount) < m.capacity
 }
 
 func (m *MockTelemetryTransport) Flush(_ time.Duration) bool {
@@ -90,4 +100,5 @@ func (m *MockTelemetryTransport) Reset() {
 	m.rateLimited = nil
 	atomic.StoreInt64(&m.sendCount, 0)
 	atomic.StoreInt64(&m.rateLimitedCalls, 0)
+	m.capacity = 0
 }

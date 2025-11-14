@@ -201,6 +201,8 @@ func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
 	return t.disabled(category)
 }
 
+func (t *SyncTransport) HasCapacity() bool { return true }
+
 func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *protocol.Envelope) error {
 	if envelope == nil || len(envelope.Items) == 0 {
 		return ErrEmptyEnvelope
@@ -343,6 +345,19 @@ func (t *AsyncTransport) start() {
 		t.wg.Add(1)
 		go t.worker()
 	})
+}
+
+// HasCapacity reports whether the async transport queue appears to have space
+// for at least one more envelope. This is a best-effort, non-blocking check.
+func (t *AsyncTransport) HasCapacity() bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	select {
+	case <-t.done:
+		return false
+	default:
+	}
+	return len(t.queue) < cap(t.queue)
 }
 
 func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
@@ -553,3 +568,5 @@ func (t *NoopTransport) FlushWithContext(_ context.Context) bool {
 func (t *NoopTransport) Close() {
 	// Nothing to close
 }
+
+func (t *NoopTransport) HasCapacity() bool { return true }
