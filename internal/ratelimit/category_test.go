@@ -88,8 +88,8 @@ func TestCategory_GetPriority(t *testing.T) {
 	}{
 		{CategoryError, PriorityCritical},
 		{CategoryMonitor, PriorityHigh},
-		{CategoryLog, PriorityMedium},
-		{CategoryTransaction, PriorityLow},
+		{CategoryLog, PriorityLow},
+		{CategoryTransaction, PriorityMedium},
 		{Category("unknown"), PriorityMedium},
 	}
 

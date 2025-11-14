@@ -543,13 +543,22 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 }
 
 func Test_batchLogger_Shutdown(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
+	mockTransport := &MockTransport{}
+	mockClient, _ := NewClient(ClientOptions{
+		Dsn:                    testDsn,
+		Transport:              mockTransport,
+		EnableLogs:             true,
+		DisableTelemetryBuffer: true,
+	})
+	hub := CurrentHub()
+	hub.BindClient(mockClient)
+	ctx := SetHubOnContext(context.Background(), hub)
 	l := NewLogger(ctx)
 	for i := 0; i < 3; i++ {
 		l.Info().WithCtx(ctx).Emit("test")
 	}
 
-	hub := GetHubFromContext(ctx)
+	hub = GetHubFromContext(ctx)
 	hub.Client().batchLogger.Shutdown()
 
 	events := mockTransport.Events()
