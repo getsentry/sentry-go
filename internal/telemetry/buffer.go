@@ -10,8 +10,8 @@ import (
 
 const defaultCapacity = 100
 
-// Buffer is a thread-safe ring buffer with overflow policies.
-type Buffer[T any] struct {
+// RingBuffer is a thread-safe ring buffer with overflow policies.
+type RingBuffer[T any] struct {
 	mu       sync.RWMutex
 	items    []T
 	head     int
@@ -32,7 +32,7 @@ type Buffer[T any] struct {
 	onDropped func(item T, reason string)
 }
 
-func NewBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration) *Buffer[T] {
+func NewRingBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration) *RingBuffer[T] {
 	if capacity <= 0 {
 		capacity = defaultCapacity
 	}
@@ -45,7 +45,7 @@ func NewBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy 
 		timeout = 0
 	}
 
-	return &Buffer[T]{
+	return &RingBuffer[T]{
 		items:          make([]T, capacity),
 		capacity:       capacity,
 		category:       category,
@@ -57,13 +57,13 @@ func NewBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy 
 	}
 }
 
-func (b *Buffer[T]) SetDroppedCallback(callback func(item T, reason string)) {
+func (b *RingBuffer[T]) SetDroppedCallback(callback func(item T, reason string)) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.onDropped = callback
 }
 
-func (b *Buffer[T]) Offer(item T) bool {
+func (b *RingBuffer[T]) Offer(item T) bool {
 	atomic.AddInt64(&b.offered, 1)
 
 	b.mu.Lock()
@@ -105,7 +105,7 @@ func (b *Buffer[T]) Offer(item T) bool {
 	}
 }
 
-func (b *Buffer[T]) Poll() (T, bool) {
+func (b *RingBuffer[T]) Poll() (T, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -122,7 +122,7 @@ func (b *Buffer[T]) Poll() (T, bool) {
 	return item, true
 }
 
-func (b *Buffer[T]) PollBatch(maxItems int) []T {
+func (b *RingBuffer[T]) PollBatch(maxItems int) []T {
 	if maxItems <= 0 {
 		return nil
 	}
@@ -152,7 +152,7 @@ func (b *Buffer[T]) PollBatch(maxItems int) []T {
 	return result
 }
 
-func (b *Buffer[T]) Drain() []T {
+func (b *RingBuffer[T]) Drain() []T {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -178,7 +178,7 @@ func (b *Buffer[T]) Drain() []T {
 	return result
 }
 
-func (b *Buffer[T]) Peek() (T, bool) {
+func (b *RingBuffer[T]) Peek() (T, bool) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -190,61 +190,61 @@ func (b *Buffer[T]) Peek() (T, bool) {
 	return b.items[b.head], true
 }
 
-func (b *Buffer[T]) Size() int {
+func (b *RingBuffer[T]) Size() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.size
 }
 
-func (b *Buffer[T]) Capacity() int {
+func (b *RingBuffer[T]) Capacity() int {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.capacity
 }
 
-func (b *Buffer[T]) Category() ratelimit.Category {
+func (b *RingBuffer[T]) Category() ratelimit.Category {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.category
 }
 
-func (b *Buffer[T]) Priority() ratelimit.Priority {
+func (b *RingBuffer[T]) Priority() ratelimit.Priority {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.priority
 }
 
-func (b *Buffer[T]) IsEmpty() bool {
+func (b *RingBuffer[T]) IsEmpty() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.size == 0
 }
 
-func (b *Buffer[T]) IsFull() bool {
+func (b *RingBuffer[T]) IsFull() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.size == b.capacity
 }
 
-func (b *Buffer[T]) Utilization() float64 {
+func (b *RingBuffer[T]) Utilization() float64 {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return float64(b.size) / float64(b.capacity)
 }
 
-func (b *Buffer[T]) OfferedCount() int64 {
+func (b *RingBuffer[T]) OfferedCount() int64 {
 	return atomic.LoadInt64(&b.offered)
 }
 
-func (b *Buffer[T]) DroppedCount() int64 {
+func (b *RingBuffer[T]) DroppedCount() int64 {
 	return atomic.LoadInt64(&b.dropped)
 }
 
-func (b *Buffer[T]) AcceptedCount() int64 {
+func (b *RingBuffer[T]) AcceptedCount() int64 {
 	return b.OfferedCount() - b.DroppedCount()
 }
 
-func (b *Buffer[T]) DropRate() float64 {
+func (b *RingBuffer[T]) DropRate() float64 {
 	offered := b.OfferedCount()
 	if offered == 0 {
 		return 0.0
@@ -252,7 +252,7 @@ func (b *Buffer[T]) DropRate() float64 {
 	return float64(b.DroppedCount()) / float64(offered)
 }
 
-func (b *Buffer[T]) Clear() {
+func (b *RingBuffer[T]) Clear() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -266,7 +266,7 @@ func (b *Buffer[T]) Clear() {
 	b.size = 0
 }
 
-func (b *Buffer[T]) GetMetrics() BufferMetrics {
+func (b *RingBuffer[T]) GetMetrics() BufferMetrics {
 	b.mu.RLock()
 	size := b.size
 	util := float64(b.size) / float64(b.capacity)
@@ -286,7 +286,7 @@ func (b *Buffer[T]) GetMetrics() BufferMetrics {
 	}
 }
 
-func (b *Buffer[T]) IsReadyToFlush() bool {
+func (b *RingBuffer[T]) IsReadyToFlush() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -305,13 +305,13 @@ func (b *Buffer[T]) IsReadyToFlush() bool {
 	return false
 }
 
-func (b *Buffer[T]) MarkFlushed() {
+func (b *RingBuffer[T]) MarkFlushed() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.lastFlushTime = time.Now()
 }
 
-func (b *Buffer[T]) PollIfReady() []T {
+func (b *RingBuffer[T]) PollIfReady() []T {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 

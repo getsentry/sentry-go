@@ -1,11 +1,11 @@
 module github.com/getsentry/sentry-go/negroni
 
-go 1.23
+go 1.23.0
 
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.36.1
+	github.com/getsentry/sentry-go v0.37.0
 	github.com/google/go-cmp v0.5.9
 	github.com/urfave/negroni/v3 v3.1.1
 )
