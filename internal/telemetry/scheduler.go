@@ -209,7 +209,7 @@ func (s *Scheduler) processItems(buffer Storage[protocol.EnvelopeItemConvertible
 		items = buffer.PollIfReady()
 	}
 
-	// drop the current batch if rate-limited
+	// drop the current batch if rate-limited or if transport is full
 	if len(items) == 0 || s.isRateLimited(category) || !s.transport.HasCapacity() {
 		return
 	}
