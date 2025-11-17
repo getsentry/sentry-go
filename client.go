@@ -625,6 +625,9 @@ func (client *Client) Close() {
 	if client.telemetryBuffer != nil {
 		client.telemetryBuffer.Close(5 * time.Second)
 	}
+	if client.batchLogger != nil {
+		client.batchLogger.Shutdown()
+	}
 	client.Transport.Close()
 }
 
