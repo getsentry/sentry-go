@@ -736,7 +736,12 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 		statusCode        interface{}
 		expectDrop        bool
 	}{
-		"No ignored codes": {
+		"Default behavior: ignoreStatusCodes = nil, should drop 404s": {
+			statusCode:        404,
+			ignoreStatusCodes: nil,
+			expectDrop:        true,
+		},
+		"Specify No ignored codes": {
 			statusCode:        404,
 			ignoreStatusCodes: [][]int{},
 			expectDrop:        false,

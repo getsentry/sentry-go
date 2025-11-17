@@ -395,3 +395,22 @@ func TestConvertErrorToExceptions_UnhashableError_NoPanic(t *testing.T) {
 	err := unhashableSliceError{"a", "b"}
 	_ = convertErrorToExceptions(err, -1)
 }
+
+type wrapper struct {
+	V any
+}
+
+func (w wrapper) Error() string {
+	return ""
+}
+
+func TestConvertErrorToExceptions_UnhashableWrapper_NoPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("convertErrorToExceptions panicked for unhashable error: %v", r)
+		}
+	}()
+
+	var err error = wrapper{unhashableSliceError{"a", "b"}}
+	_ = convertErrorToExceptions(err, -1)
+}
