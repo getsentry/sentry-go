@@ -98,7 +98,7 @@ func (s *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 		return nil, err
 	}
 
-	return &sentryTx{originalTx: tx, ctx: s.ctx, config: s.config}, nil
+	return &sentryTx{originalTx: tx, ctx: ctx, config: s.config}, nil
 }
 
 //nolint:dupl
@@ -143,6 +143,10 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 	}
 
 	parentSpan := sentry.SpanFromContext(ctx)
+	if parentSpan == nil && s.ctx != nil {
+		parentSpan = sentry.SpanFromContext(s.ctx)
+	}
+
 	if parentSpan == nil {
 		return queryerContext.QueryContext(ctx, query, args)
 	}
@@ -203,6 +207,10 @@ func (s *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 	}
 
 	parentSpan := sentry.SpanFromContext(ctx)
+	if parentSpan == nil && s.ctx != nil {
+		parentSpan = sentry.SpanFromContext(s.ctx)
+	}
+
 	if parentSpan == nil {
 		return execerContext.ExecContext(ctx, query, args)
 	}

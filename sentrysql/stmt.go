@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"errors"
 
+	"github.com/aldy505/sentry-go"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -82,11 +83,14 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 			return nil, err
 		}
 
-		s.ctx = ctx
 		return s.Exec(values)
 	}
 
-	parentSpan := sentry.SpanFromContext(s.ctx)
+	parentSpan := sentry.SpanFromContext(ctx)
+	if parentSpan == nil && s.ctx != nil {
+		parentSpan = sentry.SpanFromContext(s.ctx)
+	}
+
 	if parentSpan == nil {
 		return stmtExecContext.ExecContext(ctx, args)
 	}
@@ -116,11 +120,14 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 			return nil, err
 		}
 
-		s.ctx = ctx
 		return s.Query(values)
 	}
 
-	parentSpan := sentry.SpanFromContext(s.ctx)
+	parentSpan := sentry.SpanFromContext(ctx)
+	if parentSpan == nil && s.ctx != nil {
+		parentSpan = sentry.SpanFromContext(s.ctx)
+	}
+
 	if parentSpan == nil {
 		return stmtQueryContext.QueryContext(ctx, args)
 	}
