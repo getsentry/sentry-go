@@ -626,7 +626,7 @@ func (c *fakeConn) prepareInsert(ctx context.Context, stmt *fakeStmt, parts []st
 				if err != nil {
 					return nil, err
 				}
-				cursor, err := (substmt.(driver.StmtQueryContext)).QueryContext(ctx, []driver.NamedValue{})
+				cursor, err := (substmt.(driver.StmtQueryContext)).QueryContext(span.Context(), []driver.NamedValue{})
 				substmt.Close()
 				if err != nil {
 					return nil, err

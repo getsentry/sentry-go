@@ -151,7 +151,7 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 	s.config.SetData(span, query)
 	defer span.Finish()
 
-	rows, err := queryerContext.QueryContext(ctx, query, args)
+	rows, err := queryerContext.QueryContext(span.Context(), query, args)
 	if err != nil {
 		span.Status = sentry.SpanStatusInternalError
 		return nil, err
@@ -211,7 +211,7 @@ func (s *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 	s.config.SetData(span, query)
 	defer span.Finish()
 
-	rows, err := execerContext.ExecContext(ctx, query, args)
+	rows, err := execerContext.ExecContext(span.Context(), query, args)
 	if err != nil {
 		span.Status = sentry.SpanStatusInternalError
 		return nil, err

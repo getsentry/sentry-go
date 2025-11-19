@@ -95,7 +95,7 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 	s.config.SetData(span, s.query)
 	defer span.Finish()
 
-	result, err := stmtExecContext.ExecContext(ctx, args)
+	result, err := stmtExecContext.ExecContext(span.Context(), args)
 	if err != nil {
 		span.Status = sentry.SpanStatusInternalError
 		return nil, err
@@ -129,7 +129,7 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 	s.config.SetData(span, s.query)
 	defer span.Finish()
 
-	rows, err := stmtQueryContext.QueryContext(ctx, args)
+	rows, err := stmtQueryContext.QueryContext(span.Context(), args)
 	if err != nil {
 		span.Status = sentry.SpanStatusInternalError
 		return nil, err
