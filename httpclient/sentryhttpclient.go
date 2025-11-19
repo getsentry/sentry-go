@@ -121,6 +121,7 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	response, err := s.originalRoundTripper.RoundTrip(request)
 	if err != nil {
 		span.Status = sentry.SpanStatusInternalError
+		return response, err
 	}
 
 	if response != nil {
@@ -134,6 +135,10 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 
 // SentryHTTPClient provides a default HTTP client with SentryRoundTripper included.
 // This can be used directly to perform HTTP request.
+//
+// NOTE: `TracePropagationTargets` from `ClientOptions` will not be respected
+// because Sentry is initialized after the package import. To properly use this,
+// consider using `NewSentryRoundTripper` instead.
 var Client = &http.Client{
 	Transport: NewSentryRoundTripper(http.DefaultTransport),
 }
