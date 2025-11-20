@@ -1,6 +1,6 @@
 module github.com/getsentry/sentry-go/sentrysql
 
-go 1.21
+go 1.23.0
 
 replace github.com/getsentry/sentry-go => ../
 

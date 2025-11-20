@@ -5,7 +5,6 @@ import (
 	"database/sql/driver"
 	"errors"
 
-	"github.com/aldy505/sentry-go"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -83,6 +82,7 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 			return nil, err
 		}
 
+		s.ctx = ctx
 		return s.Exec(values)
 	}
 
