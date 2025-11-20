@@ -461,17 +461,4 @@ func TestDefaults(t *testing.T) {
 			res.Body.Close()
 		}
 	})
-
-	t.Run("Create a regular outgoing HTTP request with default SentryHttpClient", func(t *testing.T) {
-		client := sentryhttpclient.Client
-
-		res, err := client.Head("https://sentry.io")
-		if err != nil {
-			t.Error(err)
-		}
-
-		if res.Body != nil {
-			res.Body.Close()
-		}
-	})
 }
