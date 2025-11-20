@@ -26,6 +26,14 @@ var logEvent = struct {
 	"application/vnd.sentry.items.log+json",
 }
 
+var traceMetricEvent = struct {
+	Type        string
+	ContentType string
+}{
+	"trace_metric",
+	"application/vnd.sentry.items.trace-metric+json",
+}
+
 // Level marks the severity of the event.
 type Level string
 
@@ -139,6 +147,30 @@ type LogEntry interface {
 	Emit(args ...interface{})
 	// Emitf emits the LogEntry using a format string and arguments.
 	Emitf(format string, args ...interface{})
+}
+
+type MeterOptions struct {
+	// Attributes are key/value pairs that will be added to the metric.
+	// The attributes set here will take precedence over the attributes
+	// set from the Meter.
+	Attributes []attribute.Builder
+	// The unit of measurements, for "gauge" and "distribution" metrics.
+	Unit string
+}
+
+// Numbers provides a generic constraint for numeric types.
+type Numbers interface {
+	int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64 | float32 | float64
+}
+
+type Meter[T Numbers] interface {
+	// GetCtx returns the [context.Context] set on the meter.
+	GetCtx() context.Context
+	// SetAttributes allows attaching parameters to the meter using the attribute API.
+	SetAttributes(...attribute.Builder)
+	Count(name string, count int64, options MeterOptions)
+	Gauge(name string, value T, options MeterOptions)
+	Distribution(name string, sample float64, options MeterOptions)
 }
 
 // Attachment allows associating files with your events to aid in investigation.
@@ -687,6 +719,8 @@ func (e *Event) toCategory() ratelimit.Category {
 		return ratelimit.CategoryLog
 	case checkInType:
 		return ratelimit.CategoryMonitor
+	case traceMetricEvent.Type:
+		return ratelimit.CategoryTraceMetric
 	default:
 		return ratelimit.CategoryUnknown
 	}
@@ -807,4 +841,23 @@ const (
 type Attribute struct {
 	Value any      `json:"value"`
 	Type  AttrType `json:"type"`
+}
+
+type MetricType string
+
+const (
+	MetricTypeInvalid      MetricType = ""
+	MetricTypeCounter      MetricType = "counter"
+	MetricTypeGauge        MetricType = "gauge"
+	MetricTypeDistribution MetricType = "distribution"
+)
+
+type Metric struct {
+	Timestamp  time.Time            `json:"timestamp"`
+	TraceID    TraceID              `json:"trace_id,omitempty"`
+	Type       MetricType           `json:"type"`
+	Name       string               `json:"name,omitempty"`
+	Value      float64              `json:"value"`
+	Unit       string               `json:"unit,omitempty"`
+	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
