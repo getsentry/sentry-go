@@ -170,7 +170,7 @@ func (s *Scheduler) run() {
 
 func (s *Scheduler) hasWork() bool {
 	for _, buffer := range s.buffers {
-		if !buffer.IsEmpty() {
+		if buffer.IsReadyToFlush() {
 			return true
 		}
 	}
