@@ -5,7 +5,7 @@ go 1.23.0
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.38.0
+	github.com/getsentry/sentry-go v0.39.0
 	github.com/google/go-cmp v0.5.9
 	github.com/valyala/fasthttp v1.52.0
 )
