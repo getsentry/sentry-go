@@ -758,7 +758,32 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if client.telemetryBuffer != nil {
-		if !client.telemetryBuffer.Add(event) {
+		eventToBuffer := *event
+		if event.Extra != nil {
+			eventToBuffer.Extra = deepCopyMapStringAny(event.Extra)
+		}
+		if event.Contexts != nil {
+			copied := make(map[string]Context, len(event.Contexts))
+			for k, v := range event.Contexts {
+				copied[k] = deepCopyContext(v)
+			}
+			eventToBuffer.Contexts = copied
+		}
+		if len(event.Breadcrumbs) > 0 {
+			bc := make([]*Breadcrumb, 0, len(event.Breadcrumbs))
+			for _, b := range event.Breadcrumbs {
+				bc = append(bc, deepCopyBreadcrumb(b))
+			}
+			eventToBuffer.Breadcrumbs = bc
+		}
+		if event.Modules != nil {
+			eventToBuffer.Modules = deepCopyMapStringString(event.Modules)
+		}
+		if event.User.Data != nil {
+			eventToBuffer.User.Data = deepCopyMapStringString(event.User.Data)
+		}
+
+		if !client.telemetryBuffer.Add(&eventToBuffer) {
 			debuglog.Println("Event dropped: telemetry buffer full or unavailable")
 		}
 	} else {

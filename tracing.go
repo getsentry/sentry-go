@@ -883,7 +883,7 @@ func (tc TraceContext) Map() map[string]interface{} {
 	}
 
 	if len(tc.Data) > 0 {
-		m["data"] = tc.Data
+		m["data"] = deepCopyMapStringAny(tc.Data)
 	}
 
 	return m
