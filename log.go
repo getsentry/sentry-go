@@ -192,8 +192,12 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 
 	if log != nil {
 		if l.client.telemetryBuffer != nil {
-			if !l.client.telemetryBuffer.Add(log) {
-				debuglog.Print("Dropping event: log buffer full or category missing")
+			if item, err := log.ToEnvelopeItem(); err == nil && item != nil {
+				if !l.client.telemetryBuffer.Add(*item) {
+					debuglog.Print("Dropping event: log buffer full or category missing")
+				}
+			} else {
+				debuglog.Printf("Failed to serialize log: %v", err)
 			}
 		} else if l.client.batchLogger != nil {
 			l.client.batchLogger.logCh <- *log

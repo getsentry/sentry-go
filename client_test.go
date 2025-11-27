@@ -1052,7 +1052,12 @@ func TestClient_SetupTelemetryBuffer_WithDSN(t *testing.T) {
 		t.Fatalf("expected internalAsyncTransportAdapter, got %T", client.Transport)
 	}
 
-	if !client.telemetryBuffer.Add(NewEvent()) {
+	ev := NewEvent()
+	item, err := ev.ToEnvelopeItem()
+	if err != nil || item == nil {
+		t.Fatalf("unexpected serialization error: %v", err)
+	}
+	if !client.telemetryBuffer.Add(*item) {
 		t.Fatal("expected Add to succeed with default buffers")
 	}
 }

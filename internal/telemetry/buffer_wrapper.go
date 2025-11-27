@@ -15,7 +15,7 @@ type Buffer struct {
 
 // NewBuffer creates a new Buffer with the given configuration.
 func NewBuffer(
-	storage map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible],
+	storage map[ratelimit.Category]Storage[protocol.EnvelopeItem],
 	transport protocol.TelemetryTransport,
 	dsn *protocol.Dsn,
 	sdkInfo *protocol.SdkInfo,
@@ -28,8 +28,8 @@ func NewBuffer(
 	}
 }
 
-// Add adds an EnvelopeItemConvertible to the appropriate buffer based on its category.
-func (b *Buffer) Add(item protocol.EnvelopeItemConvertible) bool {
+// Add adds an EnvelopeItem to the appropriate buffer based on its category.
+func (b *Buffer) Add(item protocol.EnvelopeItem) bool {
 	return b.scheduler.Add(item)
 }
 

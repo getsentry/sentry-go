@@ -23,10 +23,10 @@ func TestBuffer_Add_MissingCategory(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
 	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
-	storage := map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible]{}
+	storage := map[ratelimit.Category]Storage[protocol.EnvelopeItem]{}
 
 	b := NewBuffer(storage, transport, dsn, sdk)
-	ok := b.Add(bwItem{id: "1"})
+	ok := b.Add(*(&protocol.EnvelopeItem{Header: &protocol.EnvelopeItemHeader{Type: protocol.EnvelopeItemTypeEvent}, Payload: []byte(`{}`)}))
 	if ok {
 		t.Fatal("expected Add to return false without storage for category")
 	}
@@ -37,11 +37,12 @@ func TestBuffer_AddAndFlush_Sends(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
 	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
-	storage := map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible]{
-		ratelimit.CategoryError: NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
+	storage := map[ratelimit.Category]Storage[protocol.EnvelopeItem]{
+		ratelimit.CategoryError: NewRingBuffer[protocol.EnvelopeItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
 	}
 	b := NewBuffer(storage, transport, dsn, sdk)
-	if !b.Add(bwItem{id: "1"}) {
+	item := protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, []byte(`{"message":"ok"}`))
+	if !b.Add(*item) {
 		t.Fatal("add failed")
 	}
 	if ok := b.Flush(testutils.FlushTimeout()); !ok {

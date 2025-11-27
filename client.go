@@ -439,11 +439,11 @@ func (client *Client) setupTelemetryBuffer() {
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
-	storage := map[ratelimit.Category]telemetry.Storage[protocol.EnvelopeItemConvertible]{
-		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
-		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+	storage := map[ratelimit.Category]telemetry.Storage[protocol.EnvelopeItem]{
+		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.EnvelopeItem](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.EnvelopeItem](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.EnvelopeItem](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.EnvelopeItem](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
 	}
 
 	sdkInfo := &protocol.SdkInfo{
@@ -756,8 +756,12 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if client.telemetryBuffer != nil {
-		if !client.telemetryBuffer.Add(event) {
-			debuglog.Println("Event dropped: telemetry buffer full or unavailable")
+		if item, err := event.ToEnvelopeItem(); err == nil && item != nil {
+			if !client.telemetryBuffer.Add(*item) {
+				debuglog.Println("Event dropped: telemetry buffer full or unavailable")
+			}
+		} else {
+			debuglog.Printf("Failed to serialize event for telemetry buffer: %v", err)
 		}
 	} else {
 		client.Transport.SendEvent(event)
