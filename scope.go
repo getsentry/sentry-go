@@ -327,8 +327,10 @@ func (scope *Scope) Clone() *Scope {
 
 	clone := NewScope()
 	clone.user = scope.user
-	clone.breadcrumbs = make([]*Breadcrumb, len(scope.breadcrumbs))
-	copy(clone.breadcrumbs, scope.breadcrumbs)
+	clone.breadcrumbs = make([]*Breadcrumb, 0, len(scope.breadcrumbs))
+	for _, b := range scope.breadcrumbs {
+		clone.breadcrumbs = append(clone.breadcrumbs, deepCopyBreadcrumb(b))
+	}
 	clone.attachments = make([]*Attachment, len(scope.attachments))
 	copy(clone.attachments, scope.attachments)
 	for key, value := range scope.tags {
@@ -338,7 +340,7 @@ func (scope *Scope) Clone() *Scope {
 		clone.contexts[key] = cloneContext(value)
 	}
 	for key, value := range scope.extra {
-		clone.extra[key] = value
+		clone.extra[key] = deepCopyValue(value)
 	}
 	clone.fingerprint = make([]string, len(scope.fingerprint))
 	copy(clone.fingerprint, scope.fingerprint)
@@ -370,7 +372,11 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 	defer scope.mu.RUnlock()
 
 	if len(scope.breadcrumbs) > 0 {
-		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
+		copied := make([]*Breadcrumb, 0, len(scope.breadcrumbs))
+		for _, b := range scope.breadcrumbs {
+			copied = append(copied, deepCopyBreadcrumb(b))
+		}
+		event.Breadcrumbs = append(event.Breadcrumbs, copied...)
 	}
 
 	if len(scope.attachments) > 0 {
@@ -438,7 +444,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		}
 
 		for key, value := range scope.extra {
-			event.Extra[key] = value
+			event.Extra[key] = deepCopyValue(value)
 		}
 	}
 
@@ -483,14 +489,6 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 }
 
 // cloneContext returns a new context with keys and values copied from the passed one.
-//
-// Note: a new Context (map) is returned, but the function does NOT do
-// a proper deep copy: if some context values are pointer types (e.g. maps),
-// they won't be properly copied.
 func cloneContext(c Context) Context {
-	res := make(Context, len(c))
-	for k, v := range c {
-		res[k] = v
-	}
-	return res
+	return deepCopyContext(c)
 }
