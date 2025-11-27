@@ -1036,7 +1036,7 @@ func TestClientSetsUpTransport(t *testing.T) {
 	require.IsType(t, &noopTransport{}, client.Transport)
 }
 
-//func TestClient_SetupTelemetryBuffer_WithDSN(t *testing.T) {
+// func TestClient_SetupTelemetryBuffer_WithDSN(t *testing.T) {
 //	client, err := NewClient(ClientOptions{
 //		Dsn: "https://public@localhost/1",
 //	})
