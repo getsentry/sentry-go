@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.40.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.40.0.
+
+### Features
+
+- Disable `DisableTelemetryBuffer` flag and noop Telemetry Buffer ([#1149](https://github.com/getsentry/sentry-go/pull/1149)).
+
 ## 0.39.0
 
 The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.39.0.
