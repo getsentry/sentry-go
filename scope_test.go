@@ -723,8 +723,8 @@ func TestCloneContext(t *testing.T) {
 
 	sliceOriginal := context["key2"].([]string)
 	sliceClone := clone["key2"].([]string)
-	if &sliceOriginal[0] != &sliceClone[0] {
-		t.Error("complex values are not supposed to be copied")
+	if &sliceOriginal[0] == &sliceClone[0] {
+		t.Error("complex values should be deeply copied")
 	}
 }
 
