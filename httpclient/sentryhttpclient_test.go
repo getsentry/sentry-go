@@ -175,7 +175,22 @@ func TestIntegration(t *testing.T) {
 			RequestMethod: "OPTIONS",
 			RequestURL:    "https://example.com",
 			WantError:     false,
-			WantSpan:      nil,
+			WantSpan: &sentry.Span{
+				Data: map[string]interface{}{
+					"http.fragment":                string(""),
+					"http.query":                   string(""),
+					"http.request.method":          string("OPTIONS"),
+					"http.response.status_code":    int(0),
+					"http.response_content_length": int64(0),
+					"server.address":               string("example.com"),
+					"server.port":                  string(""),
+				},
+				Description: "OPTIONS https://example.com",
+				Op:          "http.client",
+				Origin:      "manual",
+				Sampled:     sentry.SampledTrue,
+				Status:      sentry.SpanStatusOK,
+			},
 		},
 		{
 			RequestMethod:      "GET",
