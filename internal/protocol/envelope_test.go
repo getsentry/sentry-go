@@ -46,9 +46,9 @@ func TestEnvelope_ItemsAndSerialization(t *testing.T) {
 			creator:  func(p []byte) *EnvelopeItem { return NewLogItem(1, p) },
 		},
 		{
-			name: "trace_metric",
+			name:     "trace_metric",
 			itemType: EnvelopeItemTypeTraceMetric,
-			payload: []byte(`[{"name":"test.metric","type":"gauge","value":42,"unit":"units","attributes":{"key.string":{"value":"value","type":"string"}}}]`),
+			payload:  []byte(`[{"name":"test.metric","type":"gauge","value":42,"unit":"units","attributes":{"key.string":{"value":"value","type":"string"}}}]`),
 			creator: func(p []byte) *EnvelopeItem {
 				return NewTraceMetricItem(1, p)
 			},
