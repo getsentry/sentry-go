@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.40.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.40.0.
+
+### Bug Fixes
+
+- Disable `DisableTelemetryBuffer` flag and noop Telemetry Buffer, to prevent a panic at runtime ([#1149](https://github.com/getsentry/sentry-go/pull/1149)).
+
+## 0.39.0
+
+The Sentry SDK team is happy to announce the immediate availability of Sentry Go SDK v0.39.0.
+
+### Features
+
+- Drop events from the telemetry buffer when rate-limited or transport is full, allowing the buffer queue to empty itself under load ([#1138](https://github.com/getsentry/sentry-go/pull/1138)).
+
+### Bug Fixes
+
+- Fix scheduler's `hasWork()` method to check if buffers are ready to flush. The previous implementation was causing CPU spikes ([#1143](https://github.com/getsentry/sentry-go/pull/1143)).
+
 ## 0.38.0
 
 ### Breaking Changes
