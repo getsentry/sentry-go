@@ -54,7 +54,7 @@ func (m *BatchMeter) Shutdown() {
 	})
 }
 
-func (m *BatchMeter) run(ctx context.Context) {
+func (m *BatchMeter) run(ctx context.Context) { // nolint:dupl
 	defer m.wg.Done()
 	var metrics []Metric
 	timer := time.NewTimer(batchTimeout)
