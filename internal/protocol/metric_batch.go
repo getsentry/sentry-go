@@ -32,7 +32,7 @@ func (ms Metrics) ToEnvelopeItem() (*EnvelopeItem, error) {
 		return nil, err
 	}
 
-	return NewTraceMetricItem(len(ms), payload), nil
+	return NewTraceMetricItem(len(items), payload), nil
 }
 
 func (Metrics) GetCategory() ratelimit.Category              { return ratelimit.CategoryTraceMetric }
