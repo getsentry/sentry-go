@@ -3,6 +3,7 @@ package sentrysql
 import (
 	"context"
 	"database/sql/driver"
+	"sync"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -22,6 +23,7 @@ type sentryConn struct {
 	originalConn driver.Conn
 	ctx          context.Context
 	config       *sentrySQLConfig
+	sync.Mutex
 }
 
 // Make sure that sentryConn implements the driver.Conn interface.
@@ -54,7 +56,11 @@ func (s *sentryConn) PrepareContext(ctx context.Context, query string) (driver.S
 	connPrepareContext, ok := s.originalConn.(driver.ConnPrepareContext)
 	if !ok {
 		// We can't return driver.ErrSkip here. We should fall back to Prepare without context.
-		s.ctx = ctx
+		if ctx != nil {
+			s.Lock()
+			s.ctx = ctx
+			s.Unlock()
+		}
 		return s.Prepare(query)
 	}
 
@@ -89,7 +95,11 @@ func (s *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 	connBeginTx, ok := s.originalConn.(driver.ConnBeginTx)
 	if !ok {
 		// We can't return driver.ErrSkip here. We should fall back to Begin without context.
-		s.ctx = ctx
+		if ctx != nil {
+			s.Lock()
+			s.ctx = ctx
+			s.Unlock()
+		}
 		return s.Begin()
 	}
 
@@ -138,7 +148,11 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 			return nil, err
 		}
 
-		s.ctx = ctx
+		if ctx != nil {
+			s.Lock()
+			s.ctx = ctx
+			s.Unlock()
+		}
 		return s.Query(query, values)
 	}
 
@@ -202,7 +216,11 @@ func (s *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 			return nil, err
 		}
 
-		s.ctx = ctx
+		if ctx != nil {
+			s.Lock()
+			s.ctx = ctx
+			s.Unlock()
+		}
 		return s.Exec(query, values)
 	}
 

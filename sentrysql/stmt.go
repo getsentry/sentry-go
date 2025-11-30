@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
+	"sync"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -13,6 +14,7 @@ type sentryStmt struct {
 	query        string
 	ctx          context.Context
 	config       *sentrySQLConfig
+	sync.Mutex
 }
 
 // Make sure sentryStmt implements driver.Stmt interface.
@@ -82,7 +84,11 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 			return nil, err
 		}
 
-		s.ctx = ctx
+		if ctx != nil {
+			s.Lock()
+			s.ctx = ctx
+			s.Unlock()
+		}
 		return s.Exec(values)
 	}
 
@@ -119,7 +125,12 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 		if err != nil {
 			return nil, err
 		}
-
+		
+		if ctx != nil {
+			s.Lock()
+			s.ctx = ctx
+			s.Unlock()
+		}
 		return s.Query(values)
 	}
 
