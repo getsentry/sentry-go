@@ -22,12 +22,12 @@ func Test_sentryMeter_Methods(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		metricsFunc func(ctx context.Context, m Meter[float64])
+		metricsFunc func(m Meter[float64])
 		wantEvents  []Event
 	}{
 		{
 			name: "count",
-			metricsFunc: func(ctx context.Context, m Meter[float64]) {
+			metricsFunc: func(m Meter[float64]) {
 				m.Count("test.count", 5, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 				})
@@ -51,7 +51,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "distribution",
-			metricsFunc: func(ctx context.Context, m Meter[float64]) {
+			metricsFunc: func(m Meter[float64]) {
 				m.Distribution("test.distribution", 3.14, MeterOptions{
 					Attributes: []attribute.Builder{attribute.Int("key.int", 42)},
 					Unit:       "ms",
@@ -76,7 +76,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "gauge",
-			metricsFunc: func(ctx context.Context, m Meter[float64]) {
+			metricsFunc: func(m Meter[float64]) {
 				m.Gauge("test.gauge", 2.71, MeterOptions{
 					Attributes: []attribute.Builder{attribute.Float64("key.float", 1.618)},
 					Unit:       "requests",
@@ -101,7 +101,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "zero count",
-			metricsFunc: func(ctx context.Context, m Meter[float64]) {
+			metricsFunc: func(m Meter[float64]) {
 				m.Count("test.zero.count", 0, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 				})
@@ -125,7 +125,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "zero distribution",
-			metricsFunc: func(ctx context.Context, m Meter[float64]) {
+			metricsFunc: func(m Meter[float64]) {
 				m.Distribution("test.zero.distribution", 0, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "bytes",
@@ -150,7 +150,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "zero gauge",
-			metricsFunc: func(ctx context.Context, m Meter[float64]) {
+			metricsFunc: func(m Meter[float64]) {
 				m.Gauge("test.zero.gauge", 0, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "connections",
@@ -175,7 +175,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "negative count",
-			metricsFunc: func(ctx context.Context, m Meter[float64]) {
+			metricsFunc: func(m Meter[float64]) {
 				m.Count("test.negative.count", -10, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 				})
@@ -199,7 +199,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "negative distribution",
-			metricsFunc: func(ctx context.Context, m Meter[float64]) {
+			metricsFunc: func(m Meter[float64]) {
 				m.Distribution("test.negative.distribution", -2.5, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "ms",
@@ -224,7 +224,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "negative gauge",
-			metricsFunc: func(ctx context.Context, m Meter[float64]) {
+			metricsFunc: func(m Meter[float64]) {
 				m.Gauge("test.negative.gauge", -5, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "connections",
@@ -254,7 +254,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
 			meter := NewMeter[float64](ctx)
 
-			tt.metricsFunc(ctx, meter)
+			tt.metricsFunc(meter)
 			Flush(testutils.FlushTimeout())
 
 			opts := cmp.Options{cmpopts.IgnoreFields(Metric{}, "Timestamp")}
