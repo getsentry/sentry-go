@@ -269,6 +269,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 				if diff := cmp.Diff(tt.wantEvents[i].Metrics, event.Metrics, opts); diff != "" {
 					t.Errorf("event[%d] Metrics mismatch (-want +got):\n%s", i, diff)
 				}
+				mockTransport.events = nil
 			}
 		})
 	}
