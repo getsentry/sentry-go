@@ -46,6 +46,7 @@ const (
 	EnvelopeItemTypeCheckIn     EnvelopeItemType = "check_in"
 	EnvelopeItemTypeAttachment  EnvelopeItemType = "attachment"
 	EnvelopeItemTypeLog         EnvelopeItemType = "log"
+	EnvelopeItemTypeTraceMetric EnvelopeItemType = "trace_metric"
 )
 
 // EnvelopeItemHeader represents the header of an envelope item.
@@ -207,6 +208,20 @@ func NewLogItem(itemCount int, payload []byte) *EnvelopeItem {
 			Length:      &length,
 			ItemCount:   &itemCount,
 			ContentType: "application/vnd.sentry.items.log+json",
+		},
+		Payload: payload,
+	}
+}
+
+// NewTraceMetricItem creates a new envelope item for trace metrics.
+func NewTraceMetricItem(itemCount int, payload []byte) *EnvelopeItem {
+	length := len(payload)
+	return &EnvelopeItem{
+		Header: &EnvelopeItemHeader{
+			Type:        EnvelopeItemTypeTraceMetric,
+			Length:      &length,
+			ItemCount:   &itemCount,
+			ContentType: "application/vnd.sentry.items.trace-metric+json",
 		},
 		Payload: payload,
 	}

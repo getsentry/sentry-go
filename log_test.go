@@ -31,6 +31,7 @@ func setupMockTransport() (context.Context, *MockTransport) {
 		ServerName:    "test-server",
 		EnableLogs:    true,
 		EnableTracing: true,
+		EnableMetrics: true,
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"

@@ -122,6 +122,6 @@ func (m *BatchMeter) processEvent(metrics []Metric) {
 	event.Timestamp = time.Now()
 	event.EventID = EventID(uuid())
 	event.Type = traceMetricEvent.Type
-	m.client.telemetryBuffer.Add()
+	event.Metrics = metrics
 	m.client.Transport.SendEvent(event)
 }

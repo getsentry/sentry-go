@@ -785,6 +785,21 @@ func TestEvent_ToEnvelope(t *testing.T) {
 			dsn:       nil,
 			wantError: false,
 		},
+		{
+			name: "metric event",
+			event: &Event{
+				EventID: "12345678901234567890123456789012",
+				Type:    "trace_metric",
+				Metrics: []Metric{
+					{
+						Name:      "test.metric",
+						Value:     42,
+						Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+						Type:      MetricTypeCounter,
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {

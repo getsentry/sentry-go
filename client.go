@@ -164,6 +164,9 @@ type ClientOptions struct {
 	BeforeSendTransaction func(event *Event, hint *EventHint) *Event
 	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
+	// BeforeSendMetric is called before metric events are sent to Sentry.
+	// You can use it to mutate the metric or return nil to discard it.
+	BeforeSendMetric func(metric *Metric) *Metric
 	// Integrations to be installed on the current Client, receives default
 	// integrations.
 	Integrations func([]Integration) []Integration
@@ -238,6 +241,8 @@ type ClientOptions struct {
 	Tags map[string]string
 	// EnableLogs controls when logs should be emitted.
 	EnableLogs bool
+	// EnableMetrics controls when metrics should be emitted.
+	EnableMetrics bool
 	// TraceIgnoreStatusCodes is a list of HTTP status codes that should not be traced.
 	// Each element can be either:
 	// - A single-element slice [code] for a specific status code
@@ -274,6 +279,7 @@ type Client struct {
 	// not supported, create a new client instead.
 	Transport       Transport
 	batchLogger     *BatchLogger
+	batchMeter      *BatchMeter
 	telemetryBuffer *telemetry.Buffer
 }
 
@@ -387,6 +393,11 @@ func NewClient(options ClientOptions) (*Client, error) {
 	if options.EnableLogs {
 		client.batchLogger = NewBatchLogger(&client)
 		client.batchLogger.Start()
+	}
+
+	if options.EnableMetrics {
+		client.batchMeter = NewBatchMeter(&client)
+		client.batchMeter.Start()
 	}
 
 	client.setupIntegrations()
@@ -597,7 +608,7 @@ func (client *Client) RecoverWithContext(
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
-	if client.batchLogger != nil || client.telemetryBuffer != nil {
+	if client.batchLogger != nil || client.batchMeter != nil || client.telemetryBuffer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		return client.FlushWithContext(ctx)
@@ -621,6 +632,9 @@ func (client *Client) FlushWithContext(ctx context.Context) bool {
 	if client.batchLogger != nil {
 		client.batchLogger.Flush(ctx.Done())
 	}
+	if client.batchMeter != nil {
+		client.batchMeter.Flush(ctx.Done())
+	}
 	if client.telemetryBuffer != nil {
 		return client.telemetryBuffer.FlushWithContext(ctx)
 	}
@@ -637,6 +651,9 @@ func (client *Client) Close() {
 	}
 	if client.batchLogger != nil {
 		client.batchLogger.Shutdown()
+	}
+	if client.batchMeter != nil {
+		client.batchMeter.Shutdown()
 	}
 	client.Transport.Close()
 }

@@ -102,7 +102,7 @@ func (c Category) GetPriority() Priority {
 	case CategoryTransaction:
 		return PriorityMedium
 	case CategoryTraceMetric:
-		return PriorityMedium
+		return PriorityLow
 	default:
 		return PriorityMedium
 	}

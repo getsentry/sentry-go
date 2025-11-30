@@ -10,6 +10,9 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
+// NewMeter returns a new Meter associated with the given context.
+// If there is no Client associated with the context, or if metrics are disabled,
+// it returns a no-op Meter that discards all metrics.
 func NewMeter[T Numbers](ctx context.Context) Meter[T] {
 	var hub *Hub
 	hub = GetHubFromContext(ctx)
@@ -18,7 +21,7 @@ func NewMeter[T Numbers](ctx context.Context) Meter[T] {
 	}
 
 	client := hub.Client()
-	if client != nil {
+	if client != nil && client.options.EnableMetrics {
 		return &sentryMeter[T]{
 			ctx:        ctx,
 			client:     client,
@@ -120,7 +123,20 @@ func (s *sentryMeter[T]) emit(ctx context.Context, metricType MetricType, name s
 		Unit:       unit,
 		Attributes: attrs,
 	}
-	s.client.batchMeter.metricsCh <- *metric
+
+	if s.client.options.BeforeSendMetric != nil {
+		metric = s.client.options.BeforeSendMetric(metric)
+	}
+
+	if metric != nil {
+		if s.client.telemetryBuffer != nil {
+			if !s.client.telemetryBuffer.Add(metric) {
+				debuglog.Printf("Dropping event: metric buffer full or category missing")
+			}
+		} else if s.client.batchMeter != nil {
+			s.client.batchMeter.metricsCh <- *metric
+		}
+	}
 
 	if s.client.options.Debug {
 		debuglog.Printf("Metric %s [%s]: %f %s", metricType, name, value, unit)
@@ -129,11 +145,6 @@ func (s *sentryMeter[T]) emit(ctx context.Context, metricType MetricType, name s
 
 // Count implements Meter.
 func (s *sentryMeter[T]) Count(name string, count int64, options MeterOptions) {
-	// count can be negative, but if it's 0, then don't send anything
-	if count == 0 {
-		return
-	}
-
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -151,10 +162,6 @@ func (s *sentryMeter[T]) Count(name string, count int64, options MeterOptions) {
 
 // Distribution implements Meter.
 func (s *sentryMeter[T]) Distribution(name string, sample float64, options MeterOptions) {
-	if sample == 0 {
-		return
-	}
-
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -172,10 +179,6 @@ func (s *sentryMeter[T]) Distribution(name string, sample float64, options Meter
 
 // Gauge implements Meter.
 func (s *sentryMeter[T]) Gauge(name string, value T, options MeterOptions) {
-	if value == 0 {
-		return
-	}
-
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -215,6 +218,8 @@ func (s *sentryMeter[T]) SetAttributes(attrs ...attribute.Builder) {
 	}
 }
 
+// noopMeter is a no-operation implementation of Meter.
+// This is used when there is no client available in the context.
 type noopMeter[T Numbers] struct{}
 
 // Count implements Meter.

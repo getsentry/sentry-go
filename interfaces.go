@@ -163,13 +163,17 @@ type Numbers interface {
 	int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64 | float32 | float64
 }
 
+// Meter provides an interface for recording metrics.
 type Meter[T Numbers] interface {
 	// GetCtx returns the [context.Context] set on the meter.
 	GetCtx() context.Context
 	// SetAttributes allows attaching parameters to the meter using the attribute API.
 	SetAttributes(...attribute.Builder)
+	// Count records a count metric.
 	Count(name string, count int64, options MeterOptions)
+	// Gauge records a gauge metric.
 	Gauge(name string, value T, options MeterOptions)
+	// Distribution records a distribution metric.
 	Distribution(name string, sample float64, options MeterOptions)
 }
 
@@ -429,6 +433,9 @@ type Event struct {
 
 	// The fields below are only relevant for logs
 	Logs []Log `json:"items,omitempty"`
+
+	// The fields below are only relevant for metrics
+	Metrics []Metric `json:"metrics,omitempty"`
 
 	// The fields below are not part of the final JSON payload.
 
@@ -860,4 +867,71 @@ type Metric struct {
 	Value      float64              `json:"value"`
 	Unit       string               `json:"unit,omitempty"`
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
+}
+
+func (m *Metric) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
+	type metricJSON struct {
+		Timestamp  *float64                         `json:"timestamp,omitempty"`
+		TraceID    string                           `json:"trace_id,omitempty"`
+		Type       string                           `json:"type"`
+		Name       string                           `json:"name,omitempty"`
+		Value      float64                          `json:"value"`
+		Unit       string                           `json:"unit,omitempty"`
+		Attributes map[string]protocol.LogAttribute `json:"attributes,omitempty"`
+	}
+
+	// Convert time.Time to seconds float if set
+	var ts *float64
+	if !m.Timestamp.IsZero() {
+		sec := float64(m.Timestamp.UnixNano()) / 1e9
+		ts = &sec
+	}
+
+	attrs := make(map[string]protocol.LogAttribute, len(m.Attributes))
+	for k, v := range m.Attributes {
+		attrs[k] = protocol.LogAttribute{Value: v.Value, Type: string(v.Type)}
+	}
+
+	metricData, err := json.Marshal(metricJSON{
+		Timestamp:  ts,
+		TraceID:    m.TraceID.String(),
+		Type:       string(m.Type),
+		Name:       m.Name,
+		Value:      m.Value,
+		Unit:       m.Unit,
+		Attributes: attrs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &protocol.EnvelopeItem{
+		Header: &protocol.EnvelopeItemHeader{
+			Type: protocol.EnvelopeItemTypeTraceMetric,
+			// XXX(aldy505): I'm basically copy-pasting the implementation for
+			// logs here, but it doesn't seem like "item_count" and "content_type"
+			// are actually written here? Not sure.
+		},
+		Payload: metricData,
+	}, nil
+}
+
+// GetCategory returns the rate limit category for metrics.
+func (m *Metric) GetCategory() ratelimit.Category {
+	return ratelimit.CategoryTraceMetric
+}
+
+// GetEventID returns empty string (event ID set when batching).
+func (m *Metric) GetEventID() string {
+	return ""
+}
+
+// GetSdkInfo returns nil (SDK info set when batching).
+func (m *Metric) GetSdkInfo() *protocol.SdkInfo {
+	return nil
+}
+
+// GetDynamicSamplingContext returns nil (trace context set when batching).
+func (m *Metric) GetDynamicSamplingContext() map[string]string {
+	return nil
 }
