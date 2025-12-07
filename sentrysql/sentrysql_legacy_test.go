@@ -53,8 +53,8 @@ func TestNewSentrySQLLegacy_Integration(t *testing.T) {
 				Parameters: []interface{}{1},
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("legacydb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("legacydb"),
+						"db.namespace":   "fake",
 					},
 					Description: "SELECT|query_test|id|id=?",
 					Op:          "db.sql.query",
@@ -69,9 +69,9 @@ func TestNewSentrySQLLegacy_Integration(t *testing.T) {
 				WantError: true,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system":    sentrysql.DatabaseSystem("legacydb"),
-						"db.name":      "fake",
-						"db.operation": "SELECT",
+						"db.system.name":    sentrysql.DatabaseSystem("legacydb"),
+						"db.namespace":      "fake",
+						"db.operation.name": "SELECT",
 					},
 					Description: "SELECT FROM query_test",
 					Op:          "db.sql.query",
@@ -176,8 +176,8 @@ func TestNewSentrySQLLegacy_Integration(t *testing.T) {
 				Parameters: nil,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("legacydb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("legacydb"),
+						"db.namespace":   "fake",
 					},
 					Description: "INSERT|exec_test|id=1,name=John",
 					Op:          "db.sql.exec",
@@ -192,8 +192,8 @@ func TestNewSentrySQLLegacy_Integration(t *testing.T) {
 				WantError: false,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("legacydb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("legacydb"),
+						"db.namespace":   "fake",
 					},
 					Description: "CREATE|temporary_test|id=int32,name=string",
 					Op:          "db.sql.exec",
@@ -347,8 +347,8 @@ func TestNewSentrySQLLegacy_Conn(t *testing.T) {
 				Parameters: []interface{}{1},
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("legacydb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("legacydb"),
+						"db.namespace":   "fake",
 					},
 					Description: "SELECT|query_test|id|id=?",
 					Op:          "db.sql.query",
@@ -364,9 +364,9 @@ func TestNewSentrySQLLegacy_Conn(t *testing.T) {
 				WantError:  true,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system":    sentrysql.DatabaseSystem("legacydb"),
-						"db.name":      "fake",
-						"db.operation": "SELECT",
+						"db.system.name":    sentrysql.DatabaseSystem("legacydb"),
+						"db.namespace":      "fake",
+						"db.operation.name": "SELECT",
 					},
 					Description: "SELECT FROM query_test",
 					Op:          "db.sql.query",
@@ -481,8 +481,8 @@ func TestNewSentrySQLLegacy_Conn(t *testing.T) {
 				Parameters: []interface{}{2, "Peter"},
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("legacydb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("legacydb"),
+						"db.namespace":   "fake",
 					},
 					Description: "INSERT|exec_test|id=?,name=?",
 					Op:          "db.sql.exec",
@@ -498,8 +498,8 @@ func TestNewSentrySQLLegacy_Conn(t *testing.T) {
 				WantError:  true,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("legacydb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("legacydb"),
+						"db.namespace":   "fake",
 					},
 					Description: "INSERT|exec_test|id=?,name=?",
 					Op:          "db.sql.exec",

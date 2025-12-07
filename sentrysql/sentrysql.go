@@ -38,10 +38,10 @@ func (s *sentrySQLConfig) SetData(span *sentry.Span, query string) {
 	}
 
 	if s.databaseSystem != "" {
-		span.SetData("db.system", s.databaseSystem)
+		span.SetData("db.system.name", s.databaseSystem)
 	}
 	if s.databaseName != "" {
-		span.SetData("db.name", s.databaseName)
+		span.SetData("db.namespace", s.databaseName)
 	}
 	if s.serverAddress != "" {
 		span.SetData("server.address", s.serverAddress)
@@ -53,7 +53,7 @@ func (s *sentrySQLConfig) SetData(span *sentry.Span, query string) {
 	if query != "" {
 		databaseOperation := parseDatabaseOperation(query)
 		if databaseOperation != "" {
-			span.SetData("db.operation", databaseOperation)
+			span.SetData("db.operation.name", databaseOperation)
 		}
 	}
 }

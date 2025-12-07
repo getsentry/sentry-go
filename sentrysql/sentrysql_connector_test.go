@@ -50,8 +50,8 @@ func TestNewSentrySQLConnector_Integration(t *testing.T) {
 				Parameters: []interface{}{1},
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("fakedb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":   "fake",
 					},
 					Description: "SELECT|query_test|id|id=?",
 					Op:          "db.sql.query",
@@ -66,9 +66,9 @@ func TestNewSentrySQLConnector_Integration(t *testing.T) {
 				WantError: true,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system":    sentrysql.DatabaseSystem("fakedb"),
-						"db.name":      "fake",
-						"db.operation": "SELECT",
+						"db.system.name":    sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":      "fake",
+						"db.operation.name": "SELECT",
 					},
 					Description: "SELECT FROM query_test",
 					Op:          "db.sql.query",
@@ -168,8 +168,8 @@ func TestNewSentrySQLConnector_Integration(t *testing.T) {
 				Parameters: []interface{}{1, "John"},
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("fakedb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":   "fake",
 					},
 					Description: "INSERT|exec_test|id=?,name=?",
 					Op:          "db.sql.exec",
@@ -184,8 +184,8 @@ func TestNewSentrySQLConnector_Integration(t *testing.T) {
 				WantError: false,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("fakedb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":   "fake",
 					},
 					Description: "CREATE|temporary_test|id=int32,name=string",
 					Op:          "db.sql.exec",
@@ -331,8 +331,8 @@ func TestNewSentrySQLConnector_Conn(t *testing.T) {
 				Parameters: []interface{}{1},
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("fakedb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":   "fake",
 					},
 					Description: "SELECT|query_test|id|id=?",
 					Op:          "db.sql.query",
@@ -348,9 +348,9 @@ func TestNewSentrySQLConnector_Conn(t *testing.T) {
 				WantError:  true,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system":    sentrysql.DatabaseSystem("fakedb"),
-						"db.name":      "fake",
-						"db.operation": "SELECT",
+						"db.system.name":    sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":      "fake",
+						"db.operation.name": "SELECT",
 					},
 					Description: "SELECT FROM query_test",
 					Op:          "db.sql.query",
@@ -459,8 +459,8 @@ func TestNewSentrySQLConnector_Conn(t *testing.T) {
 				Parameters: []interface{}{2, "Peter"},
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("fakedb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":   "fake",
 					},
 					Description: "INSERT|exec_test|id=?,name=?",
 					Op:          "db.sql.exec",
@@ -476,8 +476,8 @@ func TestNewSentrySQLConnector_Conn(t *testing.T) {
 				WantError:  true,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("fakedb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":   "fake",
 					},
 					Description: "INSERT|exec_test|id=?,name=?",
 					Op:          "db.sql.exec",
@@ -611,8 +611,8 @@ func TestNewSentrySQLConnector_BeginTx(t *testing.T) {
 				Parameters: []interface{}{2, "Peter"},
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("fakedb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":   "fake",
 					},
 					Description: "INSERT|exec_test|id=?,name=?",
 					Op:          "db.sql.exec",
@@ -628,8 +628,8 @@ func TestNewSentrySQLConnector_BeginTx(t *testing.T) {
 				WantError:  true,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("fakedb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":   "fake",
 					},
 					Description: "INSERT|exec_test|id=?,name=?",
 					Op:          "db.sql.exec",
@@ -814,8 +814,8 @@ func TestNewSentrySQLConnector_BeginTx(t *testing.T) {
 		want := []*sentry.Span{
 			{
 				Data: map[string]interface{}{
-					"db.system": sentrysql.DatabaseSystem("fakedb"),
-					"db.name":   "fake",
+					"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+					"db.namespace":   "fake",
 				},
 				Description: "SELECT|query_test|name|id=?",
 				Op:          "db.sql.query",
@@ -826,8 +826,8 @@ func TestNewSentrySQLConnector_BeginTx(t *testing.T) {
 			},
 			{
 				Data: map[string]interface{}{
-					"db.system": sentrysql.DatabaseSystem("fakedb"),
-					"db.name":   "fake",
+					"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+					"db.namespace":   "fake",
 				},
 				Description: "INSERT|exec_test|id=?,name=?",
 				Op:          "db.sql.exec",
@@ -920,8 +920,8 @@ func TestNewSentrySQLConnector_BeginTx(t *testing.T) {
 		want := []*sentry.Span{
 			{
 				Data: map[string]interface{}{
-					"db.system": sentrysql.DatabaseSystem("fakedb"),
-					"db.name":   "fake",
+					"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+					"db.namespace":   "fake",
 				},
 				Description: "SELECT|query_test|name|id=?",
 				Op:          "db.sql.query",
@@ -932,8 +932,8 @@ func TestNewSentrySQLConnector_BeginTx(t *testing.T) {
 			},
 			{
 				Data: map[string]interface{}{
-					"db.system": sentrysql.DatabaseSystem("fakedb"),
-					"db.name":   "fake",
+					"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+					"db.namespace":   "fake",
 				},
 				Description: "INSERT|exec_test|id=?,name=?",
 				Op:          "db.sql.exec",
@@ -989,8 +989,8 @@ func TestNewSentrySQLConnector_PrepareContext(t *testing.T) {
 				Parameters: []interface{}{3, "Sarah"},
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("fakedb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":   "fake",
 					},
 					Description: "INSERT|exec_test|id=?,name=?",
 					Op:          "db.sql.exec",
@@ -1006,9 +1006,9 @@ func TestNewSentrySQLConnector_PrepareContext(t *testing.T) {
 				WantError:  true,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system":    sentrysql.DatabaseSystem("fakedb"),
-						"db.name":      "fake",
-						"db.operation": "INSERT",
+						"db.system.name":    sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":      "fake",
+						"db.operation.name": "INSERT",
 					},
 					Description: "INSERT INTO exec_test (id, name) VALUES (?, ?, ?, ?)",
 					Op:          "db.sql.exec",
@@ -1112,8 +1112,8 @@ func TestNewSentrySQLConnector_PrepareContext(t *testing.T) {
 				Parameters: []interface{}{2},
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system": sentrysql.DatabaseSystem("fakedb"),
-						"db.name":   "fake",
+						"db.system.name": sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":   "fake",
 					},
 					Description: "SELECT|query_test|id,name,age|id=?",
 					Op:          "db.sql.query",
@@ -1129,11 +1129,11 @@ func TestNewSentrySQLConnector_PrepareContext(t *testing.T) {
 				WantError:  true,
 				WantSpan: &sentry.Span{
 					Data: map[string]interface{}{
-						"db.system":      sentrysql.DatabaseSystem("fakedb"),
-						"db.name":        "fake",
-						"server.address": "localhost",
-						"server.port":    "5432",
-						"db.operation":   "SELECT",
+						"db.system.name":    sentrysql.DatabaseSystem("fakedb"),
+						"db.namespace":      "fake",
+						"server.address":    "localhost",
+						"server.port":       "5432",
+						"db.operation.name": "SELECT",
 					},
 					Description: "SELECT * FROM query_test WHERE id =",
 					Op:          "db.sql.query",
