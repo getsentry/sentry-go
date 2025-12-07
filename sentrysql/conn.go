@@ -48,6 +48,7 @@ func (s *sentryConn) Prepare(query string) (driver.Stmt, error) {
 		query:        query,
 		ctx:          s.ctx,
 		config:       s.config,
+		mu:           &s.Mutex,
 	}, nil
 }
 
@@ -74,6 +75,7 @@ func (s *sentryConn) PrepareContext(ctx context.Context, query string) (driver.S
 		query:        query,
 		ctx:          ctx,
 		config:       s.config,
+		mu:           &s.Mutex,
 	}, nil
 }
 

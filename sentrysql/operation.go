@@ -11,7 +11,7 @@ var knownDatabaseOperations = map[string]struct{}{
 
 func parseDatabaseOperation(query string) string {
 	// The operation is the first word of the query.
-	operation := query
+	operation := strings.ToUpper(query)
 	if i := strings.Index(query, " "); i >= 0 {
 		operation = strings.ToUpper(query[:i])
 	}

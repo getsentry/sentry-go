@@ -14,6 +14,11 @@ func TestParseDatabaseOperation(t *testing.T) {
 			want:  "SELECT",
 		},
 		{
+			name:  "SELECT with lowercase",
+			query: "select * from users",
+			want:  "SELECT",
+		},
+		{
 			name:  "INSERT",
 			query: "INSERT INTO users (id, name) VALUES (1, 'John')",
 			want:  "INSERT",

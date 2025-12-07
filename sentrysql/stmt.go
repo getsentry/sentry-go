@@ -14,7 +14,7 @@ type sentryStmt struct {
 	query        string
 	ctx          context.Context
 	config       *sentrySQLConfig
-	sync.Mutex
+	mu           *sync.Mutex
 }
 
 // Make sure sentryStmt implements driver.Stmt interface.
@@ -85,9 +85,9 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 		}
 
 		if ctx != nil {
-			s.Lock()
+			s.mu.Lock()
 			s.ctx = ctx
-			s.Unlock()
+			s.mu.Unlock()
 		}
 		return s.Exec(values)
 	}
@@ -125,11 +125,11 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if ctx != nil {
-			s.Lock()
+			s.mu.Lock()
 			s.ctx = ctx
-			s.Unlock()
+			s.mu.Unlock()
 		}
 		return s.Query(values)
 	}
