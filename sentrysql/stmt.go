@@ -85,9 +85,6 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 		}
 
 		if ctx != nil {
-			if s.mu == nil {
-				s.mu = &sync.Mutex{}
-			}
 			s.mu.Lock()
 			s.ctx = ctx
 			s.mu.Unlock()
@@ -130,9 +127,6 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 		}
 
 		if ctx != nil {
-			if s.mu == nil {
-				s.mu = &sync.Mutex{}
-			}
 			s.mu.Lock()
 			s.ctx = ctx
 			s.mu.Unlock()
