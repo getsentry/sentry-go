@@ -487,11 +487,7 @@ started:
 	}
 
 fail:
-	if itemCount := len(b.items); itemCount > 0 {
-		debuglog.Printf("Buffer flushing was canceled or timed out. %d items were not flushed.", itemCount)
-	} else {
-		debuglog.Println("Buffer flushing was canceled or timed out. No items were pending.")
-	}
+	debuglog.Println("Buffer flushing was canceled or timed out. Some events may not have been sent.")
 	return false
 }
 
@@ -776,16 +772,15 @@ func (st *SpotlightTransport) Configure(options ClientOptions) {
 }
 
 func (st *SpotlightTransport) SendEvent(event *Event) {
-	// Send to the underlying transport (Sentry) unless it's noopTransport
-	if _, isNoop := st.underlying.(noopTransport); !isNoop {
-		st.underlying.SendEvent(event)
-	}
+	// Send to the underlying transport (Sentry)
+	st.underlying.SendEvent(event)
 
 	// Always send to Spotlight
 	st.sendToSpotlight(event)
 }
 
 func (st *SpotlightTransport) sendToSpotlight(event *Event) {
+	ctx := context.Background()
 	dsn, _ := NewDsn("https://placeholder@localhost/1")
 
 	eventBody := getRequestBodyFromEvent(event)
@@ -800,14 +795,14 @@ func (st *SpotlightTransport) sendToSpotlight(event *Event) {
 		return
 	}
 
-	req, err := http.NewRequest("POST", st.spotlightURL, envelope)
+	req, err := http.NewRequestWithContext(ctx, "POST", st.spotlightURL, envelope)
 	if err != nil {
 		DebugLogger.Printf("Failed to create Spotlight request: %v", err)
 		return
 	}
 
 	req.Header.Set("Content-Type", "application/x-sentry-envelope")
-	req.Header.Set("User-Agent", "sentry-go/"+SDKVersion)
+	req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", event.Sdk.Name, event.Sdk.Version))
 
 	DebugLogger.Printf("Sending event to Spotlight at %s", st.spotlightURL)
 
@@ -817,6 +812,9 @@ func (st *SpotlightTransport) sendToSpotlight(event *Event) {
 		return
 	}
 	defer func() {
+		// Drain body up to a limit and close it, allowing the
+		// transport to reuse TCP connections.
+		_, _ = io.CopyN(io.Discard, resp.Body, maxDrainResponseBytes)
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			DebugLogger.Printf("Failed to close Spotlight response body: %v", closeErr)
 		}
@@ -826,9 +824,6 @@ func (st *SpotlightTransport) sendToSpotlight(event *Event) {
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		DebugLogger.Printf("Spotlight returned non-2xx status: %d", resp.StatusCode)
-		if body, err := io.ReadAll(resp.Body); err == nil && len(body) > 0 {
-			DebugLogger.Printf("Spotlight error response: %s", string(body))
-		}
 	} else {
 		DebugLogger.Printf("Successfully sent event to Spotlight")
 	}

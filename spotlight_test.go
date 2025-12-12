@@ -1,7 +1,6 @@
 package sentry
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -27,21 +26,27 @@ func TestSpotlightTransport(t *testing.T) {
 	}))
 	defer server.Close()
 
-	mock := &mockTransport{}
+	mock := &MockTransport{}
 	st := NewSpotlightTransport(mock)
 	st.Configure(ClientOptions{SpotlightURL: server.URL + "/stream"})
 
 	event := NewEvent()
+	event.Sdk.Name = "sentry-go"
+	event.Sdk.Version = SDKVersion
 	event.Message = "Test message"
 	st.SendEvent(event)
 
 	time.Sleep(100 * time.Millisecond)
 
-	if len(mock.events) != 1 {
-		t.Errorf("Expected 1 event, got %d", len(mock.events))
+	if len(mock.Events()) != 1 {
+		t.Errorf("Expected 1 event, got %d", len(mock.Events()))
 	}
-	if mock.events[0].Message != "Test message" {
-		t.Errorf("Expected 'Test message', got %s", mock.events[0].Message)
+	if mock.Events()[0].Message != "Test message" {
+		t.Errorf("Expected 'Test message', got %s", mock.Events()[0].Message)
+	}
+
+	if !st.Flush(time.Second) {
+		t.Errorf("Expected Flush to succeed")
 	}
 }
 
@@ -147,24 +152,3 @@ func TestSpotlightClientOptions(t *testing.T) {
 		})
 	}
 }
-
-// mockTransport is a simple transport for testing.
-type mockTransport struct {
-	events []*Event
-}
-
-func (m *mockTransport) Configure(ClientOptions) {}
-
-func (m *mockTransport) SendEvent(event *Event) {
-	m.events = append(m.events, event)
-}
-
-func (m *mockTransport) Flush(time.Duration) bool {
-	return true
-}
-
-func (m *mockTransport) FlushWithContext(_ context.Context) bool {
-	return true
-}
-
-func (m *mockTransport) Close() {}

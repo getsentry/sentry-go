@@ -348,6 +348,13 @@ func NewClient(options ClientOptions) (*Client, error) {
 		options.TraceIgnoreStatusCodes = [][]int{{404}}
 	}
 
+	// Check for Spotlight environment variable
+	if !options.Spotlight {
+		if spotlightEnv := os.Getenv("SENTRY_SPOTLIGHT"); spotlightEnv == "true" || spotlightEnv == "1" {
+			options.Spotlight = true
+		}
+	}
+
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
 	// to GODEBUG). It is not a supported feature: recognized debug options
 	// may change any time.
@@ -404,12 +411,6 @@ func NewClient(options ClientOptions) (*Client, error) {
 }
 
 func (client *Client) setupTransport() {
-	if !client.options.Spotlight {
-		if spotlightEnv := os.Getenv("SENTRY_SPOTLIGHT"); spotlightEnv == "true" || spotlightEnv == "1" {
-			client.options.Spotlight = true
-		}
-	}
-
 	opts := client.options
 	transport := opts.Transport
 
