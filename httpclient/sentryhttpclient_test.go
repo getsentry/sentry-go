@@ -477,7 +477,7 @@ func TestDefaults(t *testing.T) {
 			t.Error(err)
 		}
 
-		if res.Body != nil {
+		if res != nil && res.Body != nil {
 			res.Body.Close()
 		}
 	})

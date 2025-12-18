@@ -36,12 +36,6 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	// With Sentry's HTTP client
-	err = getExamplePage(ctx, sentryhttpclient.Client)
-	if err != nil {
-		panic(err)
-	}
 }
 
 func getExamplePage(ctx context.Context, httpClient *http.Client) error {
