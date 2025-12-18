@@ -290,9 +290,16 @@ func TestIntegration(t *testing.T) {
 		),
 	}
 	for i, tt := range tests {
-		var foundMatch = false
 		gotSpans := got[i]
 
+		if tt.WantSpan == nil {
+			if len(gotSpans) > 0 {
+				t.Errorf("Expected no span, got %+v", gotSpans)
+			}
+			continue
+		}
+
+		var foundMatch = false
 		var diffs []string
 		for _, gotSpan := range gotSpans {
 			if diff := cmp.Diff(tt.WantSpan, gotSpan, optstrans); diff != "" {
@@ -303,10 +310,8 @@ func TestIntegration(t *testing.T) {
 			}
 		}
 
-		if tt.WantSpan != nil && !foundMatch {
+		if !foundMatch {
 			t.Errorf("Span mismatch (-want +got):\n%s", strings.Join(diffs, "\n"))
-		} else if tt.WantSpan == nil && foundMatch {
-			t.Errorf("Expected no span, got %+v", gotSpans)
 		}
 	}
 }
