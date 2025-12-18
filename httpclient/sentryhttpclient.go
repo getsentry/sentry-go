@@ -44,6 +44,7 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 
 	// Configure trace propagation targets
 	var tracePropagationTargets []string
+	var propagateTraceparent bool
 	if hub := sentry.CurrentHub(); hub != nil {
 		client := hub.Client()
 		if client != nil {
@@ -51,12 +52,14 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 			if clientOptions.TracePropagationTargets != nil {
 				tracePropagationTargets = clientOptions.TracePropagationTargets
 			}
+			propagateTraceparent = clientOptions.PropagateTraceparent
 		}
 	}
 
 	t := &SentryRoundTripper{
 		originalRoundTripper:    originalRoundTripper,
 		tracePropagationTargets: tracePropagationTargets,
+		propagateTraceparent:    propagateTraceparent,
 	}
 
 	for _, opt := range opts {
@@ -72,6 +75,7 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 type SentryRoundTripper struct {
 	originalRoundTripper http.RoundTripper
 
+	propagateTraceparent    bool
 	tracePropagationTargets []string
 }
 
@@ -96,8 +100,11 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	parentSpan := sentry.SpanFromContext(request.Context())
 	if parentSpan == nil {
 		if hub := sentry.GetHubFromContext(request.Context()); hub != nil {
-			request.Header.Add("Baggage", hub.GetBaggage())
-			request.Header.Add("Sentry-Trace", hub.GetTraceparent())
+			request.Header.Add(sentry.SentryBaggageHeader, hub.GetBaggage())
+			request.Header.Add(sentry.SentryTraceHeader, hub.GetTraceparent())
+			if s.propagateTraceparent {
+				request.Header.Add(sentry.TraceparentHeader, hub.GetTraceparentW3C())
+			}
 		}
 
 		return s.originalRoundTripper.RoundTrip(request)
@@ -115,8 +122,11 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	span.SetData("server.port", request.URL.Port())
 
 	// Always add `Baggage` and `Sentry-Trace` headers.
-	request.Header.Add("Baggage", span.ToBaggage())
-	request.Header.Add("Sentry-Trace", span.ToSentryTrace())
+	request.Header.Add(sentry.SentryBaggageHeader, span.ToBaggage())
+	request.Header.Add(sentry.SentryTraceHeader, span.ToSentryTrace())
+	if s.propagateTraceparent {
+		request.Header.Add(sentry.TraceparentHeader, span.ToTraceparent())
+	}
 
 	response, err := s.originalRoundTripper.RoundTrip(request)
 	if err != nil {

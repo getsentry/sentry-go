@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -467,6 +468,60 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 	}
 }
 
+func TestPropagateTraceparentHeader(t *testing.T) {
+	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
+		EnableTracing:         true,
+		TracesSampleRate:      1.0,
+		PropagateTraceparent:  true,
+		BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event { return event },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hub := sentry.NewHub(sentryClient, sentry.NewScope())
+	ctx := sentry.SetHubOnContext(context.Background(), hub)
+	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+	ctx = span.Context()
+
+	request, err := http.NewRequestWithContext(ctx, "GET", "https://example.com/foo", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	roundTripper := &noopRoundTripper{
+		ExpectResponseStatus: 200,
+		ExpectResponseLength: 0,
+	}
+
+	client := &http.Client{
+		Transport: sentryhttpclient.NewSentryRoundTripper(roundTripper),
+	}
+
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Body != nil {
+		response.Body.Close()
+	}
+	span.Finish()
+
+	traceparent := response.Request.Header.Get("traceparent")
+	if traceparent == "" {
+		t.Fatalf(`Expected "traceparent" header to be set`)
+	}
+
+	sentryTrace := response.Request.Header.Get("Sentry-Trace")
+	if sentryTrace == "" {
+		t.Fatalf(`Expected "Sentry-Trace" header to be set`)
+	}
+
+	if want := traceparentFromSentryTraceHeader(t, sentryTrace); traceparent != want {
+		t.Fatalf(`Unexpected "traceparent" header value, got %q want %q`, traceparent, want)
+	}
+}
+
 func TestDefaults(t *testing.T) {
 	t.Run("Create a regular outgoing HTTP request with default NewSentryRoundTripper", func(t *testing.T) {
 		roundTripper := sentryhttpclient.NewSentryRoundTripper(nil)
@@ -481,4 +536,20 @@ func TestDefaults(t *testing.T) {
 			res.Body.Close()
 		}
 	})
+}
+
+func traceparentFromSentryTraceHeader(t *testing.T, sentryTrace string) string {
+	t.Helper()
+
+	traceParentContext, valid := sentry.ParseTraceParentContext([]byte(sentryTrace))
+	if !valid {
+		t.Fatalf("Invalid sentry-trace header: %q", sentryTrace)
+	}
+
+	traceFlags := "00"
+	if traceParentContext.Sampled == sentry.SampledTrue {
+		traceFlags = "01"
+	}
+
+	return fmt.Sprintf("00-%s-%s-%s", traceParentContext.TraceID.String(), traceParentContext.ParentSpanID.String(), traceFlags)
 }
