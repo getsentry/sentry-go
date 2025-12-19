@@ -469,7 +469,7 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 }
 
 func TestPropagateTraceparentHeader(t *testing.T) {
-	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
+	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:         true,
 		TracesSampleRate:      1.0,
 		PropagateTraceparent:  true,
@@ -479,10 +479,8 @@ func TestPropagateTraceparentHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hub := sentry.NewHub(sentryClient, sentry.NewScope())
-	ctx := sentry.SetHubOnContext(context.Background(), hub)
-	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
-	ctx = span.Context()
+	span := sentry.StartSpan(context.Background(), "fake_parent", sentry.WithTransactionName("Fake Parent"))
+	ctx := span.Context()
 
 	request, err := http.NewRequestWithContext(ctx, "GET", "https://example.com/foo", nil)
 	if err != nil {
