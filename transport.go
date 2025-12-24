@@ -781,7 +781,11 @@ func (st *SpotlightTransport) SendEvent(event *Event) {
 
 func (st *SpotlightTransport) sendToSpotlight(event *Event) {
 	ctx := context.Background()
-	dsn, _ := NewDsn("https://placeholder@localhost/1")
+	dsn, err := NewDsn("https://placeholder@localhost/1")
+	if err != nil {
+		DebugLogger.Printf("Failed to create Spotlight DSN: %v", err)
+		return
+	}
 
 	eventBody := getRequestBodyFromEvent(event)
 	if eventBody == nil {
