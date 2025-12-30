@@ -48,6 +48,10 @@ func TestSpotlightTransport(t *testing.T) {
 	if !st.Flush(time.Second) {
 		t.Errorf("Expected Flush to succeed")
 	}
+
+	if mock.FlushCount() != 1 {
+		t.Errorf("Expected underlying transport Flush called 1 time, got %d", mock.FlushCount())
+	}
 }
 
 func TestSpotlightTransportWithNoopUnderlying(_ *testing.T) {
