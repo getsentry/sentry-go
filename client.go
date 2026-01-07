@@ -145,6 +145,9 @@ type ClientOptions struct {
 	TracesSampler TracesSampler
 	// Control with URLs trace propagation should be enabled. Does not support regex patterns.
 	TracePropagationTargets []string
+	// PropagateTraceparent is used to control whether the W3C Trace Context HTTP traceparent header
+	// is propagated on outgoing http requests.
+	PropagateTraceparent bool
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
 	// If the match is found, then a whole event will be dropped.
