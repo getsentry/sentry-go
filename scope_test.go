@@ -706,6 +706,82 @@ func TestEventProcessorsAddEventProcessor(t *testing.T) {
 	}
 }
 
+func TestApplyToEventSnapshotsExtraValues(t *testing.T) {
+	scope := NewScope()
+	liveSlice := []int{1, 2, 3}
+	scope.SetExtra("arr_ptr", &liveSlice)
+
+	event := NewEvent()
+	processed := scope.ApplyToEvent(event, nil, nil)
+	if processed == nil {
+		t.Fatal("event should not be dropped")
+	}
+
+	liveSlice = append(liveSlice[:1], 9, 10)
+
+	copied, ok := processed.Extra["arr_ptr"].(*[]int)
+	if !ok {
+		t.Fatalf("expected *[]int, got %T", processed.Extra["arr_ptr"])
+	}
+	assertEqual(t, []int{1, 2, 3}, *copied)
+}
+
+func TestApplyToEventSnapshotsContextValues(t *testing.T) {
+	scope := NewScope()
+	nested := map[string]interface{}{
+		"numbers": []int{1, 2, 3},
+		"label":   "original",
+	}
+	scope.SetContext("ctx", nested)
+
+	event := NewEvent()
+	processed := scope.ApplyToEvent(event, nil, nil)
+	if processed == nil {
+		t.Fatal("event should not be dropped")
+	}
+
+	nested["numbers"] = []int{9}
+	nested["label"] = "mutated"
+
+	ctx := processed.Contexts["ctx"]
+	assertEqual(t, []int{1, 2, 3}, ctx["numbers"])
+	assertEqual(t, "original", ctx["label"])
+}
+
+func TestSnapshotValueDeepCopiesMapsAndSlices(t *testing.T) {
+	scope := NewScope()
+	m := map[string]interface{}{
+		"numbers": []int{1, 2},
+		"nested": map[string]interface{}{
+			"key": "val",
+		},
+		"arr": [2]int{7, 8},
+		"ptr": func() *int { v := 5; return &v }(),
+	}
+	scope.SetContext("m", m)
+	scope.SetExtra("m", m)
+
+	// mutate originals
+	m["numbers"].([]int)[0] = 99
+	m["nested"].(map[string]interface{})["key"] = "mut"
+	m["arr"] = [2]int{0, 0}
+	*m["ptr"].(*int) = 42
+
+	event := NewEvent()
+	processed := scope.ApplyToEvent(event, nil, nil)
+	ctx := processed.Contexts["m"]
+	extra := processed.Extra["m"].(map[string]interface{})
+
+	assertEqual(t, []int{1, 2}, ctx["numbers"])
+	assertEqual(t, "val", ctx["nested"].(map[string]interface{})["key"])
+	assertEqual(t, [2]int{7, 8}, ctx["arr"])
+	assertEqual(t, 5, *ctx["ptr"].(*int))
+	assertEqual(t, []int{1, 2}, extra["numbers"])
+	assertEqual(t, "val", extra["nested"].(map[string]interface{})["key"])
+	assertEqual(t, [2]int{7, 8}, extra["arr"])
+	assertEqual(t, 5, *extra["ptr"].(*int))
+}
+
 func TestCloneContext(t *testing.T) {
 	context := Context{
 		"key1": "value1",
