@@ -38,7 +38,7 @@ func (s *sentryStmt) Exec(args []driver.Value) (driver.Result, error) {
 		return s.originalStmt.Exec(args) //nolint:staticcheck // We must support legacy clients
 	}
 
-	span := parentSpan.StartChild("db.sql.exec", sentry.WithDescription(s.query))
+	span := parentSpan.StartChild("db.sql.execute")
 	s.config.SetData(span, s.query)
 	defer span.Finish()
 
@@ -60,7 +60,7 @@ func (s *sentryStmt) Query(args []driver.Value) (driver.Rows, error) {
 		return s.originalStmt.Query(args) //nolint:staticcheck // We must support legacy clients
 	}
 
-	span := parentSpan.StartChild("db.sql.query", sentry.WithDescription(s.query))
+	span := parentSpan.StartChild("db.sql.query")
 	s.config.SetData(span, s.query)
 	defer span.Finish()
 
@@ -101,7 +101,7 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 		return stmtExecContext.ExecContext(ctx, args)
 	}
 
-	span := parentSpan.StartChild("db.sql.exec", sentry.WithDescription(s.query))
+	span := parentSpan.StartChild("db.sql.execute")
 	s.config.SetData(span, s.query)
 	defer span.Finish()
 
@@ -143,7 +143,7 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 		return stmtQueryContext.QueryContext(ctx, args)
 	}
 
-	span := parentSpan.StartChild("db.sql.query", sentry.WithDescription(s.query))
+	span := parentSpan.StartChild("db.sql.query")
 	s.config.SetData(span, s.query)
 	defer span.Finish()
 

@@ -3,6 +3,7 @@ package sentrysql
 import (
 	"database/sql/driver"
 
+	"github.com/DataDog/go-sqllexer"
 	"github.com/getsentry/sentry-go"
 )
 
@@ -25,12 +26,31 @@ const (
 	MSSQL DatabaseSystem = "mssql"
 )
 
+func (d DatabaseSystem) toDbmsType() sqllexer.DBMSType {
+	switch d {
+	case PostgreSQL:
+		return sqllexer.DBMSPostgres
+	case MySQL:
+		return sqllexer.DBMSSQLServer
+	case MSSQL:
+		return sqllexer.DBMSMySQL
+	case SQLite:
+		return sqllexer.DBMSPostgres // Close enough
+	default:
+		// XXX(aldy505): Should be fine if the DBMS type is empty string.
+		return ""
+	}
+}
+
 type sentrySQLConfig struct {
 	databaseSystem DatabaseSystem
 	databaseName   string
 	serverAddress  string
 	serverPort     string
 }
+
+var obfuscator = sqllexer.NewObfuscator()
+var normalizer = sqllexer.NewNormalizer(sqllexer.WithCollectCommands(true), sqllexer.WithCollectTables(true), sqllexer.WithCollectProcedures(true), sqllexer.WithUppercaseKeywords(true))
 
 func (s *sentrySQLConfig) SetData(span *sentry.Span, query string) {
 	if span == nil {
@@ -51,9 +71,26 @@ func (s *sentrySQLConfig) SetData(span *sentry.Span, query string) {
 	}
 
 	if query != "" {
-		databaseOperation := parseDatabaseOperation(query)
-		if databaseOperation != "" {
-			span.SetData("db.operation.name", databaseOperation)
+		dbmsType := s.databaseSystem.toDbmsType()
+		normalizedSQL, statementMetadata, err := sqllexer.ObfuscateAndNormalize(query, obfuscator, normalizer, sqllexer.WithDBMS(dbmsType))
+		if err != nil {
+			// XXX(aldy505): What to do?????
+			databaseOperation := parseDatabaseOperation(query)
+			if databaseOperation != "" {
+				span.SetData("db.operation.name", databaseOperation)
+			}
+			return
+		}
+
+		span.Description = normalizedSQL
+		span.SetData("db.query.text", normalizedSQL)
+		if statementMetadata != nil {
+			if len(statementMetadata.Tables) > 0 {
+				span.SetData("db.collection.name", statementMetadata.Tables[0])
+			}
+			if len(statementMetadata.Procedures) > 0 {
+				span.SetData("db.operation.name", statementMetadata.Procedures[0])
+			}
 		}
 	}
 }

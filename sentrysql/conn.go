@@ -126,7 +126,7 @@ func (s *sentryConn) Query(query string, args []driver.Value) (driver.Rows, erro
 		return queryer.Query(query, args)
 	}
 
-	span := parentSpan.StartChild("db.sql.query", sentry.WithDescription(query))
+	span := parentSpan.StartChild("db.sql.query")
 	s.config.SetData(span, query)
 	defer span.Finish()
 
@@ -167,7 +167,7 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 		return queryerContext.QueryContext(ctx, query, args)
 	}
 
-	span := parentSpan.StartChild("db.sql.query", sentry.WithDescription(query))
+	span := parentSpan.StartChild("db.sql.query")
 	s.config.SetData(span, query)
 	defer span.Finish()
 
@@ -194,7 +194,7 @@ func (s *sentryConn) Exec(query string, args []driver.Value) (driver.Result, err
 		return execer.Exec(query, args)
 	}
 
-	span := parentSpan.StartChild("db.sql.exec", sentry.WithDescription(query))
+	span := parentSpan.StartChild("db.sql.execute")
 	s.config.SetData(span, query)
 	defer span.Finish()
 
@@ -235,7 +235,7 @@ func (s *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 		return execerContext.ExecContext(ctx, query, args)
 	}
 
-	span := parentSpan.StartChild("db.sql.exec", sentry.WithDescription(query))
+	span := parentSpan.StartChild("db.sql.execute")
 	s.config.SetData(span, query)
 	defer span.Finish()
 

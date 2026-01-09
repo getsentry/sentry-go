@@ -5,6 +5,7 @@ go 1.23.0
 replace github.com/getsentry/sentry-go => ../
 
 require (
+	github.com/DataDog/go-sqllexer v0.1.10
 	github.com/getsentry/sentry-go v0.32.0
 	github.com/glebarez/go-sqlite v1.21.1
 	github.com/go-sql-driver/mysql v1.8.1
