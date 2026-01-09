@@ -45,6 +45,14 @@ func TestEnvelope_ItemsAndSerialization(t *testing.T) {
 			payload:  []byte(`[{"timestamp":"2023-01-01T12:00:00Z","level":"info","message":"test log"}]`),
 			creator:  func(p []byte) *EnvelopeItem { return NewLogItem(1, p) },
 		},
+		{
+			name:     "trace_metric",
+			itemType: EnvelopeItemTypeTraceMetric,
+			payload:  []byte(`[{"name":"test.metric","type":"gauge","value":42,"unit":"units","attributes":{"key.string":{"value":"value","type":"string"}}}]`),
+			creator: func(p []byte) *EnvelopeItem {
+				return NewTraceMetricItem(1, p)
+			},
+		},
 	}
 
 	for _, tt := range tests {

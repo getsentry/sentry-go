@@ -232,6 +232,23 @@ func (s *Scheduler) processItems(buffer Storage[protocol.EnvelopeItemConvertible
 			debuglog.Printf("error sending envelope: %v", err)
 		}
 		return
+	case ratelimit.CategoryTraceMetric:
+		metrics := protocol.Metrics(items)
+		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Sdk: s.sdkInfo}
+		if s.dsn != nil {
+			header.Dsn = s.dsn.String()
+		}
+		envelope := protocol.NewEnvelope(header)
+		item, err := metrics.ToEnvelopeItem()
+		if err != nil {
+			debuglog.Printf("error creating trace metric batch envelope item: %v", err)
+			return
+		}
+		envelope.AddItem(item)
+		if err := s.transport.SendEnvelope(envelope); err != nil {
+			debuglog.Printf("error sending envelope: %v", err)
+		}
+		return
 	default:
 		// if the buffers are properly configured, buffer.PollIfReady should return a single item for every category
 		// other than logs. We still iterate over the items just in case, because we don't want to send broken envelopes.
