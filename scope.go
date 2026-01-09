@@ -215,9 +215,14 @@ func (scope *Scope) SetTags(tags map[string]string) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	for k, v := range tags {
-		scope.tags[k] = v
+	clone := make(map[string]string, len(scope.tags)+len(tags))
+	for k, v := range scope.tags {
+		clone[k] = v
 	}
+	for k, v := range tags {
+		clone[k] = v
+	}
+	scope.tags = clone
 }
 
 // RemoveTag removes a tag from the current scope.
@@ -233,7 +238,7 @@ func (scope *Scope) SetContext(key string, value Context) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	scope.contexts[key] = value
+	scope.contexts[key] = cloneContextSnapshot(value)
 }
 
 // SetContexts assigns multiple contexts to the current scope.
@@ -242,7 +247,7 @@ func (scope *Scope) SetContexts(contexts map[string]Context) {
 	defer scope.mu.Unlock()
 
 	for k, v := range contexts {
-		scope.contexts[k] = v
+		scope.contexts[k] = cloneContextSnapshot(v)
 	}
 }
 
@@ -259,7 +264,7 @@ func (scope *Scope) SetExtra(key string, value interface{}) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	scope.extra[key] = value
+	scope.extra[key] = deepCopyValue(value)
 }
 
 // SetExtras assigns multiple extras to the current scope.
@@ -268,7 +273,7 @@ func (scope *Scope) SetExtras(extra map[string]interface{}) {
 	defer scope.mu.Unlock()
 
 	for k, v := range extra {
-		scope.extra[k] = v
+		scope.extra[k] = deepCopyValue(v)
 	}
 }
 
@@ -404,7 +409,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 
 			// Ensure we are not overwriting event fields
 			if _, ok := event.Contexts[key]; !ok {
-				event.Contexts[key] = cloneContext(value)
+				event.Contexts[key] = cloneContextSnapshot(value)
 			}
 		}
 	}
@@ -438,7 +443,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		}
 
 		for key, value := range scope.extra {
-			event.Extra[key] = value
+			event.Extra[key] = deepCopyValue(value)
 		}
 	}
 
@@ -491,6 +496,16 @@ func cloneContext(c Context) Context {
 	res := make(Context, len(c))
 	for k, v := range c {
 		res[k] = v
+	}
+	return res
+}
+
+// cloneContextSnapshot copies a Context and snapshots nested values to avoid
+// races from later user mutations.
+func cloneContextSnapshot(c Context) Context {
+	res := make(Context, len(c))
+	for k, v := range c {
+		res[k] = deepCopyValue(v)
 	}
 	return res
 }
