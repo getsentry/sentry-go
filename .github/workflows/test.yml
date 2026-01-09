@@ -29,8 +29,8 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/checkout@v5
-      - uses: actions/cache@v4
+      - uses: actions/checkout@v6
+      - uses: actions/cache@v5
         with:
           # In order:
           # * Module download cache
@@ -55,7 +55,7 @@ jobs:
       - name: Test${{ env.RUN_RACE_TESTS == 'true' && ' (with race detection)' || '' }}
         run: ${{ env.RUN_RACE_TESTS == 'true' && 'make test-race-coverage' || 'make test-coverage' }}
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # pin@v5.5.1
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # pin@v5.5.2
         with:
           directory: .coverage
           token: ${{ secrets.CODECOV_TOKEN }}
