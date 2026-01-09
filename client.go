@@ -290,6 +290,44 @@ type ClientOptions struct {
 	DisableTelemetryBuffer bool
 }
 
+// spotlightConfigValue represents the parsed result of SENTRY_SPOTLIGHT env var or config.
+type spotlightConfigValue struct {
+	enabled bool
+	url     string
+}
+
+// parseSpotlightEnvVar parses the SENTRY_SPOTLIGHT environment variable.
+// Returns (enabled, url) where:
+// - Truthy values enable Spotlight with default URL: "true", "t", "y", "yes", "on", "1"
+// - Falsy values disable Spotlight: "false", "f", "n", "no", "off", "0"
+// - Other non-empty strings are treated as custom Spotlight URLs
+// - Empty string returns (false, "")
+func parseSpotlightEnvVar(value string) spotlightConfigValue {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return spotlightConfigValue{enabled: false}
+	}
+
+	// Check truthy values
+	truthy := map[string]bool{
+		"true": true, "t": true, "y": true, "yes": true, "on": true, "1": true,
+	}
+	if truthy[value] {
+		return spotlightConfigValue{enabled: true, url: ""}
+	}
+
+	// Check falsy values
+	falsy := map[string]bool{
+		"false": true, "f": true, "n": true, "no": true, "off": true, "0": true,
+	}
+	if falsy[value] {
+		return spotlightConfigValue{enabled: false}
+	}
+
+	// Treat as URL
+	return spotlightConfigValue{enabled: true, url: value}
+}
+
 // Client is the underlying processor that is used by the main API and Hub
 // instances. It must be created with NewClient.
 type Client struct {
@@ -372,10 +410,30 @@ func NewClient(options ClientOptions) (*Client, error) {
 		options.TraceIgnoreStatusCodes = [][]int{{404}}
 	}
 
-	// Check for Spotlight environment variable
-	if !options.Spotlight {
-		if spotlightEnv := os.Getenv("SENTRY_SPOTLIGHT"); spotlightEnv == "true" || spotlightEnv == "1" {
+	// Handle Spotlight configuration with environment variable precedence
+	spotlightEnvVar := os.Getenv("SENTRY_SPOTLIGHT")
+	if spotlightEnvVar != "" {
+		envConfig := parseSpotlightEnvVar(spotlightEnvVar)
+
+		if options.SpotlightURL != "" {
+			// Config URL explicitly set: use it and warn
+			debuglog.Printf("Both SpotlightURL config and SENTRY_SPOTLIGHT env var are set. Using config URL: %s", options.SpotlightURL)
 			options.Spotlight = true
+		} else if options.Spotlight && envConfig.url != "" {
+			// Config enables Spotlight but no URL, env var has URL: use env var URL
+			options.SpotlightURL = envConfig.url
+			debuglog.Printf("Spotlight enabled via config but using URL from SENTRY_SPOTLIGHT: %s", envConfig.url)
+		} else if !options.Spotlight {
+			// Config doesn't set Spotlight: use env var setting
+			options.Spotlight = envConfig.enabled
+			if envConfig.url != "" {
+				options.SpotlightURL = envConfig.url
+			}
+			if envConfig.enabled {
+				debuglog.Println("Spotlight enabled via SENTRY_SPOTLIGHT env var")
+			} else if spotlightEnvVar != "" {
+				debuglog.Println("Spotlight disabled via SENTRY_SPOTLIGHT env var")
+			}
 		}
 	}
 

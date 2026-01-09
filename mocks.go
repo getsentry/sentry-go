@@ -2,8 +2,11 @@ package sentry
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
+
+	"github.com/getsentry/sentry-go/internal/protocol"
 )
 
 // MockScope implements [Scope] for use in tests.
@@ -38,6 +41,19 @@ func (t *MockTransport) SendEvent(event *Event) {
 	defer t.mu.Unlock()
 	t.events = append(t.events, event)
 	t.lastEvent = event
+}
+func (t *MockTransport) SendEnvelope(envelope *protocol.Envelope) {
+	// For now, extract event from envelope and send via SendEvent
+	if envelope == nil || len(envelope.Items) == 0 {
+		return
+	}
+	item := envelope.Items[0]
+	if item.Payload != nil {
+		var event Event
+		if err := json.Unmarshal(item.Payload, &event); err == nil {
+			t.SendEvent(&event)
+		}
+	}
 }
 func (t *MockTransport) Flush(_ time.Duration) bool {
 	t.mu.Lock()

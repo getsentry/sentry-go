@@ -32,6 +32,7 @@ type Transport interface {
 	FlushWithContext(ctx context.Context) bool
 	Configure(options ClientOptions)
 	SendEvent(event *Event)
+	SendEnvelope(envelope *protocol.Envelope)
 	Close()
 }
 
@@ -507,6 +508,26 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	t.buffer <- b
 }
 
+// SendEnvelope sends an envelope to the Sentry server.
+// Currently converts envelope back to event for compatibility.
+// In the future, this will be the primary method.
+func (t *HTTPTransport) SendEnvelope(envelope *protocol.Envelope) {
+	// For now, as a temporary implementation, extract event from envelope and send via SendEvent
+	// This maintains backwards compatibility while we transition to envelope-based transport
+	if envelope == nil || len(envelope.Items) == 0 {
+		return
+	}
+
+	// Try to extract event from first item and send it
+	item := envelope.Items[0]
+	if item.Payload != nil {
+		var event Event
+		if err := json.Unmarshal(item.Payload, &event); err == nil {
+			t.SendEvent(&event)
+		}
+	}
+}
+
 // Flush waits until any buffered events are sent to the Sentry server, blocking
 // for at most the given timeout. It returns false if the timeout was reached.
 // In that case, some events may not have been sent.
@@ -777,6 +798,23 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 	t.SendEventWithContext(context.Background(), event)
 }
 
+func (t *HTTPSyncTransport) SendEnvelope(envelope *protocol.Envelope) {
+	// For now, as a temporary implementation, extract event from envelope and send via SendEvent
+	// This maintains backwards compatibility while we transition to envelope-based transport
+	if envelope == nil || len(envelope.Items) == 0 {
+		return
+	}
+
+	// Try to extract event from first item and send it
+	item := envelope.Items[0]
+	if item.Payload != nil {
+		var event Event
+		if err := json.Unmarshal(item.Payload, &event); err == nil {
+			t.SendEvent(&event)
+		}
+	}
+}
+
 func (t *HTTPSyncTransport) Close() {}
 
 // SendEventWithContext assembles a new packet out of Event and sends it to the remote server.
@@ -877,6 +915,10 @@ func (noopTransport) SendEvent(*Event) {
 	debuglog.Println("Event dropped due to noopTransport usage.")
 }
 
+func (noopTransport) SendEnvelope(*protocol.Envelope) {
+	debuglog.Println("Envelope dropped due to noopTransport usage.")
+}
+
 func (noopTransport) Flush(time.Duration) bool {
 	return true
 }
@@ -918,6 +960,12 @@ func (st *SpotlightTransport) SendEvent(event *Event) {
 
 	// Always send to Spotlight
 	st.sendToSpotlight(event)
+}
+
+func (st *SpotlightTransport) SendEnvelope(envelope *protocol.Envelope) {
+	// For now, delegate to underlying transport
+	// TODO: Enhance to clone and modify envelope for Spotlight with full PII/100% sample rate
+	st.underlying.SendEnvelope(envelope)
 }
 
 func (st *SpotlightTransport) sendToSpotlight(event *Event) {
@@ -1055,6 +1103,12 @@ func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
 		envelope.AddItem(attachmentItem)
 	}
 
+	if err := a.transport.SendEnvelope(envelope); err != nil {
+		debuglog.Printf("Error sending envelope: %v", err)
+	}
+}
+
+func (a *internalAsyncTransportAdapter) SendEnvelope(envelope *protocol.Envelope) {
 	if err := a.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("Error sending envelope: %v", err)
 	}
