@@ -4,8 +4,29 @@ import (
 	"maps"
 	"reflect"
 	"slices"
-	"unsafe"
 )
+
+type deepCopySeenKey struct {
+	kind reflect.Kind
+	ptr  uintptr
+	len  int
+	cap  int
+}
+
+func newDeepCopySeenKey(v reflect.Value) deepCopySeenKey {
+	key := deepCopySeenKey{kind: v.Kind()}
+
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Map:
+		key.ptr = v.Pointer()
+	case reflect.Slice:
+		key.ptr = v.Pointer()
+		key.len = v.Len()
+		key.cap = v.Cap()
+	}
+
+	return key
+}
 
 // deepCopyValue deep-copies common mutable containers. It falls back to the
 // original value when copying is not applicable.
@@ -32,10 +53,10 @@ func deepCopyValue(v any) any {
 		return maps.Clone(t)
 	}
 
-	return deepCopyValueRec(reflect.ValueOf(v), make(map[uintptr]reflect.Value)).Interface()
+	return deepCopyValueRec(reflect.ValueOf(v), make(map[deepCopySeenKey]reflect.Value)).Interface()
 }
 
-func deepCopyValueRec(v reflect.Value, seen map[uintptr]reflect.Value) reflect.Value {
+func deepCopyValueRec(v reflect.Value, seen map[deepCopySeenKey]reflect.Value) reflect.Value {
 	if !v.IsValid() {
 		return v
 	}
@@ -53,24 +74,24 @@ func deepCopyValueRec(v reflect.Value, seen map[uintptr]reflect.Value) reflect.V
 		if v.IsNil() {
 			return reflect.Zero(v.Type())
 		}
-		ptr := v.Pointer()
-		if cloned, ok := seen[ptr]; ok {
+		key := newDeepCopySeenKey(v)
+		if cloned, ok := seen[key]; ok {
 			return cloned
 		}
 		newPtr := reflect.New(v.Type().Elem())
-		seen[ptr] = newPtr
+		seen[key] = newPtr
 		newPtr.Elem().Set(deepCopyValueRec(v.Elem(), seen))
 		return newPtr
 	case reflect.Slice:
 		if v.IsNil() {
 			return reflect.Zero(v.Type())
 		}
-		ptr := v.Pointer()
-		if cloned, ok := seen[ptr]; ok {
+		key := newDeepCopySeenKey(v)
+		if cloned, ok := seen[key]; ok {
 			return cloned
 		}
 		clone := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
-		seen[ptr] = clone
+		seen[key] = clone
 		for i := 0; i < v.Len(); i++ {
 			clone.Index(i).Set(deepCopyValueRec(v.Index(i), seen))
 		}
@@ -79,12 +100,12 @@ func deepCopyValueRec(v reflect.Value, seen map[uintptr]reflect.Value) reflect.V
 		if v.IsNil() {
 			return reflect.Zero(v.Type())
 		}
-		ptr := v.Pointer()
-		if cloned, ok := seen[ptr]; ok {
+		key := newDeepCopySeenKey(v)
+		if cloned, ok := seen[key]; ok {
 			return cloned
 		}
 		clone := reflect.MakeMapWithSize(v.Type(), v.Len())
-		seen[ptr] = clone
+		seen[key] = clone
 		for _, key := range v.MapKeys() {
 			clone.SetMapIndex(
 				deepCopyValueRec(key, seen),
@@ -100,17 +121,13 @@ func deepCopyValueRec(v reflect.Value, seen map[uintptr]reflect.Value) reflect.V
 		return clone
 	case reflect.Struct:
 		clone := reflect.New(v.Type()).Elem()
+		clone.Set(v)
 		for i := 0; i < v.NumField(); i++ {
 			dst := clone.Field(i)
-			copied := deepCopyValueRec(v.Field(i), seen)
 
 			if dst.CanSet() {
+				copied := deepCopyValueRec(v.Field(i), seen)
 				dst.Set(copied)
-			} else {
-				reflect.NewAt(
-					dst.Type(),
-					unsafe.Pointer(dst.UnsafeAddr()),
-				).Elem().Set(copied)
 			}
 		}
 		return clone
