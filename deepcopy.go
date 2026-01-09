@@ -4,6 +4,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"unsafe"
 )
 
 // deepCopyValue deep-copies common mutable containers. It falls back to the
@@ -42,25 +43,27 @@ func deepCopyValueRec(v reflect.Value, seen map[uintptr]reflect.Value) reflect.V
 	switch v.Kind() {
 	case reflect.Interface:
 		if v.IsNil() {
-			return v
+			return reflect.Zero(v.Type())
 		}
-		return deepCopyValueRec(v.Elem(), seen)
+		cloned := deepCopyValueRec(v.Elem(), seen)
+		out := reflect.New(v.Type()).Elem()
+		out.Set(cloned)
+		return out
 	case reflect.Pointer:
 		if v.IsNil() {
-			return v
+			return reflect.Zero(v.Type())
 		}
 		ptr := v.Pointer()
 		if cloned, ok := seen[ptr]; ok {
 			return cloned
 		}
-		cloned := deepCopyValueRec(v.Elem(), seen)
-		newPtr := reflect.New(cloned.Type())
+		newPtr := reflect.New(v.Type().Elem())
 		seen[ptr] = newPtr
-		newPtr.Elem().Set(cloned)
+		newPtr.Elem().Set(deepCopyValueRec(v.Elem(), seen))
 		return newPtr
 	case reflect.Slice:
 		if v.IsNil() {
-			return v
+			return reflect.Zero(v.Type())
 		}
 		ptr := v.Pointer()
 		if cloned, ok := seen[ptr]; ok {
@@ -74,7 +77,7 @@ func deepCopyValueRec(v reflect.Value, seen map[uintptr]reflect.Value) reflect.V
 		return clone
 	case reflect.Map:
 		if v.IsNil() {
-			return v
+			return reflect.Zero(v.Type())
 		}
 		ptr := v.Pointer()
 		if cloned, ok := seen[ptr]; ok {
@@ -83,13 +86,32 @@ func deepCopyValueRec(v reflect.Value, seen map[uintptr]reflect.Value) reflect.V
 		clone := reflect.MakeMapWithSize(v.Type(), v.Len())
 		seen[ptr] = clone
 		for _, key := range v.MapKeys() {
-			clone.SetMapIndex(key, deepCopyValueRec(v.MapIndex(key), seen))
+			clone.SetMapIndex(
+				deepCopyValueRec(key, seen),
+				deepCopyValueRec(v.MapIndex(key), seen),
+			)
 		}
 		return clone
 	case reflect.Array:
 		clone := reflect.New(v.Type()).Elem()
 		for i := 0; i < v.Len(); i++ {
 			clone.Index(i).Set(deepCopyValueRec(v.Index(i), seen))
+		}
+		return clone
+	case reflect.Struct:
+		clone := reflect.New(v.Type()).Elem()
+		for i := 0; i < v.NumField(); i++ {
+			dst := clone.Field(i)
+			copied := deepCopyValueRec(v.Field(i), seen)
+
+			if dst.CanSet() {
+				dst.Set(copied)
+			} else {
+				reflect.NewAt(
+					dst.Type(),
+					unsafe.Pointer(dst.UnsafeAddr()),
+				).Elem().Set(copied)
+			}
 		}
 		return clone
 	default:
