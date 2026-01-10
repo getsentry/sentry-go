@@ -984,11 +984,12 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 			debuglog.Println("Event dropped: telemetry buffer full or unavailable")
 		}
 	} else {
-		// Build envelope from event and send
-		envelope := client.buildEnvelopeFromEvent(event)
-		client.Transport.SendEnvelope(envelope)
-		// Backwards compatibility: also try SendEvent if transport doesn't implement SendEnvelope
-		// (this will be removed once all transports are updated)
+		// For Spotlight: build and send envelope for enhanced data collection
+		if client.options.Spotlight {
+			envelope := client.buildEnvelopeFromEvent(event)
+			client.Transport.SendEnvelope(envelope)
+		}
+		// Default path: send event directly for backwards compatibility
 		client.Transport.SendEvent(event)
 	}
 
