@@ -156,3 +156,85 @@ func TestSpotlightClientOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestSpotlightURLPrecedence(t *testing.T) {
+	defaultURL := "http://localhost:8969/stream"
+
+	tests := []struct {
+		name        string
+		options     ClientOptions
+		envVar      string
+		wantURL     string
+		description string
+	}{
+		{
+			name: "Default URL when spotlight=true, no URL, no env var",
+			options: ClientOptions{
+				Spotlight: true,
+			},
+			wantURL:     defaultURL,
+			description: "Should use default URL",
+		},
+		{
+			name: "Config URL takes precedence over env var URL",
+			options: ClientOptions{
+				Spotlight:    true,
+				SpotlightURL: "http://config.url/stream",
+			},
+			envVar:      "http://env.url/stream",
+			wantURL:     "http://config.url/stream",
+			description: "Config URL should take precedence",
+		},
+		{
+			name: "Env var URL used when spotlight=true, no URL, SENTRY_SPOTLIGHT=URL",
+			options: ClientOptions{
+				Spotlight: true,
+			},
+			envVar:      "http://env.url/stream",
+			wantURL:     "http://env.url/stream",
+			description: "Env var URL should be used",
+		},
+		{
+			name: "Env var URL used when no config, SENTRY_SPOTLIGHT=URL",
+			options: ClientOptions{
+				Dsn: "https://user@sentry.io/123",
+			},
+			envVar:      "http://env.url/stream",
+			wantURL:     "http://env.url/stream",
+			description: "Env var URL should be used",
+		},
+		{
+			name: "Default URL when SENTRY_SPOTLIGHT=true, no config",
+			options: ClientOptions{
+				Dsn: "https://user@sentry.io/123",
+			},
+			envVar:      "true",
+			wantURL:     defaultURL,
+			description: "Default URL should be used",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envVar != "" {
+				t.Setenv("SENTRY_SPOTLIGHT", tt.envVar)
+			} else {
+				t.Setenv("SENTRY_SPOTLIGHT", "")
+			}
+
+			client, err := NewClient(tt.options)
+			if err != nil {
+				t.Fatalf("NewClient() error = %v", err)
+			}
+
+			st, ok := client.Transport.(*SpotlightTransport)
+			if !ok {
+				t.Fatalf("Expected SpotlightTransport, got %T", client.Transport)
+			}
+
+			if st.spotlightURL != tt.wantURL {
+				t.Errorf("%s: Expected URL %s, got %s", tt.description, tt.wantURL, st.spotlightURL)
+			}
+		})
+	}
+}
