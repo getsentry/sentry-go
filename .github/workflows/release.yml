@@ -32,5 +32,5 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ steps.token.outputs.token }}
       with:
-        version: ${{ inputs.version }}
-        force: ${{ inputs.force }}
+        version: ${{ github.event.inputs.version }}
+        force: ${{ github.event.inputs.force }}
