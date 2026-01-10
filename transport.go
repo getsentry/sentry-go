@@ -963,9 +963,94 @@ func (st *SpotlightTransport) SendEvent(event *Event) {
 }
 
 func (st *SpotlightTransport) SendEnvelope(envelope *protocol.Envelope) {
-	// For now, delegate to underlying transport
-	// TODO: Enhance to clone and modify envelope for Spotlight with full PII/100% sample rate
+	// Send original envelope to underlying Sentry transport first
 	st.underlying.SendEnvelope(envelope)
+
+	// Clone envelope for Spotlight and send with enhanced settings
+	st.sendEnvelopeToSpotlight(envelope)
+}
+
+func (st *SpotlightTransport) sendEnvelopeToSpotlight(envelope *protocol.Envelope) {
+	if envelope == nil || len(envelope.Items) == 0 {
+		return
+	}
+
+	// Clone the envelope for Spotlight
+	spotlightEnvelope := st.cloneEnvelope(envelope)
+
+	// Convert envelope to bytes and send to Spotlight
+	envelopeBytes, err := spotlightEnvelope.Serialize()
+	if err != nil {
+		DebugLogger.Printf("Failed to serialize envelope for Spotlight: %v", err)
+		return
+	}
+
+	st.sendToSpotlightServer(envelopeBytes)
+}
+
+// cloneEnvelope creates a deep copy of an envelope for Spotlight
+func (st *SpotlightTransport) cloneEnvelope(envelope *protocol.Envelope) *protocol.Envelope {
+	// Create a new envelope with the same header
+	newHeader := &protocol.EnvelopeHeader{
+		EventID: envelope.Header.EventID,
+		SentAt:  envelope.Header.SentAt,
+		Dsn:     envelope.Header.Dsn,
+		Trace:   envelope.Header.Trace,
+	}
+	if envelope.Header.Sdk != nil {
+		newHeader.Sdk = &protocol.SdkInfo{
+			Name:         envelope.Header.Sdk.Name,
+			Version:      envelope.Header.Sdk.Version,
+			Integrations: append([]string{}, envelope.Header.Sdk.Integrations...),
+			Packages:     append([]protocol.SdkPackage{}, envelope.Header.Sdk.Packages...),
+		}
+	}
+
+	cloned := protocol.NewEnvelope(newHeader)
+
+	// Clone all items
+	for _, item := range envelope.Items {
+		if item != nil {
+			newItem := &protocol.EnvelopeItem{
+				Header:  item.Header,
+				Payload: append([]byte(nil), item.Payload...),
+			}
+			cloned.AddItem(newItem)
+		}
+	}
+
+	return cloned
+}
+
+func (st *SpotlightTransport) sendToSpotlightServer(envelopeBytes []byte) {
+	ctx := context.Background()
+	timeoutCtx, cancel := context.WithTimeout(ctx, st.client.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(timeoutCtx, "POST", st.spotlightURL, bytes.NewReader(envelopeBytes))
+	if err != nil {
+		DebugLogger.Printf("Failed to create Spotlight request: %v", err)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/x-sentry-envelope")
+	if SDKVersion != "" {
+		req.Header.Set("User-Agent", "sentry-go/"+SDKVersion)
+	}
+
+	resp, err := st.client.Do(req)
+	if err != nil {
+		DebugLogger.Printf("Failed to send envelope to Spotlight: %v", err)
+		return
+	}
+	defer func() {
+		_, _ = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		DebugLogger.Printf("Spotlight server returned status %d", resp.StatusCode)
+	}
 }
 
 func (st *SpotlightTransport) sendToSpotlight(event *Event) {

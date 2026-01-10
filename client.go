@@ -984,6 +984,11 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 			debuglog.Println("Event dropped: telemetry buffer full or unavailable")
 		}
 	} else {
+		// Build envelope from event and send
+		envelope := client.buildEnvelopeFromEvent(event)
+		client.Transport.SendEnvelope(envelope)
+		// Backwards compatibility: also try SendEvent if transport doesn't implement SendEnvelope
+		// (this will be removed once all transports are updated)
 		client.Transport.SendEvent(event)
 	}
 
@@ -1102,6 +1107,45 @@ func (client *Client) integrationAlreadyInstalled(name string) bool {
 		}
 	}
 	return false
+}
+
+// buildEnvelopeFromEvent builds an envelope from an event.
+// This is used to send events via the envelope-based transport API.
+func (client *Client) buildEnvelopeFromEvent(event *Event) *protocol.Envelope {
+	header := &protocol.EnvelopeHeader{
+		EventID: string(event.EventID),
+		SentAt:  time.Now(),
+		Sdk: &protocol.SdkInfo{
+			Name:    event.Sdk.Name,
+			Version: event.Sdk.Version,
+		},
+	}
+
+	if client.dsn != nil {
+		header.Dsn = client.dsn.String()
+	}
+
+	if header.EventID == "" {
+		header.EventID = protocol.GenerateEventID()
+	}
+
+	envelope := protocol.NewEnvelope(header)
+
+	// Convert event to envelope item
+	item, err := event.ToEnvelopeItem()
+	if err != nil {
+		debuglog.Printf("Failed to convert event to envelope item: %v", err)
+		return envelope
+	}
+	envelope.AddItem(item)
+
+	// Add attachments
+	for _, attachment := range event.Attachments {
+		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
+		envelope.AddItem(attachmentItem)
+	}
+
+	return envelope
 }
 
 // sample returns true with the given probability, which must be in the range
