@@ -281,7 +281,7 @@ type ClientOptions struct {
 	TraceIgnoreStatusCodes [][]int
 	// Enable Spotlight for local development debugging.
 	// When enabled, events are sent to the local Spotlight sidecar.
-	// Default Spotlight URL is http://localhost:8969/
+	// Default Spotlight URL is http://localhost:8969/stream
 	Spotlight bool
 	// SpotlightURL is the URL to send events to when Spotlight is enabled.
 	// Defaults to http://localhost:8969/stream

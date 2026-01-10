@@ -1047,13 +1047,12 @@ func (st *SpotlightTransport) modifyEventItemForSpotlight(item *protocol.Envelop
 	}
 
 	// Modify event for Spotlight spec compliance
-	// MUST: Enable 100% sample rate for Spotlight
-	// (Note: sample_rate is not a direct field on Event, but we ensure it's processed at 100%)
+	// Note: Sampling happens at the Client level before reaching the transport layer.
+	// Events that reach Spotlight are those that weren't dropped by the client's
+	// SampleRate setting. Spotlight receives 100% of sampled events.
 
-	// MUST: Enable all PII data collection for Spotlight
-	// (This is typically a processing flag, but we ensure PII is included in the event)
-	// For now, we just send the event as-is since it should already contain all data
-	// by the time it reaches the transport. The key is that Spotlight receives it unfiltered.
+	// Spotlight receives all PII data collected by the SDK. The SDK doesn't filter
+	// PII at the transport level, so events arrive at Spotlight unfiltered and complete.
 
 	// Reserialize the (potentially modified) event
 	modifiedPayload, err := json.Marshal(event)
@@ -1166,6 +1165,10 @@ func (st *SpotlightTransport) sendToSpotlight(event *Event) {
 	}
 }
 
+// Flush waits for pending events to be sent to Sentry (via the underlying transport).
+// Note: This does not wait for pending Spotlight sends to complete. Spotlight sends
+// are non-blocking and best-effort. This is acceptable since Spotlight is a development-only
+// debugging tool. For critical production use cases, use the underlying transport directly.
 func (st *SpotlightTransport) Flush(timeout time.Duration) bool {
 	return st.underlying.Flush(timeout)
 }
