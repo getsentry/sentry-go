@@ -3,6 +3,7 @@ package sentrysql
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"sync"
 
 	"github.com/getsentry/sentry-go"
@@ -67,6 +68,17 @@ func (s *sentryConn) PrepareContext(ctx context.Context, query string) (driver.S
 
 	stmt, err := connPrepareContext.PrepareContext(ctx, query)
 	if err != nil {
+		if errors.Is(err, driver.ErrSkip) && s.config.alwaysUseFallbackCommand {
+			// Sometimes driver may return ErrSkip even if it implements ConnPrepareContext.
+			// In that case, we should fall back to Prepare without context.
+			if ctx != nil {
+				s.Lock()
+				s.ctx = ctx
+				s.Unlock()
+			}
+			return s.Prepare(query)
+		}
+
 		return nil, err
 	}
 
@@ -173,6 +185,24 @@ func (s *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 
 	rows, err := queryerContext.QueryContext(span.Context(), query, args)
 	if err != nil {
+		if errors.Is(err, driver.ErrSkip) && s.config.alwaysUseFallbackCommand {
+			// Sometimes driver may return ErrSkip even if it implements QueryerContext.
+			// In that case, we should fall back to Query without context.
+			// We need to drop the current span first
+			span.Sampled = sentry.SampledFalse
+			values, err := namedValueToValue(args)
+			if err != nil {
+				return nil, err
+			}
+
+			if ctx != nil {
+				s.Lock()
+				s.ctx = ctx
+				s.Unlock()
+			}
+			return s.Query(query, values)
+		}
+
 		span.Status = sentry.SpanStatusInternalError
 		return nil, err
 	}
@@ -241,6 +271,24 @@ func (s *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 
 	rows, err := execerContext.ExecContext(span.Context(), query, args)
 	if err != nil {
+		if errors.Is(err, driver.ErrSkip) && s.config.alwaysUseFallbackCommand {
+			// Sometimes driver may return ErrSkip even if it implements ExecerContext.
+			// In that case, we should fall back to Exec without context.
+			// We need to drop the current span first
+			span.Sampled = sentry.SampledFalse
+			values, err := namedValueToValue(args)
+			if err != nil {
+				return nil, err
+			}
+
+			if ctx != nil {
+				s.Lock()
+				s.ctx = ctx
+				s.Unlock()
+			}
+			return s.Exec(query, values)
+		}
+
 		span.Status = sentry.SpanStatusInternalError
 		return nil, err
 	}

@@ -23,3 +23,16 @@ func WithServerAddress(address string, port string) Option {
 		config.serverPort = port
 	}
 }
+
+// AlwaysUseFallbackCommand makes the sentrysql to try another method if the
+// SQL driver returns driver.ErrSkip when using ExecerContext or QueryerContext.
+// This is useful for drivers that have partial support for context methods,
+// but may result in duplicate spans for a single query.
+//
+// The default behavior is to not fallback and just mark the span with internal error
+// status when driver.ErrSkip is returned.
+func AlwaysUseFallbackCommand() Option {
+	return func(config *sentrySQLConfig) {
+		config.alwaysUseFallbackCommand = true
+	}
+}

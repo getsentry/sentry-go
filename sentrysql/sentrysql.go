@@ -2,6 +2,7 @@ package sentrysql
 
 import (
 	"database/sql/driver"
+	"strings"
 
 	"github.com/DataDog/go-sqllexer"
 	"github.com/getsentry/sentry-go"
@@ -43,19 +44,22 @@ func (d DatabaseSystem) toDbmsType() sqllexer.DBMSType {
 }
 
 type sentrySQLConfig struct {
-	databaseSystem DatabaseSystem
-	databaseName   string
-	serverAddress  string
-	serverPort     string
+	databaseSystem           DatabaseSystem
+	databaseName             string
+	serverAddress            string
+	serverPort               string
+	alwaysUseFallbackCommand bool
 }
 
-var obfuscator = sqllexer.NewObfuscator()
-var normalizer = sqllexer.NewNormalizer(sqllexer.WithCollectCommands(true), sqllexer.WithCollectTables(true), sqllexer.WithCollectProcedures(true), sqllexer.WithUppercaseKeywords(true))
+var obfuscator = sqllexer.NewObfuscator(sqllexer.WithReplaceBindParameter(false), sqllexer.WithReplacePositionalParameter(false), sqllexer.WithReplaceBoolean(false), sqllexer.WithReplaceDigits(false), sqllexer.WithReplaceNull(false))
+var normalizer = sqllexer.NewNormalizer(sqllexer.WithCollectCommands(true), sqllexer.WithCollectTables(true), sqllexer.WithCollectProcedures(true), sqllexer.WithRemoveSpaceBetweenParentheses(true), sqllexer.WithUppercaseKeywords(true), sqllexer.WithKeepIdentifierQuotation(true))
 
 func (s *sentrySQLConfig) SetData(span *sentry.Span, query string) {
 	if span == nil {
 		return
 	}
+
+	queryClone := strings.Clone(query)
 
 	if s.databaseSystem != "" {
 		span.SetData("db.system.name", s.databaseSystem)
@@ -70,12 +74,12 @@ func (s *sentrySQLConfig) SetData(span *sentry.Span, query string) {
 		span.SetData("server.port", s.serverPort)
 	}
 
-	if query != "" {
+	if queryClone != "" {
 		dbmsType := s.databaseSystem.toDbmsType()
-		normalizedSQL, statementMetadata, err := sqllexer.ObfuscateAndNormalize(query, obfuscator, normalizer, sqllexer.WithDBMS(dbmsType))
+		normalizedSQL, statementMetadata, err := sqllexer.ObfuscateAndNormalize(queryClone, obfuscator, normalizer, sqllexer.WithDBMS(dbmsType))
 		if err != nil {
 			// XXX(aldy505): What to do?????
-			databaseOperation := parseDatabaseOperation(query)
+			databaseOperation := parseDatabaseOperation(queryClone)
 			if databaseOperation != "" {
 				span.SetData("db.operation.name", databaseOperation)
 			}
@@ -88,8 +92,14 @@ func (s *sentrySQLConfig) SetData(span *sentry.Span, query string) {
 			if len(statementMetadata.Tables) > 0 {
 				span.SetData("db.collection.name", statementMetadata.Tables[0])
 			}
-			if len(statementMetadata.Procedures) > 0 {
-				span.SetData("db.operation.name", statementMetadata.Procedures[0])
+			if len(statementMetadata.Commands) > 0 {
+				span.SetData("db.operation.name", statementMetadata.Commands[0])
+			} else {
+				// Fallback to parsing the operation from the query if procedure is not found.
+				databaseOperation := parseDatabaseOperation(queryClone)
+				if databaseOperation != "" {
+					span.SetData("db.operation.name", databaseOperation)
+				}
 			}
 		}
 	}

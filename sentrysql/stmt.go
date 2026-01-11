@@ -44,7 +44,11 @@ func (s *sentryStmt) Exec(args []driver.Value) (driver.Result, error) {
 
 	result, err := s.originalStmt.Exec(args) //nolint:staticcheck // We must support legacy clients
 	if err != nil {
-		span.Status = sentry.SpanStatusInternalError
+		if errors.Is(err, driver.ErrSkip) {
+			span.Status = sentry.SpanStatusUnimplemented
+		} else {
+			span.Status = sentry.SpanStatusInternalError
+		}
 		return nil, err
 	}
 
@@ -66,7 +70,11 @@ func (s *sentryStmt) Query(args []driver.Value) (driver.Rows, error) {
 
 	rows, err := s.originalStmt.Query(args) //nolint:staticcheck // We must support legacy clients
 	if err != nil {
-		span.Status = sentry.SpanStatusInternalError
+		if errors.Is(err, driver.ErrSkip) {
+			span.Status = sentry.SpanStatusUnimplemented
+		} else {
+			span.Status = sentry.SpanStatusInternalError
+		}
 		return nil, err
 	}
 
@@ -107,6 +115,24 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 
 	result, err := stmtExecContext.ExecContext(span.Context(), args)
 	if err != nil {
+		if errors.Is(err, driver.ErrSkip) && s.config.alwaysUseFallbackCommand {
+			// Sometimes driver may return ErrSkip even if it implements StmtExecContext.
+			// In that case, we should fall back to Exec without context.
+			// We need to drop the current span first
+			span.Sampled = sentry.SampledFalse
+			values, err := namedValueToValue(args)
+			if err != nil {
+				return nil, err
+			}
+
+			if ctx != nil {
+				s.mu.Lock()
+				s.ctx = ctx
+				s.mu.Unlock()
+			}
+			return s.Exec(values)
+		}
+
 		span.Status = sentry.SpanStatusInternalError
 		return nil, err
 	}
@@ -120,7 +146,7 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 	// should only be executed if the original driver implements StmtQueryContext
 	stmtQueryContext, ok := s.originalStmt.(driver.StmtQueryContext)
 	if !ok {
-		// We may not return driver.ErrSkip. We should fallback to Exec without context.
+		// We may not return driver.ErrSkip. We should fallback to Query without context.
 		values, err := namedValueToValue(args)
 		if err != nil {
 			return nil, err
@@ -149,6 +175,24 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 
 	rows, err := stmtQueryContext.QueryContext(span.Context(), args)
 	if err != nil {
+		if errors.Is(err, driver.ErrSkip) && s.config.alwaysUseFallbackCommand {
+			// Sometimes driver may return ErrSkip even if it implements StmtQueryContext.
+			// In that case, we should fall back to Query without context.
+			// We need to drop the current span first
+			span.Sampled = sentry.SampledFalse
+			values, err := namedValueToValue(args)
+			if err != nil {
+				return nil, err
+			}
+
+			if ctx != nil {
+				s.mu.Lock()
+				s.ctx = ctx
+				s.mu.Unlock()
+			}
+			return s.Query(values)
+		}
+
 		span.Status = sentry.SpanStatusInternalError
 		return nil, err
 	}
