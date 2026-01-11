@@ -51,6 +51,8 @@ type sentrySQLConfig struct {
 	alwaysUseFallbackCommand bool
 }
 
+// obfuscator and normalizer are shared instances to avoid creating them multiple times.
+// It's being used for query scrubbing.
 var obfuscator = sqllexer.NewObfuscator(sqllexer.WithReplaceBindParameter(false), sqllexer.WithReplacePositionalParameter(false), sqllexer.WithReplaceBoolean(false), sqllexer.WithReplaceDigits(false), sqllexer.WithReplaceNull(false))
 var normalizer = sqllexer.NewNormalizer(sqllexer.WithCollectCommands(true), sqllexer.WithCollectTables(true), sqllexer.WithCollectProcedures(true), sqllexer.WithRemoveSpaceBetweenParentheses(true), sqllexer.WithUppercaseKeywords(true), sqllexer.WithKeepIdentifierQuotation(true))
 
@@ -78,7 +80,13 @@ func (s *sentrySQLConfig) SetData(span *sentry.Span, query string) {
 		dbmsType := s.databaseSystem.toDbmsType()
 		normalizedSQL, statementMetadata, err := sqllexer.ObfuscateAndNormalize(queryClone, obfuscator, normalizer, sqllexer.WithDBMS(dbmsType))
 		if err != nil {
-			// XXX(aldy505): What to do?????
+			// NOTE(aldy505): There is a very low chance that the obfuscation/normalization fails.
+			// According to the source code, it will return an error if there is a panic within their code.
+			// In this case, we fallback to setting the raw query and parsing the operation manually.
+			//
+			// What's missing from this fallback is the normalized query and table/command metadata.
+			span.Description = queryClone
+			span.SetData("db.query.text", queryClone)
 			databaseOperation := parseDatabaseOperation(queryClone)
 			if databaseOperation != "" {
 				span.SetData("db.operation.name", databaseOperation)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log"
 	"net"
 	"strings"
 	"testing"
@@ -20,23 +19,20 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-type InMemoryMysqlHandler struct {
-	fields []string
-	data   map[string][]interface{}
-}
+// InMemoryMysqlHandler is a simple in-memory MySQL handler for testing purposes.
+// It's basically a no-op handler that can respond to basic commands.
+type InMemoryMysqlHandler struct{}
 
 var _ server.Handler = (*InMemoryMysqlHandler)(nil)
 
 // HandleFieldList handle COM_FILED_LIST command
 func (i *InMemoryMysqlHandler) HandleFieldList(table string, fieldWildcard string) ([]*mysqlclient.Field, error) {
-	log.Println(table, fieldWildcard)
 	return nil, nil
 }
 
 // HandleOtherCommand handle any other command that is not currently handled by the library,
 // default implementation for this method will return an ER_UNKNOWN_ERROR
 func (i *InMemoryMysqlHandler) HandleOtherCommand(cmd byte, data []byte) error {
-	log.Println(cmd)
 	return nil
 }
 
@@ -77,7 +73,8 @@ func (i *InMemoryMysqlHandler) HandleStmtExecute(context interface{}, query stri
 // HandleStmtPrepare handle COM_STMT_PREPARE, params is the param number for this statement, columns is the column number
 // context will be used later for statement execute
 func (i *InMemoryMysqlHandler) HandleStmtPrepare(query string) (params int, columns int, context interface{}, err error) {
-	log.Println(query)
+	// This is a very naive implementation just for testing purposes.
+	// This function must not be a no-op and should return the correct number of params and columns.
 	lexer := sqllexer.New(query, sqllexer.WithDBMS(sqllexer.DBMSMySQL))
 	command := ""
 	columnStop := false
@@ -87,7 +84,6 @@ func (i *InMemoryMysqlHandler) HandleStmtPrepare(query string) (params int, colu
 		if token.Type == sqllexer.EOF {
 			break
 		}
-		log.Println(token.Type, token.Value)
 		if command == "" && token.Type == sqllexer.COMMAND {
 			command = token.Value
 			continue
@@ -144,8 +140,6 @@ func TestNewSentrySQL_MySQL(t *testing.T) {
 				return
 			}
 
-			// Create a connection with user root and an empty password.
-			// You can use your own handler to handle command here.
 			conn, err := server.NewDefaultServer().NewConn(c, "root", "password", &InMemoryMysqlHandler{})
 			if err != nil {
 				t.Logf("failed to create connection: %v", err)
