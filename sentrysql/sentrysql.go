@@ -32,9 +32,9 @@ func (d DatabaseSystem) toDbmsType() sqllexer.DBMSType {
 	case PostgreSQL:
 		return sqllexer.DBMSPostgres
 	case MySQL:
-		return sqllexer.DBMSSQLServer
-	case MSSQL:
 		return sqllexer.DBMSMySQL
+	case MSSQL:
+		return sqllexer.DBMSSQLServer
 	case SQLite:
 		return sqllexer.DBMSPostgres // Close enough
 	default:
