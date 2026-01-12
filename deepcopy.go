@@ -4,6 +4,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"unsafe"
 )
 
 type deepCopySeenKey struct {
@@ -120,18 +121,50 @@ func deepCopyValueRec(v reflect.Value, seen map[deepCopySeenKey]reflect.Value) r
 		}
 		return clone
 	case reflect.Struct:
+		// If we receive an interface, we need to make it addressable so we can safely read unexported fields.
+		v = makeAddressable(v)
 		clone := reflect.New(v.Type()).Elem()
-		clone.Set(v)
 		for i := 0; i < v.NumField(); i++ {
-			dst := clone.Field(i)
-
-			if dst.CanSet() {
-				copied := deepCopyValueRec(v.Field(i), seen)
-				dst.Set(copied)
-			}
+			copied := deepCopyValueRec(readableValue(v.Field(i)), seen)
+			setStructField(clone.Field(i), copied)
 		}
 		return clone
 	default:
 		return v
 	}
+}
+
+// setStructField writes val into dst, including unexported fields, dst must be addressable.
+func setStructField(dst reflect.Value, val reflect.Value) {
+	val = readableValue(val)
+	if dst.CanSet() {
+		dst.Set(val)
+		return
+	}
+	if dst.CanAddr() {
+		dst = reflect.NewAt(dst.Type(), unsafe.Pointer(dst.UnsafeAddr())).Elem()
+		dst.Set(val)
+	}
+}
+
+// makeAddressable returns an addressable copy of v if needed.
+func makeAddressable(v reflect.Value) reflect.Value {
+	if v.CanAddr() {
+		return v
+	}
+	out := reflect.New(v.Type()).Elem()
+	out.Set(v)
+	return out
+}
+
+// readableValue returns a reflect.Value that can be interfaced/assigned even
+// for unexported fields by using unsafe when necessary.
+func readableValue(v reflect.Value) reflect.Value {
+	if v.CanInterface() {
+		return v
+	}
+	if v.CanAddr() {
+		return reflect.NewAt(v.Type(), unsafe.Pointer(v.UnsafeAddr())).Elem()
+	}
+	return v
 }

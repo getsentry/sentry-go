@@ -143,14 +143,84 @@ func TestDeepCopySlicesSharingBackingArray(t *testing.T) {
 func TestDeepCopyStructWithUnexportedFields(t *testing.T) {
 	type container struct {
 		t time.Time
+		m map[string]string
 	}
 
 	now := time.Now()
-	original := container{t: now}
+	original := container{t: now, m: map[string]string{"1": "1"}}
 
 	cloned := deepCopyValue(original).(container)
 
 	if !cloned.t.Equal(now) {
 		t.Fatalf("unexported field not copied: got %v want %v", cloned.t, now)
+	}
+
+	original.m["1"] = "2"
+	original.m["2"] = "2"
+
+	if cloned.m["1"] != "1" {
+		t.Fatalf("unexported map field mutated through original copy")
+	}
+	if _, ok := cloned.m["2"]; ok {
+		t.Fatalf("unexported map field shares backing map with original")
+	}
+}
+
+func TestDeepCopyStructWithUnexportedSlice(t *testing.T) {
+	type container struct {
+		data []int
+	}
+
+	original := container{data: []int{1, 2, 3}}
+	cloned := deepCopyValue(original).(container)
+
+	if len(cloned.data) != len(original.data) {
+		t.Fatalf("unexpected cloned length %d", len(cloned.data))
+	}
+	if &cloned.data[0] == &original.data[0] {
+		t.Fatalf("unexported slice shares backing array")
+	}
+
+	original.data[0] = 99
+	if cloned.data[0] != 1 {
+		t.Fatalf("unexported slice mutated through original copy")
+	}
+}
+
+func TestDeepCopyInterfaceContainingUnexportedStruct(t *testing.T) {
+	type secret struct {
+		t time.Time
+		m map[string]string
+	}
+	type container struct {
+		V any
+	}
+
+	now := time.Now()
+	original := container{
+		V: secret{
+			t: now,
+			m: map[string]string{"a": "1"},
+		},
+	}
+
+	cloned := deepCopyValue(original).(container)
+	clonedSecret, ok := cloned.V.(secret)
+	if !ok {
+		t.Fatalf("unexpected cloned type %T", cloned.V)
+	}
+	if !clonedSecret.t.Equal(now) {
+		t.Fatalf("unexported time not preserved: got %v want %v", clonedSecret.t, now)
+	}
+
+	origSecret := original.V.(secret)
+	origSecret.m["a"] = "changed"
+	origSecret.m["b"] = "new"
+
+	if clonedSecret.m["a"] != "1" {
+		t.Fatalf("unexported map mutated through interface copy")
+	}
+	if _, exists := clonedSecret.m["b"]; exists {
+		t.Fatalf("unexported map shares backing map through interface copy")
 	}
 }
