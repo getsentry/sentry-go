@@ -282,6 +282,7 @@ func TestEnvelopeFromLogEvent(t *testing.T) {
 			},
 		},
 	}
+	event.Items = event.Logs // temp workaround
 	sentAt := time.Unix(0, 0).UTC()
 
 	body := getRequestBodyFromEvent(event)

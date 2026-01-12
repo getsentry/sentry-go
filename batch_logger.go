@@ -59,7 +59,7 @@ func (l *BatchLogger) Shutdown() {
 	})
 }
 
-func (l *BatchLogger) run(ctx context.Context) {
+func (l *BatchLogger) run(ctx context.Context) { // nolint: dupl
 	defer l.wg.Done()
 	var logs []Log
 	timer := time.NewTimer(batchTimeout)
@@ -128,5 +128,6 @@ func (l *BatchLogger) processEvent(logs []Log) {
 	event.EventID = EventID(uuid())
 	event.Type = logEvent.Type
 	event.Logs = logs
+	event.Items = logs
 	l.client.Transport.SendEvent(event)
 }

@@ -457,7 +457,7 @@ func (client *Client) setupTelemetryBuffer() { // nolint: unused
 		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
 		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
 		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTraceMetric, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTraceMetric, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
 	}
 
 	sdkInfo := &protocol.SdkInfo{

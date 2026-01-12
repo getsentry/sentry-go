@@ -123,5 +123,6 @@ func (m *BatchMeter) processEvent(metrics []Metric) {
 	event.EventID = EventID(uuid())
 	event.Type = traceMetricEvent.Type
 	event.Metrics = metrics
+	event.Items = metrics
 	m.client.Transport.SendEvent(event)
 }

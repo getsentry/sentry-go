@@ -432,11 +432,15 @@ type Event struct {
 	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
 
 	// The fields below are only relevant for logs
-	Logs []Log `json:"items,omitempty"`
+	Logs []Log `json:"-"`
 
 	// The fields below are only relevant for metrics
-	Metrics []Metric `json:"metrics,omitempty"`
+	Metrics []Metric `json:"-"`
 
+	// The Items is a container used for serializing logs and metrics.
+	//
+	// This is a temporary workaround, should abstract batch_logger and batch_meter to allow a generic item.
+	Items any `json:"items,omitempty"`
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
@@ -622,6 +626,20 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 }
 
 func (e *Event) defaultMarshalJSON() ([]byte, error) {
+	// Populate Items automatically for logs/metrics when not explicitly set. temp workaround for serializing logs/metrics
+	if e.Items == nil {
+		switch e.Type {
+		case logEvent.Type:
+			if len(e.Logs) > 0 {
+				e.Items = e.Logs
+			}
+		case traceMetricEvent.Type:
+			if len(e.Metrics) > 0 {
+				e.Items = e.Metrics
+			}
+		}
+	}
+
 	// event aliases Event to allow calling json.Marshal without an infinite
 	// loop. It preserves all fields while none of the attached methods.
 	type event Event
@@ -908,9 +926,6 @@ func (m *Metric) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	return &protocol.EnvelopeItem{
 		Header: &protocol.EnvelopeItemHeader{
 			Type: protocol.EnvelopeItemTypeTraceMetric,
-			// XXX(aldy505): I'm basically copy-pasting the implementation for
-			// logs here, but it doesn't seem like "item_count" and "content_type"
-			// are actually written here? Not sure.
 		},
 		Payload: metricData,
 	}, nil
