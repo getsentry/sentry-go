@@ -20,6 +20,16 @@ const (
 	LogTraceID = "d49d9bf66f13450b81f65bc51cf49c03"
 )
 
+// flushFromContext flushes the hub from the given context.
+// This is needed for tests that use a cloned hub for isolation.
+func flushFromContext(ctx context.Context, timeout time.Duration) bool {
+	hub := GetHubFromContext(ctx)
+	if hub == nil {
+		hub = CurrentHub()
+	}
+	return hub.Flush(timeout)
+}
+
 func setupMockTransport() (context.Context, *MockTransport) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
@@ -35,7 +45,7 @@ func setupMockTransport() (context.Context, *MockTransport) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub()
+	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 
@@ -181,7 +191,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 			// invalid attribute should be dropped
 			l.SetAttributes(attribute.Builder{Key: "key.invalid", Value: attribute.Value{}})
 			tt.logFunc(ctx, l)
-			Flush(testutils.FlushTimeout())
+			flushFromContext(ctx, testutils.FlushTimeout())
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
@@ -325,7 +335,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
 			l := NewLogger(ctx)
 			tt.logFunc(ctx, l, tt.args)
-			Flush(testutils.FlushTimeout())
+			flushFromContext(ctx, testutils.FlushTimeout())
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
@@ -404,7 +414,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 	if n != len(msg) {
 		t.Errorf("Write returned wrong byte count: got %d, want %d", n, len(msg))
 	}
-	Flush(testutils.FlushTimeout())
+	flushFromContext(ctx, testutils.FlushTimeout())
 
 	gotEvents := mockTransport.Events()
 	if len(gotEvents) != 1 {
@@ -430,7 +440,7 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 
 	l.SetAttributes(attribute.String("string", "some str"))
 	l.Warn().WithCtx(ctx).Emit(msg)
-	Flush(testutils.FlushTimeout())
+	flushFromContext(ctx, testutils.FlushTimeout())
 
 	gotEvents := mockTransport.Events()
 	if len(gotEvents) != 1 {
@@ -448,7 +458,7 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 	msg := []byte("something")
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx)
-	l.Info().WithCtx(ctx).
+	l.Info().
 		String("key.string", "some str").
 		Int("key.int", 42).
 		Int64("key.int64", 17).
@@ -456,7 +466,7 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 		Bool("key.bool", true).
 		Emit(msg)
 
-	Flush(20 * time.Millisecond)
+	flushFromContext(ctx, testutils.FlushTimeout())
 
 	gotEvents := mockTransport.Events()
 	if len(gotEvents) != 1 {
@@ -472,9 +482,9 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 
 func Test_batchLogger_Flush(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(context.Background())
-	l.Info().WithCtx(ctx).Emit("context done log")
-	Flush(testutils.FlushTimeout())
+	l := NewLogger(ctx)
+	l.Info().Emit("context done log")
+	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -484,12 +494,13 @@ func Test_batchLogger_Flush(t *testing.T) {
 
 func Test_batchLogger_FlushWithContext(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(context.Background())
-	l.Info().WithCtx(ctx).Emit("context done log")
+	l := NewLogger(ctx)
+	l.Info().Emit("context done log")
 
 	cancelCtx, cancel := context.WithTimeout(context.Background(), testutils.FlushTimeout())
-	FlushWithContext(cancelCtx)
 	defer cancel()
+	hub := GetHubFromContext(ctx)
+	hub.FlushWithContext(cancelCtx)
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -502,10 +513,10 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 	l := NewLogger(ctx)
 
 	for i := 0; i < 5; i++ {
-		l.Info().WithCtx(ctx).Emit("test")
+		l.Info().Emit("test")
 	}
 
-	Flush(testutils.FlushTimeout())
+	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -522,10 +533,10 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 	mockTransport.events = nil
 
 	for i := 0; i < 3; i++ {
-		l.Info().WithCtx(ctx).Emit("test")
+		l.Info().Emit("test")
 	}
 
-	Flush(testutils.FlushTimeout())
+	flushFromContext(ctx, testutils.FlushTimeout())
 	events = mockTransport.Events()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event after second flush, got %d", len(events))
@@ -536,7 +547,7 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 
 	mockTransport.events = nil
 
-	Flush(testutils.FlushTimeout())
+	flushFromContext(ctx, testutils.FlushTimeout())
 	events = mockTransport.Events()
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events after third flush with no logs, got %d", len(events))
@@ -581,7 +592,7 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 		t.Fatalf("expected 0 events after multiple shutdowns, got %d", len(events))
 	}
 
-	Flush(testutils.FlushTimeout())
+	flushFromContext(ctx, testutils.FlushTimeout())
 	events = mockTransport.Events()
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events after flush on shutdown logger, got %d", len(events))
@@ -613,7 +624,7 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 
 	l := NewLogger(ctx)
 	l.Info().WithCtx(ctx).Emit("context done log")
-	Flush(testutils.FlushTimeout())
+	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 0 {
@@ -623,9 +634,9 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 
 func Test_Logger_ExceedBatchSize(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(context.Background())
+	l := NewLogger(ctx)
 	for i := 0; i < 100; i++ {
-		l.Info().WithCtx(ctx).Emit("test")
+		l.Info().Emit("test")
 	}
 
 	// sleep to wait for events to propagate
@@ -649,7 +660,7 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 	logger := NewLogger(txn.Context())
 	logger.Info().WithCtx(txn.Context()).Emit("message with tracing")
 
-	Flush(testutils.FlushTimeout())
+	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -747,8 +758,8 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 	ctx = SetHubOnContext(ctx, hub)
 
 	l := NewLogger(ctx)
-	l.Info().WithCtx(ctx).Emit("test message with PII")
-	Flush(20 * time.Millisecond)
+	l.Info().Emit("test message with PII")
+	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 1 {

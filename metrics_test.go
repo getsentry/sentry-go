@@ -255,7 +255,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			meter := NewMeter[float64](ctx)
 
 			tt.metricsFunc(meter)
-			Flush(testutils.FlushTimeout())
+			flushFromContext(ctx, testutils.FlushTimeout())
 
 			opts := cmp.Options{cmpopts.IgnoreFields(Metric{}, "Timestamp")}
 
@@ -279,7 +279,7 @@ func Test_batchMeter_Flush(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	meter := NewMeter[float64](ctx)
 	meter.Count("test.count", 42, MeterOptions{})
-	Flush(testutils.FlushTimeout())
+	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -293,8 +293,9 @@ func Test_batchMeter_FlushWithContext(t *testing.T) {
 	meter.Count("test.count", 42, MeterOptions{})
 
 	cancelCtx, cancel := context.WithTimeout(context.Background(), testutils.FlushTimeout())
-	FlushWithContext(cancelCtx)
 	defer cancel()
+	hub := GetHubFromContext(ctx)
+	hub.FlushWithContext(cancelCtx)
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -327,7 +328,7 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 
 	meter := NewMeter[int](ctx)
 	meter.Count("test.count", 1, MeterOptions{})
-	Flush(testutils.FlushTimeout())
+	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	if len(events) != 0 {
