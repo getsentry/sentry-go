@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"io"
@@ -229,6 +230,8 @@ type ClientOptions struct {
 	// This will default to the HTTPS_PROXY environment variable.
 	// HTTPS_PROXY takes precedence over HTTP_PROXY for https requests.
 	HTTPSProxy string
+	// An optional tls config.
+	TlsConfig *tls.Config
 	// An optional set of SSL certificates to use.
 	CaCerts *x509.CertPool
 	// MaxErrorDepth is the maximum number of errors reported in a chain of errors.
