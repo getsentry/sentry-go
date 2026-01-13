@@ -723,22 +723,24 @@ type EventHint struct {
 }
 
 type Log struct {
-	Timestamp  time.Time            `json:"timestamp,omitempty"`
-	TraceID    TraceID              `json:"trace_id,omitempty"`
+	Timestamp  time.Time            `json:"timestamp"`
+	TraceID    TraceID              `json:"trace_id"`
+	SpanID     SpanID               `json:"span_id,omitempty"`
 	Level      LogLevel             `json:"level"`
 	Severity   int                  `json:"severity_number,omitempty"`
-	Body       string               `json:"body,omitempty"`
+	Body       string               `json:"body"`
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
 
 // ToEnvelopeItem converts the Log to a Sentry envelope item for batching.
 func (l *Log) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	type logJSON struct {
-		Timestamp  *float64                         `json:"timestamp,omitempty"`
-		TraceID    string                           `json:"trace_id,omitempty"`
+		Timestamp  *float64                         `json:"timestamp"`
+		TraceID    string                           `json:"trace_id"`
+		SpanID     string                           `json:"span_id,omitempty"`
 		Level      string                           `json:"level"`
 		Severity   int                              `json:"severity_number,omitempty"`
-		Body       string                           `json:"body,omitempty"`
+		Body       string                           `json:"body"`
 		Attributes map[string]protocol.LogAttribute `json:"attributes,omitempty"`
 	}
 
@@ -754,9 +756,15 @@ func (l *Log) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 		attrs[k] = protocol.LogAttribute{Value: v.Value, Type: string(v.Type)}
 	}
 
+	var spanIDStr string
+	if l.SpanID != zeroSpanID {
+		spanIDStr = l.SpanID.String()
+	}
+
 	logData, err := json.Marshal(logJSON{
 		Timestamp:  ts,
 		TraceID:    l.TraceID.String(),
+		SpanID:     spanIDStr,
 		Level:      string(l.Level),
 		Severity:   l.Severity,
 		Body:       l.Body,
@@ -807,4 +815,20 @@ const (
 type Attribute struct {
 	Value any      `json:"value"`
 	Type  AttrType `json:"type"`
+}
+
+// MarshalJSON is a custom implementation of a marshaller that skips SpanID when zero.
+func (l *Log) MarshalJSON() ([]byte, error) {
+	type log Log
+	var spanID string
+	if l.SpanID != zeroSpanID {
+		spanID = l.SpanID.String()
+	}
+	return json.Marshal(struct {
+		*log
+		SpanID string `json:"span_id,omitempty"`
+	}{
+		log:    (*log)(l),
+		SpanID: spanID,
+	})
 }
