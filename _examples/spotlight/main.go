@@ -1,13 +1,20 @@
 // This is an example program that demonstrates Sentry Go SDK integration
 // with Spotlight for local development debugging.
 //
+// Spotlight allows you to see all events captured by your application in a
+// local development web UI, without sending them to a Sentry server. This is
+// useful for debugging during development.
+//
 // Try it by running:
 //
 //	go run main.go
 //
-// To actually report events to Sentry, set the DSN either by editing the
-// appropriate line below or setting the environment variable SENTRY_DSN to
-// match the DSN of your Sentry project.
+// Configuration:
+// - Spotlight is enabled by default in this example (Spotlight: true)
+// - Events are NOT sent to Sentry (DSN is empty)
+// - To also send events to Sentry, set DSN via environment variable:
+//   SENTRY_DSN=https://key@sentry.io/project go run main.go
+// - Or edit the DSN field below
 //
 // Before running this example, make sure Spotlight is running:
 //

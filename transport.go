@@ -1098,7 +1098,8 @@ func (st *SpotlightTransport) sendToSpotlightServer(envelopeBytes []byte) {
 
 	resp, err := st.client.Do(req)
 	if err != nil {
-		DebugLogger.Printf("Failed to send envelope to Spotlight: %v", err)
+		DebugLogger.Printf("Failed to send envelope to Spotlight at %s: %v. "+
+			"Make sure Spotlight is running (npm install -g @spotlightjs/spotlight && spotlight)", st.spotlightURL, err)
 		return
 	}
 	defer func() {
@@ -1107,7 +1108,7 @@ func (st *SpotlightTransport) sendToSpotlightServer(envelopeBytes []byte) {
 	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		DebugLogger.Printf("Spotlight server returned status %d", resp.StatusCode)
+		DebugLogger.Printf("Spotlight server at %s returned status %d", st.spotlightURL, resp.StatusCode)
 	}
 }
 

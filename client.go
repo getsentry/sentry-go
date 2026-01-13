@@ -299,9 +299,14 @@ type spotlightConfigValue struct {
 // parseSpotlightEnvVar parses the SENTRY_SPOTLIGHT environment variable.
 // Returns (enabled, url) where:
 // - Truthy values enable Spotlight with default URL: "true", "t", "y", "yes", "on", "1"
+//   Example: SENTRY_SPOTLIGHT=true
 // - Falsy values disable Spotlight: "false", "f", "n", "no", "off", "0"
+//   Example: SENTRY_SPOTLIGHT=false
 // - Other non-empty strings are treated as custom Spotlight URLs
-// - Empty string returns (false, "")
+//   Example: SENTRY_SPOTLIGHT=http://localhost:8080/stream
+// - Empty string or unset returns (false, "")
+//
+// Precedence: SpotlightURL in config > SENTRY_SPOTLIGHT env var > defaults
 func parseSpotlightEnvVar(value string) spotlightConfigValue {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "" {
