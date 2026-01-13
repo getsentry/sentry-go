@@ -11,9 +11,9 @@ const (
 	batchTimeout = 5 * time.Second
 )
 
-type BatchLogger struct {
-	client       *Client
-	logCh        chan Log
+type BatchProcessor[T any] struct {
+	sendBatch    func([]T)
+	itemCh       chan T
 	flushCh      chan chan struct{}
 	cancel       context.CancelFunc
 	wg           sync.WaitGroup
@@ -21,27 +21,31 @@ type BatchLogger struct {
 	shutdownOnce sync.Once
 }
 
-func NewBatchLogger(client *Client) *BatchLogger {
-	return &BatchLogger{
-		client:  client,
-		logCh:   make(chan Log, batchSize),
-		flushCh: make(chan chan struct{}),
+func NewBatchProcessor[T any](sendBatch func([]T)) *BatchProcessor[T] {
+	return &BatchProcessor[T]{
+		itemCh:    make(chan T, batchSize),
+		flushCh:   make(chan chan struct{}),
+		sendBatch: sendBatch,
 	}
 }
 
-func (l *BatchLogger) Start() {
-	l.startOnce.Do(func() {
+func (p *BatchProcessor[T]) Send(item T) {
+	p.itemCh <- item
+}
+
+func (p *BatchProcessor[T]) Start() {
+	p.startOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
-		l.cancel = cancel
-		l.wg.Add(1)
-		go l.run(ctx)
+		p.cancel = cancel
+		p.wg.Add(1)
+		go p.run(ctx)
 	})
 }
 
-func (l *BatchLogger) Flush(timeout <-chan struct{}) {
+func (p *BatchProcessor[T]) Flush(timeout <-chan struct{}) {
 	done := make(chan struct{})
 	select {
-	case l.flushCh <- done:
+	case p.flushCh <- done:
 		select {
 		case <-done:
 		case <-timeout:
@@ -50,53 +54,53 @@ func (l *BatchLogger) Flush(timeout <-chan struct{}) {
 	}
 }
 
-func (l *BatchLogger) Shutdown() {
-	l.shutdownOnce.Do(func() {
-		if l.cancel != nil {
-			l.cancel()
-			l.wg.Wait()
+func (p *BatchProcessor[T]) Shutdown() {
+	p.shutdownOnce.Do(func() {
+		if p.cancel != nil {
+			p.cancel()
+			p.wg.Wait()
 		}
 	})
 }
 
-func (l *BatchLogger) run(ctx context.Context) { // nolint: dupl
-	defer l.wg.Done()
-	var logs []Log
+func (p *BatchProcessor[T]) run(ctx context.Context) {
+	defer p.wg.Done()
+	var items []T
 	timer := time.NewTimer(batchTimeout)
 	defer timer.Stop()
 
 	for {
 		select {
-		case log := <-l.logCh:
-			logs = append(logs, log)
-			if len(logs) >= batchSize {
-				l.processEvent(logs)
-				logs = nil
+		case item := <-p.itemCh:
+			items = append(items, item)
+			if len(items) >= batchSize {
+				p.sendBatch(items)
+				items = nil
 				if !timer.Stop() {
 					<-timer.C
 				}
 				timer.Reset(batchTimeout)
 			}
 		case <-timer.C:
-			if len(logs) > 0 {
-				l.processEvent(logs)
-				logs = nil
+			if len(items) > 0 {
+				p.sendBatch(items)
+				items = nil
 			}
 			timer.Reset(batchTimeout)
-		case done := <-l.flushCh:
+		case done := <-p.flushCh:
 		flushDrain:
 			for {
 				select {
-				case log := <-l.logCh:
-					logs = append(logs, log)
+				case item := <-p.itemCh:
+					items = append(items, item)
 				default:
 					break flushDrain
 				}
 			}
 
-			if len(logs) > 0 {
-				l.processEvent(logs)
-				logs = nil
+			if len(items) > 0 {
+				p.sendBatch(items)
+				items = nil
 			}
 			if !timer.Stop() {
 				<-timer.C
@@ -107,27 +111,17 @@ func (l *BatchLogger) run(ctx context.Context) { // nolint: dupl
 		drain:
 			for {
 				select {
-				case log := <-l.logCh:
-					logs = append(logs, log)
+				case item := <-p.itemCh:
+					items = append(items, item)
 				default:
 					break drain
 				}
 			}
 
-			if len(logs) > 0 {
-				l.processEvent(logs)
+			if len(items) > 0 {
+				p.sendBatch(items)
 			}
 			return
 		}
 	}
-}
-
-func (l *BatchLogger) processEvent(logs []Log) {
-	event := NewEvent()
-	event.Timestamp = time.Now()
-	event.EventID = EventID(uuid())
-	event.Type = logEvent.Type
-	event.Logs = logs
-	event.Items = logs
-	l.client.Transport.SendEvent(event)
 }

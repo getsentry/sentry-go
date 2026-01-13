@@ -437,10 +437,6 @@ type Event struct {
 	// The fields below are only relevant for metrics
 	Metrics []Metric `json:"-"`
 
-	// The Items is a container used for serializing logs and metrics.
-	//
-	// This is a temporary workaround, should abstract batch_logger and batch_meter to allow a generic item.
-	Items any `json:"items,omitempty"`
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
@@ -626,23 +622,36 @@ func (e *Event) MarshalJSON() ([]byte, error) {
 }
 
 func (e *Event) defaultMarshalJSON() ([]byte, error) {
-	// Populate Items automatically for logs/metrics when not explicitly set. temp workaround for serializing logs/metrics
-	if e.Items == nil {
-		switch e.Type {
-		case logEvent.Type:
-			if len(e.Logs) > 0 {
-				e.Items = e.Logs
-			}
-		case traceMetricEvent.Type:
-			if len(e.Metrics) > 0 {
-				e.Items = e.Metrics
-			}
-		}
-	}
-
 	// event aliases Event to allow calling json.Marshal without an infinite
 	// loop. It preserves all fields while none of the attached methods.
 	type event Event
+
+	// metrics and logs should be serialized under the same `items` json field.
+	if e.Type == logEvent.Type {
+		type logEvent struct {
+			*event
+			Items           []Log           `json:"items,omitempty"`
+			Type            json.RawMessage `json:"type,omitempty"`
+			Timestamp       json.RawMessage `json:"timestamp,omitempty"`
+			StartTime       json.RawMessage `json:"start_timestamp,omitempty"`
+			Spans           json.RawMessage `json:"spans,omitempty"`
+			TransactionInfo json.RawMessage `json:"transaction_info,omitempty"`
+		}
+		return json.Marshal(logEvent{event: (*event)(e), Items: e.Logs})
+	}
+
+	if e.Type == traceMetricEvent.Type {
+		type metricEvent struct {
+			*event
+			Items           []Metric        `json:"items,omitempty"`
+			Type            json.RawMessage `json:"type,omitempty"`
+			Timestamp       json.RawMessage `json:"timestamp,omitempty"`
+			StartTime       json.RawMessage `json:"start_timestamp,omitempty"`
+			Spans           json.RawMessage `json:"spans,omitempty"`
+			TransactionInfo json.RawMessage `json:"transaction_info,omitempty"`
+		}
+		return json.Marshal(metricEvent{event: (*event)(e), Items: e.Metrics})
+	}
 
 	// errorEvent is like Event with shadowed fields for customizing JSON
 	// marshaling.

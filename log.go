@@ -196,7 +196,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 				debuglog.Print("Dropping event: log buffer full or category missing")
 			}
 		} else if l.client.batchLogger != nil {
-			l.client.batchLogger.logCh <- *log
+			l.client.batchLogger.Send(log)
 		}
 	}
 

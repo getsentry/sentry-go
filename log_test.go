@@ -22,12 +22,12 @@ const (
 
 // flushFromContext flushes the hub from the given context.
 // This is needed for tests that use a cloned hub for isolation.
-func flushFromContext(ctx context.Context, timeout time.Duration) bool {
+func flushFromContext(ctx context.Context, timeout time.Duration) {
 	hub := GetHubFromContext(ctx)
 	if hub == nil {
 		hub = CurrentHub()
 	}
-	return hub.Flush(timeout)
+	hub.Flush(timeout)
 }
 
 func setupMockTransport() (context.Context, *MockTransport) {

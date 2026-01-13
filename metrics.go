@@ -134,7 +134,7 @@ func (s *sentryMeter[T]) emit(ctx context.Context, metricType MetricType, name s
 				debuglog.Printf("Dropping event: metric buffer full or category missing")
 			}
 		} else if s.client.batchMeter != nil {
-			s.client.batchMeter.metricsCh <- *metric
+			s.client.batchMeter.Send(metric)
 		}
 	}
 
