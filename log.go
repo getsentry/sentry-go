@@ -42,10 +42,11 @@ var mapTypesToStr = map[attribute.Type]AttrType{
 }
 
 type sentryLogger struct {
-	ctx        context.Context
-	client     *Client
-	attributes map[string]Attribute
-	mu         sync.RWMutex
+	ctx               context.Context
+	client            *Client
+	attributes        map[string]Attribute
+	defaultAttributes map[string]Attribute
+	mu                sync.RWMutex
 }
 
 type logEntry struct {
@@ -67,11 +68,33 @@ func NewLogger(ctx context.Context) Logger {
 
 	client := hub.Client()
 	if client != nil && client.options.EnableLogs {
+		// Build default attrs
+		serverAddr := client.options.ServerName
+		if serverAddr == "" {
+			serverAddr, _ = os.Hostname()
+		}
+
+		defaults := map[string]string{
+			"sentry.release":        client.options.Release,
+			"sentry.environment":    client.options.Environment,
+			"sentry.server.address": serverAddr,
+			"sentry.sdk.name":       client.sdkIdentifier,
+			"sentry.sdk.version":    client.sdkVersion,
+		}
+
+		defaultAttrs := make(map[string]Attribute)
+		for k, v := range defaults {
+			if v != "" {
+				defaultAttrs[k] = Attribute{Value: v, Type: AttributeString}
+			}
+		}
+
 		return &sentryLogger{
-			ctx:        ctx,
-			client:     client,
-			attributes: make(map[string]Attribute),
-			mu:         sync.RWMutex{},
+			ctx:               ctx,
+			client:            client,
+			attributes:        make(map[string]Attribute),
+			defaultAttributes: defaultAttrs,
+			mu:                sync.RWMutex{},
 		}
 	}
 
@@ -123,37 +146,10 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		scope.mu.Unlock()
 	}
 
-	attrs := map[string]Attribute{}
-	if len(args) > 0 {
-		attrs["sentry.message.template"] = Attribute{
-			Value: message, Type: AttributeString,
-		}
-		for i, p := range args {
-			attrs[fmt.Sprintf("sentry.message.parameters.%d", i)] = Attribute{
-				Value: fmt.Sprintf("%+v", p), Type: AttributeString,
-			}
-		}
-	}
-
-	l.mu.RLock()
-	for k, v := range l.attributes {
+	// attribute precedence: default -> user -> entry attrs (from SetAttributes) -> call specific
+	attrs := make(map[string]Attribute, len(l.defaultAttributes)+len(l.attributes)+len(entryAttrs)+len(args)+3)
+	for k, v := range l.defaultAttributes {
 		attrs[k] = v
-	}
-	l.mu.RUnlock()
-
-	for k, v := range entryAttrs {
-		attrs[k] = v
-	}
-	if release := l.client.options.Release; release != "" {
-		attrs["sentry.release"] = Attribute{Value: release, Type: AttributeString}
-	}
-	if environment := l.client.options.Environment; environment != "" {
-		attrs["sentry.environment"] = Attribute{Value: environment, Type: AttributeString}
-	}
-	if serverName := l.client.options.ServerName; serverName != "" {
-		attrs["sentry.server.address"] = Attribute{Value: serverName, Type: AttributeString}
-	} else if serverAddr, err := os.Hostname(); err == nil {
-		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: AttributeString}
 	}
 
 	if !user.IsEmpty() {
@@ -167,11 +163,25 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 			attrs["user.email"] = Attribute{Value: user.Email, Type: AttributeString}
 		}
 	}
-	if sdkIdentifier := l.client.sdkIdentifier; sdkIdentifier != "" {
-		attrs["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: AttributeString}
+
+	l.mu.RLock()
+	for k, v := range l.attributes {
+		attrs[k] = v
 	}
-	if sdkVersion := l.client.sdkVersion; sdkVersion != "" {
-		attrs["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: AttributeString}
+	l.mu.RUnlock()
+	for k, v := range entryAttrs {
+		attrs[k] = v
+	}
+
+	if len(args) > 0 {
+		attrs["sentry.message.template"] = Attribute{
+			Value: message, Type: AttributeString,
+		}
+		for i, p := range args {
+			attrs[fmt.Sprintf("sentry.message.parameters.%d", i)] = Attribute{
+				Value: fmt.Sprintf("%+v", p), Type: AttributeString,
+			}
+		}
 	}
 
 	log := &Log{

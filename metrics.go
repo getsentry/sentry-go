@@ -22,25 +22,49 @@ func NewMeter(ctx context.Context) Meter {
 
 	client := hub.Client()
 	if client != nil && client.options.EnableMetrics {
+		// build default attrs
+		serverAddr := client.options.ServerName
+		if serverAddr == "" {
+			serverAddr, _ = os.Hostname()
+		}
+
+		defaults := map[string]string{
+			"sentry.release":        client.options.Release,
+			"sentry.environment":    client.options.Environment,
+			"sentry.server.address": serverAddr,
+			"sentry.sdk.name":       client.sdkIdentifier,
+			"sentry.sdk.version":    client.sdkVersion,
+		}
+
+		defaultAttrs := make(map[string]Attribute)
+		for k, v := range defaults {
+			if v != "" {
+				defaultAttrs[k] = Attribute{Value: v, Type: AttributeString}
+			}
+		}
+
 		return &sentryMeter{
-			hub:        hub,
-			client:     client,
-			attributes: make(map[string]Attribute),
-			mu:         sync.RWMutex{},
+			hub:               hub,
+			client:            client,
+			attributes:        make(map[string]Attribute),
+			defaultAttributes: defaultAttrs,
+			mu:                sync.RWMutex{},
 		}
 	}
 
+	debuglog.Println("fallback to noopMeter: enableMetrics disabled")
 	return &noopMeter{}
 }
 
 type sentryMeter struct {
-	hub        *Hub
-	client     *Client
-	attributes map[string]Attribute
-	mu         sync.RWMutex
+	hub               *Hub
+	client            *Client
+	attributes        map[string]Attribute
+	defaultAttributes map[string]Attribute
+	mu                sync.RWMutex
 }
 
-func (s *sentryMeter) emit(metricType MetricType, name string, value float64, unit string, attributes map[string]Attribute) {
+func (m *sentryMeter) emit(metricType MetricType, name string, value float64, unit string, attributes map[string]Attribute) {
 	if name == "" {
 		debuglog.Println("empty name provided, dropping metric")
 		return
@@ -51,7 +75,7 @@ func (s *sentryMeter) emit(metricType MetricType, name string, value float64, un
 	var span *Span
 	var user User
 
-	scope := s.hub.Scope()
+	scope := m.hub.Scope()
 	if scope != nil {
 		scope.mu.Lock()
 		span = scope.span
@@ -65,28 +89,10 @@ func (s *sentryMeter) emit(metricType MetricType, name string, value float64, un
 		scope.mu.Unlock()
 	}
 
-	attrs := map[string]Attribute{}
-	s.mu.RLock()
-	for k, v := range s.attributes {
+	// attribute precedence: default -> user -> entry attrs (from SetAttributes) -> call specific
+	attrs := make(map[string]Attribute, len(m.defaultAttributes)+len(m.attributes)+len(attributes)+3)
+	for k, v := range m.defaultAttributes {
 		attrs[k] = v
-	}
-	s.mu.RUnlock()
-
-	for k, v := range attributes {
-		attrs[k] = v
-	}
-
-	// Set default attributes
-	if release := s.client.options.Release; release != "" {
-		attrs["sentry.release"] = Attribute{Value: release, Type: AttributeString}
-	}
-	if environment := s.client.options.Environment; environment != "" {
-		attrs["sentry.environment"] = Attribute{Value: environment, Type: AttributeString}
-	}
-	if serverName := s.client.options.ServerName; serverName != "" {
-		attrs["sentry.server.address"] = Attribute{Value: serverName, Type: AttributeString}
-	} else if serverAddr, err := os.Hostname(); err == nil {
-		attrs["sentry.server.address"] = Attribute{Value: serverAddr, Type: AttributeString}
 	}
 
 	if !user.IsEmpty() {
@@ -100,11 +106,14 @@ func (s *sentryMeter) emit(metricType MetricType, name string, value float64, un
 			attrs["user.email"] = Attribute{Value: user.Email, Type: AttributeString}
 		}
 	}
-	if sdkIdentifier := s.client.sdkIdentifier; sdkIdentifier != "" {
-		attrs["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: AttributeString}
+
+	m.mu.RLock()
+	for k, v := range m.attributes {
+		attrs[k] = v
 	}
-	if sdkVersion := s.client.sdkVersion; sdkVersion != "" {
-		attrs["sentry.sdk.version"] = Attribute{Value: sdkVersion, Type: AttributeString}
+	m.mu.RUnlock()
+	for k, v := range attributes {
+		attrs[k] = v
 	}
 
 	metric := &Metric{
@@ -118,27 +127,27 @@ func (s *sentryMeter) emit(metricType MetricType, name string, value float64, un
 		Attributes: attrs,
 	}
 
-	if s.client.options.BeforeSendMetric != nil {
-		metric = s.client.options.BeforeSendMetric(metric)
+	if m.client.options.BeforeSendMetric != nil {
+		metric = m.client.options.BeforeSendMetric(metric)
 	}
 
 	if metric != nil {
-		if s.client.telemetryBuffer != nil {
-			if !s.client.telemetryBuffer.Add(metric) {
+		if m.client.telemetryBuffer != nil {
+			if !m.client.telemetryBuffer.Add(metric) {
 				debuglog.Printf("Dropping event: metric buffer full or category missing")
 			}
-		} else if s.client.batchMeter != nil {
-			s.client.batchMeter.Send(metric)
+		} else if m.client.batchMeter != nil {
+			m.client.batchMeter.Send(metric)
 		}
 	}
 
-	if s.client.options.Debug {
+	if m.client.options.Debug {
 		debuglog.Printf("Metric %s [%s]: %f %s", metricType, name, value, unit)
 	}
 }
 
 // Count implements Meter.
-func (s *sentryMeter) Count(name string, count int64, options MeterOptions) {
+func (m *sentryMeter) Count(name string, count int64, options MeterOptions) {
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -151,11 +160,11 @@ func (s *sentryMeter) Count(name string, count int64, options MeterOptions) {
 		}
 	}
 
-	s.emit(MetricTypeCounter, name, float64(count), "", attrs)
+	m.emit(MetricTypeCounter, name, float64(count), "", attrs)
 }
 
 // Distribution implements Meter.
-func (s *sentryMeter) Distribution(name string, sample float64, options MeterOptions) {
+func (m *sentryMeter) Distribution(name string, sample float64, options MeterOptions) {
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -168,11 +177,11 @@ func (s *sentryMeter) Distribution(name string, sample float64, options MeterOpt
 		}
 	}
 
-	s.emit(MetricTypeDistribution, name, sample, options.Unit, attrs)
+	m.emit(MetricTypeDistribution, name, sample, options.Unit, attrs)
 }
 
 // Gauge implements Meter.
-func (s *sentryMeter) Gauge(name string, value float64, options MeterOptions) {
+func (m *sentryMeter) Gauge(name string, value float64, options MeterOptions) {
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -185,13 +194,13 @@ func (s *sentryMeter) Gauge(name string, value float64, options MeterOptions) {
 		}
 	}
 
-	s.emit(MetricTypeGauge, name, value, options.Unit, attrs)
+	m.emit(MetricTypeGauge, name, value, options.Unit, attrs)
 }
 
 // SetAttributes implements Meter.
-func (s *sentryMeter) SetAttributes(attrs ...attribute.Builder) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (m *sentryMeter) SetAttributes(attrs ...attribute.Builder) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	for _, v := range attrs {
 		t, ok := mapTypesToStr[v.Value.Type()]
@@ -200,7 +209,7 @@ func (s *sentryMeter) SetAttributes(attrs ...attribute.Builder) {
 			continue
 		}
 
-		s.attributes[v.Key] = Attribute{
+		m.attributes[v.Key] = Attribute{
 			Value: v.Value.AsInterface(),
 			Type:  t,
 		}
