@@ -10,7 +10,7 @@ import (
 
 func main() {
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn:           "https://3c3fd18b3fd44566aeab11385f391a48@o447951.ingest.us.sentry.io/5774600",
+		Dsn:           "",
 		EnableMetrics: true,
 		Debug:         true,
 	})
