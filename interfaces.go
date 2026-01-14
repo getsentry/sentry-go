@@ -156,6 +156,10 @@ type MeterOptions struct {
 	Attributes []attribute.Builder
 	// The unit of measurements, for "gauge" and "distribution" metrics.
 	Unit string
+	// Scope is the scope to capture the metric with.
+	// If not provided, the metric will be captured with the current scope
+	// from the hub associated with the meter.
+	Scope *Scope
 }
 
 // Numbers provides a generic constraint for numeric types.

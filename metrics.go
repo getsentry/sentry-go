@@ -10,6 +10,42 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
+// Duration Units
+const (
+	UnitNanosecond  = "nanosecond"
+	UnitMicrosecond = "microsecond"
+	UnitMillisecond = "millisecond"
+	UnitSecond      = "second"
+	UnitMinute      = "minute"
+	UnitHour        = "hour"
+	UnitDay         = "day"
+	UnitWeek        = "week"
+)
+
+// Information Units
+const (
+	UnitBit      = "bit"
+	UnitByte     = "byte"
+	UnitKilobyte = "kilobyte"
+	UnitKibibyte = "kibibyte"
+	UnitMegabyte = "megabyte"
+	UnitMebibyte = "mebibyte"
+	UnitGigabyte = "gigabyte"
+	UnitGibibyte = "gibibyte"
+	UnitTerabyte = "terabyte"
+	UnitTebibyte = "tebibyte"
+	UnitPetabyte = "petabyte"
+	UnitPebibyte = "pebibyte"
+	UnitExabyte  = "exabyte"
+	UnitExbibyte = "exbibyte"
+)
+
+// Fraction Units
+const (
+	UnitRatio   = "ratio"
+	UnitPercent = "percent"
+)
+
 // NewMeter returns a new Meter associated with the given context.
 // If there is no Client associated with the context, or if metrics are disabled,
 // it returns a no-op Meter that discards all metrics.
@@ -64,7 +100,7 @@ type sentryMeter struct {
 	mu                sync.RWMutex
 }
 
-func (m *sentryMeter) emit(metricType MetricType, name string, value float64, unit string, attributes map[string]Attribute) {
+func (m *sentryMeter) emit(metricType MetricType, name string, value float64, unit string, attributes map[string]Attribute, customScope *Scope) {
 	if name == "" {
 		debuglog.Println("empty name provided, dropping metric")
 		return
@@ -75,7 +111,11 @@ func (m *sentryMeter) emit(metricType MetricType, name string, value float64, un
 	var span *Span
 	var user User
 
-	scope := m.hub.Scope()
+	scope := customScope
+	if scope == nil {
+		scope = m.hub.Scope()
+	}
+
 	if scope != nil {
 		scope.mu.Lock()
 		span = scope.span
@@ -161,7 +201,7 @@ func (m *sentryMeter) Count(name string, count int64, options MeterOptions) {
 		}
 	}
 
-	m.emit(MetricTypeCounter, name, float64(count), "", attrs)
+	m.emit(MetricTypeCounter, name, float64(count), "", attrs, options.Scope)
 }
 
 // Distribution implements Meter.
@@ -178,7 +218,7 @@ func (m *sentryMeter) Distribution(name string, sample float64, options MeterOpt
 		}
 	}
 
-	m.emit(MetricTypeDistribution, name, sample, options.Unit, attrs)
+	m.emit(MetricTypeDistribution, name, sample, options.Unit, attrs, options.Scope)
 }
 
 // Gauge implements Meter.
@@ -195,7 +235,7 @@ func (m *sentryMeter) Gauge(name string, value float64, options MeterOptions) {
 		}
 	}
 
-	m.emit(MetricTypeGauge, name, value, options.Unit, attrs)
+	m.emit(MetricTypeGauge, name, value, options.Unit, attrs, options.Scope)
 }
 
 // SetAttributes implements Meter.

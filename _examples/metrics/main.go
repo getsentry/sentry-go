@@ -37,7 +37,7 @@ func main() {
 	// Distribution metrics to measure the statistical distribution of a set of values.
 	// Useful for measuring things and keeping track of the patterns, e.g. file sizes, response times, etc.
 	meter.Distribution("file_upload_size", 3.14, sentry.MeterOptions{
-		Unit: "MB", // Unit is optional, but it's recommended!
+		Unit: sentry.UnitMegabyte, // Using standard unit constants
 		Attributes: []attribute.Builder{
 			attribute.String("file.type", "image/png"),
 			attribute.String("bucket.region", "us-west-2"),
@@ -45,12 +45,47 @@ func main() {
 		},
 	})
 
+	// Distribution metric with duration unit
+	meter.Distribution("response_time", 123.5, sentry.MeterOptions{
+		Unit: sentry.UnitMillisecond,
+		Attributes: []attribute.Builder{
+			attribute.String("endpoint", "/api/users"),
+			attribute.String("method", "GET"),
+		},
+	})
+
 	// Gauge metrics to measure a value at a specific point in time.
 	// Useful for measuring values that can go up and down, e.g. temperature, memory usage, etc.
-	meter.Gauge("active_chat_conversations", 7, sentry.MeterOptions{
-		Unit: "chat_rooms", // Unit is optional, but it's recommended!
+	meter.Gauge("memory_usage", 512.0, sentry.MeterOptions{
+		Unit: sentry.UnitMebibyte, // Using binary unit (MiB)
 		Attributes: []attribute.Builder{
-			attribute.String("region", "asia-northeast1"),
+			attribute.String("process", "worker"),
 		},
+	})
+
+	// Gauge metric with percentage
+	meter.Gauge("cpu_usage", 0.75, sentry.MeterOptions{
+		Unit: sentry.UnitRatio, // Value from 0.0 to 1.0
+		Attributes: []attribute.Builder{
+			attribute.String("core", "0"),
+		},
+	})
+
+	// Example using a custom scope for isolating metrics
+	// This is useful when you want to capture metrics with a specific scope
+	// that has different context data (user, tags, etc.) than the current scope
+	customScope := sentry.NewScope()
+	customScope.SetUser(sentry.User{
+		ID:    "user-123",
+		Email: "user@example.com",
+	})
+	customScope.SetTag("environment", "staging")
+
+	meter.Distribution("api_latency", 250.0, sentry.MeterOptions{
+		Unit: sentry.UnitMillisecond,
+		Attributes: []attribute.Builder{
+			attribute.String("endpoint", "/api/orders"),
+		},
+		Scope: customScope, // Use a custom scope for this metric
 	})
 }
