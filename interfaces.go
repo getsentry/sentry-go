@@ -22,8 +22,8 @@ var logEvent = struct {
 	Type        string
 	ContentType string
 }{
-	"metric",
-	"application/vnd.sentry.items.metric+json",
+	"log",
+	"application/vnd.sentry.items.log+json",
 }
 
 var traceMetricEvent = struct {
@@ -108,28 +108,28 @@ type Logger interface {
 	Write(p []byte) (n int, err error)
 
 	// SetAttributes allows attaching parameters to the logger using the attribute API.
-	// These attributes will be included in all subsequent metric entries.
+	// These attributes will be included in all subsequent log entries.
 	SetAttributes(...attribute.Builder)
 
-	// Trace defines the [sentry.LogLevel] for the metric entry.
+	// Trace defines the [sentry.LogLevel] for the log entry.
 	Trace() LogEntry
-	// Debug defines the [sentry.LogLevel] for the metric entry.
+	// Debug defines the [sentry.LogLevel] for the log entry.
 	Debug() LogEntry
-	// Info defines the [sentry.LogLevel] for the metric entry.
+	// Info defines the [sentry.LogLevel] for the log entry.
 	Info() LogEntry
-	// Warn defines the [sentry.LogLevel] for the metric entry.
+	// Warn defines the [sentry.LogLevel] for the log entry.
 	Warn() LogEntry
-	// Error defines the [sentry.LogLevel] for the metric entry.
+	// Error defines the [sentry.LogLevel] for the log entry.
 	Error() LogEntry
-	// Fatal defines the [sentry.LogLevel] for the metric entry.
+	// Fatal defines the [sentry.LogLevel] for the log entry.
 	Fatal() LogEntry
-	// Panic defines the [sentry.LogLevel] for the metric entry.
+	// Panic defines the [sentry.LogLevel] for the log entry.
 	Panic() LogEntry
 	// GetCtx returns the [context.Context] set on the logger.
 	GetCtx() context.Context
 }
 
-// LogEntry defines the interface for a metric entry that supports chaining attributes.
+// LogEntry defines the interface for a log entry that supports chaining attributes.
 type LogEntry interface {
 	// WithCtx creates a new LogEntry with the specified context without overwriting the previous one.
 	WithCtx(ctx context.Context) LogEntry
