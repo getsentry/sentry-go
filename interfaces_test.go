@@ -985,7 +985,7 @@ func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 	}
 
 	var payload struct {
-		Timestamp  *float64                         `json:"timestamp,omitempty"`
+		Timestamp  string                           `json:"timestamp,omitempty"`
 		TraceID    string                           `json:"trace_id,omitempty"`
 		Level      string                           `json:"level"`
 		Severity   int                              `json:"severity_number,omitempty"`
@@ -996,11 +996,11 @@ func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 		t.Fatalf("failed to unmarshal payload: %v", err)
 	}
 
-	if payload.Timestamp == nil {
+	if payload.Timestamp == "" {
 		t.Fatal("expected timestamp to be set")
 	}
-	if *payload.Timestamp < 1.7e9 || *payload.Timestamp > 1.700000001e9 {
-		t.Fatalf("unexpected timestamp: %v", *payload.Timestamp)
+	if _, err := time.Parse(time.RFC3339, payload.Timestamp); err != nil {
+		t.Fatalf("invalid timestamp format: %v", err)
 	}
 	if payload.TraceID != trace.String() {
 		t.Fatalf("unexpected trace id: %q", payload.TraceID)

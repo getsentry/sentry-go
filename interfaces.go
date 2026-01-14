@@ -80,7 +80,7 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 
 	if b.Timestamp.IsZero() {
 		return json.Marshal(struct {
-			// Embed all of the fields of Breadcrumb.
+			// Embed all the fields of Breadcrumb.
 			*breadcrumb
 			// Timestamp shadows the original Timestamp field and is meant to
 			// remain nil, triggering the omitempty behavior.
@@ -734,42 +734,7 @@ type Log struct {
 
 // ToEnvelopeItem converts the Log to a Sentry envelope item for batching.
 func (l *Log) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
-	type logJSON struct {
-		Timestamp  *float64                         `json:"timestamp"`
-		TraceID    string                           `json:"trace_id"`
-		SpanID     string                           `json:"span_id,omitempty"`
-		Level      string                           `json:"level"`
-		Severity   int                              `json:"severity_number,omitempty"`
-		Body       string                           `json:"body"`
-		Attributes map[string]protocol.LogAttribute `json:"attributes,omitempty"`
-	}
-
-	// Convert time.Time to seconds float if set
-	var ts *float64
-	if !l.Timestamp.IsZero() {
-		sec := float64(l.Timestamp.UnixNano()) / 1e9
-		ts = &sec
-	}
-
-	attrs := make(map[string]protocol.LogAttribute, len(l.Attributes))
-	for k, v := range l.Attributes {
-		attrs[k] = protocol.LogAttribute{Value: v.Value, Type: string(v.Type)}
-	}
-
-	var spanIDStr string
-	if l.SpanID != zeroSpanID {
-		spanIDStr = l.SpanID.String()
-	}
-
-	logData, err := json.Marshal(logJSON{
-		Timestamp:  ts,
-		TraceID:    l.TraceID.String(),
-		SpanID:     spanIDStr,
-		Level:      string(l.Level),
-		Severity:   l.Severity,
-		Body:       l.Body,
-		Attributes: attrs,
-	})
+	logData, err := json.Marshal(l)
 	if err != nil {
 		return nil, err
 	}
@@ -817,18 +782,31 @@ type Attribute struct {
 	Type  AttrType `json:"type"`
 }
 
-// MarshalJSON is a custom implementation of a marshaller that skips SpanID when zero.
+// MarshalJSON is a custom implementation that skips SpanID and timestamp when empty.
 func (l *Log) MarshalJSON() ([]byte, error) {
 	type log Log
+
 	var spanID string
 	if l.SpanID != zeroSpanID {
 		spanID = l.SpanID.String()
 	}
+
+	var ts json.RawMessage
+	if !l.Timestamp.IsZero() {
+		b, err := l.Timestamp.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		ts = b
+	}
+
 	return json.Marshal(struct {
 		*log
-		SpanID string `json:"span_id,omitempty"`
+		SpanID    string          `json:"span_id,omitempty"`
+		Timestamp json.RawMessage `json:"timestamp,omitempty"`
 	}{
-		log:    (*log)(l),
-		SpanID: spanID,
+		log:       (*log)(l),
+		SpanID:    spanID,
+		Timestamp: ts,
 	})
 }
