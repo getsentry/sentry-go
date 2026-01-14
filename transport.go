@@ -674,13 +674,10 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	}
 
 	var eventIdentifier string
-	switch event.Type {
-	case transactionType:
+	if event.Type == transactionType {
 		eventIdentifier = "transaction"
-	case logEvent.Type:
-		eventIdentifier = fmt.Sprintf("%v log events", len(event.Logs))
-	default:
-		eventIdentifier = fmt.Sprintf("%s event", event.Level)
+	} else {
+		eventIdentifier = fmt.Sprintf("%s event", event.Type)
 	}
 	debuglog.Printf(
 		"Sending %s [%s] to %s project: %s",
