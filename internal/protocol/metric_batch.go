@@ -10,7 +10,7 @@ type Metrics []EnvelopeItemConvertible
 
 func (ms Metrics) ToEnvelopeItem() (*EnvelopeItem, error) {
 	// Convert each metric to its JSON representation
-	items := make([][]byte, 0, len(ms))
+	items := make([]json.RawMessage, 0, len(ms))
 	for _, metric := range ms {
 		envItem, err := metric.ToEnvelopeItem()
 		if err != nil {
@@ -24,7 +24,7 @@ func (ms Metrics) ToEnvelopeItem() (*EnvelopeItem, error) {
 	}
 
 	wrapper := struct {
-		Items [][]byte `json:"items"`
+		Items []json.RawMessage `json:"items"`
 	}{Items: items}
 
 	payload, err := json.Marshal(wrapper)

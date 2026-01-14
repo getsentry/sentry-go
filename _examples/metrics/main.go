@@ -10,8 +10,9 @@ import (
 
 func main() {
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn:           "",
+		Dsn:           "https://3c3fd18b3fd44566aeab11385f391a48@o447951.ingest.us.sentry.io/5774600",
 		EnableMetrics: true,
+		Debug:         true,
 	})
 	if err != nil {
 		panic(err)
@@ -19,7 +20,7 @@ func main() {
 	defer sentry.Flush(2 * time.Second)
 
 	ctx := context.Background()
-	meter := sentry.NewMeter[int](ctx)
+	meter := sentry.NewMeter(ctx)
 	// Attaching permanent attributes on the meter
 	meter.SetAttributes(
 		attribute.String("version", "1.0.0"),

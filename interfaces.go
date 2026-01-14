@@ -164,15 +164,13 @@ type Numbers interface {
 }
 
 // Meter provides an interface for recording metrics.
-type Meter[T Numbers] interface {
-	// GetCtx returns the [context.Context] set on the meter.
-	GetCtx() context.Context
+type Meter interface {
 	// SetAttributes allows attaching parameters to the meter using the attribute API.
 	SetAttributes(...attribute.Builder)
 	// Count records a count metric.
 	Count(name string, count int64, options MeterOptions)
 	// Gauge records a gauge metric.
-	Gauge(name string, value T, options MeterOptions)
+	Gauge(name string, value float64, options MeterOptions)
 	// Distribution records a distribution metric.
 	Distribution(name string, sample float64, options MeterOptions)
 }
@@ -519,6 +517,8 @@ func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protoc
 		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
 	case logEvent.Type:
 		mainItem = protocol.NewLogItem(len(e.Logs), eventBody)
+	case traceMetricEvent.Type:
+		mainItem = protocol.NewTraceMetricItem(len(e.Metrics), eventBody)
 	default:
 		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
 	}
@@ -563,6 +563,8 @@ func (e *Event) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
 	case logEvent.Type:
 		item = protocol.NewLogItem(len(e.Logs), eventBody)
+	case traceMetricEvent.Type:
+		item = protocol.NewTraceMetricItem(len(e.Metrics), eventBody)
 	default:
 		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
 	}
@@ -893,7 +895,7 @@ type Metric struct {
 	TraceID    TraceID              `json:"trace_id"`
 	SpanID     SpanID               `json:"span_id,omitempty"`
 	Type       MetricType           `json:"type"`
-	Name       string               `json:"name,omitempty"`
+	Name       string               `json:"name"`
 	Value      float64              `json:"value"`
 	Unit       string               `json:"unit,omitempty"`
 	Attributes map[string]Attribute `json:"attributes,omitempty"`

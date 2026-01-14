@@ -22,12 +22,12 @@ func Test_sentryMeter_Methods(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		metricsFunc func(m Meter[float64])
+		metricsFunc func(m Meter)
 		wantEvents  []Event
 	}{
 		{
 			name: "count",
-			metricsFunc: func(m Meter[float64]) {
+			metricsFunc: func(m Meter) {
 				m.Count("test.count", 5, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 				})
@@ -51,7 +51,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "distribution",
-			metricsFunc: func(m Meter[float64]) {
+			metricsFunc: func(m Meter) {
 				m.Distribution("test.distribution", 3.14, MeterOptions{
 					Attributes: []attribute.Builder{attribute.Int("key.int", 42)},
 					Unit:       "ms",
@@ -76,7 +76,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "gauge",
-			metricsFunc: func(m Meter[float64]) {
+			metricsFunc: func(m Meter) {
 				m.Gauge("test.gauge", 2.71, MeterOptions{
 					Attributes: []attribute.Builder{attribute.Float64("key.float", 1.618)},
 					Unit:       "requests",
@@ -101,7 +101,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "zero count",
-			metricsFunc: func(m Meter[float64]) {
+			metricsFunc: func(m Meter) {
 				m.Count("test.zero.count", 0, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 				})
@@ -125,7 +125,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "zero distribution",
-			metricsFunc: func(m Meter[float64]) {
+			metricsFunc: func(m Meter) {
 				m.Distribution("test.zero.distribution", 0, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "bytes",
@@ -150,7 +150,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "zero gauge",
-			metricsFunc: func(m Meter[float64]) {
+			metricsFunc: func(m Meter) {
 				m.Gauge("test.zero.gauge", 0, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "connections",
@@ -175,7 +175,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "negative count",
-			metricsFunc: func(m Meter[float64]) {
+			metricsFunc: func(m Meter) {
 				m.Count("test.negative.count", -10, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 				})
@@ -199,7 +199,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "negative distribution",
-			metricsFunc: func(m Meter[float64]) {
+			metricsFunc: func(m Meter) {
 				m.Distribution("test.negative.distribution", -2.5, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "ms",
@@ -224,7 +224,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "negative gauge",
-			metricsFunc: func(m Meter[float64]) {
+			metricsFunc: func(m Meter) {
 				m.Gauge("test.negative.gauge", -5, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "connections",
@@ -252,7 +252,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, mockTransport := setupMockTransport()
-			meter := NewMeter[float64](ctx)
+			meter := NewMeter(ctx)
 
 			tt.metricsFunc(meter)
 			flushFromContext(ctx, testutils.FlushTimeout())
@@ -277,7 +277,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 
 func Test_batchMeter_Flush(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
-	meter := NewMeter[float64](ctx)
+	meter := NewMeter(ctx)
 	meter.Count("test.count", 42, MeterOptions{})
 	flushFromContext(ctx, testutils.FlushTimeout())
 
@@ -289,7 +289,7 @@ func Test_batchMeter_Flush(t *testing.T) {
 
 func Test_batchMeter_FlushWithContext(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
-	meter := NewMeter[float64](ctx)
+	meter := NewMeter(ctx)
 	meter.Count("test.count", 42, MeterOptions{})
 
 	cancelCtx, cancel := context.WithTimeout(context.Background(), testutils.FlushTimeout())
@@ -326,7 +326,7 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 
 	ctx = SetHubOnContext(ctx, hub)
 
-	meter := NewMeter[int](ctx)
+	meter := NewMeter(ctx)
 	meter.Count("test.count", 1, MeterOptions{})
 	flushFromContext(ctx, testutils.FlushTimeout())
 
@@ -338,7 +338,7 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 
 func Test_Meter_ExceedBatchSize(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
-	meter := NewMeter[int](ctx)
+	meter := NewMeter(ctx)
 	for i := 0; i < batchSize; i++ {
 		meter.Count("test.count", 1, MeterOptions{})
 	}

@@ -13,7 +13,7 @@ import (
 // NewMeter returns a new Meter associated with the given context.
 // If there is no Client associated with the context, or if metrics are disabled,
 // it returns a no-op Meter that discards all metrics.
-func NewMeter[T Numbers](ctx context.Context) Meter[T] {
+func NewMeter(ctx context.Context) Meter {
 	var hub *Hub
 	hub = GetHubFromContext(ctx)
 	if hub == nil {
@@ -22,32 +22,28 @@ func NewMeter[T Numbers](ctx context.Context) Meter[T] {
 
 	client := hub.Client()
 	if client != nil && client.options.EnableMetrics {
-		return &sentryMeter[T]{
-			ctx:        ctx,
+		return &sentryMeter{
+			hub:        hub,
 			client:     client,
 			attributes: make(map[string]Attribute),
 			mu:         sync.RWMutex{},
 		}
 	}
 
-	return &noopMeter[T]{}
+	return &noopMeter{}
 }
 
-type sentryMeter[T Numbers] struct {
-	ctx        context.Context
+type sentryMeter struct {
+	hub        *Hub
 	client     *Client
 	attributes map[string]Attribute
 	mu         sync.RWMutex
 }
 
-func (s *sentryMeter[T]) emit(ctx context.Context, metricType MetricType, name string, value float64, unit string, attributes map[string]Attribute) {
+func (s *sentryMeter) emit(metricType MetricType, name string, value float64, unit string, attributes map[string]Attribute) {
 	if name == "" {
+		debuglog.Println("empty name provided, dropping metric")
 		return
-	}
-
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub()
 	}
 
 	var traceID TraceID
@@ -55,7 +51,7 @@ func (s *sentryMeter[T]) emit(ctx context.Context, metricType MetricType, name s
 	var span *Span
 	var user User
 
-	scope := hub.Scope()
+	scope := s.hub.Scope()
 	if scope != nil {
 		scope.mu.Lock()
 		span = scope.span
@@ -104,9 +100,6 @@ func (s *sentryMeter[T]) emit(ctx context.Context, metricType MetricType, name s
 			attrs["user.email"] = Attribute{Value: user.Email, Type: AttributeString}
 		}
 	}
-	if span != nil {
-		attrs["sentry.trace.parent_span_id"] = Attribute{Value: spanID.String(), Type: AttributeString}
-	}
 	if sdkIdentifier := s.client.sdkIdentifier; sdkIdentifier != "" {
 		attrs["sentry.sdk.name"] = Attribute{Value: sdkIdentifier, Type: AttributeString}
 	}
@@ -117,6 +110,7 @@ func (s *sentryMeter[T]) emit(ctx context.Context, metricType MetricType, name s
 	metric := &Metric{
 		Timestamp:  time.Now(),
 		TraceID:    traceID,
+		SpanID:     spanID,
 		Type:       metricType,
 		Name:       name,
 		Value:      value,
@@ -144,7 +138,7 @@ func (s *sentryMeter[T]) emit(ctx context.Context, metricType MetricType, name s
 }
 
 // Count implements Meter.
-func (s *sentryMeter[T]) Count(name string, count int64, options MeterOptions) {
+func (s *sentryMeter) Count(name string, count int64, options MeterOptions) {
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -157,11 +151,11 @@ func (s *sentryMeter[T]) Count(name string, count int64, options MeterOptions) {
 		}
 	}
 
-	s.emit(s.ctx, MetricTypeCounter, name, float64(count), "", attrs)
+	s.emit(MetricTypeCounter, name, float64(count), "", attrs)
 }
 
 // Distribution implements Meter.
-func (s *sentryMeter[T]) Distribution(name string, sample float64, options MeterOptions) {
+func (s *sentryMeter) Distribution(name string, sample float64, options MeterOptions) {
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -174,11 +168,11 @@ func (s *sentryMeter[T]) Distribution(name string, sample float64, options Meter
 		}
 	}
 
-	s.emit(s.ctx, MetricTypeDistribution, name, sample, options.Unit, attrs)
+	s.emit(MetricTypeDistribution, name, sample, options.Unit, attrs)
 }
 
 // Gauge implements Meter.
-func (s *sentryMeter[T]) Gauge(name string, value T, options MeterOptions) {
+func (s *sentryMeter) Gauge(name string, value float64, options MeterOptions) {
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -191,16 +185,11 @@ func (s *sentryMeter[T]) Gauge(name string, value T, options MeterOptions) {
 		}
 	}
 
-	s.emit(s.ctx, MetricTypeGauge, name, float64(value), options.Unit, attrs)
-}
-
-// GetCtx implements Meter.
-func (s *sentryMeter[T]) GetCtx() context.Context {
-	return s.ctx
+	s.emit(MetricTypeGauge, name, value, options.Unit, attrs)
 }
 
 // SetAttributes implements Meter.
-func (s *sentryMeter[T]) SetAttributes(attrs ...attribute.Builder) {
+func (s *sentryMeter) SetAttributes(attrs ...attribute.Builder) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -220,25 +209,25 @@ func (s *sentryMeter[T]) SetAttributes(attrs ...attribute.Builder) {
 
 // noopMeter is a no-operation implementation of Meter.
 // This is used when there is no client available in the context.
-type noopMeter[T Numbers] struct{}
+type noopMeter struct{}
 
 // Count implements Meter.
-func (n *noopMeter[T]) Count(_ string, _ int64, _ MeterOptions) {
+func (n *noopMeter) Count(_ string, _ int64, _ MeterOptions) {
 }
 
 // Distribution implements Meter.
-func (n *noopMeter[T]) Distribution(_ string, _ float64, _ MeterOptions) {
+func (n *noopMeter) Distribution(_ string, _ float64, _ MeterOptions) {
 }
 
 // Gauge implements Meter.
-func (n *noopMeter[T]) Gauge(_ string, _ T, _ MeterOptions) {
+func (n *noopMeter) Gauge(_ string, _ float64, _ MeterOptions) {
 }
 
 // GetCtx implements Meter.
-func (n *noopMeter[T]) GetCtx() context.Context {
+func (n *noopMeter) GetCtx() context.Context {
 	return context.Background()
 }
 
 // SetAttributes implements Meter.
-func (n *noopMeter[T]) SetAttributes(...attribute.Builder) {
+func (n *noopMeter) SetAttributes(...attribute.Builder) {
 }
