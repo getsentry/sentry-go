@@ -350,3 +350,291 @@ func Test_Meter_ExceedBatchSize(t *testing.T) {
 		t.Fatalf("expected only one event with 100 metrics, got %d", len(events))
 	}
 }
+
+func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	meter := NewMeter(ctx)
+
+	for i := 0; i < 5; i++ {
+		meter.Count("test.count", 1, MeterOptions{})
+	}
+
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event after first flush, got %d", len(events))
+	}
+	if len(events[0].Metrics) != 5 {
+		t.Fatalf("expected 5 metrics in first batch, got %d", len(events[0].Metrics))
+	}
+
+	mockTransport.events = nil
+
+	for i := 0; i < 3; i++ {
+		meter.Count("test.count", 1, MeterOptions{})
+	}
+
+	flushFromContext(ctx, testutils.FlushTimeout())
+	events = mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event after second flush, got %d", len(events))
+	}
+	if len(events[0].Metrics) != 3 {
+		t.Fatalf("expected 3 metrics in second batch, got %d", len(events[0].Metrics))
+	}
+
+	mockTransport.events = nil
+
+	flushFromContext(ctx, testutils.FlushTimeout())
+	events = mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected 0 events after third flush with no metrics, got %d", len(events))
+	}
+}
+
+func Test_batchMeter_Shutdown(t *testing.T) {
+	mockTransport := &MockTransport{}
+	mockClient, _ := NewClient(ClientOptions{
+		Dsn:                    testDsn,
+		Transport:              mockTransport,
+		EnableMetrics:          true,
+		DisableTelemetryBuffer: true,
+	})
+	hub := CurrentHub()
+	hub.BindClient(mockClient)
+	ctx := SetHubOnContext(context.Background(), hub)
+	meter := NewMeter(ctx)
+	for i := 0; i < 3; i++ {
+		meter.Count("test.count", 1, MeterOptions{})
+	}
+
+	hub = GetHubFromContext(ctx)
+	hub.Client().batchMeter.Shutdown()
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event after shutdown, got %d", len(events))
+	}
+	if len(events[0].Metrics) != 3 {
+		t.Fatalf("expected 3 metrics in shutdown batch, got %d", len(events[0].Metrics))
+	}
+
+	mockTransport.events = nil
+
+	// Test that shutdown can be called multiple times safely
+	hub.Client().batchMeter.Shutdown()
+	hub.Client().batchMeter.Shutdown()
+
+	events = mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected 0 events after multiple shutdowns, got %d", len(events))
+	}
+
+	flushFromContext(ctx, testutils.FlushTimeout())
+	events = mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected 0 events after flush on shutdown meter, got %d", len(events))
+	}
+}
+
+func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+
+	// Start a new transaction
+	txn := StartTransaction(ctx, "test-transaction")
+	defer txn.Finish()
+
+	expectedTraceID := txn.TraceID
+	expectedSpanID := txn.SpanID
+
+	meter := NewMeter(txn.Context())
+	meter.Count("test.count", 42, MeterOptions{})
+
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+	metrics := events[0].Metrics
+	if len(metrics) != 1 {
+		t.Fatalf("expected 1 metric, got %d", len(metrics))
+	}
+
+	metric := metrics[0]
+
+	if metric.TraceID != expectedTraceID {
+		t.Errorf("unexpected TraceID: got %s, want %s", metric.TraceID.String(), expectedTraceID.String())
+	}
+	if metric.SpanID != expectedSpanID {
+		t.Errorf("unexpected SpanID: got %s, want %s", metric.SpanID.String(), expectedSpanID.String())
+	}
+}
+
+func Test_sentryMeter_UserAttributes(t *testing.T) {
+	ctx := context.Background()
+	mockTransport := &MockTransport{}
+	mockClient, _ := NewClient(ClientOptions{
+		Dsn:           testDsn,
+		Transport:     mockTransport,
+		Release:       "v1.2.3",
+		Environment:   "testing",
+		ServerName:    "test-server",
+		EnableMetrics: true,
+		EnableTracing: true,
+	})
+	mockClient.sdkIdentifier = "sentry.go"
+	mockClient.sdkVersion = "0.10.0"
+	hub := CurrentHub().Clone()
+	hub.BindClient(mockClient)
+	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+
+	hub.Scope().SetUser(User{
+		ID:    "user123",
+		Name:  "Test User",
+		Email: "test@example.com",
+	})
+
+	ctx = SetHubOnContext(ctx, hub)
+
+	meter := NewMeter(ctx)
+	meter.Count("test.count", 1, MeterOptions{})
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	metrics := events[0].Metrics
+	if len(metrics) != 1 {
+		t.Fatalf("expected 1 metric, got %d", len(metrics))
+	}
+
+	metric := metrics[0]
+	attrs := metric.Attributes
+
+	if val, ok := attrs["user.id"]; !ok {
+		t.Error("missing user.id attribute")
+	} else if val.Value != "user123" {
+		t.Errorf("unexpected user.id: got %v, want %v", val.Value, "user123")
+	}
+
+	if val, ok := attrs["user.name"]; !ok {
+		t.Error("missing user.name attribute")
+	} else if val.Value != "Test User" {
+		t.Errorf("unexpected user.name: got %v, want %v", val.Value, "Test User")
+	}
+
+	if val, ok := attrs["user.email"]; !ok {
+		t.Error("missing user.email attribute")
+	} else if val.Value != "test@example.com" {
+		t.Errorf("unexpected user.email: got %v, want %v", val.Value, "test@example.com")
+	}
+}
+
+func Test_sentryMeter_SetAttributes(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	meter := NewMeter(ctx)
+	meter.SetAttributes(
+		attribute.String("key.string", "some str"),
+		attribute.Int("key.int", 42),
+		attribute.Int64("key.int64", 17),
+		attribute.Float64("key.float", 42.2),
+		attribute.Bool("key.bool", true),
+	)
+	meter.Count("test.count", 1, MeterOptions{})
+
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	gotEvents := mockTransport.Events()
+	if len(gotEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(gotEvents))
+	}
+	if len(gotEvents[0].Metrics) != 1 {
+		t.Fatalf("expected 1 metric, got %d", len(gotEvents[0].Metrics))
+	}
+
+	metric := gotEvents[0].Metrics[0]
+	attrs := metric.Attributes
+
+	assertEqual(t, attrs["key.string"].Value, "some str")
+	assertEqual(t, attrs["key.int"].Value, int64(42))
+	assertEqual(t, attrs["key.int64"].Value, int64(17))
+	assertEqual(t, attrs["key.float"].Value, 42.2)
+	assertEqual(t, attrs["key.bool"].Value, true)
+}
+
+func Test_sentryMeter_SetAttributes_Persistence(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	meter := NewMeter(ctx)
+	meter.SetAttributes(attribute.Int("int", 42))
+	meter.Count("test.count1", 1, MeterOptions{})
+
+	meter.SetAttributes(attribute.String("string", "some str"))
+	meter.Count("test.count2", 2, MeterOptions{})
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	gotEvents := mockTransport.Events()
+	if len(gotEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(gotEvents))
+	}
+	event := gotEvents[0]
+	assertEqual(t, event.Metrics[0].Attributes["int"].Value, int64(42))
+	if _, ok := event.Metrics[1].Attributes["int"]; !ok {
+		t.Fatalf("expected key to exist")
+	}
+	assertEqual(t, event.Metrics[1].Attributes["string"].Value, "some str")
+}
+
+func TestNewMeter_DisabledMetrics(t *testing.T) {
+	ctx := context.Background()
+	mockTransport := &MockTransport{}
+	mockClient, _ := NewClient(ClientOptions{
+		Dsn:           testDsn,
+		Transport:     mockTransport,
+		EnableMetrics: false, // Disabled
+	})
+	hub := CurrentHub()
+	hub.BindClient(mockClient)
+	ctx = SetHubOnContext(ctx, hub)
+
+	meter := NewMeter(ctx)
+	meter.Count("test.count", 1, MeterOptions{})
+	meter.Gauge("test.gauge", 2.5, MeterOptions{})
+	meter.Distribution("test.dist", 3.14, MeterOptions{})
+
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	events := mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected no events with disabled metrics, got %d", len(events))
+	}
+}
+
+func Test_sentryMeter_EmptyName(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	meter := NewMeter(ctx)
+
+	meter.Count("", 1, MeterOptions{})
+	meter.Gauge("", 2.5, MeterOptions{})
+	meter.Distribution("", 3.14, MeterOptions{})
+
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	events := mockTransport.Events()
+	if len(events) != 0 {
+		t.Fatalf("expected no events with empty name, got %d", len(events))
+	}
+}
+
+func Test_noopMeter_Methods(_ *testing.T) {
+	ctx := context.Background()
+	meter := NewMeter(ctx)
+
+	meter.Count("test.count", 1, MeterOptions{})
+	meter.Gauge("test.gauge", 2.5, MeterOptions{})
+	meter.Distribution("test.dist", 3.14, MeterOptions{})
+	meter.SetAttributes(attribute.String("key", "value"))
+}

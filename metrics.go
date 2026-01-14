@@ -13,7 +13,7 @@ import (
 // NewMeter returns a new Meter associated with the given context.
 // If there is no Client associated with the context, or if metrics are disabled,
 // it returns a no-op Meter that discards all metrics.
-func NewMeter(ctx context.Context) Meter {
+func NewMeter(ctx context.Context) Meter { // nolint:dupl
 	var hub *Hub
 	hub = GetHubFromContext(ctx)
 	if hub == nil {
@@ -90,7 +90,7 @@ func (m *sentryMeter) emit(metricType MetricType, name string, value float64, un
 	}
 
 	// attribute precedence: default -> user -> entry attrs (from SetAttributes) -> call specific
-	attrs := make(map[string]Attribute, len(m.defaultAttributes)+len(m.attributes)+len(attributes)+3)
+	attrs := make(map[string]Attribute)
 	for k, v := range m.defaultAttributes {
 		attrs[k] = v
 	}
@@ -112,6 +112,7 @@ func (m *sentryMeter) emit(metricType MetricType, name string, value float64, un
 		attrs[k] = v
 	}
 	m.mu.RUnlock()
+
 	for k, v := range attributes {
 		attrs[k] = v
 	}

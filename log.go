@@ -59,7 +59,7 @@ type logEntry struct {
 }
 
 // NewLogger returns a Logger that emits logs to Sentry. If logging is turned off, all logs get discarded.
-func NewLogger(ctx context.Context) Logger {
+func NewLogger(ctx context.Context) Logger { // nolint: dupl
 	var hub *Hub
 	hub = GetHubFromContext(ctx)
 	if hub == nil {
@@ -147,7 +147,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	}
 
 	// attribute precedence: default -> user -> entry attrs (from SetAttributes) -> call specific
-	attrs := make(map[string]Attribute, len(l.defaultAttributes)+len(l.attributes)+len(entryAttrs)+len(args)+3)
+	attrs := make(map[string]Attribute)
 	for k, v := range l.defaultAttributes {
 		attrs[k] = v
 	}
@@ -169,6 +169,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		attrs[k] = v
 	}
 	l.mu.RUnlock()
+
 	for k, v := range entryAttrs {
 		attrs[k] = v
 	}
