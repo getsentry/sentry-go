@@ -676,10 +676,8 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 	if log.TraceID != expectedTraceID {
 		t.Errorf("unexpected TraceID: got %s, want %s", log.TraceID.String(), expectedTraceID.String())
 	}
-	if val, ok := log.Attributes["sentry.trace.parent_span_id"]; !ok {
-		t.Errorf("missing sentry.trace.parent_span_id attribute")
-	} else if val.Value != expectedSpanID.String() {
-		t.Errorf("unexpected SpanID: got %s, want %s", val.Value, expectedSpanID.String())
+	if log.SpanID != expectedSpanID {
+		t.Errorf("unexpected SpanID: got %s, want %s", log.SpanID.String(), expectedSpanID.String())
 	}
 }
 

@@ -22,8 +22,8 @@ var logEvent = struct {
 	Type        string
 	ContentType string
 }{
-	"log",
-	"application/vnd.sentry.items.log+json",
+	"metric",
+	"application/vnd.sentry.items.metric+json",
 }
 
 var traceMetricEvent = struct {
@@ -88,7 +88,7 @@ func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
 
 	if b.Timestamp.IsZero() {
 		return json.Marshal(struct {
-			// Embed all of the fields of Breadcrumb.
+			// Embed all the fields of Breadcrumb.
 			*breadcrumb
 			// Timestamp shadows the original Timestamp field and is meant to
 			// remain nil, triggering the omitempty behavior.
@@ -108,28 +108,28 @@ type Logger interface {
 	Write(p []byte) (n int, err error)
 
 	// SetAttributes allows attaching parameters to the logger using the attribute API.
-	// These attributes will be included in all subsequent log entries.
+	// These attributes will be included in all subsequent metric entries.
 	SetAttributes(...attribute.Builder)
 
-	// Trace defines the [sentry.LogLevel] for the log entry.
+	// Trace defines the [sentry.LogLevel] for the metric entry.
 	Trace() LogEntry
-	// Debug defines the [sentry.LogLevel] for the log entry.
+	// Debug defines the [sentry.LogLevel] for the metric entry.
 	Debug() LogEntry
-	// Info defines the [sentry.LogLevel] for the log entry.
+	// Info defines the [sentry.LogLevel] for the metric entry.
 	Info() LogEntry
-	// Warn defines the [sentry.LogLevel] for the log entry.
+	// Warn defines the [sentry.LogLevel] for the metric entry.
 	Warn() LogEntry
-	// Error defines the [sentry.LogLevel] for the log entry.
+	// Error defines the [sentry.LogLevel] for the metric entry.
 	Error() LogEntry
-	// Fatal defines the [sentry.LogLevel] for the log entry.
+	// Fatal defines the [sentry.LogLevel] for the metric entry.
 	Fatal() LogEntry
-	// Panic defines the [sentry.LogLevel] for the log entry.
+	// Panic defines the [sentry.LogLevel] for the metric entry.
 	Panic() LogEntry
 	// GetCtx returns the [context.Context] set on the logger.
 	GetCtx() context.Context
 }
 
-// LogEntry defines the interface for a log entry that supports chaining attributes.
+// LogEntry defines the interface for a metric entry that supports chaining attributes.
 type LogEntry interface {
 	// WithCtx creates a new LogEntry with the specified context without overwriting the previous one.
 	WithCtx(ctx context.Context) LogEntry
@@ -791,45 +791,18 @@ type EventHint struct {
 }
 
 type Log struct {
-	Timestamp  time.Time            `json:"timestamp,omitempty"`
-	TraceID    TraceID              `json:"trace_id,omitempty"`
+	Timestamp  time.Time            `json:"timestamp"`
+	TraceID    TraceID              `json:"trace_id"`
+	SpanID     SpanID               `json:"span_id,omitempty"`
 	Level      LogLevel             `json:"level"`
 	Severity   int                  `json:"severity_number,omitempty"`
-	Body       string               `json:"body,omitempty"`
+	Body       string               `json:"body"`
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
 
 // ToEnvelopeItem converts the Log to a Sentry envelope item for batching.
 func (l *Log) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
-	type logJSON struct {
-		Timestamp  *float64                         `json:"timestamp,omitempty"`
-		TraceID    string                           `json:"trace_id,omitempty"`
-		Level      string                           `json:"level"`
-		Severity   int                              `json:"severity_number,omitempty"`
-		Body       string                           `json:"body,omitempty"`
-		Attributes map[string]protocol.LogAttribute `json:"attributes,omitempty"`
-	}
-
-	// Convert time.Time to seconds float if set
-	var ts *float64
-	if !l.Timestamp.IsZero() {
-		sec := float64(l.Timestamp.UnixNano()) / 1e9
-		ts = &sec
-	}
-
-	attrs := make(map[string]protocol.LogAttribute, len(l.Attributes))
-	for k, v := range l.Attributes {
-		attrs[k] = protocol.LogAttribute{Value: v.Value, Type: string(v.Type)}
-	}
-
-	logData, err := json.Marshal(logJSON{
-		Timestamp:  ts,
-		TraceID:    l.TraceID.String(),
-		Level:      string(l.Level),
-		Severity:   l.Severity,
-		Body:       l.Body,
-		Attributes: attrs,
-	})
+	logData, err := json.Marshal(l)
 	if err != nil {
 		return nil, err
 	}
@@ -877,6 +850,35 @@ type Attribute struct {
 	Type  AttrType `json:"type"`
 }
 
+// MarshalJSON converts a Log to JSON that skips SpanID and timestamp when empty.
+func (l *Log) MarshalJSON() ([]byte, error) {
+	type log Log
+
+	var spanID string
+	if l.SpanID != zeroSpanID {
+		spanID = l.SpanID.String()
+	}
+
+	var ts json.RawMessage
+	if !l.Timestamp.IsZero() {
+		b, err := l.Timestamp.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		ts = b
+	}
+
+	return json.Marshal(struct {
+		*log
+		SpanID    string          `json:"span_id,omitempty"`
+		Timestamp json.RawMessage `json:"timestamp,omitempty"`
+	}{
+		log:       (*log)(l),
+		SpanID:    spanID,
+		Timestamp: ts,
+	})
+}
+
 type MetricType string
 
 const (
@@ -888,7 +890,8 @@ const (
 
 type Metric struct {
 	Timestamp  time.Time            `json:"timestamp"`
-	TraceID    TraceID              `json:"trace_id,omitempty"`
+	TraceID    TraceID              `json:"trace_id"`
+	SpanID     SpanID               `json:"span_id,omitempty"`
 	Type       MetricType           `json:"type"`
 	Name       string               `json:"name,omitempty"`
 	Value      float64              `json:"value"`
@@ -897,37 +900,7 @@ type Metric struct {
 }
 
 func (m *Metric) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
-	type metricJSON struct {
-		Timestamp  *float64                         `json:"timestamp,omitempty"`
-		TraceID    string                           `json:"trace_id,omitempty"`
-		Type       string                           `json:"type"`
-		Name       string                           `json:"name,omitempty"`
-		Value      float64                          `json:"value"`
-		Unit       string                           `json:"unit,omitempty"`
-		Attributes map[string]protocol.LogAttribute `json:"attributes,omitempty"`
-	}
-
-	// Convert time.Time to seconds float if set
-	var ts *float64
-	if !m.Timestamp.IsZero() {
-		sec := float64(m.Timestamp.UnixNano()) / 1e9
-		ts = &sec
-	}
-
-	attrs := make(map[string]protocol.LogAttribute, len(m.Attributes))
-	for k, v := range m.Attributes {
-		attrs[k] = protocol.LogAttribute{Value: v.Value, Type: string(v.Type)}
-	}
-
-	metricData, err := json.Marshal(metricJSON{
-		Timestamp:  ts,
-		TraceID:    m.TraceID.String(),
-		Type:       string(m.Type),
-		Name:       m.Name,
-		Value:      m.Value,
-		Unit:       m.Unit,
-		Attributes: attrs,
-	})
+	metricData, err := json.Marshal(m)
 	if err != nil {
 		return nil, err
 	}
@@ -938,6 +911,35 @@ func (m *Metric) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 		},
 		Payload: metricData,
 	}, nil
+}
+
+// MarshalJSON converts a Metric to JSON that skips SpanID and timestamp when empty.
+func (m *Metric) MarshalJSON() ([]byte, error) {
+	type metric Metric
+
+	var spanID string
+	if m.SpanID != zeroSpanID {
+		spanID = m.SpanID.String()
+	}
+
+	var ts json.RawMessage
+	if !m.Timestamp.IsZero() {
+		b, err := m.Timestamp.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		ts = b
+	}
+
+	return json.Marshal(struct {
+		*metric
+		SpanID    string          `json:"span_id,omitempty"`
+		Timestamp json.RawMessage `json:"timestamp,omitempty"`
+	}{
+		metric:    (*metric)(m),
+		SpanID:    spanID,
+		Timestamp: ts,
+	})
 }
 
 // GetCategory returns the rate limit category for metrics.
