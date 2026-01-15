@@ -10,9 +10,8 @@ import (
 
 func main() {
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn:           "",
-		EnableMetrics: true,
-		Debug:         true,
+		Dsn:   "",
+		Debug: true,
 	})
 	if err != nil {
 		panic(err)

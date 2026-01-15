@@ -10,7 +10,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
-// Duration Units
+// Duration Units.
 const (
 	UnitNanosecond  = "nanosecond"
 	UnitMicrosecond = "microsecond"
@@ -22,7 +22,7 @@ const (
 	UnitWeek        = "week"
 )
 
-// Information Units
+// Information Units.
 const (
 	UnitBit      = "bit"
 	UnitByte     = "byte"
@@ -40,7 +40,7 @@ const (
 	UnitExbibyte = "exbibyte"
 )
 
-// Fraction Units
+// Fraction Units.
 const (
 	UnitRatio   = "ratio"
 	UnitPercent = "percent"
@@ -57,7 +57,7 @@ func NewMeter(ctx context.Context) Meter { // nolint:dupl
 	}
 
 	client := hub.Client()
-	if client != nil && client.options.EnableMetrics {
+	if client != nil && !client.options.DisableMetrics {
 		// build default attrs
 		serverAddr := client.options.ServerName
 		if serverAddr == "" {

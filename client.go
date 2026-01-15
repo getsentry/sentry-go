@@ -246,8 +246,8 @@ type ClientOptions struct {
 	Tags map[string]string
 	// EnableLogs controls when logs should be emitted.
 	EnableLogs bool
-	// EnableMetrics controls when metrics should be emitted.
-	EnableMetrics bool
+	// DisableMetrics controls when metrics should be emitted.
+	DisableMetrics bool
 	// TraceIgnoreStatusCodes is a list of HTTP status codes that should not be traced.
 	// Each element can be either:
 	// - A single-element slice [code] for a specific status code
@@ -400,7 +400,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		client.batchLogger.Start()
 	}
 
-	if options.EnableMetrics {
+	if !options.DisableMetrics {
 		client.batchMeter = NewMetricBatchProcessor(&client)
 		client.batchMeter.Start()
 	}
@@ -444,7 +444,7 @@ func (client *Client) setupTelemetryBuffer() { // nolint: unused
 			client.batchLogger = NewLogBatchProcessor(client)
 			client.batchLogger.Start()
 		}
-		if client.options.EnableMetrics {
+		if !client.options.DisableMetrics {
 			client.batchMeter = NewMetricBatchProcessor(client)
 			client.batchMeter.Start()
 		}

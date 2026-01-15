@@ -312,7 +312,6 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 		Release:       "v1.2.3",
 		Environment:   "testing",
 		ServerName:    "test-server",
-		EnableMetrics: true,
 		EnableTracing: true,
 		BeforeSendMetric: func(_ *Metric) *Metric {
 			return nil
@@ -398,7 +397,6 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 	mockClient, _ := NewClient(ClientOptions{
 		Dsn:                    testDsn,
 		Transport:              mockTransport,
-		EnableMetrics:          true,
 		DisableTelemetryBuffer: true,
 	})
 	hub := CurrentHub()
@@ -481,7 +479,6 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 		Release:       "v1.2.3",
 		Environment:   "testing",
 		ServerName:    "test-server",
-		EnableMetrics: true,
 		EnableTracing: true,
 	})
 	mockClient.sdkIdentifier = "sentry.go"
@@ -592,9 +589,9 @@ func TestNewMeter_DisabledMetrics(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
-		Dsn:           testDsn,
-		Transport:     mockTransport,
-		EnableMetrics: false, // Disabled
+		Dsn:            testDsn,
+		Transport:      mockTransport,
+		DisableMetrics: true,
 	})
 	hub := CurrentHub()
 	hub.BindClient(mockClient)
