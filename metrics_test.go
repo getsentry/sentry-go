@@ -11,6 +11,27 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
+func setupMetricsTest() (context.Context, *MockTransport) {
+	ctx := context.Background()
+	mockTransport := &MockTransport{}
+	mockClient, _ := NewClient(ClientOptions{
+		Dsn:           testDsn,
+		Transport:     mockTransport,
+		Release:       "v1.2.3",
+		Environment:   "testing",
+		ServerName:    "test-server",
+		EnableTracing: true,
+	})
+	mockClient.sdkIdentifier = "sentry.go"
+	mockClient.sdkVersion = "0.10.0"
+	hub := CurrentHub()
+	hub.BindClient(mockClient)
+	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+
+	ctx = SetHubOnContext(ctx, hub)
+	return ctx, mockTransport
+}
+
 func Test_sentryMeter_Methods(t *testing.T) {
 	attrs := map[string]Attribute{
 		"sentry.release":        {Value: "v1.2.3", Type: "string"},
@@ -22,13 +43,13 @@ func Test_sentryMeter_Methods(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		metricsFunc func(m Meter)
+		metricsFunc func(ctx context.Context, m Meter)
 		wantEvents  []Event
 	}{
 		{
 			name: "count",
-			metricsFunc: func(m Meter) {
-				m.Count("test.count", 5, MeterOptions{
+			metricsFunc: func(ctx context.Context, m Meter) {
+				m.Count(ctx, "test.count", 5, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 				})
 			},
@@ -51,8 +72,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "distribution",
-			metricsFunc: func(m Meter) {
-				m.Distribution("test.distribution", 3.14, MeterOptions{
+			metricsFunc: func(ctx context.Context, m Meter) {
+				m.Distribution(ctx, "test.distribution", 3.14, MeterOptions{
 					Attributes: []attribute.Builder{attribute.Int("key.int", 42)},
 					Unit:       "ms",
 				})
@@ -76,8 +97,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "gauge",
-			metricsFunc: func(m Meter) {
-				m.Gauge("test.gauge", 2.71, MeterOptions{
+			metricsFunc: func(ctx context.Context, m Meter) {
+				m.Gauge(ctx, "test.gauge", 2.71, MeterOptions{
 					Attributes: []attribute.Builder{attribute.Float64("key.float", 1.618)},
 					Unit:       "requests",
 				})
@@ -101,8 +122,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "zero count",
-			metricsFunc: func(m Meter) {
-				m.Count("test.zero.count", 0, MeterOptions{
+			metricsFunc: func(ctx context.Context, m Meter) {
+				m.Count(ctx, "test.zero.count", 0, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 				})
 			},
@@ -125,8 +146,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "zero distribution",
-			metricsFunc: func(m Meter) {
-				m.Distribution("test.zero.distribution", 0, MeterOptions{
+			metricsFunc: func(ctx context.Context, m Meter) {
+				m.Distribution(ctx, "test.zero.distribution", 0, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "bytes",
 				})
@@ -150,8 +171,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "zero gauge",
-			metricsFunc: func(m Meter) {
-				m.Gauge("test.zero.gauge", 0, MeterOptions{
+			metricsFunc: func(ctx context.Context, m Meter) {
+				m.Gauge(ctx, "test.zero.gauge", 0, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "connections",
 				})
@@ -175,8 +196,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "negative count",
-			metricsFunc: func(m Meter) {
-				m.Count("test.negative.count", -10, MeterOptions{
+			metricsFunc: func(ctx context.Context, m Meter) {
+				m.Count(ctx, "test.negative.count", -10, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 				})
 			},
@@ -199,8 +220,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "negative distribution",
-			metricsFunc: func(m Meter) {
-				m.Distribution("test.negative.distribution", -2.5, MeterOptions{
+			metricsFunc: func(ctx context.Context, m Meter) {
+				m.Distribution(ctx, "test.negative.distribution", -2.5, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "ms",
 				})
@@ -224,8 +245,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		},
 		{
 			name: "negative gauge",
-			metricsFunc: func(m Meter) {
-				m.Gauge("test.negative.gauge", -5, MeterOptions{
+			metricsFunc: func(ctx context.Context, m Meter) {
+				m.Gauge(ctx, "test.negative.gauge", -5, MeterOptions{
 					Attributes: []attribute.Builder{attribute.String("key.string", "value")},
 					Unit:       "connections",
 				})
@@ -251,10 +272,10 @@ func Test_sentryMeter_Methods(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, mockTransport := setupMockTransport()
-			meter := NewMeter(ctx)
+			ctx, mockTransport := setupMetricsTest()
+			meter := NewMeter()
 
-			tt.metricsFunc(meter)
+			tt.metricsFunc(ctx, meter)
 			flushFromContext(ctx, testutils.FlushTimeout())
 
 			opts := cmp.Options{cmpopts.IgnoreFields(Metric{}, "Timestamp")}
@@ -276,9 +297,9 @@ func Test_sentryMeter_Methods(t *testing.T) {
 }
 
 func Test_batchMeter_Flush(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	meter := NewMeter(ctx)
-	meter.Count("test.count", 42, MeterOptions{})
+	ctx, mockTransport := setupMetricsTest()
+	meter := NewMeter()
+	meter.Count(ctx, "test.count", 42, MeterOptions{})
 	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
@@ -288,9 +309,9 @@ func Test_batchMeter_Flush(t *testing.T) {
 }
 
 func Test_batchMeter_FlushWithContext(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	meter := NewMeter(ctx)
-	meter.Count("test.count", 42, MeterOptions{})
+	ctx, mockTransport := setupMetricsTest()
+	meter := NewMeter()
+	meter.Count(ctx, "test.count", 42, MeterOptions{})
 
 	cancelCtx, cancel := context.WithTimeout(context.Background(), testutils.FlushTimeout())
 	defer cancel()
@@ -325,8 +346,8 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 
 	ctx = SetHubOnContext(ctx, hub)
 
-	meter := NewMeter(ctx)
-	meter.Count("test.count", 1, MeterOptions{})
+	meter := NewMeter()
+	meter.Count(ctx, "test.count", 1, MeterOptions{})
 	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
@@ -336,10 +357,10 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 }
 
 func Test_Meter_ExceedBatchSize(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	meter := NewMeter(ctx)
+	ctx, mockTransport := setupMetricsTest()
+	meter := NewMeter()
 	for i := 0; i < batchSize; i++ {
-		meter.Count("test.count", 1, MeterOptions{})
+		meter.Count(ctx, "test.count", 1, MeterOptions{})
 	}
 
 	// sleep to wait for the batch to be processed
@@ -351,11 +372,11 @@ func Test_Meter_ExceedBatchSize(t *testing.T) {
 }
 
 func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	meter := NewMeter(ctx)
+	ctx, mockTransport := setupMetricsTest()
+	meter := NewMeter()
 
 	for i := 0; i < 5; i++ {
-		meter.Count("test.count", 1, MeterOptions{})
+		meter.Count(ctx, "test.count", 1, MeterOptions{})
 	}
 
 	flushFromContext(ctx, testutils.FlushTimeout())
@@ -371,7 +392,7 @@ func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
 	mockTransport.events = nil
 
 	for i := 0; i < 3; i++ {
-		meter.Count("test.count", 1, MeterOptions{})
+		meter.Count(ctx, "test.count", 1, MeterOptions{})
 	}
 
 	flushFromContext(ctx, testutils.FlushTimeout())
@@ -402,9 +423,9 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 	hub := CurrentHub()
 	hub.BindClient(mockClient)
 	ctx := SetHubOnContext(context.Background(), hub)
-	meter := NewMeter(ctx)
+	meter := NewMeter()
 	for i := 0; i < 3; i++ {
-		meter.Count("test.count", 1, MeterOptions{})
+		meter.Count(ctx, "test.count", 1, MeterOptions{})
 	}
 
 	hub = GetHubFromContext(ctx)
@@ -437,7 +458,7 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 }
 
 func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMetricsTest()
 
 	// Start a new transaction
 	txn := StartTransaction(ctx, "test-transaction")
@@ -446,8 +467,8 @@ func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
 	expectedTraceID := txn.TraceID
 	expectedSpanID := txn.SpanID
 
-	meter := NewMeter(txn.Context())
-	meter.Count("test.count", 42, MeterOptions{})
+	meter := NewMeter()
+	meter.Count(txn.Context(), "test.count", 42, MeterOptions{})
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
@@ -483,7 +504,7 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub().Clone()
+	hub := CurrentHub()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 
@@ -495,8 +516,8 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 
 	ctx = SetHubOnContext(ctx, hub)
 
-	meter := NewMeter(ctx)
-	meter.Count("test.count", 1, MeterOptions{})
+	meter := NewMeter()
+	meter.Count(ctx, "test.count", 1, MeterOptions{})
 	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
@@ -532,8 +553,8 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 }
 
 func Test_sentryMeter_SetAttributes(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	meter := NewMeter(ctx)
+	ctx, mockTransport := setupMetricsTest()
+	meter := NewMeter()
 	meter.SetAttributes(
 		attribute.String("key.string", "some str"),
 		attribute.Int("key.int", 42),
@@ -541,7 +562,7 @@ func Test_sentryMeter_SetAttributes(t *testing.T) {
 		attribute.Float64("key.float", 42.2),
 		attribute.Bool("key.bool", true),
 	)
-	meter.Count("test.count", 1, MeterOptions{})
+	meter.Count(ctx, "test.count", 1, MeterOptions{})
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
@@ -564,13 +585,13 @@ func Test_sentryMeter_SetAttributes(t *testing.T) {
 }
 
 func Test_sentryMeter_SetAttributes_Persistence(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	meter := NewMeter(ctx)
+	ctx, mockTransport := setupMetricsTest()
+	meter := NewMeter()
 	meter.SetAttributes(attribute.Int("int", 42))
-	meter.Count("test.count1", 1, MeterOptions{})
+	meter.Count(ctx, "test.count1", 1, MeterOptions{})
 
 	meter.SetAttributes(attribute.String("string", "some str"))
-	meter.Count("test.count2", 2, MeterOptions{})
+	meter.Count(ctx, "test.count2", 2, MeterOptions{})
 	flushFromContext(ctx, testutils.FlushTimeout())
 
 	gotEvents := mockTransport.Events()
@@ -597,10 +618,10 @@ func TestNewMeter_DisabledMetrics(t *testing.T) {
 	hub.BindClient(mockClient)
 	ctx = SetHubOnContext(ctx, hub)
 
-	meter := NewMeter(ctx)
-	meter.Count("test.count", 1, MeterOptions{})
-	meter.Gauge("test.gauge", 2.5, MeterOptions{})
-	meter.Distribution("test.dist", 3.14, MeterOptions{})
+	meter := NewMeter()
+	meter.Count(ctx, "test.count", 1, MeterOptions{})
+	meter.Gauge(ctx, "test.gauge", 2.5, MeterOptions{})
+	meter.Distribution(ctx, "test.dist", 3.14, MeterOptions{})
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
@@ -611,12 +632,12 @@ func TestNewMeter_DisabledMetrics(t *testing.T) {
 }
 
 func Test_sentryMeter_EmptyName(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	meter := NewMeter(ctx)
+	ctx, mockTransport := setupMetricsTest()
+	meter := NewMeter()
 
-	meter.Count("", 1, MeterOptions{})
-	meter.Gauge("", 2.5, MeterOptions{})
-	meter.Distribution("", 3.14, MeterOptions{})
+	meter.Count(ctx, "", 1, MeterOptions{})
+	meter.Gauge(ctx, "", 2.5, MeterOptions{})
+	meter.Distribution(ctx, "", 3.14, MeterOptions{})
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
@@ -628,10 +649,10 @@ func Test_sentryMeter_EmptyName(t *testing.T) {
 
 func Test_noopMeter_Methods(_ *testing.T) {
 	ctx := context.Background()
-	meter := NewMeter(ctx)
+	meter := NewMeter()
 
-	meter.Count("test.count", 1, MeterOptions{})
-	meter.Gauge("test.gauge", 2.5, MeterOptions{})
-	meter.Distribution("test.dist", 3.14, MeterOptions{})
+	meter.Count(ctx, "test.count", 1, MeterOptions{})
+	meter.Gauge(ctx, "test.gauge", 2.5, MeterOptions{})
+	meter.Distribution(ctx, "test.dist", 3.14, MeterOptions{})
 	meter.SetAttributes(attribute.String("key", "value"))
 }

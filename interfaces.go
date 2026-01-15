@@ -172,11 +172,11 @@ type Meter interface {
 	// SetAttributes allows attaching parameters to the meter using the attribute API.
 	SetAttributes(...attribute.Builder)
 	// Count records a count metric.
-	Count(name string, count int64, options MeterOptions)
+	Count(ctx context.Context, name string, count int64, options MeterOptions)
 	// Gauge records a gauge metric.
-	Gauge(name string, value float64, options MeterOptions)
+	Gauge(ctx context.Context, name string, value float64, options MeterOptions)
 	// Distribution records a distribution metric.
-	Distribution(name string, sample float64, options MeterOptions)
+	Distribution(ctx context.Context, name string, sample float64, options MeterOptions)
 }
 
 // Attachment allows associating files with your events to aid in investigation.

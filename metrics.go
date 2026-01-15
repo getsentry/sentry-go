@@ -46,16 +46,10 @@ const (
 	UnitPercent = "percent"
 )
 
-// NewMeter returns a new Meter associated with the given context.
-// If there is no Client associated with the context, or if metrics are disabled,
+// NewMeter returns a new Meter. If there is no Client bound to the current hub, or if metrics are disabled,
 // it returns a no-op Meter that discards all metrics.
-func NewMeter(ctx context.Context) Meter { // nolint:dupl
-	var hub *Hub
-	hub = GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub()
-	}
-
+func NewMeter() Meter {
+	hub := CurrentHub()
 	client := hub.Client()
 	if client != nil && !client.options.DisableMetrics {
 		// build default attrs
@@ -80,7 +74,6 @@ func NewMeter(ctx context.Context) Meter { // nolint:dupl
 		}
 
 		return &sentryMeter{
-			hub:               hub,
 			client:            client,
 			attributes:        make(map[string]Attribute),
 			defaultAttributes: defaultAttrs,
@@ -93,14 +86,13 @@ func NewMeter(ctx context.Context) Meter { // nolint:dupl
 }
 
 type sentryMeter struct {
-	hub               *Hub
 	client            *Client
 	attributes        map[string]Attribute
 	defaultAttributes map[string]Attribute
 	mu                sync.RWMutex
 }
 
-func (m *sentryMeter) emit(metricType MetricType, name string, value float64, unit string, attributes map[string]Attribute, customScope *Scope) {
+func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name string, value float64, unit string, attributes map[string]Attribute, customScope *Scope) {
 	if name == "" {
 		debuglog.Println("empty name provided, dropping metric")
 		return
@@ -108,22 +100,31 @@ func (m *sentryMeter) emit(metricType MetricType, name string, value float64, un
 
 	var traceID TraceID
 	var spanID SpanID
-	var span *Span
 	var user User
 
+	span := SpanFromContext(ctx)
+	if span != nil {
+		traceID = span.TraceID
+		spanID = span.SpanID
+	}
 	scope := customScope
 	if scope == nil {
-		scope = m.hub.Scope()
+		hub := GetHubFromContext(ctx)
+		if hub == nil {
+			hub = CurrentHub()
+		}
+		scope = hub.Scope()
 	}
 
 	if scope != nil {
 		scope.mu.Lock()
-		span = scope.span
-		if span != nil {
-			traceID = span.TraceID
-			spanID = span.SpanID
-		} else {
-			traceID = scope.propagationContext.TraceID
+		if span == nil {
+			if scope.span != nil {
+				traceID = scope.span.TraceID
+				spanID = scope.span.SpanID
+			} else {
+				traceID = scope.propagationContext.TraceID
+			}
 		}
 		user = scope.user
 		scope.mu.Unlock()
@@ -188,7 +189,7 @@ func (m *sentryMeter) emit(metricType MetricType, name string, value float64, un
 }
 
 // Count implements Meter.
-func (m *sentryMeter) Count(name string, count int64, options MeterOptions) {
+func (m *sentryMeter) Count(ctx context.Context, name string, count int64, options MeterOptions) {
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -201,11 +202,11 @@ func (m *sentryMeter) Count(name string, count int64, options MeterOptions) {
 		}
 	}
 
-	m.emit(MetricTypeCounter, name, float64(count), "", attrs, options.Scope)
+	m.emit(ctx, MetricTypeCounter, name, float64(count), "", attrs, options.Scope)
 }
 
 // Distribution implements Meter.
-func (m *sentryMeter) Distribution(name string, sample float64, options MeterOptions) {
+func (m *sentryMeter) Distribution(ctx context.Context, name string, sample float64, options MeterOptions) {
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -218,11 +219,11 @@ func (m *sentryMeter) Distribution(name string, sample float64, options MeterOpt
 		}
 	}
 
-	m.emit(MetricTypeDistribution, name, sample, options.Unit, attrs, options.Scope)
+	m.emit(ctx, MetricTypeDistribution, name, sample, options.Unit, attrs, options.Scope)
 }
 
 // Gauge implements Meter.
-func (m *sentryMeter) Gauge(name string, value float64, options MeterOptions) {
+func (m *sentryMeter) Gauge(ctx context.Context, name string, value float64, options MeterOptions) {
 	attrs := make(map[string]Attribute)
 	if options.Attributes != nil {
 		for _, attr := range options.Attributes {
@@ -235,7 +236,7 @@ func (m *sentryMeter) Gauge(name string, value float64, options MeterOptions) {
 		}
 	}
 
-	m.emit(MetricTypeGauge, name, value, options.Unit, attrs, options.Scope)
+	m.emit(ctx, MetricTypeGauge, name, value, options.Unit, attrs, options.Scope)
 }
 
 // SetAttributes implements Meter.
@@ -262,20 +263,15 @@ func (m *sentryMeter) SetAttributes(attrs ...attribute.Builder) {
 type noopMeter struct{}
 
 // Count implements Meter.
-func (n *noopMeter) Count(_ string, _ int64, _ MeterOptions) {
+func (n *noopMeter) Count(_ context.Context, _ string, _ int64, _ MeterOptions) {
 }
 
 // Distribution implements Meter.
-func (n *noopMeter) Distribution(_ string, _ float64, _ MeterOptions) {
+func (n *noopMeter) Distribution(_ context.Context, _ string, _ float64, _ MeterOptions) {
 }
 
 // Gauge implements Meter.
-func (n *noopMeter) Gauge(_ string, _ float64, _ MeterOptions) {
-}
-
-// GetCtx implements Meter.
-func (n *noopMeter) GetCtx() context.Context {
-	return context.Background()
+func (n *noopMeter) Gauge(_ context.Context, _ string, _ float64, _ MeterOptions) {
 }
 
 // SetAttributes implements Meter.
