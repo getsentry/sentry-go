@@ -2,16 +2,22 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 )
+
+var meter sentry.Meter
 
 func main() {
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn:   "",
-		Debug: true,
+		Dsn:              "",
+		Debug:            true,
+		TracesSampleRate: 1.0,
 		BeforeSendMetric: func(metric *sentry.Metric) *sentry.Metric {
 			// Filter metrics based on metric type and value
 			switch metric.Type {
@@ -40,15 +46,13 @@ func main() {
 	}
 	defer sentry.Flush(2 * time.Second)
 
-	ctx := context.Background()
-	meter := sentry.NewMeter(ctx)
+	meter = sentry.NewMeter(context.Background())
 	// Attaching permanent attributes on the meter
 	meter.SetAttributes(
 		attribute.String("version", "1.0.0"),
 	)
 
 	// Count metrics to measure occurrences of an event.
-	// The context is used to link the metric to the active trace/span.
 	meter.Count("sent_emails", 1,
 		sentry.WithAttributes(
 			attribute.String("email.provider", "sendgrid"),
@@ -110,4 +114,27 @@ func main() {
 			attribute.String("endpoint", "/api/orders"),
 		),
 	)
+
+	sentryHandler := sentryhttp.New(sentryhttp.Options{})
+	http.HandleFunc("/", sentryHandler.HandleFunc(handler))
+
+	fmt.Println("Listening on http://localhost:8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		panic(err)
+	}
+}
+
+// handler is an example of using `WithCtx` to link the metric with the correct request trace.
+func handler(w http.ResponseWriter, r *http.Request) {
+	// Use r.Context() and `WithCtx` to link the metric to the current request's span.
+	// The sentryhttp middleware adds the span to the request context.
+	meter.WithCtx(r.Context()).Count("page_views", 1,
+		sentry.WithAttributes(
+			attribute.String("path", r.URL.Path),
+			attribute.String("method", r.Method),
+		),
+	)
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintln(w, "Hello, World!")
 }
