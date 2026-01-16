@@ -180,8 +180,8 @@ func WithUnit(unit string) MeterOption {
 	}
 }
 
-// WithCustomScope sets a custom scope for the metric, overriding the default scope from the hub.
-func WithCustomScope(scope *Scope) MeterOption {
+// WithScopeOverride sets a custom scope for the metric, overriding the default scope from the hub.
+func WithScopeOverride(scope *Scope) MeterOption {
 	return func(o *meterOptions) {
 		o.scope = scope
 	}

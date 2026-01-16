@@ -105,7 +105,7 @@ func main() {
 
 	meter.Distribution("api_latency", 250.0,
 		sentry.WithUnit(sentry.UnitMillisecond),
-		sentry.WithCustomScope(customScope), // Use a custom scope for this metric
+		sentry.WithScopeOverride(customScope), // Use a custom scope for this metric
 		sentry.WithAttributes(
 			attribute.String("endpoint", "/api/orders"),
 		),
