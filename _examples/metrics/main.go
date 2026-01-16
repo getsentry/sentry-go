@@ -12,6 +12,28 @@ func main() {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:   "",
 		Debug: true,
+		BeforeSendMetric: func(metric *sentry.Metric) *sentry.Metric {
+			// Filter metrics based on metric type and value
+			switch metric.Type {
+			case sentry.MetricTypeCounter:
+				if v, ok := metric.Value.Int64(); ok && v < 5 {
+					return nil // drop low-value counters
+				}
+			case sentry.MetricTypeGauge:
+				if v, ok := metric.Value.Float64(); ok && v < 10.0 {
+					return nil // drop low gauge readings
+				}
+			case sentry.MetricTypeDistribution:
+				// keep all distributions
+			}
+
+			// Alternative: handle value types directly
+			if v, ok := metric.Value.Int64(); ok && v > 1 {
+				// handle all int64 values (counters)
+			}
+
+			return metric
+		},
 	})
 	if err != nil {
 		panic(err)
@@ -19,7 +41,7 @@ func main() {
 	defer sentry.Flush(2 * time.Second)
 
 	ctx := context.Background()
-	meter := sentry.NewMeter()
+	meter := sentry.NewMeter(ctx)
 	// Attaching permanent attributes on the meter
 	meter.SetAttributes(
 		attribute.String("version", "1.0.0"),
@@ -27,49 +49,49 @@ func main() {
 
 	// Count metrics to measure occurrences of an event.
 	// The context is used to link the metric to the active trace/span.
-	meter.Count(ctx, "sent_emails", 1, sentry.MeterOptions{
-		Attributes: []attribute.Builder{
+	meter.Count("sent_emails", 1,
+		sentry.WithAttributes(
 			attribute.String("email.provider", "sendgrid"),
 			attribute.Int("email.number_of_recipients", 3),
-		},
-	})
+		),
+	)
 
 	// Distribution metrics to measure the statistical distribution of a set of values.
 	// Useful for measuring things and keeping track of the patterns, e.g. file sizes, response times, etc.
-	meter.Distribution(ctx, "file_upload_size", 3.14, sentry.MeterOptions{
-		Unit: sentry.UnitMegabyte, // Using standard unit constants
-		Attributes: []attribute.Builder{
+	meter.Distribution("file_upload_size", 3.14,
+		sentry.WithUnit(sentry.UnitMegabyte), // Using standard unit constants
+		sentry.WithAttributes(
 			attribute.String("file.type", "image/png"),
 			attribute.String("bucket.region", "us-west-2"),
 			attribute.String("bucket.name", "user-uploads"),
-		},
-	})
+		),
+	)
 
 	// Distribution metric with duration unit
-	meter.Distribution(ctx, "response_time", 123.5, sentry.MeterOptions{
-		Unit: sentry.UnitMillisecond,
-		Attributes: []attribute.Builder{
+	meter.Distribution("response_time", 123.5,
+		sentry.WithUnit(sentry.UnitMillisecond),
+		sentry.WithAttributes(
 			attribute.String("endpoint", "/api/users"),
 			attribute.String("method", "GET"),
-		},
-	})
+		),
+	)
 
 	// Gauge metrics to measure a value at a specific point in time.
 	// Useful for measuring values that can go up and down, e.g. temperature, memory usage, etc.
-	meter.Gauge(ctx, "memory_usage", 512.0, sentry.MeterOptions{
-		Unit: sentry.UnitMebibyte, // Using binary unit (MiB)
-		Attributes: []attribute.Builder{
+	meter.Gauge("memory_usage", 512.0,
+		sentry.WithUnit(sentry.UnitMebibyte), // Using binary unit (MiB)
+		sentry.WithAttributes(
 			attribute.String("process", "worker"),
-		},
-	})
+		),
+	)
 
 	// Gauge metric with percentage
-	meter.Gauge(ctx, "cpu_usage", 0.75, sentry.MeterOptions{
-		Unit: sentry.UnitRatio, // Value from 0.0 to 1.0
-		Attributes: []attribute.Builder{
+	meter.Gauge("cpu_usage", 0.75,
+		sentry.WithUnit(sentry.UnitRatio), // Value from 0.0 to 1.0
+		sentry.WithAttributes(
 			attribute.String("core", "0"),
-		},
-	})
+		),
+	)
 
 	// Example using a custom scope for isolating metrics
 	// This is useful when you want to capture metrics with a specific scope
@@ -81,11 +103,11 @@ func main() {
 	})
 	customScope.SetTag("environment", "staging")
 
-	meter.Distribution(ctx, "api_latency", 250.0, sentry.MeterOptions{
-		Unit: sentry.UnitMillisecond,
-		Attributes: []attribute.Builder{
+	meter.Distribution("api_latency", 250.0,
+		sentry.WithUnit(sentry.UnitMillisecond),
+		sentry.WithCustomScope(customScope), // Use a custom scope for this metric
+		sentry.WithAttributes(
 			attribute.String("endpoint", "/api/orders"),
-		},
-		Scope: customScope, // Use a custom scope for this metric
-	})
+		),
+	)
 }

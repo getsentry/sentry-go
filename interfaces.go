@@ -149,34 +149,58 @@ type LogEntry interface {
 	Emitf(format string, args ...interface{})
 }
 
-type MeterOptions struct {
-	// Attributes are key/value pairs that will be added to the metric.
-	// The attributes set here will take precedence over the attributes
-	// set from the Meter.
-	Attributes []attribute.Builder
-	// The unit of measurements, for "gauge" and "distribution" metrics.
-	Unit string
-	// Scope is the scope to capture the metric with.
-	// If not provided, the metric will be captured with the current scope
-	// from the hub associated with the meter.
-	Scope *Scope
-}
-
-// Numbers provides a generic constraint for numeric types.
-type Numbers interface {
-	int | int8 | int16 | int32 | int64 | uint | uint8 | uint16 | uint32 | uint64 | float32 | float64
-}
-
 // Meter provides an interface for recording metrics.
 type Meter interface {
+	// WithCtx returns a new Meter that uses the given context for trace/span association.
+	WithCtx(ctx context.Context) Meter
 	// SetAttributes allows attaching parameters to the meter using the attribute API.
-	SetAttributes(...attribute.Builder)
+	// These attributes will be included in all subsequent metrics.
+	SetAttributes(attrs ...attribute.Builder)
 	// Count records a count metric.
-	Count(ctx context.Context, name string, count int64, options MeterOptions)
+	Count(name string, count int64, opts ...MeterOption)
 	// Gauge records a gauge metric.
-	Gauge(ctx context.Context, name string, value float64, options MeterOptions)
+	Gauge(name string, value float64, opts ...MeterOption)
 	// Distribution records a distribution metric.
-	Distribution(ctx context.Context, name string, sample float64, options MeterOptions)
+	Distribution(name string, sample float64, opts ...MeterOption)
+}
+
+// MeterOption configures a metric recording call.
+type MeterOption func(*meterOptions)
+
+type meterOptions struct {
+	unit       string
+	scope      *Scope
+	attributes map[string]Attribute
+}
+
+// WithUnit sets the unit for the metric (e.g., "millisecond", "byte").
+func WithUnit(unit string) MeterOption {
+	return func(o *meterOptions) {
+		o.unit = unit
+	}
+}
+
+// WithCustomScope sets a custom scope for the metric, overriding the default scope from the hub.
+func WithCustomScope(scope *Scope) MeterOption {
+	return func(o *meterOptions) {
+		o.scope = scope
+	}
+}
+
+// WithAttributes sets attributes for the metric.
+func WithAttributes(attrs ...attribute.Builder) MeterOption {
+	return func(o *meterOptions) {
+		if o.attributes == nil {
+			o.attributes = make(map[string]Attribute)
+		}
+		for _, attr := range attrs {
+			t, ok := mapTypesToStr[attr.Value.Type()]
+			if !ok || t == "" {
+				continue
+			}
+			o.attributes[attr.Key] = Attribute{Value: attr.Value.AsInterface(), Type: t}
+		}
+	}
 }
 
 // Attachment allows associating files with your events to aid in investigation.
@@ -900,7 +924,7 @@ type Metric struct {
 	SpanID     SpanID               `json:"span_id,omitempty"`
 	Type       MetricType           `json:"type"`
 	Name       string               `json:"name"`
-	Value      float64              `json:"value"`
+	Value      MetricValue          `json:"value"`
 	Unit       string               `json:"unit,omitempty"`
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
@@ -966,4 +990,56 @@ func (m *Metric) GetSdkInfo() *protocol.SdkInfo {
 // GetDynamicSamplingContext returns nil (trace context set when batching).
 func (m *Metric) GetDynamicSamplingContext() map[string]string {
 	return nil
+}
+
+// MetricValue stores metric values with full precision.
+// It supports int64 (for counters) and float64 (for gauges and distributions).
+type MetricValue struct {
+	value attribute.Value
+}
+
+// Int64MetricValue creates a MetricValue from an int64.
+// Used for counter metrics to preserve full int64 precision.
+func Int64MetricValue(v int64) MetricValue {
+	return MetricValue{value: attribute.Int64Value(v)}
+}
+
+// Float64MetricValue creates a MetricValue from a float64.
+// Used for gauge and distribution metrics.
+func Float64MetricValue(v float64) MetricValue {
+	return MetricValue{value: attribute.Float64Value(v)}
+}
+
+// Type returns the type of the stored value (attribute.INT64 or attribute.FLOAT64).
+func (v MetricValue) Type() attribute.Type {
+	return v.value.Type()
+}
+
+// Int64 returns the value as int64 if it holds an int64.
+// The second return value indicates whether the type matched.
+func (v MetricValue) Int64() (int64, bool) {
+	if v.value.Type() == attribute.INT64 {
+		return v.value.AsInt64(), true
+	}
+	return 0, false
+}
+
+// Float64 returns the value as float64 if it holds a float64.
+// The second return value indicates whether the type matched.
+func (v MetricValue) Float64() (float64, bool) {
+	if v.value.Type() == attribute.FLOAT64 {
+		return v.value.AsFloat64(), true
+	}
+	return 0, false
+}
+
+// AsInterface returns the value as int64 or float64.
+// Use type assertion or type switch to handle the result.
+func (v MetricValue) AsInterface() any {
+	return v.value.AsInterface()
+}
+
+// MarshalJSON serializes the value as a bare number.
+func (v MetricValue) MarshalJSON() ([]byte, error) {
+	return json.Marshal(v.value.AsInterface())
 }

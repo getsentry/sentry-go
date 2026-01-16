@@ -793,7 +793,7 @@ func TestEvent_ToEnvelope(t *testing.T) {
 				Metrics: []Metric{
 					{
 						Name:      "test.metric",
-						Value:     42,
+						Value:     Int64MetricValue(42),
 						Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
 						Type:      MetricTypeCounter,
 					},
@@ -1064,7 +1064,7 @@ func TestMetric_MarshalJSON(t *testing.T) {
 				SpanID:    SpanIDFromHex("1234567890123456"),
 				Type:      MetricTypeCounter,
 				Name:      "test.metric",
-				Value:     42,
+				Value:     Float64MetricValue(42),
 				Unit:      "units",
 				Attributes: map[string]Attribute{
 					"key": {Value: "value", Type: AttributeString},
@@ -1088,7 +1088,7 @@ func TestMetric_MarshalJSON(t *testing.T) {
 				TraceID:   TraceIDFromHex("12345678901234567890123456789012"),
 				Type:      MetricTypeGauge,
 				Name:      "test.gauge",
-				Value:     2.5,
+				Value:     Float64MetricValue(2.5),
 			},
 			wantJSONFields: map[string]bool{
 				"timestamp": true,
@@ -1128,7 +1128,7 @@ func TestMetric_ToEnvelopeItem(t *testing.T) {
 		TraceID:   TraceIDFromHex("12345678901234567890123456789012"),
 		Type:      MetricTypeCounter,
 		Name:      "test.metric",
-		Value:     42,
+		Value:     Int64MetricValue(42),
 		Unit:      "units",
 		Attributes: map[string]Attribute{
 			"key.string": {Value: "value", Type: "string"},
@@ -1172,7 +1172,7 @@ func TestMetric_GetterMethods(t *testing.T) {
 		TraceID:   TraceIDFromHex("12345678901234567890123456789012"),
 		Type:      MetricTypeCounter,
 		Name:      "test.metric",
-		Value:     42,
+		Value:     Int64MetricValue(42),
 	}
 
 	if metric.GetCategory() != ratelimit.CategoryTraceMetric {
