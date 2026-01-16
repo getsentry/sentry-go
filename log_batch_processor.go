@@ -1,6 +1,10 @@
 package sentry
 
-import "time"
+import (
+	"time"
+
+	"github.com/getsentry/sentry-go/internal/debuglog"
+)
 
 // LogBatchProcessor batches logs and sends them to Sentry.
 type LogBatchProcessor struct {
@@ -26,5 +30,7 @@ func NewLogBatchProcessor(client *Client) *LogBatchProcessor {
 }
 
 func (p *LogBatchProcessor) Send(log *Log) {
-	p.BatchProcessor.Send(*log)
+	if !p.BatchProcessor.Send(*log) {
+		debuglog.Printf("Dropping log [%s]: buffer full", log.Level)
+	}
 }

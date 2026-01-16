@@ -29,8 +29,13 @@ func NewBatchProcessor[T any](sendBatch func([]T)) *BatchProcessor[T] {
 	}
 }
 
-func (p *BatchProcessor[T]) Send(item T) {
-	p.itemCh <- item
+func (p *BatchProcessor[T]) Send(item T) bool {
+	select {
+	case p.itemCh <- item:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *BatchProcessor[T]) Start() {

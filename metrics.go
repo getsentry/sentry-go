@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"maps"
 	"os"
 	"sync"
 	"time"
@@ -85,7 +86,7 @@ func NewMeter(ctx context.Context) Meter {
 		}
 	}
 
-	debuglog.Println("fallback to noopMeter: enableMetrics disabled")
+	debuglog.Printf("fallback to noopMeter: metrics disabled")
 	return &noopMeter{}
 }
 
@@ -201,10 +202,14 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 
 // WithCtx returns a new Meter that uses the given context for trace/span association.
 func (m *sentryMeter) WithCtx(ctx context.Context) Meter {
+	m.mu.RLock()
+	attrsCopy := maps.Clone(m.attributes)
+	m.mu.RUnlock()
+
 	return &sentryMeter{
 		ctx:               ctx,
 		client:            m.client,
-		attributes:        m.attributes,
+		attributes:        attrsCopy,
 		defaultAttributes: m.defaultAttributes,
 		mu:                sync.RWMutex{},
 	}
@@ -221,7 +226,7 @@ func (m *sentryMeter) applyOptions(opts []MeterOption) *meterOptions {
 // Count implements Meter.
 func (m *sentryMeter) Count(name string, count int64, opts ...MeterOption) {
 	o := m.applyOptions(opts)
-	m.emit(m.ctx, MetricTypeCounter, name, Int64MetricValue(count), "", o.attributes, o.scope)
+	m.emit(m.ctx, MetricTypeCounter, name, Int64MetricValue(count), o.unit, o.attributes, o.scope)
 }
 
 // Distribution implements Meter.
@@ -256,7 +261,7 @@ func (m *sentryMeter) SetAttributes(attrs ...attribute.Builder) {
 }
 
 // noopMeter is a no-operation implementation of Meter.
-// This is used when there is no client available in the context.
+// This is used when there is no client available in the context or when metrics are disabled.
 type noopMeter struct{}
 
 // WithCtx implements Meter.
@@ -265,17 +270,21 @@ func (n *noopMeter) WithCtx(_ context.Context) Meter {
 }
 
 // Count implements Meter.
-func (n *noopMeter) Count(_ string, _ int64, _ ...MeterOption) {
+func (n *noopMeter) Count(name string, _ int64, _ ...MeterOption) {
+	debuglog.Printf("Metric %q is being dropped. Turn on metrics by setting DisableMetrics to false", name)
 }
 
 // Distribution implements Meter.
-func (n *noopMeter) Distribution(_ string, _ float64, _ ...MeterOption) {
+func (n *noopMeter) Distribution(name string, _ float64, _ ...MeterOption) {
+	debuglog.Printf("Metric %q is being dropped. Turn on metrics by setting DisableMetrics to false", name)
 }
 
 // Gauge implements Meter.
-func (n *noopMeter) Gauge(_ string, _ float64, _ ...MeterOption) {
+func (n *noopMeter) Gauge(name string, _ float64, _ ...MeterOption) {
+	debuglog.Printf("Metric %q is being dropped. Turn on metrics by setting DisableMetrics to false", name)
 }
 
 // SetAttributes implements Meter.
 func (n *noopMeter) SetAttributes(_ ...attribute.Builder) {
+	debuglog.Printf("No attributes attached. Turn on metrics by setting DisableMetrics to false")
 }
