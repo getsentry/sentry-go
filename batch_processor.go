@@ -1,0 +1,132 @@
+package sentry
+
+import (
+	"context"
+	"sync"
+	"time"
+)
+
+const (
+	batchSize    = 100
+	batchTimeout = 5 * time.Second
+)
+
+type BatchProcessor[T any] struct {
+	sendBatch    func([]T)
+	itemCh       chan T
+	flushCh      chan chan struct{}
+	cancel       context.CancelFunc
+	wg           sync.WaitGroup
+	startOnce    sync.Once
+	shutdownOnce sync.Once
+}
+
+func NewBatchProcessor[T any](sendBatch func([]T)) *BatchProcessor[T] {
+	return &BatchProcessor[T]{
+		itemCh:    make(chan T, batchSize),
+		flushCh:   make(chan chan struct{}),
+		sendBatch: sendBatch,
+	}
+}
+
+func (p *BatchProcessor[T]) Send(item T) bool {
+	select {
+	case p.itemCh <- item:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *BatchProcessor[T]) Start() {
+	p.startOnce.Do(func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		p.cancel = cancel
+		p.wg.Add(1)
+		go p.run(ctx)
+	})
+}
+
+func (p *BatchProcessor[T]) Flush(timeout <-chan struct{}) {
+	done := make(chan struct{})
+	select {
+	case p.flushCh <- done:
+		select {
+		case <-done:
+		case <-timeout:
+		}
+	case <-timeout:
+	}
+}
+
+func (p *BatchProcessor[T]) Shutdown() {
+	p.shutdownOnce.Do(func() {
+		if p.cancel != nil {
+			p.cancel()
+			p.wg.Wait()
+		}
+	})
+}
+
+func (p *BatchProcessor[T]) run(ctx context.Context) {
+	defer p.wg.Done()
+	var items []T
+	timer := time.NewTimer(batchTimeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case item := <-p.itemCh:
+			items = append(items, item)
+			if len(items) >= batchSize {
+				p.sendBatch(items)
+				items = nil
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timer.Reset(batchTimeout)
+			}
+		case <-timer.C:
+			if len(items) > 0 {
+				p.sendBatch(items)
+				items = nil
+			}
+			timer.Reset(batchTimeout)
+		case done := <-p.flushCh:
+		flushDrain:
+			for {
+				select {
+				case item := <-p.itemCh:
+					items = append(items, item)
+				default:
+					break flushDrain
+				}
+			}
+
+			if len(items) > 0 {
+				p.sendBatch(items)
+				items = nil
+			}
+			if !timer.Stop() {
+				<-timer.C
+			}
+			timer.Reset(batchTimeout)
+			close(done)
+		case <-ctx.Done():
+		drain:
+			for {
+				select {
+				case item := <-p.itemCh:
+					items = append(items, item)
+				default:
+					break drain
+				}
+			}
+
+			if len(items) > 0 {
+				p.sendBatch(items)
+			}
+			return
+		}
+	}
+}

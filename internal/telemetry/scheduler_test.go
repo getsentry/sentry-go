@@ -17,15 +17,23 @@ type testTelemetryItem struct {
 
 func (t *testTelemetryItem) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	var payload string
-	if t.GetCategory() == ratelimit.CategoryLog {
+	var itemType protocol.EnvelopeItemType
+
+	switch t.GetCategory() {
+	case ratelimit.CategoryLog:
 		payload = `{"type": "log", "timestamp": "2023-01-01T00:00:00Z", "logs": [{"level": "info", "body": "` + t.data + `"}]}`
-	} else {
+		itemType = protocol.EnvelopeItemTypeLog
+	case ratelimit.CategoryTraceMetric:
+		payload = `{"type": "trace_metric", "timestamp": "2023-01-01T00:00:00Z", "metrics": [{"name": "test.metric", "value": 42}]}`
+		itemType = protocol.EnvelopeItemTypeTraceMetric
+	default:
 		payload = `{"message": "` + t.data + `"}`
+		itemType = protocol.EnvelopeItemTypeEvent
 	}
 
 	return &protocol.EnvelopeItem{
 		Header: &protocol.EnvelopeItemHeader{
-			Type: protocol.EnvelopeItemTypeEvent,
+			Type: itemType,
 		},
 		Payload: []byte(payload),
 	}, nil
@@ -162,6 +170,21 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 				buffers[ratelimit.CategoryError].Offer(&testTelemetryItem{id: 1, data: "error", category: ratelimit.CategoryError})
 				// simulate a log item (will be batched)
 				buffers[ratelimit.CategoryLog].Offer(&testTelemetryItem{id: 2, data: "log", category: ratelimit.CategoryLog})
+			},
+			expectedCount: 2,
+		},
+		{
+			name: "priority ordering - error and metric",
+			setupBuffers: func() map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible] {
+				return map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible]{
+					ratelimit.CategoryError:       NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
+					ratelimit.CategoryTraceMetric: NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTraceMetric, 10, OverflowPolicyDropOldest, 100, 5*time.Second),
+				}
+			},
+			addItems: func(buffers map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible]) {
+				buffers[ratelimit.CategoryError].Offer(&testTelemetryItem{id: 1, data: "error", category: ratelimit.CategoryError})
+				// simulate a metric item (will be batched)
+				buffers[ratelimit.CategoryTraceMetric].Offer(&testTelemetryItem{id: 2, data: "metric", category: ratelimit.CategoryTraceMetric})
 			},
 			expectedCount: 2,
 		},
