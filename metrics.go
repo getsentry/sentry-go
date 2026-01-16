@@ -127,7 +127,7 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 	}
 
 	if scope != nil {
-		scope.mu.Lock()
+		scope.mu.RLock()
 		// Use span from hub only as last resort
 		if span == nil {
 			span = scope.span
@@ -139,7 +139,7 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 			traceID = scope.propagationContext.TraceID
 		}
 		user = scope.user
-		scope.mu.Unlock()
+		scope.mu.RUnlock()
 	}
 
 	// attribute precedence: default -> user -> entry attrs (from SetAttributes) -> call specific

@@ -131,7 +131,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 
 	scope := hub.Scope()
 	if scope != nil {
-		scope.mu.Lock()
+		scope.mu.RLock()
 		// Use span from hub only as last resort
 		if span == nil {
 			span = scope.span
@@ -143,7 +143,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 			traceID = scope.propagationContext.TraceID
 		}
 		user = scope.user
-		scope.mu.Unlock()
+		scope.mu.RUnlock()
 	}
 
 	// attribute precedence: default -> user -> entry attrs (from SetAttributes) -> call specific
