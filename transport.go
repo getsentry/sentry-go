@@ -62,6 +62,10 @@ func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error)
 
 func getTLSConfig(options ClientOptions) *tls.Config {
 	if options.TlsConfig != nil {
+		if options.TlsConfig.RootCAs == nil && options.CaCerts != nil {
+			options.TlsConfig.RootCAs = options.CaCerts
+		}
+
 		return options.TlsConfig
 	} else if options.CaCerts != nil {
 		// #nosec G402 -- We should be using `MinVersion: tls.VersionTLS12`,
