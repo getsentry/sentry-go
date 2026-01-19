@@ -17,6 +17,7 @@ func main() {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:              "",
 		Debug:            true,
+		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		BeforeSendMetric: func(metric *sentry.Metric) *sentry.Metric {
 			// Filter metrics based on metric type and value
