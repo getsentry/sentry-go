@@ -96,7 +96,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
