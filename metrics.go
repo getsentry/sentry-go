@@ -104,42 +104,13 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		return
 	}
 
-	var traceID TraceID
-	var spanID SpanID
-	var span *Span
-	var user User
+	traceID, spanID := resolveTraceIDs(ctx, m.ctx)
+	user := resolveUser(ctx, m.ctx)
 
-	span = SpanFromContext(ctx)
-	if span == nil {
-		span = SpanFromContext(m.ctx)
-	}
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = GetHubFromContext(m.ctx)
-	}
-	if hub == nil {
-		hub = CurrentHub()
-	}
-
-	scope := hub.Scope()
 	if customScope != nil {
-		scope = customScope
-	}
-
-	if scope != nil {
-		scope.mu.RLock()
-		// Use span from hub only as last resort
-		if span == nil {
-			span = scope.span
-		}
-		if span != nil {
-			traceID = span.TraceID
-			spanID = span.SpanID
-		} else {
-			traceID = scope.propagationContext.TraceID
-		}
-		user = scope.user
-		scope.mu.RUnlock()
+		customScope.mu.RLock()
+		user = customScope.user
+		customScope.mu.RUnlock()
 	}
 
 	// attribute precedence: default -> user -> entry attrs (from SetAttributes) -> call specific

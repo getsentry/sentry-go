@@ -112,39 +112,9 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	if message == "" {
 		return
 	}
-	var traceID TraceID
-	var spanID SpanID
-	var span *Span
-	var user User
 
-	span = SpanFromContext(ctx)
-	if span == nil {
-		span = SpanFromContext(l.ctx)
-	}
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = GetHubFromContext(l.ctx)
-	}
-	if hub == nil {
-		hub = CurrentHub()
-	}
-
-	scope := hub.Scope()
-	if scope != nil {
-		scope.mu.RLock()
-		// Use span from hub only as last resort
-		if span == nil {
-			span = scope.span
-		}
-		if span != nil {
-			traceID = span.TraceID
-			spanID = span.SpanID
-		} else {
-			traceID = scope.propagationContext.TraceID
-		}
-		user = scope.user
-		scope.mu.RUnlock()
-	}
+	traceID, spanID := resolveTraceIDs(ctx, l.ctx)
+	user := resolveUser(ctx, l.ctx)
 
 	// attribute precedence: default -> user -> entry attrs (from SetAttributes) -> call specific
 	attrs := make(map[string]Attribute)

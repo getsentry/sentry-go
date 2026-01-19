@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"sync"
@@ -493,4 +494,75 @@ func cloneContext(c Context) Context {
 		res[k] = v
 	}
 	return res
+}
+
+// resolveTraceIDs resolves trace and span IDs from the given contexts.
+func resolveTraceIDs(ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
+	var span *Span
+	for _, ctx := range ctxs {
+		if ctx == nil {
+			continue
+		}
+		if span = SpanFromContext(ctx); span != nil {
+			break
+		}
+	}
+
+	if span != nil {
+		return span.TraceID, span.SpanID
+	}
+
+	var hub *Hub
+	for _, ctx := range ctxs {
+		if ctx == nil {
+			continue
+		}
+		if hub = GetHubFromContext(ctx); hub != nil {
+			break
+		}
+	}
+	if hub == nil {
+		hub = CurrentHub()
+	}
+
+	scope := hub.Scope()
+	if scope == nil {
+		return TraceID{}, SpanID{}
+	}
+
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+
+	if scope.span != nil {
+		return scope.span.TraceID, scope.span.SpanID
+	}
+
+	// Fall back to propagation context (tracing without performance)
+	return scope.propagationContext.TraceID, SpanID{}
+}
+
+// resolveUser resolves user information from the hub's scope.
+func resolveUser(ctxs ...context.Context) User {
+	var hub *Hub
+	for _, ctx := range ctxs {
+		if ctx == nil {
+			continue
+		}
+		if hub = GetHubFromContext(ctx); hub != nil {
+			break
+		}
+	}
+	if hub == nil {
+		hub = CurrentHub()
+	}
+
+	scope := hub.Scope()
+	if scope == nil {
+		return User{}
+	}
+
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+
+	return scope.user
 }
