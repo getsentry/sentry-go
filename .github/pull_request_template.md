@@ -20,13 +20,7 @@ To add a custom changelog entry, uncomment the section above. Supports:
 - Multiple entries: use bullet points
 - Nested bullets: indent 4+ spaces
 
-Example:
-```
-### Changelog Entry
-- Add support for custom transports
-- Fix memory leak in session tracking
-  - Affected versions: 0.25.0+
-```
+For more details: [custom changelog entries](https://getsentry.github.io/craft/configuration/#custom-changelog-entries-from-pr-descriptions)
 </details>
 
 <details>
