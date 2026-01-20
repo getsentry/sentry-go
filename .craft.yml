@@ -1,4 +1,4 @@
-minVersion: 0.35.0
+minVersion: 2.14.0
 changelogPolicy: simple
 versioning:
   policy: auto
