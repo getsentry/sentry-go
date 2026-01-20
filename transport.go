@@ -3,7 +3,6 @@ package sentry
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -58,27 +57,6 @@ func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error)
 	}
 
 	return http.ProxyFromEnvironment
-}
-
-func getTLSConfig(options ClientOptions) *tls.Config {
-	if options.TLSConfig == nil && options.CaCerts == nil {
-		return nil
-	}
-
-	var tlsConfig *tls.Config
-	if options.TLSConfig != nil {
-		tlsConfig = options.TLSConfig.Clone()
-	} else {
-		// #nosec G402 -- We should be using `MinVersion: tls.VersionTLS12`,
-		// 				 but we don't want to break peoples code without the major bump.
-		tlsConfig = &tls.Config{}
-	}
-
-	if tlsConfig.RootCAs == nil && options.CaCerts != nil {
-		tlsConfig.RootCAs = options.CaCerts
-	}
-
-	return tlsConfig
 }
 
 func getRequestBodyFromEvent(event *Event) []byte {
