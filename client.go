@@ -231,7 +231,7 @@ type ClientOptions struct {
 	// HTTPS_PROXY takes precedence over HTTP_PROXY for https requests.
 	HTTPSProxy string
 	// An optional tls config.
-	TlsConfig *tls.Config
+	TLSConfig *tls.Config
 	// An optional set of SSL certificates to use.
 	CaCerts *x509.CertPool
 	// MaxErrorDepth is the maximum number of errors reported in a chain of errors.
