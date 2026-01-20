@@ -14,6 +14,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
+const errorType = ""
 const eventType = "event"
 const transactionType = "transaction"
 const checkInType = "check_in"
@@ -775,7 +776,7 @@ func (e *Event) checkInMarshalJSON() ([]byte, error) {
 
 func (e *Event) toCategory() ratelimit.Category {
 	switch e.Type {
-	case "":
+	case errorType:
 		return ratelimit.CategoryError
 	case transactionType:
 		return ratelimit.CategoryTransaction
