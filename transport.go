@@ -61,22 +61,24 @@ func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error)
 }
 
 func getTLSConfig(options ClientOptions) *tls.Config {
-	if options.TlsConfig != nil {
-		tlsConfig := options.TlsConfig
-		if tlsConfig.RootCAs == nil && options.CaCerts != nil {
-			tlsConfig.RootCAs = options.CaCerts
-		}
-
-		return tlsConfig
-	} else if options.CaCerts != nil {
-		// #nosec G402 -- We should be using `MinVersion: tls.VersionTLS12`,
-		// 				 but we don't want to break peoples code without the major bump.
-		return &tls.Config{
-			RootCAs: options.CaCerts,
-		}
+	if options.TlsConfig == nil && options.CaCerts == nil {
+		return nil
 	}
 
-	return nil
+	var tlsConfig *tls.Config
+	if options.TlsConfig != nil {
+		tlsConfig = options.TlsConfig.Clone()
+	} else {
+		tlsConfig = &tls.Config{}
+	}
+
+	if tlsConfig.RootCAs == nil && options.CaCerts != nil {
+		// #nosec G402 -- We should be using `MinVersion: tls.VersionTLS12`,
+		// 				 but we don't want to break peoples code without the major bump.
+		tlsConfig.RootCAs = options.CaCerts
+	}
+
+	return tlsConfig
 }
 
 func getRequestBodyFromEvent(event *Event) []byte {
