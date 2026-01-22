@@ -86,6 +86,9 @@ func NewEnvelope(header *EnvelopeHeader) *Envelope {
 
 // AddItem adds an item to the envelope.
 func (e *Envelope) AddItem(item *EnvelopeItem) {
+	if item == nil {
+		return
+	}
 	e.Items = append(e.Items, item)
 }
 

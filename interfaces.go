@@ -881,7 +881,7 @@ type Attribute struct {
 	Type  AttrType `json:"type"`
 }
 
-// MarshalJSON converts a Log to JSON that skips SpanID and timestamp when empty.
+// MarshalJSON converts a Log to JSON that skips SpanID and timestamp when zero.
 func (l *Log) MarshalJSON() ([]byte, error) {
 	type log Log
 
@@ -944,7 +944,7 @@ func (m *Metric) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	}, nil
 }
 
-// MarshalJSON converts a Metric to JSON that skips SpanID and timestamp when empty.
+// MarshalJSON converts a Metric to JSON that skips SpanID and timestamp when zero.
 func (m *Metric) MarshalJSON() ([]byte, error) {
 	type metric Metric
 

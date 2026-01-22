@@ -680,7 +680,9 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	case transactionType:
 		eventIdentifier = "transaction"
 	case logEvent.Type:
-		eventIdentifier = fmt.Sprintf("%s log event", event.Level)
+		eventIdentifier = fmt.Sprintf("%d log events", len(event.Logs))
+	case traceMetricEvent.Type:
+		eventIdentifier = fmt.Sprintf("%d metric events", len(event.Metrics))
 	default:
 		eventIdentifier = fmt.Sprintf("%s event", event.Type)
 	}

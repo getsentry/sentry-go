@@ -164,10 +164,10 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		} else if m.client.batchMeter != nil {
 			m.client.batchMeter.Send(metric)
 		}
-	}
 
-	if m.client.options.Debug {
-		debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), unit)
+		if m.client.options.Debug {
+			debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), unit)
+		}
 	}
 }
 
