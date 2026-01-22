@@ -71,27 +71,26 @@ func (p *BatchProcessor[T]) Shutdown() {
 func (p *BatchProcessor[T]) run(ctx context.Context) {
 	defer p.wg.Done()
 	var items []T
-	timer := time.NewTimer(batchTimeout)
+	timer := time.NewTimer(0)
+	timer.Stop()
 	defer timer.Stop()
 
 	for {
 		select {
 		case item := <-p.itemCh:
+			if len(items) == 0 {
+				timer.Reset(batchTimeout)
+			}
 			items = append(items, item)
 			if len(items) >= batchSize {
 				p.sendBatch(items)
 				items = nil
-				if !timer.Stop() {
-					<-timer.C
-				}
-				timer.Reset(batchTimeout)
 			}
 		case <-timer.C:
 			if len(items) > 0 {
 				p.sendBatch(items)
 				items = nil
 			}
-			timer.Reset(batchTimeout)
 		case done := <-p.flushCh:
 		flushDrain:
 			for {
@@ -107,10 +106,6 @@ func (p *BatchProcessor[T]) run(ctx context.Context) {
 				p.sendBatch(items)
 				items = nil
 			}
-			if !timer.Stop() {
-				<-timer.C
-			}
-			timer.Reset(batchTimeout)
 			close(done)
 		case <-ctx.Done():
 		drain:
