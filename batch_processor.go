@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	batchSize    = 100
-	batchTimeout = 5 * time.Second
+	batchSize           = 100
+	defaultBatchTimeout = 5 * time.Second
 )
 
 type BatchProcessor[T any] struct {
@@ -19,14 +19,23 @@ type BatchProcessor[T any] struct {
 	wg           sync.WaitGroup
 	startOnce    sync.Once
 	shutdownOnce sync.Once
+	batchTimeout time.Duration
 }
 
 func NewBatchProcessor[T any](sendBatch func([]T)) *BatchProcessor[T] {
 	return &BatchProcessor[T]{
-		itemCh:    make(chan T, batchSize),
-		flushCh:   make(chan chan struct{}),
-		sendBatch: sendBatch,
+		itemCh:       make(chan T, batchSize),
+		flushCh:      make(chan chan struct{}),
+		sendBatch:    sendBatch,
+		batchTimeout: defaultBatchTimeout,
 	}
+}
+
+// WithBatchTimeout sets a custom batch timeout for the processor.
+// This is useful for testing or when different timing behavior is needed.
+func (p *BatchProcessor[T]) WithBatchTimeout(timeout time.Duration) *BatchProcessor[T] {
+	p.batchTimeout = timeout
+	return p
 }
 
 func (p *BatchProcessor[T]) Send(item T) bool {
@@ -79,7 +88,7 @@ func (p *BatchProcessor[T]) run(ctx context.Context) {
 		select {
 		case item := <-p.itemCh:
 			if len(items) == 0 {
-				timer.Reset(batchTimeout)
+				timer.Reset(p.batchTimeout)
 			}
 			items = append(items, item)
 			if len(items) >= batchSize {

@@ -107,16 +107,19 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 	traceID, spanID := resolveTraceIDs(ctx, m.ctx)
 	user := resolveUser(ctx, m.ctx)
 
-	if customScope != nil {
-		customScope.mu.RLock()
-		user = customScope.user
-		customScope.mu.RUnlock()
-	}
-
-	// attribute precedence: default -> user -> entry attrs (from SetAttributes) -> call specific
+	// attribute precedence: default -> user -> scope tags -> entry attrs (from SetAttributes) -> call specific
 	attrs := make(map[string]Attribute)
 	for k, v := range m.defaultAttributes {
 		attrs[k] = v
+	}
+
+	if customScope != nil {
+		customScope.mu.RLock()
+		user = customScope.user
+		for k, v := range customScope.tags {
+			attrs[k] = Attribute{Value: v, Type: AttributeString}
+		}
+		customScope.mu.RUnlock()
 	}
 
 	if !user.IsEmpty() {

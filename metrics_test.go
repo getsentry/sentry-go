@@ -24,7 +24,7 @@ func setupMetricsTest() (context.Context, *MockTransport) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub()
+	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 
@@ -319,7 +319,7 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub()
+	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 
@@ -483,7 +483,7 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub()
+	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 
@@ -626,12 +626,71 @@ func Test_sentryMeter_EmptyName(t *testing.T) {
 	}
 }
 
-func Test_noopMeter_Methods(_ *testing.T) {
-	ctx := context.Background()
+func Test_noopMeter_Methods(t *testing.T) {
+	hub := NewHub(nil, NewScope())
+	ctx := SetHubOnContext(context.Background(), hub)
 	meter := NewMeter(ctx)
 
+	meter = meter.WithCtx(ctx)
 	meter.Count("test.count", 1)
 	meter.Gauge("test.gauge", 2.5)
 	meter.Distribution("test.dist", 3.14)
 	meter.SetAttributes(attribute.String("key", "value"))
+
+	if _, ok := meter.(*noopMeter); !ok {
+		t.Errorf("expected *noopMeter, got %T", meter)
+	}
+}
+
+func Test_sentryMeter_WithScopeOverride(t *testing.T) {
+	ctx, mockTransport := setupMetricsTest()
+	meter := NewMeter(ctx)
+
+	customScope := NewScope()
+	customScope.SetTag("environment", "staging")
+	customScope.SetTag("region", "us-west")
+	customScope.SetUser(User{
+		ID:    "custom-user-123",
+		Email: "custom@example.com",
+	})
+
+	meter.Count("test.count.with.scope", 42, WithScopeOverride(customScope))
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	metrics := events[0].Metrics
+	if len(metrics) != 1 {
+		t.Fatalf("expected 1 metric, got %d", len(metrics))
+	}
+
+	metric := metrics[0]
+	attrs := metric.Attributes
+
+	if val, ok := attrs["environment"]; !ok {
+		t.Error("missing environment attribute from custom scope")
+	} else if val.Value != "staging" {
+		t.Errorf("unexpected environment: got %v, want staging", val.Value)
+	}
+
+	if val, ok := attrs["region"]; !ok {
+		t.Error("missing region attribute from custom scope")
+	} else if val.Value != "us-west" {
+		t.Errorf("unexpected region: got %v, want us-west", val.Value)
+	}
+
+	if val, ok := attrs["user.id"]; !ok {
+		t.Error("missing user.id attribute from custom scope")
+	} else if val.Value != "custom-user-123" {
+		t.Errorf("unexpected user.id: got %v, want custom-user-123", val.Value)
+	}
+
+	if val, ok := attrs["user.email"]; !ok {
+		t.Error("missing user.email attribute from custom scope")
+	} else if val.Value != "custom@example.com" {
+		t.Errorf("unexpected user.email: got %v, want custom@example.com", val.Value)
+	}
 }
