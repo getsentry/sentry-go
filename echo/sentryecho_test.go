@@ -15,7 +15,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 func TestIntegration(t *testing.T) {
@@ -37,7 +37,7 @@ func TestIntegration(t *testing.T) {
 			RoutePath:   "/panic/:id",
 			Method:      "GET",
 			WantStatus:  200,
-			Handler: func(c echo.Context) error {
+			Handler: func(c *echo.Context) error {
 				panic("test")
 			},
 			WantEvent: &sentry.Event{
@@ -114,7 +114,7 @@ func TestIntegration(t *testing.T) {
 			Method:      "POST",
 			WantStatus:  200,
 			Body:        "payload",
-			Handler: func(c echo.Context) error {
+			Handler: func(c *echo.Context) error {
 				hub := sentryecho.GetHubFromContext(c)
 				body, err := io.ReadAll(c.Request().Body)
 				if err != nil {
@@ -168,7 +168,7 @@ func TestIntegration(t *testing.T) {
 			RoutePath:   "/get",
 			Method:      "GET",
 			WantStatus:  200,
-			Handler: func(c echo.Context) error {
+			Handler: func(c *echo.Context) error {
 				hub := sentryecho.GetHubFromContext(c)
 				hub.CaptureMessage("get")
 				return c.JSON(http.StatusOK, map[string]string{"status": "get"})
@@ -215,7 +215,7 @@ func TestIntegration(t *testing.T) {
 			Method:      "POST",
 			WantStatus:  200,
 			Body:        largePayload,
-			Handler: func(c echo.Context) error {
+			Handler: func(c *echo.Context) error {
 				hub := sentryecho.GetHubFromContext(c)
 				body, err := io.ReadAll(c.Request().Body)
 				if err != nil {
@@ -270,7 +270,7 @@ func TestIntegration(t *testing.T) {
 			Method:      "POST",
 			WantStatus:  200,
 			Body:        "client sends, server ignores, SDK doesn't read",
-			Handler: func(c echo.Context) error {
+			Handler: func(c *echo.Context) error {
 				hub := sentryecho.GetHubFromContext(c)
 				hub.CaptureMessage("body ignored")
 				return nil
@@ -322,7 +322,7 @@ func TestIntegration(t *testing.T) {
 			RoutePath:   "/badreq",
 			Method:      "GET",
 			WantStatus:  400,
-			Handler: func(c echo.Context) error {
+			Handler: func(c *echo.Context) error {
 				return c.JSON(http.StatusBadRequest, map[string]string{"status": "bad_request"})
 			},
 			WantTransaction: &sentry.Event{
@@ -376,6 +376,9 @@ func TestIntegration(t *testing.T) {
 	router.Use(sentryecho.New(sentryecho.Options{}))
 
 	for _, tt := range tests {
+		if tt.Handler == nil {
+			continue // no route to register (e.g. 404 case: path /404/1 must not exist)
+		}
 		switch tt.Method {
 		case http.MethodGet:
 			router.GET(tt.RoutePath, tt.Handler)
@@ -495,7 +498,7 @@ func TestSetHubOnContext(t *testing.T) {
 
 	hub := sentry.CurrentHub().Clone()
 	router := echo.New()
-	router.GET("/set-hub", func(c echo.Context) error {
+	router.GET("/set-hub", func(c *echo.Context) error {
 		sentryecho.SetHubOnContext(c, hub)
 		retrievedHub := sentryecho.GetHubFromContext(c)
 		if retrievedHub == nil {
@@ -540,14 +543,14 @@ func TestGetSpanFromContext(t *testing.T) {
 	}
 
 	router := echo.New()
-	router.GET("/no-span", func(c echo.Context) error {
+	router.GET("/no-span", func(c *echo.Context) error {
 		span := sentryecho.GetSpanFromContext(c)
 		if span != nil {
 			t.Error("expecting span to be nil")
 		}
 		return c.NoContent(http.StatusOK)
 	})
-	router.GET("/with-span", func(c echo.Context) error {
+	router.GET("/with-span", func(c *echo.Context) error {
 		span := sentryecho.GetSpanFromContext(c)
 		if span == nil {
 			t.Error("expecting span to not be nil")
@@ -592,5 +595,49 @@ func TestGetSpanFromContext(t *testing.T) {
 		if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
 			t.Fatal("sentry.Flush timed out")
 		}
+	}
+}
+
+func TestUnwrapResponseError(t *testing.T) {
+	ch := make(chan *sentry.Event, 1)
+	if err := sentry.Init(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		BeforeSendTransaction: func(e *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			ch <- e
+			return e
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	router := echo.New()
+	router.Use(sentryecho.New(sentryecho.Options{}))
+	// ResponseWriter that does not implement Unwrap(), so echo.UnwrapResponse() returns an error.
+	router.GET("/unwrap-err", func(c *echo.Context) error {
+		c.SetResponse(&struct{ http.ResponseWriter }{c.Response()})
+		return c.JSON(http.StatusOK, "ok")
+	})
+
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	res, err := srv.Client().Get(srv.URL + "/unwrap-err")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", res.StatusCode)
+	}
+
+	if !sentry.Flush(testutils.FlushTimeout()) {
+		t.Fatal("Flush timed out")
+	}
+	tx := <-ch
+
+	code := tx.Contexts["trace"]["data"].(map[string]interface{})["http.response.status_code"].(int)
+	if code != 0 {
+		t.Errorf("when UnwrapResponse fails, expected status_code 0, got %d", code)
 	}
 }

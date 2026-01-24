@@ -6,13 +6,13 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryecho "github.com/getsentry/sentry-go/echo"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 func ExampleGetSpanFromContext() {
 	router := echo.New()
 	router.Use(sentryecho.New(sentryecho.Options{}))
-	router.GET("/", func(c echo.Context) error {
+	router.GET("/", func(c *echo.Context) error {
 		expensiveThing := func(ctx context.Context) error {
 			span := sentry.StartTransaction(ctx, "expensive_thing")
 			defer span.Finish()
