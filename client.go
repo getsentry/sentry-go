@@ -573,7 +573,7 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 			return false
 		}
 	} else if client.batchLogger != nil {
-		if client.batchLogger.Send(log) {
+		if !client.batchLogger.Send(log) {
 			debuglog.Printf("Dropping log [%s]: buffer full", log.Level)
 			return false
 		}
