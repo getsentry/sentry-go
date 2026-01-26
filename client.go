@@ -577,7 +577,6 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 			debuglog.Printf("Dropping log [%s]: buffer full", log.Level)
 			return false
 		}
-
 	}
 
 	return true
