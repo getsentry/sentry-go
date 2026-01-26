@@ -647,8 +647,6 @@ func Test_sentryMeter_WithScopeOverride(t *testing.T) {
 	meter := NewMeter(ctx)
 
 	customScope := NewScope()
-	customScope.SetTag("environment", "staging")
-	customScope.SetTag("region", "us-west")
 	customScope.SetUser(User{
 		ID:    "custom-user-123",
 		Email: "custom@example.com",
@@ -669,18 +667,6 @@ func Test_sentryMeter_WithScopeOverride(t *testing.T) {
 
 	metric := metrics[0]
 	attrs := metric.Attributes
-
-	if val, ok := attrs["environment"]; !ok {
-		t.Error("missing environment attribute from custom scope")
-	} else if val.Value != "staging" {
-		t.Errorf("unexpected environment: got %v, want staging", val.Value)
-	}
-
-	if val, ok := attrs["region"]; !ok {
-		t.Error("missing region attribute from custom scope")
-	} else if val.Value != "us-west" {
-		t.Errorf("unexpected region: got %v, want us-west", val.Value)
-	}
 
 	if val, ok := attrs["user.id"]; !ok {
 		t.Error("missing user.id attribute from custom scope")

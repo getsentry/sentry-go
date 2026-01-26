@@ -105,6 +105,9 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 	}
 
 	scope, traceID, spanID := resolveScopeAndTrace(ctx, m.ctx)
+	if customScope != nil {
+		scope = customScope
+	}
 
 	// attribute precedence: default -> user -> scope -> entry attrs (from SetAttributes) -> call specific
 	attrs := make(map[string]Attribute)
