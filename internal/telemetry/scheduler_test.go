@@ -175,13 +175,13 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 		},
 		{
 			name: "priority ordering - error and metric",
-			setupBuffers: func() map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible] {
-				return map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible]{
-					ratelimit.CategoryError:       NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
-					ratelimit.CategoryTraceMetric: NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTraceMetric, 10, OverflowPolicyDropOldest, 100, 5*time.Second),
+			setupBuffers: func() map[ratelimit.Category]Buffer[protocol.TelemetryItem] {
+				return map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
+					ratelimit.CategoryError:       NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
+					ratelimit.CategoryTraceMetric: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTraceMetric, 10, OverflowPolicyDropOldest, 100, 5*time.Second),
 				}
 			},
-			addItems: func(buffers map[ratelimit.Category]Storage[protocol.EnvelopeItemConvertible]) {
+			addItems: func(buffers map[ratelimit.Category]Buffer[protocol.TelemetryItem]) {
 				buffers[ratelimit.CategoryError].Offer(&testTelemetryItem{id: 1, data: "error", category: ratelimit.CategoryError})
 				// simulate a metric item (will be batched)
 				buffers[ratelimit.CategoryTraceMetric].Offer(&testTelemetryItem{id: 2, data: "metric", category: ratelimit.CategoryTraceMetric})

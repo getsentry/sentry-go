@@ -282,9 +282,9 @@ type Client struct {
 	sdkVersion      string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
-	Transport       Transport
-	batchLogger     *logBatchProcessor
-	batchMeter      *metricBatchProcessor
+	Transport          Transport
+	batchLogger        *logBatchProcessor
+	batchMeter         *metricBatchProcessor
 	telemetryProcessor *telemetry.Processor
 }
 
