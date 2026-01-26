@@ -479,6 +479,63 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 	assertEqual(t, event.Logs[0].Attributes["key.string"].Value, "some str")
 }
 
+func Test_sentryLogger_AttributePrecedence(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+	hub := GetHubFromContext(ctx)
+
+	hub.Scope().SetUser(User{ID: "user456", Name: "TestUser"})
+
+	logger := NewLogger(ctx)
+	logger.SetAttributes(attribute.String("key", "instance-value"))
+	logger.SetAttributes(attribute.String("instance-only", "instance"))
+	logger.Info().
+		String("key", "entry-value"). // Should override instance-level
+		String("entry-only", "entry").
+		Emit("test message")
+
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	logs := events[0].Logs
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 log, got %d", len(logs))
+	}
+
+	attrs := logs[0].Attributes
+
+	if val, ok := attrs["key"]; !ok {
+		t.Error("missing key attribute")
+	} else if val.Value != "entry-value" {
+		t.Errorf("expected key=entry-value, got %v", val.Value)
+	}
+
+	if val, ok := attrs["instance-only"]; !ok {
+		t.Error("missing instance-only attribute")
+	} else if val.Value != "instance" {
+		t.Errorf("expected instance-only=instance, got %v", val.Value)
+	}
+
+	if val, ok := attrs["entry-only"]; !ok {
+		t.Error("missing entry-only attribute")
+	} else if val.Value != "entry" {
+		t.Errorf("expected entry-only=entry, got %v", val.Value)
+	}
+
+	if val, ok := attrs["user.id"]; !ok {
+		t.Error("missing user.id attribute from scope")
+	} else if val.Value != "user456" {
+		t.Errorf("expected user.id=user456, got %v", val.Value)
+	}
+
+	if _, ok := attrs["sentry.sdk.name"]; !ok {
+		t.Error("missing sentry.sdk.name default attribute")
+	}
+}
+
 func Test_batchLogger_Flush(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx)

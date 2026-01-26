@@ -109,11 +109,15 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		scope = customScope
 	}
 
-	// attribute precedence: default -> user -> scope -> entry attrs (from SetAttributes) -> call specific
-	attrs := make(map[string]Attribute)
+	// Pre-allocate with capacity hint to avoid map growth reallocations
+	estimatedCap := len(m.defaultAttributes) + len(attributes) + 8 // scope ~3 + call-specific ~5
+	attrs := make(map[string]Attribute, estimatedCap)
+
+	// attribute precedence: default -> scope -> instance (from SetAttrs) -> entry-specific
 	for k, v := range m.defaultAttributes {
 		attrs[k] = v
 	}
+	scope.populateAttrs(attrs)
 
 	m.mu.RLock()
 	for k, v := range m.attributes {

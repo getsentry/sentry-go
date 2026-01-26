@@ -585,6 +585,66 @@ func Test_sentryMeter_SetAttributes_Persistence(t *testing.T) {
 	assertEqual(t, event.Metrics[1].Attributes["string"].Value, "some str")
 }
 
+func Test_sentryMeter_AttributePrecedence(t *testing.T) {
+	ctx, mockTransport := setupMetricsTest()
+	hub := GetHubFromContext(ctx)
+
+	hub.Scope().SetUser(User{ID: "user123", Name: "TestUser"})
+
+	meter := NewMeter(ctx)
+	meter.SetAttributes(attribute.String("key", "instance-value"))
+	meter.SetAttributes(attribute.String("instance-only", "instance"))
+
+	meter.Count("test.precedence", 1,
+		WithAttributes(
+			attribute.String("key", "call-value"), // Should override instance-level
+			attribute.String("call-only", "call"),
+		),
+	)
+
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	events := mockTransport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(events))
+	}
+
+	metrics := events[0].Metrics
+	if len(metrics) != 1 {
+		t.Fatalf("expected 1 metric, got %d", len(metrics))
+	}
+
+	attrs := metrics[0].Attributes
+
+	if val, ok := attrs["key"]; !ok {
+		t.Error("missing key attribute")
+	} else if val.Value != "call-value" {
+		t.Errorf("expected key=call-value, got %v", val.Value)
+	}
+
+	if val, ok := attrs["instance-only"]; !ok {
+		t.Error("missing instance-only attribute")
+	} else if val.Value != "instance" {
+		t.Errorf("expected instance-only=instance, got %v", val.Value)
+	}
+
+	if val, ok := attrs["call-only"]; !ok {
+		t.Error("missing call-only attribute")
+	} else if val.Value != "call" {
+		t.Errorf("expected call-only=call, got %v", val.Value)
+	}
+
+	if val, ok := attrs["user.id"]; !ok {
+		t.Error("missing user.id attribute from scope")
+	} else if val.Value != "user123" {
+		t.Errorf("expected user.id=user123, got %v", val.Value)
+	}
+
+	if _, ok := attrs["sentry.sdk.name"]; !ok {
+		t.Error("missing sentry.sdk.name default attribute")
+	}
+}
+
 func TestNewMeter_DisabledMetrics(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}

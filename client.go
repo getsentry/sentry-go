@@ -559,13 +559,6 @@ func (client *Client) captureLog(log *Log, scope *Scope) bool {
 		return false
 	}
 
-	if scope != nil {
-		scopeAttrs := scope.GetAttributes()
-		for k, v := range scopeAttrs {
-			log.Attributes[k] = v
-		}
-	}
-
 	if client.options.BeforeSendLog != nil {
 		log = client.options.BeforeSendLog(log)
 		if log == nil {
@@ -589,13 +582,6 @@ func (client *Client) captureLog(log *Log, scope *Scope) bool {
 func (client *Client) captureMetric(metric *Metric, scope *Scope) bool {
 	if metric == nil {
 		return false
-	}
-
-	if scope != nil {
-		scopeAttrs := scope.GetAttributes()
-		for k, v := range scopeAttrs {
-			metric.Attributes[k] = v
-		}
 	}
 
 	if client.options.BeforeSendMetric != nil {

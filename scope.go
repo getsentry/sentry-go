@@ -496,14 +496,15 @@ func cloneContext(c Context) Context {
 	return res
 }
 
-func (scope *Scope) GetAttributes() map[string]Attribute {
+func (scope *Scope) populateAttrs(attrs map[string]Attribute) {
+	if scope == nil {
+		return
+	}
+
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
-	attrs := make(map[string]Attribute)
-
-	// currently GetAttributes only returns user related info from the scope. In the future it should also return
-	// any attributes set on the scope.
+	// Add user-related attributes
 	if !scope.user.IsEmpty() {
 		if scope.user.ID != "" {
 			attrs["user.id"] = Attribute{Value: scope.user.ID, Type: AttributeString}
@@ -516,7 +517,10 @@ func (scope *Scope) GetAttributes() map[string]Attribute {
 		}
 	}
 
-	return attrs
+	// In the future, add scope.attributes here
+	// for k, v := range scope.attributes {
+	//     attrs[k] = v
+	// }
 }
 
 // resolveScopeAndTrace resolves scope, trace ID, and span ID from the given contexts.

@@ -115,12 +115,15 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 
 	scope, traceID, spanID := resolveScopeAndTrace(ctx, l.ctx)
 
-	// Build attributes: default -> logger.attributes (from SetAttributes) -> entry attrs -> call specific
-	// Scope attributes will be applied by the client with lowest priority
-	attrs := make(map[string]Attribute)
+	// Pre-allocate with capacity hint to avoid map growth reallocations
+	estimatedCap := len(l.defaultAttributes) + len(entryAttrs) + len(args) + 8 // scope ~3 + instance ~5
+	attrs := make(map[string]Attribute, estimatedCap)
+
+	// attribute precedence: default -> scope -> instance (from SetAttrs) -> entry-specific
 	for k, v := range l.defaultAttributes {
 		attrs[k] = v
 	}
+	scope.populateAttrs(attrs)
 
 	l.mu.RLock()
 	for k, v := range l.attributes {
