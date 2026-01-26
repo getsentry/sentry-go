@@ -24,7 +24,7 @@ func main() {
 			switch metric.Type {
 			case sentry.MetricTypeCounter:
 				if v, ok := metric.Value.Int64(); ok && v > 5 {
-					return nil // drop low-value counters
+					return nil // drop high-value counters
 				}
 			case sentry.MetricTypeGauge:
 				if v, ok := metric.Value.Float64(); ok && v < 10.0 {
@@ -54,7 +54,7 @@ func main() {
 	)
 
 	// Count metrics to measure occurrences of an event.
-	meter.Count("sent_emails", 1,
+	meter.Count("sent_emails", 6,
 		sentry.WithAttributes(
 			attribute.String("email.provider", "sendgrid"),
 			attribute.Int("email.number_of_recipients", 3),
