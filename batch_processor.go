@@ -11,7 +11,7 @@ const (
 	defaultBatchTimeout = 5 * time.Second
 )
 
-type BatchProcessor[T any] struct {
+type batchProcessor[T any] struct {
 	sendBatch    func([]T)
 	itemCh       chan T
 	flushCh      chan chan struct{}
@@ -22,8 +22,8 @@ type BatchProcessor[T any] struct {
 	batchTimeout time.Duration
 }
 
-func NewBatchProcessor[T any](sendBatch func([]T)) *BatchProcessor[T] {
-	return &BatchProcessor[T]{
+func newBatchProcessor[T any](sendBatch func([]T)) *batchProcessor[T] {
+	return &batchProcessor[T]{
 		itemCh:       make(chan T, batchSize),
 		flushCh:      make(chan chan struct{}),
 		sendBatch:    sendBatch,
@@ -33,12 +33,12 @@ func NewBatchProcessor[T any](sendBatch func([]T)) *BatchProcessor[T] {
 
 // WithBatchTimeout sets a custom batch timeout for the processor.
 // This is useful for testing or when different timing behavior is needed.
-func (p *BatchProcessor[T]) WithBatchTimeout(timeout time.Duration) *BatchProcessor[T] {
+func (p *batchProcessor[T]) WithBatchTimeout(timeout time.Duration) *batchProcessor[T] {
 	p.batchTimeout = timeout
 	return p
 }
 
-func (p *BatchProcessor[T]) Send(item T) bool {
+func (p *batchProcessor[T]) Send(item T) bool {
 	select {
 	case p.itemCh <- item:
 		return true
@@ -47,7 +47,7 @@ func (p *BatchProcessor[T]) Send(item T) bool {
 	}
 }
 
-func (p *BatchProcessor[T]) Start() {
+func (p *batchProcessor[T]) Start() {
 	p.startOnce.Do(func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		p.cancel = cancel
@@ -56,7 +56,7 @@ func (p *BatchProcessor[T]) Start() {
 	})
 }
 
-func (p *BatchProcessor[T]) Flush(timeout <-chan struct{}) {
+func (p *batchProcessor[T]) Flush(timeout <-chan struct{}) {
 	done := make(chan struct{})
 	select {
 	case p.flushCh <- done:
@@ -68,7 +68,7 @@ func (p *BatchProcessor[T]) Flush(timeout <-chan struct{}) {
 	}
 }
 
-func (p *BatchProcessor[T]) Shutdown() {
+func (p *batchProcessor[T]) Shutdown() {
 	p.shutdownOnce.Do(func() {
 		if p.cancel != nil {
 			p.cancel()
@@ -77,7 +77,7 @@ func (p *BatchProcessor[T]) Shutdown() {
 	})
 }
 
-func (p *BatchProcessor[T]) run(ctx context.Context) {
+func (p *batchProcessor[T]) run(ctx context.Context) {
 	defer p.wg.Done()
 	var items []T
 	timer := time.NewTimer(0)

@@ -17,7 +17,7 @@ func TestBatchProcessor_TimerStartsOnFirstItem(t *testing.T) {
 		batches = append(batches, batch)
 	}
 
-	processor := NewBatchProcessor(sendBatch).WithBatchTimeout(50 * time.Millisecond)
+	processor := newBatchProcessor(sendBatch).WithBatchTimeout(50 * time.Millisecond)
 	processor.Start()
 	defer processor.Shutdown()
 

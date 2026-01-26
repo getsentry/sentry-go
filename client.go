@@ -283,8 +283,8 @@ type Client struct {
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
 	Transport       Transport
-	batchLogger     *LogBatchProcessor
-	batchMeter      *MetricBatchProcessor
+	batchLogger     *logBatchProcessor
+	batchMeter      *metricBatchProcessor
 	telemetryBuffer *telemetry.Buffer
 }
 
@@ -396,12 +396,12 @@ func NewClient(options ClientOptions) (*Client, error) {
 	// 	client.setupTelemetryBuffer()
 	// } else
 	if options.EnableLogs {
-		client.batchLogger = NewLogBatchProcessor(&client)
+		client.batchLogger = newLogBatchProcessor(&client)
 		client.batchLogger.Start()
 	}
 
 	if !options.DisableMetrics {
-		client.batchMeter = NewMetricBatchProcessor(&client)
+		client.batchMeter = newMetricBatchProcessor(&client)
 		client.batchMeter.Start()
 	}
 
@@ -441,11 +441,11 @@ func (client *Client) setupTelemetryBuffer() { // nolint: unused
 	if client.options.Transport != nil {
 		debuglog.Println("Cannot enable Telemetry Buffer with custom Transport: fallback to old transport")
 		if client.options.EnableLogs {
-			client.batchLogger = NewLogBatchProcessor(client)
+			client.batchLogger = newLogBatchProcessor(client)
 			client.batchLogger.Start()
 		}
 		if !client.options.DisableMetrics {
-			client.batchMeter = NewMetricBatchProcessor(client)
+			client.batchMeter = newMetricBatchProcessor(client)
 			client.batchMeter.Start()
 		}
 		return

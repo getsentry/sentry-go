@@ -23,7 +23,7 @@ func main() {
 			// Filter metrics based on metric type and value
 			switch metric.Type {
 			case sentry.MetricTypeCounter:
-				if v, ok := metric.Value.Int64(); ok && v < 5 {
+				if v, ok := metric.Value.Int64(); ok && v > 5 {
 					return nil // drop low-value counters
 				}
 			case sentry.MetricTypeGauge:

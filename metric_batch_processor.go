@@ -6,14 +6,14 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
-// MetricBatchProcessor batches metrics and sends them to Sentry.
-type MetricBatchProcessor struct {
-	*BatchProcessor[Metric]
+// metricBatchProcessor batches metrics and sends them to Sentry.
+type metricBatchProcessor struct {
+	*batchProcessor[Metric]
 }
 
-func NewMetricBatchProcessor(client *Client) *MetricBatchProcessor {
-	return &MetricBatchProcessor{
-		BatchProcessor: NewBatchProcessor(func(items []Metric) {
+func newMetricBatchProcessor(client *Client) *metricBatchProcessor {
+	return &metricBatchProcessor{
+		batchProcessor: newBatchProcessor(func(items []Metric) {
 			if len(items) == 0 {
 				return
 			}
@@ -29,8 +29,8 @@ func NewMetricBatchProcessor(client *Client) *MetricBatchProcessor {
 	}
 }
 
-func (p *MetricBatchProcessor) Send(metric *Metric) {
-	if !p.BatchProcessor.Send(*metric) {
+func (p *metricBatchProcessor) Send(metric *Metric) {
+	if !p.batchProcessor.Send(*metric) {
 		debuglog.Printf("Dropping metric %q: buffer full", metric.Name)
 	}
 }
