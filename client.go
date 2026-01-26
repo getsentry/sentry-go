@@ -554,6 +554,70 @@ func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventMod
 	return client.processEvent(event, hint, scope)
 }
 
+func (client *Client) captureLog(log *Log, scope *Scope) bool {
+	if log == nil {
+		return false
+	}
+
+	if scope != nil {
+		scopeAttrs := scope.GetAttributes()
+		for k, v := range scopeAttrs {
+			log.Attributes[k] = v
+		}
+	}
+
+	if client.options.BeforeSendLog != nil {
+		log = client.options.BeforeSendLog(log)
+		if log == nil {
+			debuglog.Println("Log dropped due to BeforeSendLog callback.")
+			return false
+		}
+	}
+
+	if client.telemetryBuffer != nil {
+		if !client.telemetryBuffer.Add(log) {
+			debuglog.Print("Dropping log: telemetry buffer full or category missing")
+			return false
+		}
+	} else if client.batchLogger != nil {
+		client.batchLogger.Send(log)
+	}
+
+	return true
+}
+
+func (client *Client) captureMetric(metric *Metric, scope *Scope) bool {
+	if metric == nil {
+		return false
+	}
+
+	if scope != nil {
+		scopeAttrs := scope.GetAttributes()
+		for k, v := range scopeAttrs {
+			metric.Attributes[k] = v
+		}
+	}
+
+	if client.options.BeforeSendMetric != nil {
+		metric = client.options.BeforeSendMetric(metric)
+		if metric == nil {
+			debuglog.Println("Metric dropped due to BeforeSendMetric callback.")
+			return false
+		}
+	}
+
+	if client.telemetryBuffer != nil {
+		if !client.telemetryBuffer.Add(metric) {
+			debuglog.Printf("Dropping metric: telemetry buffer full or category missing")
+			return false
+		}
+	} else if client.batchMeter != nil {
+		client.batchMeter.Send(metric)
+	}
+
+	return true
+}
+
 // Recover captures a panic.
 // Returns EventID if successfully, or nil if there's no error to recover from.
 func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModifier) *EventID {

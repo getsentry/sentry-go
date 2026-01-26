@@ -113,25 +113,13 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		return
 	}
 
-	traceID, spanID := resolveTraceIDs(ctx, l.ctx)
-	user := resolveUser(ctx, l.ctx)
+	scope, traceID, spanID := resolveScopeAndTrace(ctx, l.ctx)
 
-	// attribute precedence: default -> user -> entry attrs (from SetAttributes) -> call specific
+	// Build attributes: default -> logger.attributes (from SetAttributes) -> entry attrs -> call specific
+	// Scope attributes will be applied by the client with lowest priority
 	attrs := make(map[string]Attribute)
 	for k, v := range l.defaultAttributes {
 		attrs[k] = v
-	}
-
-	if !user.IsEmpty() {
-		if user.ID != "" {
-			attrs["user.id"] = Attribute{Value: user.ID, Type: AttributeString}
-		}
-		if user.Name != "" {
-			attrs["user.name"] = Attribute{Value: user.Name, Type: AttributeString}
-		}
-		if user.Email != "" {
-			attrs["user.email"] = Attribute{Value: user.Email, Type: AttributeString}
-		}
 	}
 
 	l.mu.RLock()
@@ -165,19 +153,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		Attributes: attrs,
 	}
 
-	if l.client.options.BeforeSendLog != nil {
-		log = l.client.options.BeforeSendLog(log)
-	}
-
-	if log != nil {
-		if l.client.telemetryBuffer != nil {
-			if !l.client.telemetryBuffer.Add(log) {
-				debuglog.Print("Dropping event: log buffer full or category missing")
-			}
-		} else if l.client.batchLogger != nil {
-			l.client.batchLogger.Send(log)
-		}
-	}
+	l.client.captureLog(log, scope)
 
 	if l.client.options.Debug {
 		debuglog.Printf(message, args...)

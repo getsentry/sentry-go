@@ -104,34 +104,12 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		return
 	}
 
-	traceID, spanID := resolveTraceIDs(ctx, m.ctx)
-	user := resolveUser(ctx, m.ctx)
+	scope, traceID, spanID := resolveScopeAndTrace(ctx, m.ctx)
 
-	// attribute precedence: default -> user -> scope tags -> entry attrs (from SetAttributes) -> call specific
+	// attribute precedence: default -> user -> scope -> entry attrs (from SetAttributes) -> call specific
 	attrs := make(map[string]Attribute)
 	for k, v := range m.defaultAttributes {
 		attrs[k] = v
-	}
-
-	if customScope != nil {
-		customScope.mu.RLock()
-		user = customScope.user
-		for k, v := range customScope.tags {
-			attrs[k] = Attribute{Value: v, Type: AttributeString}
-		}
-		customScope.mu.RUnlock()
-	}
-
-	if !user.IsEmpty() {
-		if user.ID != "" {
-			attrs["user.id"] = Attribute{Value: user.ID, Type: AttributeString}
-		}
-		if user.Name != "" {
-			attrs["user.name"] = Attribute{Value: user.Name, Type: AttributeString}
-		}
-		if user.Email != "" {
-			attrs["user.email"] = Attribute{Value: user.Email, Type: AttributeString}
-		}
 	}
 
 	m.mu.RLock()
@@ -155,22 +133,8 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		Attributes: attrs,
 	}
 
-	if m.client.options.BeforeSendMetric != nil {
-		metric = m.client.options.BeforeSendMetric(metric)
-	}
-
-	if metric != nil {
-		if m.client.telemetryBuffer != nil {
-			if !m.client.telemetryBuffer.Add(metric) {
-				debuglog.Printf("Dropping event: metric buffer full or category missing")
-			}
-		} else if m.client.batchMeter != nil {
-			m.client.batchMeter.Send(metric)
-		}
-
-		if m.client.options.Debug {
-			debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), unit)
-		}
+	if m.client.captureMetric(metric, scope) && m.client.options.Debug {
+		debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), unit)
 	}
 }
 

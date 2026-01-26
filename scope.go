@@ -496,9 +496,45 @@ func cloneContext(c Context) Context {
 	return res
 }
 
-// resolveTraceIDs resolves trace and span IDs from the given contexts.
-func resolveTraceIDs(ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
+func (scope *Scope) GetAttributes() map[string]Attribute {
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+
+	attrs := make(map[string]Attribute)
+
+	// currently GetAttributes only returns user related info from the scope. In the future it should also return
+	// any attributes set on the scope.
+	if !scope.user.IsEmpty() {
+		if scope.user.ID != "" {
+			attrs["user.id"] = Attribute{Value: scope.user.ID, Type: AttributeString}
+		}
+		if scope.user.Name != "" {
+			attrs["user.name"] = Attribute{Value: scope.user.Name, Type: AttributeString}
+		}
+		if scope.user.Email != "" {
+			attrs["user.email"] = Attribute{Value: scope.user.Email, Type: AttributeString}
+		}
+	}
+
+	return attrs
+}
+
+// resolveScopeAndTrace resolves scope, trace ID, and span ID from the given contexts.
+//
+// The resolution order follows a most-specific-to-least-specific pattern:
+//  1. Check for span directly in contexts (SpanFromContext) - this is the most specific
+//     source as it represents a span explicitly attached to the current operation's context
+//  2. Check for hub in contexts (GetHubFromContext) - provides access to scope which may
+//     contain a span, but this is less specific than a directly attached span
+//  3. Fall back to CurrentHub() - the global hub as a last resort
+//
+// This ordering ensures we always use the most contextually relevant tracing information.
+// For example, if a specific span is active for an operation, we use that span's trace/span IDs
+// rather than accidentally using a different span that might be set on the hub's scope.
+func resolveScopeAndTrace(ctxs ...context.Context) (scope *Scope, traceID TraceID, spanID SpanID) {
 	var span *Span
+	var hub *Hub
+
 	for _, ctx := range ctxs {
 		if ctx == nil {
 			continue
@@ -508,11 +544,6 @@ func resolveTraceIDs(ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
 		}
 	}
 
-	if span != nil {
-		return span.TraceID, span.SpanID
-	}
-
-	var hub *Hub
 	for _, ctx := range ctxs {
 		if ctx == nil {
 			continue
@@ -525,44 +556,20 @@ func resolveTraceIDs(ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
 		hub = CurrentHub()
 	}
 
-	scope := hub.Scope()
-	if scope == nil {
-		return TraceID{}, SpanID{}
-	}
-
-	scope.mu.RLock()
-	defer scope.mu.RUnlock()
-
-	if scope.span != nil {
-		return scope.span.TraceID, scope.span.SpanID
-	}
-
-	// Fall back to propagation context (tracing without performance)
-	return scope.propagationContext.TraceID, SpanID{}
-}
-
-// resolveUser resolves user information from the hub's scope.
-func resolveUser(ctxs ...context.Context) User {
-	var hub *Hub
-	for _, ctx := range ctxs {
-		if ctx == nil {
-			continue
+	scope = hub.Scope()
+	if scope != nil {
+		scope.mu.RLock()
+		if span == nil {
+			span = scope.span
 		}
-		if hub = GetHubFromContext(ctx); hub != nil {
-			break
+		if span != nil {
+			traceID = span.TraceID
+			spanID = span.SpanID
+		} else {
+			traceID = scope.propagationContext.TraceID
 		}
-	}
-	if hub == nil {
-		hub = CurrentHub()
+		scope.mu.RUnlock()
 	}
 
-	scope := hub.Scope()
-	if scope == nil {
-		return User{}
-	}
-
-	scope.mu.RLock()
-	defer scope.mu.RUnlock()
-
-	return scope.user
+	return scope, traceID, spanID
 }
