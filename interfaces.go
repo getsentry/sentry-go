@@ -487,80 +487,6 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 	e.Exception = exceptions
 }
 
-// ToEnvelope converts the Event to a Sentry envelope.
-// This includes the event data and any attachments as separate envelope items.
-func (e *Event) ToEnvelope(dsn *protocol.Dsn) (*protocol.Envelope, error) {
-	return e.ToEnvelopeWithTime(dsn, time.Now())
-}
-
-// ToEnvelopeWithTime converts the Event to a Sentry envelope with a specific sentAt time.
-// This is primarily useful for testing with predictable timestamps.
-func (e *Event) ToEnvelopeWithTime(dsn *protocol.Dsn, sentAt time.Time) (*protocol.Envelope, error) {
-	// Create envelope header with trace context
-	trace := make(map[string]string)
-	if dsc := e.sdkMetaData.dsc; dsc.HasEntries() {
-		for k, v := range dsc.Entries {
-			trace[k] = v
-		}
-	}
-
-	header := &protocol.EnvelopeHeader{
-		EventID: string(e.EventID),
-		SentAt:  sentAt,
-		Trace:   trace,
-	}
-
-	if dsn != nil {
-		header.Dsn = dsn.String()
-	}
-
-	header.Sdk = &e.Sdk
-
-	envelope := protocol.NewEnvelope(header)
-
-	eventBody, err := json.Marshal(e)
-	if err != nil {
-		// Try fallback: remove problematic fields and retry
-		e.Breadcrumbs = nil
-		e.Contexts = nil
-		e.Extra = map[string]interface{}{
-			"info": fmt.Sprintf("Could not encode original event as JSON. "+
-				"Succeeded by removing Breadcrumbs, Contexts and Extra. "+
-				"Please verify the data you attach to the scope. "+
-				"Error: %s", err),
-		}
-
-		eventBody, err = json.Marshal(e)
-		if err != nil {
-			return nil, fmt.Errorf("event could not be marshaled even with fallback: %w", err)
-		}
-
-		DebugLogger.Printf("Event marshaling succeeded with fallback after removing problematic fields")
-	}
-
-	var mainItem *protocol.EnvelopeItem
-	switch e.Type {
-	case transactionType:
-		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeTransaction, eventBody)
-	case checkInType:
-		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
-	case logEvent.Type:
-		mainItem = protocol.NewLogItem(len(e.Logs), eventBody)
-	case traceMetricEvent.Type:
-		mainItem = protocol.NewTraceMetricItem(len(e.Metrics), eventBody)
-	default:
-		mainItem = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
-	}
-
-	envelope.AddItem(mainItem)
-	for _, attachment := range e.Attachments {
-		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
-		envelope.AddItem(attachmentItem)
-	}
-
-	return envelope, nil
-}
-
 // ToEnvelopeItem converts the Event to a Sentry envelope item.
 func (e *Event) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	eventBody, err := json.Marshal(e)
@@ -831,21 +757,6 @@ type Log struct {
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
 }
 
-// ToEnvelopeItem converts the Log to a Sentry envelope item for batching.
-func (l *Log) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
-	logData, err := json.Marshal(l)
-	if err != nil {
-		return nil, err
-	}
-
-	return &protocol.EnvelopeItem{
-		Header: &protocol.EnvelopeItemHeader{
-			Type: protocol.EnvelopeItemTypeLog,
-		},
-		Payload: logData,
-	}, nil
-}
-
 // GetCategory returns the rate limit category for logs.
 func (l *Log) GetCategory() ratelimit.Category {
 	return ratelimit.CategoryLog
@@ -928,20 +839,6 @@ type Metric struct {
 	Value      MetricValue          `json:"value"`
 	Unit       string               `json:"unit,omitempty"`
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
-}
-
-func (m *Metric) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
-	metricData, err := json.Marshal(m)
-	if err != nil {
-		return nil, err
-	}
-
-	return &protocol.EnvelopeItem{
-		Header: &protocol.EnvelopeItemHeader{
-			Type: protocol.EnvelopeItemTypeTraceMetric,
-		},
-		Payload: metricData,
-	}, nil
 }
 
 // MarshalJSON converts a Metric to JSON that skips SpanID and timestamp when zero.

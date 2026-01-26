@@ -140,7 +140,7 @@ func TestBufferOverflow(t *testing.T) {
 		t.Error("Expected offer to succeed even on overflow")
 	}
 
-	// Buffer should still be full
+	// Processor should still be full
 	if !buffer.IsFull() {
 		t.Error("Expected buffer to remain full after overflow")
 	}
@@ -196,7 +196,7 @@ func TestBufferDrain(t *testing.T) {
 		}
 	}
 
-	// Buffer should be empty after drain
+	// Processor should be empty after drain
 	if !buffer.IsEmpty() {
 		t.Error("Expected buffer to be empty after drain")
 	}
@@ -282,7 +282,7 @@ func TestBufferConcurrency(t *testing.T) {
 
 	wg.Wait()
 
-	// Buffer should be empty after polling
+	// Processor should be empty after polling
 	if !buffer.IsEmpty() {
 		t.Error("Expected buffer to be empty after concurrent polling")
 	}
