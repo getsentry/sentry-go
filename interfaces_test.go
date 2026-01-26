@@ -785,6 +785,21 @@ func TestEvent_ToEnvelope(t *testing.T) {
 			dsn:       nil,
 			wantError: false,
 		},
+		{
+			name: "metric event",
+			event: &Event{
+				EventID: "12345678901234567890123456789012",
+				Type:    "trace_metric",
+				Metrics: []Metric{
+					{
+						Name:      "test.metric",
+						Value:     Int64MetricValue(42),
+						Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+						Type:      MetricTypeCounter,
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -1032,5 +1047,147 @@ func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 	}
 	if dsc := l.GetDynamicSamplingContext(); dsc != nil {
 		t.Fatalf("expected nil DSC for logs, got: %+v", dsc)
+	}
+}
+
+func TestMetric_MarshalJSON(t *testing.T) {
+	tests := []struct {
+		name           string
+		metric         Metric
+		wantJSONFields map[string]bool
+	}{
+		{
+			name: "with all fields set",
+			metric: Metric{
+				Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+				TraceID:   TraceIDFromHex("12345678901234567890123456789012"),
+				SpanID:    SpanIDFromHex("1234567890123456"),
+				Type:      MetricTypeCounter,
+				Name:      "test.metric",
+				Value:     Float64MetricValue(42),
+				Unit:      "units",
+				Attributes: map[string]Attribute{
+					"key": {Value: "value", Type: AttributeString},
+				},
+			},
+			wantJSONFields: map[string]bool{
+				"timestamp":  true,
+				"trace_id":   true,
+				"span_id":    true,
+				"type":       true,
+				"name":       true,
+				"value":      true,
+				"unit":       true,
+				"attributes": true,
+			},
+		},
+		{
+			name: "with minimal fields",
+			metric: Metric{
+				Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+				TraceID:   TraceIDFromHex("12345678901234567890123456789012"),
+				Type:      MetricTypeGauge,
+				Name:      "test.gauge",
+				Value:     Float64MetricValue(2.5),
+			},
+			wantJSONFields: map[string]bool{
+				"timestamp": true,
+				"trace_id":  true,
+				"type":      true,
+				"name":      true,
+				"value":     true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jsonData, err := json.Marshal(tt.metric)
+			if err != nil {
+				t.Fatalf("MarshalJSON() error = %v", err)
+			}
+
+			var result map[string]interface{}
+			if err := json.Unmarshal(jsonData, &result); err != nil {
+				t.Fatalf("Failed to unmarshal result: %v", err)
+			}
+
+			for field, shouldExist := range tt.wantJSONFields {
+				_, exists := result[field]
+				if shouldExist && !exists {
+					t.Errorf("Expected field %q to be present in JSON, but it was not. JSON: %s", field, string(jsonData))
+				}
+			}
+		})
+	}
+}
+
+func TestMetric_ToEnvelopeItem(t *testing.T) {
+	metric := &Metric{
+		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+		TraceID:   TraceIDFromHex("12345678901234567890123456789012"),
+		Type:      MetricTypeCounter,
+		Name:      "test.metric",
+		Value:     Int64MetricValue(42),
+		Unit:      "units",
+		Attributes: map[string]Attribute{
+			"key.string": {Value: "value", Type: "string"},
+		},
+	}
+
+	item, err := metric.ToEnvelopeItem()
+	if err != nil {
+		t.Fatalf("ToEnvelopeItem() error = %v", err)
+	}
+
+	if item == nil {
+		t.Fatal("ToEnvelopeItem() returned nil item")
+	}
+
+	if item.Header == nil {
+		t.Fatal("Envelope item header is nil")
+	}
+
+	if item.Header.Type != protocol.EnvelopeItemTypeTraceMetric {
+		t.Errorf("Expected header type %s, got %s", protocol.EnvelopeItemTypeTraceMetric, item.Header.Type)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(item.Payload, &result); err != nil {
+		t.Fatalf("Payload is not valid JSON: %v", err)
+	}
+
+	if result["name"] != "test.metric" {
+		t.Errorf("Expected name 'test.metric', got %v", result["name"])
+	}
+
+	if result["value"] != float64(42) {
+		t.Errorf("Expected value 42, got %v", result["value"])
+	}
+}
+
+func TestMetric_GetterMethods(t *testing.T) {
+	metric := &Metric{
+		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
+		TraceID:   TraceIDFromHex("12345678901234567890123456789012"),
+		Type:      MetricTypeCounter,
+		Name:      "test.metric",
+		Value:     Int64MetricValue(42),
+	}
+
+	if metric.GetCategory() != ratelimit.CategoryTraceMetric {
+		t.Errorf("GetCategory() = %v, want %v", metric.GetCategory(), ratelimit.CategoryTraceMetric)
+	}
+
+	if metric.GetEventID() != "" {
+		t.Errorf("GetEventID() = %q, want empty string", metric.GetEventID())
+	}
+
+	if metric.GetSdkInfo() != nil {
+		t.Errorf("GetSdkInfo() = %v, want nil", metric.GetSdkInfo())
+	}
+
+	if metric.GetDynamicSamplingContext() != nil {
+		t.Errorf("GetDynamicSamplingContext() = %v, want nil", metric.GetDynamicSamplingContext())
 	}
 }

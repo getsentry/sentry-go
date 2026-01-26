@@ -169,6 +169,9 @@ type ClientOptions struct {
 	BeforeSendTransaction func(event *Event, hint *EventHint) *Event
 	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
+	// BeforeSendMetric is called before metric events are sent to Sentry.
+	// You can use it to mutate the metric or return nil to discard it.
+	BeforeSendMetric func(metric *Metric) *Metric
 	// Integrations to be installed on the current Client, receives default
 	// integrations.
 	Integrations func([]Integration) []Integration
@@ -243,6 +246,8 @@ type ClientOptions struct {
 	Tags map[string]string
 	// EnableLogs controls when logs should be emitted.
 	EnableLogs bool
+	// DisableMetrics controls when metrics should be emitted.
+	DisableMetrics bool
 	// TraceIgnoreStatusCodes is a list of HTTP status codes that should not be traced.
 	// Each element can be either:
 	// - A single-element slice [code] for a specific status code
@@ -278,7 +283,8 @@ type Client struct {
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
 	Transport       Transport
-	batchLogger     *BatchLogger
+	batchLogger     *logBatchProcessor
+	batchMeter      *metricBatchProcessor
 	telemetryBuffer *telemetry.Buffer
 }
 
@@ -390,8 +396,13 @@ func NewClient(options ClientOptions) (*Client, error) {
 	// 	client.setupTelemetryBuffer()
 	// } else
 	if options.EnableLogs {
-		client.batchLogger = NewBatchLogger(&client)
+		client.batchLogger = newLogBatchProcessor(&client)
 		client.batchLogger.Start()
+	}
+
+	if !options.DisableMetrics {
+		client.batchMeter = newMetricBatchProcessor(&client)
+		client.batchMeter.Start()
 	}
 
 	client.setupIntegrations()
@@ -430,8 +441,12 @@ func (client *Client) setupTelemetryBuffer() { // nolint: unused
 	if client.options.Transport != nil {
 		debuglog.Println("Cannot enable Telemetry Buffer with custom Transport: fallback to old transport")
 		if client.options.EnableLogs {
-			client.batchLogger = NewBatchLogger(client)
+			client.batchLogger = newLogBatchProcessor(client)
 			client.batchLogger.Start()
+		}
+		if !client.options.DisableMetrics {
+			client.batchMeter = newMetricBatchProcessor(client)
+			client.batchMeter.Start()
 		}
 		return
 	}
@@ -451,6 +466,7 @@ func (client *Client) setupTelemetryBuffer() { // nolint: unused
 		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
 		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
 		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.EnvelopeItemConvertible](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
 	}
 
 	sdkInfo := &protocol.SdkInfo{
@@ -538,6 +554,62 @@ func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventMod
 	return client.processEvent(event, hint, scope)
 }
 
+func (client *Client) captureLog(log *Log, _ *Scope) bool {
+	if log == nil {
+		return false
+	}
+
+	if client.options.BeforeSendLog != nil {
+		log = client.options.BeforeSendLog(log)
+		if log == nil {
+			debuglog.Println("Log dropped due to BeforeSendLog callback.")
+			return false
+		}
+	}
+
+	if client.telemetryBuffer != nil {
+		if !client.telemetryBuffer.Add(log) {
+			debuglog.Print("Dropping log: telemetry buffer full or category missing")
+			return false
+		}
+	} else if client.batchLogger != nil {
+		if !client.batchLogger.Send(log) {
+			debuglog.Printf("Dropping log [%s]: buffer full", log.Level)
+			return false
+		}
+	}
+
+	return true
+}
+
+func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
+	if metric == nil {
+		return false
+	}
+
+	if client.options.BeforeSendMetric != nil {
+		metric = client.options.BeforeSendMetric(metric)
+		if metric == nil {
+			debuglog.Println("Metric dropped due to BeforeSendMetric callback.")
+			return false
+		}
+	}
+
+	if client.telemetryBuffer != nil {
+		if !client.telemetryBuffer.Add(metric) {
+			debuglog.Printf("Dropping metric: telemetry buffer full or category missing")
+			return false
+		}
+	} else if client.batchMeter != nil {
+		if !client.batchMeter.Send(metric) {
+			debuglog.Printf("Dropping metric %q: buffer full", metric.Name)
+			return false
+		}
+	}
+
+	return true
+}
+
 // Recover captures a panic.
 // Returns EventID if successfully, or nil if there's no error to recover from.
 func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModifier) *EventID {
@@ -601,7 +673,7 @@ func (client *Client) RecoverWithContext(
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
-	if client.batchLogger != nil || client.telemetryBuffer != nil {
+	if client.batchLogger != nil || client.batchMeter != nil || client.telemetryBuffer != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		return client.FlushWithContext(ctx)
@@ -625,6 +697,9 @@ func (client *Client) FlushWithContext(ctx context.Context) bool {
 	if client.batchLogger != nil {
 		client.batchLogger.Flush(ctx.Done())
 	}
+	if client.batchMeter != nil {
+		client.batchMeter.Flush(ctx.Done())
+	}
 	if client.telemetryBuffer != nil {
 		return client.telemetryBuffer.FlushWithContext(ctx)
 	}
@@ -641,6 +716,9 @@ func (client *Client) Close() {
 	}
 	if client.batchLogger != nil {
 		client.batchLogger.Shutdown()
+	}
+	if client.batchMeter != nil {
+		client.batchMeter.Shutdown()
 	}
 	client.Transport.Close()
 }
