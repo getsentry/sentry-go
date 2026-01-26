@@ -573,7 +573,11 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 			return false
 		}
 	} else if client.batchLogger != nil {
-		client.batchLogger.Send(log)
+		if client.batchLogger.Send(log) {
+			debuglog.Printf("Dropping log [%s]: buffer full", log.Level)
+			return false
+		}
+
 	}
 
 	return true
@@ -598,7 +602,10 @@ func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
 			return false
 		}
 	} else if client.batchMeter != nil {
-		client.batchMeter.Send(metric)
+		if !client.batchMeter.Send(metric) {
+			debuglog.Printf("Dropping metric %q: buffer full", metric.Name)
+			return false
+		}
 	}
 
 	return true

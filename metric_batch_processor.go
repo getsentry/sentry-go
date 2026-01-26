@@ -2,8 +2,6 @@ package sentry
 
 import (
 	"time"
-
-	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 // metricBatchProcessor batches metrics and sends them to Sentry.
@@ -29,8 +27,6 @@ func newMetricBatchProcessor(client *Client) *metricBatchProcessor {
 	}
 }
 
-func (p *metricBatchProcessor) Send(metric *Metric) {
-	if !p.batchProcessor.Send(*metric) {
-		debuglog.Printf("Dropping metric %q: buffer full", metric.Name)
-	}
+func (p *metricBatchProcessor) Send(metric *Metric) bool {
+	return p.batchProcessor.Send(*metric)
 }

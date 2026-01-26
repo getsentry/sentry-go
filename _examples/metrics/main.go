@@ -15,7 +15,7 @@ var meter sentry.Meter
 
 func main() {
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn:              "",
+		Dsn:              "https://53eb618df7695aaea90bcc816ff537e0@o447951.ingest.us.sentry.io/5774600",
 		Debug:            true,
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
