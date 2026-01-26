@@ -554,7 +554,7 @@ func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventMod
 	return client.processEvent(event, hint, scope)
 }
 
-func (client *Client) captureLog(log *Log, scope *Scope) bool {
+func (client *Client) captureLog(log *Log, _ *Scope) bool {
 	if log == nil {
 		return false
 	}
@@ -579,7 +579,7 @@ func (client *Client) captureLog(log *Log, scope *Scope) bool {
 	return true
 }
 
-func (client *Client) captureMetric(metric *Metric, scope *Scope) bool {
+func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
 	if metric == nil {
 		return false
 	}
