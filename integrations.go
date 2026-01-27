@@ -391,3 +391,30 @@ func loadEnvTags() map[string]string {
 	}
 	return tags
 }
+
+// ================================
+// Spotlight Integration
+// ================================
+
+type spotlightIntegration struct{}
+
+func (si *spotlightIntegration) Name() string {
+	return "Spotlight"
+}
+
+func (si *spotlightIntegration) SetupOnce(client *Client) {
+	// The spotlight integration doesn't add event processors.
+	// It works by wrapping the transport in setupTransport().
+	// This integration is mainly for completeness and debugging visibility.
+	if client.options.Spotlight {
+		DebugLogger.Printf("Spotlight integration enabled. Events will be sent to %s",
+			client.getSpotlightURL())
+	}
+}
+
+func (client *Client) getSpotlightURL() string {
+	if client.options.SpotlightURL != "" {
+		return client.options.SpotlightURL
+	}
+	return "http://localhost:8969/stream"
+}
