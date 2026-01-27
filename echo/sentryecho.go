@@ -7,20 +7,20 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v5"
 )
 
 const (
 	// sdkIdentifier is the identifier of the Echo SDK.
 	sdkIdentifier = "sentry.go.echo"
 
-	// valuesKey is used as a key to store the Sentry Hub instance on the  echo.Context.
+	// valuesKey is used as a key to store the Sentry Hub instance on the  *echo.Context.
 	valuesKey = "sentry"
 
-	// transactionKey is used as a key to store the Sentry transaction on the echo.Context.
+	// transactionKey is used as a key to store the Sentry transaction on the *echo.Context.
 	transactionKey = "sentry_transaction"
 
-	// errorKey is used as a key to store the error on the echo.Context.
+	// errorKey is used as a key to store the error on the *echo.Context.
 	errorKey = "error"
 )
 
@@ -57,7 +57,7 @@ func New(options Options) echo.MiddlewareFunc {
 }
 
 func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(ctx echo.Context) error {
+	return func(ctx *echo.Context) error {
 		hub := GetHubFromContext(ctx)
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
@@ -93,10 +93,13 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		transaction.SetData("http.request.method", r.Method)
 
 		defer func() {
-			status := ctx.Response().Status
+			var status int
+			if resp, err := echo.UnwrapResponse(ctx.Response()); err == nil && resp.Status != 0 {
+				status = resp.Status
+			}
 			if err := ctx.Get(errorKey); err != nil {
-				if httpError, ok := err.(*echo.HTTPError); ok {
-					status = httpError.Code
+				if coder, ok := err.(echo.HTTPStatusCoder); ok {
+					status = coder.StatusCode()
 				}
 			}
 
@@ -135,22 +138,22 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 	}
 }
 
-// GetHubFromContext retrieves attached *sentry.Hub instance from echo.Context.
-func GetHubFromContext(ctx echo.Context) *sentry.Hub {
+// GetHubFromContext retrieves attached *sentry.Hub instance from *echo.Context.
+func GetHubFromContext(ctx *echo.Context) *sentry.Hub {
 	if hub, ok := ctx.Get(valuesKey).(*sentry.Hub); ok {
 		return hub
 	}
 	return nil
 }
 
-// SetHubOnContext attaches *sentry.Hub instance to echo.Context.
-func SetHubOnContext(ctx echo.Context, hub *sentry.Hub) {
+// SetHubOnContext attaches *sentry.Hub instance to *echo.Context.
+func SetHubOnContext(ctx *echo.Context, hub *sentry.Hub) {
 	ctx.Set(valuesKey, hub)
 }
 
-// GetSpanFromContext retrieves attached *sentry.Span instance from echo.Context.
-// If there is no transaction on echo.Context, it will return nil.
-func GetSpanFromContext(ctx echo.Context) *sentry.Span {
+// GetSpanFromContext retrieves attached *sentry.Span instance from *echo.Context.
+// If there is no transaction on *echo.Context, it will return nil.
+func GetSpanFromContext(ctx *echo.Context) *sentry.Span {
 	if span, ok := ctx.Get(transactionKey).(*sentry.Span); ok {
 		return span
 	}
