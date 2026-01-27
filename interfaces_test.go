@@ -706,235 +706,6 @@ func TestEvent_ToCategory(t *testing.T) {
 	}
 }
 
-func TestEvent_ToEnvelope(t *testing.T) {
-	tests := []struct {
-		name      string
-		event     *Event
-		dsn       *protocol.Dsn
-		wantError bool
-	}{
-		{
-			name: "basic event",
-			event: &Event{
-				EventID:   "12345678901234567890123456789012",
-				Message:   "test message",
-				Level:     LevelError,
-				Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-			},
-			dsn:       nil,
-			wantError: false,
-		},
-		{
-			name: "event with attachments",
-			event: &Event{
-				EventID:   "12345678901234567890123456789012",
-				Message:   "test message",
-				Level:     LevelError,
-				Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-				Attachments: []*Attachment{
-					{
-						Filename:    "test.txt",
-						ContentType: "text/plain",
-						Payload:     []byte("test content"),
-					},
-				},
-			},
-			dsn:       nil,
-			wantError: false,
-		},
-		{
-			name: "transaction event",
-			event: &Event{
-				EventID:     "12345678901234567890123456789012",
-				Type:        "transaction",
-				Transaction: "test transaction",
-				StartTime:   time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-				Timestamp:   time.Date(2023, 1, 1, 12, 0, 1, 0, time.UTC),
-			},
-			dsn:       nil,
-			wantError: false,
-		},
-		{
-			name: "check-in event",
-			event: &Event{
-				EventID: "12345678901234567890123456789012",
-				Type:    "check_in",
-				CheckIn: &CheckIn{
-					ID:          "checkin123",
-					MonitorSlug: "test-monitor",
-					Status:      CheckInStatusOK,
-					Duration:    5 * time.Second,
-				},
-			},
-			dsn:       nil,
-			wantError: false,
-		},
-		{
-			name: "log event",
-			event: &Event{
-				EventID: "12345678901234567890123456789012",
-				Type:    "log",
-				Logs: []Log{
-					{
-						Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-						Level:     LogLevelInfo,
-						Body:      "test log message",
-					},
-				},
-			},
-			dsn:       nil,
-			wantError: false,
-		},
-		{
-			name: "metric event",
-			event: &Event{
-				EventID: "12345678901234567890123456789012",
-				Type:    "trace_metric",
-				Metrics: []Metric{
-					{
-						Name:      "test.metric",
-						Value:     Int64MetricValue(42),
-						Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-						Type:      MetricTypeCounter,
-					},
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			envelope, err := tt.event.ToEnvelope(tt.dsn)
-
-			if (err != nil) != tt.wantError {
-				t.Errorf("ToEnvelope() error = %v, wantError %v", err, tt.wantError)
-				return
-			}
-
-			if err != nil {
-				return // Expected error, nothing more to check
-			}
-
-			// Basic envelope validation
-			if envelope == nil {
-				t.Error("ToEnvelope() returned nil envelope")
-				return
-			}
-
-			if envelope.Header == nil {
-				t.Error("Envelope header is nil")
-				return
-			}
-
-			if envelope.Header.EventID != string(tt.event.EventID) {
-				t.Errorf("Expected EventID %s, got %s", tt.event.EventID, envelope.Header.EventID)
-			}
-
-			// Check that items were created
-			expectedItems := 1 // Main event item
-			if tt.event.Attachments != nil {
-				expectedItems += len(tt.event.Attachments)
-			}
-
-			if len(envelope.Items) != expectedItems {
-				t.Errorf("Expected %d items, got %d", expectedItems, len(envelope.Items))
-			}
-
-			// Verify the envelope can be serialized
-			data, err := envelope.Serialize()
-			if err != nil {
-				t.Errorf("Failed to serialize envelope: %v", err)
-			}
-
-			if len(data) == 0 {
-				t.Error("Serialized envelope is empty")
-			}
-		})
-	}
-}
-
-func TestEvent_ToEnvelopeWithTime(t *testing.T) {
-	event := &Event{
-		EventID:   "12345678901234567890123456789012",
-		Message:   "test message",
-		Level:     LevelError,
-		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-	}
-
-	sentAt := time.Date(2023, 1, 1, 15, 0, 0, 0, time.UTC)
-	envelope, err := event.ToEnvelopeWithTime(nil, sentAt)
-
-	if err != nil {
-		t.Errorf("ToEnvelopeWithTime() error = %v", err)
-		return
-	}
-
-	if envelope == nil {
-		t.Error("ToEnvelopeWithTime() returned nil envelope")
-		return
-	}
-
-	if envelope.Header == nil {
-		t.Error("Envelope header is nil")
-		return
-	}
-
-	if !envelope.Header.SentAt.Equal(sentAt) {
-		t.Errorf("Expected SentAt %v, got %v", sentAt, envelope.Header.SentAt)
-	}
-}
-
-func TestEvent_ToEnvelope_FallbackOnMarshalError(t *testing.T) {
-	unmarshalableFunc := func() string { return "test" }
-
-	event := &Event{
-		EventID:   "12345678901234567890123456789012",
-		Message:   "test message with fallback",
-		Level:     LevelError,
-		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-		Extra: map[string]interface{}{
-			"bad_data": unmarshalableFunc,
-		},
-	}
-
-	envelope, err := event.ToEnvelope(nil)
-
-	if err != nil {
-		t.Errorf("ToEnvelope() should not error even with unmarshalable data, got: %v", err)
-		return
-	}
-
-	if envelope == nil {
-		t.Error("ToEnvelope() should not return a nil envelope")
-		return
-	}
-
-	data, _ := envelope.Serialize()
-
-	lines := strings.Split(string(data), "\n")
-	if len(lines) < 2 {
-		t.Error("Expected at least 2 lines in serialized envelope")
-		return
-	}
-
-	var eventData map[string]interface{}
-	if err := json.Unmarshal([]byte(lines[2]), &eventData); err != nil {
-		t.Errorf("Failed to unmarshal event data: %v", err)
-		return
-	}
-
-	extra, exists := eventData["extra"].(map[string]interface{})
-	if !exists {
-		t.Error("Expected extra field after fallback")
-		return
-	}
-
-	info, exists := extra["info"].(string)
-	if !exists || !strings.Contains(info, "Could not encode original event as JSON") {
-		t.Fatal("Expected fallback info message in extra field for ToEnvelopeItem")
-	}
-}
-
 func TestEvent_ToEnvelopeItem_FallbackOnMarshalError(t *testing.T) {
 	unmarshalableFunc := func() string { return "test" }
 
@@ -988,15 +759,10 @@ func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 		},
 	}
 
-	item, err := l.ToEnvelopeItem()
+	// Test JSON marshaling directly (logs are batched, not individually converted)
+	logData, err := json.Marshal(l)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if item == nil || item.Header == nil {
-		t.Fatal("expected non-nil envelope item and header")
-	}
-	if item.Header.Type != protocol.EnvelopeItemTypeLog {
-		t.Fatalf("expected log item type, got %q", item.Header.Type)
+		t.Fatalf("unexpected error marshaling log: %v", err)
 	}
 
 	var payload struct {
@@ -1007,7 +773,7 @@ func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 		Body       string                           `json:"body,omitempty"`
 		Attributes map[string]protocol.LogAttribute `json:"attributes,omitempty"`
 	}
-	if err := json.Unmarshal(item.Payload, &payload); err != nil {
+	if err := json.Unmarshal(logData, &payload); err != nil {
 		t.Fatalf("failed to unmarshal payload: %v", err)
 	}
 
@@ -1119,50 +885,6 @@ func TestMetric_MarshalJSON(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestMetric_ToEnvelopeItem(t *testing.T) {
-	metric := &Metric{
-		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-		TraceID:   TraceIDFromHex("12345678901234567890123456789012"),
-		Type:      MetricTypeCounter,
-		Name:      "test.metric",
-		Value:     Int64MetricValue(42),
-		Unit:      "units",
-		Attributes: map[string]Attribute{
-			"key.string": {Value: "value", Type: "string"},
-		},
-	}
-
-	item, err := metric.ToEnvelopeItem()
-	if err != nil {
-		t.Fatalf("ToEnvelopeItem() error = %v", err)
-	}
-
-	if item == nil {
-		t.Fatal("ToEnvelopeItem() returned nil item")
-	}
-
-	if item.Header == nil {
-		t.Fatal("Envelope item header is nil")
-	}
-
-	if item.Header.Type != protocol.EnvelopeItemTypeTraceMetric {
-		t.Errorf("Expected header type %s, got %s", protocol.EnvelopeItemTypeTraceMetric, item.Header.Type)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(item.Payload, &result); err != nil {
-		t.Fatalf("Payload is not valid JSON: %v", err)
-	}
-
-	if result["name"] != "test.metric" {
-		t.Errorf("Expected name 'test.metric', got %v", result["name"])
-	}
-
-	if result["value"] != float64(42) {
-		t.Errorf("Expected value 42, got %v", result["value"])
 	}
 }
 

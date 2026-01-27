@@ -6,17 +6,17 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
-type Metrics []EnvelopeItemConvertible
+type Metrics []TelemetryItem
 
 func (ms Metrics) ToEnvelopeItem() (*EnvelopeItem, error) {
 	// Convert each metric to its JSON representation
 	items := make([]json.RawMessage, 0, len(ms))
 	for _, metric := range ms {
-		envItem, err := metric.ToEnvelopeItem()
+		metricPayload, err := json.Marshal(metric)
 		if err != nil {
 			continue
 		}
-		items = append(items, envItem.Payload)
+		items = append(items, metricPayload)
 	}
 
 	if len(items) == 0 {
