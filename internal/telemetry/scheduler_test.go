@@ -16,24 +16,10 @@ type testTelemetryItem struct {
 }
 
 func (t *testTelemetryItem) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
-	var payload string
-	var itemType protocol.EnvelopeItemType
-
-	switch t.GetCategory() {
-	case ratelimit.CategoryLog:
-		payload = `{"type": "log", "timestamp": "2023-01-01T00:00:00Z", "logs": [{"level": "info", "body": "` + t.data + `"}]}`
-		itemType = protocol.EnvelopeItemTypeLog
-	case ratelimit.CategoryTraceMetric:
-		payload = `{"type": "trace_metric", "timestamp": "2023-01-01T00:00:00Z", "metrics": [{"name": "test.metric", "value": 42}]}`
-		itemType = protocol.EnvelopeItemTypeTraceMetric
-	default:
-		payload = `{"message": "` + t.data + `"}`
-		itemType = protocol.EnvelopeItemTypeEvent
-	}
-
+	payload := `{"message": "` + t.data + `"}`
 	return &protocol.EnvelopeItem{
 		Header: &protocol.EnvelopeItemHeader{
-			Type: itemType,
+			Type: protocol.EnvelopeItemTypeEvent,
 		},
 		Payload: []byte(payload),
 	}, nil
