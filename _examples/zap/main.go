@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -13,34 +14,37 @@ import (
 func main() {
 	// Initialize Sentry with logs enabled
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn:        "", // Set your Sentry DSN here
+		Dsn:        "your-sentry-dsn",
 		EnableLogs: true,
-		Debug:      true,
 	})
 	if err != nil {
 		panic(err)
 	}
-	defer sentry.Flush(5 * time.Second)
+	defer sentry.Flush(2 * time.Second)
 
+	// Create the Sentry core
 	ctx := context.Background()
-
-	// Start a transaction
-	span := sentry.StartTransaction(ctx, "zap-example")
-	defer span.Finish()
-
-	// Create logger with the transaction context
-	sentryCore := sentryzap.NewSentryCore(context.Background(), sentryzap.Option{
-		Level: []zapcore.Level{zapcore.InfoLevel},
+	sentryCore := sentryzap.NewSentryCore(ctx, sentryzap.Option{
+		Level: []zapcore.Level{ // define capture levels
+			zapcore.InfoLevel,
+			zapcore.WarnLevel,
+			zapcore.ErrorLevel,
+		},
+		AddCaller: true,
 	})
-	logger := zap.New(sentryCore)
 
-	// Use the Context() helper to associate logs with the transaction
-	scopedLogger := logger.With(sentryzap.Context(span.Context()))
-	scopedLogger.Info("Transaction started")
-	time.Sleep(100 * time.Millisecond)
-	scopedLogger.Info("Processing data",
-		zap.Int("records", 100),
+	logger := zap.New(sentryCore)
+	logger.Info("Application started",
+		zap.String("version", "1.0.0"),
+		zap.String("environment", "production"),
 	)
-	time.Sleep(100 * time.Millisecond)
-	scopedLogger.Info("Transaction completed")
+
+	logger.Warn("High memory usage",
+		zap.Float64("usage_percent", 85.5),
+	)
+
+	logger.Error("Database connection failed",
+		zap.Error(errors.New("connection timeout")),
+		zap.String("host", "db.example.com"),
+	)
 }
