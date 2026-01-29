@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +17,7 @@ import (
 func TestZapFieldToLogEntry(t *testing.T) {
 	fixedTime := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
 
-	entry := testutils.NewMockLogEntry()
+	entry := sentry.NewMockLogEntry()
 	fields := []zapcore.Field{
 		zap.Bool("enabled", true),
 		zap.Bool("disabled", false),
@@ -78,20 +78,20 @@ func TestZapFieldToLogEntry(t *testing.T) {
 
 func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	t.Run("nil error is skipped", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Error(nil))
 		_, found := entry.Attributes["error"]
 		assert.False(t, found)
 	})
 
 	t.Run("skip field", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Skip())
 		assert.Empty(t, entry.Attributes)
 	})
 
 	t.Run("reflect type", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Reflect("custom", customStruct{Name: "test", Value: 42}))
 		result, ok := entry.Attributes["custom"].(string)
 		assert.True(t, ok)
@@ -100,7 +100,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("object marshaler", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Object("user", testObjectMarshaler{name: "john", age: 30}))
 		result, ok := entry.Attributes["user"].(string)
 		assert.True(t, ok)
@@ -109,7 +109,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("array marshaler", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Array("items", testArrayMarshaler{items: []string{"a", "b", "c"}}))
 		result, ok := entry.Attributes["items"].(string)
 		assert.True(t, ok)
@@ -119,7 +119,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("inline marshaler", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Inline(testInlineMarshaler{name: "alice", score: 95}))
 		result, ok := entry.Attributes[""].(string)
 		assert.True(t, ok)
@@ -128,7 +128,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("complex64 type", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Complex64("c64", complex(float32(3.14), float32(2.71))))
 		result, ok := entry.Attributes["c64"].(string)
 		assert.True(t, ok)
@@ -137,7 +137,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("complex128 type", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Complex128("c128", complex(3.14159, 2.71828)))
 		result, ok := entry.Attributes["c128"].(string)
 		assert.True(t, ok)
@@ -146,7 +146,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("time full type", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		fixedTime := time.Date(2024, 1, 15, 10, 30, 45, 0, time.UTC)
 		// Create a TimeFullType field manually
 		field := zapcore.Field{
@@ -161,14 +161,14 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("namespace type", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Namespace("http"))
 		// Namespace fields should be skipped and not add any attributes
 		assert.Empty(t, entry.Attributes)
 	})
 
 	t.Run("uint64 overflow", func(t *testing.T) {
-		entry := testutils.NewMockLogEntry()
+		entry := sentry.NewMockLogEntry()
 		// Test uint64 value that exceeds MaxInt64
 		zapFieldToLogEntry(entry, zap.Uint64("big", uint64(math.MaxUint64)))
 		result, ok := entry.Attributes["big"].(string)

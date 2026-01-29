@@ -6,7 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
@@ -103,33 +102,3 @@ func (m *MockTelemetryTransport) Reset() {
 	atomic.StoreInt64(&m.rateLimitedCalls, 0)
 	m.capacity = 0
 }
-
-// MockLogEntry implements sentry.LogEntry to capture field conversions.
-type MockLogEntry struct {
-	Attributes map[string]any
-}
-
-func NewMockLogEntry() *MockLogEntry {
-	return &MockLogEntry{Attributes: make(map[string]any)}
-}
-
-func (m *MockLogEntry) WithCtx(_ context.Context) sentry.LogEntry { return m }
-func (m *MockLogEntry) String(key, value string) sentry.LogEntry  { m.Attributes[key] = value; return m }
-func (m *MockLogEntry) Int(key string, value int) sentry.LogEntry {
-	m.Attributes[key] = int64(value)
-	return m
-}
-func (m *MockLogEntry) Int64(key string, value int64) sentry.LogEntry {
-	m.Attributes[key] = value
-	return m
-}
-func (m *MockLogEntry) Float64(key string, value float64) sentry.LogEntry {
-	m.Attributes[key] = value
-	return m
-}
-func (m *MockLogEntry) Bool(key string, value bool) sentry.LogEntry {
-	m.Attributes[key] = value
-	return m
-}
-func (m *MockLogEntry) Emit(args ...any)                 {}
-func (m *MockLogEntry) Emitf(format string, args ...any) {}
