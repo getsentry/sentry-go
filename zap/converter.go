@@ -1,6 +1,7 @@
 package sentryzap
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -93,8 +94,16 @@ func zapFieldToLogEntry(entry sentry.LogEntry, field zapcore.Field) sentry.LogEn
 		return entry.Float64(key, float64(math.Float32frombits(uint32(field.Integer))))
 	case zapcore.StringType:
 		return entry.String(key, field.String)
-	case zapcore.ByteStringType, zapcore.BinaryType:
-		return entry.String(key, string(field.Interface.([]byte)))
+	case zapcore.ByteStringType:
+		if bytes, ok := field.Interface.([]byte); ok {
+			return entry.String(key, string(bytes))
+		}
+		return entry.String(key, fmt.Sprintf("%v", field.Interface))
+	case zapcore.BinaryType:
+		if bytes, ok := field.Interface.([]byte); ok {
+			return entry.String(key, base64.StdEncoding.EncodeToString(bytes))
+		}
+		return entry.String(key, fmt.Sprintf("%v", field.Interface))
 	case zapcore.StringerType:
 		if stringer, ok := field.Interface.(fmt.Stringer); ok && stringer != nil {
 			return entry.String(key, stringer.String())
