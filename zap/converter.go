@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"go.uber.org/zap/zapcore"
 )
 
-var encoder = zapcore.NewJSONEncoder(zapcore.EncoderConfig{
+var encoderConfig = zapcore.EncoderConfig{
 	TimeKey:        "time",
 	LevelKey:       "level",
 	NameKey:        "logger",
@@ -24,10 +25,19 @@ var encoder = zapcore.NewJSONEncoder(zapcore.EncoderConfig{
 	EncodeTime:     zapcore.RFC3339TimeEncoder,
 	EncodeDuration: zapcore.StringDurationEncoder,
 	EncodeCaller:   zapcore.ShortCallerEncoder,
-})
+}
+
+var encoderPool = sync.Pool{
+	New: func() interface{} {
+		return zapcore.NewJSONEncoder(encoderConfig)
+	},
+}
 
 // encodeAndExtractValue uses the zapcore.JSONEncoder to serialize custom serializable object/array types.
 func encodeAndExtractValue(addToEncoder func(zapcore.Encoder) error) (json.RawMessage, error) {
+	encoder := encoderPool.Get().(zapcore.Encoder)
+	defer encoderPool.Put(encoder)
+
 	if err := addToEncoder(encoder); err != nil {
 		return nil, err
 	}
@@ -35,16 +45,19 @@ func encodeAndExtractValue(addToEncoder func(zapcore.Encoder) error) (json.RawMe
 	if err != nil {
 		return nil, err
 	}
+	defer buf.Free()
 
+	data := make([]byte, len(buf.Bytes()))
+	copy(data, buf.Bytes())
 	var result map[string]json.RawMessage
-	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		return buf.Bytes(), nil
+	if err := json.Unmarshal(data, &result); err != nil {
+		return data, nil
 	}
 
 	if val, ok := result["_"]; ok {
 		return val, nil
 	}
-	return buf.Bytes(), nil
+	return data, nil
 }
 
 // stringifyObject uses zap's JSON encoder to safely stringify an object.
