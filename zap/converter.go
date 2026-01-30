@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -27,16 +27,9 @@ var encoderConfig = zapcore.EncoderConfig{
 	EncodeCaller:   zapcore.ShortCallerEncoder,
 }
 
-var encoderPool = sync.Pool{
-	New: func() interface{} {
-		return zapcore.NewJSONEncoder(encoderConfig)
-	},
-}
-
 // encodeAndExtractValue uses the zapcore.JSONEncoder to serialize custom serializable object/array types.
 func encodeAndExtractValue(addToEncoder func(zapcore.Encoder) error) (json.RawMessage, error) {
-	encoder := encoderPool.Get().(zapcore.Encoder)
-	defer encoderPool.Put(encoder)
+	encoder := zapcore.NewJSONEncoder(encoderConfig)
 
 	if err := addToEncoder(encoder); err != nil {
 		return nil, err
@@ -82,6 +75,20 @@ func stringifyArray(arr zapcore.ArrayMarshaler) (string, error) {
 	return string(val), nil
 }
 
+// isSafeToCall checks that the field.Interface doesn't hold a nil pointer.
+func isSafeToCall(v interface{}) bool {
+	if v == nil {
+		return false
+	}
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Interface, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func:
+		return !rv.IsNil()
+	default:
+		return true
+	}
+}
+
 // zapFieldToLogEntry converts a zap Field to a sentry LogEntry attribute.
 //
 //nolint:gocyclo
@@ -118,7 +125,7 @@ func zapFieldToLogEntry(entry sentry.LogEntry, field zapcore.Field) sentry.LogEn
 		}
 		return entry.String(key, fmt.Sprintf("%v", field.Interface))
 	case zapcore.StringerType:
-		if stringer, ok := field.Interface.(fmt.Stringer); ok && stringer != nil {
+		if stringer, ok := field.Interface.(fmt.Stringer); ok && isSafeToCall(stringer) {
 			return entry.String(key, stringer.String())
 		}
 		return entry.String(key, fmt.Sprintf("%v", field.Interface))
@@ -126,7 +133,11 @@ func zapFieldToLogEntry(entry sentry.LogEntry, field zapcore.Field) sentry.LogEn
 		duration := time.Duration(field.Integer)
 		return entry.String(key, duration.String())
 	case zapcore.TimeType:
-		t := time.Unix(0, field.Integer)
+		loc := time.UTC
+		if l, ok := field.Interface.(*time.Location); ok && l != nil {
+			loc = l
+		}
+		t := time.Unix(0, field.Integer).In(loc)
 		return entry.String(key, t.Format(time.RFC3339))
 	case zapcore.TimeFullType:
 		if t, ok := field.Interface.(time.Time); ok {
@@ -134,7 +145,7 @@ func zapFieldToLogEntry(entry sentry.LogEntry, field zapcore.Field) sentry.LogEn
 		}
 		return entry.String(key, fmt.Sprintf("%v", field.Interface))
 	case zapcore.ErrorType:
-		if err, ok := field.Interface.(error); ok && err != nil {
+		if err, ok := field.Interface.(error); ok && isSafeToCall(err) {
 			return entry.String(key, err.Error())
 		}
 		return entry.String(key, fmt.Sprintf("%v", field.Interface))
@@ -154,21 +165,21 @@ func zapFieldToLogEntry(entry sentry.LogEntry, field zapcore.Field) sentry.LogEn
 		// Namespace fields are just markers for grouping subsequent fields, so we skip them.
 		return entry
 	case zapcore.ObjectMarshalerType:
-		if marshaler, ok := field.Interface.(zapcore.ObjectMarshaler); ok && marshaler != nil {
+		if marshaler, ok := field.Interface.(zapcore.ObjectMarshaler); ok && isSafeToCall(marshaler) {
 			if str, err := stringifyObject(marshaler); err == nil {
 				return entry.String(key, str)
 			}
 		}
 		return entry.String(key, fmt.Sprintf("%+v", field.Interface))
 	case zapcore.ArrayMarshalerType:
-		if marshaler, ok := field.Interface.(zapcore.ArrayMarshaler); ok && marshaler != nil {
+		if marshaler, ok := field.Interface.(zapcore.ArrayMarshaler); ok && isSafeToCall(marshaler) {
 			if str, err := stringifyArray(marshaler); err == nil {
 				return entry.String(key, str)
 			}
 		}
 		return entry.String(key, fmt.Sprintf("%+v", field.Interface))
 	case zapcore.InlineMarshalerType:
-		if marshaler, ok := field.Interface.(zapcore.ObjectMarshaler); ok && marshaler != nil {
+		if marshaler, ok := field.Interface.(zapcore.ObjectMarshaler); ok && isSafeToCall(marshaler) {
 			if str, err := stringifyObject(marshaler); err == nil {
 				return entry.String(key, str)
 			}
