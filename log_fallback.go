@@ -101,7 +101,7 @@ func (*noopLogger) Panic() LogEntry {
 	return &noopLogEntry{level: LogLevelFatal, shouldPanic: true}
 }
 
-func (*noopLogger) LPanic() LogEntry {
+func (*noopLogger) LFatal() LogEntry {
 	return &noopLogEntry{level: LogLevelFatal}
 }
 
