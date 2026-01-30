@@ -33,7 +33,7 @@ func TestZapFieldToLogEntry(t *testing.T) {
 		zap.Duration("elapsed", 5*time.Second),
 		zap.Time("timestamp", fixedTime),
 		zap.Error(errors.New("something went wrong")),
-		zap.Stringer("addr", testStringer{"192.168.1.1"}),
+		zap.Stringer("addr", &testStringer{value: "192.168.1.1"}),
 		zap.ByteString("data", []byte("hello bytes")),
 		zap.Uintptr("ptr", uintptr(0x1234)),
 	}
@@ -101,7 +101,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 
 	t.Run("object marshaler", func(t *testing.T) {
 		entry := sentry.NewMockLogEntry()
-		zapFieldToLogEntry(entry, zap.Object("user", testObjectMarshaler{name: "john", age: 30}))
+		zapFieldToLogEntry(entry, zap.Object("user", &testObjectMarshaler{name: "john", age: 30}))
 		result, ok := entry.Attributes["user"].(string)
 		assert.True(t, ok)
 		assert.Contains(t, result, "john")
@@ -110,7 +110,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 
 	t.Run("array marshaler", func(t *testing.T) {
 		entry := sentry.NewMockLogEntry()
-		zapFieldToLogEntry(entry, zap.Array("items", testArrayMarshaler{items: []string{"a", "b", "c"}}))
+		zapFieldToLogEntry(entry, zap.Array("items", &testArrayMarshaler{items: []string{"a", "b", "c"}}))
 		result, ok := entry.Attributes["items"].(string)
 		assert.True(t, ok)
 		assert.Contains(t, result, "a")
@@ -120,7 +120,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 
 	t.Run("inline marshaler", func(t *testing.T) {
 		entry := sentry.NewMockLogEntry()
-		zapFieldToLogEntry(entry, zap.Inline(testInlineMarshaler{name: "alice", score: 95}))
+		zapFieldToLogEntry(entry, zap.Inline(&testInlineMarshaler{name: "alice", score: 95}))
 		result, ok := entry.Attributes[""].(string)
 		assert.True(t, ok)
 		assert.Contains(t, result, "alice")
@@ -178,6 +178,42 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 }
 
+// TestTypedNilPointerValidation validates that typed nil pointers don't cause panics.
+func TestTypedNilPointerValidation(t *testing.T) {
+	tests := []struct {
+		name  string
+		field zapcore.Field
+	}{
+		{"Stringer", zap.Stringer("key", (*testStringer)(nil))},
+		{"Error", zap.Error((*testError)(nil))},
+		{"ObjectMarshaler", zap.Object("key", (*testObjectMarshaler)(nil))},
+		{"ArrayMarshaler", zap.Array("key", (*testArrayMarshaler)(nil))},
+		{"InlineMarshaler", zap.Inline((*testInlineMarshaler)(nil))},
+	}
+
+	for _, tt := range tests {
+		t.Run("typed nil "+tt.name, func(t *testing.T) {
+			entry := sentry.NewMockLogEntry()
+			assert.NotPanics(t, func() {
+				zapFieldToLogEntry(entry, tt.field)
+			})
+		})
+	}
+
+	t.Run("non-nil values still work", func(t *testing.T) {
+		entry := sentry.NewMockLogEntry()
+
+		zapFieldToLogEntry(entry, zap.Stringer("s", &testStringer{value: "test"}))
+		assert.Equal(t, "test", entry.Attributes["s"])
+
+		zapFieldToLogEntry(entry, zap.Error(errors.New("err")))
+		assert.Equal(t, "err", entry.Attributes["error"])
+
+		zapFieldToLogEntry(entry, zap.Object("o", &testObjectMarshaler{name: "test", age: 1}))
+		assert.Contains(t, entry.Attributes["o"], "test")
+	})
+}
+
 type customStruct struct {
 	Name  string `json:"name"`
 	Value int    `json:"value"`
@@ -187,7 +223,7 @@ type testStringer struct {
 	value string
 }
 
-func (t testStringer) String() string {
+func (t *testStringer) String() string {
 	return t.value
 }
 
@@ -196,7 +232,7 @@ type testObjectMarshaler struct {
 	age  int
 }
 
-func (t testObjectMarshaler) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+func (t *testObjectMarshaler) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("name", t.name)
 	enc.AddInt("age", t.age)
 	return nil
@@ -206,7 +242,7 @@ type testArrayMarshaler struct {
 	items []string
 }
 
-func (t testArrayMarshaler) MarshalLogArray(enc zapcore.ArrayEncoder) error {
+func (t *testArrayMarshaler) MarshalLogArray(enc zapcore.ArrayEncoder) error {
 	for _, item := range t.items {
 		enc.AppendString(item)
 	}
@@ -218,8 +254,16 @@ type testInlineMarshaler struct {
 	score int
 }
 
-func (t testInlineMarshaler) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+func (t *testInlineMarshaler) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("name", t.name)
 	enc.AddInt("score", t.score)
 	return nil
+}
+
+type testError struct {
+	msg string
+}
+
+func (e *testError) Error() string {
+	return e.msg
 }

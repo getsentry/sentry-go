@@ -188,7 +188,7 @@ func (c *SentryCore) getLogEntry(level zapcore.Level, ctx context.Context) sentr
 		// DPanic is treated as Error in production
 		logEntry = c.logger.Error()
 	case zapcore.PanicLevel:
-		logEntry = c.logger.Fatal()
+		logEntry = c.logger.Panic()
 	case zapcore.FatalLevel:
 		logEntry = c.logger.Fatal()
 	default:
