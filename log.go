@@ -254,7 +254,7 @@ func (l *sentryLogger) Panic() LogEntry {
 	}
 }
 
-func (l *sentryLogger) LPanic() LogEntry {
+func (l *sentryLogger) LFatal() LogEntry {
 	return &logEntry{
 		logger:     l,
 		ctx:        l.ctx,
