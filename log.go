@@ -56,6 +56,7 @@ type logEntry struct {
 	severity    int
 	attributes  map[string]Attribute
 	shouldPanic bool
+	shouldFatal bool
 }
 
 // NewLogger returns a Logger that emits logs to Sentry. If logging is turned off, all logs get discarded.
@@ -233,11 +234,12 @@ func (l *sentryLogger) Error() LogEntry {
 
 func (l *sentryLogger) Fatal() LogEntry {
 	return &logEntry{
-		logger:     l,
-		ctx:        l.ctx,
-		level:      LogLevelFatal,
-		severity:   LogSeverityFatal,
-		attributes: make(map[string]Attribute),
+		logger:      l,
+		ctx:         l.ctx,
+		level:       LogLevelFatal,
+		severity:    LogSeverityFatal,
+		attributes:  make(map[string]Attribute),
+		shouldFatal: true,
 	}
 }
 
@@ -249,6 +251,16 @@ func (l *sentryLogger) Panic() LogEntry {
 		severity:    LogSeverityFatal,
 		attributes:  make(map[string]Attribute),
 		shouldPanic: true,
+	}
+}
+
+func (l *sentryLogger) LFatal() LogEntry {
+	return &logEntry{
+		logger:     l,
+		ctx:        l.ctx,
+		level:      LogLevelFatal,
+		severity:   LogSeverityFatal,
+		attributes: make(map[string]Attribute),
 	}
 }
 
@@ -264,6 +276,7 @@ func (e *logEntry) WithCtx(ctx context.Context) LogEntry {
 		severity:    e.severity,
 		attributes:  maps.Clone(e.attributes),
 		shouldPanic: e.shouldPanic,
+		shouldFatal: e.shouldFatal,
 	}
 }
 
@@ -299,7 +312,9 @@ func (e *logEntry) Emit(args ...interface{}) {
 		if e.shouldPanic {
 			panic(fmt.Sprint(args...))
 		}
-		os.Exit(1)
+		if e.shouldFatal {
+			os.Exit(1)
+		}
 	}
 }
 
@@ -311,6 +326,8 @@ func (e *logEntry) Emitf(format string, args ...interface{}) {
 			formattedMessage := fmt.Sprintf(format, args...)
 			panic(formattedMessage)
 		}
-		os.Exit(1)
+		if e.shouldFatal {
+			os.Exit(1)
+		}
 	}
 }
