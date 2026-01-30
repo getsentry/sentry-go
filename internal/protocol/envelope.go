@@ -70,7 +70,7 @@ type EnvelopeItemHeader struct {
 	ItemCount *int `json:"item_count,omitempty"`
 }
 
-// EnvelopeItem represents a single item within an envelope.
+// EnvelopeItem represents a single item or batch within an envelope.
 type EnvelopeItem struct {
 	Header  *EnvelopeItemHeader `json:"-"`
 	Payload []byte              `json:"-"`

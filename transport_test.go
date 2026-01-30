@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/google/go-cmp/cmp"
 	"go.uber.org/goleak"
 )
@@ -639,7 +640,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 		// it doesn't matter for this test.
 		fmt.Fprintln(w, `{"id":"ec71d87189164e79ab1e61030c183af0"}`)
 		if largeResponse {
-			fmt.Fprintln(w, strings.Repeat(" ", maxDrainResponseBytes))
+			fmt.Fprintln(w, strings.Repeat(" ", util.MaxDrainResponseBytes))
 		}
 	}))
 	defer srv.Close()
