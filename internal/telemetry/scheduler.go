@@ -8,6 +8,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/util"
 )
 
 // Scheduler implements a weighted round-robin scheduler for processing buffered events.
@@ -214,9 +215,11 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 		return
 	}
 
+	// we need to deepcopy to avoid races on user mutable data
+	itemsCopy := util.Deepcopy(items).([]protocol.TelemetryItem)
 	switch category {
 	case ratelimit.CategoryLog:
-		logs := protocol.Logs(items)
+		logs := protocol.Logs(itemsCopy)
 		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Sdk: s.sdkInfo}
 		if s.dsn != nil {
 			header.Dsn = s.dsn.String()
@@ -233,7 +236,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 		}
 		return
 	case ratelimit.CategoryTraceMetric:
-		metrics := protocol.Metrics(items)
+		metrics := protocol.Metrics(itemsCopy)
 		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Sdk: s.sdkInfo}
 		if s.dsn != nil {
 			header.Dsn = s.dsn.String()
@@ -252,7 +255,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 	default:
 		// if the buffers are properly configured, buffer.PollIfReady should return a single item for every category
 		// other than logs. We still iterate over the items just in case, because we don't want to send broken envelopes.
-		for _, it := range items {
+		for _, it := range itemsCopy {
 			convertible, ok := it.(protocol.EnvelopeItemConvertible)
 			if !ok {
 				debuglog.Printf("item does not implement EnvelopeItemConvertible: %T", it)
