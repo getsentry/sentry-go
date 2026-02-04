@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/clientreport"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
@@ -207,12 +208,14 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 
 	category := categoryFromEnvelope(envelope)
 	if t.disabled(category) {
+		clientreport.RecordOne(clientreport.ReasonRateLimitBackoff, category)
 		return nil
 	}
 
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
 	if err != nil {
 		debuglog.Printf("There was an issue creating the request: %v", err)
+		clientreport.RecordOne(clientreport.ReasonInternalError, category)
 		return err
 	}
 	identifier := util.EnvelopeIdentifier(envelope)
@@ -226,6 +229,7 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 	response, err := t.client.Do(request)
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
+		clientreport.RecordOne(clientreport.ReasonNetworkError, category)
 		return err
 	}
 	util.HandleHTTPResponse(response, identifier)
@@ -363,6 +367,7 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 
 	category := categoryFromEnvelope(envelope)
 	if t.isRateLimited(category) {
+		clientreport.RecordOne(clientreport.ReasonRateLimitBackoff, category)
 		return nil
 	}
 
@@ -378,6 +383,7 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 		return nil
 	default:
 		atomic.AddInt64(&t.droppedCount, 1)
+		clientreport.RecordOne(clientreport.ReasonQueueOverflow, category)
 		return ErrTransportQueueFull
 	}
 }
@@ -466,6 +472,7 @@ func (t *AsyncTransport) processEnvelope(envelope *protocol.Envelope) {
 func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
 	category := categoryFromEnvelope(envelope)
 	if t.isRateLimited(category) {
+		clientreport.RecordOne(clientreport.ReasonRateLimitBackoff, category)
 		return false
 	}
 
@@ -475,18 +482,23 @@ func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
 	if err != nil {
 		debuglog.Printf("Failed to create request from envelope: %v", err)
+		clientreport.RecordOne(clientreport.ReasonInternalError, category)
 		return false
 	}
 
 	response, err := t.client.Do(request)
 	if err != nil {
 		debuglog.Printf("HTTP request failed: %v", err)
+		clientreport.RecordOne(clientreport.ReasonNetworkError, category)
 		return false
 	}
 	defer response.Body.Close()
 
 	identifier := util.EnvelopeIdentifier(envelope)
 	success := util.HandleHTTPResponse(response, identifier)
+	if !success {
+		clientreport.RecordOne(clientreport.ReasonSendError, category)
+	}
 
 	t.mu.Lock()
 	if t.limits == nil {

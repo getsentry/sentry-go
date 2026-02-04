@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/clientreport"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	httpinternal "github.com/getsentry/sentry-go/internal/http"
 	"github.com/getsentry/sentry-go/internal/protocol"
@@ -386,11 +387,13 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	category := event.toCategory()
 
 	if t.disabled(category) {
+		clientreport.RecordOne(clientreport.ReasonRateLimitBackoff, category)
 		return
 	}
 
 	request, err := getRequestFromEvent(ctx, event, t.dsn)
 	if err != nil {
+		clientreport.RecordOne(clientreport.ReasonInternalError, category)
 		return
 	}
 
@@ -423,6 +426,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		)
 	default:
 		debuglog.Println("Event dropped due to transport buffer being full.")
+		clientreport.RecordOne(clientreport.ReasonQueueOverflow, category)
 	}
 
 	t.buffer <- b
@@ -645,12 +649,15 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		return
 	}
 
-	if t.disabled(event.toCategory()) {
+	category := event.toCategory()
+	if t.disabled(category) {
+		clientreport.RecordOne(clientreport.ReasonRateLimitBackoff, category)
 		return
 	}
 
 	request, err := getRequestFromEvent(ctx, event, t.dsn)
 	if err != nil {
+		clientreport.RecordOne(clientreport.ReasonInternalError, category)
 		return
 	}
 
@@ -665,9 +672,13 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	response, err := t.client.Do(request)
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
+		clientreport.RecordOne(clientreport.ReasonNetworkError, category)
 		return
 	}
-	util.HandleHTTPResponse(response, identifier)
+	success := util.HandleHTTPResponse(response, identifier)
+	if !success && response.StatusCode != http.StatusTooManyRequests {
+		clientreport.RecordOne(clientreport.ReasonSendError, category)
+	}
 
 	t.mu.Lock()
 	if t.limits == nil {

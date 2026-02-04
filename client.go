@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/clientreport"
 	"github.com/getsentry/sentry-go/internal/debug"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	httpInternal "github.com/getsentry/sentry-go/internal/http"
@@ -563,6 +564,7 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 		log = client.options.BeforeSendLog(log)
 		if log == nil {
 			debuglog.Println("Log dropped due to BeforeSendLog callback.")
+			clientreport.RecordOne(clientreport.ReasonBeforeSend, ratelimit.CategoryLog)
 			return false
 		}
 	}
@@ -570,11 +572,13 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 	if client.telemetryProcessor != nil {
 		if !client.telemetryProcessor.Add(log) {
 			debuglog.Print("Dropping log: telemetry buffer full or category missing")
+			// Note: processor tracks client report
 			return false
 		}
 	} else if client.batchLogger != nil {
 		if !client.batchLogger.Send(log) {
 			debuglog.Printf("Dropping log [%s]: buffer full", log.Level)
+			clientreport.RecordOne(clientreport.ReasonBufferOverflow, ratelimit.CategoryLog)
 			return false
 		}
 	}
@@ -591,6 +595,7 @@ func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
 		metric = client.options.BeforeSendMetric(metric)
 		if metric == nil {
 			debuglog.Println("Metric dropped due to BeforeSendMetric callback.")
+			clientreport.RecordOne(clientreport.ReasonBeforeSend, ratelimit.CategoryTraceMetric)
 			return false
 		}
 	}
@@ -598,11 +603,13 @@ func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
 	if client.telemetryProcessor != nil {
 		if !client.telemetryProcessor.Add(metric) {
 			debuglog.Printf("Dropping metric: telemetry buffer full or category missing")
+			// Note: processor tracks client report
 			return false
 		}
 	} else if client.batchMeter != nil {
 		if !client.batchMeter.Send(metric) {
 			debuglog.Printf("Dropping metric %q: buffer full", metric.Name)
+			clientreport.RecordOne(clientreport.ReasonBufferOverflow, ratelimit.CategoryTraceMetric)
 			return false
 		}
 	}
@@ -811,6 +818,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	// (errors, messages) are sampled here. Does not apply to check-ins.
 	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
 		debuglog.Println("Event dropped due to SampleRate hit.")
+		clientreport.RecordOne(clientreport.ReasonSampleRate, ratelimit.CategoryError)
 		return nil
 	}
 
@@ -827,6 +835,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		if client.options.BeforeSendTransaction != nil {
 			if event = client.options.BeforeSendTransaction(event, hint); event == nil {
 				debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
+				clientreport.RecordOne(clientreport.ReasonBeforeSend, ratelimit.CategoryTransaction)
 				return nil
 			}
 		}
@@ -835,6 +844,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		if client.options.BeforeSend != nil {
 			if event = client.options.BeforeSend(event, hint); event == nil {
 				debuglog.Println("Event dropped due to BeforeSend callback.")
+				clientreport.RecordOne(clientreport.ReasonBeforeSend, ratelimit.CategoryError)
 				return nil
 			}
 		}
@@ -905,18 +915,22 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 
 	for _, processor := range client.eventProcessors {
 		id := event.EventID
+		category := event.toCategory()
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
+			clientreport.RecordOne(clientreport.ReasonEventProcessor, category)
 			return nil
 		}
 	}
 
 	for _, processor := range globalEventProcessors {
 		id := event.EventID
+		category := event.toCategory()
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
+			clientreport.RecordOne(clientreport.ReasonEventProcessor, category)
 			return nil
 		}
 	}

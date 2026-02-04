@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/clientreport"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
@@ -84,6 +85,7 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 		b.tail = (b.tail + 1) % b.capacity
 
 		atomic.AddInt64(&b.dropped, 1)
+		clientreport.RecordOne(clientreport.ReasonBufferOverflow, b.category)
 		if b.onDropped != nil {
 			b.onDropped(oldItem, "buffer_full_drop_oldest")
 		}
@@ -91,6 +93,7 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 
 	case OverflowPolicyDropNewest:
 		atomic.AddInt64(&b.dropped, 1)
+		clientreport.RecordOne(clientreport.ReasonBufferOverflow, b.category)
 		if b.onDropped != nil {
 			b.onDropped(item, "buffer_full_drop_newest")
 		}
@@ -98,6 +101,7 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 
 	default:
 		atomic.AddInt64(&b.dropped, 1)
+		clientreport.RecordOne(clientreport.ReasonBufferOverflow, b.category)
 		if b.onDropped != nil {
 			b.onDropped(item, "unknown_overflow_policy")
 		}

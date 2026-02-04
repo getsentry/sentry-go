@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/clientreport"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
@@ -209,8 +210,16 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 		items = buffer.PollIfReady()
 	}
 
-	// drop the current batch if rate-limited or if transport is full
-	if len(items) == 0 || s.isRateLimited(category) || !s.transport.HasCapacity() {
+	if len(items) == 0 {
+		return
+	}
+
+	if s.isRateLimited(category) {
+		clientreport.Record(clientreport.ReasonRateLimitBackoff, category, int64(len(items)))
+		return
+	}
+	if !s.transport.HasCapacity() {
+		clientreport.Record(clientreport.ReasonQueueOverflow, category, int64(len(items)))
 		return
 	}
 
