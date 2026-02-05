@@ -38,7 +38,7 @@ func (a *aggregator) IsEnabled() bool {
 
 // RecordOutcome records a discarded event outcome.
 func (a *aggregator) RecordOutcome(reason DiscardReason, category ratelimit.Category, quantity int64) {
-	if !a.enabled.Load() || quantity <= 0 {
+	if !a.IsEnabled() || quantity <= 0 {
 		return
 	}
 

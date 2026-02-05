@@ -408,6 +408,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		client.batchMeter.Start()
 	}
 
+	clientreport.SetEnabled(options.EnableClientReports)
 	client.setupIntegrations()
 
 	return &client, nil

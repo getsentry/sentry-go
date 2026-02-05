@@ -19,17 +19,22 @@ func global() *aggregator {
 	return globalAggregator
 }
 
-// Record is a convenience function for recording an outcome to the global aggregator.
+// SetEnabled enables or disables client report recording.
+func SetEnabled(b bool) {
+	global().enabled.Store(b)
+}
+
+// Record allows recording an outcome to the global aggregator.
 func Record(reason DiscardReason, category ratelimit.Category, quantity int64) {
 	global().RecordOutcome(reason, category, quantity)
 }
 
-// RecordOne is a convenience function for recording a single outcome to the global aggregator.
+// RecordOne allows recording a single outcome to the global aggregator.
 func RecordOne(reason DiscardReason, category ratelimit.Category) {
 	global().RecordOutcome(reason, category, 1)
 }
 
-// TakeReport returns a client report for sending.
+// TakeReport returns the aggregated client report outcomes.
 func TakeReport() *ClientReport {
 	return global().TakeReport()
 }
