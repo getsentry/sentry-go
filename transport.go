@@ -571,21 +571,25 @@ func (t *HTTPTransport) worker() {
 					if err := encodeEnvelopeHeader(enc, &envelopeHeader{
 						SentAt: time.Now(),
 						Dsn:    t.dsn.String(),
+						Sdk: map[string]string{
+							"name":    sdkIdentifier,
+							"version": SDKVersion,
+						},
 					}); err != nil {
-						break loop
+						continue
 					}
 					if err := encodeClientReport(enc, r); err != nil {
-						break loop
+						continue
 					}
 					req, err := getRequestFromEnvelope(context.Background(), t.dsn, &buf, sdkIdentifier, SDKVersion)
 					if err != nil {
-						debuglog.Printf("There was an issue when creating the request: %e", err)
-						break loop
+						debuglog.Printf("There was an issue when creating the request: %v", err)
+						continue
 					}
 					response, err := t.client.Do(req)
 					if err != nil {
-						debuglog.Printf("There was an issue with sending an event: %e", err)
-						break loop
+						debuglog.Printf("There was an issue with sending an event: %v", err)
+						continue
 					}
 
 					// Drain body up to a limit and close it, allowing the
@@ -603,7 +607,7 @@ func (t *HTTPTransport) worker() {
 
 				response, err := t.client.Do(item.request)
 				if err != nil {
-					debuglog.Printf("There was an issue with sending an event: %e", err)
+					debuglog.Printf("There was an issue with sending an event: %v", err)
 					continue
 				}
 				util.HandleHTTPResponse(response, item.eventIdentifier)
