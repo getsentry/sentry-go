@@ -249,8 +249,8 @@ type ClientOptions struct {
 	EnableLogs bool
 	// DisableMetrics controls when metrics should be emitted.
 	DisableMetrics bool
-	// EnableClientReports controls when client reports should be emitted.
-	EnableClientReports bool
+	// SendClientReports controls when client reports should be emitted.
+	SendClientReports bool
 	// TraceIgnoreStatusCodes is a list of HTTP status codes that should not be traced.
 	// Each element can be either:
 	// - A single-element slice [code] for a specific status code
@@ -408,7 +408,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		client.batchMeter.Start()
 	}
 
-	clientreport.SetEnabled(options.EnableClientReports)
+	clientreport.SetEnabled(options.SendClientReports)
 	client.setupIntegrations()
 
 	return &client, nil
