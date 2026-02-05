@@ -10,7 +10,7 @@ func AttachToEnvelope(envelope *protocol.Envelope) {
 	r := TakeReport()
 	if r != nil {
 		rItem, err := r.ToEnvelopeItem()
-		if err != nil {
+		if err == nil {
 			envelope.AddItem(rItem)
 		} else {
 			debuglog.Printf("failed to serialize client report: %v, with err: %e", r, err)
