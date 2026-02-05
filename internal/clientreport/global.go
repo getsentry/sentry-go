@@ -28,3 +28,8 @@ func Record(reason DiscardReason, category ratelimit.Category, quantity int64) {
 func RecordOne(reason DiscardReason, category ratelimit.Category) {
 	Global().RecordOutcome(reason, category, 1)
 }
+
+// TakeReport returns a client report for sending.
+func TakeReport() *ClientReport {
+	return Global().TakeReport()
+}

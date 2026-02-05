@@ -11,6 +11,10 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
+const (
+	defaultClientReportsTick = time.Second * 30
+)
+
 // Scheduler implements a weighted round-robin scheduler for processing buffered events.
 type Scheduler struct {
 	buffers   map[ratelimit.Category]Buffer[protocol.TelemetryItem]
@@ -142,10 +146,30 @@ func (s *Scheduler) run() {
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 
+		clientReportsTicker := time.NewTicker(defaultClientReportsTick)
 		for {
 			select {
 			case <-ticker.C:
 				s.cond.Broadcast()
+			case <-clientReportsTicker.C:
+				report := clientreport.TakeReport()
+				if report != nil {
+					header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Sdk: s.sdkInfo}
+					if s.dsn != nil {
+						header.Dsn = s.dsn.String()
+					}
+					envelope := protocol.NewEnvelope(header)
+					item, err := report.ToEnvelopeItem()
+					if err != nil {
+						debuglog.Printf("error sending client report: %v", err)
+						continue
+					}
+					envelope.AddItem(item)
+					if err := s.transport.SendEnvelope(envelope); err != nil {
+						debuglog.Printf("error sending envelope: %v", err)
+						continue
+					}
+				}
 			case <-s.ctx.Done():
 				return
 			}
@@ -237,6 +261,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 			return
 		}
 		envelope.AddItem(item)
+		clientreport.AttachToEnvelope(envelope)
 		if err := s.transport.SendEnvelope(envelope); err != nil {
 			debuglog.Printf("error sending envelope: %v", err)
 		}
@@ -254,6 +279,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 			return
 		}
 		envelope.AddItem(item)
+		clientreport.AttachToEnvelope(envelope)
 		if err := s.transport.SendEnvelope(envelope); err != nil {
 			debuglog.Printf("error sending envelope: %v", err)
 		}
@@ -292,6 +318,7 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeItemConvertible) {
 		return
 	}
 	envelope.AddItem(envItem)
+	clientreport.AttachToEnvelope(envelope)
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)
 	}

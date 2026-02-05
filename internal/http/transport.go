@@ -206,6 +206,8 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 		return ErrEmptyEnvelope
 	}
 
+	// the sync transport needs to attach client reports when available
+	clientreport.AttachToEnvelope(envelope)
 	category := categoryFromEnvelope(envelope)
 	if t.disabled(category) {
 		clientreport.RecordOne(clientreport.ReasonRateLimitBackoff, category)

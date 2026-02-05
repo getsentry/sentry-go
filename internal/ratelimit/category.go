@@ -21,6 +21,7 @@ const (
 	CategoryError       Category = "error"
 	CategoryTransaction Category = "transaction"
 	CategoryLog         Category = "log_item"
+	CategoryLogByte     Category = "log_byte"
 	CategoryMonitor     Category = "monitor"
 	CategoryTraceMetric Category = "trace_metric"
 )
@@ -47,6 +48,8 @@ func (c Category) String() string {
 		return "CategoryTransaction"
 	case CategoryLog:
 		return "CategoryLog"
+	case CategoryLogByte:
+		return "CategoryLogByte"
 	case CategoryMonitor:
 		return "CategoryMonitor"
 	case CategoryTraceMetric:

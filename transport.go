@@ -22,8 +22,9 @@ import (
 )
 
 const (
-	defaultBufferSize = 1000
-	defaultTimeout    = time.Second * 30
+	defaultBufferSize        = 1000
+	defaultTimeout           = time.Second * 30
+	defaultClientReportsTick = time.Second * 30
 )
 
 // Transport is used by the Client to deliver events to remote server.
@@ -125,6 +126,19 @@ func encodeAttachment(enc *json.Encoder, b io.Writer, attachment *Attachment) er
 	return nil
 }
 
+func encodeClientReport(enc *json.Encoder, cr *clientreport.ClientReport) error {
+	payload, err := json.Marshal(cr)
+	if err != nil {
+		return err
+	}
+	err = encodeEnvelopeItem(enc, string(protocol.EnvelopeItemTypeClientReport), payload)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func encodeEnvelopeItem(enc *json.Encoder, itemType string, body json.RawMessage) error {
 	// Item header
 	err := enc.Encode(struct {
@@ -175,6 +189,19 @@ func encodeEnvelopeMetrics(enc *json.Encoder, count int, body json.RawMessage) e
 	return err
 }
 
+// envelopeHeader represents the header of a Sentry envelope.
+type envelopeHeader struct {
+	EventID EventID           `json:"event_id,omitempty"`
+	SentAt  time.Time         `json:"sent_at"`
+	Dsn     string            `json:"dsn,omitempty"`
+	Sdk     map[string]string `json:"sdk,omitempty"`
+	Trace   map[string]string `json:"trace,omitempty"`
+}
+
+func encodeEnvelopeHeader(enc *json.Encoder, header *envelopeHeader) error {
+	return enc.Encode(header)
+}
+
 func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -188,13 +215,7 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	}
 
 	// Envelope header
-	err := enc.Encode(struct {
-		EventID EventID           `json:"event_id"`
-		SentAt  time.Time         `json:"sent_at"`
-		Dsn     string            `json:"dsn"`
-		Sdk     map[string]string `json:"sdk"`
-		Trace   map[string]string `json:"trace,omitempty"`
-	}{
+	err := encodeEnvelopeHeader(enc, &envelopeHeader{
 		EventID: event.EventID,
 		SentAt:  sentAt,
 		Trace:   trace,
@@ -230,29 +251,52 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		}
 	}
 
+	// attach client report if exists
+	r := clientreport.TakeReport()
+	if r != nil {
+		if err := encodeClientReport(enc, r); err != nil {
+			return nil, err
+		}
+	}
 	return &b, nil
 }
 
-func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (r *http.Request, err error) {
-	defer func() {
-		if r != nil {
-			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", event.Sdk.Name, event.Sdk.Version))
-			r.Header.Set("Content-Type", "application/x-sentry-envelope")
+// getRequestFromEnvelope creates an HTTP request from a pre-built envelope.
+// sdkName and sdkVersion are used for User-Agent and authentication headers.
+func getRequestFromEnvelope(ctx context.Context, dsn *Dsn, envelope *bytes.Buffer, sdkName, sdkVersion string) (*http.Request, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-			auth := fmt.Sprintf("Sentry sentry_version=%s, "+
-				"sentry_client=%s/%s, sentry_key=%s", apiVersion, event.Sdk.Name, event.Sdk.Version, dsn.GetPublicKey())
+	request, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		dsn.GetAPIURL().String(),
+		envelope,
+	)
+	if err != nil {
+		return nil, err
+	}
 
-			// The key sentry_secret is effectively deprecated and no longer needs to be set.
-			// However, since it was required in older self-hosted versions,
-			// it should still passed through to Sentry if set.
-			if dsn.GetSecretKey() != "" {
-				auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.GetSecretKey())
-			}
+	request.Header.Set("User-Agent", fmt.Sprintf("%s/%s", sdkName, sdkVersion))
+	request.Header.Set("Content-Type", "application/x-sentry-envelope")
 
-			r.Header.Set("X-Sentry-Auth", auth)
-		}
-	}()
+	auth := fmt.Sprintf("Sentry sentry_version=%s, "+
+		"sentry_client=%s/%s, sentry_key=%s", apiVersion, sdkName, sdkVersion, dsn.GetPublicKey())
 
+	// The key sentry_secret is effectively deprecated and no longer needs to be set.
+	// However, since it was required in older self-hosted versions,
+	// it should still be passed through to Sentry if set.
+	if dsn.GetSecretKey() != "" {
+		auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.GetSecretKey())
+	}
+
+	request.Header.Set("X-Sentry-Auth", auth)
+
+	return request, nil
+}
+
+func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (*http.Request, error) {
 	body := getRequestBodyFromEvent(event)
 	if body == nil {
 		return nil, errors.New("event could not be marshaled")
@@ -263,16 +307,7 @@ func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (r *http.R
 		return nil, err
 	}
 
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	return http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		dsn.GetAPIURL().String(),
-		envelope,
-	)
+	return getRequestFromEnvelope(ctx, dsn, envelope, event.Sdk.Name, event.Sdk.Version)
 }
 
 // ================================
@@ -513,6 +548,7 @@ func (t *HTTPTransport) Close() {
 }
 
 func (t *HTTPTransport) worker() {
+	crTicker := time.NewTicker(defaultClientReportsTick)
 	for b := range t.buffer {
 		// Signal that processing of the current batch has started.
 		close(b.started)
@@ -527,6 +563,36 @@ func (t *HTTPTransport) worker() {
 			select {
 			case <-t.done:
 				return
+			case <-crTicker.C:
+				r := clientreport.TakeReport()
+				if r != nil {
+					var buf bytes.Buffer
+					enc := json.NewEncoder(&buf)
+					if err := encodeEnvelopeHeader(enc, &envelopeHeader{
+						SentAt: time.Now(),
+						Dsn:    t.dsn.String(),
+					}); err != nil {
+						break loop
+					}
+					if err := encodeClientReport(enc, r); err != nil {
+						break loop
+					}
+					req, err := getRequestFromEnvelope(context.Background(), t.dsn, &buf, sdkIdentifier, SDKVersion)
+					if err != nil {
+						debuglog.Printf("There was an issue when creating the request: %e", err)
+						break loop
+					}
+					response, err := t.client.Do(req)
+					if err != nil {
+						debuglog.Printf("There was an issue with sending an event: %e", err)
+						break loop
+					}
+
+					// Drain body up to a limit and close it, allowing the
+					// transport to reuse TCP connections.
+					_, _ = io.CopyN(io.Discard, response.Body, util.MaxDrainResponseBytes)
+					response.Body.Close()
+				}
 			case item, open := <-b.items:
 				if !open {
 					break loop
@@ -537,7 +603,7 @@ func (t *HTTPTransport) worker() {
 
 				response, err := t.client.Do(item.request)
 				if err != nil {
-					debuglog.Printf("There was an issue with sending an event: %v", err)
+					debuglog.Printf("There was an issue with sending an event: %e", err)
 					continue
 				}
 				util.HandleHTTPResponse(response, item.eventIdentifier)
