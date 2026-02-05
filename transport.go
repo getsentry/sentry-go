@@ -746,7 +746,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		return
 	}
 	success := util.HandleHTTPResponse(response, identifier)
-	if !success && response.StatusCode != http.StatusTooManyRequests {
+	if !success && response.StatusCode != http.StatusTooManyRequests && response.StatusCode != http.StatusRequestEntityTooLarge {
 		clientreport.RecordOne(clientreport.ReasonSendError, category)
 	}
 
