@@ -69,6 +69,9 @@ type EnvelopeItemHeader struct {
 
 	// ItemCount is the number of items in a batch (used for logs)
 	ItemCount *int `json:"item_count,omitempty"`
+
+	// SpanCount is the number of spans in a transaction (used for client reports)
+	SpanCount int `json:"-"`
 }
 
 // EnvelopeItem represents a single item or batch within an envelope.
@@ -183,6 +186,19 @@ func NewEnvelopeItem(itemType EnvelopeItemType, payload []byte) *EnvelopeItem {
 		Header: &EnvelopeItemHeader{
 			Type:   itemType,
 			Length: &length,
+		},
+		Payload: payload,
+	}
+}
+
+// NewTransactionItem creates a new envelope item including the span count of the transaction.
+func NewTransactionItem(spanCount int, payload []byte) *EnvelopeItem {
+	length := len(payload)
+	return &EnvelopeItem{
+		Header: &EnvelopeItemHeader{
+			Type:      EnvelopeItemTypeTransaction,
+			Length:    &length,
+			SpanCount: spanCount,
 		},
 		Payload: payload,
 	}

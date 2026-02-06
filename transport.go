@@ -189,6 +189,12 @@ func encodeEnvelopeMetrics(enc *json.Encoder, count int, body json.RawMessage) e
 	return err
 }
 
+func recordSpanOutcome(reason clientreport.DiscardReason, event *Event) {
+	if event.Type == transactionType {
+		clientreport.Record(reason, ratelimit.CategorySpan, int64(event.GetSpanCount()))
+	}
+}
+
 // envelopeHeader represents the header of a Sentry envelope.
 type envelopeHeader struct {
 	EventID EventID           `json:"event_id,omitempty"`
@@ -423,12 +429,14 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 
 	if t.disabled(category) {
 		clientreport.RecordOne(clientreport.ReasonRateLimitBackoff, category)
+		recordSpanOutcome(clientreport.ReasonRateLimitBackoff, event)
 		return
 	}
 
 	request, err := getRequestFromEvent(ctx, event, t.dsn)
 	if err != nil {
 		clientreport.RecordOne(clientreport.ReasonInternalError, category)
+		recordSpanOutcome(clientreport.ReasonInternalError, event)
 		return
 	}
 
@@ -462,6 +470,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	default:
 		debuglog.Println("Event dropped due to transport buffer being full.")
 		clientreport.RecordOne(clientreport.ReasonQueueOverflow, category)
+		recordSpanOutcome(clientreport.ReasonQueueOverflow, event)
 	}
 
 	t.buffer <- b
@@ -722,12 +731,14 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	category := event.toCategory()
 	if t.disabled(category) {
 		clientreport.RecordOne(clientreport.ReasonRateLimitBackoff, category)
+		recordSpanOutcome(clientreport.ReasonRateLimitBackoff, event)
 		return
 	}
 
 	request, err := getRequestFromEvent(ctx, event, t.dsn)
 	if err != nil {
 		clientreport.RecordOne(clientreport.ReasonInternalError, category)
+		recordSpanOutcome(clientreport.ReasonInternalError, event)
 		return
 	}
 
@@ -743,11 +754,13 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
 		clientreport.RecordOne(clientreport.ReasonNetworkError, category)
+		recordSpanOutcome(clientreport.ReasonNetworkError, event)
 		return
 	}
 	success := util.HandleHTTPResponse(response, identifier)
 	if !success && response.StatusCode != http.StatusTooManyRequests && response.StatusCode != http.StatusRequestEntityTooLarge {
 		clientreport.RecordOne(clientreport.ReasonSendError, category)
+		recordSpanOutcome(clientreport.ReasonSendError, event)
 	}
 
 	t.mu.Lock()

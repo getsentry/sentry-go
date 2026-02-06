@@ -513,7 +513,7 @@ func (e *Event) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	var item *protocol.EnvelopeItem
 	switch e.Type {
 	case transactionType:
-		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeTransaction, eventBody)
+		item = protocol.NewTransactionItem(e.GetSpanCount(), eventBody)
 	case checkInType:
 		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
 	case logEvent.Type:
@@ -551,6 +551,15 @@ func (e *Event) GetDynamicSamplingContext() map[string]string {
 		}
 	}
 	return trace
+}
+
+// GetSpanCount returns the number of spans in the transaction including the transaction itself. It is used for client
+// reports. Returns 0 for non-transaction events.
+func (e *Event) GetSpanCount() int {
+	if e.Type != transactionType {
+		return 0
+	}
+	return len(e.Spans) + 1
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
@@ -755,6 +764,28 @@ type Log struct {
 	Severity   int                  `json:"severity_number,omitempty"`
 	Body       string               `json:"body"`
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
+
+	// approximateSize is the pre-computed approximate size in bytes.
+	approximateSize int
+}
+
+// ApproximateSize returns the pre-computed approximate serialized size in bytes.
+func (l *Log) ApproximateSize() int {
+	return l.approximateSize
+}
+
+// computeLogSize estimates the serialized JSON size of a log entry.
+func computeLogSize(l *Log) int {
+	// Base overhead: timestamp, trace_id, level, severity, JSON structure
+	size := len(l.Body) + 60
+	for k, v := range l.Attributes {
+		// Key + type/value JSON overhead
+		size += len(k) + 20
+		if s, ok := v.Value.(string); ok {
+			size += len(s)
+		}
+	}
+	return size
 }
 
 // GetCategory returns the rate limit category for logs.

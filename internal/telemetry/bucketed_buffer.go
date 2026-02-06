@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/clientreport"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
@@ -138,6 +139,7 @@ func (b *BucketedBuffer[T]) offerToBucket(item T, traceID string) bool {
 }
 
 func (b *BucketedBuffer[T]) handleOverflow(item T, traceID string) bool {
+	clientreport.RecordOne(clientreport.ReasonBufferOverflow, b.category)
 	switch b.overflowPolicy {
 	case OverflowPolicyDropOldest:
 		oldestBucket := b.buckets[b.head]

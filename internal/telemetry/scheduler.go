@@ -239,11 +239,15 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 	}
 
 	if s.isRateLimited(category) {
-		clientreport.Record(clientreport.ReasonRateLimitBackoff, category, int64(len(items)))
+		for _, item := range items {
+			clientreport.RecordItem(clientreport.ReasonQueueOverflow, item)
+		}
 		return
 	}
 	if !s.transport.HasCapacity() {
-		clientreport.Record(clientreport.ReasonQueueOverflow, category, int64(len(items)))
+		for _, item := range items {
+			clientreport.RecordItem(clientreport.ReasonQueueOverflow, item)
+		}
 		return
 	}
 

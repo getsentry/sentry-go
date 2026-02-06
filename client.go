@@ -564,10 +564,12 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 	}
 
 	if client.options.BeforeSendLog != nil {
+		approxSize := log.ApproximateSize()
 		log = client.options.BeforeSendLog(log)
 		if log == nil {
 			debuglog.Println("Log dropped due to BeforeSendLog callback.")
 			clientreport.RecordOne(clientreport.ReasonBeforeSend, ratelimit.CategoryLog)
+			clientreport.Record(clientreport.ReasonBeforeSend, ratelimit.CategoryLogByte, int64(approxSize))
 			return false
 		}
 	}
@@ -582,6 +584,7 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 		if !client.batchLogger.Send(log) {
 			debuglog.Printf("Dropping log [%s]: buffer full", log.Level)
 			clientreport.RecordOne(clientreport.ReasonBufferOverflow, ratelimit.CategoryLog)
+			clientreport.Record(clientreport.ReasonBufferOverflow, ratelimit.CategoryLogByte, int64(log.ApproximateSize()))
 			return false
 		}
 	}
@@ -836,10 +839,17 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	switch event.Type {
 	case transactionType:
 		if client.options.BeforeSendTransaction != nil {
-			if event = client.options.BeforeSendTransaction(event, hint); event == nil {
+			spanCountBefore := event.GetSpanCount()
+			event = client.options.BeforeSendTransaction(event, hint)
+			if event == nil {
 				debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
 				clientreport.RecordOne(clientreport.ReasonBeforeSend, ratelimit.CategoryTransaction)
+				clientreport.Record(clientreport.ReasonBeforeSend, ratelimit.CategorySpan, 1) // count the transaction root itself
 				return nil
+			}
+			// Track spans removed by the callback
+			if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
+				clientreport.Record(clientreport.ReasonBeforeSend, ratelimit.CategorySpan, int64(droppedSpans))
 			}
 		}
 	case checkInType: // not a default case, since we shouldn't apply BeforeSend on check-in events
@@ -919,22 +929,42 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	for _, processor := range client.eventProcessors {
 		id := event.EventID
 		category := event.toCategory()
+		spanCountBefore := event.GetSpanCount()
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
 			clientreport.RecordOne(clientreport.ReasonEventProcessor, category)
+			if category == ratelimit.CategoryTransaction {
+				clientreport.Record(clientreport.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
+			}
 			return nil
+		}
+		// Track spans removed by the processor
+		if category == ratelimit.CategoryTransaction {
+			if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
+				clientreport.Record(clientreport.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
+			}
 		}
 	}
 
 	for _, processor := range globalEventProcessors {
 		id := event.EventID
 		category := event.toCategory()
+		spanCountBefore := event.GetSpanCount()
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
 			clientreport.RecordOne(clientreport.ReasonEventProcessor, category)
+			if category == ratelimit.CategoryTransaction {
+				clientreport.Record(clientreport.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore+1))
+			}
 			return nil
+		}
+		// Track spans removed by the processor
+		if category == ratelimit.CategoryTransaction {
+			if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
+				clientreport.Record(clientreport.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
+			}
 		}
 	}
 
