@@ -79,7 +79,7 @@ func NewMeter(ctx context.Context) Meter {
 
 		return &sentryMeter{
 			ctx:               ctx,
-			client:            client,
+			hub:               hub,
 			attributes:        make(map[string]Attribute),
 			defaultAttributes: defaultAttrs,
 			mu:                sync.RWMutex{},
@@ -92,7 +92,7 @@ func NewMeter(ctx context.Context) Meter {
 
 type sentryMeter struct {
 	ctx               context.Context
-	client            *Client
+	hub               *Hub
 	attributes        map[string]Attribute
 	defaultAttributes map[string]Attribute
 	mu                sync.RWMutex
@@ -104,10 +104,21 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		return
 	}
 
-	scope, traceID, spanID := resolveScopeAndTrace(ctx, m.ctx)
+	hub := hubFromContexts(ctx, m.ctx)
+	if hub == nil {
+		hub = m.hub
+	}
+
+	client := hub.Client()
+	if client == nil {
+		return
+	}
+
+	scope := hub.Scope()
 	if customScope != nil {
 		scope = customScope
 	}
+	traceID, spanID := resolveTrace(scope, ctx, m.ctx)
 
 	// Pre-allocate with capacity hint to avoid map growth reallocations
 	estimatedCap := len(m.defaultAttributes) + len(attributes) + 8 // scope ~3 + call-specific ~5
@@ -140,7 +151,7 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		Attributes: attrs,
 	}
 
-	if m.client.captureMetric(metric, scope) && m.client.options.Debug {
+	if client.captureMetric(metric, scope) && client.options.Debug {
 		debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), unit)
 	}
 }
@@ -153,7 +164,7 @@ func (m *sentryMeter) WithCtx(ctx context.Context) Meter {
 
 	return &sentryMeter{
 		ctx:               ctx,
-		client:            m.client,
+		hub:               m.hub,
 		attributes:        attrsCopy,
 		defaultAttributes: m.defaultAttributes,
 		mu:                sync.RWMutex{},
