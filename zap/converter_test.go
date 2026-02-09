@@ -2,14 +2,15 @@ package sentryzap
 
 import (
 	"errors"
-	"math"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -25,7 +26,6 @@ func TestZapFieldToLogEntry(t *testing.T) {
 		zap.Int32("count32", 32),
 		zap.Int64("negative", -42),
 		zap.Uint32("ucount", 32),
-		zap.Uint64("max_safe", uint64(math.MaxInt64)),
 		zap.Float64("pi", 3.14159),
 		zap.Float32("approx", 2.5),
 		zap.String("message", "hello"),
@@ -35,6 +35,7 @@ func TestZapFieldToLogEntry(t *testing.T) {
 		zap.Error(errors.New("something went wrong")),
 		zap.Stringer("addr", &testStringer{value: "192.168.1.1"}),
 		zap.ByteString("data", []byte("hello bytes")),
+		zap.Binary("binary", []byte{0xde, 0xad, 0xbe, 0xef}),
 		zap.Uintptr("ptr", uintptr(0x1234)),
 	}
 
@@ -49,7 +50,6 @@ func TestZapFieldToLogEntry(t *testing.T) {
 		"count32":  int64(32),
 		"negative": int64(-42),
 		"ucount":   int64(32),
-		"max_safe": int64(math.MaxInt64),
 		"pi":       3.14159,
 		"approx":   2.5,
 		"message":  "hello",
@@ -58,6 +58,7 @@ func TestZapFieldToLogEntry(t *testing.T) {
 		"error":    "something went wrong",
 		"addr":     "192.168.1.1",
 		"data":     "hello bytes",
+		"binary":   "3q2+7w==",
 		"ptr":      "0x1234",
 	}
 
@@ -168,13 +169,26 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("uint64 overflow", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
-		// Test uint64 value that exceeds MaxInt64
-		zapFieldToLogEntry(entry, zap.Uint64("big", uint64(math.MaxUint64)))
-		result, ok := entry.Attributes["big"].(string)
-		assert.True(t, ok)
-		// Should be formatted as a string since it can't fit in int64
-		assert.NotEmpty(t, result)
+		ctx, mockTransport := newMockTransport()
+		core := NewSentryCore(ctx, Option{
+			Level: []zapcore.Level{zapcore.InfoLevel},
+		})
+		logger := zap.New(core)
+
+		maxValue := uint64(1<<64 - 1)
+		logger.Info("test uint64 overflow",
+			zap.Uint64("max_uint64", maxValue),
+		)
+		sentry.Flush(testutils.FlushTimeout())
+
+		events := mockTransport.Events()
+		require.Equal(t, 1, len(events))
+		require.NotEmpty(t, events[0].Logs)
+
+		log := events[0].Logs[0]
+		maxUint64Attr, found := log.Attributes["max_uint64"]
+		assert.True(t, found)
+		assert.Equal(t, maxValue, maxUint64Attr.Value)
 	})
 }
 

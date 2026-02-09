@@ -89,6 +89,13 @@ func isSafeToCall(v interface{}) bool {
 	}
 }
 
+// uint64LogEntry is used to pass uint64 values without conversion.
+// The concrete sentry.logEntry type satisfies this interface,
+// but it is intentionally not part of the public sentry.LogEntry API.
+type uint64LogEntry interface {
+	Uint64(key string, value uint64) sentry.LogEntry
+}
+
 // zapFieldToLogEntry converts a zap Field to a sentry LogEntry attribute.
 //
 //nolint:gocyclo
@@ -102,10 +109,10 @@ func zapFieldToLogEntry(entry sentry.LogEntry, field zapcore.Field) sentry.LogEn
 		zapcore.Uint32Type, zapcore.Uint16Type, zapcore.Uint8Type:
 		return entry.Int64(key, field.Integer)
 	case zapcore.Uint64Type:
-		if uint64(field.Integer) <= math.MaxInt64 {
-			return entry.Int64(key, field.Integer)
+		if u, ok := entry.(uint64LogEntry); ok {
+			return u.Uint64(key, uint64(field.Integer))
 		}
-		return entry.String(key, strconv.FormatUint(uint64(field.Integer), 10))
+		return entry.Int64(key, field.Integer)
 	case zapcore.UintptrType:
 		return entry.String(key, fmt.Sprintf("0x%x", field.Integer))
 	case zapcore.Float64Type:
