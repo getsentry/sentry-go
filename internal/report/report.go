@@ -1,4 +1,4 @@
-package clientreport
+package report
 
 import (
 	"encoding/json"

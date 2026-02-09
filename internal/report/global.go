@@ -1,4 +1,4 @@
-package clientreport
+package report
 
 import (
 	"sync"
@@ -7,14 +7,14 @@ import (
 )
 
 var (
-	globalAggregator     *aggregator
+	globalAggregator     *Aggregator
 	globalAggregatorOnce sync.Once
 )
 
-// global returns the global client report aggregator singleton.
-func global() *aggregator {
+// global returns the global client report Aggregator singleton.
+func global() *Aggregator {
 	globalAggregatorOnce.Do(func() {
-		globalAggregator = newAggregator()
+		globalAggregator = NewAggregator()
 	})
 	return globalAggregator
 }
@@ -24,12 +24,12 @@ func SetEnabled(b bool) {
 	global().enabled.Store(b)
 }
 
-// Record allows recording an outcome to the global aggregator.
+// Record allows recording an outcome to the global Aggregator.
 func Record(reason DiscardReason, category ratelimit.Category, quantity int64) {
 	global().RecordOutcome(reason, category, quantity)
 }
 
-// RecordOne allows recording a single outcome to the global aggregator.
+// RecordOne allows recording a single outcome to the global Aggregator.
 func RecordOne(reason DiscardReason, category ratelimit.Category) {
 	global().RecordOutcome(reason, category, 1)
 }

@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getsentry/sentry-go/internal/clientreport"
 	"github.com/getsentry/sentry-go/internal/debug"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	httpInternal "github.com/getsentry/sentry-go/internal/http"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	clientreport "github.com/getsentry/sentry-go/internal/report"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 )
 

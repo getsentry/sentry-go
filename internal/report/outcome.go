@@ -1,4 +1,4 @@
-package clientreport
+package report
 
 import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"

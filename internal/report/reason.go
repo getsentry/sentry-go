@@ -1,4 +1,4 @@
-package clientreport
+package report
 
 // DiscardReason represents why an item was discarded.
 type DiscardReason string

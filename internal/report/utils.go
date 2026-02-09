@@ -1,4 +1,4 @@
-package clientreport
+package report
 
 import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
@@ -62,7 +62,7 @@ func RecordItem(reason DiscardReason, item protocol.TelemetryItem) {
 	}
 }
 
-// AttachToEnvelope adds a client report to the envelope if the aggregator has outcomes available.
+// AttachToEnvelope adds a client report to the envelope if the Aggregator has outcomes available.
 func AttachToEnvelope(envelope *protocol.Envelope) {
 	r := TakeReport()
 	if r != nil {

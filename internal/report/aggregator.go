@@ -1,4 +1,4 @@
-package clientreport
+package report
 
 import (
 	"sync"
@@ -8,18 +8,18 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
-// aggregator collects discarded event outcomes for client reports.
+// Aggregator collects discarded event outcomes for client reports.
 // Uses atomic operations to be safe for concurrent use.
-type aggregator struct {
+type Aggregator struct {
 	mu       sync.Mutex
 	outcomes map[OutcomeKey]*atomic.Int64
 
 	enabled atomic.Bool
 }
 
-// newAggregator creates a new client report aggregator.
-func newAggregator() *aggregator {
-	a := &aggregator{
+// NewAggregator creates a new client report Aggregator.
+func NewAggregator() *Aggregator {
+	a := &Aggregator{
 		outcomes: make(map[OutcomeKey]*atomic.Int64),
 	}
 	a.enabled.Store(true)
@@ -27,17 +27,17 @@ func newAggregator() *aggregator {
 }
 
 // SetEnabled enables or disables outcome recording.
-func (a *aggregator) SetEnabled(enabled bool) {
+func (a *Aggregator) SetEnabled(enabled bool) {
 	a.enabled.Store(enabled)
 }
 
 // IsEnabled returns whether outcome recording is enabled.
-func (a *aggregator) IsEnabled() bool {
+func (a *Aggregator) IsEnabled() bool {
 	return a.enabled.Load()
 }
 
 // RecordOutcome records a discarded event outcome.
-func (a *aggregator) RecordOutcome(reason DiscardReason, category ratelimit.Category, quantity int64) {
+func (a *Aggregator) RecordOutcome(reason DiscardReason, category ratelimit.Category, quantity int64) {
 	if !a.IsEnabled() || quantity <= 0 {
 		return
 	}
@@ -56,7 +56,7 @@ func (a *aggregator) RecordOutcome(reason DiscardReason, category ratelimit.Cate
 }
 
 // TakeReport atomically takes all accumulated outcomes and returns a ClientReport.
-func (a *aggregator) TakeReport() *ClientReport {
+func (a *Aggregator) TakeReport() *ClientReport {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 

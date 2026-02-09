@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/getsentry/sentry-go/internal/clientreport"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	clientreport "github.com/getsentry/sentry-go/internal/report"
 )
 
 const defaultCapacity = 100
