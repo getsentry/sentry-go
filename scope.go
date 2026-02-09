@@ -8,7 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/clientreport"
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
 // Scope holds contextual data for the current scope.
@@ -473,9 +475,15 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 
 	for _, processor := range scope.eventProcessors {
 		id := event.EventID
+		category := event.toCategory()
+		spanCountBefore := event.GetSpanCount()
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
+			clientreport.RecordOne(clientreport.ReasonEventProcessor, category)
+			if category == ratelimit.CategoryTransaction {
+				clientreport.Record(clientreport.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
+			}
 			return nil
 		}
 	}
