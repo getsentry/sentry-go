@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	clientreport "github.com/getsentry/sentry-go/internal/report"
+	"github.com/getsentry/sentry-go/internal/report"
+	"github.com/getsentry/sentry-go/internal/sdk"
 )
 
 const (
@@ -40,6 +41,7 @@ type BucketedBuffer[T any] struct {
 	category       ratelimit.Category
 	priority       ratelimit.Priority
 	overflowPolicy OverflowPolicy
+	reporter       *report.Aggregator
 	batchSize      int
 	timeout        time.Duration
 	lastFlushTime  time.Time
@@ -55,6 +57,7 @@ func NewBucketedBuffer[T any](
 	overflowPolicy OverflowPolicy,
 	batchSize int,
 	timeout time.Duration,
+	opts ...sdk.Option,
 ) *BucketedBuffer[T] {
 	if capacity <= 0 {
 		capacity = defaultBucketedCapacity
@@ -71,6 +74,7 @@ func NewBucketedBuffer[T any](
 		bucketCapacity = 10
 	}
 
+	o := sdk.Apply(opts)
 	return &BucketedBuffer[T]{
 		buckets:        make([]*Bucket[T], bucketCapacity),
 		traceIndex:     make(map[string]int),
@@ -79,6 +83,7 @@ func NewBucketedBuffer[T any](
 		category:       category,
 		priority:       category.GetPriority(),
 		overflowPolicy: overflowPolicy,
+		reporter:       o.Reporter,
 		batchSize:      batchSize,
 		timeout:        timeout,
 		lastFlushTime:  time.Now(),
@@ -139,7 +144,7 @@ func (b *BucketedBuffer[T]) offerToBucket(item T, traceID string) bool {
 }
 
 func (b *BucketedBuffer[T]) handleOverflow(item T, traceID string) bool {
-	clientreport.RecordOne(clientreport.ReasonBufferOverflow, b.category)
+	b.reporter.RecordOne(report.ReasonBufferOverflow, b.category)
 	switch b.overflowPolicy {
 	case OverflowPolicyDropOldest:
 		oldestBucket := b.buckets[b.head]

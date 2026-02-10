@@ -17,7 +17,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	clientreport "github.com/getsentry/sentry-go/internal/report"
+	"github.com/getsentry/sentry-go/internal/report"
 	"github.com/getsentry/sentry-go/internal/util"
 )
 
@@ -148,6 +148,7 @@ type SyncTransport struct {
 	dsn       *protocol.Dsn
 	client    *http.Client
 	transport http.RoundTripper
+	reporter  *report.Aggregator
 
 	mu     sync.Mutex
 	limits ratelimit.Map
@@ -207,17 +208,17 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 	}
 
 	// the sync transport needs to attach client reports when available
-	clientreport.AttachToEnvelope(envelope)
+	t.reporter.AttachToEnvelope(envelope)
 	category := categoryFromEnvelope(envelope)
 	if t.disabled(category) {
-		clientreport.RecordForEnvelope(clientreport.ReasonRateLimitBackoff, envelope)
+		t.reporter.RecordForEnvelope(report.ReasonRateLimitBackoff, envelope)
 		return nil
 	}
 
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
 	if err != nil {
 		debuglog.Printf("There was an issue creating the request: %v", err)
-		clientreport.RecordForEnvelope(clientreport.ReasonInternalError, envelope)
+		t.reporter.RecordForEnvelope(report.ReasonInternalError, envelope)
 		return err
 	}
 	identifier := util.EnvelopeIdentifier(envelope)
@@ -231,7 +232,7 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 	response, err := t.client.Do(request)
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
-		clientreport.RecordForEnvelope(clientreport.ReasonNetworkError, envelope)
+		t.reporter.RecordForEnvelope(report.ReasonNetworkError, envelope)
 		return err
 	}
 	util.HandleHTTPResponse(response, identifier)
@@ -274,6 +275,7 @@ type AsyncTransport struct {
 	dsn       *protocol.Dsn
 	client    *http.Client
 	transport http.RoundTripper
+	reporter  *report.Aggregator
 
 	queue chan *protocol.Envelope
 
@@ -369,7 +371,7 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 
 	category := categoryFromEnvelope(envelope)
 	if t.isRateLimited(category) {
-		clientreport.RecordForEnvelope(clientreport.ReasonRateLimitBackoff, envelope)
+		t.reporter.RecordForEnvelope(report.ReasonRateLimitBackoff, envelope)
 		return nil
 	}
 
@@ -385,7 +387,7 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 		return nil
 	default:
 		atomic.AddInt64(&t.droppedCount, 1)
-		clientreport.RecordForEnvelope(clientreport.ReasonQueueOverflow, envelope)
+		t.reporter.RecordForEnvelope(report.ReasonQueueOverflow, envelope)
 		return ErrTransportQueueFull
 	}
 }
@@ -474,7 +476,7 @@ func (t *AsyncTransport) processEnvelope(envelope *protocol.Envelope) {
 func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
 	category := categoryFromEnvelope(envelope)
 	if t.isRateLimited(category) {
-		clientreport.RecordForEnvelope(clientreport.ReasonRateLimitBackoff, envelope)
+		t.reporter.RecordForEnvelope(report.ReasonRateLimitBackoff, envelope)
 		return false
 	}
 
@@ -484,14 +486,14 @@ func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
 	if err != nil {
 		debuglog.Printf("Failed to create request from envelope: %v", err)
-		clientreport.RecordForEnvelope(clientreport.ReasonInternalError, envelope)
+		t.reporter.RecordForEnvelope(report.ReasonInternalError, envelope)
 		return false
 	}
 
 	response, err := t.client.Do(request)
 	if err != nil {
 		debuglog.Printf("HTTP request failed: %v", err)
-		clientreport.RecordForEnvelope(clientreport.ReasonNetworkError, envelope)
+		t.reporter.RecordForEnvelope(report.ReasonNetworkError, envelope)
 		return false
 	}
 	defer response.Body.Close()
@@ -499,7 +501,7 @@ func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
 	identifier := util.EnvelopeIdentifier(envelope)
 	success := util.HandleHTTPResponse(response, identifier)
 	if !success && response.StatusCode != http.StatusTooManyRequests && response.StatusCode != http.StatusRequestEntityTooLarge {
-		clientreport.RecordForEnvelope(clientreport.ReasonSendError, envelope)
+		t.reporter.RecordForEnvelope(report.ReasonSendError, envelope)
 	}
 
 	t.mu.Lock()

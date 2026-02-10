@@ -162,7 +162,7 @@ func TestEnvelopeFromErrorBody(t *testing.T) {
 
 	body := json.RawMessage(`{"type":"event","fields":"omitted"}`)
 
-	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestEnvelopeFromTransactionBody(t *testing.T) {
 
 	body := json.RawMessage(`{"type":"transaction","fields":"omitted"}`)
 
-	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func TestEnvelopeFromEventWithAttachments(t *testing.T) {
 
 	body := json.RawMessage(`{"type":"event","fields":"omitted"}`)
 
-	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestEnvelopeFromCheckInEvent(t *testing.T) {
 	sentAt := time.Unix(0, 0).UTC()
 
 	body := getRequestBodyFromEvent(event)
-	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestEnvelopeFromLogEvent(t *testing.T) {
 	sentAt := time.Unix(0, 0).UTC()
 
 	body := getRequestBodyFromEvent(event)
-	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func TestGetRequestFromEvent(t *testing.T) {
 		}
 
 		t.Run(test.testName, func(t *testing.T) {
-			req, err := getRequestFromEvent(context.TODO(), test.event, dsn)
+			req, err := getRequestFromEvent(context.TODO(), test.event, dsn, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

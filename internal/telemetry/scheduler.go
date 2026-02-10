@@ -8,7 +8,8 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	clientreport "github.com/getsentry/sentry-go/internal/report"
+	"github.com/getsentry/sentry-go/internal/report"
+	"github.com/getsentry/sentry-go/internal/sdk"
 )
 
 const (
@@ -21,6 +22,7 @@ type Scheduler struct {
 	transport protocol.TelemetryTransport
 	dsn       *protocol.Dsn
 	sdkInfo   *protocol.SdkInfo
+	reporter  *report.Aggregator
 
 	currentCycle []ratelimit.Priority
 	cyclePos     int
@@ -40,7 +42,9 @@ func NewScheduler(
 	transport protocol.TelemetryTransport,
 	dsn *protocol.Dsn,
 	sdkInfo *protocol.SdkInfo,
+	opts ...sdk.Option,
 ) *Scheduler {
+	o := sdk.Apply(opts)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	priorityWeights := map[ratelimit.Priority]int{
@@ -73,6 +77,7 @@ func NewScheduler(
 		transport:    transport,
 		dsn:          dsn,
 		sdkInfo:      sdkInfo,
+		reporter:     o.Reporter,
 		currentCycle: currentCycle,
 		ctx:          ctx,
 		cancel:       cancel,
@@ -152,7 +157,7 @@ func (s *Scheduler) run() {
 			case <-ticker.C:
 				s.cond.Broadcast()
 			case <-clientReportsTicker.C:
-				report := clientreport.TakeReport()
+				report := s.reporter.TakeReport()
 				if report != nil {
 					header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Sdk: s.sdkInfo}
 					if s.dsn != nil {
@@ -240,13 +245,13 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 
 	if s.isRateLimited(category) {
 		for _, item := range items {
-			clientreport.RecordItem(clientreport.ReasonQueueOverflow, item)
+			s.reporter.RecordItem(report.ReasonQueueOverflow, item)
 		}
 		return
 	}
 	if !s.transport.HasCapacity() {
 		for _, item := range items {
-			clientreport.RecordItem(clientreport.ReasonQueueOverflow, item)
+			s.reporter.RecordItem(report.ReasonQueueOverflow, item)
 		}
 		return
 	}
@@ -265,7 +270,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 			return
 		}
 		envelope.AddItem(item)
-		clientreport.AttachToEnvelope(envelope)
+		s.reporter.AttachToEnvelope(envelope)
 		if err := s.transport.SendEnvelope(envelope); err != nil {
 			debuglog.Printf("error sending envelope: %v", err)
 		}
@@ -283,7 +288,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 			return
 		}
 		envelope.AddItem(item)
-		clientreport.AttachToEnvelope(envelope)
+		s.reporter.AttachToEnvelope(envelope)
 		if err := s.transport.SendEnvelope(envelope); err != nil {
 			debuglog.Printf("error sending envelope: %v", err)
 		}
@@ -322,7 +327,7 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeItemConvertible) {
 		return
 	}
 	envelope.AddItem(envItem)
-	clientreport.AttachToEnvelope(envelope)
+	s.reporter.AttachToEnvelope(envelope)
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)
 	}
