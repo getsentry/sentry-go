@@ -17,6 +17,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1053,4 +1054,186 @@ func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
 	if _, ok := client.Transport.(*noopTransport); !ok {
 		t.Fatalf("expected noopTransport, got %T", client.Transport)
 	}
+}
+
+type multiClientEnv struct {
+	client1, client2       *Client
+	transport1, transport2 *MockTransport
+	hub1, hub2             *Hub
+	ctx1, ctx2             context.Context
+	traceID1, traceID2     TraceID
+}
+
+func setupMultiClientEnv(t *testing.T) *multiClientEnv {
+	t.Helper()
+	mkClient := func(dsn string) (*Client, *MockTransport) {
+		tr := &MockTransport{}
+		c, err := NewClient(ClientOptions{
+			Dsn:        dsn,
+			Transport:  tr,
+			EnableLogs: true,
+			Integrations: func(_ []Integration) []Integration {
+				return []Integration{}
+			},
+		})
+		require.NoError(t, err)
+		return c, tr
+	}
+
+	e := &multiClientEnv{}
+	e.client1, e.transport1 = mkClient("https://public@example.com/sentry/1")
+	e.client2, e.transport2 = mkClient("https://public@example.com/sentry/2")
+	e.traceID1 = TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
+	e.traceID2 = TraceIDFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2")
+
+	scope1 := NewScope()
+	scope1.SetPropagationContext(PropagationContext{TraceID: e.traceID1})
+	scope2 := NewScope()
+	scope2.SetPropagationContext(PropagationContext{TraceID: e.traceID2})
+
+	e.hub1 = NewHub(e.client1, scope1)
+	e.hub2 = NewHub(e.client2, scope2)
+	e.ctx1 = SetHubOnContext(context.Background(), e.hub1)
+	e.ctx2 = SetHubOnContext(context.Background(), e.hub2)
+
+	t.Cleanup(func() {
+		e.client1.Close()
+		e.client2.Close()
+	})
+	return e
+}
+
+func (e *multiClientEnv) resetTransports() {
+	e.transport1.mu.Lock()
+	e.transport1.events = nil
+	e.transport1.mu.Unlock()
+	e.transport2.mu.Lock()
+	e.transport2.events = nil
+	e.transport2.mu.Unlock()
+}
+
+func (e *multiClientEnv) flushAll() {
+	e.client1.Flush(5 * time.Second)
+	e.client2.Flush(5 * time.Second)
+}
+
+func eventTraceID(t *testing.T, ev *Event) TraceID {
+	t.Helper()
+	traceCtx, ok := ev.Contexts["trace"]
+	require.True(t, ok, "event should have a trace context")
+	tid, ok := traceCtx["trace_id"].(TraceID)
+	require.True(t, ok, "trace context should contain a TraceID")
+	return tid
+}
+
+func TestClient_MultiClientSetup(t *testing.T) {
+	t.Run("signals_route_to_correct_client", func(t *testing.T) {
+		e := setupMultiClientEnv(t)
+
+		e.hub1.CaptureMessage("msg-from-client1")
+		e.hub2.CaptureMessage("msg-from-client2")
+
+		require.Len(t, e.transport1.Events(), 1)
+		require.Len(t, e.transport2.Events(), 1)
+		assert.Equal(t, "msg-from-client1", e.transport1.Events()[0].Message)
+		assert.Equal(t, "msg-from-client2", e.transport2.Events()[0].Message)
+		assert.Equal(t, e.traceID1, eventTraceID(t, e.transport1.Events()[0]),
+			"event on client1 should carry hub1's trace ID")
+		assert.Equal(t, e.traceID2, eventTraceID(t, e.transport2.Events()[0]),
+			"event on client2 should carry hub2's trace ID")
+		e.resetTransports()
+
+		NewLogger(e.ctx1).Info().WithCtx(e.ctx1).Emit("log-from-client1")
+		NewLogger(e.ctx2).Info().WithCtx(e.ctx2).Emit("log-from-client2")
+		e.flushAll()
+
+		require.Len(t, e.transport1.Events(), 1, "client1 transport should have 1 log event")
+		require.Len(t, e.transport2.Events(), 1, "client2 transport should have 1 log event")
+		require.Len(t, e.transport1.Events()[0].Logs, 1)
+		require.Len(t, e.transport2.Events()[0].Logs, 1)
+		assert.Equal(t, "log-from-client1", e.transport1.Events()[0].Logs[0].Body)
+		assert.Equal(t, "log-from-client2", e.transport2.Events()[0].Logs[0].Body)
+		assert.Equal(t, e.traceID1, e.transport1.Events()[0].Logs[0].TraceID,
+			"log on client1 should carry hub1's trace ID")
+		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
+			"log on client2 should carry hub2's trace ID")
+		e.resetTransports()
+
+		NewMeter(e.ctx1).Count("counter-from-client1", 1)
+		NewMeter(e.ctx2).Count("counter-from-client2", 2)
+		e.flushAll()
+
+		require.Len(t, e.transport1.Events(), 1, "client1 transport should have 1 metric event")
+		require.Len(t, e.transport2.Events(), 1, "client2 transport should have 1 metric event")
+		require.Len(t, e.transport1.Events()[0].Metrics, 1)
+		require.Len(t, e.transport2.Events()[0].Metrics, 1)
+		assert.Equal(t, "counter-from-client1", e.transport1.Events()[0].Metrics[0].Name)
+		assert.Equal(t, "counter-from-client2", e.transport2.Events()[0].Metrics[0].Name)
+	})
+
+	t.Run("signals_respect_emit_context_client", func(t *testing.T) {
+		e := setupMultiClientEnv(t)
+		logger := NewLogger(e.ctx1)
+		meter := NewMeter(e.ctx1)
+		logger.Info().WithCtx(e.ctx2).Emit("cross-context-log")
+		meter.WithCtx(e.ctx2).Count("cross-context-count", 1)
+		e.flushAll()
+
+		assert.Empty(t, e.transport1.Events(),
+			"creation-time client should NOT receive the log when emit context points elsewhere")
+		require.Len(t, e.transport2.Events(), 2,
+			"emit-context client should receive the signals")
+		require.Len(t, e.transport2.Events()[0].Logs, 1)
+		require.Len(t, e.transport2.Events()[1].Metrics, 1)
+		assert.Equal(t, "cross-context-log", e.transport2.Events()[0].Logs[0].Body)
+		assert.Equal(t, "cross-context-count", e.transport2.Events()[1].Metrics[0].Name)
+		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
+			"trace ID should come from the emit context's hub, not the creation context")
+	})
+
+	t.Run("signals_follow_bind_client", func(t *testing.T) {
+		e := setupMultiClientEnv(t)
+
+		traceID := TraceIDFromHex("cccccccccccccccccccccccccccccccc")
+		scope := NewScope()
+		scope.SetPropagationContext(PropagationContext{TraceID: traceID})
+		hub := NewHub(e.client1, scope)
+		ctx := SetHubOnContext(context.Background(), hub)
+		logger := NewLogger(ctx)
+		meter := NewMeter(ctx)
+
+		hub.BindClient(e.client2)
+
+		hub.CaptureMessage("event-after-rebind")
+		logger.Info().WithCtx(ctx).Emit("log-after-rebind")
+		meter.WithCtx(ctx).Count("count-after-rebind", 1)
+		e.flushAll()
+
+		assert.Empty(t, e.transport1.Events(),
+			"old client should not receive any signals after BindClient")
+		require.Len(t, e.transport2.Events(), 3,
+			"new client should receive all signals")
+
+		var gotEvent, gotLog, gotMetric bool
+		for _, ev := range e.transport2.Events() {
+			if ev.Message == "event-after-rebind" {
+				gotEvent = true
+				assert.Equal(t, traceID, eventTraceID(t, ev),
+					"event should carry the hub's trace ID")
+			}
+			if len(ev.Logs) == 1 && ev.Logs[0].Body == "log-after-rebind" {
+				gotLog = true
+				assert.Equal(t, traceID, ev.Logs[0].TraceID,
+					"log should carry the hub's trace ID")
+			}
+			if len(ev.Metrics) == 1 && ev.Metrics[0].Name == "count-after-rebind" {
+				gotMetric = true
+				assert.Equal(t, traceID, ev.Metrics[0].TraceID,
+					"count should carry the hub's trace ID")
+			}
+		}
+		assert.True(t, gotEvent, "event should arrive at new client")
+		assert.True(t, gotLog, "log should arrive at new client")
+		assert.True(t, gotMetric, "count should arrive at new client")
+	})
 }

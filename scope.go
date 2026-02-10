@@ -533,21 +533,32 @@ func (scope *Scope) populateAttrs(attrs map[string]Attribute) {
 	// }
 }
 
-// resolveScopeAndTrace resolves scope, trace ID, and span ID from the given contexts.
+// hubFromContexts is a helper to return the first hub found in the given contexts.
+func hubFromContexts(ctxs ...context.Context) *Hub {
+	for _, ctx := range ctxs {
+		if ctx == nil {
+			continue
+		}
+		if hub := GetHubFromContext(ctx); hub != nil {
+			return hub
+		}
+	}
+	return nil
+}
+
+// resolveTrace resolves trace ID and span ID from the given scope and contexts.
 //
 // The resolution order follows a most-specific-to-least-specific pattern:
 //  1. Check for span directly in contexts (SpanFromContext) - this is the most specific
 //     source as it represents a span explicitly attached to the current operation's context
-//  2. Check for hub in contexts (GetHubFromContext) - provides access to scope which may
-//     contain a span, but this is less specific than a directly attached span
-//  3. Fall back to CurrentHub() - the global hub as a last resort
+//  2. Check scope's span - provides access to span set on the hub's scope
+//  3. Fall back to scope's propagation context trace ID
 //
 // This ordering ensures we always use the most contextually relevant tracing information.
 // For example, if a specific span is active for an operation, we use that span's trace/span IDs
 // rather than accidentally using a different span that might be set on the hub's scope.
-func resolveScopeAndTrace(ctxs ...context.Context) (scope *Scope, traceID TraceID, spanID SpanID) {
+func resolveTrace(scope *Scope, ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
 	var span *Span
-	var hub *Hub
 
 	for _, ctx := range ctxs {
 		if ctx == nil {
@@ -558,19 +569,6 @@ func resolveScopeAndTrace(ctxs ...context.Context) (scope *Scope, traceID TraceI
 		}
 	}
 
-	for _, ctx := range ctxs {
-		if ctx == nil {
-			continue
-		}
-		if hub = GetHubFromContext(ctx); hub != nil {
-			break
-		}
-	}
-	if hub == nil {
-		hub = CurrentHub()
-	}
-
-	scope = hub.Scope()
 	if scope != nil {
 		scope.mu.RLock()
 		if span == nil {
@@ -585,5 +583,5 @@ func resolveScopeAndTrace(ctxs ...context.Context) (scope *Scope, traceID TraceI
 		scope.mu.RUnlock()
 	}
 
-	return scope, traceID, spanID
+	return traceID, spanID
 }
