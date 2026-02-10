@@ -157,14 +157,14 @@ func (s *Scheduler) run() {
 			case <-ticker.C:
 				s.cond.Broadcast()
 			case <-clientReportsTicker.C:
-				report := s.reporter.TakeReport()
-				if report != nil {
+				r := s.reporter.TakeReport()
+				if r != nil {
 					header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Sdk: s.sdkInfo}
 					if s.dsn != nil {
 						header.Dsn = s.dsn.String()
 					}
 					envelope := protocol.NewEnvelope(header)
-					item, err := report.ToEnvelopeItem()
+					item, err := r.ToEnvelopeItem()
 					if err != nil {
 						debuglog.Printf("error sending client report: %v", err)
 						continue
