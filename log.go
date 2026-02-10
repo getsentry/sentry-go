@@ -43,7 +43,7 @@ var mapTypesToStr = map[attribute.Type]AttrType{
 
 type sentryLogger struct {
 	ctx               context.Context
-	client            *Client
+	hub               *Hub
 	attributes        map[string]Attribute
 	defaultAttributes map[string]Attribute
 	mu                sync.RWMutex
@@ -91,7 +91,7 @@ func NewLogger(ctx context.Context) Logger { // nolint: dupl
 
 		return &sentryLogger{
 			ctx:               ctx,
-			client:            client,
+			hub:               hub,
 			attributes:        make(map[string]Attribute),
 			defaultAttributes: defaultAttrs,
 			mu:                sync.RWMutex{},
@@ -113,7 +113,17 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		return
 	}
 
-	scope, traceID, spanID := resolveScopeAndTrace(ctx, l.ctx)
+	hub := hubFromContexts(ctx, l.ctx)
+	if hub == nil {
+		hub = l.hub
+	}
+	client := hub.Client()
+	if client == nil {
+		return
+	}
+
+	scope := hub.Scope()
+	traceID, spanID := resolveTrace(scope, ctx, l.ctx)
 
 	// Pre-allocate with capacity hint to avoid map growth reallocations
 	estimatedCap := len(l.defaultAttributes) + len(entryAttrs) + len(args) + 8 // scope ~3 + instance ~5
@@ -156,9 +166,8 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		Attributes: attrs,
 	}
 
-	l.client.captureLog(log, scope)
-
-	if l.client.options.Debug {
+	client.captureLog(log, scope)
+	if client.options.Debug {
 		debuglog.Printf(message, args...)
 	}
 }
