@@ -3,6 +3,7 @@ package sentryzap
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -167,7 +168,13 @@ func (c *SentryCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
 
 // Sync flushes any buffered log entries to Sentry.
 func (c *SentryCore) Sync() error {
-	sentry.Flush(c.option.FlushTimeout)
+	hub := sentry.GetHubFromContext(c.ctx)
+	if hub == nil {
+		hub = sentry.CurrentHub()
+	}
+	if ok := hub.Flush(c.option.FlushTimeout); !ok {
+		return fmt.Errorf("failed to flush client: %v", hub.Client())
+	}
 	return nil
 }
 
