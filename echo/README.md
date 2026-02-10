@@ -24,8 +24,8 @@ import (
 
     "github.com/getsentry/sentry-go"
     sentryecho "github.com/getsentry/sentry-go/echo"
-    "github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+    "github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 )
 
 // To initialize Sentry's handler, you need to initialize Sentry itself beforehand
@@ -45,7 +45,7 @@ app.Use(middleware.Recover())
 app.Use(sentryecho.New(sentryecho.Options{}))
 
 // Set up routes
-app.GET("/", func(ctx echo.Context) error {
+app.GET("/", func(ctx *echo.Context) error {
     return ctx.String(http.StatusOK, "Hello, World!")
 })
 
@@ -90,7 +90,7 @@ app.Use(sentryecho.New(sentryecho.Options{
 }))
 
 app.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(ctx echo.Context) error {
+	return func(ctx *echo.Context) error {
 		if hub := sentryecho.GetHubFromContext(ctx); hub != nil {
 			hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
 		}
@@ -98,7 +98,7 @@ app.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 })
 
-app.GET("/", func(ctx echo.Context) error {
+app.GET("/", func(ctx *echo.Context) error {
 	if hub := sentryecho.GetHubFromContext(ctx); hub != nil {
 		hub.WithScope(func(scope *sentry.Scope) {
 			scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
@@ -108,7 +108,7 @@ app.GET("/", func(ctx echo.Context) error {
 	return ctx.String(http.StatusOK, "Hello, World!")
 })
 
-app.GET("/foo", func(ctx echo.Context) error {
+app.GET("/foo", func(ctx *echo.Context) error {
 	// sentryecho handler will catch it just fine. Also, because we attached "someRandomTag"
 	// in the middleware before, it will be sent through as well
 	panic("y tho")
