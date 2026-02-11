@@ -196,7 +196,7 @@ func TestEventMarshalJSON(t *testing.T) {
 	}
 
 	// Non-transaction event should not have fields Spans and StartTime
-	want := `{"sdk":{},"user":{},"timestamp":"1970-01-01T00:00:14Z"}`
+	want := `{"sdk":{},"timestamp":"1970-01-01T00:00:14Z","user":{}}`
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
