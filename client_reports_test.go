@@ -24,7 +24,7 @@ func TestClientReports_Integration(t *testing.T) {
 		body, _ := io.ReadAll(r.Body)
 		receivedBodies = append(receivedBodies, body)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"id":"test-event-id"}`))
+		_, _ = w.Write([]byte(`{"id":"test-event-id"}`))
 	}))
 	defer srv.Close()
 
@@ -34,7 +34,7 @@ func TestClientReports_Integration(t *testing.T) {
 		Dsn:                  dsn,
 		DisableClientReports: false,
 		SampleRate:           1.0,
-		BeforeSend: func(event *Event, hint *EventHint) *Event {
+		BeforeSend: func(event *Event, _ *EventHint) *Event {
 			if event.Message == "drop-me" {
 				return nil
 			}
@@ -50,7 +50,7 @@ func TestClientReports_Integration(t *testing.T) {
 	// simulate dropped events for report outcomes
 	hub.CaptureMessage("drop-me")
 	scope := NewScope()
-	scope.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
+	scope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		if event.Message == "processor-drop" {
 			return nil
 		}
