@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.26"
+          go-version: "1.24"
       - uses: actions/checkout@v6
       - name: golangci-lint
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # pin@v8.0
