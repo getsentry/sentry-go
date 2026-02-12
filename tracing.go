@@ -49,7 +49,7 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	Op           string            `json:"op,omitempty"`
 	Description  string            `json:"description,omitempty"`
 	Status       SpanStatus        `json:"status,omitempty"`
-	Tags         map[string]string `json:"tags,omitzero"`
+	Tags         map[string]string `json:"tags,omitempty"`
 	StartTime    time.Time         `json:"start_timestamp,omitzero"`
 	EndTime      time.Time         `json:"timestamp,omitzero"`
 	// Deprecated: use Data instead. To be removed in 0.33.0
