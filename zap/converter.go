@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/debuglog"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -109,10 +110,11 @@ func zapFieldToLogEntry(entry sentry.LogEntry, field zapcore.Field) sentry.LogEn
 		zapcore.Uint32Type, zapcore.Uint16Type, zapcore.Uint8Type:
 		return entry.Int64(key, field.Integer)
 	case zapcore.Uint64Type:
-		if u, ok := entry.(uint64LogEntry); ok {
-			return u.Uint64(key, uint64(field.Integer))
+		if e, ok := entry.(uint64LogEntry); ok {
+			return e.Uint64(key, uint64(field.Integer))
 		}
-		return entry.Int64(key, field.Integer)
+		debuglog.Println("Internal error: log entry does not implement unsigned int conversion")
+		return entry
 	case zapcore.UintptrType:
 		return entry.String(key, fmt.Sprintf("0x%x", field.Integer))
 	case zapcore.Float64Type:
