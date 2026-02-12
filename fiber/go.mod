@@ -1,12 +1,12 @@
 module github.com/getsentry/sentry-go/fiber
 
-go 1.23.0
+go 1.24
 
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.39.0
-	github.com/gofiber/fiber/v2 v2.52.9
+	github.com/getsentry/sentry-go v0.42.0
+	github.com/gofiber/fiber/v2 v2.52.11
 	github.com/google/go-cmp v0.5.9
 )
 

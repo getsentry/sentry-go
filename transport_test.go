@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/google/go-cmp/cmp"
 	"go.uber.org/goleak"
 )
@@ -292,7 +293,7 @@ func TestEnvelopeFromLogEvent(t *testing.T) {
 	got := b.String()
 	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
 {"type":"log","item_count":1,"content_type":"application/vnd.sentry.items.log+json"}
-{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sdk":{"name":"sentry.go","version":"0.0.1"},"user":{},"items":[{"timestamp":"0001-01-01T00:00:00Z","trace_id":"d49d9bf66f13450b81f65bc51cf49c03","level":"info","severity_number":9,"body":"test log message","attributes":{"key.bool":{"value":true,"type":"boolean"},"key.float":{"value":42.2,"type":"double"},"key.int":{"value":42,"type":"integer"},"key.string":{"value":"str","type":"string"},"sentry.environment":{"value":"testing","type":"string"},"sentry.release":{"value":"v1.2.3","type":"string"},"sentry.sdk.name":{"value":"sentry.go","type":"string"},"sentry.sdk.version":{"value":"0.0.1","type":"string"},"sentry.server.address":{"value":"test-server","type":"string"}}}]}
+{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sdk":{"name":"sentry.go","version":"0.0.1"},"user":{},"items":[{"trace_id":"d49d9bf66f13450b81f65bc51cf49c03","level":"info","severity_number":9,"body":"test log message","attributes":{"key.bool":{"value":true,"type":"boolean"},"key.float":{"value":42.2,"type":"double"},"key.int":{"value":42,"type":"integer"},"key.string":{"value":"str","type":"string"},"sentry.environment":{"value":"testing","type":"string"},"sentry.release":{"value":"v1.2.3","type":"string"},"sentry.sdk.name":{"value":"sentry.go","type":"string"},"sentry.sdk.version":{"value":"0.0.1","type":"string"},"sentry.server.address":{"value":"test-server","type":"string"}}}]}
 `
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
@@ -639,7 +640,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 		// it doesn't matter for this test.
 		fmt.Fprintln(w, `{"id":"ec71d87189164e79ab1e61030c183af0"}`)
 		if largeResponse {
-			fmt.Fprintln(w, strings.Repeat(" ", maxDrainResponseBytes))
+			fmt.Fprintln(w, strings.Repeat(" ", util.MaxDrainResponseBytes))
 		}
 	}))
 	defer srv.Close()
