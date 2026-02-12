@@ -301,6 +301,14 @@ func (e *logEntry) Bool(key string, value bool) LogEntry {
 	return e
 }
 
+// Uint64 adds uint64 attributes to the log entry.
+//
+// This method is intentionally not part of the LogEntry interface to avoid exposing uint64 in the public API.
+func (e *logEntry) Uint64(key string, value uint64) LogEntry {
+	e.attributes[key] = Attribute{Value: value, Type: AttributeInt}
+	return e
+}
+
 func (e *logEntry) Emit(args ...interface{}) {
 	e.logger.log(e.ctx, e.level, e.severity, fmt.Sprint(args...), e.attributes)
 
