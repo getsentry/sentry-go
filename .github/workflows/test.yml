@@ -24,7 +24,7 @@ jobs:
       # pull requests, only run this step for a single job in the matrix. For
       # all other workflow triggers (e.g., pushes to a release branch) run
       # this step for the whole matrix.
-      RUN_RACE_TESTS: ${{ github.event_name != 'pull_request' || (matrix.go == '1.24' && matrix.os == 'ubuntu') }}
+      RUN_RACE_TESTS: ${{ github.event_name != 'pull_request' || (matrix.go == '1.26' && matrix.os == 'ubuntu') }}
     steps:
       - uses: actions/setup-go@v6
         with:
@@ -47,7 +47,7 @@ jobs:
             ${{ runner.os }}-go-${{ matrix.go }}-
       - name: Tidy for min version
         run: make mod-tidy
-        if: ${{ matrix.go == '1.23' }}
+        if: ${{ matrix.go == '1.24' }}
       - name: Build
         run: make build
       - name: Vet
@@ -62,6 +62,6 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        go: ["1.25", "1.24", "1.23"]
+        go: ["1.26", "1.25", "1.24"]
         os: [ubuntu, windows, macos]
       fail-fast: false
