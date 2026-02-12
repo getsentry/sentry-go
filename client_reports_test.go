@@ -47,6 +47,12 @@ func TestClientReports_Integration(t *testing.T) {
 	hub.BindClient(c)
 	defer hub.Flush(testutils.FlushTimeout())
 
+	// second client with disabled reports shouldn't affect the first
+	_, _ = NewClient(ClientOptions{
+		Dsn:                  testDsn,
+		DisableClientReports: true,
+	})
+
 	// simulate dropped events for report outcomes
 	hub.CaptureMessage("drop-me")
 	scope := NewScope()

@@ -19,7 +19,6 @@ import (
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/report"
-	"github.com/getsentry/sentry-go/internal/sdk"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 )
 
@@ -395,7 +394,9 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	if !options.DisableClientReports {
-		client.reporter = report.NewAggregator()
+		// Use the global registry to get or create a reporter for this DSN.
+		// This ensures all components using the same DSN share the same reporter.
+		client.reporter = report.GetOrCreateAggregator(options.Dsn)
 	}
 
 	client.setupTransport()
@@ -427,9 +428,7 @@ func (client *Client) setupTransport() {
 		if opts.Dsn == "" {
 			transport = new(noopTransport)
 		} else {
-			t := NewHTTPTransport()
-			t.reporter = client.reporter
-			transport = t
+			transport = NewHTTPTransport()
 		}
 	}
 
@@ -472,13 +471,12 @@ func (client *Client) setupTelemetryProcessor() { // nolint: unused
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
-	reportOpt := sdk.WithReporter(client.reporter)
 	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, reportOpt),
-		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0, reportOpt),
-		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, reportOpt),
-		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0, reportOpt),
-		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, reportOpt),
+		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
 	}
 
 	sdkInfo := &protocol.SdkInfo{
@@ -486,7 +484,7 @@ func (client *Client) setupTelemetryProcessor() { // nolint: unused
 		Version: client.sdkVersion,
 	}
 
-	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, &client.dsn.Dsn, sdkInfo, sdk.WithReporter(client.reporter))
+	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, &client.dsn.Dsn, sdkInfo)
 }
 
 func (client *Client) setupIntegrations() {
@@ -852,7 +850,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 			if event == nil {
 				debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
 				client.reporter.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryTransaction)
-				client.reporter.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, 1) // count the transaction root itself
+				client.reporter.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, int64(spanCountBefore))
 				return nil
 			}
 			// Track spans removed by the callback
@@ -964,7 +962,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 			debuglog.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
 			client.reporter.RecordOne(report.ReasonEventProcessor, category)
 			if category == ratelimit.CategoryTransaction {
-				client.reporter.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore+1))
+				client.reporter.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
 			}
 			return nil
 		}

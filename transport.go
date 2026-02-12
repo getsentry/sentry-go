@@ -373,7 +373,7 @@ func NewHTTPTransport() *HTTPTransport {
 	return &transport
 }
 
-// Configure is called by the Client itself, providing it it's own ClientOptions.
+// Configure is called by the Client itself, providing its own ClientOptions.
 func (t *HTTPTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
@@ -381,6 +381,10 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		return
 	}
 	t.dsn = dsn
+
+	if t.reporter == nil {
+		t.reporter = report.GetAggregator(options.Dsn)
+	}
 
 	// A buffered channel with capacity 1 works like a mutex, ensuring only one
 	// goroutine can access the current batch at a given time. Access is
@@ -689,7 +693,7 @@ func NewHTTPSyncTransport() *HTTPSyncTransport {
 	return &transport
 }
 
-// Configure is called by the Client itself, providing it it's own ClientOptions.
+// Configure is called by the Client itself, providing its own ClientOptions.
 func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
@@ -697,6 +701,10 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 		return
 	}
 	t.dsn = dsn
+
+	if t.reporter == nil {
+		t.reporter = report.GetAggregator(options.Dsn)
+	}
 
 	if options.HTTPTransport != nil {
 		t.transport = options.HTTPTransport

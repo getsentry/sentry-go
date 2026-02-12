@@ -163,10 +163,15 @@ func NewSyncTransport(options TransportOptions) protocol.TelemetryTransport {
 		return NewNoopTransport()
 	}
 
+	// Fetch reporter from global registry (created by Client).
+	// Transports should not create reporters, only use existing ones.
+	reporter := report.GetAggregator(options.Dsn)
+
 	transport := &SyncTransport{
-		Timeout: defaultTimeout,
-		limits:  make(ratelimit.Map),
-		dsn:     dsn,
+		Timeout:  defaultTimeout,
+		limits:   make(ratelimit.Map),
+		dsn:      dsn,
+		reporter: reporter,
 	}
 
 	if options.HTTPTransport != nil {
@@ -305,12 +310,17 @@ func NewAsyncTransport(options TransportOptions) protocol.TelemetryTransport {
 		return NewNoopTransport()
 	}
 
+	// Fetch reporter from global registry (created by Client).
+	// Transports should not create reporters, only use existing ones.
+	reporter := report.GetAggregator(options.Dsn)
+
 	transport := &AsyncTransport{
 		QueueSize: defaultQueueSize,
 		Timeout:   defaultTimeout,
 		done:      make(chan struct{}),
 		limits:    make(ratelimit.Map),
 		dsn:       dsn,
+		reporter:  reporter,
 	}
 
 	transport.queue = make(chan *protocol.Envelope, transport.QueueSize)

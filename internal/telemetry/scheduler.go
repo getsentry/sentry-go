@@ -9,7 +9,6 @@ import (
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/report"
-	"github.com/getsentry/sentry-go/internal/sdk"
 )
 
 const (
@@ -42,9 +41,7 @@ func NewScheduler(
 	transport protocol.TelemetryTransport,
 	dsn *protocol.Dsn,
 	sdkInfo *protocol.SdkInfo,
-	opts ...sdk.Option,
 ) *Scheduler {
-	o := sdk.Apply(opts)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	priorityWeights := map[ratelimit.Priority]int{
@@ -77,7 +74,7 @@ func NewScheduler(
 		transport:    transport,
 		dsn:          dsn,
 		sdkInfo:      sdkInfo,
-		reporter:     o.Reporter,
+		reporter:     report.GetAggregator(dsn.String()),
 		currentCycle: currentCycle,
 		ctx:          ctx,
 		cancel:       cancel,

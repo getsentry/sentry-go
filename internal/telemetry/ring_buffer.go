@@ -7,7 +7,6 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/report"
-	"github.com/getsentry/sentry-go/internal/sdk"
 )
 
 const defaultCapacity = 100
@@ -35,7 +34,7 @@ type RingBuffer[T any] struct {
 	onDropped func(item T, reason string)
 }
 
-func NewRingBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration, opts ...sdk.Option) *RingBuffer[T] {
+func NewRingBuffer[T any](dsn string, category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration) *RingBuffer[T] {
 	if capacity <= 0 {
 		capacity = defaultCapacity
 	}
@@ -48,14 +47,13 @@ func NewRingBuffer[T any](category ratelimit.Category, capacity int, overflowPol
 		timeout = 0
 	}
 
-	o := sdk.Apply(opts)
 	return &RingBuffer[T]{
 		items:          make([]T, capacity),
 		capacity:       capacity,
 		category:       category,
 		priority:       category.GetPriority(),
 		overflowPolicy: overflowPolicy,
-		reporter:       o.Reporter,
+		reporter:       report.GetAggregator(dsn),
 		batchSize:      batchSize,
 		timeout:        timeout,
 		lastFlushTime:  time.Now(),

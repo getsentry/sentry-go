@@ -7,7 +7,6 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/report"
-	"github.com/getsentry/sentry-go/internal/sdk"
 )
 
 const (
@@ -52,12 +51,12 @@ type BucketedBuffer[T any] struct {
 }
 
 func NewBucketedBuffer[T any](
+	dsn string,
 	category ratelimit.Category,
 	capacity int,
 	overflowPolicy OverflowPolicy,
 	batchSize int,
 	timeout time.Duration,
-	opts ...sdk.Option,
 ) *BucketedBuffer[T] {
 	if capacity <= 0 {
 		capacity = defaultBucketedCapacity
@@ -74,7 +73,6 @@ func NewBucketedBuffer[T any](
 		bucketCapacity = 10
 	}
 
-	o := sdk.Apply(opts)
 	return &BucketedBuffer[T]{
 		buckets:        make([]*Bucket[T], bucketCapacity),
 		traceIndex:     make(map[string]int),
@@ -83,7 +81,7 @@ func NewBucketedBuffer[T any](
 		category:       category,
 		priority:       category.GetPriority(),
 		overflowPolicy: overflowPolicy,
-		reporter:       o.Reporter,
+		reporter:       report.GetAggregator(dsn),
 		batchSize:      batchSize,
 		timeout:        timeout,
 		lastFlushTime:  time.Now(),

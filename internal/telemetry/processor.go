@@ -6,7 +6,6 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/sdk"
 )
 
 // Processor is the top-level object that wraps the scheduler and buffers.
@@ -20,9 +19,8 @@ func NewProcessor(
 	transport protocol.TelemetryTransport,
 	dsn *protocol.Dsn,
 	sdkInfo *protocol.SdkInfo,
-	opts ...sdk.Option,
 ) *Processor {
-	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, opts...)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
 	scheduler.Start()
 
 	return &Processor{
