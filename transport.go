@@ -605,6 +605,12 @@ func (t *HTTPTransport) worker() {
 						debuglog.Printf("There was an issue with sending an event: %v", err)
 						continue
 					}
+					t.mu.Lock()
+					if t.limits == nil {
+						t.limits = make(ratelimit.Map)
+					}
+					t.limits.Merge(ratelimit.FromResponse(response))
+					t.mu.Unlock()
 
 					// Drain body up to a limit and close it, allowing the
 					// transport to reuse TCP connections.
