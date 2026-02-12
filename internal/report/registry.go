@@ -12,6 +12,7 @@ var registry struct {
 	aggregators map[string]*Aggregator
 }
 
+// nolint:gochecknoinits
 func init() {
 	registry.aggregators = make(map[string]*Aggregator)
 }
