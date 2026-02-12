@@ -785,6 +785,7 @@ const (
 	AttributeInt     AttrType = "integer"
 	AttributeFloat   AttrType = "double"
 	AttributeString  AttrType = "string"
+	AttributeArray   AttrType = "array"
 )
 
 type Attribute struct {

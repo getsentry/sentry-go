@@ -34,11 +34,15 @@ const (
 )
 
 var mapTypesToStr = map[attribute.Type]AttrType{
-	attribute.INVALID: AttributeInvalid,
-	attribute.BOOL:    AttributeBool,
-	attribute.INT64:   AttributeInt,
-	attribute.FLOAT64: AttributeFloat,
-	attribute.STRING:  AttributeString,
+	attribute.INVALID:      AttributeInvalid,
+	attribute.BOOL:         AttributeBool,
+	attribute.INT64:        AttributeInt,
+	attribute.FLOAT64:      AttributeFloat,
+	attribute.STRING:       AttributeString,
+	attribute.BOOLSLICE:    AttributeArray,
+	attribute.INT64SLICE:   AttributeArray,
+	attribute.FLOAT64SLICE: AttributeArray,
+	attribute.STRINGSLICE:  AttributeArray,
 }
 
 type sentryLogger struct {
