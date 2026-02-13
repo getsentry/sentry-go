@@ -88,24 +88,24 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 		b.tail = (b.tail + 1) % b.capacity
 
 		atomic.AddInt64(&b.dropped, 1)
+		b.recordDroppedItem(oldItem)
 		if b.onDropped != nil {
-			b.recordDroppedItem(oldItem)
 			b.onDropped(oldItem, "buffer_full_drop_oldest")
 		}
 		return true
 
 	case OverflowPolicyDropNewest:
 		atomic.AddInt64(&b.dropped, 1)
+		b.recordDroppedItem(item)
 		if b.onDropped != nil {
-			b.recordDroppedItem(item)
 			b.onDropped(item, "buffer_full_drop_newest")
 		}
 		return false
 
 	default:
 		atomic.AddInt64(&b.dropped, 1)
+		b.recordDroppedItem(item)
 		if b.onDropped != nil {
-			b.recordDroppedItem(item)
 			b.onDropped(item, "unknown_overflow_policy")
 		}
 		return false
