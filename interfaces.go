@@ -99,6 +99,9 @@ type Logger interface {
 	Fatal() LogEntry
 	// Panic defines the [sentry.LogLevel] for the log entry.
 	Panic() LogEntry
+	// LFatal defines the [sentry.LogLevel] for the log entry. This only sets
+	// the level to fatal, but does not panic or exit.
+	LFatal() LogEntry
 	// GetCtx returns the [context.Context] set on the logger.
 	GetCtx() context.Context
 }
