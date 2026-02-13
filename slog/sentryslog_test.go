@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"strconv"
 	"testing"
 	"time"
 
@@ -381,16 +380,10 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 			expectedValue: "2023-01-01T00:00:00Z",
 		},
 		{
-			name:          "Uint64 attribute - convert to int64",
-			attr:          []any{"key7", uint64(100)},
-			expectedKey:   "key7",
-			expectedValue: int64(100),
-		},
-		{
-			name:          "Uint64 attribute - convert to float",
+			name:          "Uint64 attribute",
 			attr:          []any{"key8", uint64(math.MaxUint64)},
 			expectedKey:   "key8",
-			expectedValue: strconv.FormatUint(math.MaxUint64, 10),
+			expectedValue: uint64(math.MaxUint64),
 		},
 		{
 			name:          "something attribute",
