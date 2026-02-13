@@ -8,7 +8,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/report"
+	"github.com/getsentry/sentry-go/report"
 )
 
 const (
@@ -149,6 +149,7 @@ func (s *Scheduler) run() {
 		defer ticker.Stop()
 
 		clientReportsTicker := time.NewTicker(defaultClientReportsTick)
+		defer clientReportsTicker.Stop()
 		for {
 			select {
 			case <-ticker.C:
@@ -242,7 +243,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 
 	if s.isRateLimited(category) {
 		for _, item := range items {
-			s.reporter.RecordItem(report.ReasonQueueOverflow, item)
+			s.reporter.RecordItem(report.ReasonRateLimitBackoff, item)
 		}
 		return
 	}

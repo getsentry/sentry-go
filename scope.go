@@ -10,7 +10,7 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/report"
+	"github.com/getsentry/sentry-go/report"
 )
 
 // Scope holds contextual data for the current scope.
@@ -487,6 +487,11 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 				}
 			}
 			return nil
+		}
+		if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
+			if client != nil {
+				client.reporter.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
+			}
 		}
 	}
 

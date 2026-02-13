@@ -5,8 +5,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/report"
+	"github.com/getsentry/sentry-go/report"
 )
 
 const defaultCapacity = 100
@@ -79,7 +80,7 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 		return true
 	}
 
-	b.reporter.RecordOne(report.ReasonBufferOverflow, b.category)
+	b.recordDroppedItem(item)
 	switch b.overflowPolicy {
 	case OverflowPolicyDropOldest:
 		oldItem := b.items[b.head]
@@ -347,6 +348,14 @@ func (b *RingBuffer[T]) PollIfReady() []T {
 
 	b.lastFlushTime = time.Now()
 	return result
+}
+
+func (b *RingBuffer[T]) recordDroppedItem(item T) {
+	if ti, ok := any(item).(protocol.TelemetryItem); ok {
+		b.reporter.RecordItem(report.ReasonBufferOverflow, ti)
+	} else {
+		b.reporter.RecordOne(report.ReasonBufferOverflow, b.category)
+	}
 }
 
 type BufferMetrics struct {

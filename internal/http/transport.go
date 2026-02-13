@@ -11,14 +11,13 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/report"
 	"github.com/getsentry/sentry-go/internal/util"
+	"github.com/getsentry/sentry-go/report"
 )
 
 const (
@@ -212,13 +211,13 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 		return ErrEmptyEnvelope
 	}
 
-	// the sync transport needs to attach client reports when available
-	t.reporter.AttachToEnvelope(envelope)
 	category := categoryFromEnvelope(envelope)
 	if t.disabled(category) {
 		t.reporter.RecordForEnvelope(report.ReasonRateLimitBackoff, envelope)
 		return nil
 	}
+	// the sync transport needs to attach client reports when available
+	t.reporter.AttachToEnvelope(envelope)
 
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
 	if err != nil {
@@ -291,10 +290,6 @@ type AsyncTransport struct {
 	wg   sync.WaitGroup
 
 	flushRequest chan chan struct{}
-
-	sentCount    int64
-	droppedCount int64
-	errorCount   int64
 
 	QueueSize int
 	Timeout   time.Duration
@@ -396,7 +391,6 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 		)
 		return nil
 	default:
-		atomic.AddInt64(&t.droppedCount, 1)
 		t.reporter.RecordForEnvelope(report.ReasonQueueOverflow, envelope)
 		return ErrTransportQueueFull
 	}
@@ -450,7 +444,7 @@ func (t *AsyncTransport) worker() {
 			if !open {
 				return
 			}
-			t.processEnvelope(envelope)
+			t.sendEnvelopeHTTP(envelope)
 		case flushResponse, open := <-t.flushRequest:
 			if !open {
 				return
@@ -468,27 +462,21 @@ func (t *AsyncTransport) drainQueue() {
 			if !open {
 				return
 			}
-			t.processEnvelope(envelope)
+			t.sendEnvelopeHTTP(envelope)
 		default:
 			return
 		}
 	}
 }
 
-func (t *AsyncTransport) processEnvelope(envelope *protocol.Envelope) {
-	if t.sendEnvelopeHTTP(envelope) {
-		atomic.AddInt64(&t.sentCount, 1)
-	} else {
-		atomic.AddInt64(&t.errorCount, 1)
-	}
-}
-
-func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool {
+func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool { //nolint: unparam
 	category := categoryFromEnvelope(envelope)
 	if t.isRateLimited(category) {
 		t.reporter.RecordForEnvelope(report.ReasonRateLimitBackoff, envelope)
 		return false
 	}
+	// attach to envelope after rate-limit check
+	t.reporter.AttachToEnvelope(envelope)
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()

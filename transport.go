@@ -17,8 +17,8 @@ import (
 	httpinternal "github.com/getsentry/sentry-go/internal/http"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/report"
 	"github.com/getsentry/sentry-go/internal/util"
+	"github.com/getsentry/sentry-go/report"
 )
 
 const (
@@ -381,8 +381,7 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		return
 	}
 	t.dsn = dsn
-
-	if t.reporter == nil {
+	if !options.DisableClientReports {
 		t.reporter = report.GetAggregator(options.Dsn)
 	}
 
@@ -563,6 +562,7 @@ func (t *HTTPTransport) Close() {
 
 func (t *HTTPTransport) worker() {
 	crTicker := time.NewTicker(defaultClientReportsTick)
+	defer crTicker.Stop()
 	for b := range t.buffer {
 		// Signal that processing of the current batch has started.
 		close(b.started)
@@ -707,8 +707,7 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 		return
 	}
 	t.dsn = dsn
-
-	if t.reporter == nil {
+	if !options.DisableClientReports {
 		t.reporter = report.GetAggregator(options.Dsn)
 	}
 
@@ -774,7 +773,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		return
 	}
 	success := util.HandleHTTPResponse(response, identifier)
-	if !success && response.StatusCode != http.StatusTooManyRequests && response.StatusCode != http.StatusRequestEntityTooLarge {
+	if !success && response.StatusCode != http.StatusTooManyRequests {
 		t.reporter.RecordOne(report.ReasonSendError, category)
 		recordSpanOutcome(t.reporter, report.ReasonSendError, event)
 	}

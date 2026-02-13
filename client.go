@@ -18,8 +18,8 @@ import (
 	httpInternal "github.com/getsentry/sentry-go/internal/http"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/report"
 	"github.com/getsentry/sentry-go/internal/telemetry"
+	"github.com/getsentry/sentry-go/report"
 )
 
 // The identifier of the SDK.
@@ -739,6 +739,7 @@ func (client *Client) Close() {
 	if client.batchMeter != nil {
 		client.batchMeter.Shutdown()
 	}
+	report.UnregisterAggregator(client.options.Dsn)
 	client.Transport.Close()
 }
 

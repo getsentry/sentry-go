@@ -34,13 +34,12 @@ func (a *Aggregator) Record(reason DiscardReason, category ratelimit.Category, q
 	key := OutcomeKey{Reason: reason, Category: category}
 
 	a.mu.Lock()
+	defer a.mu.Unlock()
 	counter, exists := a.outcomes[key]
 	if !exists {
 		counter = &atomic.Int64{}
 		a.outcomes[key] = counter
 	}
-	a.mu.Unlock()
-
 	counter.Add(quantity)
 }
 
@@ -93,6 +92,10 @@ func (a *Aggregator) TakeReport() *ClientReport {
 // RecordForEnvelope records client report outcomes for all items in the envelope.
 // It inspects envelope item headers to derive categories, span counts, and log byte sizes.
 func (a *Aggregator) RecordForEnvelope(reason DiscardReason, envelope *protocol.Envelope) {
+	if a == nil {
+		return
+	}
+
 	for _, item := range envelope.Items {
 		if item == nil || item.Header == nil {
 			continue
@@ -111,6 +114,8 @@ func (a *Aggregator) RecordForEnvelope(reason DiscardReason, envelope *protocol.
 			if item.Header.Length != nil {
 				a.Record(reason, ratelimit.CategoryLogByte, int64(*item.Header.Length))
 			}
+		case protocol.EnvelopeItemTypeTraceMetric:
+			a.RecordOne(reason, ratelimit.CategoryTraceMetric)
 		case protocol.EnvelopeItemTypeCheckIn:
 			a.RecordOne(reason, ratelimit.CategoryMonitor)
 		case protocol.EnvelopeItemTypeAttachment, protocol.EnvelopeItemTypeClientReport:
@@ -148,6 +153,10 @@ func (a *Aggregator) RecordItem(reason DiscardReason, item protocol.TelemetryIte
 
 // AttachToEnvelope adds a client report to the envelope if the Aggregator has outcomes available.
 func (a *Aggregator) AttachToEnvelope(envelope *protocol.Envelope) {
+	if a == nil {
+		return
+	}
+
 	r := a.TakeReport()
 	if r != nil {
 		rItem, err := r.ToEnvelopeItem()
