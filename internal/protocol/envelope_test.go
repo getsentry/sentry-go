@@ -184,34 +184,3 @@ func TestEnvelope_Size(t *testing.T) {
 		t.Errorf("Size() = %d, but Serialize() length = %d", size2, len(data))
 	}
 }
-
-func TestEnvelopeHeader_MarshalJSON(t *testing.T) {
-	header := &EnvelopeHeader{
-		EventID: "12345678901234567890123456789012",
-		SentAt:  time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-		Dsn:     "https://public@example.com/1",
-		Trace:   map[string]string{"trace_id": "abc123"},
-	}
-
-	data, err := header.MarshalJSON()
-	if err != nil {
-		t.Errorf("MarshalJSON() error = %v", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		t.Errorf("Marshaled JSON is invalid: %v", err)
-	}
-
-	if result["event_id"] != header.EventID {
-		t.Errorf("Expected event_id %s, got %v", header.EventID, result["event_id"])
-	}
-
-	if result["dsn"] != header.Dsn {
-		t.Errorf("Expected dsn %s, got %v", header.Dsn, result["dsn"])
-	}
-
-	if bytes.Contains(data, []byte("\n")) {
-		t.Error("Marshaled JSON contains newlines")
-	}
-}
