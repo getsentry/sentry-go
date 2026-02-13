@@ -498,7 +498,7 @@ func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool { //
 
 	identifier := util.EnvelopeIdentifier(envelope)
 	success := util.HandleHTTPResponse(response, identifier)
-	if !success && response.StatusCode != http.StatusTooManyRequests && response.StatusCode != http.StatusRequestEntityTooLarge {
+	if !success && response.StatusCode != http.StatusTooManyRequests {
 		t.reporter.RecordForEnvelope(report.ReasonSendError, envelope)
 	}
 

@@ -80,7 +80,6 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 		return true
 	}
 
-	b.recordDroppedItem(item)
 	switch b.overflowPolicy {
 	case OverflowPolicyDropOldest:
 		oldItem := b.items[b.head]
@@ -90,6 +89,7 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 
 		atomic.AddInt64(&b.dropped, 1)
 		if b.onDropped != nil {
+			b.recordDroppedItem(oldItem)
 			b.onDropped(oldItem, "buffer_full_drop_oldest")
 		}
 		return true
@@ -97,6 +97,7 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 	case OverflowPolicyDropNewest:
 		atomic.AddInt64(&b.dropped, 1)
 		if b.onDropped != nil {
+			b.recordDroppedItem(item)
 			b.onDropped(item, "buffer_full_drop_newest")
 		}
 		return false
@@ -104,6 +105,7 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 	default:
 		atomic.AddInt64(&b.dropped, 1)
 		if b.onDropped != nil {
+			b.recordDroppedItem(item)
 			b.onDropped(item, "unknown_overflow_policy")
 		}
 		return false
