@@ -83,7 +83,9 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			{"attachment", protocol.EnvelopeItemTypeAttachment},
 		}
 
+		var count int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			atomic.AddInt64(&count, 1)
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -108,14 +110,17 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		}
 
 		expectedCount := int64(len(tests))
-		if sent := atomic.LoadInt64(&transport.sentCount); sent != expectedCount {
+		if sent := atomic.LoadInt64(&count); sent != expectedCount {
 			t.Errorf("expected %d sent, got %d", expectedCount, sent)
 		}
 	})
 
 	t.Run("server error", func(t *testing.T) {
+		var requestCount int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
+			atomic.AddInt64(&requestCount, 1)
+			status := http.StatusInternalServerError
+			w.WriteHeader(status)
 		}))
 		defer server.Close()
 
@@ -136,11 +141,8 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			t.Fatal("Flush timed out")
 		}
 
-		if sent := atomic.LoadInt64(&transport.sentCount); sent != 0 {
-			t.Errorf("expected 0 sent, got %d", sent)
-		}
-		if errors := atomic.LoadInt64(&transport.errorCount); errors != 1 {
-			t.Errorf("expected 1 error, got %d", errors)
+		if sent := atomic.LoadInt64(&requestCount); sent != 1 {
+			t.Errorf("expected 1 request, got %d", sent)
 		}
 	})
 

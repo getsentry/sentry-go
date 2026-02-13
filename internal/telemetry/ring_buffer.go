@@ -5,7 +5,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/report"
 )
 
 const defaultCapacity = 100
@@ -22,6 +24,7 @@ type RingBuffer[T any] struct {
 	category       ratelimit.Category
 	priority       ratelimit.Priority
 	overflowPolicy OverflowPolicy
+	reporter       *report.Aggregator
 
 	batchSize     int
 	timeout       time.Duration
@@ -32,7 +35,7 @@ type RingBuffer[T any] struct {
 	onDropped func(item T, reason string)
 }
 
-func NewRingBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration) *RingBuffer[T] {
+func NewRingBuffer[T any](dsn string, category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration) *RingBuffer[T] {
 	if capacity <= 0 {
 		capacity = defaultCapacity
 	}
@@ -51,6 +54,7 @@ func NewRingBuffer[T any](category ratelimit.Category, capacity int, overflowPol
 		category:       category,
 		priority:       category.GetPriority(),
 		overflowPolicy: overflowPolicy,
+		reporter:       report.GetAggregator(dsn),
 		batchSize:      batchSize,
 		timeout:        timeout,
 		lastFlushTime:  time.Now(),
@@ -84,6 +88,7 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 		b.tail = (b.tail + 1) % b.capacity
 
 		atomic.AddInt64(&b.dropped, 1)
+		b.recordDroppedItem(oldItem)
 		if b.onDropped != nil {
 			b.onDropped(oldItem, "buffer_full_drop_oldest")
 		}
@@ -91,6 +96,7 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 
 	case OverflowPolicyDropNewest:
 		atomic.AddInt64(&b.dropped, 1)
+		b.recordDroppedItem(item)
 		if b.onDropped != nil {
 			b.onDropped(item, "buffer_full_drop_newest")
 		}
@@ -98,6 +104,7 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 
 	default:
 		atomic.AddInt64(&b.dropped, 1)
+		b.recordDroppedItem(item)
 		if b.onDropped != nil {
 			b.onDropped(item, "unknown_overflow_policy")
 		}
@@ -343,6 +350,14 @@ func (b *RingBuffer[T]) PollIfReady() []T {
 
 	b.lastFlushTime = time.Now()
 	return result
+}
+
+func (b *RingBuffer[T]) recordDroppedItem(item T) {
+	if ti, ok := any(item).(protocol.TelemetryItem); ok {
+		b.reporter.RecordItem(report.ReasonBufferOverflow, ti)
+	} else {
+		b.reporter.RecordOne(report.ReasonBufferOverflow, b.category)
+	}
 }
 
 type BufferMetrics struct {

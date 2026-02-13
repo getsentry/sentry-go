@@ -8,6 +8,11 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/report"
+)
+
+const (
+	defaultClientReportsTick = time.Second * 30
 )
 
 // Scheduler implements a weighted round-robin scheduler for processing buffered events.
@@ -16,6 +21,7 @@ type Scheduler struct {
 	transport protocol.TelemetryTransport
 	dsn       *protocol.Dsn
 	sdkInfo   *protocol.SdkInfo
+	reporter  *report.Aggregator
 
 	currentCycle []ratelimit.Priority
 	cyclePos     int
@@ -68,6 +74,7 @@ func NewScheduler(
 		transport:    transport,
 		dsn:          dsn,
 		sdkInfo:      sdkInfo,
+		reporter:     report.GetAggregator(dsn.String()),
 		currentCycle: currentCycle,
 		ctx:          ctx,
 		cancel:       cancel,
@@ -141,10 +148,31 @@ func (s *Scheduler) run() {
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
 
+		clientReportsTicker := time.NewTicker(defaultClientReportsTick)
+		defer clientReportsTicker.Stop()
 		for {
 			select {
 			case <-ticker.C:
 				s.cond.Broadcast()
+			case <-clientReportsTicker.C:
+				r := s.reporter.TakeReport()
+				if r != nil {
+					header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Sdk: s.sdkInfo}
+					if s.dsn != nil {
+						header.Dsn = s.dsn.String()
+					}
+					envelope := protocol.NewEnvelope(header)
+					item, err := r.ToEnvelopeItem()
+					if err != nil {
+						debuglog.Printf("error sending client report: %v", err)
+						continue
+					}
+					envelope.AddItem(item)
+					if err := s.transport.SendEnvelope(envelope); err != nil {
+						debuglog.Printf("error sending envelope: %v", err)
+						continue
+					}
+				}
 			case <-s.ctx.Done():
 				return
 			}
@@ -209,8 +237,20 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 		items = buffer.PollIfReady()
 	}
 
-	// drop the current batch if rate-limited or if transport is full
-	if len(items) == 0 || s.isRateLimited(category) || !s.transport.HasCapacity() {
+	if len(items) == 0 {
+		return
+	}
+
+	if s.isRateLimited(category) {
+		for _, item := range items {
+			s.reporter.RecordItem(report.ReasonRateLimitBackoff, item)
+		}
+		return
+	}
+	if !s.transport.HasCapacity() {
+		for _, item := range items {
+			s.reporter.RecordItem(report.ReasonQueueOverflow, item)
+		}
 		return
 	}
 
@@ -228,6 +268,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 			return
 		}
 		envelope.AddItem(item)
+		s.reporter.AttachToEnvelope(envelope)
 		if err := s.transport.SendEnvelope(envelope); err != nil {
 			debuglog.Printf("error sending envelope: %v", err)
 		}
@@ -245,6 +286,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 			return
 		}
 		envelope.AddItem(item)
+		s.reporter.AttachToEnvelope(envelope)
 		if err := s.transport.SendEnvelope(envelope); err != nil {
 			debuglog.Printf("error sending envelope: %v", err)
 		}
@@ -283,6 +325,7 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeItemConvertible) {
 		return
 	}
 	envelope.AddItem(envItem)
+	s.reporter.AttachToEnvelope(envelope)
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)
 	}

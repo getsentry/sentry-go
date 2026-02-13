@@ -18,11 +18,13 @@ import (
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/util"
+	"github.com/getsentry/sentry-go/report"
 )
 
 const (
-	defaultBufferSize = 1000
-	defaultTimeout    = time.Second * 30
+	defaultBufferSize        = 1000
+	defaultTimeout           = time.Second * 30
+	defaultClientReportsTick = time.Second * 30
 )
 
 // Transport is used by the Client to deliver events to remote server.
@@ -124,6 +126,19 @@ func encodeAttachment(enc *json.Encoder, b io.Writer, attachment *Attachment) er
 	return nil
 }
 
+func encodeClientReport(enc *json.Encoder, cr *report.ClientReport) error {
+	payload, err := json.Marshal(cr)
+	if err != nil {
+		return err
+	}
+	err = encodeEnvelopeItem(enc, string(protocol.EnvelopeItemTypeClientReport), payload)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func encodeEnvelopeItem(enc *json.Encoder, itemType string, body json.RawMessage) error {
 	// Item header
 	err := enc.Encode(struct {
@@ -174,7 +189,26 @@ func encodeEnvelopeMetrics(enc *json.Encoder, count int, body json.RawMessage) e
 	return err
 }
 
-func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
+func recordSpanOutcome(reporter *report.Aggregator, reason report.DiscardReason, event *Event) {
+	if event.Type == transactionType {
+		reporter.Record(reason, ratelimit.CategorySpan, int64(event.GetSpanCount()))
+	}
+}
+
+// envelopeHeader represents the header of a Sentry envelope.
+type envelopeHeader struct {
+	EventID EventID           `json:"event_id,omitempty"`
+	SentAt  time.Time         `json:"sent_at"`
+	Dsn     string            `json:"dsn,omitempty"`
+	Sdk     map[string]string `json:"sdk,omitempty"`
+	Trace   map[string]string `json:"trace,omitempty"`
+}
+
+func encodeEnvelopeHeader(enc *json.Encoder, header *envelopeHeader) error {
+	return enc.Encode(header)
+}
+
+func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage, reporter *report.Aggregator) (*bytes.Buffer, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 
@@ -187,13 +221,7 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	}
 
 	// Envelope header
-	err := enc.Encode(struct {
-		EventID EventID           `json:"event_id"`
-		SentAt  time.Time         `json:"sent_at"`
-		Dsn     string            `json:"dsn"`
-		Sdk     map[string]string `json:"sdk"`
-		Trace   map[string]string `json:"trace,omitempty"`
-	}{
+	err := encodeEnvelopeHeader(enc, &envelopeHeader{
 		EventID: event.EventID,
 		SentAt:  sentAt,
 		Trace:   trace,
@@ -229,49 +257,63 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		}
 	}
 
+	// attach client report if exists
+	r := reporter.TakeReport()
+	if r != nil {
+		if err := encodeClientReport(enc, r); err != nil {
+			return nil, err
+		}
+	}
 	return &b, nil
 }
 
-func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn) (r *http.Request, err error) {
-	defer func() {
-		if r != nil {
-			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", event.Sdk.Name, event.Sdk.Version))
-			r.Header.Set("Content-Type", "application/x-sentry-envelope")
-
-			auth := fmt.Sprintf("Sentry sentry_version=%s, "+
-				"sentry_client=%s/%s, sentry_key=%s", apiVersion, event.Sdk.Name, event.Sdk.Version, dsn.GetPublicKey())
-
-			// The key sentry_secret is effectively deprecated and no longer needs to be set.
-			// However, since it was required in older self-hosted versions,
-			// it should still passed through to Sentry if set.
-			if dsn.GetSecretKey() != "" {
-				auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.GetSecretKey())
-			}
-
-			r.Header.Set("X-Sentry-Auth", auth)
-		}
-	}()
-
-	body := getRequestBodyFromEvent(event)
-	if body == nil {
-		return nil, errors.New("event could not be marshaled")
-	}
-
-	envelope, err := envelopeFromBody(event, dsn, time.Now(), body)
-	if err != nil {
-		return nil, err
-	}
-
+// getRequestFromEnvelope creates an HTTP request from a pre-built envelope.
+// sdkName and sdkVersion are used for User-Agent and authentication headers.
+func getRequestFromEnvelope(ctx context.Context, dsn *Dsn, envelope *bytes.Buffer, sdkName, sdkVersion string) (*http.Request, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	return http.NewRequestWithContext(
+	request, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodPost,
 		dsn.GetAPIURL().String(),
 		envelope,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	request.Header.Set("User-Agent", fmt.Sprintf("%s/%s", sdkName, sdkVersion))
+	request.Header.Set("Content-Type", "application/x-sentry-envelope")
+
+	auth := fmt.Sprintf("Sentry sentry_version=%s, "+
+		"sentry_client=%s/%s, sentry_key=%s", apiVersion, sdkName, sdkVersion, dsn.GetPublicKey())
+
+	// The key sentry_secret is effectively deprecated and no longer needs to be set.
+	// However, since it was required in older self-hosted versions,
+	// it should still be passed through to Sentry if set.
+	if dsn.GetSecretKey() != "" {
+		auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.GetSecretKey())
+	}
+
+	request.Header.Set("X-Sentry-Auth", auth)
+
+	return request, nil
+}
+
+func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn, reporter *report.Aggregator) (*http.Request, error) {
+	body := getRequestBodyFromEvent(event)
+	if body == nil {
+		return nil, errors.New("event could not be marshaled")
+	}
+
+	envelope, err := envelopeFromBody(event, dsn, time.Now(), body, reporter)
+	if err != nil {
+		return nil, err
+	}
+
+	return getRequestFromEnvelope(ctx, dsn, envelope, event.Sdk.Name, event.Sdk.Version)
 }
 
 // ================================
@@ -300,6 +342,7 @@ type HTTPTransport struct {
 	dsn       *Dsn
 	client    *http.Client
 	transport http.RoundTripper
+	reporter  *report.Aggregator
 
 	// buffer is a channel of batches. Calling Flush terminates work on the
 	// current in-flight items and starts a new batch for subsequent events.
@@ -330,7 +373,7 @@ func NewHTTPTransport() *HTTPTransport {
 	return &transport
 }
 
-// Configure is called by the Client itself, providing it it's own ClientOptions.
+// Configure is called by the Client itself, providing its own ClientOptions.
 func (t *HTTPTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
@@ -338,6 +381,9 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		return
 	}
 	t.dsn = dsn
+	if !options.DisableClientReports {
+		t.reporter = report.GetAggregator(options.Dsn)
+	}
 
 	// A buffered channel with capacity 1 works like a mutex, ensuring only one
 	// goroutine can access the current batch at a given time. Access is
@@ -386,11 +432,15 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	category := event.toCategory()
 
 	if t.disabled(category) {
+		t.reporter.RecordOne(report.ReasonRateLimitBackoff, category)
+		recordSpanOutcome(t.reporter, report.ReasonRateLimitBackoff, event)
 		return
 	}
 
-	request, err := getRequestFromEvent(ctx, event, t.dsn)
+	request, err := getRequestFromEvent(ctx, event, t.dsn, t.reporter)
 	if err != nil {
+		t.reporter.RecordOne(report.ReasonInternalError, category)
+		recordSpanOutcome(t.reporter, report.ReasonInternalError, event)
 		return
 	}
 
@@ -423,6 +473,8 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		)
 	default:
 		debuglog.Println("Event dropped due to transport buffer being full.")
+		t.reporter.RecordOne(report.ReasonQueueOverflow, category)
+		recordSpanOutcome(t.reporter, report.ReasonQueueOverflow, event)
 	}
 
 	t.buffer <- b
@@ -509,6 +561,8 @@ func (t *HTTPTransport) Close() {
 }
 
 func (t *HTTPTransport) worker() {
+	crTicker := time.NewTicker(defaultClientReportsTick)
+	defer crTicker.Stop()
 	for b := range t.buffer {
 		// Signal that processing of the current batch has started.
 		close(b.started)
@@ -523,6 +577,46 @@ func (t *HTTPTransport) worker() {
 			select {
 			case <-t.done:
 				return
+			case <-crTicker.C:
+				r := t.reporter.TakeReport()
+				if r != nil {
+					var buf bytes.Buffer
+					enc := json.NewEncoder(&buf)
+					if err := encodeEnvelopeHeader(enc, &envelopeHeader{
+						SentAt: time.Now(),
+						Dsn:    t.dsn.String(),
+						Sdk: map[string]string{
+							"name":    sdkIdentifier,
+							"version": SDKVersion,
+						},
+					}); err != nil {
+						continue
+					}
+					if err := encodeClientReport(enc, r); err != nil {
+						continue
+					}
+					req, err := getRequestFromEnvelope(context.Background(), t.dsn, &buf, sdkIdentifier, SDKVersion)
+					if err != nil {
+						debuglog.Printf("There was an issue when creating the request: %v", err)
+						continue
+					}
+					response, err := t.client.Do(req)
+					if err != nil {
+						debuglog.Printf("There was an issue with sending an event: %v", err)
+						continue
+					}
+					t.mu.Lock()
+					if t.limits == nil {
+						t.limits = make(ratelimit.Map)
+					}
+					t.limits.Merge(ratelimit.FromResponse(response))
+					t.mu.Unlock()
+
+					// Drain body up to a limit and close it, allowing the
+					// transport to reuse TCP connections.
+					_, _ = io.CopyN(io.Discard, response.Body, util.MaxDrainResponseBytes)
+					response.Body.Close()
+				}
 			case item, open := <-b.items:
 				if !open {
 					break loop
@@ -586,6 +680,7 @@ type HTTPSyncTransport struct {
 	dsn       *Dsn
 	client    *http.Client
 	transport http.RoundTripper
+	reporter  *report.Aggregator
 
 	mu     sync.Mutex
 	limits ratelimit.Map
@@ -604,7 +699,7 @@ func NewHTTPSyncTransport() *HTTPSyncTransport {
 	return &transport
 }
 
-// Configure is called by the Client itself, providing it it's own ClientOptions.
+// Configure is called by the Client itself, providing its own ClientOptions.
 func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	dsn, err := NewDsn(options.Dsn)
 	if err != nil {
@@ -612,6 +707,9 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 		return
 	}
 	t.dsn = dsn
+	if !options.DisableClientReports {
+		t.reporter = report.GetAggregator(options.Dsn)
+	}
 
 	if options.HTTPTransport != nil {
 		t.transport = options.HTTPTransport
@@ -645,12 +743,17 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		return
 	}
 
-	if t.disabled(event.toCategory()) {
+	category := event.toCategory()
+	if t.disabled(category) {
+		t.reporter.RecordOne(report.ReasonRateLimitBackoff, category)
+		recordSpanOutcome(t.reporter, report.ReasonRateLimitBackoff, event)
 		return
 	}
 
-	request, err := getRequestFromEvent(ctx, event, t.dsn)
+	request, err := getRequestFromEvent(ctx, event, t.dsn, t.reporter)
 	if err != nil {
+		t.reporter.RecordOne(report.ReasonInternalError, category)
+		recordSpanOutcome(t.reporter, report.ReasonInternalError, event)
 		return
 	}
 
@@ -665,9 +768,15 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	response, err := t.client.Do(request)
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
+		t.reporter.RecordOne(report.ReasonNetworkError, category)
+		recordSpanOutcome(t.reporter, report.ReasonNetworkError, event)
 		return
 	}
-	util.HandleHTTPResponse(response, identifier)
+	success := util.HandleHTTPResponse(response, identifier)
+	if !success && response.StatusCode != http.StatusTooManyRequests {
+		t.reporter.RecordOne(report.ReasonSendError, category)
+		recordSpanOutcome(t.reporter, report.ReasonSendError, event)
+	}
 
 	t.mu.Lock()
 	if t.limits == nil {

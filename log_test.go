@@ -194,6 +194,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
+				cmpopts.IgnoreFields(Log{}, "approximateSize"),
 			}
 
 			gotEvents := mockTransport.Events()
@@ -338,6 +339,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
+				cmpopts.IgnoreFields(Log{}, "approximateSize"),
 			}
 
 			gotEvents := mockTransport.Events()
@@ -424,6 +426,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Log{}, "Timestamp"),
+		cmpopts.IgnoreFields(Log{}, "approximateSize"),
 	}
 	if diff := cmp.Diff(wantLogs, event.Logs, opts); diff != "" {
 		t.Errorf("Logs mismatch (-want +got):\n%s", diff)
