@@ -285,8 +285,18 @@ func (e *logEntry) String(key, value string) LogEntry {
 	return e
 }
 
+func (e *logEntry) StringSlice(key string, value []string) LogEntry {
+	e.attributes[key] = Attribute{Value: value, Type: AttributeArray}
+	return e
+}
+
 func (e *logEntry) Int(key string, value int) LogEntry {
 	e.attributes[key] = Attribute{Value: int64(value), Type: AttributeInt}
+	return e
+}
+
+func (e *logEntry) Int64Slice(key string, value []int64) LogEntry {
+	e.attributes[key] = Attribute{Value: value, Type: AttributeArray}
 	return e
 }
 
@@ -295,8 +305,18 @@ func (e *logEntry) Int64(key string, value int64) LogEntry {
 	return e
 }
 
+func (e *logEntry) Float64Slice(key string, value []float64) LogEntry {
+	e.attributes[key] = Attribute{Value: value, Type: AttributeArray}
+	return e
+}
+
 func (e *logEntry) Float64(key string, value float64) LogEntry {
 	e.attributes[key] = Attribute{Value: value, Type: AttributeFloat}
+	return e
+}
+
+func (e *logEntry) BoolSlice(key string, value []bool) LogEntry {
+	e.attributes[key] = Attribute{Value: value, Type: AttributeArray}
 	return e
 }
 

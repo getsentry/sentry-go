@@ -134,14 +134,22 @@ type Logger interface {
 type LogEntry interface {
 	// WithCtx creates a new LogEntry with the specified context without overwriting the previous one.
 	WithCtx(ctx context.Context) LogEntry
+	// StringSlice adds a string slice attribute to the LogEntry.
+	StringSlice(key string, value []string) LogEntry
 	// String adds a string attribute to the LogEntry.
 	String(key, value string) LogEntry
 	// Int adds an int attribute to the LogEntry.
 	Int(key string, value int) LogEntry
+	// Int64Slice adds an int64 slice attribute to the LogEntry.
+	Int64Slice(key string, value []int64) LogEntry
 	// Int64 adds an int64 attribute to the LogEntry.
 	Int64(key string, value int64) LogEntry
+	// Float64Slice adds a float64 slice attribute to the LogEntry.
+	Float64Slice(key string, value []float64) LogEntry
 	// Float64 adds a float64 attribute to the LogEntry.
 	Float64(key string, value float64) LogEntry
+	// BoolSlice adds a bool slice attribute to the LogEntry.
+	BoolSlice(key string, value []bool) LogEntry
 	// Bool adds a bool attribute to the LogEntry.
 	Bool(key string, value bool) LogEntry
 	// Emit emits the LogEntry with the provided arguments.
