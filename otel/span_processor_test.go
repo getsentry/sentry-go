@@ -446,7 +446,7 @@ func TestSpanWithFinishedParentShouldBeDeleted(t *testing.T) {
 
 	parent.End()
 	_, parentExists = sentrySpanMap.Get(parentSpanID)
-	assertEqual(t, parentExists, true)
+	assertEqual(t, parentExists, false)
 	_, childExists = sentrySpanMap.Get(childSpanID)
 	assertEqual(t, childExists, true)
 
