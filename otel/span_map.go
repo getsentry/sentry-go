@@ -55,7 +55,7 @@ func (ssm *SentrySpanMap) MarkFinished(spanID otelTrace.SpanID, traceID otelTrac
 
 	if entry, ok := ssm.transactions.Load(traceID); ok {
 		if entry.activeCount.Add(-1) <= 0 {
-			ssm.transactions.Delete(traceID)
+			ssm.transactions.CompareAndDelete(traceID, entry)
 		}
 	}
 }

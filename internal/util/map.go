@@ -10,6 +10,10 @@ func (s *SyncMap[K, V]) Store(key K, value V) {
 	s.m.Store(key, value)
 }
 
+func (s *SyncMap[K, V]) CompareAndDelete(key K, value V) {
+	s.m.CompareAndDelete(key, value)
+}
+
 func (s *SyncMap[K, V]) Load(key K) (V, bool) {
 	v, ok := s.m.Load(key)
 	if !ok {
