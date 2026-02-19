@@ -17,5 +17,5 @@ jobs:
     with:
       language: go
       sdk-version: ${{ inputs.sdk-version || 'latest' }}
-      iterations: 3
+      iterations: 5
       benchmarks-ref: feat/e2e-go-benchmarks
