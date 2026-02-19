@@ -1,0 +1,21 @@
+name: SDK Benchmarks
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      sdk-version:
+        description: "SDK version to benchmark (e.g. 0.42.0 or latest)"
+        default: "latest"
+
+permissions:
+  pull-requests: write
+
+jobs:
+  benchmark:
+    uses: getsentry/sdk-benchmarks/.github/workflows/e2e.yml@feat/e2e-go-benchmarks
+    with:
+      language: go
+      sdk-version: ${{ inputs.sdk-version || 'latest' }}
+      iterations: 3
+      benchmarks-ref: feat/e2e-go-benchmarks
