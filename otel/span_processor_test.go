@@ -103,7 +103,7 @@ func TestOnStartRootSpan(t *testing.T) {
 	if sentrySpanMap.Len() != 1 {
 		t.Errorf("Span map size is %d, expected: 1", sentrySpanMap.Len())
 	}
-	sentrySpan, ok := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
+	sentrySpan, ok := sentrySpanMap.Get(otelSpan.SpanContext().TraceID(), otelSpan.SpanContext().SpanID())
 	if !ok {
 		t.Errorf("Sentry span not found in the map")
 	}
@@ -158,7 +158,7 @@ func TestOnStartWithTraceParentContext(t *testing.T) {
 	if sentrySpanMap.Len() != 1 {
 		t.Errorf("Span map size is %d, expected: 1", sentrySpanMap.Len())
 	}
-	sentrySpan, ok := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
+	sentrySpan, ok := sentrySpanMap.Get(otelSpan.SpanContext().TraceID(), otelSpan.SpanContext().SpanID())
 	if !ok {
 		t.Errorf("Sentry span not found in the map")
 	}
@@ -201,11 +201,11 @@ func TestOnStartWithExistingParentSpan(t *testing.T) {
 		t.Errorf("Span map size is %d, expected: 2", sentrySpanMap.Len())
 	}
 
-	sentryTransaction, ok1 := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
+	sentryTransaction, ok1 := sentrySpanMap.Get(otelRootSpan.SpanContext().TraceID(), otelRootSpan.SpanContext().SpanID())
 	if !ok1 {
 		t.Errorf("Sentry span not found in the map")
 	}
-	sentryChildSpan, ok2 := sentrySpanMap.Get(otelChildSpan.SpanContext().SpanID())
+	sentryChildSpan, ok2 := sentrySpanMap.Get(otelChildSpan.SpanContext().TraceID(), otelChildSpan.SpanContext().SpanID())
 	if !ok2 {
 		t.Errorf("Sentry span not found in the map")
 	}
@@ -229,7 +229,7 @@ func TestOnEndWithTransaction(t *testing.T) {
 			attribute.String("key1", "value1"),
 		),
 	)
-	sentryTransaction, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
+	sentryTransaction, _ := sentrySpanMap.Get(otelSpan.SpanContext().TraceID(), otelSpan.SpanContext().SpanID())
 	assertTrue(t, sentryTransaction.EndTime.IsZero())
 	otelSpan.End()
 
@@ -275,8 +275,8 @@ func TestOnEndWithChildSpan(t *testing.T) {
 			attribute.String("childKey1", "value1"),
 		),
 	)
-	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
-	sentryChildSpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().SpanID())
+	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().TraceID(), otelRootSpan.SpanContext().SpanID())
+	sentryChildSpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().TraceID(), otelChildSpan.SpanContext().SpanID())
 	otelChildSpan.End()
 	otelRootSpan.End()
 
@@ -313,7 +313,7 @@ func TestOnEndDoesNotFinishSentryRequests(t *testing.T) {
 		// Hostname is same as in Sentry DSN
 		trace.WithAttributes(attribute.String("http.url", "https://example.com/api/123/envelope/")),
 	)
-	sentrySpan, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
+	sentrySpan, _ := sentrySpanMap.Get(otelSpan.SpanContext().TraceID(), otelSpan.SpanContext().SpanID())
 	otelSpan.End()
 
 	// The span map should be empty
@@ -342,8 +342,8 @@ func TestParseSpanAttributesHttpClient(t *testing.T) {
 		trace.WithAttributes(attribute.String("http.url", "http://localhost:2345/api/checkout2?q1=q2#fragment")),
 	)
 
-	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
-	sentrySpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().SpanID())
+	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().TraceID(), otelRootSpan.SpanContext().SpanID())
+	sentrySpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().TraceID(), otelChildSpan.SpanContext().SpanID())
 
 	otelChildSpan.End()
 	otelRootSpan.End()
@@ -381,8 +381,8 @@ func TestParseSpanAttributesHttpServer(t *testing.T) {
 		// We ignore "http.url" if "http.target" is present
 		trace.WithAttributes(attribute.String("http.url", "http://localhost:2345/api/checkout?q1=q2#fragment")),
 	)
-	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
-	sentrySpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().SpanID())
+	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().TraceID(), otelRootSpan.SpanContext().SpanID())
+	sentrySpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().TraceID(), otelChildSpan.SpanContext().SpanID())
 
 	otelChildSpan.End()
 	otelRootSpan.End()
@@ -406,20 +406,20 @@ func TestSpanBecomesChildOfFinishedSpan(t *testing.T) {
 		emptyContextWithSentry(),
 		"rootSpan",
 	)
-	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().SpanID())
+	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().TraceID(), otelRootSpan.SpanContext().SpanID())
 
 	ctx, childSpan1 := tracer.Start(
 		ctx,
 		"span name 1",
 	)
-	sentrySpan1, _ := sentrySpanMap.Get(childSpan1.SpanContext().SpanID())
+	sentrySpan1, _ := sentrySpanMap.Get(childSpan1.SpanContext().TraceID(), childSpan1.SpanContext().SpanID())
 	childSpan1.End()
 
 	_, childSpan2 := tracer.Start(
 		ctx,
 		"span name 2",
 	)
-	sentrySpan2, _ := sentrySpanMap.Get(childSpan2.SpanContext().SpanID())
+	sentrySpan2, _ := sentrySpanMap.Get(childSpan2.SpanContext().TraceID(), childSpan2.SpanContext().SpanID())
 	childSpan2.End()
 
 	otelRootSpan.End()
@@ -435,23 +435,24 @@ func TestSpanWithFinishedParentShouldBeDeleted(t *testing.T) {
 	_, _, tracer := setupSpanProcessorTest()
 
 	ctx, parent := tracer.Start(context.Background(), "parent")
+	traceID := parent.SpanContext().TraceID()
 	parentSpanID := parent.SpanContext().SpanID()
 	_, child := tracer.Start(ctx, "child")
 	childSpanID := child.SpanContext().SpanID()
 
-	_, parentExists := sentrySpanMap.Get(parentSpanID)
-	_, childExists := sentrySpanMap.Get(childSpanID)
+	_, parentExists := sentrySpanMap.Get(traceID, parentSpanID)
+	_, childExists := sentrySpanMap.Get(traceID, childSpanID)
 	assertEqual(t, parentExists, true)
 	assertEqual(t, childExists, true)
 
 	parent.End()
-	_, parentExists = sentrySpanMap.Get(parentSpanID)
+	_, parentExists = sentrySpanMap.Get(traceID, parentSpanID)
 	assertEqual(t, parentExists, false)
-	_, childExists = sentrySpanMap.Get(childSpanID)
+	_, childExists = sentrySpanMap.Get(traceID, childSpanID)
 	assertEqual(t, childExists, true)
 
 	child.End()
-	_, childExists = sentrySpanMap.Get(childSpanID)
+	_, childExists = sentrySpanMap.Get(traceID, childSpanID)
 	assertEqual(t, childExists, false)
 	assertEqual(t, sentrySpanMap.Len(), 0)
 }

@@ -19,7 +19,7 @@ func TestLinkTraceContextToErrorEventSetsContext(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, _, tracer := setupSpanProcessorTest()
 			ctx, otelSpan := tracer.Start(emptyContextWithSentry(), "spanName")
-			sentrySpan, _ := sentrySpanMap.Get(otelSpan.SpanContext().SpanID())
+			sentrySpan, _ := sentrySpanMap.Get(otelSpan.SpanContext().TraceID(), otelSpan.SpanContext().SpanID())
 
 			hub := sentry.GetHubFromContext(ctx)
 			client, scope := hub.Client(), hub.Scope()

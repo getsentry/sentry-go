@@ -33,7 +33,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 	otelParentSpanID := s.Parent().SpanID()
 
 	txn, ok := sentrySpanMap.GetTransaction(otelTraceID)
-	if ok && s.Parent().IsValid() && !s.Parent().IsRemote() {
+	if ok && s.Parent().IsValid() && !s.Parent().IsRemote() && txn.HasSpan(otelParentSpanID) {
 		span := txn.root.StartChild(s.Name())
 		span.SpanID = sentry.SpanID(otelSpanID)
 		span.ParentSpanID = sentry.SpanID(otelParentSpanID)
@@ -61,7 +61,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	otelSpanId := s.SpanContext().SpanID()
 	otelTraceId := s.SpanContext().TraceID()
-	sentrySpan, ok := sentrySpanMap.Get(otelSpanId)
+	sentrySpan, ok := sentrySpanMap.Get(otelTraceId, otelSpanId)
 	if !ok || sentrySpan == nil {
 		return
 	}
