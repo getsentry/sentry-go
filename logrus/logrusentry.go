@@ -5,10 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"reflect"
-	"strconv"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -301,6 +299,13 @@ func (h *logHook) key(key string) string {
 	return key
 }
 
+// uint64LogEntry is used to pass uint64 values without conversion.
+// The concrete sentry.logEntry type satisfies this interface,
+// but it is intentionally not part of the public sentry.LogEntry API.
+type uint64LogEntry interface {
+	Uint64(key string, value uint64) sentry.LogEntry
+}
+
 func logrusFieldToLogEntry(logEntry sentry.LogEntry, key string, value interface{}) sentry.LogEntry {
 	switch val := value.(type) {
 	case int8:
@@ -315,12 +320,11 @@ func logrusFieldToLogEntry(logEntry sentry.LogEntry, key string, value interface
 		return logEntry.Int64(key, int64(val))
 	case uint, uint8, uint16, uint32, uint64:
 		uval := reflect.ValueOf(val).Convert(reflect.TypeOf(uint64(0))).Uint()
-		if uval <= math.MaxInt64 {
-			return logEntry.Int64(key, int64(uval))
-		} else {
-			// For values larger than int64 can handle, we use string
-			return logEntry.String(key, strconv.FormatUint(uval, 10))
+		if e, ok := logEntry.(uint64LogEntry); ok {
+			return e.Uint64(key, uval)
 		}
+		debuglog.Println("Internal error: log entry does not implement unsigned int conversion")
+		return logEntry
 	case string:
 		return logEntry.String(key, val)
 	case float32:
