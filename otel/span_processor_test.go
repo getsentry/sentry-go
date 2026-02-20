@@ -456,3 +456,39 @@ func TestSpanWithFinishedParentShouldBeDeleted(t *testing.T) {
 	assertEqual(t, childExists, false)
 	assertEqual(t, sentrySpanMap.Len(), 0)
 }
+
+func TestTransactionsStayIndependent(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+	sharedTraceID := "bc6d53f15eb88f4320054569b8c553d4"
+
+	ctx1 := trace.ContextWithSpanContext(
+		emptyContextWithSentry(),
+		trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID:    otelTraceIDFromHex(sharedTraceID),
+			SpanID:     otelSpanIDFromHex("1111111111111111"),
+			TraceFlags: trace.FlagsSampled,
+		}),
+	)
+	ctx2 := trace.ContextWithSpanContext(
+		emptyContextWithSentry(),
+		trace.NewSpanContext(trace.SpanContextConfig{
+			TraceID:    otelTraceIDFromHex(sharedTraceID),
+			SpanID:     otelSpanIDFromHex("2222222222222222"),
+			TraceFlags: trace.FlagsSampled,
+		}),
+	)
+
+	_, otelRoot1 := tracer.Start(ctx1, "request1")
+	sentryTxn1, _ := sentrySpanMap.Get(otelRoot1.SpanContext().TraceID(), otelRoot1.SpanContext().SpanID())
+
+	_, otelRoot2 := tracer.Start(ctx2, "request2")
+	sentryTxn2, _ := sentrySpanMap.Get(otelRoot2.SpanContext().TraceID(), otelRoot2.SpanContext().SpanID())
+
+	assertEqual(t, sentryTxn1.IsTransaction(), true)
+	assertEqual(t, sentryTxn2.IsTransaction(), true)
+
+	assertTrue(t, sentryTxn1.SpanID != sentryTxn2.SpanID)
+
+	otelRoot1.End()
+	otelRoot2.End()
+}
