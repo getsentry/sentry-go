@@ -19,6 +19,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
+	"github.com/getsentry/sentry-go/report"
 )
 
 // The identifier of the SDK.
@@ -248,6 +249,8 @@ type ClientOptions struct {
 	EnableLogs bool
 	// DisableMetrics controls when metrics should be emitted.
 	DisableMetrics bool
+	// DisableClientReports controls when client reports should be emitted.
+	DisableClientReports bool
 	// TraceIgnoreStatusCodes is a list of HTTP status codes that should not be traced.
 	// Each element can be either:
 	// - A single-element slice [code] for a specific status code
@@ -286,6 +289,7 @@ type Client struct {
 	batchLogger        *logBatchProcessor
 	batchMeter         *metricBatchProcessor
 	telemetryProcessor *telemetry.Processor
+	reporter           *report.Aggregator
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -389,6 +393,12 @@ func NewClient(options ClientOptions) (*Client, error) {
 		sdkVersion:    SDKVersion,
 	}
 
+	if !options.DisableClientReports {
+		// Use the global registry to get or create a reporter for this DSN.
+		// This ensures all components using the same DSN share the same reporter.
+		client.reporter = report.GetOrCreateAggregator(options.Dsn)
+	}
+
 	client.setupTransport()
 
 	// noop Telemetry Buffers and Processor fow now
@@ -462,11 +472,11 @@ func (client *Client) setupTelemetryProcessor() { // nolint: unused
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
 	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
-		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
 	}
 
 	sdkInfo := &protocol.SdkInfo{
@@ -560,9 +570,12 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 	}
 
 	if client.options.BeforeSendLog != nil {
+		approxSize := log.ApproximateSize()
 		log = client.options.BeforeSendLog(log)
 		if log == nil {
 			debuglog.Println("Log dropped due to BeforeSendLog callback.")
+			client.reporter.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryLog)
+			client.reporter.Record(report.ReasonBeforeSend, ratelimit.CategoryLogByte, int64(approxSize))
 			return false
 		}
 	}
@@ -570,11 +583,14 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 	if client.telemetryProcessor != nil {
 		if !client.telemetryProcessor.Add(log) {
 			debuglog.Print("Dropping log: telemetry buffer full or category missing")
+			// Note: processor tracks client report
 			return false
 		}
 	} else if client.batchLogger != nil {
 		if !client.batchLogger.Send(log) {
 			debuglog.Printf("Dropping log [%s]: buffer full", log.Level)
+			client.reporter.RecordOne(report.ReasonBufferOverflow, ratelimit.CategoryLog)
+			client.reporter.Record(report.ReasonBufferOverflow, ratelimit.CategoryLogByte, int64(log.ApproximateSize()))
 			return false
 		}
 	}
@@ -591,6 +607,7 @@ func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
 		metric = client.options.BeforeSendMetric(metric)
 		if metric == nil {
 			debuglog.Println("Metric dropped due to BeforeSendMetric callback.")
+			client.reporter.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryTraceMetric)
 			return false
 		}
 	}
@@ -598,11 +615,13 @@ func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
 	if client.telemetryProcessor != nil {
 		if !client.telemetryProcessor.Add(metric) {
 			debuglog.Printf("Dropping metric: telemetry buffer full or category missing")
+			// Note: processor tracks client report
 			return false
 		}
 	} else if client.batchMeter != nil {
 		if !client.batchMeter.Send(metric) {
 			debuglog.Printf("Dropping metric %q: buffer full", metric.Name)
+			client.reporter.RecordOne(report.ReasonBufferOverflow, ratelimit.CategoryTraceMetric)
 			return false
 		}
 	}
@@ -720,6 +739,7 @@ func (client *Client) Close() {
 	if client.batchMeter != nil {
 		client.batchMeter.Shutdown()
 	}
+	report.UnregisterAggregator(client.options.Dsn)
 	client.Transport.Close()
 }
 
@@ -811,6 +831,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	// (errors, messages) are sampled here. Does not apply to check-ins.
 	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
 		debuglog.Println("Event dropped due to SampleRate hit.")
+		client.reporter.RecordOne(report.ReasonSampleRate, ratelimit.CategoryError)
 		return nil
 	}
 
@@ -825,9 +846,17 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	switch event.Type {
 	case transactionType:
 		if client.options.BeforeSendTransaction != nil {
-			if event = client.options.BeforeSendTransaction(event, hint); event == nil {
+			spanCountBefore := event.GetSpanCount()
+			event = client.options.BeforeSendTransaction(event, hint)
+			if event == nil {
 				debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
+				client.reporter.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryTransaction)
+				client.reporter.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, int64(spanCountBefore))
 				return nil
+			}
+			// Track spans removed by the callback
+			if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
+				client.reporter.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, int64(droppedSpans))
 			}
 		}
 	case checkInType: // not a default case, since we shouldn't apply BeforeSend on check-in events
@@ -835,6 +864,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		if client.options.BeforeSend != nil {
 			if event = client.options.BeforeSend(event, hint); event == nil {
 				debuglog.Println("Event dropped due to BeforeSend callback.")
+				client.reporter.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryError)
 				return nil
 			}
 		}
@@ -905,19 +935,43 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 
 	for _, processor := range client.eventProcessors {
 		id := event.EventID
+		category := event.toCategory()
+		spanCountBefore := event.GetSpanCount()
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
+			client.reporter.RecordOne(report.ReasonEventProcessor, category)
+			if category == ratelimit.CategoryTransaction {
+				client.reporter.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
+			}
 			return nil
+		}
+		// Track spans removed by the processor
+		if category == ratelimit.CategoryTransaction {
+			if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
+				client.reporter.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
+			}
 		}
 	}
 
 	for _, processor := range globalEventProcessors {
 		id := event.EventID
+		category := event.toCategory()
+		spanCountBefore := event.GetSpanCount()
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
+			client.reporter.RecordOne(report.ReasonEventProcessor, category)
+			if category == ratelimit.CategoryTransaction {
+				client.reporter.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
+			}
 			return nil
+		}
+		// Track spans removed by the processor
+		if category == ratelimit.CategoryTransaction {
+			if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
+				client.reporter.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
+			}
 		}
 	}
 

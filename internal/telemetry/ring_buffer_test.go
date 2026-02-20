@@ -16,7 +16,7 @@ type testItem struct {
 
 func TestNewRingBuffer(t *testing.T) {
 	t.Run("with valid capacity", func(t *testing.T) {
-		buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 50, OverflowPolicyDropOldest, 1, 0)
+		buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 50, OverflowPolicyDropOldest, 1, 0)
 		if buffer.Capacity() != 50 {
 			t.Errorf("Expected capacity 50, got %d", buffer.Capacity())
 		}
@@ -29,14 +29,14 @@ func TestNewRingBuffer(t *testing.T) {
 	})
 
 	t.Run("with zero capacity", func(t *testing.T) {
-		buffer := NewRingBuffer[*testItem](ratelimit.CategoryLog, 0, OverflowPolicyDropOldest, 1, 0)
+		buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryLog, 0, OverflowPolicyDropOldest, 1, 0)
 		if buffer.Capacity() != 100 {
 			t.Errorf("Expected default capacity 100, got %d", buffer.Capacity())
 		}
 	})
 
 	t.Run("with negative capacity", func(t *testing.T) {
-		buffer := NewRingBuffer[*testItem](ratelimit.CategoryLog, -10, OverflowPolicyDropOldest, 1, 0)
+		buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryLog, -10, OverflowPolicyDropOldest, 1, 0)
 		if buffer.Capacity() != 100 {
 			t.Errorf("Expected default capacity 100, got %d", buffer.Capacity())
 		}
@@ -44,7 +44,7 @@ func TestNewRingBuffer(t *testing.T) {
 }
 
 func TestBufferBasicOperations(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
 
 	// Test empty buffer
 	if !buffer.IsEmpty() {
@@ -83,7 +83,7 @@ func TestBufferBasicOperations(t *testing.T) {
 }
 
 func TestBufferPollOperation(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
 
 	// Test polling from empty buffer
 	item, ok := buffer.Poll()
@@ -126,7 +126,7 @@ func TestBufferPollOperation(t *testing.T) {
 }
 
 func TestBufferOverflow(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 2, OverflowPolicyDropOldest, 1, 0)
 
 	// Fill buffer to capacity
 	item1 := &testItem{id: 1, data: "first"}
@@ -170,7 +170,7 @@ func TestBufferOverflow(t *testing.T) {
 }
 
 func TestBufferDrain(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 5, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 5, OverflowPolicyDropOldest, 1, 0)
 
 	// Drain empty buffer
 	items := buffer.Drain()
@@ -206,7 +206,7 @@ func TestBufferDrain(t *testing.T) {
 }
 
 func TestBufferMetrics(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 2, OverflowPolicyDropOldest, 1, 0)
 
 	// Initial metrics
 	if buffer.OfferedCount() != 0 {
@@ -230,7 +230,7 @@ func TestBufferMetrics(t *testing.T) {
 }
 
 func TestBufferConcurrency(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 100, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 100, OverflowPolicyDropOldest, 1, 0)
 
 	const numGoroutines = 10
 	const itemsPerGoroutine = 50
@@ -301,7 +301,7 @@ func TestBufferDifferentCategories(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(string(tc.category), func(t *testing.T) {
-			buffer := NewRingBuffer[*testItem](tc.category, 10, OverflowPolicyDropOldest, 1, 0)
+			buffer := NewRingBuffer[*testItem]("", tc.category, 10, OverflowPolicyDropOldest, 1, 0)
 			if buffer.Category() != tc.category {
 				t.Errorf("Expected category %s, got %s", tc.category, buffer.Category())
 			}
@@ -317,7 +317,7 @@ func TestBufferStressTest(t *testing.T) {
 		t.Skip("Skipping stress test in short mode")
 	}
 
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 1000, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 1000, OverflowPolicyDropOldest, 1, 0)
 
 	const duration = 100 * time.Millisecond
 	const numProducers = 5
@@ -394,7 +394,7 @@ func TestBufferStressTest(t *testing.T) {
 }
 
 func TestOverflowPolicyDropOldest(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 2, OverflowPolicyDropOldest, 1, 0)
 
 	// Fill buffer to capacity
 	item1 := &testItem{id: 1, data: "first"}
@@ -434,7 +434,7 @@ func TestOverflowPolicyDropOldest(t *testing.T) {
 }
 
 func TestOverflowPolicyDropNewest(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropNewest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 2, OverflowPolicyDropNewest, 1, 0)
 
 	// Fill buffer to capacity
 	item1 := &testItem{id: 1, data: "first"}
@@ -474,7 +474,7 @@ func TestOverflowPolicyDropNewest(t *testing.T) {
 }
 
 func TestBufferDroppedCallback(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 2, OverflowPolicyDropOldest, 1, 0)
 
 	var droppedItems []*testItem
 	var dropReasons []string
@@ -512,7 +512,7 @@ func TestBufferDroppedCallback(t *testing.T) {
 }
 
 func TestBufferPollBatch(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 5, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 5, OverflowPolicyDropOldest, 1, 0)
 
 	// Add some items
 	for i := 1; i <= 5; i++ {
@@ -540,7 +540,7 @@ func TestBufferPollBatch(t *testing.T) {
 }
 
 func TestBufferPeek(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
 
 	// Test peek on empty buffer
 	_, ok := buffer.Peek()
@@ -567,7 +567,7 @@ func TestBufferPeek(t *testing.T) {
 }
 
 func TestBufferAdvancedMetrics(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 2, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 2, OverflowPolicyDropOldest, 1, 0)
 
 	// Test initial metrics
 	metrics := buffer.GetMetrics()
@@ -611,7 +611,7 @@ func TestBufferAdvancedMetrics(t *testing.T) {
 }
 
 func TestBufferClear(t *testing.T) {
-	buffer := NewRingBuffer[*testItem](ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[*testItem]("", ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
 
 	// Add some items
 	buffer.Offer(&testItem{id: 1, data: "test"})
@@ -700,7 +700,7 @@ func TestBufferIsReadyToFlush(t *testing.T) {
 				batchSize = 100
 				timeout = 5 * time.Second
 			}
-			buffer := NewRingBuffer[*testItem](tt.category, 200, OverflowPolicyDropOldest, batchSize, timeout)
+			buffer := NewRingBuffer[*testItem]("", tt.category, 200, OverflowPolicyDropOldest, batchSize, timeout)
 
 			for i := 0; i < tt.itemsToAdd; i++ {
 				buffer.Offer(&testItem{id: i, data: "test"})
@@ -771,7 +771,7 @@ func TestBufferPollIfReady(t *testing.T) {
 				batchSize = 100
 				timeout = 5 * time.Second
 			}
-			buffer := NewRingBuffer[*testItem](tt.category, 200, OverflowPolicyDropOldest, batchSize, timeout)
+			buffer := NewRingBuffer[*testItem]("", tt.category, 200, OverflowPolicyDropOldest, batchSize, timeout)
 
 			for i := 0; i < tt.itemsToAdd; i++ {
 				buffer.Offer(&testItem{id: i, data: "test"})
