@@ -318,6 +318,7 @@ func (e *logEntry) Bool(key string, value bool) LogEntry {
 //
 // This method is intentionally not part of the LogEntry interface to avoid exposing uint64 in the public API.
 func (e *logEntry) Uint64(key string, value uint64) LogEntry {
+	// We don't currently support uint64, but they should be sent with type integer and let relay handle overflows.
 	e.attributes[key] = Attribute{Value: value, Type: AttributeInt}
 	return e
 }

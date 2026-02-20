@@ -66,38 +66,11 @@ type Breadcrumb struct {
 	Message   string                 `json:"message,omitempty"`
 	Data      map[string]interface{} `json:"data,omitempty"`
 	Level     Level                  `json:"level,omitempty"`
-	Timestamp time.Time              `json:"timestamp"`
+	Timestamp time.Time              `json:"timestamp,omitzero"`
 }
 
 // TODO: provide constants for known breadcrumb types.
 // See https://develop.sentry.dev/sdk/event-payloads/breadcrumbs/#breadcrumb-types.
-
-// MarshalJSON converts the Breadcrumb struct to JSON.
-func (b *Breadcrumb) MarshalJSON() ([]byte, error) {
-	// We want to omit time.Time zero values, otherwise the server will try to
-	// interpret dates too far in the past. However, encoding/json doesn't
-	// support the "omitempty" option for struct types. See
-	// https://golang.org/issues/11939.
-	//
-	// We overcome the limitation and achieve what we want by shadowing fields
-	// and a few type tricks.
-
-	// breadcrumb aliases Breadcrumb to allow calling json.Marshal without an
-	// infinite loop. It preserves all fields while none of the attached
-	// methods.
-	type breadcrumb Breadcrumb
-
-	if b.Timestamp.IsZero() {
-		return json.Marshal(struct {
-			// Embed all the fields of Breadcrumb.
-			*breadcrumb
-			// Timestamp shadows the original Timestamp field and is meant to
-			// remain nil, triggering the omitempty behavior.
-			Timestamp json.RawMessage `json:"timestamp,omitempty"`
-		}{breadcrumb: (*breadcrumb)(b)})
-	}
-	return json.Marshal((*breadcrumb)(b))
-}
 
 // Logger provides a chaining API for structured logging to Sentry.
 type Logger interface {
@@ -439,7 +412,7 @@ type Event struct {
 	ServerName  string                 `json:"server_name,omitempty"`
 	Threads     []Thread               `json:"threads,omitempty"`
 	Tags        map[string]string      `json:"tags,omitempty"`
-	Timestamp   time.Time              `json:"timestamp"`
+	Timestamp   time.Time              `json:"timestamp,omitzero"`
 	Transaction string                 `json:"transaction,omitempty"`
 	User        User                   `json:"user,omitempty"`
 	Logger      string                 `json:"logger,omitempty"`
@@ -452,7 +425,7 @@ type Event struct {
 	// The fields below are only relevant for transactions.
 
 	Type            string           `json:"type,omitempty"`
-	StartTime       time.Time        `json:"start_timestamp"`
+	StartTime       time.Time        `json:"start_timestamp,omitzero"`
 	Spans           []*Span          `json:"spans,omitempty"`
 	TransactionInfo *TransactionInfo `json:"transaction_info,omitempty"`
 
@@ -564,17 +537,6 @@ func (e *Event) GetDynamicSamplingContext() map[string]string {
 
 // MarshalJSON converts the Event struct to JSON.
 func (e *Event) MarshalJSON() ([]byte, error) {
-	// We want to omit time.Time zero values, otherwise the server will try to
-	// interpret dates too far in the past. However, encoding/json doesn't
-	// support the "omitempty" option for struct types. See
-	// https://golang.org/issues/11939.
-	//
-	// We overcome the limitation and achieve what we want by shadowing fields
-	// and a few type tricks.
-	if e.Type == transactionType {
-		return e.transactionMarshalJSON()
-	}
-
 	if e.Type == checkInType {
 		return e.checkInMarshalJSON()
 	}
@@ -586,16 +548,15 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 	// loop. It preserves all fields while none of the attached methods.
 	type event Event
 
+	if e.Type == transactionType {
+		return json.Marshal(struct{ *event }{(*event)(e)})
+	}
 	// metrics and logs should be serialized under the same `items` json field.
 	if e.Type == logEvent.Type {
 		type logEvent struct {
 			*event
-			Items           []Log           `json:"items,omitempty"`
-			Type            json.RawMessage `json:"type,omitempty"`
-			Timestamp       json.RawMessage `json:"timestamp,omitempty"`
-			StartTime       json.RawMessage `json:"start_timestamp,omitempty"`
-			Spans           json.RawMessage `json:"spans,omitempty"`
-			TransactionInfo json.RawMessage `json:"transaction_info,omitempty"`
+			Items []Log           `json:"items,omitempty"`
+			Type  json.RawMessage `json:"type,omitempty"`
 		}
 		return json.Marshal(logEvent{event: (*event)(e), Items: e.Logs})
 	}
@@ -603,12 +564,8 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 	if e.Type == traceMetricEvent.Type {
 		type metricEvent struct {
 			*event
-			Items           []Metric        `json:"items,omitempty"`
-			Type            json.RawMessage `json:"type,omitempty"`
-			Timestamp       json.RawMessage `json:"timestamp,omitempty"`
-			StartTime       json.RawMessage `json:"start_timestamp,omitempty"`
-			Spans           json.RawMessage `json:"spans,omitempty"`
-			TransactionInfo json.RawMessage `json:"transaction_info,omitempty"`
+			Items []Metric        `json:"items,omitempty"`
+			Type  json.RawMessage `json:"type,omitempty"`
 		}
 		return json.Marshal(metricEvent{event: (*event)(e), Items: e.Metrics})
 	}
@@ -617,10 +574,6 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 	// marshaling.
 	type errorEvent struct {
 		*event
-
-		// Timestamp shadows the original Timestamp field. It allows us to
-		// include the timestamp when non-zero and omit it otherwise.
-		Timestamp json.RawMessage `json:"timestamp,omitempty"`
 
 		// The fields below are not part of error events and only make sense to
 		// be sent for transactions. They shadow the respective fields in Event
@@ -633,48 +586,6 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 	}
 
 	x := errorEvent{event: (*event)(e)}
-	if !e.Timestamp.IsZero() {
-		b, err := e.Timestamp.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-		x.Timestamp = b
-	}
-	return json.Marshal(x)
-}
-
-func (e *Event) transactionMarshalJSON() ([]byte, error) {
-	// event aliases Event to allow calling json.Marshal without an infinite
-	// loop. It preserves all fields while none of the attached methods.
-	type event Event
-
-	// transactionEvent is like Event with shadowed fields for customizing JSON
-	// marshaling.
-	type transactionEvent struct {
-		*event
-
-		// The fields below shadow the respective fields in Event. They allow us
-		// to include timestamps when non-zero and omit them otherwise.
-
-		StartTime json.RawMessage `json:"start_timestamp,omitempty"`
-		Timestamp json.RawMessage `json:"timestamp,omitempty"`
-	}
-
-	x := transactionEvent{event: (*event)(e)}
-	if !e.Timestamp.IsZero() {
-		b, err := e.Timestamp.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-		x.Timestamp = b
-	}
-	if !e.StartTime.IsZero() {
-		b, err := e.StartTime.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-		x.StartTime = b
-	}
 	return json.Marshal(x)
 }
 
@@ -751,9 +662,9 @@ type EventHint struct {
 }
 
 type Log struct {
-	Timestamp  time.Time            `json:"timestamp"`
+	Timestamp  time.Time            `json:"timestamp,omitzero"`
 	TraceID    TraceID              `json:"trace_id"`
-	SpanID     SpanID               `json:"span_id,omitempty"`
+	SpanID     SpanID               `json:"span_id,omitzero"`
 	Level      LogLevel             `json:"level"`
 	Severity   int                  `json:"severity_number,omitempty"`
 	Body       string               `json:"body"`
@@ -795,35 +706,6 @@ type Attribute struct {
 	Type  AttrType `json:"type"`
 }
 
-// MarshalJSON converts a Log to JSON that skips SpanID and timestamp when zero.
-func (l *Log) MarshalJSON() ([]byte, error) {
-	type log Log
-
-	var spanID string
-	if l.SpanID != zeroSpanID {
-		spanID = l.SpanID.String()
-	}
-
-	var ts json.RawMessage
-	if !l.Timestamp.IsZero() {
-		b, err := l.Timestamp.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-		ts = b
-	}
-
-	return json.Marshal(struct {
-		*log
-		SpanID    string          `json:"span_id,omitempty"`
-		Timestamp json.RawMessage `json:"timestamp,omitempty"`
-	}{
-		log:       (*log)(l),
-		SpanID:    spanID,
-		Timestamp: ts,
-	})
-}
-
 type MetricType string
 
 const (
@@ -834,43 +716,14 @@ const (
 )
 
 type Metric struct {
-	Timestamp  time.Time            `json:"timestamp"`
+	Timestamp  time.Time            `json:"timestamp,omitzero"`
 	TraceID    TraceID              `json:"trace_id"`
-	SpanID     SpanID               `json:"span_id,omitempty"`
+	SpanID     SpanID               `json:"span_id,omitzero"`
 	Type       MetricType           `json:"type"`
 	Name       string               `json:"name"`
 	Value      MetricValue          `json:"value"`
 	Unit       string               `json:"unit,omitempty"`
 	Attributes map[string]Attribute `json:"attributes,omitempty"`
-}
-
-// MarshalJSON converts a Metric to JSON that skips SpanID and timestamp when zero.
-func (m *Metric) MarshalJSON() ([]byte, error) {
-	type metric Metric
-
-	var spanID string
-	if m.SpanID != zeroSpanID {
-		spanID = m.SpanID.String()
-	}
-
-	var ts json.RawMessage
-	if !m.Timestamp.IsZero() {
-		b, err := m.Timestamp.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-		ts = b
-	}
-
-	return json.Marshal(struct {
-		*metric
-		SpanID    string          `json:"span_id,omitempty"`
-		Timestamp json.RawMessage `json:"timestamp,omitempty"`
-	}{
-		metric:    (*metric)(m),
-		SpanID:    spanID,
-		Timestamp: ts,
-	})
 }
 
 // GetCategory returns the rate limit category for metrics.

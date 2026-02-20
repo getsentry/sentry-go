@@ -4,9 +4,7 @@ import (
 	"encoding"
 	"fmt"
 	"log/slog"
-	"math"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -143,6 +141,13 @@ func handleFingerprint(v slog.Value, event *sentry.Event) {
 	}
 }
 
+// uint64LogEntry is used to pass uint64 values without conversion.
+// The concrete sentry.logEntry type satisfies this interface,
+// but it is intentionally not part of the public sentry.LogEntry API.
+type uint64LogEntry interface {
+	Uint64(key string, value uint64) sentry.LogEntry
+}
+
 func slogAttrToLogEntry(logEntry sentry.LogEntry, group string, a slog.Attr) sentry.LogEntry {
 	key := group + a.Key
 	switch a.Value.Kind() {
@@ -161,12 +166,11 @@ func slogAttrToLogEntry(logEntry sentry.LogEntry, group string, a slog.Attr) sen
 	case slog.KindTime:
 		return logEntry.String(key, a.Value.Time().Format(time.RFC3339))
 	case slog.KindUint64:
-		val := a.Value.Uint64()
-		if val <= math.MaxInt64 {
-			return logEntry.Int64(key, int64(val))
-		} else {
-			return logEntry.String(key, strconv.FormatUint(val, 10))
+		if e, ok := logEntry.(uint64LogEntry); ok {
+			return e.Uint64(key, a.Value.Uint64())
 		}
+		debuglog.Println("Internal error: log entry does not implement unsigned int conversion")
+		return logEntry
 	case slog.KindLogValuer:
 		return logEntry.String(key, a.Value.LogValuer().LogValue().String())
 	case slog.KindGroup:
