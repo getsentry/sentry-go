@@ -24,7 +24,7 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	var sentrySpan *sentry.Span
 
 	if spanContext.IsValid() {
-		sentrySpan, _ = sentrySpanMap.Get(spanContext.SpanID())
+		sentrySpan, _ = sentrySpanMap.Get(spanContext.TraceID(), spanContext.SpanID())
 	} else {
 		sentrySpan = nil
 	}

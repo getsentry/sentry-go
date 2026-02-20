@@ -20,7 +20,7 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 	otelSpanContext := trace.SpanContextFromContext(hint.Context)
 	var sentrySpan *sentry.Span
 	if otelSpanContext.IsValid() {
-		sentrySpan, _ = sentrySpanMap.Get(otelSpanContext.SpanID())
+		sentrySpan, _ = sentrySpanMap.Get(otelSpanContext.TraceID(), otelSpanContext.SpanID())
 	}
 	if sentrySpan == nil {
 		return event
