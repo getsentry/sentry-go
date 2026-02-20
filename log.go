@@ -299,7 +299,7 @@ func (e *logEntry) String(key, value string) LogEntry {
 }
 
 func (e *logEntry) StringSlice(key string, value []string) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: AttributeArray}
+	e.attributes[key] = Attribute{Value: attribute.StringSliceValue(value).AsInterface(), Type: AttributeArray}
 	return e
 }
 
@@ -309,7 +309,7 @@ func (e *logEntry) Int(key string, value int) LogEntry {
 }
 
 func (e *logEntry) Int64Slice(key string, value []int64) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: AttributeArray}
+	e.attributes[key] = Attribute{Value: attribute.Int64SliceValue(value).AsInterface(), Type: AttributeArray}
 	return e
 }
 
@@ -319,7 +319,7 @@ func (e *logEntry) Int64(key string, value int64) LogEntry {
 }
 
 func (e *logEntry) Float64Slice(key string, value []float64) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: AttributeArray}
+	e.attributes[key] = Attribute{Value: attribute.Float64SliceValue(value).AsInterface(), Type: AttributeArray}
 	return e
 }
 
@@ -329,7 +329,7 @@ func (e *logEntry) Float64(key string, value float64) LogEntry {
 }
 
 func (e *logEntry) BoolSlice(key string, value []bool) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: AttributeArray}
+	e.attributes[key] = Attribute{Value: attribute.BoolSliceValue(value).AsInterface(), Type: AttributeArray}
 	return e
 }
 

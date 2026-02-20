@@ -4,7 +4,7 @@ import "reflect"
 
 func asSlice[T any](v any) []T {
 	rv := reflect.ValueOf(v)
-	if rv.Type().Kind() != reflect.Array {
+	if rv.Kind() != reflect.Array {
 		return nil
 	}
 	cpy := make([]T, rv.Len())
