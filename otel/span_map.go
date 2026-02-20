@@ -75,7 +75,15 @@ func (ssm *SentrySpanMap) MarkFinished(spanID otelTrace.SpanID, traceID otelTrac
 	entry.spans.Delete(spanID)
 
 	if entry.activeCount.Add(-1) <= 0 {
-		ssm.transactions.CompareAndDelete(traceID, entry)
+		// CompareAndSwap(CAS) is used to prevent a race between Set and MarkFinished.
+		// The race has two windows:
+		// 1. MarkFinished decremented activeCount to 0 but hasn't CAS'd yet -> Set Adds(1), and CAS fails keeping the
+		// transaction, since we just added a new span.
+		// 2. MarkFinished already CAS'd -> Set will store on the transaction marked for deletion (better than
+		// creating a new orphaned span).
+		if entry.activeCount.CompareAndSwap(0, -1) {
+			ssm.transactions.CompareAndDelete(traceID, entry)
+		}
 	}
 }
 
