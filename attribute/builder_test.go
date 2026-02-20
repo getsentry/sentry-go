@@ -2,6 +2,8 @@ package attribute
 
 import (
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestBuilder(t *testing.T) {
@@ -42,9 +44,46 @@ func TestBuilder(t *testing.T) {
 			wantType:  STRING,
 			wantValue: "foo",
 		},
+		{
+			name:      "BoolSlice() correctly returns a bool slice builder",
+			value:     BoolSlice(k, []bool{true, false, true}),
+			wantType:  BOOLSLICE,
+			wantValue: []bool{true, false, true},
+		},
+		{
+			name:      "IntSlice() correctly returns an int slice builder",
+			value:     IntSlice(k, []int{1, 2, 3}),
+			wantType:  INT64SLICE,
+			wantValue: []int64{1, 2, 3},
+		},
+		{
+			name:      "Int64Slice() correctly returns an int64 slice builder",
+			value:     Int64Slice(k, []int64{42, 43, 44}),
+			wantType:  INT64SLICE,
+			wantValue: []int64{42, 43, 44},
+		},
+		{
+			name:      "Float64Slice() correctly returns a float64 slice builder",
+			value:     Float64Slice(k, []float64{1.5, 2.5, 3.5}),
+			wantType:  FLOAT64SLICE,
+			wantValue: []float64{1.5, 2.5, 3.5},
+		},
+		{
+			name:      "StringSlice() correctly returns a string slice builder",
+			value:     StringSlice(k, []string{"foo", "bar", "baz"}),
+			wantType:  STRINGSLICE,
+			wantValue: []string{"foo", "bar", "baz"},
+		},
 	} {
 		if testcase.value.Value.Type() != testcase.wantType {
 			t.Errorf("wrong value type, got %#v, expected %#v", testcase.value.Value.Type(), testcase.wantType)
+		}
+		if testcase.value.Key != k {
+			t.Errorf("wrong key, got %#v, expected %#v", testcase.value.Key, k)
+		}
+		got := testcase.value.Value.AsInterface()
+		if diff := cmp.Diff(testcase.wantValue, got); diff != "" {
+			t.Errorf("+got, -want: %s", diff)
 		}
 	}
 }
@@ -78,6 +117,26 @@ func TestBuilder_Valid(t *testing.T) {
 				Value: Value{},
 			},
 			wantValid: false,
+		},
+		{
+			name:      "BoolSlice builder is valid",
+			builder:   BoolSlice("key", []bool{true}),
+			wantValid: true,
+		},
+		{
+			name:      "Int64Slice builder is valid",
+			builder:   Int64Slice("key", []int64{42}),
+			wantValid: true,
+		},
+		{
+			name:      "Float64Slice builder is valid",
+			builder:   Float64Slice("key", []float64{1.5}),
+			wantValid: true,
+		},
+		{
+			name:      "StringSlice builder is valid",
+			builder:   StringSlice("key", []string{"foo"}),
+			wantValid: true,
 		},
 	} {
 		valid := tt.builder.Valid()
