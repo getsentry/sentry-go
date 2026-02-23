@@ -93,6 +93,8 @@ func (ssm *SentrySpanMap) Clear() {
 }
 
 // Len returns the number of spans on the map.
+//
+// This should only be used in tests, since computing the map length is fairly expensive.
 func (ssm *SentrySpanMap) Len() int {
 	count := 0
 	ssm.transactions.Range(func(_ otelTrace.TraceID, entry *TransactionEntry) bool {
