@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"maps"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
@@ -27,6 +29,7 @@ import (
 // scope into the event.
 type Scope struct {
 	mu          sync.RWMutex
+	attributes  map[string]attribute.Value
 	breadcrumbs []*Breadcrumb
 	attachments []*Attachment
 	user        User
@@ -54,6 +57,7 @@ type Scope struct {
 // NewScope creates a new Scope.
 func NewScope() *Scope {
 	return &Scope{
+		attributes:         make(map[string]attribute.Value),
 		breadcrumbs:        make([]*Breadcrumb, 0),
 		attachments:        make([]*Attachment, 0),
 		tags:               make(map[string]string),
@@ -203,6 +207,19 @@ type readCloser struct {
 	io.Closer
 }
 
+// SetAttributes adds attributes to the current scope.
+func (scope *Scope) SetAttributes(attrs ...attribute.Builder) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
+	for _, a := range attrs {
+		if a.Value.Type() == attribute.INVALID {
+			continue
+		}
+		scope.attributes[a.Key] = a.Value
+	}
+}
+
 // SetTag adds a tag to the current scope.
 func (scope *Scope) SetTag(key, value string) {
 	scope.mu.Lock()
@@ -332,15 +349,9 @@ func (scope *Scope) Clone() *Scope {
 	copy(clone.breadcrumbs, scope.breadcrumbs)
 	clone.attachments = make([]*Attachment, len(scope.attachments))
 	copy(clone.attachments, scope.attachments)
-	for key, value := range scope.tags {
-		clone.tags[key] = value
-	}
-	for key, value := range scope.contexts {
-		clone.contexts[key] = cloneContext(value)
-	}
-	for key, value := range scope.extra {
-		clone.extra[key] = value
-	}
+	clone.attributes = maps.Clone(scope.attributes)
+	clone.tags = maps.Clone(scope.tags)
+	clone.extra = maps.Clone(scope.extra)
 	clone.fingerprint = make([]string, len(scope.fingerprint))
 	copy(clone.fingerprint, scope.fingerprint)
 	clone.level = scope.level
@@ -496,7 +507,7 @@ func cloneContext(c Context) Context {
 	return res
 }
 
-func (scope *Scope) populateAttrs(attrs map[string]Attribute) {
+func (scope *Scope) populateAttrs(attrs map[string]attribute.Value) {
 	if scope == nil {
 		return
 	}
@@ -504,23 +515,22 @@ func (scope *Scope) populateAttrs(attrs map[string]Attribute) {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
-	// Add user-related attributes
-	if !scope.user.IsEmpty() {
-		if scope.user.ID != "" {
-			attrs["user.id"] = Attribute{Value: scope.user.ID, Type: AttributeString}
-		}
-		if scope.user.Name != "" {
-			attrs["user.name"] = Attribute{Value: scope.user.Name, Type: AttributeString}
-		}
-		if scope.user.Email != "" {
-			attrs["user.email"] = Attribute{Value: scope.user.Email, Type: AttributeString}
-		}
+	for k, v := range scope.attributes {
+		attrs[k] = v
 	}
 
-	// In the future, add scope.attributes here
-	// for k, v := range scope.attributes {
-	//     attrs[k] = v
-	// }
+	if scope.user.IsEmpty() {
+		return
+	}
+	for key, val := range map[string]string{
+		"user.id":    scope.user.ID,
+		"user.name":  scope.user.Name,
+		"user.email": scope.user.Email,
+	} {
+		if val != "" {
+			attrs[key] = attribute.StringValue(val)
+		}
+	}
 }
 
 // hubFromContexts is a helper to return the first hub found in the given contexts.
