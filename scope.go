@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
@@ -496,7 +497,7 @@ func cloneContext(c Context) Context {
 	return res
 }
 
-func (scope *Scope) populateAttrs(attrs map[string]Attribute) {
+func (scope *Scope) populateAttrs(attrs map[string]attribute.Value) {
 	if scope == nil {
 		return
 	}
@@ -507,13 +508,13 @@ func (scope *Scope) populateAttrs(attrs map[string]Attribute) {
 	// Add user-related attributes
 	if !scope.user.IsEmpty() {
 		if scope.user.ID != "" {
-			attrs["user.id"] = Attribute{Value: scope.user.ID, Type: AttributeString}
+			attrs["user.id"] = attribute.StringValue(scope.user.ID)
 		}
 		if scope.user.Name != "" {
-			attrs["user.name"] = Attribute{Value: scope.user.Name, Type: AttributeString}
+			attrs["user.name"] = attribute.StringValue(scope.user.Name)
 		}
 		if scope.user.Email != "" {
-			attrs["user.email"] = Attribute{Value: scope.user.Email, Type: AttributeString}
+			attrs["user.email"] = attribute.StringValue(scope.user.Email)
 		}
 	}
 
