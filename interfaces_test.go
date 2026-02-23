@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/google/go-cmp/cmp"
@@ -753,9 +754,9 @@ func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 		Level:     LogLevelInfo,
 		Severity:  LogSeverityInfo,
 		Body:      "hello world",
-		Attributes: map[string]Attribute{
-			"k1": {Value: "v1", Type: AttributeString},
-			"k2": {Value: int64(42), Type: AttributeInt},
+		Attributes: map[string]attribute.Value{
+			"k1": attribute.StringValue("v1"),
+			"k2": attribute.Int64Value(42),
 		},
 	}
 
@@ -795,10 +796,10 @@ func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 	if payload.Body != "hello world" {
 		t.Fatalf("unexpected body: %q", payload.Body)
 	}
-	if payload.Attributes["k1"].Type != string(AttributeString) || payload.Attributes["k1"].Value != "v1" {
+	if payload.Attributes["k1"].Type != "string" || payload.Attributes["k1"].Value != "v1" {
 		t.Fatalf("unexpected attribute k1: %+v", payload.Attributes["k1"])
 	}
-	if payload.Attributes["k2"].Type != string(AttributeInt) || payload.Attributes["k2"].Value != float64(42) {
+	if payload.Attributes["k2"].Type != "integer" || payload.Attributes["k2"].Value != float64(42) {
 		t.Fatalf("unexpected attribute k2: %+v", payload.Attributes["k2"])
 	}
 
@@ -832,8 +833,8 @@ func TestMetric_MarshalJSON(t *testing.T) {
 				Name:      "test.metric",
 				Value:     Float64MetricValue(42),
 				Unit:      "units",
-				Attributes: map[string]Attribute{
-					"key": {Value: "value", Type: AttributeString},
+				Attributes: map[string]attribute.Value{
+					"key": attribute.StringValue("value"),
 				},
 			},
 			wantJSONFields: map[string]bool{
