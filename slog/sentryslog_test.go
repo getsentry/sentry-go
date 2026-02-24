@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"strconv"
 	"testing"
 	"time"
 
@@ -381,16 +380,10 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 			expectedValue: "2023-01-01T00:00:00Z",
 		},
 		{
-			name:          "Uint64 attribute - convert to int64",
-			attr:          []any{"key7", uint64(100)},
-			expectedKey:   "key7",
-			expectedValue: int64(100),
-		},
-		{
-			name:          "Uint64 attribute - convert to float",
+			name:          "Uint64 attribute",
 			attr:          []any{"key8", uint64(math.MaxUint64)},
 			expectedKey:   "key8",
-			expectedValue: strconv.FormatUint(math.MaxUint64, 10),
+			expectedValue: uint64(math.MaxUint64),
 		},
 		{
 			name:          "something attribute",
@@ -430,8 +423,8 @@ func TestSentryHandler_AttrToSentryAttr(t *testing.T) {
 
 			value, found := mockTransport.Events()[0].Logs[0].Attributes[tt.expectedKey]
 			assert.True(t, found, "Attribute %s not found", tt.expectedKey)
-			assert.Equal(t, tt.expectedValue, value.Value, "For %s, expected value %v, got %v", tt.expectedKey, tt.expectedValue, value)
-			assert.Equal(t, "auto.log.slog", mockTransport.Events()[0].Logs[0].Attributes["sentry.origin"].Value, "incorrect sentry.origin")
+			assert.Equal(t, tt.expectedValue, value.AsInterface(), "For %s, expected value %v, got %v", tt.expectedKey, tt.expectedValue, value)
+			assert.Equal(t, "auto.log.slog", mockTransport.Events()[0].Logs[0].Attributes["sentry.origin"].AsInterface(), "incorrect sentry.origin")
 		})
 	}
 }
@@ -470,22 +463,22 @@ func TestSentryHandler_WithAttrsAndGroup(t *testing.T) {
 	// Check parent level attribute
 	parentAttr, found := mockTransport.Events()[0].Logs[0].Attributes["parent.parent_attr"]
 	assert.True(t, found, "parent.parent_attr not found")
-	assert.Equal(t, "parent_value", parentAttr.Value)
+	assert.Equal(t, "parent_value", parentAttr.AsInterface())
 
 	// Check child level attribute
 	childAttr, found := mockTransport.Events()[0].Logs[0].Attributes["parent.child.child_attr"]
 	assert.True(t, found, "parent.child.child_attr not found")
-	assert.Equal(t, "child_value", childAttr.Value)
+	assert.Equal(t, "child_value", childAttr.AsInterface())
 
 	// Check nested group attribute
 	nestedAttr, found := mockTransport.Events()[0].Logs[0].Attributes["parent.child.nested.nested_attr"]
 	assert.True(t, found, "parent.child.nested.nested_attr not found")
-	assert.Equal(t, "nested_value", nestedAttr.Value)
+	assert.Equal(t, "nested_value", nestedAttr.AsInterface())
 
 	// Check direct attribute
 	directAttr, found := mockTransport.Events()[0].Logs[0].Attributes["parent.child.direct_attr"]
 	assert.True(t, found, "parent.child.direct_attr not found")
-	assert.Equal(t, "direct_value", directAttr.Value)
+	assert.Equal(t, "direct_value", directAttr.AsInterface())
 
 	// Verify base logger log doesn't have any of these attributes
 	assert.Equal(t, "should not have attrs and groups", mockTransport.Events()[0].Logs[1].Body)
@@ -588,11 +581,11 @@ func TestSentryHandler_ReplaceAttr(t *testing.T) {
 
 	val, found := attrs["foo"]
 	assert.True(t, found)
-	assert.Equal(t, "replaced", val.Value)
+	assert.Equal(t, "replaced", val.AsInterface())
 
 	val, found = attrs["num"]
 	assert.True(t, found)
-	assert.Equal(t, int64(123), val.Value)
+	assert.Equal(t, int64(123), val.AsInterface())
 }
 
 func TestSentryHandler_AddSource(t *testing.T) {
@@ -703,7 +696,7 @@ func TestSentryHandler_CaptureAsEventAndLog(t *testing.T) {
 	assert.Equal(t, sentry.LogLevelWarn, logEntry.Level)
 	logAttrVal, found := logEntry.Attributes["common_attr"]
 	assert.True(t, found, "attribute should be in log entry's attributes")
-	assert.Equal(t, sentry.Attribute{Value: "common_value", Type: "string"}, logAttrVal)
+	assert.Equal(t, logAttrVal.AsInterface(), "common_value")
 }
 
 func TestSentryHandler_CustomLogLevels(t *testing.T) {
@@ -769,7 +762,7 @@ func TestSentryHandler_CustomLogLevels(t *testing.T) {
 
 			levelName, found := mockTransport.Events()[0].Logs[0].Attributes["level_name"]
 			assert.True(t, found, "level_name attribute not found for %s", tt.description)
-			assert.Equal(t, tt.name, levelName.Value, "level_name value mismatch for %s", tt.description)
+			assert.Equal(t, tt.name, levelName.AsInterface(), "level_name value mismatch for %s", tt.description)
 		})
 	}
 }

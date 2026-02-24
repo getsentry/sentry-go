@@ -1,123 +1,107 @@
 package sentryotel
 
 import (
-	"sync"
+	"sync/atomic"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/util"
 	otelTrace "go.opentelemetry.io/otel/trace"
 )
 
-type spanInfo struct {
-	span     *sentry.Span
-	finished bool
-	children map[otelTrace.SpanID]struct{}
-	parentID otelTrace.SpanID
+// TransactionEntry holds a reference to the root transaction span and
+// tracks the number of active spans belonging to this trace.
+type TransactionEntry struct {
+	root        *sentry.Span
+	activeCount atomic.Int64
+	// spans holds active (not yet finished) spans for Get lookups.
+	spans util.SyncMap[otelTrace.SpanID, *sentry.Span]
+	// knownSpanIDs tracks all span IDs ever added to this transaction.
+	knownSpanIDs util.SyncMap[otelTrace.SpanID, struct{}]
+}
+
+// HasSpan returns true if the given spanID was ever part of this transaction.
+func (te *TransactionEntry) HasSpan(spanID otelTrace.SpanID) bool {
+	_, ok := te.knownSpanIDs.Load(spanID)
+	return ok
 }
 
 // SentrySpanMap is a mapping between OpenTelemetry spans and Sentry spans.
-// It helps Sentry span processor and propagator to keep track of unfinished
-// Sentry spans and to establish parent-child links between spans.
+// It stores spans per transaction for lookup by the propagator and event processor,
+// and manages transaction entries for creating child spans via the shared spanRecorder.
 type SentrySpanMap struct {
-	spanMap map[otelTrace.SpanID]*spanInfo
-	mu      sync.RWMutex
+	transactions util.SyncMap[otelTrace.TraceID, *TransactionEntry]
 }
 
-func (ssm *SentrySpanMap) Get(otelSpandID otelTrace.SpanID) (*sentry.Span, bool) {
-	ssm.mu.RLock()
-	defer ssm.mu.RUnlock()
-	info, ok := ssm.spanMap[otelSpandID]
+// Get returns the current sentry.Span associated with the given OTel traceID and spanID.
+func (ssm *SentrySpanMap) Get(traceID otelTrace.TraceID, spanID otelTrace.SpanID) (*sentry.Span, bool) {
+	entry, ok := ssm.transactions.Load(traceID)
 	if !ok {
 		return nil, false
 	}
-	return info.span, true
+	return entry.spans.Load(spanID)
 }
 
-func (ssm *SentrySpanMap) Set(otelSpandID otelTrace.SpanID, sentrySpan *sentry.Span, parentID otelTrace.SpanID) {
-	ssm.mu.Lock()
-	defer ssm.mu.Unlock()
+// GetTransaction returns the transaction information for the given OTel traceID.
+func (ssm *SentrySpanMap) GetTransaction(traceID otelTrace.TraceID) (*TransactionEntry, bool) {
+	return ssm.transactions.Load(traceID)
+}
 
-	info := &spanInfo{
-		span:     sentrySpan,
-		finished: false,
-		children: make(map[otelTrace.SpanID]struct{}),
-		parentID: parentID,
-	}
-	ssm.spanMap[otelSpandID] = info
+// Set stores the span and transaction information on the map. It handles both root and child spans automatically.
+//
+// If there is a cache miss on the given traceID, a transaction entry is created. Subsequent calls for the same traceID
+// just increment the active span count and store the span in the entry.
+func (ssm *SentrySpanMap) Set(spanID otelTrace.SpanID, span *sentry.Span, traceID otelTrace.TraceID) {
+	t := &TransactionEntry{root: span}
+	t.activeCount.Store(1)
+	t.spans.Store(spanID, span)
+	t.knownSpanIDs.Store(spanID, struct{}{})
 
-	if parentID != (otelTrace.SpanID{}) {
-		if parentInfo, ok := ssm.spanMap[parentID]; ok {
-			parentInfo.children[otelSpandID] = struct{}{}
-		}
+	if existing, loaded := ssm.transactions.LoadOrStore(traceID, t); loaded {
+		existing.activeCount.Add(1)
+		existing.spans.Store(spanID, span)
+		existing.knownSpanIDs.Store(spanID, struct{}{})
 	}
 }
 
-func (ssm *SentrySpanMap) MarkFinished(otelSpandID otelTrace.SpanID) {
-	ssm.mu.Lock()
-	defer ssm.mu.Unlock()
-
-	info, ok := ssm.spanMap[otelSpandID]
+// MarkFinished removes a span from the active set and decrements the transaction's active count.
+// When the count reaches zero, the transaction entry is removed.
+// The span ID is kept in knownSpanIDs so that HasSpan continues to work for child span creation.
+func (ssm *SentrySpanMap) MarkFinished(spanID otelTrace.SpanID, traceID otelTrace.TraceID) {
+	entry, ok := ssm.transactions.Load(traceID)
 	if !ok {
 		return
 	}
 
-	info.finished = true
-	ssm.tryCleanupSpan(otelSpandID)
-}
+	entry.spans.Delete(spanID)
 
-// tryCleanupSpan deletes a parent and all children only if the whole subtree is marked finished.
-// Must be called with lock held.
-func (ssm *SentrySpanMap) tryCleanupSpan(spanID otelTrace.SpanID) {
-	info, ok := ssm.spanMap[spanID]
-	if !ok || !info.finished {
-		return
-	}
-
-	if !info.span.IsTransaction() {
-		parentID := info.parentID
-		if parentID != (otelTrace.SpanID{}) {
-			if parentInfo, parentExists := ssm.spanMap[parentID]; parentExists && !parentInfo.finished {
-				return
-			}
+	if entry.activeCount.Add(-1) <= 0 {
+		// CompareAndSwap(CAS) is used to prevent a race between Set and MarkFinished.
+		// The race has two windows:
+		// 1. MarkFinished decremented activeCount to 0 but hasn't CAS'd yet -> Set Adds(1), and CAS fails keeping the
+		// transaction, since we just added a new span.
+		// 2. MarkFinished already CAS'd -> Set will store on the transaction marked for deletion (better than
+		// creating a new orphaned span).
+		if entry.activeCount.CompareAndSwap(0, -1) {
+			ssm.transactions.CompareAndDelete(traceID, entry)
 		}
-	}
-
-	// We need to have a lookup first to see if every child is marked as finished to actually cleanup everything.
-	// There probably is a better way to do this
-	for childID := range info.children {
-		if childInfo, exists := ssm.spanMap[childID]; exists && !childInfo.finished {
-			return
-		}
-	}
-
-	parentID := info.parentID
-	if parentID != (otelTrace.SpanID{}) {
-		if parentInfo, ok := ssm.spanMap[parentID]; ok {
-			delete(parentInfo.children, spanID)
-		}
-	}
-
-	for childID := range info.children {
-		if childInfo, exists := ssm.spanMap[childID]; exists && childInfo.finished {
-			ssm.tryCleanupSpan(childID)
-		}
-	}
-
-	delete(ssm.spanMap, spanID)
-	if parentID != (otelTrace.SpanID{}) {
-		ssm.tryCleanupSpan(parentID)
 	}
 }
 
+// Clear removes all spans stored on the map.
 func (ssm *SentrySpanMap) Clear() {
-	ssm.mu.Lock()
-	defer ssm.mu.Unlock()
-	ssm.spanMap = make(map[otelTrace.SpanID]*spanInfo)
+	ssm.transactions.Clear()
 }
 
+// Len returns the number of spans on the map.
+//
+// This should only be used in tests, since computing the map length is fairly expensive.
 func (ssm *SentrySpanMap) Len() int {
-	ssm.mu.RLock()
-	defer ssm.mu.RUnlock()
-	return len(ssm.spanMap)
+	count := 0
+	ssm.transactions.Range(func(_ otelTrace.TraceID, entry *TransactionEntry) bool {
+		count += int(entry.activeCount.Load())
+		return true
+	})
+	return count
 }
 
-var sentrySpanMap = SentrySpanMap{spanMap: make(map[otelTrace.SpanID]*spanInfo)}
+var sentrySpanMap = SentrySpanMap{}
