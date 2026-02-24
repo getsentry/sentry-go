@@ -167,11 +167,11 @@ func TestSentryCore_Write(t *testing.T) {
 
 	keyAttr, found := log.Attributes["key"]
 	assert.True(t, found)
-	assert.Equal(t, "value", keyAttr.Value)
+	assert.Equal(t, "value", keyAttr.AsInterface())
 
 	countAttr, found := log.Attributes["count"]
 	assert.True(t, found)
-	assert.Equal(t, int64(42), countAttr.Value)
+	assert.Equal(t, int64(42), countAttr.AsInterface())
 }
 
 func TestSentryCore_WriteWithAccumulatedFields(t *testing.T) {
@@ -207,11 +207,11 @@ func TestSentryCore_WriteWithAccumulatedFields(t *testing.T) {
 
 	serviceAttr, found := log.Attributes["service"]
 	assert.True(t, found)
-	assert.Equal(t, "my-service", serviceAttr.Value)
+	assert.Equal(t, "my-service", serviceAttr.AsInterface())
 
 	reqIdAttr, found := log.Attributes["request_id"]
 	assert.True(t, found)
-	assert.Equal(t, "123", reqIdAttr.Value)
+	assert.Equal(t, "123", reqIdAttr.AsInterface())
 }
 
 func TestSentryCore_WriteWithCaller(t *testing.T) {
@@ -246,15 +246,15 @@ func TestSentryCore_WriteWithCaller(t *testing.T) {
 
 	fileAttr, found := log.Attributes["code.filepath"]
 	assert.True(t, found)
-	assert.Equal(t, "/path/to/file.go", fileAttr.Value)
+	assert.Equal(t, "/path/to/file.go", fileAttr.AsInterface())
 
 	lineAttr, found := log.Attributes["code.lineno"]
 	assert.True(t, found)
-	assert.Equal(t, int64(42), lineAttr.Value)
+	assert.Equal(t, int64(42), lineAttr.AsInterface())
 
 	funcAttr, found := log.Attributes["code.function"]
 	assert.True(t, found)
-	assert.Equal(t, "myFunction", funcAttr.Value)
+	assert.Equal(t, "myFunction", funcAttr.AsInterface())
 }
 
 func TestSentryCore_WriteWithLoggerName(t *testing.T) {
@@ -283,7 +283,7 @@ func TestSentryCore_WriteWithLoggerName(t *testing.T) {
 
 	nameAttr, found := log.Attributes["logger.name"]
 	assert.True(t, found)
-	assert.Equal(t, "my.logger.name", nameAttr.Value)
+	assert.Equal(t, "my.logger.name", nameAttr.AsInterface())
 }
 
 func TestSentryCore_WriteWithStack(t *testing.T) {
@@ -312,7 +312,7 @@ func TestSentryCore_WriteWithStack(t *testing.T) {
 
 	stackAttr, found := log.Attributes["exception.stacktrace"]
 	assert.True(t, found)
-	assert.Contains(t, stackAttr.Value, "goroutine 1")
+	assert.Contains(t, stackAttr.AsInterface(), "goroutine 1")
 }
 
 func TestSentryCore_LogLevels(t *testing.T) {
@@ -398,7 +398,7 @@ func TestSentryCore_Origin(t *testing.T) {
 
 	originAttr, found := events[0].Logs[0].Attributes["sentry.origin"]
 	assert.True(t, found)
-	assert.Equal(t, ZapOrigin, originAttr.Value)
+	assert.Equal(t, ZapOrigin, originAttr.AsInterface())
 }
 
 func TestSentryCore_Integration(t *testing.T) {
@@ -424,7 +424,7 @@ func TestSentryCore_Integration(t *testing.T) {
 
 	userIdAttr, found := log1.Attributes["user_id"]
 	assert.True(t, found)
-	assert.Equal(t, "123", userIdAttr.Value)
+	assert.Equal(t, "123", userIdAttr.AsInterface())
 
 	// Check second log
 	log2 := events[0].Logs[1]
@@ -433,7 +433,7 @@ func TestSentryCore_Integration(t *testing.T) {
 
 	usageAttr, found := log2.Attributes["usage_percent"]
 	assert.True(t, found)
-	assert.Equal(t, 85.5, usageAttr.Value)
+	assert.Equal(t, 85.5, usageAttr.AsInterface())
 }
 
 func TestSentryCore_IntegrationWithTee(t *testing.T) {
@@ -489,11 +489,11 @@ func TestSentryCore_IntegrationWithSugaredLogger(t *testing.T) {
 
 	methodAttr, found := log.Attributes["method"]
 	assert.True(t, found)
-	assert.Equal(t, "GET", methodAttr.Value)
+	assert.Equal(t, "GET", methodAttr.AsInterface())
 
 	statusAttr, found := log.Attributes["status"]
 	assert.True(t, found)
-	assert.Equal(t, int64(200), statusAttr.Value)
+	assert.Equal(t, int64(200), statusAttr.AsInterface())
 }
 
 func TestSentryCore_Sync(t *testing.T) {
@@ -571,7 +571,7 @@ func TestSentryCore_ContextFieldInLogger(t *testing.T) {
 
 	keyAttr, found := log.Attributes["key"]
 	assert.True(t, found)
-	assert.Equal(t, "value", keyAttr.Value)
+	assert.Equal(t, "value", keyAttr.AsInterface())
 	assert.Equal(t, span.TraceID, events[0].Logs[0].TraceID)
 	assert.Equal(t, span.SpanID, events[0].Logs[0].SpanID)
 }

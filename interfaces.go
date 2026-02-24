@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
@@ -147,7 +148,7 @@ type MeterOption func(*meterOptions)
 type meterOptions struct {
 	unit       string
 	scope      *Scope
-	attributes map[string]Attribute
+	attributes map[string]attribute.Value
 }
 
 // WithUnit sets the unit for the metric (e.g., "millisecond", "byte").
@@ -168,14 +169,14 @@ func WithScopeOverride(scope *Scope) MeterOption {
 func WithAttributes(attrs ...attribute.Builder) MeterOption {
 	return func(o *meterOptions) {
 		if o.attributes == nil {
-			o.attributes = make(map[string]Attribute)
+			o.attributes = make(map[string]attribute.Value, len(attrs))
 		}
-		for _, attr := range attrs {
-			t, ok := mapTypesToStr[attr.Value.Type()]
-			if !ok || t == "" {
+		for _, a := range attrs {
+			if a.Value.Type() == attribute.INVALID {
+				debuglog.Printf("invalid attribute: %v", a)
 				continue
 			}
-			o.attributes[attr.Key] = Attribute{Value: attr.Value.AsInterface(), Type: t}
+			o.attributes[a.Key] = a.Value
 		}
 	}
 }
@@ -662,13 +663,13 @@ type EventHint struct {
 }
 
 type Log struct {
-	Timestamp  time.Time            `json:"timestamp,omitzero"`
-	TraceID    TraceID              `json:"trace_id"`
-	SpanID     SpanID               `json:"span_id,omitzero"`
-	Level      LogLevel             `json:"level"`
-	Severity   int                  `json:"severity_number,omitempty"`
-	Body       string               `json:"body"`
-	Attributes map[string]Attribute `json:"attributes,omitempty"`
+	Timestamp  time.Time                  `json:"timestamp,omitzero"`
+	TraceID    TraceID                    `json:"trace_id"`
+	SpanID     SpanID                     `json:"span_id,omitzero"`
+	Level      LogLevel                   `json:"level"`
+	Severity   int                        `json:"severity_number,omitempty"`
+	Body       string                     `json:"body"`
+	Attributes map[string]attribute.Value `json:"attributes,omitempty"`
 }
 
 // GetCategory returns the rate limit category for logs.
@@ -691,21 +692,6 @@ func (l *Log) GetDynamicSamplingContext() map[string]string {
 	return nil
 }
 
-type AttrType string
-
-const (
-	AttributeInvalid AttrType = ""
-	AttributeBool    AttrType = "boolean"
-	AttributeInt     AttrType = "integer"
-	AttributeFloat   AttrType = "double"
-	AttributeString  AttrType = "string"
-)
-
-type Attribute struct {
-	Value any      `json:"value"`
-	Type  AttrType `json:"type"`
-}
-
 type MetricType string
 
 const (
@@ -716,14 +702,14 @@ const (
 )
 
 type Metric struct {
-	Timestamp  time.Time            `json:"timestamp,omitzero"`
-	TraceID    TraceID              `json:"trace_id"`
-	SpanID     SpanID               `json:"span_id,omitzero"`
-	Type       MetricType           `json:"type"`
-	Name       string               `json:"name"`
-	Value      MetricValue          `json:"value"`
-	Unit       string               `json:"unit,omitempty"`
-	Attributes map[string]Attribute `json:"attributes,omitempty"`
+	Timestamp  time.Time                  `json:"timestamp,omitzero"`
+	TraceID    TraceID                    `json:"trace_id"`
+	SpanID     SpanID                     `json:"span_id,omitzero"`
+	Type       MetricType                 `json:"type"`
+	Name       string                     `json:"name"`
+	Value      MetricValue                `json:"value"`
+	Unit       string                     `json:"unit,omitempty"`
+	Attributes map[string]attribute.Value `json:"attributes,omitempty"`
 }
 
 // GetCategory returns the rate limit category for metrics.

@@ -188,7 +188,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 		log := events[0].Logs[0]
 		maxUint64Attr, found := log.Attributes["max_uint64"]
 		assert.True(t, found)
-		assert.Equal(t, maxValue, maxUint64Attr.Value)
+		assert.Equal(t, maxValue, maxUint64Attr.AsInterface())
 	})
 }
 

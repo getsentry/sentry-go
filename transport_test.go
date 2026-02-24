@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/google/go-cmp/cmp"
@@ -269,16 +270,16 @@ func TestEnvelopeFromLogEvent(t *testing.T) {
 			Level:    LogLevelInfo,
 			Severity: LogSeverityInfo,
 			Body:     "test log message",
-			Attributes: map[string]Attribute{
-				"sentry.release":        {Value: "v1.2.3", Type: "string"},
-				"sentry.environment":    {Value: "testing", Type: "string"},
-				"sentry.server.address": {Value: "test-server", Type: "string"},
-				"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
-				"sentry.sdk.version":    {Value: "0.0.1", Type: "string"},
-				"key.int":               {Value: 42, Type: "integer"},
-				"key.string":            {Value: "str", Type: "string"},
-				"key.float":             {Value: 42.2, Type: "double"},
-				"key.bool":              {Value: true, Type: "boolean"},
+			Attributes: map[string]attribute.Value{
+				"sentry.release":        attribute.StringValue("v1.2.3"),
+				"sentry.environment":    attribute.StringValue("testing"),
+				"sentry.server.address": attribute.StringValue("test-server"),
+				"sentry.sdk.name":       attribute.StringValue("sentry.go"),
+				"sentry.sdk.version":    attribute.StringValue("0.0.1"),
+				"key.int":               attribute.Int64Value(42),
+				"key.string":            attribute.StringValue("str"),
+				"key.float":             attribute.Float64Value(42.2),
+				"key.bool":              attribute.BoolValue(true),
 			},
 		},
 	}

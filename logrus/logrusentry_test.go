@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -679,8 +680,8 @@ func TestLogHook_AddTags(t *testing.T) {
 	hook.Flush(testutils.FlushTimeout())
 	got := transport.Events()
 	assert.Equal(t, 1, len(got), "unexpected number of events")
-	assert.Equal(t, tags["tag1"], got[0].Logs[0].Attributes["tag1"].Value)
-	assert.Equal(t, tags["tag2"], got[0].Logs[0].Attributes["tag2"].Value)
+	assert.Equal(t, tags["tag1"], got[0].Logs[0].Attributes["tag1"].String())
+	assert.Equal(t, tags["tag2"], got[0].Logs[0].Attributes["tag2"].String())
 }
 
 func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
@@ -696,25 +697,25 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 	wantLog := sentry.Log{
 		Level: sentry.LogLevelInfo,
 		Body:  "test message",
-		Attributes: map[string]sentry.Attribute{
-			"int8":          {Value: int64(8), Type: "integer"},
-			"int16":         {Value: int64(16), Type: "integer"},
-			"int32":         {Value: int64(32), Type: "integer"},
-			"int64":         {Value: int64(64), Type: "integer"},
-			"int":           {Value: int64(42), Type: "integer"},
-			"uint8":         {Value: uint64(8), Type: "integer"},
-			"uint16":        {Value: uint64(16), Type: "integer"},
-			"uint32":        {Value: uint64(32), Type: "integer"},
-			"uint64":        {Value: uint64(64), Type: "integer"},
-			"uint":          {Value: uint64(42), Type: "integer"},
-			"string":        {Value: "test string", Type: "string"},
-			"float32":       {Value: float64(float32(3.14)), Type: "double"},
-			"float64":       {Value: 6.28, Type: "double"},
-			"bool":          {Value: true, Type: "boolean"},
-			"string_slice":  {Value: "[one two three]", Type: "string"},
-			"string_map":    {Value: "map[a:1 b:2 c:3]", Type: "string"},
-			"complex":       {Value: "{test 42}", Type: "string"},
-			"sentry.origin": {Value: "auto.log.logrus", Type: "string"},
+		Attributes: map[string]attribute.Value{
+			"int8":          attribute.Int64Value(8),
+			"int16":         attribute.Int64Value(16),
+			"int32":         attribute.Int64Value(32),
+			"int64":         attribute.Int64Value(64),
+			"int":           attribute.Int64Value(42),
+			"uint8":         attribute.Uint64Value(8),
+			"uint16":        attribute.Uint64Value(16),
+			"uint32":        attribute.Uint64Value(32),
+			"uint64":        attribute.Uint64Value(64),
+			"uint":          attribute.Uint64Value(42),
+			"string":        attribute.StringValue("test string"),
+			"float32":       attribute.Float64Value(float64(float32(3.14))),
+			"float64":       attribute.Float64Value(6.28),
+			"bool":          attribute.BoolValue(true),
+			"string_slice":  attribute.StringValue("[one two three]"),
+			"string_map":    attribute.StringValue("map[a:1 b:2 c:3]"),
+			"complex":       attribute.StringValue("{test 42}"),
+			"sentry.origin": attribute.StringValue("auto.log.logrus"),
 		},
 	}
 
@@ -752,7 +753,8 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 	got := transport.Events()
 	assert.Equal(t, 1, len(got), "unexpected number of events")
 	if diff := cmp.Diff(wantLog.Attributes, got[0].Logs[0].Attributes,
-		cmpopts.IgnoreMapEntries(func(k string, v sentry.Attribute) bool {
+		cmp.AllowUnexported(attribute.Value{}),
+		cmpopts.IgnoreMapEntries(func(k string, v attribute.Value) bool {
 			return k == "sentry.sdk.name" || k == "sentry.release" || k == "sentry.sdk.version" || k == "sentry.server.address"
 		}),
 	); diff != "" {
