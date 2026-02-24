@@ -39,6 +39,10 @@ func NewScheduler(
 	sdkInfo *protocol.SdkInfo,
 	recorder report.ClientReportRecorder,
 ) *Scheduler {
+	if recorder == nil {
+		recorder = report.NoopRecorder()
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	priorityWeights := map[ratelimit.Priority]int{
@@ -218,18 +222,14 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 	}
 
 	if s.isRateLimited(category) {
-		if s.recorder != nil {
-			for _, item := range items {
-				s.recorder.RecordItem(report.ReasonRateLimitBackoff, item)
-			}
+		for _, item := range items {
+			s.recorder.RecordItem(report.ReasonRateLimitBackoff, item)
 		}
 		return
 	}
 	if !s.transport.HasCapacity() {
-		if s.recorder != nil {
-			for _, item := range items {
-				s.recorder.RecordItem(report.ReasonQueueOverflow, item)
-			}
+		for _, item := range items {
+			s.recorder.RecordItem(report.ReasonQueueOverflow, item)
 		}
 		return
 	}

@@ -190,9 +190,6 @@ func encodeEnvelopeMetrics(enc *json.Encoder, count int, body json.RawMessage) e
 }
 
 func recordSpanOutcome(recorder report.ClientReportRecorder, reason report.DiscardReason, event *Event) {
-	if recorder == nil {
-		return
-	}
 	if event.Type == transactionType {
 		recorder.Record(reason, ratelimit.CategorySpan, int64(event.GetSpanCount()))
 	}
@@ -212,6 +209,10 @@ func encodeEnvelopeHeader(enc *json.Encoder, header *envelopeHeader) error {
 }
 
 func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage, provider report.ClientReportProvider) (*bytes.Buffer, error) {
+	if provider == nil {
+		provider = report.NoopProvider()
+	}
+
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 
@@ -261,12 +262,10 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 	}
 
 	// attach client report if exists
-	if provider != nil {
-		r := provider.TakeReport()
-		if r != nil {
-			if err := encodeClientReport(enc, r); err != nil {
-				return nil, err
-			}
+	r := provider.TakeReport()
+	if r != nil {
+		if err := encodeClientReport(enc, r); err != nil {
+			return nil, err
 		}
 	}
 	return &b, nil
@@ -388,6 +387,13 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 	}
 	t.dsn = dsn
 
+	if t.recorder == nil {
+		t.recorder = report.NoopRecorder()
+	}
+	if t.provider == nil {
+		t.provider = report.NoopProvider()
+	}
+
 	// A buffered channel with capacity 1 works like a mutex, ensuring only one
 	// goroutine can access the current batch at a given time. Access is
 	// synchronized by reading from and writing to the channel.
@@ -435,18 +441,14 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	category := event.toCategory()
 
 	if t.disabled(category) {
-		if t.recorder != nil {
-			t.recorder.RecordOne(report.ReasonRateLimitBackoff, category)
-		}
+		t.recorder.RecordOne(report.ReasonRateLimitBackoff, category)
 		recordSpanOutcome(t.recorder, report.ReasonRateLimitBackoff, event)
 		return
 	}
 
 	request, err := getRequestFromEvent(ctx, event, t.dsn, t.provider)
 	if err != nil {
-		if t.recorder != nil {
-			t.recorder.RecordOne(report.ReasonInternalError, category)
-		}
+		t.recorder.RecordOne(report.ReasonInternalError, category)
 		recordSpanOutcome(t.recorder, report.ReasonInternalError, event)
 		return
 	}
@@ -480,9 +482,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		)
 	default:
 		debuglog.Println("Event dropped due to transport buffer being full.")
-		if t.recorder != nil {
-			t.recorder.RecordOne(report.ReasonQueueOverflow, category)
-		}
+		t.recorder.RecordOne(report.ReasonQueueOverflow, category)
 		recordSpanOutcome(t.recorder, report.ReasonQueueOverflow, event)
 	}
 
@@ -587,9 +587,6 @@ func (t *HTTPTransport) worker() {
 			case <-t.done:
 				return
 			case <-crTicker.C:
-				if t.provider == nil {
-					continue
-				}
 				r := t.provider.TakeReport()
 				if r != nil {
 					var buf bytes.Buffer
@@ -640,16 +637,12 @@ func (t *HTTPTransport) worker() {
 				response, err := t.client.Do(item.request)
 				if err != nil {
 					debuglog.Printf("There was an issue with sending an event: %v", err)
-					if t.recorder != nil {
-						t.recorder.RecordOne(report.ReasonNetworkError, item.category)
-					}
+					t.recorder.RecordOne(report.ReasonNetworkError, item.category)
 					continue
 				}
 				success := util.HandleHTTPResponse(response, item.eventIdentifier)
 				if !success && response.StatusCode != http.StatusTooManyRequests {
-					if t.recorder != nil {
-						t.recorder.RecordOne(report.ReasonSendError, item.category)
-					}
+					t.recorder.RecordOne(report.ReasonSendError, item.category)
 				}
 
 				t.mu.Lock()
@@ -729,6 +722,13 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 	}
 	t.dsn = dsn
 
+	if t.recorder == nil {
+		t.recorder = report.NoopRecorder()
+	}
+	if t.provider == nil {
+		t.provider = report.NoopProvider()
+	}
+
 	if options.HTTPTransport != nil {
 		t.transport = options.HTTPTransport
 	} else {
@@ -763,18 +763,14 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 
 	category := event.toCategory()
 	if t.disabled(category) {
-		if t.recorder != nil {
-			t.recorder.RecordOne(report.ReasonRateLimitBackoff, category)
-		}
+		t.recorder.RecordOne(report.ReasonRateLimitBackoff, category)
 		recordSpanOutcome(t.recorder, report.ReasonRateLimitBackoff, event)
 		return
 	}
 
 	request, err := getRequestFromEvent(ctx, event, t.dsn, t.provider)
 	if err != nil {
-		if t.recorder != nil {
-			t.recorder.RecordOne(report.ReasonInternalError, category)
-		}
+		t.recorder.RecordOne(report.ReasonInternalError, category)
 		recordSpanOutcome(t.recorder, report.ReasonInternalError, event)
 		return
 	}
@@ -790,17 +786,13 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	response, err := t.client.Do(request)
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
-		if t.recorder != nil {
-			t.recorder.RecordOne(report.ReasonNetworkError, category)
-		}
+		t.recorder.RecordOne(report.ReasonNetworkError, category)
 		recordSpanOutcome(t.recorder, report.ReasonNetworkError, event)
 		return
 	}
 	success := util.HandleHTTPResponse(response, identifier)
 	if !success && response.StatusCode != http.StatusTooManyRequests {
-		if t.recorder != nil {
-			t.recorder.RecordOne(report.ReasonSendError, category)
-		}
+		t.recorder.RecordOne(report.ReasonSendError, category)
 		recordSpanOutcome(t.recorder, report.ReasonSendError, event)
 	}
 
