@@ -33,23 +33,11 @@ const (
 	LogSeverityFatal   int = 21
 )
 
-var mapTypesToStr = map[attribute.Type]AttrType{
-	attribute.INVALID:      AttributeInvalid,
-	attribute.BOOL:         AttributeBool,
-	attribute.INT64:        AttributeInt,
-	attribute.FLOAT64:      AttributeFloat,
-	attribute.STRING:       AttributeString,
-	attribute.BOOLSLICE:    AttributeArray,
-	attribute.INT64SLICE:   AttributeArray,
-	attribute.FLOAT64SLICE: AttributeArray,
-	attribute.STRINGSLICE:  AttributeArray,
-}
-
 type sentryLogger struct {
 	ctx               context.Context
 	hub               *Hub
-	attributes        map[string]Attribute
-	defaultAttributes map[string]Attribute
+	attributes        map[string]attribute.Value
+	defaultAttributes map[string]attribute.Value
 	mu                sync.RWMutex
 }
 
@@ -58,7 +46,7 @@ type logEntry struct {
 	ctx         context.Context
 	level       LogLevel
 	severity    int
-	attributes  map[string]Attribute
+	attributes  map[string]attribute.Value
 	shouldPanic bool
 	shouldFatal bool
 }
@@ -87,17 +75,17 @@ func NewLogger(ctx context.Context) Logger { // nolint: dupl
 			"sentry.sdk.version":    client.sdkVersion,
 		}
 
-		defaultAttrs := make(map[string]Attribute)
+		defaultAttrs := make(map[string]attribute.Value, len(defaults))
 		for k, v := range defaults {
 			if v != "" {
-				defaultAttrs[k] = Attribute{Value: v, Type: AttributeString}
+				defaultAttrs[k] = attribute.StringValue(v)
 			}
 		}
 
 		return &sentryLogger{
 			ctx:               ctx,
 			hub:               hub,
-			attributes:        make(map[string]Attribute),
+			attributes:        make(map[string]attribute.Value),
 			defaultAttributes: defaultAttrs,
 			mu:                sync.RWMutex{},
 		}
@@ -113,7 +101,7 @@ func (l *sentryLogger) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, message string, entryAttrs map[string]Attribute, args ...interface{}) {
+func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, message string, entryAttrs map[string]attribute.Value, args ...interface{}) {
 	if message == "" {
 		return
 	}
@@ -132,7 +120,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 
 	// Pre-allocate with capacity hint to avoid map growth reallocations
 	estimatedCap := len(l.defaultAttributes) + len(entryAttrs) + len(args) + 8 // scope ~3 + instance ~5
-	attrs := make(map[string]Attribute, estimatedCap)
+	attrs := make(map[string]attribute.Value, estimatedCap)
 
 	// attribute precedence: default -> scope -> instance (from SetAttrs) -> entry-specific
 	for k, v := range l.defaultAttributes {
@@ -151,13 +139,9 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	}
 
 	if len(args) > 0 {
-		attrs["sentry.message.template"] = Attribute{
-			Value: message, Type: AttributeString,
-		}
+		attrs["sentry.message.template"] = attribute.StringValue(message)
 		for i, p := range args {
-			attrs[fmt.Sprintf("sentry.message.parameters.%d", i)] = Attribute{
-				Value: fmt.Sprintf("%+v", p), Type: AttributeString,
-			}
+			attrs[fmt.Sprintf("sentry.message.parameters.%d", i)] = attribute.StringValue(fmt.Sprintf("%+v", p))
 		}
 	}
 
@@ -181,17 +165,12 @@ func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	for _, v := range attrs {
-		t, ok := mapTypesToStr[v.Value.Type()]
-		if !ok || t == "" {
-			debuglog.Printf("invalid attribute type set: %v", t)
+	for _, a := range attrs {
+		if a.Value.Type() == attribute.INVALID {
+			debuglog.Printf("invalid attribute: %v", a)
 			continue
 		}
-
-		l.attributes[v.Key] = Attribute{
-			Value: v.Value.AsInterface(),
-			Type:  t,
-		}
+		l.attributes[a.Key] = a.Value
 	}
 }
 
@@ -201,7 +180,7 @@ func (l *sentryLogger) Trace() LogEntry {
 		ctx:        l.ctx,
 		level:      LogLevelTrace,
 		severity:   LogSeverityTrace,
-		attributes: make(map[string]Attribute),
+		attributes: make(map[string]attribute.Value),
 	}
 }
 
@@ -211,7 +190,7 @@ func (l *sentryLogger) Debug() LogEntry {
 		ctx:        l.ctx,
 		level:      LogLevelDebug,
 		severity:   LogSeverityDebug,
-		attributes: make(map[string]Attribute),
+		attributes: make(map[string]attribute.Value),
 	}
 }
 
@@ -221,7 +200,7 @@ func (l *sentryLogger) Info() LogEntry {
 		ctx:        l.ctx,
 		level:      LogLevelInfo,
 		severity:   LogSeverityInfo,
-		attributes: make(map[string]Attribute),
+		attributes: make(map[string]attribute.Value),
 	}
 }
 
@@ -231,7 +210,7 @@ func (l *sentryLogger) Warn() LogEntry {
 		ctx:        l.ctx,
 		level:      LogLevelWarn,
 		severity:   LogSeverityWarning,
-		attributes: make(map[string]Attribute),
+		attributes: make(map[string]attribute.Value),
 	}
 }
 
@@ -241,7 +220,7 @@ func (l *sentryLogger) Error() LogEntry {
 		ctx:        l.ctx,
 		level:      LogLevelError,
 		severity:   LogSeverityError,
-		attributes: make(map[string]Attribute),
+		attributes: make(map[string]attribute.Value),
 	}
 }
 
@@ -251,7 +230,7 @@ func (l *sentryLogger) Fatal() LogEntry {
 		ctx:         l.ctx,
 		level:       LogLevelFatal,
 		severity:    LogSeverityFatal,
-		attributes:  make(map[string]Attribute),
+		attributes:  make(map[string]attribute.Value),
 		shouldFatal: true,
 	}
 }
@@ -262,7 +241,7 @@ func (l *sentryLogger) Panic() LogEntry {
 		ctx:         l.ctx,
 		level:       LogLevelFatal,
 		severity:    LogSeverityFatal,
-		attributes:  make(map[string]Attribute),
+		attributes:  make(map[string]attribute.Value),
 		shouldPanic: true,
 	}
 }
@@ -273,7 +252,7 @@ func (l *sentryLogger) LFatal() LogEntry {
 		ctx:        l.ctx,
 		level:      LogLevelFatal,
 		severity:   LogSeverityFatal,
-		attributes: make(map[string]Attribute),
+		attributes: make(map[string]attribute.Value),
 	}
 }
 
@@ -294,47 +273,47 @@ func (e *logEntry) WithCtx(ctx context.Context) LogEntry {
 }
 
 func (e *logEntry) String(key, value string) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: AttributeString}
+	e.attributes[key] = attribute.StringValue(value)
 	return e
 }
 
 func (e *logEntry) StringSlice(key string, value []string) LogEntry {
-	e.attributes[key] = Attribute{Value: attribute.StringSliceValue(value).AsInterface(), Type: AttributeArray}
+	e.attributes[key] = attribute.StringSliceValue(value)
 	return e
 }
 
 func (e *logEntry) Int(key string, value int) LogEntry {
-	e.attributes[key] = Attribute{Value: int64(value), Type: AttributeInt}
+	e.attributes[key] = attribute.Int64Value(int64(value))
 	return e
 }
 
 func (e *logEntry) Int64Slice(key string, value []int64) LogEntry {
-	e.attributes[key] = Attribute{Value: attribute.Int64SliceValue(value).AsInterface(), Type: AttributeArray}
+	e.attributes[key] = attribute.Int64SliceValue(value)
 	return e
 }
 
 func (e *logEntry) Int64(key string, value int64) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: AttributeInt}
+	e.attributes[key] = attribute.Int64Value(value)
 	return e
 }
 
 func (e *logEntry) Float64Slice(key string, value []float64) LogEntry {
-	e.attributes[key] = Attribute{Value: attribute.Float64SliceValue(value).AsInterface(), Type: AttributeArray}
+	e.attributes[key] = attribute.Float64SliceValue(value)
 	return e
 }
 
 func (e *logEntry) Float64(key string, value float64) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: AttributeFloat}
+	e.attributes[key] = attribute.Float64Value(value)
 	return e
 }
 
 func (e *logEntry) BoolSlice(key string, value []bool) LogEntry {
-	e.attributes[key] = Attribute{Value: attribute.BoolSliceValue(value).AsInterface(), Type: AttributeArray}
+	e.attributes[key] = attribute.BoolSliceValue(value)
 	return e
 }
 
 func (e *logEntry) Bool(key string, value bool) LogEntry {
-	e.attributes[key] = Attribute{Value: value, Type: AttributeBool}
+	e.attributes[key] = attribute.BoolValue(value)
 	return e
 }
 
@@ -342,8 +321,7 @@ func (e *logEntry) Bool(key string, value bool) LogEntry {
 //
 // This method is intentionally not part of the LogEntry interface to avoid exposing uint64 in the public API.
 func (e *logEntry) Uint64(key string, value uint64) LogEntry {
-	// We don't currently support uint64, but they should be sent with type integer and let relay handle overflows.
-	e.attributes[key] = Attribute{Value: value, Type: AttributeInt}
+	e.attributes[key] = attribute.Uint64Value(value)
 	return e
 }
 

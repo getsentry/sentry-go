@@ -53,19 +53,19 @@ func setupMockTransport() (context.Context, *MockTransport) {
 }
 
 func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
-	attrs := map[string]Attribute{
-		"sentry.release":              {Value: "v1.2.3", Type: "string"},
-		"sentry.environment":          {Value: "testing", Type: "string"},
-		"sentry.server.address":       {Value: "test-server", Type: "string"},
-		"sentry.sdk.name":             {Value: "sentry.go", Type: "string"},
-		"sentry.sdk.version":          {Value: "0.10.0", Type: "string"},
-		"sentry.message.template":     {Value: "param matching: %v and %v", Type: "string"},
-		"sentry.message.parameters.0": {Value: "param1", Type: "string"},
-		"sentry.message.parameters.1": {Value: "param2", Type: "string"},
-		"key.int":                     {Value: int64(42), Type: "integer"},
-		"key.float":                   {Value: 42.2, Type: "double"},
-		"key.bool":                    {Value: true, Type: "boolean"},
-		"key.string":                  {Value: "str", Type: "string"},
+	attrs := map[string]attribute.Value{
+		"sentry.release":              attribute.StringValue("v1.2.3"),
+		"sentry.environment":          attribute.StringValue("testing"),
+		"sentry.server.address":       attribute.StringValue("test-server"),
+		"sentry.sdk.name":             attribute.StringValue("sentry.go"),
+		"sentry.sdk.version":          attribute.StringValue("0.10.0"),
+		"sentry.message.template":     attribute.StringValue("param matching: %v and %v"),
+		"sentry.message.parameters.0": attribute.StringValue("param1"),
+		"sentry.message.parameters.1": attribute.StringValue("param2"),
+		"key.int":                     attribute.Int64Value(42),
+		"key.float":                   attribute.Float64Value(42.2),
+		"key.bool":                    attribute.BoolValue(true),
+		"key.string":                  attribute.StringValue("str"),
 	}
 
 	tests := []struct {
@@ -194,6 +194,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
+				cmp.AllowUnexported(attribute.Value{}),
 			}
 
 			gotEvents := mockTransport.Events()
@@ -213,12 +214,12 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 }
 
 func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
-	attrs := map[string]Attribute{
-		"sentry.release":        {Value: "v1.2.3", Type: "string"},
-		"sentry.environment":    {Value: "testing", Type: "string"},
-		"sentry.server.address": {Value: "test-server", Type: "string"},
-		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
-		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
+	attrs := map[string]attribute.Value{
+		"sentry.release":        attribute.StringValue("v1.2.3"),
+		"sentry.environment":    attribute.StringValue("testing"),
+		"sentry.server.address": attribute.StringValue("test-server"),
+		"sentry.sdk.name":       attribute.StringValue("sentry.go"),
+		"sentry.sdk.version":    attribute.StringValue("0.10.0"),
 	}
 
 	tests := []struct {
@@ -338,6 +339,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Log{}, "Timestamp"),
+				cmp.AllowUnexported(attribute.Value{}),
 			}
 
 			gotEvents := mockTransport.Events()
@@ -386,12 +388,12 @@ func Test_sentryLogger_Panic(t *testing.T) {
 
 func Test_sentryLogger_Write(t *testing.T) {
 	msg := []byte("message from writer\n")
-	attrs := map[string]Attribute{
-		"sentry.release":        {Value: "v1.2.3", Type: "string"},
-		"sentry.environment":    {Value: "testing", Type: "string"},
-		"sentry.server.address": {Value: "test-server", Type: "string"},
-		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
-		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
+	attrs := map[string]attribute.Value{
+		"sentry.release":        attribute.StringValue("v1.2.3"),
+		"sentry.environment":    attribute.StringValue("testing"),
+		"sentry.server.address": attribute.StringValue("test-server"),
+		"sentry.sdk.name":       attribute.StringValue("sentry.go"),
+		"sentry.sdk.version":    attribute.StringValue("0.10.0"),
 	}
 	wantLogs := []Log{
 		{
@@ -424,6 +426,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Log{}, "Timestamp"),
+		cmp.AllowUnexported(attribute.Value{}),
 	}
 	if diff := cmp.Diff(wantLogs, event.Logs, opts); diff != "" {
 		t.Errorf("Logs mismatch (-want +got):\n%s", diff)
@@ -446,11 +449,11 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(gotEvents))
 	}
 	event := gotEvents[0]
-	assertEqual(t, event.Logs[0].Attributes["int"].Value, int64(42))
+	assertEqual(t, event.Logs[0].Attributes["int"].AsInt64(), int64(42))
 	if _, ok := event.Logs[1].Attributes["int"]; !ok {
 		t.Fatalf("expected key to exist")
 	}
-	assertEqual(t, event.Logs[1].Attributes["string"].Value, "some str")
+	assertEqual(t, event.Logs[1].Attributes["string"].AsString(), "some str")
 }
 
 func TestSentryLogger_LogEntryAttributes(t *testing.T) {
@@ -476,15 +479,15 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(gotEvents))
 	}
 	event := gotEvents[0]
-	assertEqual(t, event.Logs[0].Attributes["key.int"].Value, int64(42))
-	assertEqual(t, event.Logs[0].Attributes["key.int64"].Value, int64(17))
-	assertEqual(t, event.Logs[0].Attributes["key.float"].Value, 42.2)
-	assertEqual(t, event.Logs[0].Attributes["key.bool"].Value, true)
-	assertEqual(t, event.Logs[0].Attributes["key.string"].Value, "some str")
-	assertEqual(t, event.Logs[0].Attributes["key.int64slice"].Value, []int64{1, 2, 3})
-	assertEqual(t, event.Logs[0].Attributes["key.float64slice"].Value, []float64{2.2, 3.14})
-	assertEqual(t, event.Logs[0].Attributes["key.boolslice"].Value, []bool{true, true})
-	assertEqual(t, event.Logs[0].Attributes["key.stringslice"].Value, []string{"s1", "s2"})
+	assertEqual(t, event.Logs[0].Attributes["key.int"].AsInt64(), int64(42))
+	assertEqual(t, event.Logs[0].Attributes["key.int64"].AsInt64(), int64(17))
+	assertEqual(t, event.Logs[0].Attributes["key.float"].AsFloat64(), 42.2)
+	assertEqual(t, event.Logs[0].Attributes["key.bool"].AsBool(), true)
+	assertEqual(t, event.Logs[0].Attributes["key.string"].AsString(), "some str")
+	assertEqual(t, event.Logs[0].Attributes["key.int64slice"].AsInt64Slice(), []int64{1, 2, 3})
+	assertEqual(t, event.Logs[0].Attributes["key.float64slice"].AsFloat64Slice(), []float64{2.2, 3.14})
+	assertEqual(t, event.Logs[0].Attributes["key.boolslice"].AsBoolSlice(), []bool{true, true})
+	assertEqual(t, event.Logs[0].Attributes["key.stringslice"].AsStringSlice(), []string{"s1", "s2"})
 }
 
 func Test_sentryLogger_AttributePrecedence(t *testing.T) {
@@ -517,26 +520,26 @@ func Test_sentryLogger_AttributePrecedence(t *testing.T) {
 
 	if val, ok := attrs["key"]; !ok {
 		t.Error("missing key attribute")
-	} else if val.Value != "entry-value" {
-		t.Errorf("expected key=entry-value, got %v", val.Value)
+	} else if val.AsString() != "entry-value" {
+		t.Errorf("expected key=entry-value, got %v", val.AsString())
 	}
 
 	if val, ok := attrs["instance-only"]; !ok {
 		t.Error("missing instance-only attribute")
-	} else if val.Value != "instance" {
-		t.Errorf("expected instance-only=instance, got %v", val.Value)
+	} else if val.AsString() != "instance" {
+		t.Errorf("expected instance-only=instance, got %v", val.AsString())
 	}
 
 	if val, ok := attrs["entry-only"]; !ok {
 		t.Error("missing entry-only attribute")
-	} else if val.Value != "entry" {
-		t.Errorf("expected entry-only=entry, got %v", val.Value)
+	} else if val.AsString() != "entry" {
+		t.Errorf("expected entry-only=entry, got %v", val.AsString())
 	}
 
 	if val, ok := attrs["user.id"]; !ok {
 		t.Error("missing user.id attribute from scope")
-	} else if val.Value != "user456" {
-		t.Errorf("expected user.id=user456, got %v", val.Value)
+	} else if val.AsString() != "user456" {
+		t.Errorf("expected user.id=user456, got %v", val.AsString())
 	}
 
 	if _, ok := attrs["sentry.sdk.name"]; !ok {
@@ -838,20 +841,20 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 
 	if val, ok := attrs["user.id"]; !ok {
 		t.Error("missing user.id attribute")
-	} else if val.Value != "user123" {
-		t.Errorf("unexpected user.id: got %v, want %v", val.Value, "user123")
+	} else if val.AsString() != "user123" {
+		t.Errorf("unexpected user.id: got %v, want %v", val.AsString(), "user123")
 	}
 
 	if val, ok := attrs["user.name"]; !ok {
 		t.Error("missing user.name attribute")
-	} else if val.Value != "Test User" {
-		t.Errorf("unexpected user.name: got %v, want %v", val.Value, "Test User")
+	} else if val.AsString() != "Test User" {
+		t.Errorf("unexpected user.name: got %v, want %v", val.AsString(), "Test User")
 	}
 
 	if val, ok := attrs["user.email"]; !ok {
 		t.Error("missing user.email attribute")
-	} else if val.Value != "test@example.com" {
-		t.Errorf("unexpected user.email: got %v, want %v", val.Value, "test@example.com")
+	} else if val.AsString() != "test@example.com" {
+		t.Errorf("unexpected user.email: got %v, want %v", val.AsString(), "test@example.com")
 	}
 }
 
