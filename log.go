@@ -167,6 +167,7 @@ func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
 
 	for _, a := range attrs {
 		if a.Value.Type() == attribute.INVALID {
+			debuglog.Printf("invalid attribute: %v", a)
 			continue
 		}
 		l.attributes[a.Key] = a.Value
