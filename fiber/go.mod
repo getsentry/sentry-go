@@ -6,7 +6,7 @@ replace github.com/getsentry/sentry-go => ../
 
 require (
 	github.com/getsentry/sentry-go v0.43.0
-	github.com/gofiber/fiber/v2 v2.52.11
+	github.com/gofiber/fiber/v2 v2.52.12
 	github.com/google/go-cmp v0.5.9
 )
 
