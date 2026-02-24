@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
@@ -172,6 +173,7 @@ func WithAttributes(attrs ...attribute.Builder) MeterOption {
 		}
 		for _, a := range attrs {
 			if a.Value.Type() == attribute.INVALID {
+				debuglog.Printf("invalid attribute: %v", a)
 				continue
 			}
 			o.attributes[a.Key] = a.Value

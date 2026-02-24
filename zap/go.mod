@@ -5,7 +5,7 @@ go 1.24.0
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.0.0-00010101000000-000000000000
+	github.com/getsentry/sentry-go v0.43.0
 	github.com/google/go-cmp v0.7.0
 	github.com/stretchr/testify v1.8.4
 	go.uber.org/zap v1.27.1

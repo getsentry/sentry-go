@@ -515,21 +515,21 @@ func (scope *Scope) populateAttrs(attrs map[string]attribute.Value) {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
-	for k, v := range scope.attributes {
-		attrs[k] = v
+	// Add user-related attributes
+	if !scope.user.IsEmpty() {
+		if scope.user.ID != "" {
+			attrs["user.id"] = attribute.StringValue(scope.user.ID)
+		}
+		if scope.user.Name != "" {
+			attrs["user.name"] = attribute.StringValue(scope.user.Name)
+		}
+		if scope.user.Email != "" {
+			attrs["user.email"] = attribute.StringValue(scope.user.Email)
+		}
 	}
 
-	if scope.user.IsEmpty() {
-		return
-	}
-	for key, val := range map[string]string{
-		"user.id":    scope.user.ID,
-		"user.name":  scope.user.Name,
-		"user.email": scope.user.Email,
-	} {
-		if val != "" {
-			attrs[key] = attribute.StringValue(val)
-		}
+	for k, v := range scope.attributes {
+		attrs[k] = v
 	}
 }
 
