@@ -22,7 +22,7 @@ func (i tbItem) GetTraceID() (string, bool) {
 }
 
 func TestBucketedBufferPollOperation(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 3, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 3, 0)
 	if !b.Offer(tbItem{id: 1}) || !b.Offer(tbItem{id: 2}) {
 		t.Fatal("offer failed")
 	}
@@ -41,7 +41,7 @@ func TestBucketedBufferPollOperation(t *testing.T) {
 }
 
 func TestBucketedBufferOverflowDropOldest(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
 	dropped := 0
 	b.SetDroppedCallback(func(_ tbItem, _ string) { dropped++ })
 	b.Offer(tbItem{id: 1, trace: "a"})
@@ -59,7 +59,7 @@ func TestBucketedBufferOverflowDropOldest(t *testing.T) {
 }
 
 func TestBucketedBufferPollIfReady_BatchSize(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryLog, 10, OverflowPolicyDropOldest, 3, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryLog, 10, OverflowPolicyDropOldest, 3, 0)
 	for i := 1; i <= 3; i++ {
 		b.Offer(tbItem{id: i, trace: "t"})
 	}
@@ -73,7 +73,7 @@ func TestBucketedBufferPollIfReady_BatchSize(t *testing.T) {
 }
 
 func TestBucketedBufferPollIfReady_Timeout(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryLog, 10, OverflowPolicyDropOldest, 100, 1*time.Millisecond)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryLog, 10, OverflowPolicyDropOldest, 100, 1*time.Millisecond)
 	b.Offer(tbItem{id: 1, trace: "t"})
 	time.Sleep(3 * time.Millisecond)
 	items := b.PollIfReady()
@@ -83,7 +83,7 @@ func TestBucketedBufferPollIfReady_Timeout(t *testing.T) {
 }
 
 func TestNewBucketedBuffer(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryLog, 0, OverflowPolicyDropOldest, 0, -1)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryLog, 0, OverflowPolicyDropOldest, 0, -1)
 	if b.Capacity() != 100 {
 		t.Fatalf("default capacity want 100 got %d", b.Capacity())
 	}
@@ -96,7 +96,7 @@ func TestNewBucketedBuffer(t *testing.T) {
 }
 
 func TestBucketedBufferBasicOperations(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0)
 	if !b.IsEmpty() || b.IsFull() || b.Size() != 0 {
 		t.Fatalf("unexpected initial state: empty=%v full=%v size=%d", b.IsEmpty(), b.IsFull(), b.Size())
 	}
@@ -115,7 +115,7 @@ func TestBucketedBufferBasicOperations(t *testing.T) {
 }
 
 func TestBucketedBufferPollBatchAcrossBuckets(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 10, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 10, 0)
 	// Two buckets with different traces
 	b.Offer(tbItem{id: 1, trace: "a"})
 	b.Offer(tbItem{id: 2, trace: "a"})
@@ -129,7 +129,7 @@ func TestBucketedBufferPollBatchAcrossBuckets(t *testing.T) {
 }
 
 func TestBucketedBufferDrain(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0)
 	for i := 1; i <= 5; i++ {
 		b.Offer(tbItem{id: i, trace: "t"})
 	}
@@ -143,7 +143,7 @@ func TestBucketedBufferDrain(t *testing.T) {
 }
 
 func TestBucketedBufferMetrics(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryError, 10, OverflowPolicyDropNewest, 1, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryError, 10, OverflowPolicyDropNewest, 1, 0)
 	if b.OfferedCount() != 0 || b.DroppedCount() != 0 {
 		t.Fatalf("initial metrics not zero")
 	}
@@ -162,7 +162,7 @@ func TestBucketedBufferMetrics(t *testing.T) {
 }
 
 func TestBucketedBufferOverflowDropNewest(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryError, 2, OverflowPolicyDropNewest, 1, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryError, 2, OverflowPolicyDropNewest, 1, 0)
 	b.Offer(tbItem{id: 1})
 	b.Offer(tbItem{id: 2})
 	if ok := b.Offer(tbItem{id: 3}); ok {
@@ -171,7 +171,7 @@ func TestBucketedBufferOverflowDropNewest(t *testing.T) {
 }
 
 func TestBucketedBufferDroppedCallback(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryError, 3, OverflowPolicyDropOldest, 1, 0)
 	calls := 0
 	b.SetDroppedCallback(func(_ tbItem, reason string) {
 		calls++
@@ -191,7 +191,7 @@ func TestBucketedBufferDroppedCallback(t *testing.T) {
 }
 
 func TestBucketedBufferClear(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryError, 5, OverflowPolicyDropOldest, 1, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryError, 5, OverflowPolicyDropOldest, 1, 0)
 	b.Offer(tbItem{id: 1})
 	b.Offer(tbItem{id: 2})
 	b.Clear()
@@ -219,7 +219,7 @@ func TestBucketedBufferIsReadyToFlush(t *testing.T) {
 			if tt.category == ratelimit.CategoryError {
 				batch = 1
 			}
-			b := NewBucketedBuffer[tbItem]("", tt.category, 10, OverflowPolicyDropOldest, batch, tt.timeout)
+			b := NewBucketedBuffer[tbItem](nil, tt.category, 10, OverflowPolicyDropOldest, batch, tt.timeout)
 			for i := 0; i < tt.items; i++ {
 				b.Offer(tbItem{id: i, trace: "t"})
 			}
@@ -235,7 +235,7 @@ func TestBucketedBufferIsReadyToFlush(t *testing.T) {
 }
 
 func TestBucketedBufferConcurrency(t *testing.T) {
-	b := NewBucketedBuffer[tbItem]("", ratelimit.CategoryError, 200, OverflowPolicyDropOldest, 1, 0)
+	b := NewBucketedBuffer[tbItem](nil, ratelimit.CategoryError, 200, OverflowPolicyDropOldest, 1, 0)
 	const producers = 5
 	const per = 50
 	var wg sync.WaitGroup

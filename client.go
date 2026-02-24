@@ -394,9 +394,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	if !options.DisableClientReports {
-		// Use the global registry to get or create a reporter for this DSN.
-		// This ensures all components using the same DSN share the same reporter.
-		client.reporter = report.GetOrCreateAggregator(options.Dsn)
+		client.reporter = report.NewAggregator()
 	}
 
 	client.setupTransport()
@@ -428,7 +426,20 @@ func (client *Client) setupTransport() {
 		if opts.Dsn == "" {
 			transport = new(noopTransport)
 		} else {
-			transport = NewHTTPTransport()
+			httpTransport := NewHTTPTransport()
+			httpTransport.recorder = client.reporter
+			httpTransport.provider = client.reporter
+			transport = httpTransport
+		}
+	} else {
+		// For known transport types, inject the client report interfaces.
+		switch tr := transport.(type) {
+		case *HTTPTransport:
+			tr.recorder = client.reporter
+			tr.provider = client.reporter
+		case *HTTPSyncTransport:
+			tr.recorder = client.reporter
+			tr.provider = client.reporter
 		}
 	}
 
@@ -468,15 +479,17 @@ func (client *Client) setupTelemetryProcessor() { // nolint: unused
 		HTTPProxy:     client.options.HTTPProxy,
 		HTTPSProxy:    client.options.HTTPSProxy,
 		CaCerts:       client.options.CaCerts,
+		Recorder:      client.reporter,
+		Provider:      client.reporter,
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
 	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
-		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
-		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.TelemetryItem](client.options.Dsn, ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+		ratelimit.CategoryError:       telemetry.NewRingBuffer[protocol.TelemetryItem](client.reporter, ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.TelemetryItem](client.reporter, ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.TelemetryItem](client.reporter, ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
+		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.TelemetryItem](client.reporter, ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.TelemetryItem](client.reporter, ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second),
 	}
 
 	sdkInfo := &protocol.SdkInfo{
@@ -484,7 +497,7 @@ func (client *Client) setupTelemetryProcessor() { // nolint: unused
 		Version: client.sdkVersion,
 	}
 
-	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, &client.dsn.Dsn, sdkInfo)
+	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, &client.dsn.Dsn, sdkInfo, client.reporter)
 }
 
 func (client *Client) setupIntegrations() {
@@ -739,7 +752,6 @@ func (client *Client) Close() {
 	if client.batchMeter != nil {
 		client.batchMeter.Shutdown()
 	}
-	report.UnregisterAggregator(client.options.Dsn)
 	client.Transport.Close()
 }
 

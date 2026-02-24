@@ -24,7 +24,7 @@ type RingBuffer[T any] struct {
 	category       ratelimit.Category
 	priority       ratelimit.Priority
 	overflowPolicy OverflowPolicy
-	reporter       *report.Aggregator
+	recorder       report.ClientReportRecorder
 
 	batchSize     int
 	timeout       time.Duration
@@ -35,7 +35,7 @@ type RingBuffer[T any] struct {
 	onDropped func(item T, reason string)
 }
 
-func NewRingBuffer[T any](dsn string, category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration) *RingBuffer[T] {
+func NewRingBuffer[T any](recorder report.ClientReportRecorder, category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration) *RingBuffer[T] {
 	if capacity <= 0 {
 		capacity = defaultCapacity
 	}
@@ -54,7 +54,7 @@ func NewRingBuffer[T any](dsn string, category ratelimit.Category, capacity int,
 		category:       category,
 		priority:       category.GetPriority(),
 		overflowPolicy: overflowPolicy,
-		reporter:       report.GetAggregator(dsn),
+		recorder:       recorder,
 		batchSize:      batchSize,
 		timeout:        timeout,
 		lastFlushTime:  time.Now(),
@@ -353,10 +353,13 @@ func (b *RingBuffer[T]) PollIfReady() []T {
 }
 
 func (b *RingBuffer[T]) recordDroppedItem(item T) {
+	if b.recorder == nil {
+		return
+	}
 	if ti, ok := any(item).(protocol.TelemetryItem); ok {
-		b.reporter.RecordItem(report.ReasonBufferOverflow, ti)
+		b.recorder.RecordItem(report.ReasonBufferOverflow, ti)
 	} else {
-		b.reporter.RecordOne(report.ReasonBufferOverflow, b.category)
+		b.recorder.RecordOne(report.ReasonBufferOverflow, b.category)
 	}
 }
 

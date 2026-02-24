@@ -41,7 +41,7 @@ type BucketedBuffer[T any] struct {
 	category       ratelimit.Category
 	priority       ratelimit.Priority
 	overflowPolicy OverflowPolicy
-	reporter       *report.Aggregator
+	recorder       report.ClientReportRecorder
 	batchSize      int
 	timeout        time.Duration
 	lastFlushTime  time.Time
@@ -52,7 +52,7 @@ type BucketedBuffer[T any] struct {
 }
 
 func NewBucketedBuffer[T any](
-	dsn string,
+	recorder report.ClientReportRecorder,
 	category ratelimit.Category,
 	capacity int,
 	overflowPolicy OverflowPolicy,
@@ -82,7 +82,7 @@ func NewBucketedBuffer[T any](
 		category:       category,
 		priority:       category.GetPriority(),
 		overflowPolicy: overflowPolicy,
-		reporter:       report.GetAggregator(dsn),
+		recorder:       recorder,
 		batchSize:      batchSize,
 		timeout:        timeout,
 		lastFlushTime:  time.Now(),
@@ -159,9 +159,9 @@ func (b *BucketedBuffer[T]) handleOverflow(item T, traceID string) bool {
 		}
 		droppedCount := len(oldestBucket.items)
 		atomic.AddInt64(&b.dropped, int64(droppedCount))
-		if b.onDropped != nil {
-			for _, di := range oldestBucket.items {
-				b.recordDroppedItem(di)
+		for _, di := range oldestBucket.items {
+			b.recordDroppedItem(di)
+			if b.onDropped != nil {
 				b.onDropped(di, "buffer_full_drop_oldest_bucket")
 			}
 		}
@@ -407,9 +407,12 @@ func (b *BucketedBuffer[T]) MarkFlushed() {
 }
 
 func (b *BucketedBuffer[T]) recordDroppedItem(item T) {
+	if b.recorder == nil {
+		return
+	}
 	if ti, ok := any(item).(protocol.TelemetryItem); ok {
-		b.reporter.RecordItem(report.ReasonBufferOverflow, ti)
+		b.recorder.RecordItem(report.ReasonBufferOverflow, ti)
 	} else {
-		b.reporter.RecordOne(report.ReasonBufferOverflow, b.category)
+		b.recorder.RecordOne(report.ReasonBufferOverflow, b.category)
 	}
 }
