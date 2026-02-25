@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/getsentry/sentry-go/attribute"
 )
 
 const sharedContextsKey = "sharedContextsKey"
@@ -132,6 +134,19 @@ func TestScopeSetTagsOverrides(t *testing.T) {
 	scope.SetTags(map[string]string{"a": "bar", "b": "baz"})
 
 	assertEqual(t, map[string]string{"a": "bar", "b": "baz"}, scope.tags)
+}
+
+func TestScope_SetAttributes(t *testing.T) {
+	scope := NewScope()
+	scope.SetAttributes(
+		attribute.String("key.string", "str"),
+		attribute.Bool("key.bool", true),
+	)
+
+	assertEqual(t, map[string]attribute.Value{
+		"key.string": attribute.StringValue("str"),
+		"key.bool":   attribute.BoolValue(true),
+	}, scope.attributes)
 }
 
 func TestScopeRemoveTag(t *testing.T) {
