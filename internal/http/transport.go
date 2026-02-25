@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/httputils"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/getsentry/sentry-go/report"
 )
 
@@ -234,7 +234,7 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 		t.recorder.RecordForEnvelope(report.ReasonInternalError, envelope)
 		return err
 	}
-	identifier := util.EnvelopeIdentifier(envelope)
+	identifier := httputils.EnvelopeIdentifier(envelope)
 	debuglog.Printf(
 		"Sending %s to %s project: %s",
 		identifier,
@@ -242,7 +242,7 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 		t.dsn.GetProjectID(),
 	)
 
-	result, err := util.DoSendRequest(t.client, request, identifier)
+	result, err := httputils.DoSendRequest(t.client, request, identifier)
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
 		t.recorder.RecordForEnvelope(report.ReasonNetworkError, envelope)
@@ -402,7 +402,7 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 
 	select {
 	case t.queue <- envelope:
-		identifier := util.EnvelopeIdentifier(envelope)
+		identifier := httputils.EnvelopeIdentifier(envelope)
 		debuglog.Printf(
 			"Sending %s to %s project: %s",
 			identifier,
@@ -506,7 +506,7 @@ func (t *AsyncTransport) sendClientReport() {
 		debuglog.Printf("Failed to create client report request: %v", err)
 		return
 	}
-	result, err := util.DoSendRequest(t.client, request, "client report")
+	result, err := httputils.DoSendRequest(t.client, request, "client report")
 	if err != nil {
 		debuglog.Printf("Failed to send client report: %v", err)
 		return
@@ -550,8 +550,8 @@ func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool { //
 		return false
 	}
 
-	identifier := util.EnvelopeIdentifier(envelope)
-	result, err := util.DoSendRequest(t.client, request, identifier)
+	identifier := httputils.EnvelopeIdentifier(envelope)
+	result, err := httputils.DoSendRequest(t.client, request, identifier)
 	if err != nil {
 		debuglog.Printf("HTTP request failed: %v", err)
 		t.recorder.RecordForEnvelope(report.ReasonNetworkError, envelope)

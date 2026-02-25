@@ -15,9 +15,9 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	httpinternal "github.com/getsentry/sentry-go/internal/http"
+	"github.com/getsentry/sentry-go/internal/httputils"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/getsentry/sentry-go/report"
 )
 
@@ -634,7 +634,7 @@ func (t *HTTPTransport) worker() {
 						debuglog.Printf("There was an issue when creating the request: %v", err)
 						continue
 					}
-					result, err := util.DoSendRequest(t.client, req, "client report")
+					result, err := httputils.DoSendRequest(t.client, req, "client report")
 					if err != nil {
 						debuglog.Printf("There was an issue with sending an event: %v", err)
 						continue
@@ -653,7 +653,7 @@ func (t *HTTPTransport) worker() {
 					continue
 				}
 
-				result, err := util.DoSendRequest(t.client, item.request, item.eventIdentifier)
+				result, err := httputils.DoSendRequest(t.client, item.request, item.eventIdentifier)
 				if err != nil {
 					debuglog.Printf("There was an issue with sending an event: %v", err)
 					t.recorder.RecordOne(report.ReasonNetworkError, item.category)
@@ -795,7 +795,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		t.dsn.GetProjectID(),
 	)
 
-	result, err := util.DoSendRequest(t.client, request, identifier)
+	result, err := httputils.DoSendRequest(t.client, request, identifier)
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
 		t.recorder.RecordOne(report.ReasonNetworkError, category)
