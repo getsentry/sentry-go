@@ -440,6 +440,9 @@ func (client *Client) setupTransport() {
 		case *HTTPSyncTransport:
 			tr.recorder = client.reporter
 			tr.provider = client.reporter
+		case *internalAsyncTransportAdapter:
+			tr.recorder = client.reporter
+			tr.provider = client.reporter
 		}
 	}
 

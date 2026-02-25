@@ -23,8 +23,9 @@ import (
 const (
 	apiVersion = 7
 
-	defaultTimeout   = time.Second * 30
-	defaultQueueSize = 1000
+	defaultTimeout           = time.Second * 30
+	defaultQueueSize         = 1000
+	defaultClientReportsTick = time.Second * 30
 )
 
 var (
@@ -248,7 +249,10 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 		t.recorder.RecordForEnvelope(report.ReasonNetworkError, envelope)
 		return err
 	}
-	util.HandleHTTPResponse(response, identifier)
+	success := util.HandleHTTPResponse(response, identifier)
+	if !success && response.StatusCode != http.StatusTooManyRequests {
+		t.recorder.RecordForEnvelope(report.ReasonSendError, envelope)
+	}
 
 	t.mu.Lock()
 	if t.limits == nil {
@@ -458,10 +462,15 @@ func (t *AsyncTransport) IsRateLimited(category ratelimit.Category) bool {
 func (t *AsyncTransport) worker() {
 	defer t.wg.Done()
 
+	crTicker := time.NewTicker(defaultClientReportsTick)
+	defer crTicker.Stop()
+
 	for {
 		select {
 		case <-t.done:
 			return
+		case <-crTicker.C:
+			t.sendClientReport()
 		case envelope, open := <-t.queue:
 			if !open {
 				return
@@ -475,6 +484,48 @@ func (t *AsyncTransport) worker() {
 			close(flushResponse)
 		}
 	}
+}
+
+// sendClientReport sends a standalone envelope containing only a client report.
+func (t *AsyncTransport) sendClientReport() {
+	r := t.provider.TakeReport()
+	if r == nil {
+		return
+	}
+	item, err := r.ToEnvelopeItem()
+	if err != nil {
+		debuglog.Printf("Failed to serialize client report: %v", err)
+		return
+	}
+	header := &protocol.EnvelopeHeader{
+		SentAt: time.Now(),
+		Dsn:    t.dsn.String(),
+	}
+	envelope := protocol.NewEnvelope(header)
+	envelope.AddItem(item)
+
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+
+	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
+	if err != nil {
+		debuglog.Printf("Failed to create client report request: %v", err)
+		return
+	}
+	response, err := t.client.Do(request)
+	if err != nil {
+		debuglog.Printf("Failed to send client report: %v", err)
+		return
+	}
+	t.mu.Lock()
+	if t.limits == nil {
+		t.limits = make(ratelimit.Map)
+	}
+	t.limits.Merge(ratelimit.FromResponse(response))
+	t.mu.Unlock()
+
+	_, _ = io.CopyN(io.Discard, response.Body, util.MaxDrainResponseBytes)
+	response.Body.Close()
 }
 
 func (t *AsyncTransport) drainQueue() {

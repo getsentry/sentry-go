@@ -335,6 +335,7 @@ type batchItem struct {
 	request         *http.Request
 	category        ratelimit.Category
 	eventIdentifier string
+	spanCount       int
 }
 
 // HTTPTransport is the default, non-blocking, implementation of Transport.
@@ -473,6 +474,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		request:         request,
 		category:        category,
 		eventIdentifier: identifier,
+		spanCount:       event.GetSpanCount(),
 	}:
 		debuglog.Printf(
 			"Sending %s to %s project: %s",
@@ -638,11 +640,17 @@ func (t *HTTPTransport) worker() {
 				if err != nil {
 					debuglog.Printf("There was an issue with sending an event: %v", err)
 					t.recorder.RecordOne(report.ReasonNetworkError, item.category)
+					if item.spanCount > 0 {
+						t.recorder.Record(report.ReasonNetworkError, ratelimit.CategorySpan, int64(item.spanCount))
+					}
 					continue
 				}
 				success := util.HandleHTTPResponse(response, item.eventIdentifier)
 				if !success && response.StatusCode != http.StatusTooManyRequests {
 					t.recorder.RecordOne(report.ReasonSendError, item.category)
+					if item.spanCount > 0 {
+						t.recorder.Record(report.ReasonSendError, ratelimit.CategorySpan, int64(item.spanCount))
+					}
 				}
 
 				t.mu.Lock()
@@ -875,6 +883,8 @@ func newInternalAsyncTransport() Transport {
 type internalAsyncTransportAdapter struct {
 	transport protocol.TelemetryTransport
 	dsn       *protocol.Dsn
+	recorder  report.ClientReportRecorder
+	provider  report.ClientReportProvider
 }
 
 func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
@@ -885,6 +895,8 @@ func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
 		HTTPProxy:     options.HTTPProxy,
 		HTTPSProxy:    options.HTTPSProxy,
 		CaCerts:       options.CaCerts,
+		Recorder:      a.recorder,
+		Provider:      a.provider,
 	}
 
 	a.transport = httpinternal.NewAsyncTransport(transportOptions)

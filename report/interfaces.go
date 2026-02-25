@@ -30,8 +30,8 @@ func (noopRecorder) RecordItem(DiscardReason, protocol.TelemetryItem)    {}
 // noopProvider is a no-op implementation of ClientReportProvider.
 type noopProvider struct{}
 
-func (noopProvider) TakeReport() *ClientReport                    { return nil }
-func (noopProvider) AttachToEnvelope(envelope *protocol.Envelope) {}
+func (noopProvider) TakeReport() *ClientReport             { return nil }
+func (noopProvider) AttachToEnvelope(_ *protocol.Envelope) {}
 
 // NoopRecorder returns a no-op ClientReportRecorder that silently discards all records.
 func NoopRecorder() ClientReportRecorder { return noopRecorder{} }
