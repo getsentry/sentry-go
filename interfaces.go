@@ -562,6 +562,19 @@ func (e *Event) GetSpanCount() int {
 	return len(e.Spans) + 1
 }
 
+// GetLogByteSize returns the approximate total byte size of all logs in the event. It is used for client
+// reports. Returns 0 for non-log events.
+func (e *Event) GetLogByteSize() int {
+	if e.Type != logEvent.Type {
+		return 0
+	}
+	var size int
+	for i := range e.Logs {
+		size += e.Logs[i].ApproximateSize()
+	}
+	return size
+}
+
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
 // to prevent accidentally storing T when we mean *T.
 // For example, the TraceContext must be stored as *TraceContext to pick up the

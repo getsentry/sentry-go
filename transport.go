@@ -189,9 +189,29 @@ func encodeEnvelopeMetrics(enc *json.Encoder, count int, body json.RawMessage) e
 	return err
 }
 
-func recordSpanOutcome(recorder report.ClientReportRecorder, reason report.DiscardReason, event *Event) {
-	if event.Type == transactionType {
-		recorder.Record(reason, ratelimit.CategorySpan, int64(event.GetSpanCount()))
+// recordSupplementaryOutcomes records supplementary category outcomes for an event.
+// Transactions record span counts; logs record byte sizes.
+func recordSupplementaryOutcomes(recorder report.ClientReportRecorder, reason report.DiscardReason, event *Event) {
+	switch event.Type {
+	case transactionType:
+		if count := event.GetSpanCount(); count > 0 {
+			recorder.Record(reason, ratelimit.CategorySpan, int64(count))
+		}
+	case logEvent.Type:
+		if size := event.GetLogByteSize(); size > 0 {
+			recorder.Record(reason, ratelimit.CategoryLogByte, int64(size))
+		}
+	}
+}
+
+// recordBatchItemSupplementary records supplementary category outcomes from a batchItem,
+// which carries pre-computed counts from the original event.
+func recordBatchItemSupplementary(recorder report.ClientReportRecorder, reason report.DiscardReason, item *batchItem) {
+	if item.spanCount > 0 {
+		recorder.Record(reason, ratelimit.CategorySpan, int64(item.spanCount))
+	}
+	if item.logByteSize > 0 {
+		recorder.Record(reason, ratelimit.CategoryLogByte, int64(item.logByteSize))
 	}
 }
 
@@ -336,6 +356,7 @@ type batchItem struct {
 	category        ratelimit.Category
 	eventIdentifier string
 	spanCount       int
+	logByteSize     int
 }
 
 // HTTPTransport is the default, non-blocking, implementation of Transport.
@@ -443,14 +464,14 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 
 	if t.disabled(category) {
 		t.recorder.RecordOne(report.ReasonRateLimitBackoff, category)
-		recordSpanOutcome(t.recorder, report.ReasonRateLimitBackoff, event)
+		recordSupplementaryOutcomes(t.recorder, report.ReasonRateLimitBackoff, event)
 		return
 	}
 
 	request, err := getRequestFromEvent(ctx, event, t.dsn, t.provider)
 	if err != nil {
 		t.recorder.RecordOne(report.ReasonInternalError, category)
-		recordSpanOutcome(t.recorder, report.ReasonInternalError, event)
+		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
 		return
 	}
 
@@ -475,6 +496,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		category:        category,
 		eventIdentifier: identifier,
 		spanCount:       event.GetSpanCount(),
+		logByteSize:     event.GetLogByteSize(),
 	}:
 		debuglog.Printf(
 			"Sending %s to %s project: %s",
@@ -485,7 +507,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	default:
 		debuglog.Println("Event dropped due to transport buffer being full.")
 		t.recorder.RecordOne(report.ReasonQueueOverflow, category)
-		recordSpanOutcome(t.recorder, report.ReasonQueueOverflow, event)
+		recordSupplementaryOutcomes(t.recorder, report.ReasonQueueOverflow, event)
 	}
 
 	t.buffer <- b
@@ -633,6 +655,8 @@ func (t *HTTPTransport) worker() {
 					break loop
 				}
 				if t.disabled(item.category) {
+					t.recorder.RecordOne(report.ReasonRateLimitBackoff, item.category)
+					recordBatchItemSupplementary(t.recorder, report.ReasonRateLimitBackoff, &item)
 					continue
 				}
 
@@ -640,17 +664,13 @@ func (t *HTTPTransport) worker() {
 				if err != nil {
 					debuglog.Printf("There was an issue with sending an event: %v", err)
 					t.recorder.RecordOne(report.ReasonNetworkError, item.category)
-					if item.spanCount > 0 {
-						t.recorder.Record(report.ReasonNetworkError, ratelimit.CategorySpan, int64(item.spanCount))
-					}
+					recordBatchItemSupplementary(t.recorder, report.ReasonNetworkError, &item)
 					continue
 				}
 				success := util.HandleHTTPResponse(response, item.eventIdentifier)
 				if !success && response.StatusCode != http.StatusTooManyRequests {
 					t.recorder.RecordOne(report.ReasonSendError, item.category)
-					if item.spanCount > 0 {
-						t.recorder.Record(report.ReasonSendError, ratelimit.CategorySpan, int64(item.spanCount))
-					}
+					recordBatchItemSupplementary(t.recorder, report.ReasonSendError, &item)
 				}
 
 				t.mu.Lock()
@@ -772,14 +792,14 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	category := event.toCategory()
 	if t.disabled(category) {
 		t.recorder.RecordOne(report.ReasonRateLimitBackoff, category)
-		recordSpanOutcome(t.recorder, report.ReasonRateLimitBackoff, event)
+		recordSupplementaryOutcomes(t.recorder, report.ReasonRateLimitBackoff, event)
 		return
 	}
 
 	request, err := getRequestFromEvent(ctx, event, t.dsn, t.provider)
 	if err != nil {
 		t.recorder.RecordOne(report.ReasonInternalError, category)
-		recordSpanOutcome(t.recorder, report.ReasonInternalError, event)
+		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
 		return
 	}
 
@@ -795,13 +815,13 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
 		t.recorder.RecordOne(report.ReasonNetworkError, category)
-		recordSpanOutcome(t.recorder, report.ReasonNetworkError, event)
+		recordSupplementaryOutcomes(t.recorder, report.ReasonNetworkError, event)
 		return
 	}
 	success := util.HandleHTTPResponse(response, identifier)
 	if !success && response.StatusCode != http.StatusTooManyRequests {
 		t.recorder.RecordOne(report.ReasonSendError, category)
-		recordSpanOutcome(t.recorder, report.ReasonSendError, event)
+		recordSupplementaryOutcomes(t.recorder, report.ReasonSendError, event)
 	}
 
 	t.mu.Lock()
@@ -923,6 +943,11 @@ func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
 	item, err := event.ToEnvelopeItem()
 	if err != nil {
 		debuglog.Printf("Failed to convert event to envelope item: %v", err)
+		if a.recorder != nil {
+			category := event.toCategory()
+			a.recorder.RecordOne(report.ReasonInternalError, category)
+			recordSupplementaryOutcomes(a.recorder, report.ReasonInternalError, event)
+		}
 		return
 	}
 	envelope.AddItem(item)
