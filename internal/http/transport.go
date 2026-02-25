@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"sync"
@@ -243,26 +242,21 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 		t.dsn.GetProjectID(),
 	)
 
-	response, err := t.client.Do(request)
+	result, err := util.DoSendRequest(t.client, request, identifier)
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
 		t.recorder.RecordForEnvelope(report.ReasonNetworkError, envelope)
 		return err
 	}
-	success := util.HandleHTTPResponse(response, identifier)
-	if !success && response.StatusCode != http.StatusTooManyRequests {
+	if result.IsSendError() {
 		t.recorder.RecordForEnvelope(report.ReasonSendError, envelope)
 	}
 
 	t.mu.Lock()
-	if t.limits == nil {
-		t.limits = make(ratelimit.Map)
-	}
-	t.limits.Merge(ratelimit.FromResponse(response))
+	t.limits.Merge(result.Limits)
 	t.mu.Unlock()
 
-	_, _ = io.CopyN(io.Discard, response.Body, util.MaxDrainResponseBytes)
-	return response.Body.Close()
+	return nil
 }
 
 func (t *SyncTransport) Flush(_ time.Duration) bool {
@@ -512,20 +506,15 @@ func (t *AsyncTransport) sendClientReport() {
 		debuglog.Printf("Failed to create client report request: %v", err)
 		return
 	}
-	response, err := t.client.Do(request)
+	result, err := util.DoSendRequest(t.client, request, "client report")
 	if err != nil {
 		debuglog.Printf("Failed to send client report: %v", err)
 		return
 	}
-	t.mu.Lock()
-	if t.limits == nil {
-		t.limits = make(ratelimit.Map)
-	}
-	t.limits.Merge(ratelimit.FromResponse(response))
-	t.mu.Unlock()
 
-	_, _ = io.CopyN(io.Discard, response.Body, util.MaxDrainResponseBytes)
-	response.Body.Close()
+	t.mu.Lock()
+	t.limits.Merge(result.Limits)
+	t.mu.Unlock()
 }
 
 func (t *AsyncTransport) drainQueue() {
@@ -561,29 +550,22 @@ func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool { //
 		return false
 	}
 
-	response, err := t.client.Do(request)
+	identifier := util.EnvelopeIdentifier(envelope)
+	result, err := util.DoSendRequest(t.client, request, identifier)
 	if err != nil {
 		debuglog.Printf("HTTP request failed: %v", err)
 		t.recorder.RecordForEnvelope(report.ReasonNetworkError, envelope)
 		return false
 	}
-	defer response.Body.Close()
-
-	identifier := util.EnvelopeIdentifier(envelope)
-	success := util.HandleHTTPResponse(response, identifier)
-	if !success && response.StatusCode != http.StatusTooManyRequests {
+	if result.IsSendError() {
 		t.recorder.RecordForEnvelope(report.ReasonSendError, envelope)
 	}
 
 	t.mu.Lock()
-	if t.limits == nil {
-		t.limits = make(ratelimit.Map)
-	}
-	t.limits.Merge(ratelimit.FromResponse(response))
+	t.limits.Merge(result.Limits)
 	t.mu.Unlock()
 
-	_, _ = io.CopyN(io.Discard, response.Body, util.MaxDrainResponseBytes)
-	return success
+	return result.Success
 }
 
 func (t *AsyncTransport) isRateLimited(category ratelimit.Category) bool {

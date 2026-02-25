@@ -396,6 +396,7 @@ func NewHTTPTransport() *HTTPTransport {
 		BufferSize: defaultBufferSize,
 		Timeout:    defaultTimeout,
 		done:       make(chan struct{}),
+		limits:     make(ratelimit.Map),
 	}
 	return &transport
 }
@@ -633,22 +634,14 @@ func (t *HTTPTransport) worker() {
 						debuglog.Printf("There was an issue when creating the request: %v", err)
 						continue
 					}
-					response, err := t.client.Do(req)
+					result, err := util.DoSendRequest(t.client, req, "client report")
 					if err != nil {
 						debuglog.Printf("There was an issue with sending an event: %v", err)
 						continue
 					}
 					t.mu.Lock()
-					if t.limits == nil {
-						t.limits = make(ratelimit.Map)
-					}
-					t.limits.Merge(ratelimit.FromResponse(response))
+					t.limits.Merge(result.Limits)
 					t.mu.Unlock()
-
-					// Drain body up to a limit and close it, allowing the
-					// transport to reuse TCP connections.
-					_, _ = io.CopyN(io.Discard, response.Body, util.MaxDrainResponseBytes)
-					response.Body.Close()
 				}
 			case item, open := <-b.items:
 				if !open {
@@ -660,30 +653,21 @@ func (t *HTTPTransport) worker() {
 					continue
 				}
 
-				response, err := t.client.Do(item.request)
+				result, err := util.DoSendRequest(t.client, item.request, item.eventIdentifier)
 				if err != nil {
 					debuglog.Printf("There was an issue with sending an event: %v", err)
 					t.recorder.RecordOne(report.ReasonNetworkError, item.category)
 					recordBatchItemSupplementary(t.recorder, report.ReasonNetworkError, &item)
 					continue
 				}
-				success := util.HandleHTTPResponse(response, item.eventIdentifier)
-				if !success && response.StatusCode != http.StatusTooManyRequests {
+				if result.IsSendError() {
 					t.recorder.RecordOne(report.ReasonSendError, item.category)
 					recordBatchItemSupplementary(t.recorder, report.ReasonSendError, &item)
 				}
 
 				t.mu.Lock()
-				if t.limits == nil {
-					t.limits = make(ratelimit.Map)
-				}
-				t.limits.Merge(ratelimit.FromResponse(response))
+				t.limits.Merge(result.Limits)
 				t.mu.Unlock()
-
-				// Drain body up to a limit and close it, allowing the
-				// transport to reuse TCP connections.
-				_, _ = io.CopyN(io.Discard, response.Body, util.MaxDrainResponseBytes)
-				response.Body.Close()
 			}
 		}
 
@@ -811,31 +795,21 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		t.dsn.GetProjectID(),
 	)
 
-	response, err := t.client.Do(request)
+	result, err := util.DoSendRequest(t.client, request, identifier)
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
 		t.recorder.RecordOne(report.ReasonNetworkError, category)
 		recordSupplementaryOutcomes(t.recorder, report.ReasonNetworkError, event)
 		return
 	}
-	success := util.HandleHTTPResponse(response, identifier)
-	if !success && response.StatusCode != http.StatusTooManyRequests {
+	if result.IsSendError() {
 		t.recorder.RecordOne(report.ReasonSendError, category)
 		recordSupplementaryOutcomes(t.recorder, report.ReasonSendError, event)
 	}
 
 	t.mu.Lock()
-	if t.limits == nil {
-		t.limits = make(ratelimit.Map)
-	}
-
-	t.limits.Merge(ratelimit.FromResponse(response))
+	t.limits.Merge(result.Limits)
 	t.mu.Unlock()
-
-	// Drain body up to a limit and close it, allowing the
-	// transport to reuse TCP connections.
-	_, _ = io.CopyN(io.Discard, response.Body, util.MaxDrainResponseBytes)
-	response.Body.Close()
 }
 
 // Flush is a no-op for HTTPSyncTransport. It always returns true immediately.
