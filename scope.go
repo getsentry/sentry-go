@@ -214,6 +214,7 @@ func (scope *Scope) SetAttributes(attrs ...attribute.Builder) {
 
 	for _, a := range attrs {
 		if a.Value.Type() == attribute.INVALID {
+			debuglog.Printf("invalid attribute: %v", a)
 			continue
 		}
 		scope.attributes[a.Key] = a.Value
@@ -350,6 +351,7 @@ func (scope *Scope) Clone() *Scope {
 	clone.attachments = make([]*Attachment, len(scope.attachments))
 	copy(clone.attachments, scope.attachments)
 	clone.attributes = maps.Clone(scope.attributes)
+	clone.contexts = maps.Clone(scope.contexts)
 	clone.tags = maps.Clone(scope.tags)
 	clone.extra = maps.Clone(scope.extra)
 	clone.fingerprint = make([]string, len(scope.fingerprint))
