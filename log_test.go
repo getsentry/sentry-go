@@ -462,9 +462,13 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 	l := NewLogger(ctx)
 	l.Info().
 		String("key.string", "some str").
+		StringSlice("key.stringslice", []string{"s1", "s2"}).
 		Int("key.int", 42).
+		Int64Slice("key.int64slice", []int64{1, 2, 3}).
 		Int64("key.int64", 17).
+		Float64Slice("key.float64slice", []float64{2.2, 3.14}).
 		Float64("key.float", 42.2).
+		BoolSlice("key.boolslice", []bool{true, true}).
 		Bool("key.bool", true).
 		Emit(msg)
 
@@ -480,6 +484,10 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 	assertEqual(t, event.Logs[0].Attributes["key.float"].AsFloat64(), 42.2)
 	assertEqual(t, event.Logs[0].Attributes["key.bool"].AsBool(), true)
 	assertEqual(t, event.Logs[0].Attributes["key.string"].AsString(), "some str")
+	assertEqual(t, event.Logs[0].Attributes["key.int64slice"].AsInt64Slice(), []int64{1, 2, 3})
+	assertEqual(t, event.Logs[0].Attributes["key.float64slice"].AsFloat64Slice(), []float64{2.2, 3.14})
+	assertEqual(t, event.Logs[0].Attributes["key.boolslice"].AsBoolSlice(), []bool{true, true})
+	assertEqual(t, event.Logs[0].Attributes["key.stringslice"].AsStringSlice(), []string{"s1", "s2"})
 }
 
 func Test_sentryLogger_AttributePrecedence(t *testing.T) {

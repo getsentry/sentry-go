@@ -60,6 +60,36 @@ func TestValue(t *testing.T) {
 			wantValue: "foo",
 		},
 		{
+			name:      "BoolSliceValue() correctly returns a bool slice value",
+			value:     BoolSliceValue([]bool{true, false, true}),
+			wantType:  BOOLSLICE,
+			wantValue: []bool{true, false, true},
+		},
+		{
+			name:      "IntSliceValue() correctly returns an int slice value as int64",
+			value:     IntSliceValue([]int{1, 2, 3}),
+			wantType:  INT64SLICE,
+			wantValue: []int64{1, 2, 3},
+		},
+		{
+			name:      "Int64SliceValue() correctly returns an int64 slice value",
+			value:     Int64SliceValue([]int64{42, 43, 44}),
+			wantType:  INT64SLICE,
+			wantValue: []int64{42, 43, 44},
+		},
+		{
+			name:      "Float64SliceValue() correctly returns a float64 slice value",
+			value:     Float64SliceValue([]float64{1.5, 2.5, 3.5}),
+			wantType:  FLOAT64SLICE,
+			wantValue: []float64{1.5, 2.5, 3.5},
+		},
+		{
+			name:      "StringSliceValue() correctly returns a string slice value",
+			value:     StringSliceValue([]string{"foo", "bar"}),
+			wantType:  STRINGSLICE,
+			wantValue: []string{"foo", "bar"},
+		},
+		{
 			name:      "Invalid value type",
 			value:     Value{},
 			wantType:  INVALID,
@@ -108,6 +138,31 @@ func TestValue_toString(t *testing.T) {
 			want:  "true",
 		},
 		{
+			name:  "BoolSliceValue",
+			value: BoolSliceValue([]bool{true, false}),
+			want:  "[true false]",
+		},
+		{
+			name:  "IntSliceValue",
+			value: IntSliceValue([]int{1, 2, 3}),
+			want:  "[1 2 3]",
+		},
+		{
+			name:  "Int64SliceValue",
+			value: Int64SliceValue([]int64{42, 43}),
+			want:  "[42 43]",
+		},
+		{
+			name:  "Float64SliceValue",
+			value: Float64SliceValue([]float64{1.5, 2.5}),
+			want:  "[1.5 2.5]",
+		},
+		{
+			name:  "StringSliceValue",
+			value: StringSliceValue([]string{"foo", "bar"}),
+			want:  "[foo bar]",
+		},
+		{
 			name:  "Invalid Value",
 			value: Value{},
 			want:  "unknown",
@@ -118,6 +173,57 @@ func TestValue_toString(t *testing.T) {
 			t.Errorf("expected %v, got: %v", tt.want, str)
 		}
 	}
+}
+
+func TestValue_ImmutableSlices(t *testing.T) {
+	// Test that modifying the original slice doesn't affect the stored value
+	t.Run("BoolSlice immutability", func(t *testing.T) {
+		original := []bool{true, false, true}
+		value := BoolSliceValue(original)
+		original[0] = false // Modify original
+
+		got := value.AsBoolSlice()
+		want := []bool{true, false, true}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("original slice mutation affected stored value: %s", diff)
+		}
+	})
+
+	t.Run("Int64Slice immutability", func(t *testing.T) {
+		original := []int64{1, 2, 3}
+		value := Int64SliceValue(original)
+		original[0] = 999 // Modify original
+
+		got := value.AsInt64Slice()
+		want := []int64{1, 2, 3}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("original slice mutation affected stored value: %s", diff)
+		}
+	})
+
+	t.Run("Float64Slice immutability", func(t *testing.T) {
+		original := []float64{1.5, 2.5, 3.5}
+		value := Float64SliceValue(original)
+		original[0] = 999.9 // Modify original
+
+		got := value.AsFloat64Slice()
+		want := []float64{1.5, 2.5, 3.5}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("original slice mutation affected stored value: %s", diff)
+		}
+	})
+
+	t.Run("StringSlice immutability", func(t *testing.T) {
+		original := []string{"foo", "bar", "baz"}
+		value := StringSliceValue(original)
+		original[0] = "modified" // Modify original
+
+		got := value.AsStringSlice()
+		want := []string{"foo", "bar", "baz"}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Errorf("original slice mutation affected stored value: %s", diff)
+		}
+	})
 }
 
 func TestType_String(t *testing.T) {
@@ -132,6 +238,11 @@ func TestType_String(t *testing.T) {
 			want:  "bool",
 		},
 		{
+			name:  "BoolSliceValue correctly returns a bool slice",
+			value: BoolSliceValue([]bool{true}),
+			want:  "boolslice",
+		},
+		{
 			name:  "Int64Value() correctly returns an int64",
 			value: Int64Value(42),
 			want:  "int64",
@@ -142,14 +253,29 @@ func TestType_String(t *testing.T) {
 			want:  "int64",
 		},
 		{
+			name:  "Int64SliceValue() correctly returns an int64 slice",
+			value: Int64SliceValue([]int64{42}),
+			want:  "int64slice",
+		},
+		{
 			name:  "Float64Value() correctly returns a float64 value",
 			value: Float64Value(42.1),
 			want:  "float64",
 		},
 		{
+			name:  "Float64SliceValue() correctly returns a float64 slice",
+			value: Float64SliceValue([]float64{42.1}),
+			want:  "float64slice",
+		},
+		{
 			name:  "StringValue() correctly returns a string value",
 			value: StringValue("foo"),
 			want:  "string",
+		},
+		{
+			name:  "StringSliceValue() correctly returns a string slice",
+			value: StringSliceValue([]string{"foo"}),
+			want:  "stringslice",
 		},
 		{
 			name:  "Invalid value returns INVALID",
