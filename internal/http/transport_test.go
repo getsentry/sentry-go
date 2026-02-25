@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getsentry/sentry-go/internal/httputils"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/internal/util"
 	"go.uber.org/goleak"
 )
 
@@ -472,7 +472,7 @@ func TestKeepAlive(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				fmt.Fprintln(w, `{"id":"ec71d87189164e79ab1e61030c183af0"}`)
 				if largeResponse {
-					fmt.Fprintln(w, strings.Repeat(" ", httputils.MaxDrainResponseBytes))
+					fmt.Fprintln(w, strings.Repeat(" ", util.MaxDrainResponseBytes))
 				}
 			}))
 			defer server.Close()

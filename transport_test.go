@@ -16,8 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getsentry/sentry-go/internal/httputils"
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/google/go-cmp/cmp"
 	"go.uber.org/goleak"
 )
@@ -27,9 +28,8 @@ type unserializableType struct {
 }
 
 const (
-	basicEvent                         = `{"message":"mkey","sdk":{},"user":{}}`
-	enhancedEventInvalidBreadcrumb     = `{"extra":{"info":"Could not encode original event as JSON. Succeeded by removing Breadcrumbs, Contexts and Extra. Please verify the data you attach to the scope. Error: json: error calling MarshalJSON for type *sentry.Event: json: error calling MarshalJSON for type *sentry.Breadcrumb: json: unsupported type: func()"},"message":"mkey","sdk":{},"user":{}}`
-	enhancedEventInvalidContextOrExtra = `{"extra":{"info":"Could not encode original event as JSON. Succeeded by removing Breadcrumbs, Contexts and Extra. Please verify the data you attach to the scope. Error: json: error calling MarshalJSON for type *sentry.Event: json: unsupported type: func()"},"message":"mkey","sdk":{},"user":{}}`
+	basicEvent         = `{"message":"mkey","sdk":{},"user":{}}`
+	invalidEventOutput = `{"extra":{"info":"Could not encode original event as JSON. Succeeded by removing Breadcrumbs, Contexts and Extra. Please verify the data you attach to the scope. Error: json: error calling MarshalJSON for type *sentry.Event: json: unsupported type: func()"},"message":"mkey","sdk":{},"user":{}}`
 )
 
 func TestGetRequestBodyFromEventValid(t *testing.T) {
@@ -56,7 +56,7 @@ func TestGetRequestBodyFromEventInvalidBreadcrumbsField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEventInvalidBreadcrumb
+	want := invalidEventOutput
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -72,7 +72,7 @@ func TestGetRequestBodyFromEventInvalidExtraField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEventInvalidContextOrExtra
+	want := invalidEventOutput
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -88,7 +88,7 @@ func TestGetRequestBodyFromEventInvalidContextField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEventInvalidContextOrExtra
+	want := invalidEventOutput
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -112,7 +112,7 @@ func TestGetRequestBodyFromEventMultipleInvalidFields(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEventInvalidBreadcrumb
+	want := invalidEventOutput
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -270,16 +270,16 @@ func TestEnvelopeFromLogEvent(t *testing.T) {
 			Level:    LogLevelInfo,
 			Severity: LogSeverityInfo,
 			Body:     "test log message",
-			Attributes: map[string]Attribute{
-				"sentry.release":        {Value: "v1.2.3", Type: "string"},
-				"sentry.environment":    {Value: "testing", Type: "string"},
-				"sentry.server.address": {Value: "test-server", Type: "string"},
-				"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
-				"sentry.sdk.version":    {Value: "0.0.1", Type: "string"},
-				"key.int":               {Value: 42, Type: "integer"},
-				"key.string":            {Value: "str", Type: "string"},
-				"key.float":             {Value: 42.2, Type: "double"},
-				"key.bool":              {Value: true, Type: "boolean"},
+			Attributes: map[string]attribute.Value{
+				"sentry.release":        attribute.StringValue("v1.2.3"),
+				"sentry.environment":    attribute.StringValue("testing"),
+				"sentry.server.address": attribute.StringValue("test-server"),
+				"sentry.sdk.name":       attribute.StringValue("sentry.go"),
+				"sentry.sdk.version":    attribute.StringValue("0.0.1"),
+				"key.int":               attribute.Int64Value(42),
+				"key.string":            attribute.StringValue("str"),
+				"key.float":             attribute.Float64Value(42.2),
+				"key.bool":              attribute.BoolValue(true),
 			},
 		},
 	}
@@ -640,7 +640,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 		// it doesn't matter for this test.
 		fmt.Fprintln(w, `{"id":"ec71d87189164e79ab1e61030c183af0"}`)
 		if largeResponse {
-			fmt.Fprintln(w, strings.Repeat(" ", httputils.MaxDrainResponseBytes))
+			fmt.Fprintln(w, strings.Repeat(" ", util.MaxDrainResponseBytes))
 		}
 	}))
 	defer srv.Close()

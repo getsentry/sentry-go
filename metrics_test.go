@@ -9,6 +9,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
 )
 
 func setupMetricsTest() (context.Context, *MockTransport) {
@@ -33,12 +34,12 @@ func setupMetricsTest() (context.Context, *MockTransport) {
 }
 
 func Test_sentryMeter_Methods(t *testing.T) {
-	attrs := map[string]Attribute{
-		"sentry.release":        {Value: "v1.2.3", Type: "string"},
-		"sentry.environment":    {Value: "testing", Type: "string"},
-		"sentry.server.address": {Value: "test-server", Type: "string"},
-		"sentry.sdk.name":       {Value: "sentry.go", Type: "string"},
-		"sentry.sdk.version":    {Value: "0.10.0", Type: "string"},
+	attrs := map[string]attribute.Value{
+		"sentry.release":        attribute.StringValue("v1.2.3"),
+		"sentry.environment":    attribute.StringValue("testing"),
+		"sentry.server.address": attribute.StringValue("test-server"),
+		"sentry.sdk.name":       attribute.StringValue("sentry.go"),
+		"sentry.sdk.version":    attribute.StringValue("0.10.0"),
 	}
 
 	tests := []struct {
@@ -58,8 +59,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 							TraceID: TraceIDFromHex(LogTraceID),
 							Name:    "test.count",
 							Value:   Int64MetricValue(5),
-							Attributes: testutils.MergeMaps(attrs, map[string]Attribute{
-								"key.string": {Value: "value", Type: "string"},
+							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
+								"key.string": attribute.StringValue("value"),
 							}),
 							Type: MetricTypeCounter,
 							Unit: "",
@@ -80,8 +81,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 							TraceID: TraceIDFromHex(LogTraceID),
 							Name:    "test.distribution",
 							Value:   Float64MetricValue(3.14),
-							Attributes: testutils.MergeMaps(attrs, map[string]Attribute{
-								"key.int": {Value: int64(42), Type: "integer"},
+							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
+								"key.int": attribute.Int64Value(42),
 							}),
 							Type: MetricTypeDistribution,
 							Unit: "ms",
@@ -102,8 +103,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 							TraceID: TraceIDFromHex(LogTraceID),
 							Name:    "test.gauge",
 							Value:   Float64MetricValue(2.71),
-							Attributes: testutils.MergeMaps(attrs, map[string]Attribute{
-								"key.float": {Value: 1.618, Type: "double"},
+							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
+								"key.float": attribute.Float64Value(1.618),
 							}),
 							Type: MetricTypeGauge,
 							Unit: "requests",
@@ -124,8 +125,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 							TraceID: TraceIDFromHex(LogTraceID),
 							Name:    "test.zero.count",
 							Value:   Int64MetricValue(0),
-							Attributes: testutils.MergeMaps(attrs, map[string]Attribute{
-								"key.string": {Value: "value", Type: "string"},
+							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
+								"key.string": attribute.StringValue("value"),
 							}),
 							Type: MetricTypeCounter,
 							Unit: "",
@@ -146,8 +147,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 							TraceID: TraceIDFromHex(LogTraceID),
 							Name:    "test.zero.distribution",
 							Value:   Float64MetricValue(0),
-							Attributes: testutils.MergeMaps(attrs, map[string]Attribute{
-								"key.string": {Value: "value", Type: "string"},
+							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
+								"key.string": attribute.StringValue("value"),
 							}),
 							Type: MetricTypeDistribution,
 							Unit: "bytes",
@@ -168,8 +169,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 							TraceID: TraceIDFromHex(LogTraceID),
 							Name:    "test.zero.gauge",
 							Value:   Float64MetricValue(0),
-							Attributes: testutils.MergeMaps(attrs, map[string]Attribute{
-								"key.string": {Value: "value", Type: "string"},
+							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
+								"key.string": attribute.StringValue("value"),
 							}),
 							Type: MetricTypeGauge,
 							Unit: "connections",
@@ -190,8 +191,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 							TraceID: TraceIDFromHex(LogTraceID),
 							Name:    "test.negative.count",
 							Value:   Int64MetricValue(-10),
-							Attributes: testutils.MergeMaps(attrs, map[string]Attribute{
-								"key.string": {Value: "value", Type: "string"},
+							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
+								"key.string": attribute.StringValue("value"),
 							}),
 							Type: MetricTypeCounter,
 							Unit: "",
@@ -212,8 +213,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 							TraceID: TraceIDFromHex(LogTraceID),
 							Name:    "test.negative.distribution",
 							Value:   Float64MetricValue(-2.5),
-							Attributes: testutils.MergeMaps(attrs, map[string]Attribute{
-								"key.string": {Value: "value", Type: "string"},
+							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
+								"key.string": attribute.StringValue("value"),
 							}),
 							Type: MetricTypeDistribution,
 							Unit: "ms",
@@ -234,8 +235,8 @@ func Test_sentryMeter_Methods(t *testing.T) {
 							TraceID: TraceIDFromHex(LogTraceID),
 							Name:    "test.negative.gauge",
 							Value:   Float64MetricValue(-5),
-							Attributes: testutils.MergeMaps(attrs, map[string]Attribute{
-								"key.string": {Value: "value", Type: "string"},
+							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
+								"key.string": attribute.StringValue("value"),
 							}),
 							Type: MetricTypeGauge,
 							Unit: "connections",
@@ -257,6 +258,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(Metric{}, "Timestamp"),
 				cmpopts.IgnoreUnexported(MetricValue{}),
+				cmp.AllowUnexported(attribute.Value{}),
 			}
 
 			gotEvents := mockTransport.Events()
@@ -514,20 +516,20 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 
 	if val, ok := attrs["user.id"]; !ok {
 		t.Error("missing user.id attribute")
-	} else if val.Value != "user123" {
-		t.Errorf("unexpected user.id: got %v, want %v", val.Value, "user123")
+	} else if val.AsString() != "user123" {
+		t.Errorf("unexpected user.id: got %v, want %v", val.AsString(), "user123")
 	}
 
 	if val, ok := attrs["user.name"]; !ok {
 		t.Error("missing user.name attribute")
-	} else if val.Value != "Test User" {
-		t.Errorf("unexpected user.name: got %v, want %v", val.Value, "Test User")
+	} else if val.AsString() != "Test User" {
+		t.Errorf("unexpected user.name: got %v, want %v", val.AsString(), "Test User")
 	}
 
 	if val, ok := attrs["user.email"]; !ok {
 		t.Error("missing user.email attribute")
-	} else if val.Value != "test@example.com" {
-		t.Errorf("unexpected user.email: got %v, want %v", val.Value, "test@example.com")
+	} else if val.AsString() != "test@example.com" {
+		t.Errorf("unexpected user.email: got %v, want %v", val.AsString(), "test@example.com")
 	}
 }
 
@@ -556,11 +558,11 @@ func Test_sentryMeter_SetAttributes(t *testing.T) {
 	metric := gotEvents[0].Metrics[0]
 	attrs := metric.Attributes
 
-	assertEqual(t, attrs["key.string"].Value, "some str")
-	assertEqual(t, attrs["key.int"].Value, int64(42))
-	assertEqual(t, attrs["key.int64"].Value, int64(17))
-	assertEqual(t, attrs["key.float"].Value, 42.2)
-	assertEqual(t, attrs["key.bool"].Value, true)
+	assertEqual(t, attrs["key.string"].AsString(), "some str")
+	assertEqual(t, attrs["key.int"].AsInt64(), int64(42))
+	assertEqual(t, attrs["key.int64"].AsInt64(), int64(17))
+	assertEqual(t, attrs["key.float"].AsFloat64(), 42.2)
+	assertEqual(t, attrs["key.bool"].AsBool(), true)
 }
 
 func Test_sentryMeter_SetAttributes_Persistence(t *testing.T) {
@@ -578,11 +580,11 @@ func Test_sentryMeter_SetAttributes_Persistence(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(gotEvents))
 	}
 	event := gotEvents[0]
-	assertEqual(t, event.Metrics[0].Attributes["int"].Value, int64(42))
+	assertEqual(t, event.Metrics[0].Attributes["int"].AsInt64(), int64(42))
 	if _, ok := event.Metrics[1].Attributes["int"]; !ok {
 		t.Fatalf("expected key to exist")
 	}
-	assertEqual(t, event.Metrics[1].Attributes["string"].Value, "some str")
+	assertEqual(t, event.Metrics[1].Attributes["string"].AsString(), "some str")
 }
 
 func Test_sentryMeter_AttributePrecedence(t *testing.T) {
@@ -618,26 +620,26 @@ func Test_sentryMeter_AttributePrecedence(t *testing.T) {
 
 	if val, ok := attrs["key"]; !ok {
 		t.Error("missing key attribute")
-	} else if val.Value != "call-value" {
-		t.Errorf("expected key=call-value, got %v", val.Value)
+	} else if val.AsString() != "call-value" {
+		t.Errorf("expected key=call-value, got %v", val.AsString())
 	}
 
 	if val, ok := attrs["instance-only"]; !ok {
 		t.Error("missing instance-only attribute")
-	} else if val.Value != "instance" {
-		t.Errorf("expected instance-only=instance, got %v", val.Value)
+	} else if val.AsString() != "instance" {
+		t.Errorf("expected instance-only=instance, got %v", val.AsString())
 	}
 
 	if val, ok := attrs["call-only"]; !ok {
 		t.Error("missing call-only attribute")
-	} else if val.Value != "call" {
-		t.Errorf("expected call-only=call, got %v", val.Value)
+	} else if val.AsString() != "call" {
+		t.Errorf("expected call-only=call, got %v", val.AsString())
 	}
 
 	if val, ok := attrs["user.id"]; !ok {
 		t.Error("missing user.id attribute from scope")
-	} else if val.Value != "user123" {
-		t.Errorf("expected user.id=user123, got %v", val.Value)
+	} else if val.AsString() != "user123" {
+		t.Errorf("expected user.id=user123, got %v", val.AsString())
 	}
 
 	if _, ok := attrs["sentry.sdk.name"]; !ok {
@@ -730,13 +732,58 @@ func Test_sentryMeter_WithScopeOverride(t *testing.T) {
 
 	if val, ok := attrs["user.id"]; !ok {
 		t.Error("missing user.id attribute from custom scope")
-	} else if val.Value != "custom-user-123" {
-		t.Errorf("unexpected user.id: got %v, want custom-user-123", val.Value)
+	} else if val.AsString() != "custom-user-123" {
+		t.Errorf("unexpected user.id: got %v, want custom-user-123", val.AsString())
 	}
 
 	if val, ok := attrs["user.email"]; !ok {
 		t.Error("missing user.email attribute from custom scope")
-	} else if val.Value != "custom@example.com" {
-		t.Errorf("unexpected user.email: got %v, want custom@example.com", val.Value)
+	} else if val.AsString() != "custom@example.com" {
+		t.Errorf("unexpected user.email: got %v, want custom@example.com", val.AsString())
 	}
+}
+
+func TestSentryMeter_ScopeSetAttributesNoLeak(t *testing.T) {
+	ctx, mockTransport := setupMetricsTest()
+
+	clonedHub := GetHubFromContext(ctx).Clone()
+	clonedHub.Scope().SetAttributes(
+		attribute.String("key.string", "str"),
+		attribute.Bool("key.bool", true),
+	)
+	scopedCtx := SetHubOnContext(ctx, clonedHub)
+	txn := StartTransaction(scopedCtx, "test-transaction")
+	defer txn.Finish()
+
+	meterOutsideScope := NewMeter(ctx)
+	meterOutsideScope.Count("test.count.before", 1)
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	eventsBeforeScope := mockTransport.Events()
+	if len(eventsBeforeScope) != 1 {
+		t.Fatalf("expected 1 event before scope attrs, got %d", len(eventsBeforeScope))
+	}
+	metricsBeforeScope := eventsBeforeScope[0].Metrics
+	if len(metricsBeforeScope) != 1 {
+		t.Fatalf("expected 1 metric before scope attrs, got %d", len(metricsBeforeScope))
+	}
+	assert.NotContains(t, metricsBeforeScope[0].Attributes, "key.bool")
+	assert.NotContains(t, metricsBeforeScope[0].Attributes, "key.string")
+
+	mockTransport.events = nil
+
+	meter := NewMeter(txn.Context())
+	meter.Count("test.count.after", 2)
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	eventsAfterScope := mockTransport.Events()
+	if len(eventsAfterScope) != 1 {
+		t.Fatalf("expected 1 event after scope attrs, got %d", len(eventsAfterScope))
+	}
+	metricsAfterScope := eventsAfterScope[0].Metrics
+	if len(metricsAfterScope) != 1 {
+		t.Fatalf("expected 1 metric after scope attrs, got %d", len(metricsAfterScope))
+	}
+	assert.Equal(t, attribute.BoolValue(true), metricsAfterScope[0].Attributes["key.bool"])
+	assert.Equal(t, attribute.StringValue("str"), metricsAfterScope[0].Attributes["key.string"])
 }

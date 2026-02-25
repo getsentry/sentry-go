@@ -70,17 +70,17 @@ func NewMeter(ctx context.Context) Meter {
 			"sentry.sdk.version":    client.sdkVersion,
 		}
 
-		defaultAttrs := make(map[string]Attribute)
+		defaultAttrs := make(map[string]attribute.Value)
 		for k, v := range defaults {
 			if v != "" {
-				defaultAttrs[k] = Attribute{Value: v, Type: AttributeString}
+				defaultAttrs[k] = attribute.StringValue(v)
 			}
 		}
 
 		return &sentryMeter{
 			ctx:               ctx,
 			hub:               hub,
-			attributes:        make(map[string]Attribute),
+			attributes:        make(map[string]attribute.Value),
 			defaultAttributes: defaultAttrs,
 			mu:                sync.RWMutex{},
 		}
@@ -93,12 +93,12 @@ func NewMeter(ctx context.Context) Meter {
 type sentryMeter struct {
 	ctx               context.Context
 	hub               *Hub
-	attributes        map[string]Attribute
-	defaultAttributes map[string]Attribute
+	attributes        map[string]attribute.Value
+	defaultAttributes map[string]attribute.Value
 	mu                sync.RWMutex
 }
 
-func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name string, value MetricValue, unit string, attributes map[string]Attribute, customScope *Scope) {
+func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name string, value MetricValue, unit string, attributes map[string]attribute.Value, customScope *Scope) {
 	if name == "" {
 		debuglog.Println("empty name provided, dropping metric")
 		return
@@ -122,7 +122,7 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 
 	// Pre-allocate with capacity hint to avoid map growth reallocations
 	estimatedCap := len(m.defaultAttributes) + len(attributes) + 8 // scope ~3 + call-specific ~5
-	attrs := make(map[string]Attribute, estimatedCap)
+	attrs := make(map[string]attribute.Value, estimatedCap)
 
 	// attribute precedence: default -> scope -> instance (from SetAttrs) -> entry-specific
 	for k, v := range m.defaultAttributes {
@@ -202,17 +202,12 @@ func (m *sentryMeter) SetAttributes(attrs ...attribute.Builder) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for _, v := range attrs {
-		t, ok := mapTypesToStr[v.Value.Type()]
-		if !ok || t == "" {
-			debuglog.Printf("invalid attribute type set: %v", t)
+	for _, a := range attrs {
+		if a.Value.Type() == attribute.INVALID {
+			debuglog.Printf("invalid attribute: %v", a)
 			continue
 		}
-
-		m.attributes[v.Key] = Attribute{
-			Value: v.Value.AsInterface(),
-			Type:  t,
-		}
+		m.attributes[a.Key] = a.Value
 	}
 }
 
