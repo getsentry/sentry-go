@@ -63,6 +63,9 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 		if publicKey := dsn.GetPublicKey(); publicKey != "" {
 			entries["public_key"] = publicKey
 		}
+		if orgID := dsn.GetOrgID(); orgID != 0 {
+			entries["org_id"] = strconv.FormatUint(orgID, 10)
+		}
 	}
 	if release := client.options.Release; release != "" {
 		entries["release"] = release
