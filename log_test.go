@@ -850,6 +850,51 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 	}
 }
 
+func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
+	ctx, mockTransport := setupMockTransport()
+
+	clonedHub := GetHubFromContext(ctx).Clone()
+	clonedHub.Scope().SetAttributes(
+		attribute.String("key.string", "str"),
+		attribute.Bool("key.bool", true),
+	)
+	scopedCtx := SetHubOnContext(ctx, clonedHub)
+	txn := StartTransaction(scopedCtx, "test-transaction")
+	defer txn.Finish()
+
+	loggerOutsideScope := NewLogger(ctx)
+	loggerOutsideScope.Info().Emit("message without attrs")
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	eventsBeforeScope := mockTransport.Events()
+	if len(eventsBeforeScope) != 1 {
+		t.Fatalf("expected 1 event before scope attrs, got %d", len(eventsBeforeScope))
+	}
+	logsBeforeScope := eventsBeforeScope[0].Logs
+	if len(logsBeforeScope) != 1 {
+		t.Fatalf("expected 1 log before scope attrs, got %d", len(logsBeforeScope))
+	}
+	assert.NotContains(t, logsBeforeScope[0].Attributes, "key.bool")
+	assert.NotContains(t, logsBeforeScope[0].Attributes, "key.string")
+
+	mockTransport.events = nil
+
+	logger := NewLogger(txn.Context())
+	logger.Info().WithCtx(txn.Context()).Emit("message with attrs")
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	eventsAfterScope := mockTransport.Events()
+	if len(eventsAfterScope) != 1 {
+		t.Fatalf("expected 1 event after scope attrs, got %d", len(eventsAfterScope))
+	}
+	logsAfterScope := eventsAfterScope[0].Logs
+	if len(logsAfterScope) != 1 {
+		t.Fatalf("expected 1 log after scope attrs, got %d", len(logsAfterScope))
+	}
+	assert.Equal(t, attribute.BoolValue(true), logsAfterScope[0].Attributes["key.bool"])
+	assert.Equal(t, attribute.StringValue("str"), logsAfterScope[0].Attributes["key.string"])
+}
+
 func TestLogEntryWithCtx_ShouldCopy(t *testing.T) {
 	ctx, _ := setupMockTransport()
 	l := NewLogger(ctx)

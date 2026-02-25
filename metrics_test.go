@@ -9,6 +9,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
 )
 
 func setupMetricsTest() (context.Context, *MockTransport) {
@@ -740,4 +741,49 @@ func Test_sentryMeter_WithScopeOverride(t *testing.T) {
 	} else if val.AsString() != "custom@example.com" {
 		t.Errorf("unexpected user.email: got %v, want custom@example.com", val.AsString())
 	}
+}
+
+func TestSentryMeter_ScopeSetAttributesNoLeak(t *testing.T) {
+	ctx, mockTransport := setupMetricsTest()
+
+	clonedHub := GetHubFromContext(ctx).Clone()
+	clonedHub.Scope().SetAttributes(
+		attribute.String("key.string", "str"),
+		attribute.Bool("key.bool", true),
+	)
+	scopedCtx := SetHubOnContext(ctx, clonedHub)
+	txn := StartTransaction(scopedCtx, "test-transaction")
+	defer txn.Finish()
+
+	meterOutsideScope := NewMeter(ctx)
+	meterOutsideScope.Count("test.count.before", 1)
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	eventsBeforeScope := mockTransport.Events()
+	if len(eventsBeforeScope) != 1 {
+		t.Fatalf("expected 1 event before scope attrs, got %d", len(eventsBeforeScope))
+	}
+	metricsBeforeScope := eventsBeforeScope[0].Metrics
+	if len(metricsBeforeScope) != 1 {
+		t.Fatalf("expected 1 metric before scope attrs, got %d", len(metricsBeforeScope))
+	}
+	assert.NotContains(t, metricsBeforeScope[0].Attributes, "key.bool")
+	assert.NotContains(t, metricsBeforeScope[0].Attributes, "key.string")
+
+	mockTransport.events = nil
+
+	meter := NewMeter(txn.Context())
+	meter.Count("test.count.after", 2)
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	eventsAfterScope := mockTransport.Events()
+	if len(eventsAfterScope) != 1 {
+		t.Fatalf("expected 1 event after scope attrs, got %d", len(eventsAfterScope))
+	}
+	metricsAfterScope := eventsAfterScope[0].Metrics
+	if len(metricsAfterScope) != 1 {
+		t.Fatalf("expected 1 metric after scope attrs, got %d", len(metricsAfterScope))
+	}
+	assert.Equal(t, attribute.BoolValue(true), metricsAfterScope[0].Attributes["key.bool"])
+	assert.Equal(t, attribute.StringValue("str"), metricsAfterScope[0].Attributes["key.string"])
 }
