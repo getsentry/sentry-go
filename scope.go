@@ -494,16 +494,16 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
 			if client != nil {
-				client.reporter.RecordOne(report.ReasonEventProcessor, category)
+				client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
 				if category == ratelimit.CategoryTransaction {
-					client.reporter.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
+					client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
 				}
 			}
 			return nil
 		}
 		if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
 			if client != nil {
-				client.reporter.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
+				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
 			}
 		}
 	}

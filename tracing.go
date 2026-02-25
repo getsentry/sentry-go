@@ -439,8 +439,8 @@ func (s *Span) doFinish() {
 				return
 			}
 			children := s.recorder.children()
-			c.reporter.RecordOne(report.ReasonSampleRate, ratelimit.CategoryTransaction)
-			c.reporter.Record(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
+			c.reportRecorder.RecordOne(report.ReasonSampleRate, ratelimit.CategoryTransaction)
+			c.reportRecorder.Record(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
 		}
 		return
 	}
