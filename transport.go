@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -228,11 +227,7 @@ func encodeEnvelopeHeader(enc *json.Encoder, header *envelopeHeader) error {
 	return enc.Encode(header)
 }
 
-func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage, provider report.ClientReportProvider) (*bytes.Buffer, error) {
-	if provider == nil {
-		provider = report.NoopProvider()
-	}
-
+func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 
@@ -281,13 +276,6 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		}
 	}
 
-	// attach client report if exists
-	r := provider.TakeReport()
-	if r != nil {
-		if err := encodeClientReport(enc, r); err != nil {
-			return nil, err
-		}
-	}
 	return &b, nil
 }
 
@@ -326,20 +314,6 @@ func getRequestFromEnvelope(ctx context.Context, dsn *Dsn, envelope *bytes.Buffe
 	return request, nil
 }
 
-func getRequestFromEvent(ctx context.Context, event *Event, dsn *Dsn, provider report.ClientReportProvider) (*http.Request, error) {
-	body := getRequestBodyFromEvent(event)
-	if body == nil {
-		return nil, errors.New("event could not be marshaled")
-	}
-
-	envelope, err := envelopeFromBody(event, dsn, time.Now(), body, provider)
-	if err != nil {
-		return nil, err
-	}
-
-	return getRequestFromEnvelope(ctx, dsn, envelope, event.Sdk.Name, event.Sdk.Version)
-}
-
 // ================================
 // HTTPTransport
 // ================================
@@ -352,7 +326,9 @@ type batch struct {
 }
 
 type batchItem struct {
-	request         *http.Request
+	envelope        *bytes.Buffer
+	sdkName         string
+	sdkVersion      string
 	category        ratelimit.Category
 	eventIdentifier string
 	spanCount       int
@@ -469,7 +445,13 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		return
 	}
 
-	request, err := getRequestFromEvent(ctx, event, t.dsn, t.provider)
+	body := getRequestBodyFromEvent(event)
+	if body == nil {
+		t.recorder.RecordOne(report.ReasonInternalError, category)
+		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
+		return
+	}
+	envelope, err := envelopeFromBody(event, t.dsn, time.Now(), body)
 	if err != nil {
 		t.recorder.RecordOne(report.ReasonInternalError, category)
 		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
@@ -493,7 +475,9 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 
 	select {
 	case b.items <- batchItem{
-		request:         request,
+		envelope:        envelope,
+		sdkName:         event.Sdk.Name,
+		sdkVersion:      event.Sdk.Version,
 		category:        category,
 		eventIdentifier: identifier,
 		spanCount:       event.GetSpanCount(),
@@ -653,7 +637,17 @@ func (t *HTTPTransport) worker() {
 					continue
 				}
 
-				result, err := util.DoSendRequest(t.client, item.request, item.eventIdentifier)
+				// Attach accumulated client report inside the worker to avoid background queue overflows.
+				t.attachClientReport(item.envelope)
+				request, err := getRequestFromEnvelope(context.Background(), t.dsn, item.envelope, item.sdkName, item.sdkVersion)
+				if err != nil {
+					debuglog.Printf("There was an issue when creating the request: %v", err)
+					t.recorder.RecordOne(report.ReasonInternalError, item.category)
+					recordBatchItemSupplementary(t.recorder, report.ReasonInternalError, &item)
+					continue
+				}
+
+				result, err := util.DoSendRequest(t.client, request, item.eventIdentifier)
 				if err != nil {
 					debuglog.Printf("There was an issue with sending an event: %v", err)
 					t.recorder.RecordOne(report.ReasonNetworkError, item.category)
@@ -673,6 +667,19 @@ func (t *HTTPTransport) worker() {
 
 		// Signal that processing of the batch is done.
 		close(b.done)
+	}
+}
+
+// attachClientReport takes any pending client report from the provider and
+// appends it to the envelope buffer.
+func (t *HTTPTransport) attachClientReport(buf *bytes.Buffer) {
+	r := t.provider.TakeReport()
+	if r == nil {
+		return
+	}
+	enc := json.NewEncoder(buf)
+	if err := encodeClientReport(enc, r); err != nil {
+		debuglog.Printf("Failed to encode client report: %v", err)
 	}
 }
 
@@ -780,7 +787,28 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 		return
 	}
 
-	request, err := getRequestFromEvent(ctx, event, t.dsn, t.provider)
+	body := getRequestBodyFromEvent(event)
+	if body == nil {
+		t.recorder.RecordOne(report.ReasonInternalError, category)
+		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
+		return
+	}
+
+	envelope, err := envelopeFromBody(event, t.dsn, time.Now(), body)
+	if err != nil {
+		t.recorder.RecordOne(report.ReasonInternalError, category)
+		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
+		return
+	}
+
+	if r := t.provider.TakeReport(); r != nil {
+		enc := json.NewEncoder(envelope)
+		if err := encodeClientReport(enc, r); err != nil {
+			debuglog.Printf("Failed to encode client report: %v", err)
+		}
+	}
+
+	request, err := getRequestFromEnvelope(ctx, t.dsn, envelope, event.Sdk.Name, event.Sdk.Version)
 	if err != nil {
 		t.recorder.RecordOne(report.ReasonInternalError, category)
 		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
