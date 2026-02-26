@@ -153,7 +153,7 @@ type ClientOptions struct {
 	//
 	// Enabling the option means that the SDK will require the org ids from baggage to match for continuing the trace.
 	StrictTraceContinuation bool
-	// OrgID configures the orgID used for trace continuation.
+	// OrgID configures the orgID used for trace propagation and features like StrictTraceContinuation.
 	//
 	// In most cases the orgID is already parsed from the DSN. This option should be used when non-standard Sentry DSNs
 	// are used, such as self-hosted or when using a local Relay.
