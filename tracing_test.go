@@ -1324,6 +1324,7 @@ func TestStrictTraceContinuation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &MockTransport{}
 			ctx := NewTestContext(ClientOptions{
+				Dsn:                     testDsn,
 				EnableTracing:           true,
 				TracesSampleRate:        1.0,
 				Transport:               transport,

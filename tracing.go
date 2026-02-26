@@ -1110,8 +1110,8 @@ func shouldContinueTrace(client *Client, dsc DynamicSamplingContext) bool {
 		return true
 	}
 
-	sdkOrgID := client.options.OrgID
-	if sdkOrgID == 0 && client.dsn != nil {
+	var sdkOrgID uint64
+	if client.dsn != nil {
 		sdkOrgID = client.dsn.GetOrgID()
 	}
 

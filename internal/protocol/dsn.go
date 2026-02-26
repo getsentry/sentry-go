@@ -201,6 +201,8 @@ func (dsn Dsn) GetOrgID() uint64 {
 }
 
 // SetOrgID sets the orgID used for trace continuation.
+//
+// This function is used for overriding the orgID parsed from the DSN.
 func (dsn *Dsn) SetOrgID(orgID uint64) {
 	dsn.orgID = orgID
 }
