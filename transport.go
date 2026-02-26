@@ -188,29 +188,38 @@ func encodeEnvelopeMetrics(enc *json.Encoder, count int, body json.RawMessage) e
 	return err
 }
 
-// recordSupplementaryOutcomes records supplementary category outcomes for an event.
-// Transactions record span counts; logs record byte sizes.
-func recordSupplementaryOutcomes(recorder report.ClientReportRecorder, reason report.DiscardReason, event *Event) {
+func recordForEvent(recorder report.ClientReportRecorder, reason report.DiscardReason, event *Event) {
+	category := event.toCategory()
 	switch event.Type {
 	case transactionType:
+		recorder.RecordOne(reason, category)
 		if count := event.GetSpanCount(); count > 0 {
 			recorder.Record(reason, ratelimit.CategorySpan, int64(count))
 		}
 	case logEvent.Type:
+		if count := len(event.Logs); count > 0 {
+			recorder.Record(reason, ratelimit.CategoryLog, int64(count))
+		}
 		if size := event.GetLogByteSize(); size > 0 {
 			recorder.Record(reason, ratelimit.CategoryLogByte, int64(size))
 		}
+	default:
+		recorder.RecordOne(reason, category)
 	}
 }
 
-// recordBatchItemSupplementary records supplementary category outcomes from a batchItem,
-// which carries pre-computed counts from the original event.
-func recordBatchItemSupplementary(recorder report.ClientReportRecorder, reason report.DiscardReason, item *batchItem) {
-	if item.spanCount > 0 {
-		recorder.Record(reason, ratelimit.CategorySpan, int64(item.spanCount))
-	}
-	if item.logByteSize > 0 {
-		recorder.Record(reason, ratelimit.CategoryLogByte, int64(item.logByteSize))
+func recordForBatchItem(recorder report.ClientReportRecorder, reason report.DiscardReason, item *batchItem) {
+	switch {
+	case item.logItemCount > 0:
+		recorder.Record(reason, ratelimit.CategoryLog, int64(item.logItemCount))
+		if item.logByteSize > 0 {
+			recorder.Record(reason, ratelimit.CategoryLogByte, int64(item.logByteSize))
+		}
+	default:
+		recorder.RecordOne(reason, item.category)
+		if item.spanCount > 0 {
+			recorder.Record(reason, ratelimit.CategorySpan, int64(item.spanCount))
+		}
 	}
 }
 
@@ -333,6 +342,7 @@ type batchItem struct {
 	category        ratelimit.Category
 	eventIdentifier string
 	spanCount       int
+	logItemCount    int
 	logByteSize     int
 }
 
@@ -441,21 +451,18 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	category := event.toCategory()
 
 	if t.disabled(category) {
-		t.recorder.RecordOne(report.ReasonRateLimitBackoff, category)
-		recordSupplementaryOutcomes(t.recorder, report.ReasonRateLimitBackoff, event)
+		recordForEvent(t.recorder, report.ReasonRateLimitBackoff, event)
 		return
 	}
 
 	body := getRequestBodyFromEvent(event)
 	if body == nil {
-		t.recorder.RecordOne(report.ReasonInternalError, category)
-		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
+		recordForEvent(t.recorder, report.ReasonInternalError, event)
 		return
 	}
 	envelope, err := envelopeFromBody(event, t.dsn, time.Now(), body)
 	if err != nil {
-		t.recorder.RecordOne(report.ReasonInternalError, category)
-		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
+		recordForEvent(t.recorder, report.ReasonInternalError, event)
 		return
 	}
 
@@ -483,6 +490,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		category:        category,
 		eventIdentifier: identifier,
 		spanCount:       event.GetSpanCount(),
+		logItemCount:    len(event.Logs),
 		logByteSize:     event.GetLogByteSize(),
 	}:
 		debuglog.Printf(
@@ -493,8 +501,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 		)
 	default:
 		debuglog.Println("Event dropped due to transport buffer being full.")
-		t.recorder.RecordOne(report.ReasonQueueOverflow, category)
-		recordSupplementaryOutcomes(t.recorder, report.ReasonQueueOverflow, event)
+		recordForEvent(t.recorder, report.ReasonQueueOverflow, event)
 	}
 
 	t.buffer <- b
@@ -634,8 +641,7 @@ func (t *HTTPTransport) worker() {
 					break loop
 				}
 				if t.disabled(item.category) {
-					t.recorder.RecordOne(report.ReasonRateLimitBackoff, item.category)
-					recordBatchItemSupplementary(t.recorder, report.ReasonRateLimitBackoff, &item)
+					recordForBatchItem(t.recorder, report.ReasonRateLimitBackoff, &item)
 					continue
 				}
 
@@ -644,21 +650,18 @@ func (t *HTTPTransport) worker() {
 				request, err := getRequestFromEnvelope(item.ctx, t.dsn, item.envelope, item.sdkName, item.sdkVersion)
 				if err != nil {
 					debuglog.Printf("There was an issue when creating the request: %v", err)
-					t.recorder.RecordOne(report.ReasonInternalError, item.category)
-					recordBatchItemSupplementary(t.recorder, report.ReasonInternalError, &item)
+					recordForBatchItem(t.recorder, report.ReasonInternalError, &item)
 					continue
 				}
 
 				result, err := util.DoSendRequest(t.client, request, item.eventIdentifier)
 				if err != nil {
 					debuglog.Printf("There was an issue with sending an event: %v", err)
-					t.recorder.RecordOne(report.ReasonNetworkError, item.category)
-					recordBatchItemSupplementary(t.recorder, report.ReasonNetworkError, &item)
+					recordForBatchItem(t.recorder, report.ReasonNetworkError, &item)
 					continue
 				}
 				if result.IsSendError() {
-					t.recorder.RecordOne(report.ReasonSendError, item.category)
-					recordBatchItemSupplementary(t.recorder, report.ReasonSendError, &item)
+					recordForBatchItem(t.recorder, report.ReasonSendError, &item)
 				}
 
 				t.mu.Lock()
@@ -784,22 +787,19 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 
 	category := event.toCategory()
 	if t.disabled(category) {
-		t.recorder.RecordOne(report.ReasonRateLimitBackoff, category)
-		recordSupplementaryOutcomes(t.recorder, report.ReasonRateLimitBackoff, event)
+		recordForEvent(t.recorder, report.ReasonRateLimitBackoff, event)
 		return
 	}
 
 	body := getRequestBodyFromEvent(event)
 	if body == nil {
-		t.recorder.RecordOne(report.ReasonInternalError, category)
-		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
+		recordForEvent(t.recorder, report.ReasonInternalError, event)
 		return
 	}
 
 	envelope, err := envelopeFromBody(event, t.dsn, time.Now(), body)
 	if err != nil {
-		t.recorder.RecordOne(report.ReasonInternalError, category)
-		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
+		recordForEvent(t.recorder, report.ReasonInternalError, event)
 		return
 	}
 
@@ -812,8 +812,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 
 	request, err := getRequestFromEnvelope(ctx, t.dsn, envelope, event.Sdk.Name, event.Sdk.Version)
 	if err != nil {
-		t.recorder.RecordOne(report.ReasonInternalError, category)
-		recordSupplementaryOutcomes(t.recorder, report.ReasonInternalError, event)
+		recordForEvent(t.recorder, report.ReasonInternalError, event)
 		return
 	}
 
@@ -828,13 +827,11 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 	result, err := util.DoSendRequest(t.client, request, identifier)
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
-		t.recorder.RecordOne(report.ReasonNetworkError, category)
-		recordSupplementaryOutcomes(t.recorder, report.ReasonNetworkError, event)
+		recordForEvent(t.recorder, report.ReasonNetworkError, event)
 		return
 	}
 	if result.IsSendError() {
-		t.recorder.RecordOne(report.ReasonSendError, category)
-		recordSupplementaryOutcomes(t.recorder, report.ReasonSendError, event)
+		recordForEvent(t.recorder, report.ReasonSendError, event)
 	}
 
 	t.mu.Lock()
@@ -948,9 +945,7 @@ func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
 	if err != nil {
 		debuglog.Printf("Failed to convert event to envelope item: %v", err)
 		if a.recorder != nil {
-			category := event.toCategory()
-			a.recorder.RecordOne(report.ReasonInternalError, category)
-			recordSupplementaryOutcomes(a.recorder, report.ReasonInternalError, event)
+			recordForEvent(a.recorder, report.ReasonInternalError, event)
 		}
 		return
 	}
