@@ -25,7 +25,7 @@ func TestBuffer_Add_MissingCategory(t *testing.T) {
 	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
 	storage := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{}
 
-	b := NewProcessor(storage, transport, dsn, sdk)
+	b := NewProcessor(storage, transport, dsn, sdk, nil)
 	ok := b.Add(bwItem{id: "1"})
 	if ok {
 		t.Fatal("expected Add to return false without storage for category")
@@ -38,9 +38,9 @@ func TestBuffer_AddAndFlush_Sends(t *testing.T) {
 	dsn := &protocol.Dsn{}
 	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
 	storage := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
 	}
-	b := NewProcessor(storage, transport, dsn, sdk)
+	b := NewProcessor(storage, transport, dsn, sdk, nil)
 	if !b.Add(bwItem{id: "1"}) {
 		t.Fatal("add failed")
 	}
