@@ -900,6 +900,26 @@ func TestSampleRate(t *testing.T) {
 		})
 	}
 }
+func TestClient_ParseOrgID(t *testing.T) {
+	c, err := NewClient(ClientOptions{
+		Dsn: "https://example@o1.ingest.us.sentry.io/1337",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, uint64(1), c.dsn.GetOrgID(), "Custom org id should override the DSN parsed one")
+}
+
+func TestClientOptions_OrgIDShouldOverrideParsed(t *testing.T) {
+	c, err := NewClient(ClientOptions{
+		Dsn:   "https://example@o1.ingest.us.sentry.io/1337",
+		OrgID: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, uint64(2), c.dsn.GetOrgID(), "Custom org id should override the DSN parsed one")
+}
 
 func BenchmarkProcessEvent(b *testing.B) {
 	c, err := NewClient(ClientOptions{
