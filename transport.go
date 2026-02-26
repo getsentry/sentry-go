@@ -326,6 +326,7 @@ type batch struct {
 }
 
 type batchItem struct {
+	ctx             context.Context
 	envelope        *bytes.Buffer
 	sdkName         string
 	sdkVersion      string
@@ -475,6 +476,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 
 	select {
 	case b.items <- batchItem{
+		ctx:             ctx,
 		envelope:        envelope,
 		sdkName:         event.Sdk.Name,
 		sdkVersion:      event.Sdk.Version,
@@ -639,7 +641,7 @@ func (t *HTTPTransport) worker() {
 
 				// Attach accumulated client report inside the worker to avoid background queue overflows.
 				t.attachClientReport(item.envelope)
-				request, err := getRequestFromEnvelope(context.Background(), t.dsn, item.envelope, item.sdkName, item.sdkVersion)
+				request, err := getRequestFromEnvelope(item.ctx, t.dsn, item.envelope, item.sdkName, item.sdkVersion)
 				if err != nil {
 					debuglog.Printf("There was an issue when creating the request: %v", err)
 					t.recorder.RecordOne(report.ReasonInternalError, item.category)
