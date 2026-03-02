@@ -574,7 +574,7 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 	// loop. It preserves all fields while none of the attached methods.
 	type event Event
 
-	//// Use pre-serialized bytes for fields that contain user mutable data.
+	// Use pre-serialized bytes for fields that contain user mutable data.
 	if e.hasPreSerializedFields() {
 		return e.preSerializedMarshalJSON()
 	}
