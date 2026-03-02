@@ -17,6 +17,7 @@ func (dummyLog) GetCategory() ratelimit.Category              { return ratelimit
 func (dummyLog) GetEventID() string                           { return "" }
 func (dummyLog) GetSdkInfo() *SdkInfo                         { return nil }
 func (dummyLog) GetDynamicSamplingContext() map[string]string { return nil }
+func (dummyLog) MakeSerializationSafe()                       {}
 
 func TestLogs_ToEnvelopeItem_And_Getters(t *testing.T) {
 	logs := Logs{dummyLog{body: "a"}, dummyLog{body: "b"}}

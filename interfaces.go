@@ -444,6 +444,13 @@ type Event struct {
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
+
+	// Pre-serialized copies of mutable fields, set by MakeSerializationSafe.
+	serializedExtra       json.RawMessage
+	serializedContexts    json.RawMessage
+	serializedBreadcrumbs json.RawMessage
+	serializedException   json.RawMessage
+	serializedUser        json.RawMessage
 }
 
 // SetException appends the unwrapped errors to the event's exception list.
@@ -464,13 +471,32 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 	e.Exception = exceptions
 }
 
+// safeMarshal wraps json.Marshal with a recover guard.
+//
+// we shouldn't panic since we already pre serialized all user mutable fields, but using this just to be safe.
+func (e *Event) safeMarshal() (b []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			b = nil
+			err = fmt.Errorf("panic during event marshaling: %v", r)
+		}
+	}()
+	return json.Marshal(e)
+}
+
 // ToEnvelopeItem converts the Event to a Sentry envelope item.
-func (e *Event) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
-	eventBody, err := json.Marshal(e)
+func (e *Event) ToEnvelopeItem() (item *protocol.EnvelopeItem, err error) {
+	eventBody, err := e.safeMarshal()
 	if err != nil {
-		// Try fallback: remove problematic fields and retry
+		// Try fallback: remove problematic fields and retry.
+		// Clear both original and pre-serialized versions.
 		e.Breadcrumbs = nil
+		e.serializedBreadcrumbs = nil
 		e.Contexts = nil
+		e.serializedContexts = nil
+		e.serializedException = nil
+		e.serializedUser = nil
+		e.serializedExtra = nil
 		e.Extra = map[string]interface{}{
 			"info": fmt.Sprintf("Could not encode original event as JSON. "+
 				"Succeeded by removing Breadcrumbs, Contexts and Extra. "+
@@ -487,7 +513,6 @@ func (e *Event) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	}
 
 	// TODO: all event types should be abstracted to implement EnvelopeItemConvertible and convert themselves.
-	var item *protocol.EnvelopeItem
 	switch e.Type {
 	case transactionType:
 		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeTransaction, eventBody)
@@ -549,6 +574,11 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 	// loop. It preserves all fields while none of the attached methods.
 	type event Event
 
+	//// Use pre-serialized bytes for fields that contain user mutable data.
+	if e.hasPreSerializedFields() {
+		return e.preSerializedMarshalJSON()
+	}
+
 	if e.Type == transactionType {
 		return json.Marshal(struct{ *event }{(*event)(e)})
 	}
@@ -588,6 +618,63 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 
 	x := errorEvent{event: (*event)(e)}
 	return json.Marshal(x)
+}
+
+func (e *Event) hasPreSerializedFields() bool {
+	return e.serializedExtra != nil ||
+		e.serializedContexts != nil ||
+		e.serializedBreadcrumbs != nil ||
+		e.serializedException != nil ||
+		e.serializedUser != nil
+}
+
+// preSerializedMarshalJSON handles marshaling when MakeSerializationSafe has
+// pre-serialized mutable fields. Shadow structs ensure the json.RawMessage
+// bytes are emitted directly, overriding the original fields.
+func (e *Event) preSerializedMarshalJSON() ([]byte, error) {
+	type event Event
+
+	if e.Type == transactionType {
+		type safeTransaction struct {
+			*event
+			Extra       json.RawMessage `json:"extra,omitempty"`
+			Contexts    json.RawMessage `json:"contexts,omitempty"`
+			Breadcrumbs json.RawMessage `json:"breadcrumbs,omitempty"`
+			Exception   json.RawMessage `json:"exception,omitempty"`
+			Spans       json.RawMessage `json:"spans,omitempty"`
+			User        json.RawMessage `json:"user,omitempty"`
+		}
+		return json.Marshal(safeTransaction{
+			event:       (*event)(e),
+			Extra:       e.serializedExtra,
+			Contexts:    e.serializedContexts,
+			Breadcrumbs: e.serializedBreadcrumbs,
+			Exception:   e.serializedException,
+			User:        e.serializedUser,
+		})
+	}
+
+	// Error event: also shadow transaction-only fields to exclude them.
+	type safeErrorEvent struct {
+		*event
+		Extra           json.RawMessage `json:"extra,omitempty"`
+		Contexts        json.RawMessage `json:"contexts,omitempty"`
+		Breadcrumbs     json.RawMessage `json:"breadcrumbs,omitempty"`
+		Exception       json.RawMessage `json:"exception,omitempty"`
+		User            json.RawMessage `json:"user,omitempty"`
+		Type            json.RawMessage `json:"type,omitempty"`
+		StartTime       json.RawMessage `json:"start_timestamp,omitempty"`
+		Spans           json.RawMessage `json:"spans,omitempty"`
+		TransactionInfo json.RawMessage `json:"transaction_info,omitempty"`
+	}
+	return json.Marshal(safeErrorEvent{
+		event:       (*event)(e),
+		Extra:       e.serializedExtra,
+		Contexts:    e.serializedContexts,
+		Breadcrumbs: e.serializedBreadcrumbs,
+		Exception:   e.serializedException,
+		User:        e.serializedUser,
+	})
 }
 
 func (e *Event) checkInMarshalJSON() ([]byte, error) {
@@ -672,6 +759,9 @@ type Log struct {
 	Attributes map[string]attribute.Value `json:"attributes,omitempty"`
 }
 
+// MakeSerializationSafe is a no-op for Log, all fields are passed from the safe attribute API.
+func (l *Log) MakeSerializationSafe() {}
+
 // GetCategory returns the rate limit category for logs.
 func (l *Log) GetCategory() ratelimit.Category {
 	return ratelimit.CategoryLog
@@ -711,6 +801,9 @@ type Metric struct {
 	Unit       string                     `json:"unit,omitempty"`
 	Attributes map[string]attribute.Value `json:"attributes,omitempty"`
 }
+
+// MakeSerializationSafe is a no-op for Metric, all fields are passed from the safe attribute API.
+func (m *Metric) MakeSerializationSafe() {}
 
 // GetCategory returns the rate limit category for metrics.
 func (m *Metric) GetCategory() ratelimit.Category {
@@ -782,4 +875,38 @@ func (v MetricValue) AsInterface() any {
 // MarshalJSON serializes the value as a bare number.
 func (v MetricValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.value.AsInterface())
+}
+
+// MakeSerializationSafe pre-serializes all fields containing user mutable data to json.RawMessage, preventing race
+// conditions when the event is later serialized on a background goroutine.
+func (e *Event) MakeSerializationSafe() {
+	if len(e.Extra) > 0 {
+		if b, err := json.Marshal(e.Extra); err == nil {
+			e.serializedExtra = b
+		}
+	}
+
+	if len(e.Contexts) > 0 {
+		if b, err := json.Marshal(e.Contexts); err == nil {
+			e.serializedContexts = b
+		}
+	}
+
+	if len(e.Breadcrumbs) > 0 {
+		if b, err := json.Marshal(e.Breadcrumbs); err == nil {
+			e.serializedBreadcrumbs = b
+		}
+	}
+
+	if len(e.Exception) > 0 {
+		if b, err := json.Marshal(e.Exception); err == nil {
+			e.serializedException = b
+		}
+	}
+
+	if len(e.User.Data) > 0 {
+		if b, err := json.Marshal(e.User); err == nil {
+			e.serializedUser = b
+		}
+	}
 }
