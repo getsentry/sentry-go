@@ -1028,6 +1028,73 @@ func TestMakeSerializationSafe(t *testing.T) {
 		}
 	})
 
+	t.Run("pre-serializes User when Data is empty", func(t *testing.T) {
+		event := &Event{
+			Extra: map[string]interface{}{"key": "value"},
+			User:  User{ID: "1", Email: "user@example.com"},
+		}
+		event.MakeSerializationSafe()
+
+		if event.serializedUser == nil {
+			t.Fatal("serializedUser should be set")
+		}
+
+		jsonData, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("marshal failed: %v", err)
+		}
+
+		var got map[string]interface{}
+		if err := json.Unmarshal(jsonData, &got); err != nil {
+			t.Fatalf("unmarshal failed: %v", err)
+		}
+
+		user, ok := got["user"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected user field in JSON, got %s", jsonData)
+		}
+		if user["id"] != "1" {
+			t.Errorf("expected user.id=1, got %v", user["id"])
+		}
+		if user["email"] != "user@example.com" {
+			t.Errorf("expected user.email=user@example.com, got %v", user["email"])
+		}
+	})
+
+	t.Run("pre-serializes transaction spans", func(t *testing.T) {
+		event := &Event{
+			Type: transactionType,
+			Contexts: map[string]Context{
+				"trace": TraceContext{
+					TraceID: TraceIDFromHex("90d57511038845dcb4164a70fc3a7fdb"),
+					SpanID:  SpanIDFromHex("f7f3fd754a9040eb"),
+				}.Map(),
+			},
+			Spans: []*Span{{
+				TraceID:   TraceIDFromHex("90d57511038845dcb4164a70fc3a7fdb"),
+				SpanID:    SpanIDFromHex("4aaf45ea7db94520"),
+				StartTime: time.Unix(1, 0).UTC(),
+				EndTime:   time.Unix(2, 0).UTC(),
+			}},
+		}
+		event.MakeSerializationSafe()
+
+		jsonData, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("marshal failed: %v", err)
+		}
+
+		var got map[string]interface{}
+		if err := json.Unmarshal(jsonData, &got); err != nil {
+			t.Fatalf("unmarshal failed: %v", err)
+		}
+
+		spans, ok := got["spans"].([]interface{})
+		if !ok || len(spans) != 1 {
+			t.Fatalf("expected one span in JSON, got %s", jsonData)
+		}
+	})
+
 	t.Run("marshaled output matches original event", func(t *testing.T) {
 		event := &Event{
 			EventID: "12345678901234567890123456789012",

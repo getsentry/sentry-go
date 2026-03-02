@@ -641,7 +641,6 @@ func (e *Event) preSerializedMarshalJSON() ([]byte, error) {
 			Contexts    json.RawMessage `json:"contexts,omitempty"`
 			Breadcrumbs json.RawMessage `json:"breadcrumbs,omitempty"`
 			Exception   json.RawMessage `json:"exception,omitempty"`
-			Spans       json.RawMessage `json:"spans,omitempty"`
 			User        json.RawMessage `json:"user,omitempty"`
 		}
 		return json.Marshal(safeTransaction{
@@ -904,7 +903,7 @@ func (e *Event) MakeSerializationSafe() {
 		}
 	}
 
-	if len(e.User.Data) > 0 {
+	if !e.User.IsEmpty() {
 		if b, err := json.Marshal(e.User); err == nil {
 			e.serializedUser = b
 		}
