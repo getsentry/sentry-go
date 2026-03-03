@@ -8,20 +8,6 @@ Single-module Go SDK with integration sub-modules in `github.com/getsentry/sentr
 - After cloning: `make build`
 - Never change Go version constraints in `go.mod` unless explicitly asked
 
-## Commands
-
-| Command          | Purpose                       |
-| ---------------- | ----------------------------- |
-| `make build`     | Build all modules             |
-| `make test`      | Run all tests                 |
-| `make test-race` | Run tests with `-race`        |
-| `make vet`       | Run `go vet`                  |
-| `make lint`      | Run `golangci-lint`           |
-| `make fmt`       | Format with `gofmt -s`        |
-| `make mod-tidy`  | Tidy and verify all `go.mod`s |
-
-Single integration: `cd <integration> && go test ./...`
-
 ## Commit Attribution
 
 AI commits MUST include:
