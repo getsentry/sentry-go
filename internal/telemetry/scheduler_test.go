@@ -47,6 +47,8 @@ func (t *testTelemetryItem) GetDynamicSamplingContext() map[string]string {
 	return nil
 }
 
+func (t *testTelemetryItem) MakeSerializationSafe() {}
+
 func TestNewTelemetryScheduler(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}

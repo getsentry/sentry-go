@@ -29,7 +29,11 @@ func NewProcessor(
 }
 
 // Add adds a TelemetryItem to the appropriate buffer based on its category.
+//
+// The processor should call MakeSerializationSafe to eliminate any race on user mutable fields,
+// since the serialization happens on a background goroutine.
 func (b *Processor) Add(item protocol.TelemetryItem) bool {
+	item.MakeSerializationSafe()
 	return b.scheduler.Add(item)
 }
 
