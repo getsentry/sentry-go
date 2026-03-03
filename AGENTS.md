@@ -10,17 +10,15 @@ Single-module Go SDK with integration sub-modules in `github.com/getsentry/sentr
 
 ## Commands
 
-| Command                | Purpose                                    |
-| ---------------------- | ------------------------------------------ |
-| `make build`           | Build all modules                          |
-| `make test`            | Run all tests (root + integrations)        |
-| `make test-race`       | Run tests with `-race`                     |
-| `make test-verbose`    | Run tests with `-v -race`                  |
-| `make test-coverage`   | Run tests with coverage report             |
-| `make vet`             | Run `go vet` on all modules                |
-| `make lint`            | Run `golangci-lint`                        |
-| `make fmt`             | Format all Go files with `gofmt -s`        |
-| `make mod-tidy`        | Tidy all `go.mod` files and verify no diff |
+| Command          | Purpose                       |
+| ---------------- | ----------------------------- |
+| `make build`     | Build all modules             |
+| `make test`      | Run all tests                 |
+| `make test-race` | Run tests with `-race`        |
+| `make vet`       | Run `go vet`                  |
+| `make lint`      | Run `golangci-lint`           |
+| `make fmt`       | Format with `gofmt -s`        |
+| `make mod-tidy`  | Tidy and verify all `go.mod`s |
 
 Single integration: `cd <integration> && go test ./...`
 
@@ -34,24 +32,21 @@ Co-Authored-By: <agent model name> <noreply@anthropic.com>
 
 ## Before Every Commit
 
-1. `make fmt`
-2. `make lint`
-3. `make vet`
-4. `make test-race`
+1. `make fmt` 2. `make lint` 3. `make vet` 4. `make test-race`
 
 ## Architecture
 
 ### Core (`/`)
 
-The root package `sentry` contains the entire public API. Key files:
+The root package `sentry` contains the entire public API:
 
-- `sentry.go` — Package-level functions (`Init`, `CaptureException`, `CaptureMessage`, `Flush`)
-- `client.go` — `Client` and `ClientOptions` (DSN, sampling, callbacks)
+- `sentry.go` — `Init`, `CaptureException`, `CaptureMessage`, `Flush`
+- `client.go` — `Client`, `ClientOptions`
 - `hub.go` — `Hub` manages a stack of `Scope`/`Client` pairs; thread-safe
 - `scope.go` — `Scope` holds contextual data (tags, user, breadcrumbs, spans)
-- `tracing.go` — `Span`, `StartSpan`, `StartTransaction`; W3C Trace Context propagation
-- `transport.go` — `Transport` interface; async envelope delivery with buffering
-- `interfaces.go` — `Event`, `Breadcrumb`, `User`, `Request`, `Exception` types
+- `tracing.go` — `Span`, `StartSpan`, `StartTransaction`; W3C Trace Context
+- `transport.go` — `Transport` interface and `HTTPTransport`/`HTTPSyncTransport`
+- `interfaces.go` — `Event`, `Breadcrumb`, `User`, `Request`, `Exception`
 
 ### Attribute Package (`/attribute/`)
 
@@ -66,91 +61,57 @@ attribute.Bool("flag", true)
 
 ### Internal Packages (`/internal/`)
 
-Private implementation details — protocol encoding, rate limiting, telemetry buffer, debug logging. Do not export types from these packages.
+Private implementation. Do not export types from these packages.
 
 ### Integration Sub-Modules
 
-Each integration lives in its own top-level directory with a separate `go.mod`. They fall into three categories:
+Each lives in its own directory with a separate `go.mod`:
 
-- **HTTP middleware** — wrap handlers, create transaction spans, recover panics (e.g., `http/`, `gin/`, `echo/`, `fiber/`)
-- **Logging hooks** — capture errors from log calls as Sentry events (e.g., `logrus/`, `zerolog/`, `zap/`, `slog/`)
-- **Instrumentation** — outgoing HTTP spans (`httpclient/`), OpenTelemetry bridge (`otel/`)
+- **HTTP middleware** — `http/`, `gin/`, `echo/`, `fiber/`, `fasthttp/`, `iris/`, `negroni/`
+- **Logging hooks** — `logrus/`, `zerolog/`, `zap/`, `slog/`
+- **Instrumentation** — `httpclient/`, `otel/`
 
-Each sub-module follows the same pattern: a single exported middleware/hook constructor, options struct, and tests. When adding a new integration, mirror an existing one.
+When adding a new integration, mirror an existing one.
 
 ### Transport Architecture
 
-The SDK has two transport layers. Understanding both is important when working on event delivery.
+**Current: `transport.go` (active)** — `HTTPTransport` uses a batch-channel model with a single worker goroutine. `HTTPSyncTransport` is the blocking variant for serverless.
 
-**Current: `transport.go` (active)**
+**Next: `internal/telemetry/` + `internal/http/` (not yet enabled)** — Processor/buffer/scheduler architecture. Wired up in `client.go` (`setupTelemetryProcessor`) but **commented out** behind `DisableTelemetryBuffer`. Key parts:
 
-The `HTTPTransport` is the production transport. It uses a batch-channel model with a single background worker goroutine:
+- `internal/telemetry/processor.go` — orchestrator; routes items to category-specific buffers
+- `internal/telemetry/scheduler.go` — weighted round-robin; errors get 5x priority over logs
+- `internal/telemetry/ring_buffer.go` — circular buffer with overflow policies and batch/timeout flushing
+- `internal/telemetry/bucketed_buffer.go` — groups items by trace ID
+- `internal/http/transport.go` — `AsyncTransport` with `HasCapacity()` backpressure
+- `internal/protocol/` — `Envelope`, `TelemetryItem` interfaces; log/metric batch types
 
-- `SendEvent` serializes the event into an envelope and enqueues a `batchItem`
-- A worker goroutine reads items sequentially and sends them via `http.Client`
-- `Flush` closes the current batch's item channel, waits for the worker to drain it, then starts a new batch
-- Rate limiting is tracked per-category via response headers
-- `HTTPSyncTransport` is the blocking variant for serverless/FaaS use cases
-
-**Next: `internal/telemetry/` + `internal/http/` (not yet enabled)**
-
-A new processor/buffer/scheduler architecture designed to replace the above. Currently wired up in `client.go` (`setupTelemetryProcessor`) but **commented out** behind `DisableTelemetryBuffer`.
-
-Key components:
-
-- **`internal/telemetry/processor.go`** — top-level orchestrator; routes items to category-specific buffers
-- **`internal/telemetry/scheduler.go`** — weighted round-robin scheduler; errors get 5x the processing slots of logs
-- **`internal/telemetry/ring_buffer.go`** — circular buffer with overflow policies (drop-oldest/drop-newest), configurable batch size and flush timeout
-- **`internal/telemetry/bucketed_buffer.go`** — groups items by trace ID for trace-aware batching
-- **`internal/http/transport.go`** — `AsyncTransport` implementing `protocol.TelemetryTransport` (envelope-first interface with `HasCapacity()` backpressure)
-- **`internal/protocol/`** — `Envelope`, `TelemetryItem`, `EnvelopeItemConvertible` interfaces; batch types for logs and metrics
-
-The `internalAsyncTransportAdapter` in `transport.go` bridges the old `Transport` interface to the new `TelemetryTransport` interface.
-
-### Examples (`/_examples/`)
-
-Runnable example programs for each feature and integration. Reference these for idiomatic usage patterns.
+The `internalAsyncTransportAdapter` in `transport.go` bridges old `Transport` to new `TelemetryTransport`.
 
 ## Coding Standards
 
-- Follow existing conventions — check neighboring files before adding new patterns
-- Only use libraries already present in `go.mod`; do not add new dependencies without asking
-- Run `gofmt -s` — the project uses standard Go formatting, no custom style
-- Exported identifiers need doc comments per [Go convention](https://go.dev/blog/godoc)
-- Keep the public API surface in the root package; internals go in `/internal`
-- Use `context.Context` for cancellation and span propagation
-- Ensure thread safety — the SDK is used concurrently; guard shared state with mutexes
-- When modifying behavior, update tests in the corresponding `*_test.go` files
-- Never expose secrets or DSN tokens in test fixtures
+- Follow existing conventions — check neighboring files first
+- Do not add new dependencies without asking
+- `gofmt -s` formatting, doc comments on exports
+- Public API in root package; internals in `/internal`
+- Thread safety required — guard shared state with mutexes
+- Update tests when modifying behavior
 
 ## Testing
 
-See **[.agents/TESTING.md](.agents/TESTING.md)** for full guidelines. Key points:
+See **[.agents/TESTING.md](.agents/TESTING.md)** for full guidelines.
 
-- Prefer integration tests that use real APIs (`sentry.Init`, `CaptureException`, `Flush`) over mocking internals
-- Tests use the standard `testing` package with [`testify`](https://github.com/stretchr/testify) assertions
-- Internal test helpers live in `internal/testutils/` (mocks, assertions, constants)
-- Always run `make test-race` before submitting — the SDK must be free of data races
-- Use `t.Parallel()` where tests are independent
-- Prefer table-driven tests for covering multiple cases
+Prefer integration tests using real APIs (`sentry.Init`, `CaptureException`, `Flush`) over mocking internals. Use `testify` for assertions, `internal/testutils/` for mocks, and always pass `make test-race`.
 
-## Reference Documentation
+## Reference
 
 - [SDK Development Guide](https://develop.sentry.dev/sdk/)
 - [Commit Guidelines](https://develop.sentry.dev/engineering-practices/commit-messages/)
-- [Span Attributes](https://develop.sentry.dev/sdk/foundations/state-management/scopes/attributes/)
-- [Hubs & Scopes](https://develop.sentry.dev/sdk/foundations/state-management/hub-and-scope/)
+- [Hubs & Scopes](https://develop.sentry.dev/sdk/unified-api/#hub)
 
 ## Skills
 
-### Commit
-
-Use `/commit` skill when committing changes. Follows Sentry conventional commit format.
-
-### Code Review
-
-Use `/code-review` skill to review pull requests following Sentry engineering practices.
-
-### Find Bugs
-
-Use `/find-bugs` skill to audit local branch changes for bugs and security issues.
+- `/commit` — Commit with Sentry conventional format
+- `/create-pr` — Create PRs following Sentry conventions
+- `/code-review` — Review PRs following Sentry practices
+- `/find-bugs` — Audit local changes for bugs and security issues
