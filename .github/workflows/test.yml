@@ -45,9 +45,9 @@ jobs:
           key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-${{ matrix.go }}-
-      - name: Tidy for min version
+      - name: Tidy
         run: make mod-tidy
-        if: ${{ matrix.go == '1.24' }}
+        if: ${{ matrix.go == '1.26' }}
       - name: Build
         run: make build
       - name: Vet
