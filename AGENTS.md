@@ -85,9 +85,32 @@ The `internalAsyncTransportAdapter` in `transport.go` bridges old `Transport` to
 
 ## Testing
 
-See **[.agents/TESTING.md](.agents/TESTING.md)** for full guidelines.
+**Prefer tests that exercise real user-facing behavior over isolated unit tests.** Call the same APIs users call — `sentry.Init`, `CaptureException`, `Flush`, framework middleware — rather than mocking internal components.
 
-Prefer integration tests using real APIs (`sentry.Init`, `CaptureException`, `Flush`) over mocking internals. Use `testify` for assertions, `internal/testutils/` for mocks, and always pass `make test-race`.
+Test tier preference (use the highest tier that covers what you need):
+
+1. **Integration tests** — `sentry.Init` with `BeforeSend` callbacks, `httptest.Server` with real framework routers, `sentry.Flush` to collect events. This is the default for any new test.
+2. **Context-level tests** — `NewTestContext` with `MockTransport` for span/transaction behavior when no HTTP server is needed.
+3. **Unit tests** (sparingly) — Direct `NewClient` + `MockScope` only for self-contained logic like `BeforeSend` callbacks or sampling decisions.
+
+Conventions:
+
+- Table-driven tests for multiple inputs through the same code path
+- `t.Parallel()` for tests that don't share global state
+- `cmp.Diff` with `cmpopts.IgnoreFields` for `*Event` comparison — ignore `EventID`, `Timestamp`, `Sdk`, `sdkMetaData`
+- `testutils.FlushTimeout()` when calling `sentry.Flush` (longer timeout in CI)
+- `testify` for assertions, `internal/testutils/` for mocks
+- All tests must pass `make test-race`
+
+What to test:
+
+- Behavior users observe: Does middleware capture panics? Does `Flush` deliver events? Do trace headers propagate?
+- Edge cases at system boundaries: malformed DSN, nil `Hub`, concurrent captures, context cancellation
+- Regressions: reproduce the failure before applying the fix
+
+Thread safety:
+
+- The SDK is used concurrently. Any test touching shared state (`Hub`, `Scope`, `CurrentHub`) must either use `t.Parallel()` with isolated instances, or explicitly verify safety with goroutines and `sync.WaitGroup`.
 
 ## Reference
 
