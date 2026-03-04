@@ -328,7 +328,15 @@ func TestGetRequestFromEvent(t *testing.T) {
 		}
 
 		t.Run(test.testName, func(t *testing.T) {
-			req, err := getRequestFromEvent(context.TODO(), test.event, dsn)
+			body := getRequestBodyFromEvent(test.event)
+			if body == nil {
+				t.Fatal("failed to marshal event")
+			}
+			envelope, err := envelopeFromBody(test.event, dsn, time.Now(), body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req, err := getRequestFromEnvelope(context.TODO(), dsn, envelope, test.event.Sdk.Name, test.event.Sdk.Version)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -54,7 +54,7 @@ func TestNewTelemetryScheduler(t *testing.T) {
 	dsn := &protocol.Dsn{}
 
 	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
+		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
 	}
 
 	sdkInfo := &protocol.SdkInfo{
@@ -62,7 +62,7 @@ func TestNewTelemetryScheduler(t *testing.T) {
 		Version: "1.0.0",
 	}
 
-	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, nil)
 
 	if scheduler == nil {
 		t.Fatal("Expected non-nil scheduler")
@@ -107,7 +107,7 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			name: "single category with multiple items",
 			setupBuffers: func() map[ratelimit.Category]Buffer[protocol.TelemetryItem] {
 				return map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
-					ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
+					ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
 				}
 			},
 			addItems: func(buffers map[ratelimit.Category]Buffer[protocol.TelemetryItem]) {
@@ -121,7 +121,7 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			name: "empty buffers",
 			setupBuffers: func() map[ratelimit.Category]Buffer[protocol.TelemetryItem] {
 				return map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
-					ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
+					ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
 				}
 			},
 			addItems: func(_ map[ratelimit.Category]Buffer[protocol.TelemetryItem]) {
@@ -132,9 +132,9 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			name: "multiple categories",
 			setupBuffers: func() map[ratelimit.Category]Buffer[protocol.TelemetryItem] {
 				return map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
-					ratelimit.CategoryError:       NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
-					ratelimit.CategoryTransaction: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTransaction, 10, OverflowPolicyDropOldest, 1, 0),
-					ratelimit.CategoryMonitor:     NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryMonitor, 10, OverflowPolicyDropOldest, 1, 0),
+					ratelimit.CategoryError:       NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
+					ratelimit.CategoryTransaction: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTransaction, 10, OverflowPolicyDropOldest, 1, 0, nil),
+					ratelimit.CategoryMonitor:     NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryMonitor, 10, OverflowPolicyDropOldest, 1, 0, nil),
 				}
 			},
 			addItems: func(buffers map[ratelimit.Category]Buffer[protocol.TelemetryItem]) {
@@ -150,8 +150,8 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			name: "priority ordering - error and log",
 			setupBuffers: func() map[ratelimit.Category]Buffer[protocol.TelemetryItem] {
 				return map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
-					ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
-					ratelimit.CategoryLog:   NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryLog, 10, OverflowPolicyDropOldest, 100, 5*time.Second),
+					ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
+					ratelimit.CategoryLog:   NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryLog, 10, OverflowPolicyDropOldest, 100, 5*time.Second, nil),
 				}
 			},
 			addItems: func(buffers map[ratelimit.Category]Buffer[protocol.TelemetryItem]) {
@@ -165,8 +165,8 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			name: "priority ordering - error and metric",
 			setupBuffers: func() map[ratelimit.Category]Buffer[protocol.TelemetryItem] {
 				return map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
-					ratelimit.CategoryError:       NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0),
-					ratelimit.CategoryTraceMetric: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTraceMetric, 10, OverflowPolicyDropOldest, 100, 5*time.Second),
+					ratelimit.CategoryError:       NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
+					ratelimit.CategoryTraceMetric: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTraceMetric, 10, OverflowPolicyDropOldest, 100, 5*time.Second, nil),
 				}
 			},
 			addItems: func(buffers map[ratelimit.Category]Buffer[protocol.TelemetryItem]) {
@@ -185,7 +185,7 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
 			buffers := tt.setupBuffers()
-			scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
+			scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, nil)
 
 			tt.addItems(buffers)
 
@@ -208,14 +208,14 @@ func TestTelemetrySchedulerRateLimiting(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
 
-	buffer := NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
 	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
 		ratelimit.CategoryError: buffer,
 	}
 	// no log buffer used in simplified scheduler tests
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, nil)
 
 	transport.SetRateLimited("error", true)
 
@@ -241,14 +241,14 @@ func TestTelemetrySchedulerStartStop(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
 
-	buffer := NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
 	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
 		ratelimit.CategoryError: buffer,
 	}
 	// no log buffer used in simplified scheduler tests
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, nil)
 
 	scheduler.Start()
 	scheduler.Start()
@@ -269,13 +269,13 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
 
-	buffer := NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0)
+	buffer := NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
 	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
 		ratelimit.CategoryError: buffer,
 	}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, nil)
 
 	scheduler.Start()
 

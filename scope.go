@@ -11,6 +11,8 @@ import (
 
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/report"
 )
 
 // Scope holds contextual data for the current scope.
@@ -379,7 +381,7 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 }
 
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
-func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event {
+func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event { //nolint:gocyclo
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
@@ -486,10 +488,23 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 
 	for _, processor := range scope.eventProcessors {
 		id := event.EventID
+		category := event.toCategory()
+		spanCountBefore := event.GetSpanCount()
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
+			if client != nil {
+				client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
+				if category == ratelimit.CategoryTransaction {
+					client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
+				}
+			}
 			return nil
+		}
+		if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
+			if client != nil {
+				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
+			}
 		}
 	}
 

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/report"
 )
 
 const (
@@ -429,6 +431,17 @@ func (s *Span) doFinish() {
 	}
 
 	if !s.Sampled.Bool() {
+		c := hub.Client()
+		if c != nil {
+			if !s.IsTransaction() {
+				// we count the sampled spans from the transaction root. it is guaranteed that the whole transaction
+				// would be sampled
+				return
+			}
+			children := s.recorder.children()
+			c.reportRecorder.RecordOne(report.ReasonSampleRate, ratelimit.CategoryTransaction)
+			c.reportRecorder.Record(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
+		}
 		return
 	}
 	event := s.toEvent()
