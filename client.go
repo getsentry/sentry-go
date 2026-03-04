@@ -148,6 +148,16 @@ type ClientOptions struct {
 	// PropagateTraceparent is used to control whether the W3C Trace Context HTTP traceparent header
 	// is propagated on outgoing http requests.
 	PropagateTraceparent bool
+	// StrictTraceContinuation is used to control trace continuation from 3rd party services that happen to be
+	// instrumented by Sentry.
+	//
+	// Enabling the option means that the SDK will require the org ids from baggage to match for continuing the trace.
+	StrictTraceContinuation bool
+	// OrgID configures the orgID used for trace propagation and features like StrictTraceContinuation.
+	//
+	// In most cases the orgID is already parsed from the DSN. This option should be used when non-standard Sentry DSNs
+	// are used, such as self-hosted or when using a local Relay.
+	OrgID uint64
 	// List of regexp strings that will be used to match against event's message
 	// and if applicable, caught errors type and value.
 	// If the match is found, then a whole event will be dropped.
@@ -404,7 +414,9 @@ func NewClient(options ClientOptions) (*Client, error) {
 		client.batchMeter = newMetricBatchProcessor(&client)
 		client.batchMeter.Start()
 	}
-
+	if options.OrgID != 0 && client.dsn != nil {
+		client.dsn.SetOrgID(options.OrgID)
+	}
 	client.setupIntegrations()
 
 	return &client, nil

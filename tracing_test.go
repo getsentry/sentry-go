@@ -485,6 +485,7 @@ func TestContinueSpanFromRequest(t *testing.T) {
 		sampled := sampled
 		t.Run(sampled.String(), func(t *testing.T) {
 			var s Span
+			s.ctx = context.Background()
 			hkey := http.CanonicalHeaderKey("sentry-trace")
 			hval := (&Span{
 				TraceID: traceID,
@@ -585,12 +586,13 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Span{}
+			s.ctx = context.Background()
 			spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
 			spanOption(s)
 
 			if diff := cmp.Diff(tt.wantSpan, s, cmp.Options{
 				cmp.AllowUnexported(Span{}),
-				cmpopts.IgnoreFields(Span{}, "mu", "finishOnce"),
+				cmpopts.IgnoreFields(Span{}, "ctx", "mu", "finishOnce"),
 			}); diff != "" {
 				t.Fatalf("Expected no difference on spans, got: %s", diff)
 			}
@@ -605,13 +607,14 @@ func TestContinueSpanFromTrace(t *testing.T) {
 	for _, sampled := range []Sampled{SampledTrue, SampledFalse, SampledUndefined} {
 		sampled := sampled
 		t.Run(sampled.String(), func(t *testing.T) {
-			var s Span
+			s := &Span{}
+			s.ctx = context.Background()
 			trace := (&Span{
 				TraceID: traceID,
 				SpanID:  spanID,
 				Sampled: sampled,
 			}).ToSentryTrace()
-			ContinueFromTrace(trace)(&s)
+			ContinueFromTrace(trace)(s)
 			if s.TraceID != traceID {
 				t.Errorf("got %q, want %q", s.TraceID, traceID)
 			}
@@ -1285,5 +1288,70 @@ func TestSpanScopeManagement(t *testing.T) {
 	}
 	if spanID != childSpan.SpanID {
 		t.Errorf("expected SpanID %s, got %s", transaction.SpanID, spanID)
+	}
+}
+
+func TestStrictTraceContinuation(t *testing.T) {
+	incomingTraceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
+	sentryTrace := "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1"
+
+	baggageWithOrg := func(orgID string) string {
+		return "sentry-org_id=" + orgID + ",sentry-trace_id=bc6d53f15eb88f4320054569b8c553d4"
+	}
+	baggageWithoutOrg := "sentry-trace_id=bc6d53f15eb88f4320054569b8c553d4"
+
+	tests := []struct {
+		name          string
+		baggageOrgID  string
+		sdkOrgID      uint64
+		strict        bool
+		wantContinued bool
+	}{
+		{"strict=false, baggage=1, sdk=1", "1", 1, false, true},
+		{"strict=false, baggage=none, sdk=1", "", 1, false, true},
+		{"strict=false, baggage=1, sdk=none", "1", 0, false, true},
+		{"strict=false, baggage=none, sdk=none", "", 0, false, true},
+		{"strict=false, baggage=1, sdk=2", "1", 2, false, false},
+
+		{"strict=true, baggage=1, sdk=1", "1", 1, true, true},
+		{"strict=true, baggage=none, sdk=1", "", 1, true, false},
+		{"strict=true, baggage=1, sdk=none", "1", 0, true, false},
+		{"strict=true, baggage=none, sdk=none", "", 0, true, true},
+		{"strict=true, baggage=1, sdk=2", "1", 2, true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &MockTransport{}
+			ctx := NewTestContext(ClientOptions{
+				Dsn:                     testDsn,
+				EnableTracing:           true,
+				TracesSampleRate:        1.0,
+				Transport:               transport,
+				StrictTraceContinuation: tt.strict,
+				OrgID:                   tt.sdkOrgID,
+			})
+
+			baggage := baggageWithoutOrg
+			if tt.baggageOrgID != "" {
+				baggage = baggageWithOrg(tt.baggageOrgID)
+			}
+
+			hub := GetHubFromContext(ctx)
+			transaction := StartTransaction(ctx, "test",
+				ContinueTrace(hub, sentryTrace, baggage),
+			)
+			transaction.Finish()
+
+			if tt.wantContinued {
+				if transaction.TraceID != incomingTraceID {
+					t.Errorf("expected trace to be continued, got new TraceID %s", transaction.TraceID)
+				}
+			} else {
+				if transaction.TraceID == incomingTraceID {
+					t.Errorf("expected new trace, but got continued TraceID %s", transaction.TraceID)
+				}
+			}
+		})
 	}
 }
