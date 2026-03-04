@@ -1275,10 +1275,11 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 			telemetry.OverflowPolicyDropOldest,
 			1,
 			0,
+			nil,
 		),
 	}
 
-	proc := telemetry.NewProcessor(buffers, transport, dsn, sdk)
+	proc := telemetry.NewProcessor(buffers, transport, dsn, sdk, nil)
 
 	extra := map[string]interface{}{
 		"request_id": "original-123",
