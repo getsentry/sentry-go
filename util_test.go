@@ -36,6 +36,20 @@ func TestDefaultReleaseSentryReleaseEnvvar(t *testing.T) {
 	assertEqual(t, defaultRelease(), releaseVersion)
 }
 
+func TestDefaultReleaseHerokuBuildCommitEnvvar(t *testing.T) {
+	releaseVersion := "abc123"
+	t.Setenv("HEROKU_BUILD_COMMIT", releaseVersion)
+
+	assertEqual(t, defaultRelease(), releaseVersion)
+}
+
+func TestDefaultReleaseHerokuBuildCommitPrecedenceOverSlugCommit(t *testing.T) {
+	t.Setenv("HEROKU_SLUG_COMMIT", "old-slug-value")
+	t.Setenv("HEROKU_BUILD_COMMIT", "new-build-value")
+
+	assertEqual(t, defaultRelease(), "new-build-value")
+}
+
 func TestDefaultReleaseSentryReleaseEnvvarPrecedence(t *testing.T) {
 	releaseVersion := "1.2.3"
 	t.Setenv("SOURCE_VERSION", "3.2.1")
