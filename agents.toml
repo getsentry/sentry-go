@@ -22,3 +22,7 @@ source = "getsentry/skills"
 [[skills]]
 name = "commit"
 source = "getsentry/skills"
+
+[[skills]]
+name = "create-pr"
+source = "getsentry/skills"

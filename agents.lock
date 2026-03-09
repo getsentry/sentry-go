@@ -15,6 +15,13 @@ resolved_path = ".agents/skills/commit"
 commit = "6089495c2085b5fae0573ec3c0dd64c4a5c7d44e"
 integrity = "sha256-EFbC0wiqzaiVLzfKi6aNSJukKYl36mb4qHW0wYooWxU="
 
+[skills.create-pr]
+source = "getsentry/skills"
+resolved_url = "https://github.com/getsentry/skills.git"
+resolved_path = ".agents/skills/create-pr"
+commit = "b68ac5ce82c981ac3235dd6f2037c1109baaf0f2"
+integrity = "sha256-ChCXKfikzmN8vzMKcER/TWVECVjP+cCsGrDheo+WL7k="
+
 [skills.dotagents]
 source = "getsentry/dotagents"
 resolved_url = "https://github.com/getsentry/dotagents.git"
