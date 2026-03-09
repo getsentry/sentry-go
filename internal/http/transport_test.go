@@ -302,7 +302,9 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 	})
 
 	t.Run("timeout", func(t *testing.T) {
+		blockChan := make(chan struct{})
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			<-blockChan
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -314,11 +316,15 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *AsyncTransport, got %T", tr)
 		}
-		defer transport.Close()
+		defer func() {
+			close(blockChan)
+			transport.Close()
+		}()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
-		time.Sleep(10 * time.Millisecond)
 
 		if transport.FlushWithContext(ctx) {
 			t.Error("FlushWithContext should timeout")
