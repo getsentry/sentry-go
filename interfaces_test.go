@@ -16,6 +16,8 @@ import (
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/telemetry"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -745,6 +747,26 @@ func TestEvent_ToEnvelopeItem_FallbackOnMarshalError(t *testing.T) {
 	}
 }
 
+func TestEvent_ToEnvelopeItem_RecoverFromPanic(t *testing.T) {
+	// Verify that safeMarshal recovers from panics and ToEnvelopeItem
+	// falls back to a stripped-down event instead of crashing.
+	event := &Event{
+		EventID: "panic-test",
+		Extra: map[string]interface{}{
+			// json.Marshal will panic on a channel value.
+			"bad": make(chan int),
+		},
+	}
+
+	item, err := event.ToEnvelopeItem()
+	if err != nil {
+		t.Fatalf("ToEnvelopeItem() should recover from panic and use fallback, got error: %v", err)
+	}
+	if item == nil {
+		t.Fatal("ToEnvelopeItem() returned nil item after panic recovery")
+	}
+}
+
 func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 	ts := time.Unix(1700000000, 500_000_000).UTC()
 	trace := TraceIDFromHex("d6c4f03650bd47699ec65c84352b6208")
@@ -912,5 +934,449 @@ func TestMetric_GetterMethods(t *testing.T) {
 
 	if metric.GetDynamicSamplingContext() != nil {
 		t.Errorf("GetDynamicSamplingContext() = %v, want nil", metric.GetDynamicSamplingContext())
+	}
+}
+
+func TestMakeSerializationSafe(t *testing.T) {
+	t.Run("pre-serializes Extra", func(t *testing.T) {
+		event := &Event{
+			Extra: map[string]interface{}{
+				"key": "value",
+				"nested": map[string]interface{}{
+					"inner": "data",
+				},
+			},
+		}
+		event.MakeSerializationSafe()
+
+		if event.serializedExtra == nil {
+			t.Fatal("serializedExtra should be set")
+		}
+
+		var got map[string]interface{}
+		if err := json.Unmarshal(event.serializedExtra, &got); err != nil {
+			t.Fatalf("invalid serializedExtra JSON: %v", err)
+		}
+		if got["key"] != "value" {
+			t.Errorf("expected key=value, got %v", got["key"])
+		}
+	})
+
+	t.Run("pre-serializes Contexts", func(t *testing.T) {
+		event := &Event{
+			Contexts: map[string]Context{
+				"test": {"key": "value"},
+			},
+		}
+		event.MakeSerializationSafe()
+
+		if event.serializedContexts == nil {
+			t.Fatal("serializedContexts should be set")
+		}
+	})
+
+	t.Run("pre-serializes Breadcrumbs", func(t *testing.T) {
+		event := &Event{
+			Breadcrumbs: []*Breadcrumb{
+				{Message: "test", Data: map[string]interface{}{"key": "value"}},
+			},
+		}
+		event.MakeSerializationSafe()
+
+		if event.serializedBreadcrumbs == nil {
+			t.Fatal("serializedBreadcrumbs should be set")
+		}
+	})
+
+	t.Run("pre-serializes Exception", func(t *testing.T) {
+		event := &Event{
+			Exception: []Exception{
+				{
+					Type:  "error",
+					Value: "test",
+					Mechanism: &Mechanism{
+						Type: "generic",
+						Data: map[string]any{"info": "original"},
+					},
+				},
+			},
+		}
+		event.MakeSerializationSafe()
+
+		if event.serializedException == nil {
+			t.Fatal("serializedException should be set")
+		}
+	})
+
+	t.Run("pre-serializes User when Data is present", func(t *testing.T) {
+		event := &Event{
+			User: User{ID: "1", Data: map[string]string{"role": "admin"}},
+		}
+		event.MakeSerializationSafe()
+
+		if event.serializedUser == nil {
+			t.Fatal("serializedUser should be set")
+		}
+
+		var got map[string]interface{}
+		if err := json.Unmarshal(event.serializedUser, &got); err != nil {
+			t.Fatalf("invalid serializedUser JSON: %v", err)
+		}
+		gotData, _ := got["data"].(map[string]interface{})
+		if gotData["role"] != "admin" {
+			t.Errorf("expected role=admin, got %v", gotData["role"])
+		}
+	})
+
+	t.Run("pre-serializes User when Data is empty", func(t *testing.T) {
+		event := &Event{
+			Extra: map[string]interface{}{"key": "value"},
+			User:  User{ID: "1", Email: "user@example.com"},
+		}
+		event.MakeSerializationSafe()
+
+		if event.serializedUser == nil {
+			t.Fatal("serializedUser should be set")
+		}
+
+		jsonData, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("marshal failed: %v", err)
+		}
+
+		var got map[string]interface{}
+		if err := json.Unmarshal(jsonData, &got); err != nil {
+			t.Fatalf("unmarshal failed: %v", err)
+		}
+
+		user, ok := got["user"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected user field in JSON, got %s", jsonData)
+		}
+		if user["id"] != "1" {
+			t.Errorf("expected user.id=1, got %v", user["id"])
+		}
+		if user["email"] != "user@example.com" {
+			t.Errorf("expected user.email=user@example.com, got %v", user["email"])
+		}
+	})
+
+	t.Run("pre-serializes transaction spans", func(t *testing.T) {
+		event := &Event{
+			Type: transactionType,
+			Contexts: map[string]Context{
+				"trace": TraceContext{
+					TraceID: TraceIDFromHex("90d57511038845dcb4164a70fc3a7fdb"),
+					SpanID:  SpanIDFromHex("f7f3fd754a9040eb"),
+				}.Map(),
+			},
+			Spans: []*Span{{
+				TraceID:   TraceIDFromHex("90d57511038845dcb4164a70fc3a7fdb"),
+				SpanID:    SpanIDFromHex("4aaf45ea7db94520"),
+				StartTime: time.Unix(1, 0).UTC(),
+				EndTime:   time.Unix(2, 0).UTC(),
+			}},
+		}
+		event.MakeSerializationSafe()
+
+		jsonData, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("marshal failed: %v", err)
+		}
+
+		var got map[string]interface{}
+		if err := json.Unmarshal(jsonData, &got); err != nil {
+			t.Fatalf("unmarshal failed: %v", err)
+		}
+
+		spans, ok := got["spans"].([]interface{})
+		if !ok || len(spans) != 1 {
+			t.Fatalf("expected one span in JSON, got %s", jsonData)
+		}
+	})
+
+	t.Run("marshaled output matches original event", func(t *testing.T) {
+		event := &Event{
+			EventID: "12345678901234567890123456789012",
+			Message: "test message",
+			Level:   LevelError,
+			Extra: map[string]interface{}{
+				"string_val": "hello",
+				"number_val": float64(42),
+			},
+			Contexts: map[string]Context{
+				"os": {"name": "linux", "version": "5.4"},
+			},
+			Breadcrumbs: []*Breadcrumb{
+				{Message: "clicked", Data: map[string]interface{}{"target": "button"}},
+			},
+			Exception: []Exception{
+				{Type: "RuntimeError", Value: "oops"},
+			},
+			User: User{ID: "42", Data: map[string]string{"role": "admin"}},
+		}
+
+		originalJSON, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("original marshal failed: %v", err)
+		}
+
+		event2 := &Event{
+			EventID: "12345678901234567890123456789012",
+			Message: "test message",
+			Level:   LevelError,
+			Extra: map[string]interface{}{
+				"string_val": "hello",
+				"number_val": float64(42),
+			},
+			Contexts: map[string]Context{
+				"os": {"name": "linux", "version": "5.4"},
+			},
+			Breadcrumbs: []*Breadcrumb{
+				{Message: "clicked", Data: map[string]interface{}{"target": "button"}},
+			},
+			Exception: []Exception{
+				{Type: "RuntimeError", Value: "oops"},
+			},
+			User: User{ID: "42", Data: map[string]string{"role": "admin"}},
+		}
+		event2.MakeSerializationSafe()
+
+		safeJSON, err := json.Marshal(event2)
+		if err != nil {
+			t.Fatalf("safe marshal failed: %v", err)
+		}
+
+		var originalMap, safeMap map[string]interface{}
+		if err := json.Unmarshal(originalJSON, &originalMap); err != nil {
+			t.Fatalf("unmarshal original: %v", err)
+		}
+		if err := json.Unmarshal(safeJSON, &safeMap); err != nil {
+			t.Fatalf("unmarshal safe: %v", err)
+		}
+
+		// Re-marshal for stable comparison
+		origNorm, _ := json.Marshal(originalMap)
+		safeNorm, _ := json.Marshal(safeMap)
+		if string(origNorm) != string(safeNorm) {
+			t.Errorf("JSON output differs:\noriginal: %s\nsafe:     %s", origNorm, safeNorm)
+		}
+	})
+}
+
+func TestMakeSerializationSafe_ConcurrentAccess(t *testing.T) {
+	extra := map[string]interface{}{
+		"key1": "value1",
+		"nested": map[string]interface{}{
+			"inner": "data",
+		},
+	}
+	ctx := Context{"info": "context_value"}
+	bcData := map[string]interface{}{"bc_key": "bc_value"}
+
+	event := &Event{
+		Extra:    extra,
+		Contexts: map[string]Context{"ctx": ctx},
+		Breadcrumbs: []*Breadcrumb{
+			{Message: "crumb", Data: bcData},
+		},
+		User: User{ID: "1", Data: map[string]string{"role": "admin"}},
+	}
+
+	event.MakeSerializationSafe()
+
+	start := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		<-start
+		for range 1000 {
+			_, err := json.Marshal(event)
+			if err != nil {
+				t.Errorf("marshal error: %v", err)
+				return
+			}
+		}
+	}()
+	close(start)
+	for range 1000 {
+		extra["key1"] = "mutated"
+		extra["new_key"] = "new_value"
+		delete(extra, "new_key")
+		ctx["info"] = "mutated"
+		bcData["bc_key"] = "mutated"
+		event.User.Data["role"] = "mutated"
+	}
+
+	<-done
+}
+
+func TestMakeSerializationSafe_PreventsIndexOutOfRange(t *testing.T) {
+	// Build a large Breadcrumbs slice so Marshal spends enough time
+	// iterating it to collide with the shrinking goroutine.
+	const n = 500
+	breadcrumbs := make([]*Breadcrumb, n)
+	for i := range n {
+		breadcrumbs[i] = &Breadcrumb{
+			Message: fmt.Sprintf("crumb-%d", i),
+			Data:    map[string]interface{}{"i": i},
+		}
+	}
+
+	event := &Event{
+		EventID:     "test-panic",
+		Breadcrumbs: breadcrumbs,
+		Exception: []Exception{
+			{Type: "RuntimeError", Value: "something went wrong"},
+			{Type: "ValueError", Value: "bad value"},
+		},
+	}
+
+	event.MakeSerializationSafe()
+
+	start := make(chan struct{})
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		<-start
+		for range 2000 {
+			_, err := json.Marshal(event)
+			if err != nil {
+				t.Errorf("marshal error: %v", err)
+				return
+			}
+		}
+	}()
+
+	close(start)
+	for range 2000 {
+		event.Breadcrumbs = event.Breadcrumbs[:1]
+		event.Breadcrumbs = append(event.Breadcrumbs, &Breadcrumb{Message: "extra"})
+		event.Breadcrumbs = event.Breadcrumbs[:0]
+
+		event.Exception = event.Exception[:0]
+		event.Exception = append(event.Exception, Exception{Type: "new"})
+		event.Exception = event.Exception[:1]
+	}
+
+	<-done
+}
+
+func TestProcessor_MutationAfterAdd(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	dsn := &protocol.Dsn{}
+	sdk := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
+
+	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
+		ratelimit.CategoryError: telemetry.NewRingBuffer[protocol.TelemetryItem](
+			ratelimit.CategoryError,
+			10,
+			telemetry.OverflowPolicyDropOldest,
+			1,
+			0,
+			nil,
+		),
+	}
+
+	proc := telemetry.NewProcessor(buffers, transport, dsn, sdk, nil)
+
+	extra := map[string]interface{}{
+		"request_id": "original-123",
+		"nested":     map[string]interface{}{"deep": "value"},
+	}
+	contexts := map[string]Context{
+		"app": {"version": "1.0"},
+	}
+	bcData := map[string]interface{}{"target": "button"}
+	mechData := map[string]any{"errno": float64(42)}
+
+	event := &Event{
+		EventID:  "aaaabbbbccccddddeeeeffffaaaabbbb",
+		Message:  "test event",
+		Level:    LevelError,
+		Extra:    extra,
+		Contexts: contexts,
+		Breadcrumbs: []*Breadcrumb{
+			{Message: "clicked", Data: bcData},
+		},
+		Exception: []Exception{
+			{
+				Type:  "RuntimeError",
+				Value: "oops",
+				Mechanism: &Mechanism{
+					Type: "generic",
+					Data: mechData,
+				},
+			},
+		},
+		User: User{ID: "42", Data: map[string]string{"role": "admin"}},
+	}
+
+	ok := proc.Add(event)
+	if !ok {
+		t.Fatal("Add returned false")
+	}
+
+	extra["request_id"] = "MUTATED"
+	delete(extra, "nested")
+	extra["injected"] = "should-not-appear"
+	contexts["app"]["version"] = "MUTATED"
+	bcData["target"] = "MUTATED"
+	mechData["errno"] = "MUTATED"
+	event.User.Data["role"] = "MUTATED"
+
+	proc.Close(testutils.FlushTimeout())
+	envelopes := transport.GetSentEnvelopes()
+	if len(envelopes) == 0 {
+		t.Fatal("no envelopes sent")
+	}
+
+	payload := envelopes[0].Items[0].Payload
+	var body map[string]interface{}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("invalid JSON payload: %v", err)
+	}
+
+	gotExtra, _ := body["extra"].(map[string]interface{})
+	if gotExtra["request_id"] != "original-123" {
+		t.Errorf("extra.request_id = %v, want original-123", gotExtra["request_id"])
+	}
+	if _, ok := gotExtra["injected"]; ok {
+		t.Error("injected key should not appear in serialized extra")
+	}
+	nested, _ := gotExtra["nested"].(map[string]interface{})
+	if nested["deep"] != "value" {
+		t.Errorf("extra.nested.deep = %v, want value", nested["deep"])
+	}
+	gotContexts, _ := body["contexts"].(map[string]interface{})
+	gotApp, _ := gotContexts["app"].(map[string]interface{})
+	if gotApp["version"] != "1.0" {
+		t.Errorf("contexts.app.version = %v, want 1.0", gotApp["version"])
+	}
+	gotBreadcrumbs, _ := body["breadcrumbs"].([]interface{})
+	if len(gotBreadcrumbs) > 0 {
+		bc0, _ := gotBreadcrumbs[0].(map[string]interface{})
+		bcDataGot, _ := bc0["data"].(map[string]interface{})
+		if bcDataGot["target"] != "button" {
+			t.Errorf("breadcrumb.data.target = %v, want button", bcDataGot["target"])
+		}
+	}
+	gotExceptions, _ := body["exception"].([]interface{})
+	if len(gotExceptions) > 0 {
+		exc0, _ := gotExceptions[0].(map[string]interface{})
+		mech, _ := exc0["mechanism"].(map[string]interface{})
+		mechDataGot, _ := mech["data"].(map[string]interface{})
+		if mechDataGot["errno"] != float64(42) {
+			t.Errorf("mechanism.data.errno = %v, want 42", mechDataGot["errno"])
+		}
+	}
+	gotUser, _ := body["user"].(map[string]interface{})
+	gotUserData, _ := gotUser["data"].(map[string]interface{})
+	if gotUserData["role"] != "admin" {
+		t.Errorf("user.data.role = %v, want admin", gotUserData["role"])
+	}
+	if strings.Contains(string(payload), "MUTATED") {
+		t.Errorf("mutated value leaked into serialized payload: %s", payload)
 	}
 }

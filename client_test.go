@@ -86,7 +86,7 @@ func TestCaptureMessageEmptyString(t *testing.T) {
 	}
 	got := transport.lastEvent
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 			return &Event{
 				Exception: e.Exception,
@@ -335,7 +335,7 @@ func TestCaptureEvent(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "sdkMetaData")}
+	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release"), cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser")}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
@@ -363,7 +363,7 @@ func TestCaptureEventNil(t *testing.T) {
 	}
 	got := transport.lastEvent
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 			return &Event{
 				Exception: e.Exception,
@@ -900,6 +900,37 @@ func TestSampleRate(t *testing.T) {
 		})
 	}
 }
+func TestClient_ParseOrgID(t *testing.T) {
+	c, err := NewClient(ClientOptions{
+		Dsn: "https://example@o1.ingest.us.sentry.io/1337",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, uint64(1), c.dsn.GetOrgID(), "Custom org id should override the DSN parsed one")
+}
+
+func TestClient_ParseOrgIDInvalid(t *testing.T) {
+	c, err := NewClient(ClientOptions{
+		// org id is MaxUint64 + 1, should be considered empty
+		Dsn: "https://example@o18446744073709551616.ingest.us.sentry.io/1337",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, uint64(0), c.dsn.GetOrgID(), "Custom org id should override the DSN parsed one")
+}
+
+func TestClientOptions_OrgIDShouldOverrideParsed(t *testing.T) {
+	c, err := NewClient(ClientOptions{
+		Dsn:   "https://example@o1.ingest.us.sentry.io/1337",
+		OrgID: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, uint64(2), c.dsn.GetOrgID(), "Custom org id should override the DSN parsed one")
+}
 
 func BenchmarkProcessEvent(b *testing.B) {
 	c, err := NewClient(ClientOptions{
@@ -948,7 +979,7 @@ func TestRecover(t *testing.T) {
 		}
 		got := events[0]
 		opts := cmp.Options{
-			cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+			cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 			cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 				return &Event{
 					Message:   e.Message,

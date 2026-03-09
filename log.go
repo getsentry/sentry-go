@@ -154,6 +154,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		Body:       fmt.Sprintf(message, args...),
 		Attributes: attrs,
 	}
+	log.approximateSize = computeLogSize(log)
 
 	client.captureLog(log, scope)
 	if client.options.Debug {

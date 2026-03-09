@@ -29,6 +29,7 @@ func (d dummyMetric) GetCategory() ratelimit.Category              { return rate
 func (d dummyMetric) GetEventID() string                           { return "" }
 func (d dummyMetric) GetSdkInfo() *SdkInfo                         { return nil }
 func (d dummyMetric) GetDynamicSamplingContext() map[string]string { return nil }
+func (d dummyMetric) MakeSerializationSafe()                       {}
 
 func TestMetric_ToEnvelopeItem(t *testing.T) {
 	metrics := Metrics{dummyMetric{Name: "metric1", Type: "gauge", Value: 42}, dummyMetric{Name: "metric2", Type: "count", Value: 7}}

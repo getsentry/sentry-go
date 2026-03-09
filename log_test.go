@@ -193,7 +193,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 			flushFromContext(ctx, testutils.FlushTimeout())
 
 			opts := cmp.Options{
-				cmpopts.IgnoreFields(Log{}, "Timestamp"),
+				cmpopts.IgnoreFields(Log{}, "approximateSize", "Timestamp"),
 				cmp.AllowUnexported(attribute.Value{}),
 			}
 
@@ -338,7 +338,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 			flushFromContext(ctx, testutils.FlushTimeout())
 
 			opts := cmp.Options{
-				cmpopts.IgnoreFields(Log{}, "Timestamp"),
+				cmpopts.IgnoreFields(Log{}, "approximateSize", "Timestamp"),
 				cmp.AllowUnexported(attribute.Value{}),
 			}
 
@@ -425,7 +425,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 	assertEqual(t, event.Type, logEvent.Type)
 
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Log{}, "Timestamp"),
+		cmpopts.IgnoreFields(Log{}, "approximateSize", "Timestamp"),
 		cmp.AllowUnexported(attribute.Value{}),
 	}
 	if diff := cmp.Diff(wantLogs, event.Logs, opts); diff != "" {
