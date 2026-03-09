@@ -2,18 +2,12 @@
 
 Single-module Go SDK with integration sub-modules in `github.com/getsentry/sentry-go`.
 
-## Setup
-
-- Requires **Go 1.24+** (tested on 1.24, 1.25, 1.26)
-- After cloning: `make build`
-- Never change Go version constraints in `go.mod` unless explicitly asked
-
 ## Commit Attribution
 
 AI commits MUST include:
 
 ```
-Co-Authored-By: <agent model name> <noreply@anthropic.com>
+Co-Authored-By: <agent model name> <agent-email-or-noreply@example.com>
 ```
 
 ## Before Every Commit
@@ -24,15 +18,7 @@ Co-Authored-By: <agent model name> <noreply@anthropic.com>
 
 ### Core (`/`)
 
-The root package `sentry` contains the entire public API:
-
-- `sentry.go` — `Init`, `CaptureException`, `CaptureMessage`, `Flush`
-- `client.go` — `Client`, `ClientOptions`
-- `hub.go` — `Hub` manages a stack of `Scope`/`Client` pairs; thread-safe
-- `scope.go` — `Scope` holds contextual data (tags, user, breadcrumbs, spans)
-- `tracing.go` — `Span`, `StartSpan`, `StartTransaction`; W3C Trace Context
-- `transport.go` — `Transport` interface and `HTTPTransport`/`HTTPSyncTransport`
-- `interfaces.go` — `Event`, `Breadcrumb`, `User`, `Request`, `Exception`
+The root package `sentry` contains the entire public API.
 
 ### Attribute Package (`/attribute/`)
 
@@ -44,10 +30,6 @@ attribute.Int("count", 42)
 attribute.Float64("ratio", 0.5)
 attribute.Bool("flag", true)
 ```
-
-### Internal Packages (`/internal/`)
-
-Private implementation. Do not export types from these packages.
 
 ### Integration Sub-Modules
 
@@ -61,7 +43,7 @@ When adding a new integration, mirror an existing one.
 
 ### Transport Architecture
 
-**Current: `transport.go` (active)** — `HTTPTransport` uses a batch-channel model with a single worker goroutine. `HTTPSyncTransport` is the blocking variant for serverless.
+**Current: `transport.go` (active)** — `HTTPTransport` is the default implementation of an async transport. `HTTPSyncTransport` is the blocking variant for serverless.
 
 **Next: `internal/telemetry/` + `internal/http/` (not yet enabled)** — Processor/buffer/scheduler architecture. Wired up in `client.go` (`setupTelemetryProcessor`) but **commented out** behind `DisableTelemetryBuffer`. Key parts:
 
@@ -77,7 +59,7 @@ The `internalAsyncTransportAdapter` in `transport.go` bridges old `Transport` to
 ## Coding Standards
 
 - Follow existing conventions — check neighboring files first
-- Do not add new dependencies without asking
+- Maintain existing Go versions and dependencies unless explicitly asked to change them
 - `gofmt -s` formatting, doc comments on exports
 - Public API in root package; internals in `/internal`
 - Thread safety required — guard shared state with mutexes
@@ -85,11 +67,9 @@ The `internalAsyncTransportAdapter` in `transport.go` bridges old `Transport` to
 
 ## Testing
 
-**Prefer tests that exercise real user-facing behavior over isolated unit tests.** Call the same APIs users call — `sentry.Init`, `CaptureException`, `Flush`, framework middleware — rather than mocking internal components.
-
 Test tier preference (use the highest tier that covers what you need):
 
-1. **Integration tests** — `sentry.Init` with `BeforeSend` callbacks, `httptest.Server` with real framework routers, `sentry.Flush` to collect events. This is the default for any new test.
+1. **Integration tests** (default) — `sentry.Init` with `BeforeSend` callbacks, `httptest.Server` with real framework routers, `sentry.Flush` to collect events. Prefer tests that use the public API.
 2. **Context-level tests** — `NewTestContext` with `MockTransport` for span/transaction behavior when no HTTP server is needed.
 3. **Unit tests** (sparingly) — Direct `NewClient` + `MockScope` only for self-contained logic like `BeforeSend` callbacks or sampling decisions.
 
