@@ -87,6 +87,26 @@ func (ssm *SentrySpanMap) MarkFinished(spanID otelTrace.SpanID, traceID otelTrac
 	}
 }
 
+// GetDSC looks up the transaction for the given trace and returns a frozen DSC.
+func (ssm *SentrySpanMap) GetDSC(traceID otelTrace.TraceID, spanID otelTrace.SpanID) (sentry.DynamicSamplingContext, bool) {
+	span, ok := ssm.Get(traceID, spanID)
+	if !ok {
+		return sentry.DynamicSamplingContext{}, false
+	}
+	txn := span.GetTransaction()
+	if txn == nil {
+		return sentry.DynamicSamplingContext{}, false
+	}
+	dsc := sentry.DynamicSamplingContextFromTransaction(txn)
+	if !dsc.HasEntries() {
+		return sentry.DynamicSamplingContext{}, false
+	}
+	// DynamicSamplingContextFromTransaction returns a frozen dsc, we need to separately
+	// freeze it for the transaction itself.
+	txn.SetDynamicSamplingContext(dsc)
+	return dsc, true
+}
+
 // Clear removes all spans stored on the map.
 func (ssm *SentrySpanMap) Clear() {
 	ssm.transactions.Clear()

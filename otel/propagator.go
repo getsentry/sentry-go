@@ -2,17 +2,50 @@ package sentryotel
 
 import (
 	"context"
+	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/otel/baggage"
+	"github.com/getsentry/sentry-go/otel/internal/common"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
-type sentryPropagator struct{}
+const sentryPrefix = "sentry-"
 
-func NewSentryPropagator() propagation.TextMapPropagator {
-	return &sentryPropagator{}
+// Option applies configuration to the propagator.
+type Option func(*sentryPropagator)
+
+// WithDSCSource configures the propagator to look up the DSC from the given source.
+// This is used for configuring the propagator to work with either OTLP or the span processor.
+//
+// The propagator fallbacks to a noop implementation if not provided.
+func WithDSCSource(src common.DSCSource) Option {
+	return func(p *sentryPropagator) {
+		p.dscSource = src
+	}
+}
+
+type sentryPropagator struct {
+	dscSource common.DSCSource
+}
+
+// NewSentryPropagator creates a new Sentry propagator.
+//
+// Without options, it behaves as a lightweight propagator suitable for OTLP:
+// it generates sentry-trace from the OTel SpanContext and only forwards
+// baggage that was received from upstream (Extract).
+//
+// With WithDSCSource, it also emits baggage at the trace origin by looking up
+// DSC from the provided source (e.g. the bridge span map).
+func NewSentryPropagator(opts ...Option) propagation.TextMapPropagator {
+	p := &sentryPropagator{dscSource: &sentrySpanMap}
+	for _, o := range opts {
+		o(p)
+	}
+	return p
 }
 
 // Inject sets Sentry-related values from the Context into the carrier.
@@ -20,52 +53,39 @@ func NewSentryPropagator() propagation.TextMapPropagator {
 // https://opentelemetry.io/docs/reference/specification/context/api-propagators/#inject
 func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMapCarrier) {
 	spanContext := trace.SpanContextFromContext(ctx)
-
-	var sentrySpan *sentry.Span
-
-	if spanContext.IsValid() {
-		sentrySpan, _ = sentrySpanMap.Get(spanContext.TraceID(), spanContext.SpanID())
-	} else {
-		sentrySpan = nil
-	}
-
-	// Propagate sentry-trace header
-	if sentrySpan == nil {
-		// No span => propagate the incoming sentry-trace header, if exists
-		sentryTraceHeader, _ := ctx.Value(sentryTraceHeaderContextKey{}).(string)
-		if sentryTraceHeader != "" {
-			carrier.Set(sentry.SentryTraceHeader, sentryTraceHeader)
+	sampled := spanContext.IsSampled()
+	if !spanContext.IsValid() {
+		if h := common.TraceHeaderFromContext(ctx); h != "" {
+			carrier.Set(sentry.SentryTraceHeader, h)
 		}
-	} else {
-		// Sentry span exists => generate "sentry-trace" from it
-		carrier.Set(sentry.SentryTraceHeader, sentrySpan.ToSentryTrace())
-	}
-
-	// Propagate baggage header
-	sentryBaggageStr := ""
-	if sentrySpan != nil {
-		sentryBaggageStr = sentrySpan.GetTransaction().ToBaggage()
-	}
-	// FIXME(anton): We're basically reparsing the header again, because in sentry-go
-	// we currently don't expose a method to get only DSC or its baggage (only a string).
-	// This is not optimal and we should consider other approaches.
-	sentryBaggage, _ := baggage.Parse(sentryBaggageStr)
-
-	// Merge the baggage values
-	finalBaggage, baggageOk := ctx.Value(baggageContextKey{}).(baggage.Baggage)
-	if !baggageOk {
-		finalBaggage = baggage.Baggage{}
-	}
-	for _, member := range sentryBaggage.Members() {
-		var err error
-		finalBaggage, err = finalBaggage.SetMember(member)
-		if err != nil {
-			continue
+		if b := common.BaggageFromContext(ctx); b.Len() > 0 {
+			carrier.Set(sentry.SentryBaggageHeader, b.String())
 		}
+		return
 	}
 
-	if finalBaggage.Len() > 0 {
-		carrier.Set(sentry.SentryBaggageHeader, finalBaggage.String())
+	// dscSource should have priority here. It is used for specifying a more "complete" DSC to get.
+	// when using the otel span processor, the DSC originates from the span map and includes span specific info.
+	// Then the priority should be:
+	// 1. span map (more specific)
+	// 2. upstream propagation for otlp
+	// 3. no trace to propagate - skip baggage
+	dsc, _ := p.dscSource.GetDSC(spanContext.TraceID(), spanContext.SpanID())
+	if !dsc.HasEntries() {
+		dsc = common.DynamicSamplingContextFromContext(ctx)
+	}
+	// try and ovewrite the sampling decision from the dsc before setting the trace
+	if s, err := strconv.ParseBool(dsc.Entries["sampled"]); err == nil {
+		sampled = s
+	}
+	carrier.Set(sentry.SentryTraceHeader, formatSentryTrace(spanContext.TraceID(), spanContext.SpanID(), sampled))
+
+	if !dsc.HasEntries() {
+		return
+	}
+	b := mergeDSCToBaggage(dsc, common.BaggageFromContext(ctx))
+	if b.Len() > 0 {
+		carrier.Set(sentry.SentryBaggageHeader, b.String())
 	}
 }
 
@@ -74,13 +94,12 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 // https://opentelemetry.io/docs/reference/specification/context/api-propagators/#extract
 func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextMapCarrier) context.Context {
 	sentryTraceHeader := carrier.Get(sentry.SentryTraceHeader)
-
 	if sentryTraceHeader != "" {
-		ctx = context.WithValue(ctx, sentryTraceHeaderContextKey{}, sentryTraceHeader)
+		ctx = common.WithSentryTraceHeader(ctx, sentryTraceHeader)
 		if traceParentContext, valid := sentry.ParseTraceParentContext([]byte(sentryTraceHeader)); valid {
 			// Save traceParentContext because we'll at least need to know the original "sampled"
 			// value in the span processor.
-			ctx = context.WithValue(ctx, sentryTraceParentContextKey{}, traceParentContext)
+			ctx = common.WithTraceParentContext(ctx, traceParentContext)
 
 			spanContextConfig := trace.SpanContextConfig{
 				TraceID:    trace.TraceID(traceParentContext.TraceID),
@@ -97,7 +116,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 		// Preserve the original baggage
 		parsedBaggage, err := baggage.Parse(baggageHeader)
 		if err == nil {
-			ctx = context.WithValue(ctx, baggageContextKey{}, parsedBaggage)
+			ctx = common.WithBaggage(ctx, parsedBaggage)
 		}
 	}
 
@@ -112,8 +131,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 		dynamicSamplingContext = sentry.DynamicSamplingContext{Frozen: false}
 	}
 
-	ctx = context.WithValue(ctx, dynamicSamplingContextKey{}, dynamicSamplingContext)
-	return ctx
+	return common.WithDynamicSamplingContext(ctx, dynamicSamplingContext)
 }
 
 // Fields returns a list of fields that will be used by the propagator.
@@ -121,4 +139,28 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 // https://opentelemetry.io/docs/reference/specification/context/api-propagators/#fields
 func (p sentryPropagator) Fields() []string {
 	return []string{sentry.SentryTraceHeader, sentry.SentryBaggageHeader}
+}
+
+func mergeDSCToBaggage(dsc sentry.DynamicSamplingContext, base baggage.Baggage) baggage.Baggage {
+	for k, v := range dsc.Entries {
+		member, err := baggage.NewMember(sentryPrefix+k, v)
+		if err != nil {
+			continue
+		}
+		if updated, err := base.SetMember(member); err == nil {
+			base = updated
+		}
+	}
+	return base
+}
+
+func formatSentryTrace(trace trace.TraceID, span trace.SpanID, sampled bool) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s-%s", trace, span)
+	if sampled {
+		b.WriteString("-1")
+	} else {
+		b.WriteString("-0")
+	}
+	return b.String()
 }

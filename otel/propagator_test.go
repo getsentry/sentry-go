@@ -6,6 +6,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/otel/baggage"
+	"github.com/getsentry/sentry-go/otel/internal/common"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -89,11 +90,7 @@ func TestInjectDoesNothingOnEmptyContext(t *testing.T) {
 
 func TestInjectUsesSentryTraceOnEmptySpan(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
-	ctx := context.WithValue(
-		context.Background(),
-		sentryTraceHeaderContextKey{},
-		"d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1",
-	)
+	ctx := common.WithSentryTraceHeader(context.Background(), "d4cda95b652f4a1592b449d5929fda1b-6e0c63257de34c92-1")
 
 	propagator.Inject(ctx, carrier)
 
@@ -106,7 +103,7 @@ func TestInjectUsesSentryTraceOnEmptySpan(t *testing.T) {
 func TestInjectUsesBaggageOnEmptySpan(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
 	bag, _ := baggage.Parse("key1=value1;value2, key2=value2")
-	ctx := context.WithValue(context.Background(), baggageContextKey{}, bag)
+	ctx := common.WithBaggage(context.Background(), bag)
 
 	propagator.Inject(ctx, carrier)
 
@@ -207,7 +204,7 @@ func TestExtractDoesNotChangeContextWithEmptyHeaders(t *testing.T) {
 	ctx := propagator.Extract(context.Background(), carrier)
 
 	assertEqual(t,
-		ctx.Value(dynamicSamplingContextKey{}),
+		common.DynamicSamplingContextFromContext(ctx),
 		sentry.DynamicSamplingContext{Entries: map[string]string{}, Frozen: false},
 	)
 }
@@ -220,7 +217,7 @@ func TestExtractSetsUndefinedDynamicSamplingContext(t *testing.T) {
 	ctx := propagator.Extract(context.Background(), carrier)
 
 	assertEqual(t,
-		ctx.Value(dynamicSamplingContextKey{}),
+		common.DynamicSamplingContextFromContext(ctx),
 		sentry.DynamicSamplingContext{Entries: map[string]string{}, Frozen: false},
 	)
 }
@@ -277,7 +274,7 @@ func TestExtractSetsDefinedDynamicSamplingContext(t *testing.T) {
 	ctx := propagator.Extract(context.Background(), carrier)
 
 	assertEqual(t,
-		ctx.Value(dynamicSamplingContextKey{}),
+		common.DynamicSamplingContextFromContext(ctx),
 		sentry.DynamicSamplingContext{
 			Entries: map[string]string{
 				"environment": "production",

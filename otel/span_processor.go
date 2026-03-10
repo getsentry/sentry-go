@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/otel/internal/common"
 	"github.com/getsentry/sentry-go/otel/internal/utils"
 	"go.opentelemetry.io/otel/attribute"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
@@ -51,7 +52,7 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 	transaction.TraceID = sentry.TraceID(otelTraceID)
 	transaction.ParentSpanID = sentry.SpanID(otelParentSpanID)
 	transaction.StartTime = s.StartTime()
-	if dsc, valid := parent.Value(dynamicSamplingContextKey{}).(sentry.DynamicSamplingContext); valid {
+	if dsc := common.DynamicSamplingContextFromContext(parent); dsc.HasEntries() {
 		transaction.SetDynamicSamplingContext(dsc)
 	}
 	sentrySpanMap.Set(otelSpanID, transaction, otelTraceID)
@@ -107,11 +108,7 @@ func flushSpanProcessor(ctx context.Context) error {
 }
 
 func getTraceParentContext(ctx context.Context) sentry.TraceParentContext {
-	traceParentContext, ok := ctx.Value(sentryTraceParentContextKey{}).(sentry.TraceParentContext)
-	if !ok {
-		traceParentContext.Sampled = sentry.SampledUndefined
-	}
-	return traceParentContext
+	return common.TraceParentContextFromContext(ctx)
 }
 
 func updateTransactionWithOtelData(transaction *sentry.Span, s otelSdkTrace.ReadOnlySpan) {

@@ -310,8 +310,6 @@ func (s *Span) GetTransaction() *Span {
 // Use this function to propagate the TraceParentContext to a downstream SDK,
 // either as the value of the "sentry-trace" HTTP header, or as an html "sentry-trace" meta tag.
 func (s *Span) ToSentryTrace() string {
-	// TODO(tracing): add instrumentation for outgoing HTTP requests using
-	// ToSentryTrace.
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s-%s", s.TraceID.Hex(), s.SpanID.Hex())
 	switch s.Sampled {
