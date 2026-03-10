@@ -1,4 +1,4 @@
-package sentryotel
+package common
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/otel/baggage"
-	"github.com/getsentry/sentry-go/otel/internal/common"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -22,14 +21,14 @@ type Option func(*sentryPropagator)
 // This is used for configuring the propagator to work with either OTLP or the span processor.
 //
 // The propagator fallbacks to a noop implementation if not provided.
-func WithDSCSource(src common.DSCSource) Option {
+func WithDSCSource(src DSCSource) Option {
 	return func(p *sentryPropagator) {
 		p.dscSource = src
 	}
 }
 
 type sentryPropagator struct {
-	dscSource common.DSCSource
+	dscSource DSCSource
 }
 
 // NewSentryPropagator creates a new Sentry propagator.
@@ -41,7 +40,7 @@ type sentryPropagator struct {
 // With WithDSCSource, it also emits baggage at the trace origin by looking up
 // DSC from the provided source (e.g. the bridge span map).
 func NewSentryPropagator(opts ...Option) propagation.TextMapPropagator {
-	p := &sentryPropagator{dscSource: &sentrySpanMap}
+	p := &sentryPropagator{dscSource: &noopDSCSource{}}
 	for _, o := range opts {
 		o(p)
 	}
@@ -55,10 +54,10 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	spanContext := trace.SpanContextFromContext(ctx)
 	sampled := spanContext.IsSampled()
 	if !spanContext.IsValid() {
-		if h := common.TraceHeaderFromContext(ctx); h != "" {
+		if h := TraceHeaderFromContext(ctx); h != "" {
 			carrier.Set(sentry.SentryTraceHeader, h)
 		}
-		if b := common.BaggageFromContext(ctx); b.Len() > 0 {
+		if b := BaggageFromContext(ctx); b.Len() > 0 {
 			carrier.Set(sentry.SentryBaggageHeader, b.String())
 		}
 		return
@@ -72,7 +71,7 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	// 3. no trace to propagate - skip baggage
 	dsc, _ := p.dscSource.GetDSC(spanContext.TraceID(), spanContext.SpanID())
 	if !dsc.HasEntries() {
-		dsc = common.DynamicSamplingContextFromContext(ctx)
+		dsc = DynamicSamplingContextFromContext(ctx)
 	}
 	// try and ovewrite the sampling decision from the dsc before setting the trace
 	if s, err := strconv.ParseBool(dsc.Entries["sampled"]); err == nil {
@@ -83,7 +82,7 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 	if !dsc.HasEntries() {
 		return
 	}
-	b := mergeDSCToBaggage(dsc, common.BaggageFromContext(ctx))
+	b := mergeDSCToBaggage(dsc, BaggageFromContext(ctx))
 	if b.Len() > 0 {
 		carrier.Set(sentry.SentryBaggageHeader, b.String())
 	}
@@ -95,11 +94,11 @@ func (p sentryPropagator) Inject(ctx context.Context, carrier propagation.TextMa
 func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextMapCarrier) context.Context {
 	sentryTraceHeader := carrier.Get(sentry.SentryTraceHeader)
 	if sentryTraceHeader != "" {
-		ctx = common.WithSentryTraceHeader(ctx, sentryTraceHeader)
+		ctx = WithSentryTraceHeader(ctx, sentryTraceHeader)
 		if traceParentContext, valid := sentry.ParseTraceParentContext([]byte(sentryTraceHeader)); valid {
 			// Save traceParentContext because we'll at least need to know the original "sampled"
 			// value in the span processor.
-			ctx = common.WithTraceParentContext(ctx, traceParentContext)
+			ctx = WithTraceParentContext(ctx, traceParentContext)
 
 			spanContextConfig := trace.SpanContextConfig{
 				TraceID:    trace.TraceID(traceParentContext.TraceID),
@@ -116,7 +115,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 		// Preserve the original baggage
 		parsedBaggage, err := baggage.Parse(baggageHeader)
 		if err == nil {
-			ctx = common.WithBaggage(ctx, parsedBaggage)
+			ctx = WithBaggage(ctx, parsedBaggage)
 		}
 	}
 
@@ -131,7 +130,7 @@ func (p sentryPropagator) Extract(ctx context.Context, carrier propagation.TextM
 		dynamicSamplingContext = sentry.DynamicSamplingContext{Frozen: false}
 	}
 
-	return common.WithDynamicSamplingContext(ctx, dynamicSamplingContext)
+	return WithDynamicSamplingContext(ctx, dynamicSamplingContext)
 }
 
 // Fields returns a list of fields that will be used by the propagator.
