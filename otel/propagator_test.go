@@ -59,7 +59,7 @@ func createTransactionAndMaybeSpan(transactionContext transactionTestContext, wi
 func TestNewSentryPropagator(t *testing.T) {
 	propagator := NewSentryPropagator()
 
-	if _, valid := propagator.(*sentryPropagator); !valid {
+	if _, valid := propagator.(propagation.TextMapPropagator); !valid {
 		t.Errorf(
 			"Invalid type returned by the propagator constructor: %#v\n",
 			propagator,
