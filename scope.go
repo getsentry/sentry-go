@@ -223,6 +223,13 @@ func (scope *Scope) SetAttributes(attrs ...attribute.Builder) {
 	}
 }
 
+// RemoveAttribute removes an attribute from the current scope.
+func (scope *Scope) RemoveAttribute(key string) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+	delete(scope.attributes, key)
+}
+
 // SetTag adds a tag to the current scope.
 func (scope *Scope) SetTag(key, value string) {
 	scope.mu.Lock()
@@ -276,6 +283,8 @@ func (scope *Scope) RemoveContext(key string) {
 }
 
 // SetExtra adds an extra to the current scope.
+//
+// Deprecated: Use [Scope.SetAttributes] instead.
 func (scope *Scope) SetExtra(key string, value interface{}) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
@@ -284,6 +293,8 @@ func (scope *Scope) SetExtra(key string, value interface{}) {
 }
 
 // SetExtras assigns multiple extras to the current scope.
+//
+// Deprecated: Use [Scope.SetAttributes] instead.
 func (scope *Scope) SetExtras(extra map[string]interface{}) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
@@ -294,6 +305,8 @@ func (scope *Scope) SetExtras(extra map[string]interface{}) {
 }
 
 // RemoveExtra removes a extra from the current scope.
+//
+// Deprecated: Use [Scope.RemoveAttribute] instead.
 func (scope *Scope) RemoveExtra(key string) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()

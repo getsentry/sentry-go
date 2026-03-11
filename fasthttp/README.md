@@ -94,7 +94,7 @@ sentryHandler := sentryfasthttp.New(sentryfasthttp.Options{
 defaultHandler := func(ctx *fasthttp.RequestCtx) {
 	if hub := sentryfasthttp.GetHubFromContext(ctx); hub != nil {
 		hub.WithScope(func(scope *sentry.Scope) {
-			scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
+			scope.SetAttributes(attribute.String("unwantedQuery", "someQueryDataMaybe"))
 			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 		})
 	}

@@ -149,6 +149,30 @@ func TestScope_SetAttributes(t *testing.T) {
 	}, scope.attributes)
 }
 
+func TestScopeRemoveAttributeOnEmptyScope(t *testing.T) {
+	scope := NewScope()
+	scope.RemoveAttribute("key.nonexistent")
+
+	assertEqual(t, make(map[string]attribute.Value), scope.attributes)
+}
+
+func TestScopeRemoveAttributeNotInPopulateAttrs(t *testing.T) {
+	scope := NewScope()
+	scope.SetAttributes(
+		attribute.String("key.one", "val1"),
+		attribute.String("key.two", "val2"),
+	)
+	scope.RemoveAttribute("key.two")
+
+	attrs := make(map[string]attribute.Value)
+	scope.populateAttrs(attrs)
+
+	if _, ok := attrs["key.two"]; ok {
+		t.Error("removed attribute should not appear in populateAttrs output")
+	}
+	assertEqual(t, attribute.StringValue("val1"), attrs["key.one"])
+}
+
 func TestScopeRemoveTag(t *testing.T) {
 	scope := NewScope()
 	scope.SetTag("a", "foo")

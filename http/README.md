@@ -81,7 +81,7 @@ type handler struct{}
 func (h *handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if hub := sentry.GetHubFromContext(r.Context()); hub != nil {
 		hub.WithScope(func(scope *sentry.Scope) {
-			scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
+			scope.SetAttributes(attribute.String("unwantedQuery", "someQueryDataMaybe"))
 			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 		})
 	}

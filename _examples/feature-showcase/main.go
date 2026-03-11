@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 )
 
 func prettyPrint(v interface{}) string {
@@ -47,7 +48,7 @@ func captureMessage() {
 
 func configureScope() {
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetExtra("oristhis", "justfantasy")
+		scope.SetAttributes(attribute.String("oristhis", "justfantasy"))
 		scope.SetTag("isthis", "reallife")
 		scope.SetLevel(sentry.LevelFatal)
 		scope.SetUser(sentry.User{
@@ -80,10 +81,10 @@ func addBreadcrumbs() {
 func withScopeAndConfigureScope() {
 	sentry.WithScope(func(scope *sentry.Scope) {
 		sentry.ConfigureScope(func(scope *sentry.Scope) {
-			scope.SetExtras(map[string]interface{}{
-				"istillcant": 42,
-				"believe":    "that",
-			})
+			scope.SetAttributes(
+				attribute.Int("istillcant", 42),
+				attribute.String("believe", "that"),
+			)
 			scope.SetTags(map[string]string{
 				"italready": "works",
 				"just":      "likethat",

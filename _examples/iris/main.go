@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/attribute"
 	sentryiris "github.com/getsentry/sentry-go/iris"
 	"github.com/kataras/iris/v12"
 )
@@ -43,7 +44,7 @@ func main() {
 	app.Get("/", func(ctx iris.Context) {
 		if hub := sentryiris.GetHubFromContext(ctx); hub != nil {
 			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
+				scope.SetAttributes(attribute.String("unwantedQuery", "someQueryDataMaybe"))
 				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 			})
 		}
