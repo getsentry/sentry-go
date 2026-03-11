@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/attribute"
 	sentryecho "github.com/getsentry/sentry-go/echo"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -50,7 +49,7 @@ func main() {
 	app.GET("/", func(ctx echo.Context) error {
 		if hub := sentryecho.GetHubFromContext(ctx); hub != nil {
 			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetAttributes(attribute.String("unwantedQuery", "someQueryDataMaybe"))
+				scope.SetTag("unwantedQuery", "someQueryDataMaybe")
 				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 			})
 		}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/attribute"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/utils"
@@ -51,7 +50,7 @@ func main() {
 	app.All("/", func(ctx *fiber.Ctx) error {
 		if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
 			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetAttributes(attribute.String("unwantedQuery", "someQueryDataMaybe"))
+				scope.SetTag("unwantedQuery", "someQueryDataMaybe")
 				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 			})
 		}

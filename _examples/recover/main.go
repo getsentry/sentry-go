@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/attribute"
 )
 
 func prettyPrint(v interface{}) string {
@@ -51,7 +50,7 @@ func main() {
 	})
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetAttributes(attribute.String("oristhis", "justfantasy"))
+		scope.SetTag("oristhis", "justfantasy")
 		scope.SetTag("isthis", "reallife")
 		scope.SetLevel(sentry.LevelFatal)
 		scope.SetUser(sentry.User{

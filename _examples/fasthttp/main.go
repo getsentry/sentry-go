@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/attribute"
 	sentryfasthttp "github.com/getsentry/sentry-go/fasthttp"
 	"github.com/valyala/fasthttp"
 )
@@ -59,7 +58,7 @@ func main() {
 	defaultHandler := func(ctx *fasthttp.RequestCtx) {
 		if hub := sentryfasthttp.GetHubFromContext(ctx); hub != nil {
 			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetAttributes(attribute.String("unwantedQuery", "someQueryDataMaybe"))
+				scope.SetTag("unwantedQuery", "someQueryDataMaybe")
 				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 			})
 		}

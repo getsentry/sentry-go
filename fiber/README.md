@@ -99,7 +99,7 @@ app.All("/foo", enhanceSentryEvent, func(ctx *fiber.Ctx) {
 app.All("/", func(ctx *fiber.Ctx) {
     if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
         hub.WithScope(func(scope *sentry.Scope) {
-            scope.SetAttributes(attribute.String("unwantedQuery", "someQueryDataMaybe"))
+            scope.SetTag("unwantedQuery", "someQueryDataMaybe")
             hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
         })
     }
