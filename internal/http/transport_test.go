@@ -192,7 +192,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 
 	t.Run("queue overflow", func(t *testing.T) {
 		blockChan := make(chan struct{})
-		requestReceived := make(chan struct{})
+		requestReceived := make(chan struct{}, 1)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			select {
 			case requestReceived <- struct{}{}:
