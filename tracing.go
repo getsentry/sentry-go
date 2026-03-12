@@ -476,17 +476,6 @@ func (s *Span) updateFromSentryTrace(header []byte) (updated bool) {
 	return true
 }
 
-func (s *Span) updateFromBaggage(header []byte) {
-	if s.IsTransaction() {
-		dsc, err := DynamicSamplingContextFromHeader(header)
-		if err != nil {
-			return
-		}
-
-		s.dynamicSamplingContext = dsc
-	}
-}
-
 func (s *Span) clientOptions() *ClientOptions {
 	client := hubFromContext(s.ctx).Client()
 	if client != nil {

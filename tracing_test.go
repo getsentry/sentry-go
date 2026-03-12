@@ -1290,12 +1290,12 @@ func TestSpanScopeManagement(t *testing.T) {
 
 func TestShouldContinueTrace(t *testing.T) {
 	tests := []struct {
-		name           string
-		dsn            string
-		orgID          string // explicit OrgID option
-		strict         bool
-		incomingOrgID  string
-		wantContinue   bool
+		name          string
+		dsn           string
+		orgID         string // explicit OrgID option
+		strict        bool
+		incomingOrgID string
+		wantContinue  bool
 	}{
 		// strict=false cases
 		{"BothMatch_NotStrict", "https://key@o123.ingest.sentry.io/1", "", false, "123", true},
@@ -1353,11 +1353,11 @@ func TestContinueFromHeaders_OrgIDMismatch(t *testing.T) {
 	incomingTraceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
 
 	tests := []struct {
-		name          string
-		dsn           string
-		strict        bool
-		baggageOrgID  string
-		wantContinue  bool
+		name         string
+		dsn          string
+		strict       bool
+		baggageOrgID string
+		wantContinue bool
 	}{
 		{"Match_Continue", "https://key@o123.ingest.sentry.io/1", false, "123", true},
 		{"Mismatch_NewTrace", "https://key@o123.ingest.sentry.io/1", false, "456", false},
