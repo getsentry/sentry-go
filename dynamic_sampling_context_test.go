@@ -147,6 +147,62 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 	}
 }
 
+func TestDynamicSamplingContextFromTransaction_OrgID(t *testing.T) {
+	tests := []struct {
+		name    string
+		dsn     string
+		orgID   string // explicit OrgID option
+		wantOrg string
+	}{
+		{"OrgFromDSN", "https://public@o456.ingest.sentry.io/1", "", "456"},
+		{"ExplicitOrgID", "https://public@o456.ingest.sentry.io/1", "999", "999"},
+		{"NoOrg", "https://public@sentry.example.com/1", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := NewTestContext(ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 1.0,
+				Dsn:              tt.dsn,
+				OrgID:            tt.orgID,
+			})
+			txn := StartTransaction(ctx, "test")
+			dsc := DynamicSamplingContextFromTransaction(txn)
+
+			gotOrg := dsc.Entries["org_id"]
+			if gotOrg != tt.wantOrg {
+				t.Errorf("expected org_id %q, got %q", tt.wantOrg, gotOrg)
+			}
+		})
+	}
+}
+
+func TestDynamicSamplingContextFromScope_OrgID(t *testing.T) {
+	dsn, _ := NewDsn("https://public@o789.ingest.sentry.io/1")
+	client := &Client{
+		options: ClientOptions{
+			Dsn: dsn.String(),
+		},
+		dsn: dsn,
+	}
+	scope := &Scope{
+		propagationContext: NewPropagationContext(),
+	}
+
+	dsc := DynamicSamplingContextFromScope(scope, client)
+	if dsc.Entries["org_id"] != "789" {
+		t.Errorf("expected org_id 789, got %q", dsc.Entries["org_id"])
+	}
+
+	// Test explicit OrgID override
+	client.options.OrgID = "111"
+	dsc = DynamicSamplingContextFromScope(scope, client)
+	if dsc.Entries["org_id"] != "111" {
+		t.Errorf("expected org_id 111, got %q", dsc.Entries["org_id"])
+	}
+}
+
 func TestHasEntries(t *testing.T) {
 	var dsc DynamicSamplingContext
 

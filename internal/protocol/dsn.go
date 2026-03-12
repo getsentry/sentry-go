@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +41,9 @@ func (e DsnParseError) Error() string {
 	return "[Sentry] DsnParseError: " + e.Message
 }
 
+// orgIDPattern matches DSN hosts like "o123.ingest.sentry.io" and extracts "123".
+var orgIDPattern = regexp.MustCompile(`^o(\d+)\.`)
+
 // Dsn is used as the remote address source to client transport.
 type Dsn struct {
 	scheme    scheme
@@ -49,6 +53,7 @@ type Dsn struct {
 	port      int
 	path      string
 	projectID string
+	orgID     string
 }
 
 // NewDsn creates a Dsn by parsing rawURL. Most users will never call this
@@ -118,6 +123,12 @@ func NewDsn(rawURL string) (*Dsn, error) {
 		path = "/" + strings.Join(pathSegments[0:len(pathSegments)-1], "/")
 	}
 
+	// Extract org ID from host (e.g., "o123.ingest.sentry.io" -> "123")
+	var orgID string
+	if m := orgIDPattern.FindStringSubmatch(host); m != nil {
+		orgID = m[1]
+	}
+
 	return &Dsn{
 		scheme:    scheme,
 		publicKey: publicKey,
@@ -126,6 +137,7 @@ func NewDsn(rawURL string) (*Dsn, error) {
 		port:      port,
 		path:      path,
 		projectID: projectID,
+		orgID:     orgID,
 	}, nil
 }
 
@@ -180,6 +192,13 @@ func (dsn Dsn) GetPath() string {
 // Get the project ID of the DSN.
 func (dsn Dsn) GetProjectID() string {
 	return dsn.projectID
+}
+
+// GetOrgID returns the organization ID extracted from the DSN host.
+// For example, a host like "o123.ingest.sentry.io" yields "123".
+// Returns an empty string if the org ID cannot be determined.
+func (dsn Dsn) GetOrgID() string {
+	return dsn.orgID
 }
 
 // GetAPIURL returns the URL of the envelope endpoint of the project

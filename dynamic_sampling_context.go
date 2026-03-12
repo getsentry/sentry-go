@@ -64,6 +64,9 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 			entries["public_key"] = publicKey
 		}
 	}
+	if orgID := client.orgID(); orgID != "" {
+		entries["org_id"] = orgID
+	}
 	if release := client.options.Release; release != "" {
 		entries["release"] = release
 	}
@@ -139,6 +142,9 @@ func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSampli
 		if publicKey := dsn.GetPublicKey(); publicKey != "" {
 			entries["public_key"] = publicKey
 		}
+	}
+	if orgID := client.orgID(); orgID != "" {
+		entries["org_id"] = orgID
 	}
 	if release := client.options.Release; release != "" {
 		entries["release"] = release

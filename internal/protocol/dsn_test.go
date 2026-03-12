@@ -326,3 +326,28 @@ func TestGetProjectID(t *testing.T) {
 		}
 	}
 }
+
+func TestGetOrgID(t *testing.T) {
+	tests := []struct {
+		name string
+		dsn  string
+		want string
+	}{
+		{"SentryHosted", "https://public@o123.ingest.sentry.io/42", "123"},
+		{"SentryHostedLargeOrgID", "https://public@o9876543.ingest.us.sentry.io/42", "9876543"},
+		{"NoOrgID", "https://public@sentry.example.com/42", ""},
+		{"SelfHosted", "https://public@my-sentry.company.com/42", ""},
+		{"EmptyOrgIDPrefix", "https://public@o.ingest.sentry.io/42", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dsn, err := NewDsn(tt.dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if dsn.GetOrgID() != tt.want {
+				t.Errorf("Expected org ID %q, got %q", tt.want, dsn.GetOrgID())
+			}
+		})
+	}
+}

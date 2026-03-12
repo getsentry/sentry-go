@@ -268,6 +268,15 @@ type ClientOptions struct {
 	TraceIgnoreStatusCodes [][]int
 	// DisableTelemetryBuffer disables the telemetry buffer layer for prioritizing events and uses the old transport layer.
 	DisableTelemetryBuffer bool
+	// OrgID is an optional organization ID. The SDK will try to extract it from the DSN in most cases
+	// but you can provide it explicitly for self-hosted and Relay setups. This value is used for
+	// trace propagation and for features like StrictTraceContinuation.
+	OrgID string
+	// StrictTraceContinuation controls whether the SDK only continues traces where the org_id in
+	// the incoming baggage header matches the SDK's own org_id. When false (default), traces are
+	// only rejected when both org IDs are present and differ. When true, traces are also rejected
+	// if either org ID is missing.
+	StrictTraceContinuation bool
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -515,6 +524,18 @@ func (client *Client) setupIntegrations() {
 // event processor to the client affects all hubs that share the client.
 func (client *Client) AddEventProcessor(processor EventProcessor) {
 	client.eventProcessors = append(client.eventProcessors, processor)
+}
+
+// orgID returns the organization ID for this client. If OrgID is set in options,
+// it takes precedence over the value extracted from the DSN.
+func (client *Client) orgID() string {
+	if client.options.OrgID != "" {
+		return client.options.OrgID
+	}
+	if client.dsn != nil {
+		return client.dsn.GetOrgID()
+	}
+	return ""
 }
 
 // Options return ClientOptions for the current Client.

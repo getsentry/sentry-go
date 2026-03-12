@@ -1287,3 +1287,110 @@ func TestSpanScopeManagement(t *testing.T) {
 		t.Errorf("expected SpanID %s, got %s", transaction.SpanID, spanID)
 	}
 }
+
+func TestShouldContinueTrace(t *testing.T) {
+	tests := []struct {
+		name           string
+		dsn            string
+		orgID          string // explicit OrgID option
+		strict         bool
+		incomingOrgID  string
+		wantContinue   bool
+	}{
+		// strict=false cases
+		{"BothMatch_NotStrict", "https://key@o123.ingest.sentry.io/1", "", false, "123", true},
+		{"NoBaggage_NotStrict", "https://key@o123.ingest.sentry.io/1", "", false, "", true},
+		{"NoSDK_NotStrict", "https://key@sentry.example.com/1", "", false, "123", true},
+		{"BothEmpty_NotStrict", "https://key@sentry.example.com/1", "", false, "", true},
+		{"Mismatch_NotStrict", "https://key@o123.ingest.sentry.io/1", "", false, "456", false},
+
+		// strict=true cases
+		{"BothMatch_Strict", "https://key@o123.ingest.sentry.io/1", "", true, "123", true},
+		{"NoBaggage_Strict", "https://key@o123.ingest.sentry.io/1", "", true, "", false},
+		{"NoSDK_Strict", "https://key@sentry.example.com/1", "", true, "123", false},
+		{"BothEmpty_Strict", "https://key@sentry.example.com/1", "", true, "", true},
+		{"Mismatch_Strict", "https://key@o123.ingest.sentry.io/1", "", true, "456", false},
+
+		// Explicit OrgID override
+		{"ExplicitOrgID_Match", "https://key@sentry.example.com/1", "999", false, "999", true},
+		{"ExplicitOrgID_Mismatch", "https://key@sentry.example.com/1", "999", false, "111", false},
+		{"ExplicitOrgID_OverridesDSN", "https://key@o123.ingest.sentry.io/1", "999", false, "123", false},
+
+		// nil client
+		{"NilClient", "", "", false, "123", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.dsn == "" {
+				// Test with nil client
+				got := shouldContinueTrace(nil, tt.incomingOrgID)
+				if got != tt.wantContinue {
+					t.Errorf("shouldContinueTrace(nil, %q) = %v, want %v", tt.incomingOrgID, got, tt.wantContinue)
+				}
+				return
+			}
+
+			client, err := NewClient(ClientOptions{
+				Dsn:                     tt.dsn,
+				OrgID:                   tt.orgID,
+				StrictTraceContinuation: tt.strict,
+				Transport:               &MockTransport{},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			got := shouldContinueTrace(client, tt.incomingOrgID)
+			if got != tt.wantContinue {
+				t.Errorf("shouldContinueTrace(client, %q) = %v, want %v", tt.incomingOrgID, got, tt.wantContinue)
+			}
+		})
+	}
+}
+
+func TestContinueFromHeaders_OrgIDMismatch(t *testing.T) {
+	incomingTraceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
+
+	tests := []struct {
+		name          string
+		dsn           string
+		strict        bool
+		baggageOrgID  string
+		wantContinue  bool
+	}{
+		{"Match_Continue", "https://key@o123.ingest.sentry.io/1", false, "123", true},
+		{"Mismatch_NewTrace", "https://key@o123.ingest.sentry.io/1", false, "456", false},
+		{"NoBaggage_NotStrict_Continue", "https://key@o123.ingest.sentry.io/1", false, "", true},
+		{"NoBaggage_Strict_NewTrace", "https://key@o123.ingest.sentry.io/1", true, "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := NewTestContext(ClientOptions{
+				Dsn:                     tt.dsn,
+				EnableTracing:           true,
+				TracesSampleRate:        1.0,
+				StrictTraceContinuation: tt.strict,
+			})
+
+			traceStr := "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1"
+			baggageStr := "sentry-trace_id=bc6d53f15eb88f4320054569b8c553d4,sentry-public_key=key"
+			if tt.baggageOrgID != "" {
+				baggageStr += ",sentry-org_id=" + tt.baggageOrgID
+			}
+
+			transaction := StartTransaction(ctx, "test", ContinueFromHeaders(traceStr, baggageStr))
+
+			if tt.wantContinue {
+				if transaction.TraceID != incomingTraceID {
+					t.Errorf("expected trace to continue with TraceID %s, got %s", incomingTraceID, transaction.TraceID)
+				}
+			} else {
+				if transaction.TraceID == incomingTraceID {
+					t.Errorf("expected new trace (different TraceID), but got the incoming TraceID %s", incomingTraceID)
+				}
+			}
+		})
+	}
+}

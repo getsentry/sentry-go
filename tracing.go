@@ -946,13 +946,57 @@ func WithSpanOrigin(origin SpanOrigin) SpanOption {
 	}
 }
 
+// shouldContinueTrace determines whether the SDK should continue an incoming trace
+// based on org_id matching rules and the StrictTraceContinuation option.
+//
+// See https://develop.sentry.dev/sdk/foundations/trace-propagation/#strict-trace-continuation
+func shouldContinueTrace(client *Client, incomingOrgID string) bool {
+	if client == nil {
+		return true
+	}
+
+	clientOrgID := client.orgID()
+
+	// If both org IDs are present and don't match, always start a new trace.
+	if incomingOrgID != "" && clientOrgID != "" && incomingOrgID != clientOrgID {
+		debuglog.Printf(
+			"Won't continue trace: org IDs don't match (incoming: %s, SDK: %s)",
+			incomingOrgID, clientOrgID,
+		)
+		return false
+	}
+
+	if client.options.StrictTraceContinuation {
+		// In strict mode, also reject if one side is missing an org ID.
+		if (incomingOrgID != "" && clientOrgID == "") || (incomingOrgID == "" && clientOrgID != "") {
+			debuglog.Printf(
+				"Won't continue trace: strict mode and one org ID is missing (incoming: %q, SDK: %q)",
+				incomingOrgID, clientOrgID,
+			)
+			return false
+		}
+	}
+
+	return true
+}
+
 // ContinueTrace continues a trace based on traceparent and baggage values.
 // If the SDK is configured with tracing enabled,
 // this function returns populated SpanOption.
 // In any other cases, it populates the propagation context on the scope.
 func ContinueTrace(hub *Hub, traceparent, baggage string) SpanOption {
 	scope := hub.Scope()
+	client := hub.Client()
+
 	propagationContext, _ := PropagationContextFromHeaders(traceparent, baggage)
+
+	// Check if we should continue the trace based on org_id matching.
+	incomingOrgID := propagationContext.DynamicSamplingContext.Entries["org_id"]
+	if !shouldContinueTrace(client, incomingOrgID) {
+		// Start a fresh propagation context (new trace).
+		propagationContext = NewPropagationContext()
+	}
+
 	scope.SetPropagationContext(propagationContext)
 
 	return ContinueFromHeaders(traceparent, baggage)
@@ -974,10 +1018,33 @@ func ContinueFromRequest(r *http.Request) SpanOption {
 func ContinueFromHeaders(trace, baggage string) SpanOption {
 	return func(s *Span) {
 		if trace != "" {
+			// Parse baggage first to check org_id before applying trace context.
+			var dsc DynamicSamplingContext
+			if baggage != "" {
+				var err error
+				dsc, err = DynamicSamplingContextFromHeader([]byte(baggage))
+				if err != nil {
+					return
+				}
+			}
+
+			// Check org_id matching before continuing the trace.
+			var client *Client
+			if s.ctx != nil {
+				if hub := hubFromContext(s.ctx); hub != nil {
+					client = hub.Client()
+				}
+			}
+			incomingOrgID := dsc.Entries["org_id"]
+			if !shouldContinueTrace(client, incomingOrgID) {
+				// Don't apply incoming trace/baggage — span keeps its fresh trace ID.
+				return
+			}
+
 			s.updateFromSentryTrace([]byte(trace))
 
-			if baggage != "" {
-				s.updateFromBaggage([]byte(baggage))
+			if dsc.HasEntries() {
+				s.dynamicSamplingContext = dsc
 			}
 
 			// In case a sentry-trace header is present but there are no sentry-related
