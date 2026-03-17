@@ -297,40 +297,23 @@ type spotlightConfigValue struct {
 }
 
 // parseSpotlightEnvVar parses the SENTRY_SPOTLIGHT environment variable.
-// Returns (enabled, url) where:
-// - Truthy values enable Spotlight with default URL: "true", "t", "y", "yes", "on", "1"
-//   Example: SENTRY_SPOTLIGHT=true
-// - Falsy values disable Spotlight: "false", "f", "n", "no", "off", "0"
-//   Example: SENTRY_SPOTLIGHT=false
-// - Other non-empty strings are treated as custom Spotlight URLs
-//   Example: SENTRY_SPOTLIGHT=http://localhost:8080/stream
-// - Empty string or unset returns (false, "")
-//
-// Precedence: SpotlightURL in config > SENTRY_SPOTLIGHT env var > defaults
+// Truthy values ("true", "t", "y", "yes", "on", "1") enable Spotlight with the default URL.
+// Falsy values ("false", "f", "n", "no", "off", "0") disable it.
+// Any other non-empty string is treated as a custom Spotlight URL.
 func parseSpotlightEnvVar(value string) spotlightConfigValue {
-	value = strings.ToLower(strings.TrimSpace(value))
-	if value == "" {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
 		return spotlightConfigValue{enabled: false}
 	}
 
-	// Check truthy values
-	truthy := map[string]bool{
-		"true": true, "t": true, "y": true, "yes": true, "on": true, "1": true,
-	}
-	if truthy[value] {
-		return spotlightConfigValue{enabled: true, url: ""}
-	}
-
-	// Check falsy values
-	falsy := map[string]bool{
-		"false": true, "f": true, "n": true, "no": true, "off": true, "0": true,
-	}
-	if falsy[value] {
+	switch strings.ToLower(trimmed) {
+	case "true", "t", "y", "yes", "on", "1":
+		return spotlightConfigValue{enabled: true}
+	case "false", "f", "n", "no", "off", "0":
 		return spotlightConfigValue{enabled: false}
 	}
 
-	// Treat as URL
-	return spotlightConfigValue{enabled: true, url: value}
+	return spotlightConfigValue{enabled: true, url: trimmed}
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -420,15 +403,16 @@ func NewClient(options ClientOptions) (*Client, error) {
 	if spotlightEnvVar != "" {
 		envConfig := parseSpotlightEnvVar(spotlightEnvVar)
 
-		if options.SpotlightURL != "" {
+		switch {
+		case options.SpotlightURL != "":
 			// Config URL explicitly set: use it and warn
 			debuglog.Printf("Both SpotlightURL config and SENTRY_SPOTLIGHT env var are set. Using config URL: %s", options.SpotlightURL)
 			options.Spotlight = true
-		} else if options.Spotlight && envConfig.url != "" {
+		case options.Spotlight && envConfig.url != "":
 			// Config enables Spotlight but no URL, env var has URL: use env var URL
 			options.SpotlightURL = envConfig.url
 			debuglog.Printf("Spotlight enabled via config but using URL from SENTRY_SPOTLIGHT: %s", envConfig.url)
-		} else if !options.Spotlight {
+		case !options.Spotlight:
 			// Config doesn't set Spotlight: use env var setting
 			options.Spotlight = envConfig.enabled
 			if envConfig.url != "" {
@@ -436,9 +420,22 @@ func NewClient(options ClientOptions) (*Client, error) {
 			}
 			if envConfig.enabled {
 				debuglog.Println("Spotlight enabled via SENTRY_SPOTLIGHT env var")
-			} else if spotlightEnvVar != "" {
+			} else {
 				debuglog.Println("Spotlight disabled via SENTRY_SPOTLIGHT env var")
 			}
+		}
+	}
+
+	// Spotlight is a local development tool: always deliver 100% of events
+	// with full PII so the developer sees everything their app is generating.
+	if options.Spotlight {
+		if options.SampleRate != 1.0 {
+			debuglog.Printf("Overriding SampleRate from %.2f to 1.0 for Spotlight", options.SampleRate)
+			options.SampleRate = 1.0
+		}
+		if !options.SendDefaultPII {
+			debuglog.Println("Enabling SendDefaultPII for Spotlight")
+			options.SendDefaultPII = true
 		}
 	}
 

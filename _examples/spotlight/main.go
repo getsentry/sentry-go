@@ -10,11 +10,11 @@
 //	go run main.go
 //
 // Configuration:
-// - Spotlight is enabled by default in this example (Spotlight: true)
-// - Events are NOT sent to Sentry (DSN is empty)
-// - To also send events to Sentry, set DSN via environment variable:
-//   SENTRY_DSN=https://key@sentry.io/project go run main.go
-// - Or edit the DSN field below
+//   - Spotlight is enabled by default in this example (Spotlight: true)
+//   - Events are NOT sent to Sentry (DSN is empty)
+//   - To also send events to Sentry, set DSN via environment variable:
+//     SENTRY_DSN=https://key@sentry.io/project go run main.go
+//   - Or edit the DSN field below
 //
 // Before running this example, make sure Spotlight is running:
 //

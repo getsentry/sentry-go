@@ -1,9 +1,11 @@
 package sentry
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -407,9 +409,7 @@ func TestCloneAndModifyEnvelopeForSpotlight(t *testing.T) {
 		Payload: []byte("hello"),
 	})
 
-	// Clone and modify
-	st := NewSpotlightTransport(&MockTransport{})
-	cloned := st.cloneAndModifyEnvelopeForSpotlight(envelope)
+	cloned := cloneEnvelopeForSpotlight(envelope)
 
 	// Verify cloned envelope has same number of items
 	if len(cloned.Items) != len(envelope.Items) {
@@ -435,77 +435,507 @@ func TestCloneAndModifyEnvelopeForSpotlight(t *testing.T) {
 	}
 }
 
-func TestModifyEventItemForSpotlight(t *testing.T) {
-	// Create an event
-	event := &Event{
-		EventID: EventID("test123"),
-		Message: "Test event",
-		Level:   LevelError,
+func TestSpotlightSampleRateOverride(t *testing.T) {
+	tests := []struct {
+		name               string
+		inputSampleRate    float64
+		expectedSampleRate float64
+	}{
+		{
+			name:               "Sample rate 0.5 overridden to 1.0",
+			inputSampleRate:    0.5,
+			expectedSampleRate: 1.0,
+		},
+		{
+			name:               "Sample rate 0.0 overridden to 1.0",
+			inputSampleRate:    0.0,
+			expectedSampleRate: 1.0,
+		},
+		{
+			name:               "Sample rate 1.0 unchanged",
+			inputSampleRate:    1.0,
+			expectedSampleRate: 1.0,
+		},
 	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewClient(ClientOptions{
+				Spotlight:  true,
+				SampleRate: tt.inputSampleRate,
+			})
+			if err != nil {
+				t.Fatalf("NewClient() error = %v", err)
+			}
+
+			if client.options.SampleRate != tt.expectedSampleRate {
+				t.Errorf("Expected SampleRate = %f, got %f", tt.expectedSampleRate, client.options.SampleRate)
+			}
+		})
+	}
+}
+
+func TestSpotlightPIIOverride(t *testing.T) {
+	tests := []struct {
+		name            string
+		inputSendPII    bool
+		expectedSendPII bool
+	}{
+		{
+			name:            "SendDefaultPII false overridden to true",
+			inputSendPII:    false,
+			expectedSendPII: true,
+		},
+		{
+			name:            "SendDefaultPII true unchanged",
+			inputSendPII:    true,
+			expectedSendPII: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewClient(ClientOptions{
+				Spotlight:      true,
+				SendDefaultPII: tt.inputSendPII,
+			})
+			if err != nil {
+				t.Fatalf("NewClient() error = %v", err)
+			}
+
+			if client.options.SendDefaultPII != tt.expectedSendPII {
+				t.Errorf("Expected SendDefaultPII = %v, got %v", tt.expectedSendPII, client.options.SendDefaultPII)
+			}
+		})
+	}
+}
+
+func TestSpotlightDisabledPreservesSettings(t *testing.T) {
+	client, err := NewClient(ClientOptions{
+		Spotlight:      false,
+		SampleRate:     0.5,
+		SendDefaultPII: false,
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+
+	if client.options.SampleRate != 0.5 {
+		t.Errorf("Expected SampleRate = 0.5, got %f", client.options.SampleRate)
+	}
+
+	if client.options.SendDefaultPII {
+		t.Errorf("Expected SendDefaultPII = false, got %v", client.options.SendDefaultPII)
+	}
+}
+
+func TestSpotlightProxyConfiguration(t *testing.T) {
+	// Test with HTTPProxy option
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{
+		Spotlight: true,
+		HTTPProxy: "http://proxy.example.com:8080",
+	})
+
+	if st.client == nil {
+		t.Errorf("Expected HTTP client to be configured")
+	}
+
+	transport, ok := st.client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("Expected *http.Transport, got %T", st.client.Transport)
+	}
+
+	if transport.Proxy == nil {
+		t.Errorf("Expected Proxy to be configured")
+	}
+}
+
+func TestSpotlightCustomHTTPClient(t *testing.T) {
+	// Create a custom HTTP client
+	customClient := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{
+		Spotlight:  true,
+		HTTPClient: customClient,
+	})
+
+	if st.client == nil {
+		t.Errorf("Expected HTTP client to be configured")
+	}
+
+	// Spotlight enforces its own 5s timeout even when the caller supplies a longer one.
+	if st.client.Timeout != 5*time.Second {
+		t.Errorf("Expected timeout 5s for Spotlight, got %v", st.client.Timeout)
+	}
+}
+
+func TestSpotlightAsyncSend(t *testing.T) {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		time.Sleep(100 * time.Millisecond) // Simulate slow server
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: server.URL + "/stream"})
+
+	start := time.Now()
+	for i := 0; i < 5; i++ {
+		event := NewEvent()
+		event.Message = "Test message " + string(rune(i))
+		st.SendEvent(event)
+	}
+	elapsed := time.Since(start)
+
+	// Should return immediately, not wait for all sends to complete
+	if elapsed > 500*time.Millisecond {
+		t.Errorf("SendEvent took too long (%v), should be non-blocking", elapsed)
+	}
+
+	time.Sleep(1 * time.Second)
+	if len(mock.Events()) != 5 {
+		t.Errorf("Expected 5 events in mock, got %d", len(mock.Events()))
+	}
+}
+
+func TestSpotlightContextCancellation(t *testing.T) {
+	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(5 * time.Second) // Very slow server
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slowServer.Close()
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: slowServer.URL + "/stream"})
+
+	event := NewEvent()
+	event.Message = "Test message"
+	st.SendEvent(event)
+
+	// Close immediately while the slow server is still handling the request.
+	// This should cancel the in-flight request rather than blocking for 5 seconds.
+	st.Close()
+
+	if st.ctx.Err() == nil {
+		t.Errorf("Expected context to be cancelled after Close()")
+	}
+}
+
+func TestSpotlightShutdownTimeout(t *testing.T) {
+	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(5 * time.Second) // Much longer than shutdown timeout
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slowServer.Close()
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: slowServer.URL + "/stream"})
+
+	// Send multiple events
+	for i := 0; i < 3; i++ {
+		event := NewEvent()
+		event.Message = "Test message"
+		st.SendEvent(event)
+	}
+
+	// Close should timeout gracefully
+	start := time.Now()
+	st.Close()
+	elapsed := time.Since(start)
+
+	// Should timeout after ~2 seconds, not hang
+	if elapsed > 3*time.Second {
+		t.Errorf("Close took too long (%v), should respect 2s timeout", elapsed)
+	}
+}
+
+func TestSpotlightServerError(t *testing.T) {
+	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer errorServer.Close()
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: errorServer.URL + "/stream"})
+
+	event := NewEvent()
+	event.Message = "Test message"
+	st.SendEvent(event)
+
+	time.Sleep(500 * time.Millisecond) // Wait for async send
+
+	// Should have sent to mock transport even if Spotlight fails
+	if len(mock.Events()) != 1 {
+		t.Errorf("Expected 1 event in mock, got %d", len(mock.Events()))
+	}
+
+	st.Close()
+}
+
+func TestSpotlightNetworkError(t *testing.T) {
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{
+		SpotlightURL: "http://localhost:54321", // Unreachable port
+	})
+
+	event := NewEvent()
+	event.Message = "Test message"
+	st.SendEvent(event)
+
+	time.Sleep(500 * time.Millisecond) // Wait for async send attempt
+
+	// Should have sent to mock transport even if Spotlight is unreachable
+	if len(mock.Events()) != 1 {
+		t.Errorf("Expected 1 event in mock, got %d", len(mock.Events()))
+	}
+
+	st.Close()
+}
+
+func TestSpotlightSlowServer(t *testing.T) {
+	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(500 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slowServer.Close()
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: slowServer.URL + "/stream"})
+
+	start := time.Now()
+	event := NewEvent()
+	event.Message = "Test message"
+	st.SendEvent(event)
+	elapsed := time.Since(start)
+
+	// SendEvent should return immediately, not wait for server response
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("SendEvent should not block on slow server, took %v", elapsed)
+	}
+
+	st.Close()
+}
+
+func TestSpotlightMultipleEvents(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: server.URL + "/stream"})
+
+	// Send multiple events concurrently
+	for i := 0; i < 10; i++ {
+		event := NewEvent()
+		event.Message = "Test message " + string(rune(i))
+		st.SendEvent(event)
+	}
+
+	st.Close()
+
+	// All events should be sent to mock transport
+	if len(mock.Events()) != 10 {
+		t.Errorf("Expected 10 events in mock, got %d", len(mock.Events()))
+	}
+}
+
+func TestSpotlightSendEnvelope(t *testing.T) {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: server.URL + "/stream"})
+
+	// Build and send an envelope
+	envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{
+		EventID: "test-envelope-123",
+	})
+	event := &Event{
+		EventID: "test-envelope-123",
+		Message: "Envelope test",
+		Level:   LevelError,
+	}
 	eventJSON, err := json.Marshal(event)
 	if err != nil {
 		t.Fatalf("Failed to marshal event: %v", err)
 	}
-
-	item := &protocol.EnvelopeItem{
-		Header: &protocol.EnvelopeItemHeader{
-			Type: protocol.EnvelopeItemTypeEvent,
-		},
+	envelope.AddItem(&protocol.EnvelopeItem{
+		Header:  &protocol.EnvelopeItemHeader{Type: protocol.EnvelopeItemTypeEvent},
 		Payload: eventJSON,
+	})
+
+	st.SendEnvelope(envelope)
+	time.Sleep(200 * time.Millisecond) // Wait for async send
+
+	if len(mock.Events()) != 1 {
+		t.Errorf("Expected 1 event in mock (from envelope), got %d", len(mock.Events()))
+	}
+	if requestCount.Load() != 1 {
+		t.Errorf("Expected 1 request to Spotlight, got %d", requestCount.Load())
 	}
 
-	st := NewSpotlightTransport(&MockTransport{})
-	modifiedItem := st.modifyEventItemForSpotlight(item)
+	st.Close()
+}
 
-	// Deserialize the modified payload
-	var modifiedEvent Event
-	err = json.Unmarshal(modifiedItem.Payload, &modifiedEvent)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal modified event: %v", err)
-	}
+func TestSpotlightSendEnvelopeEmpty(_ *testing.T) {
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: "http://localhost:54321/stream"})
 
-	// Verify event data is preserved
-	if modifiedEvent.Message != "Test event" {
-		t.Errorf("Expected message 'Test event', got %q", modifiedEvent.Message)
-	}
-	if modifiedEvent.Level != LevelError {
-		t.Errorf("Expected level Error, got %v", modifiedEvent.Level)
-	}
+	emptyEnvelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{})
+	st.SendEnvelope(emptyEnvelope)
+	time.Sleep(100 * time.Millisecond)
 
-	// Verify payload is not empty
-	if len(modifiedItem.Payload) == 0 {
-		t.Errorf("Expected non-empty payload after modification")
+	st.Close()
+}
+
+func TestSpotlightFlushWithContext(t *testing.T) {
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	result := st.FlushWithContext(ctx)
+	if !result {
+		t.Errorf("Expected FlushWithContext to succeed")
 	}
 }
 
-func TestModifyEventItemForSpotlightInvalidPayload(t *testing.T) {
-	// Create item with invalid JSON payload
-	item := &protocol.EnvelopeItem{
-		Header: &protocol.EnvelopeItemHeader{
-			Type: protocol.EnvelopeItemTypeEvent,
+func TestSpotlightSendEnvelopeWithSDK(t *testing.T) {
+	var requestCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestCount.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: server.URL + "/stream"})
+
+	envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{
+		EventID: "test-sdk-123",
+		Sdk: &protocol.SdkInfo{
+			Name:         "sentry-go",
+			Version:      SDKVersion,
+			Integrations: []string{"spotlight"},
 		},
-		Payload: []byte("invalid json {"),
+	})
+	event := &Event{
+		EventID: "test-sdk-123",
+		Message: "SDK envelope test",
 	}
+	eventJSON, _ := json.Marshal(event)
+	envelope.AddItem(&protocol.EnvelopeItem{
+		Header:  &protocol.EnvelopeItemHeader{Type: protocol.EnvelopeItemTypeEvent},
+		Payload: eventJSON,
+	})
 
-	st := NewSpotlightTransport(&MockTransport{})
-	modifiedItem := st.modifyEventItemForSpotlight(item)
+	st.SendEnvelope(envelope)
+	time.Sleep(200 * time.Millisecond)
+	st.Close()
 
-	// Should return original item on error
-	if !bytesEqual(modifiedItem.Payload, item.Payload) {
-		t.Errorf("Expected original payload to be returned on deserialization error")
+	if requestCount.Load() != 1 {
+		t.Errorf("Expected 1 request to Spotlight, got %d", requestCount.Load())
 	}
 }
 
-// Helper to compare byte slices
-func bytesEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
+func TestSpotlightBuildHTTPClientWithTransport(t *testing.T) {
+	customTransport := &http.Transport{}
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{
+		HTTPTransport: customTransport,
+	})
+
+	if st.client == nil {
+		t.Fatalf("Expected HTTP client to be configured")
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
+	if st.client.Transport != customTransport {
+		t.Errorf("Expected custom transport to be used")
 	}
-	return true
+}
+
+func TestSpotlightEnvelopeCancelledContext(_ *testing.T) {
+	// Test that sendToSpotlightServer skips when context is already cancelled
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: "http://localhost:54321/stream"})
+
+	// Cancel the context before sending
+	st.cancel()
+
+	// Build an envelope with an event
+	envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{EventID: "test-cancel"})
+	event := &Event{EventID: "test-cancel", Message: "cancelled"}
+	eventJSON, _ := json.Marshal(event)
+	envelope.AddItem(&protocol.EnvelopeItem{
+		Header:  &protocol.EnvelopeItemHeader{Type: protocol.EnvelopeItemTypeEvent},
+		Payload: eventJSON,
+	})
+
+	// Directly call sendEnvelopeToSpotlight — context already cancelled, should skip gracefully
+	st.sendEnvelopeToSpotlight(envelope)
+}
+
+func TestSpotlightSendEventCancelledContext(_ *testing.T) {
+	// Test that sendToSpotlight skips when context is already cancelled
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: "http://localhost:54321/stream"})
+
+	// Cancel context before calling sendToSpotlight directly
+	st.cancel()
+
+	event := NewEvent()
+	event.Message = "cancelled event"
+	// Call directly (bypassing the goroutine wrapper) to test the ctx.Done() check
+	st.sendToSpotlight(event)
+}
+
+func TestSpotlightSendEnvelopeServerError(_ *testing.T) {
+	errorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer errorServer.Close()
+
+	mock := &MockTransport{}
+	st := NewSpotlightTransport(mock)
+	st.Configure(ClientOptions{SpotlightURL: errorServer.URL + "/stream"})
+
+	envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{EventID: "test-server-error"})
+	event := &Event{EventID: "test-server-error", Message: "server error test"}
+	eventJSON, _ := json.Marshal(event)
+	envelope.AddItem(&protocol.EnvelopeItem{
+		Header:  &protocol.EnvelopeItemHeader{Type: protocol.EnvelopeItemTypeEvent},
+		Payload: eventJSON,
+	})
+
+	st.SendEnvelope(envelope)
+	time.Sleep(200 * time.Millisecond)
+	st.Close()
 }

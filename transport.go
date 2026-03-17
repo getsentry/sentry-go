@@ -934,15 +934,24 @@ type SpotlightTransport struct {
 	underlying   Transport
 	client       *http.Client
 	spotlightURL string
+
+	// ctx is cancelled on Close to signal goroutines to stop.
+	// wg tracks in-flight sends so Close can wait for them to finish.
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 func NewSpotlightTransport(underlying Transport) *SpotlightTransport {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &SpotlightTransport{
 		underlying: underlying,
 		client: &http.Client{
 			Timeout: 5 * time.Second,
 		},
 		spotlightURL: "http://localhost:8969/stream",
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 }
 
@@ -952,22 +961,55 @@ func (st *SpotlightTransport) Configure(options ClientOptions) {
 	if options.SpotlightURL != "" {
 		st.spotlightURL = options.SpotlightURL
 	}
+
+	st.buildHTTPClient(options)
+}
+
+func (st *SpotlightTransport) buildHTTPClient(opts ClientOptions) {
+	if opts.HTTPClient != nil {
+		// Copy the user's client but enforce Spotlight's own timeout.
+		// Spotlight is dev-only; we don't want it inheriting a long or zero timeout.
+		st.client = &http.Client{
+			Transport:     opts.HTTPClient.Transport,
+			CheckRedirect: opts.HTTPClient.CheckRedirect,
+			Jar:           opts.HTTPClient.Jar,
+			Timeout:       5 * time.Second,
+		}
+		return
+	}
+
+	var transport http.RoundTripper
+	if opts.HTTPTransport != nil {
+		transport = opts.HTTPTransport
+	} else {
+		transport = &http.Transport{
+			Proxy:           getProxyConfig(opts),
+			TLSClientConfig: getTLSConfig(opts),
+		}
+	}
+
+	st.client = &http.Client{
+		Transport: transport,
+		Timeout:   5 * time.Second,
+	}
 }
 
 func (st *SpotlightTransport) SendEvent(event *Event) {
-	// Send to the underlying transport (Sentry)
 	st.underlying.SendEvent(event)
-
-	// Always send to Spotlight
-	st.sendToSpotlight(event)
+	st.wg.Add(1)
+	go func() {
+		defer st.wg.Done()
+		st.sendToSpotlight(event)
+	}()
 }
 
 func (st *SpotlightTransport) SendEnvelope(envelope *protocol.Envelope) {
-	// Send original envelope to underlying Sentry transport first
 	st.underlying.SendEnvelope(envelope)
-
-	// Clone envelope for Spotlight and send with enhanced settings
-	st.sendEnvelopeToSpotlight(envelope)
+	st.wg.Add(1)
+	go func() {
+		defer st.wg.Done()
+		st.sendEnvelopeToSpotlight(envelope)
+	}()
 }
 
 func (st *SpotlightTransport) sendEnvelopeToSpotlight(envelope *protocol.Envelope) {
@@ -975,10 +1017,8 @@ func (st *SpotlightTransport) sendEnvelopeToSpotlight(envelope *protocol.Envelop
 		return
 	}
 
-	// Clone the envelope for Spotlight and modify for spec compliance
-	spotlightEnvelope := st.cloneAndModifyEnvelopeForSpotlight(envelope)
+	spotlightEnvelope := cloneEnvelopeForSpotlight(envelope)
 
-	// Convert envelope to bytes and send to Spotlight
 	envelopeBytes, err := spotlightEnvelope.Serialize()
 	if err != nil {
 		DebugLogger.Printf("Failed to serialize envelope for Spotlight: %v", err)
@@ -988,10 +1028,10 @@ func (st *SpotlightTransport) sendEnvelopeToSpotlight(envelope *protocol.Envelop
 	st.sendToSpotlightServer(envelopeBytes)
 }
 
-// cloneAndModifyEnvelopeForSpotlight creates a deep copy of an envelope and modifies it
-// to comply with Spotlight spec: 100% sample rate and full PII collection
-func (st *SpotlightTransport) cloneAndModifyEnvelopeForSpotlight(envelope *protocol.Envelope) *protocol.Envelope {
-	// Create a new envelope with the same header
+// cloneEnvelopeForSpotlight creates a deep copy of an envelope for sending to Spotlight.
+// We clone so that Spotlight's send path doesn't race with or mutate the envelope
+// already handed to the underlying Sentry transport.
+func cloneEnvelopeForSpotlight(envelope *protocol.Envelope) *protocol.Envelope {
 	newHeader := &protocol.EnvelopeHeader{
 		EventID: envelope.Header.EventID,
 		SentAt:  envelope.Header.SentAt,
@@ -1008,81 +1048,29 @@ func (st *SpotlightTransport) cloneAndModifyEnvelopeForSpotlight(envelope *proto
 	}
 
 	cloned := protocol.NewEnvelope(newHeader)
-
-	// Clone all items and modify events/transactions for Spotlight spec compliance
 	for _, item := range envelope.Items {
 		if item == nil {
 			continue
 		}
-
-		// For event and transaction items, deserialize and modify
-		if item.Header.Type == protocol.EnvelopeItemTypeEvent || item.Header.Type == protocol.EnvelopeItemTypeTransaction {
-			modifiedItem := st.modifyEventItemForSpotlight(item)
-			cloned.AddItem(modifiedItem)
-		} else {
-			// For other items (attachments, logs, etc), just copy as-is
-			newItem := &protocol.EnvelopeItem{
-				Header:  item.Header,
-				Payload: append([]byte(nil), item.Payload...),
-			}
-			cloned.AddItem(newItem)
-		}
+		cloned.AddItem(&protocol.EnvelopeItem{
+			Header:  item.Header,
+			Payload: append([]byte(nil), item.Payload...),
+		})
 	}
-
 	return cloned
 }
 
-// modifyEventItemForSpotlight deserializes an event/transaction, modifies it for Spotlight
-// spec compliance (100% sample rate, full PII), and returns a modified envelope item
-func (st *SpotlightTransport) modifyEventItemForSpotlight(item *protocol.EnvelopeItem) *protocol.EnvelopeItem {
-	// Try to deserialize the event
-	var event Event
-	if err := json.Unmarshal(item.Payload, &event); err != nil {
-		DebugLogger.Printf("Failed to deserialize event for Spotlight modification: %v", err)
-		// Return original item if deserialization fails
-		return &protocol.EnvelopeItem{
-			Header:  item.Header,
-			Payload: append([]byte(nil), item.Payload...),
-		}
-	}
-
-	// Modify event for Spotlight spec compliance
-	// Note: Sampling happens at the Client level before reaching the transport layer.
-	// Events that reach Spotlight are those that weren't dropped by the client's
-	// SampleRate setting. Spotlight receives 100% of sampled events.
-
-	// Spotlight receives all PII data collected by the SDK. The SDK doesn't filter
-	// PII at the transport level, so events arrive at Spotlight unfiltered and complete.
-
-	// Reserialize the (potentially modified) event
-	modifiedPayload, err := json.Marshal(event)
-	if err != nil {
-		DebugLogger.Printf("Failed to serialize modified event for Spotlight: %v", err)
-		// Return original item if serialization fails
-		return &protocol.EnvelopeItem{
-			Header:  item.Header,
-			Payload: append([]byte(nil), item.Payload...),
-		}
-	}
-
-	// Create new envelope item with modified payload
-	newItem := &protocol.EnvelopeItem{
-		Header:  item.Header,
-		Payload: modifiedPayload,
-	}
-
-	// Update the length in the item header to match new payload size
-	if newItem.Header.Length != nil {
-		payloadLen := len(modifiedPayload)
-		newItem.Header.Length = &payloadLen
-	}
-
-	return newItem
+func (st *SpotlightTransport) isShuttingDown() bool {
+	return st.ctx.Err() != nil
 }
 
 func (st *SpotlightTransport) sendToSpotlightServer(envelopeBytes []byte) {
-	ctx := context.Background()
-	timeoutCtx, cancel := context.WithTimeout(ctx, st.client.Timeout)
+	if st.isShuttingDown() {
+		DebugLogger.Printf("Skipping Spotlight send: transport shutting down")
+		return
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(st.ctx, st.client.Timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(timeoutCtx, "POST", st.spotlightURL, bytes.NewReader(envelopeBytes))
@@ -1103,7 +1091,9 @@ func (st *SpotlightTransport) sendToSpotlightServer(envelopeBytes []byte) {
 		return
 	}
 	defer func() {
-		_, _ = io.ReadAll(resp.Body)
+		// Drain body up to a limit and close it, allowing the
+		// transport to reuse TCP connections.
+		_, _ = io.CopyN(io.Discard, resp.Body, util.MaxDrainResponseBytes)
 		_ = resp.Body.Close()
 	}()
 
@@ -1113,7 +1103,13 @@ func (st *SpotlightTransport) sendToSpotlightServer(envelopeBytes []byte) {
 }
 
 func (st *SpotlightTransport) sendToSpotlight(event *Event) {
-	ctx := context.Background()
+	if st.isShuttingDown() {
+		DebugLogger.Printf("Skipping Spotlight send: transport shutting down")
+		return
+	}
+
+	// envelopeFromBody requires a DSN to set the envelope URL; the value is
+	// irrelevant because we POST directly to spotlightURL, not the DSN endpoint.
 	dsn, err := NewDsn("https://placeholder@localhost/1")
 	if err != nil {
 		DebugLogger.Printf("Failed to create Spotlight DSN: %v", err)
@@ -1132,7 +1128,10 @@ func (st *SpotlightTransport) sendToSpotlight(event *Event) {
 		return
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", st.spotlightURL, envelope)
+	timeoutCtx, cancel := context.WithTimeout(st.ctx, st.client.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(timeoutCtx, "POST", st.spotlightURL, envelope)
 	if err != nil {
 		DebugLogger.Printf("Failed to create Spotlight request: %v", err)
 		return
@@ -1151,7 +1150,7 @@ func (st *SpotlightTransport) sendToSpotlight(event *Event) {
 	defer func() {
 		// Drain body up to a limit and close it, allowing the
 		// transport to reuse TCP connections.
-		_, _ = io.CopyN(io.Discard, resp.Body, maxDrainResponseBytes)
+		_, _ = io.CopyN(io.Discard, resp.Body, util.MaxDrainResponseBytes)
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			DebugLogger.Printf("Failed to close Spotlight response body: %v", closeErr)
 		}
@@ -1166,10 +1165,8 @@ func (st *SpotlightTransport) sendToSpotlight(event *Event) {
 	}
 }
 
-// Flush waits for pending events to be sent to Sentry (via the underlying transport).
-// Note: This does not wait for pending Spotlight sends to complete. Spotlight sends
-// are non-blocking and best-effort. This is acceptable since Spotlight is a development-only
-// debugging tool. For critical production use cases, use the underlying transport directly.
+// Flush waits for the underlying transport to send pending events to Sentry.
+// In-flight Spotlight sends are best-effort and not waited on.
 func (st *SpotlightTransport) Flush(timeout time.Duration) bool {
 	return st.underlying.Flush(timeout)
 }
@@ -1179,6 +1176,21 @@ func (st *SpotlightTransport) FlushWithContext(ctx context.Context) bool {
 }
 
 func (st *SpotlightTransport) Close() {
+	st.cancel()
+
+	done := make(chan struct{})
+	go func() {
+		st.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		DebugLogger.Printf("All Spotlight sends completed")
+	case <-time.After(2 * time.Second):
+		DebugLogger.Printf("Spotlight sends timed out during shutdown")
+	}
+
 	st.underlying.Close()
 }
 
