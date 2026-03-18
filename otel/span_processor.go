@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/otel/internal/common"
 	"github.com/getsentry/sentry-go/otel/internal/utils"
 	"go.opentelemetry.io/otel/attribute"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
@@ -26,7 +27,7 @@ func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
 	if sentrySpanProcessorInstance != nil {
 		return sentrySpanProcessorInstance
 	}
-	sentry.AddGlobalEventProcessor(NewEventProcessor())
+	sentry.AddGlobalEventProcessor(common.NewEventProcessor())
 	sentrySpanProcessorInstance = &sentrySpanProcessor{}
 	return sentrySpanProcessorInstance
 }
