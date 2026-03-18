@@ -42,7 +42,7 @@ func main() {
 	app.GET("/", func(ctx *gin.Context) {
 		if hub := sentrygin.GetHubFromContext(ctx); hub != nil {
 			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
+				scope.SetTag("unwantedQuery", "someQueryDataMaybe")
 				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 			})
 		}

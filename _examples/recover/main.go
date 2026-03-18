@@ -50,7 +50,7 @@ func main() {
 	})
 
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetExtra("oristhis", "justfantasy")
+		scope.SetTag("oristhis", "justfantasy")
 		scope.SetTag("isthis", "reallife")
 		scope.SetLevel(sentry.LevelFatal)
 		scope.SetUser(sentry.User{

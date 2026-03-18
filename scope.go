@@ -223,6 +223,13 @@ func (scope *Scope) SetAttributes(attrs ...attribute.Builder) {
 	}
 }
 
+// RemoveAttribute removes an attribute from the current scope.
+func (scope *Scope) RemoveAttribute(key string) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+	delete(scope.attributes, key)
+}
+
 // SetTag adds a tag to the current scope.
 func (scope *Scope) SetTag(key, value string) {
 	scope.mu.Lock()
@@ -276,6 +283,10 @@ func (scope *Scope) RemoveContext(key string) {
 }
 
 // SetExtra adds an extra to the current scope.
+//
+// Deprecated: Use [Scope.SetAttributes] instead, which attaches typed key-value
+// pairs to logs and metrics. Note that attributes do not attach to error events;
+// if you only capture errors, use [Scope.SetTag] or [Scope.SetContext] to enrich them.
 func (scope *Scope) SetExtra(key string, value interface{}) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
@@ -284,6 +295,10 @@ func (scope *Scope) SetExtra(key string, value interface{}) {
 }
 
 // SetExtras assigns multiple extras to the current scope.
+//
+// Deprecated: Use [Scope.SetAttributes] instead, which attaches typed key-value
+// pairs to logs and metrics. Note that attributes do not attach to error events;
+// if you only capture errors, use [Scope.SetTag] or [Scope.SetContext] to enrich them.
 func (scope *Scope) SetExtras(extra map[string]interface{}) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
@@ -294,6 +309,10 @@ func (scope *Scope) SetExtras(extra map[string]interface{}) {
 }
 
 // RemoveExtra removes a extra from the current scope.
+//
+// Deprecated: Use [Scope.RemoveAttribute] instead. Note that attributes only
+// attach to logs and metrics, not error events. If you only capture errors,
+// use [Scope.RemoveTag] or [Scope.RemoveContext] instead.
 func (scope *Scope) RemoveExtra(key string) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()

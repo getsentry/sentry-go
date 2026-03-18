@@ -97,7 +97,7 @@ mux := http.NewServeMux()
 mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
     hub := sentry.GetHubFromContext(r.Context())
     hub.WithScope(func(scope *sentry.Scope) {
-        scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
+        scope.SetTag("unwantedQuery", "someQueryDataMaybe")
         hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
     })
     rw.WriteHeader(http.StatusOK)
