@@ -279,8 +279,41 @@ type ClientOptions struct {
 	// IMPORTANT: to not ignore any status codes, the option should be an empty slice and not nil. The nil option is
 	// used for defaulting to 404 ignores.
 	TraceIgnoreStatusCodes [][]int
+	// Enable Spotlight for local development debugging.
+	// When enabled, events are sent to the local Spotlight sidecar.
+	// Default Spotlight URL is http://localhost:8969/stream
+	Spotlight bool
+	// SpotlightURL is the URL to send events to when Spotlight is enabled.
+	// Defaults to http://localhost:8969/stream
+	SpotlightURL string
 	// DisableTelemetryBuffer disables the telemetry buffer layer for prioritizing events and uses the old transport layer.
 	DisableTelemetryBuffer bool
+}
+
+// spotlightConfigValue represents the parsed result of SENTRY_SPOTLIGHT env var or config.
+type spotlightConfigValue struct {
+	enabled bool
+	url     string
+}
+
+// parseSpotlightEnvVar parses the SENTRY_SPOTLIGHT environment variable.
+// Truthy values ("true", "t", "y", "yes", "on", "1") enable Spotlight with the default URL.
+// Falsy values ("false", "f", "n", "no", "off", "0") disable it.
+// Any other non-empty string is treated as a custom Spotlight URL.
+func parseSpotlightEnvVar(value string) spotlightConfigValue {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return spotlightConfigValue{enabled: false}
+	}
+
+	switch strings.ToLower(trimmed) {
+	case "true", "t", "y", "yes", "on", "1":
+		return spotlightConfigValue{enabled: true}
+	case "false", "f", "n", "no", "off", "0":
+		return spotlightConfigValue{enabled: false}
+	}
+
+	return spotlightConfigValue{enabled: true, url: trimmed}
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -363,6 +396,47 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	if options.TraceIgnoreStatusCodes == nil {
 		options.TraceIgnoreStatusCodes = [][]int{{404}}
+	}
+
+	// Handle Spotlight configuration with environment variable precedence
+	spotlightEnvVar := os.Getenv("SENTRY_SPOTLIGHT")
+	if spotlightEnvVar != "" {
+		envConfig := parseSpotlightEnvVar(spotlightEnvVar)
+
+		switch {
+		case options.SpotlightURL != "":
+			// Config URL explicitly set: use it and warn
+			debuglog.Printf("Both SpotlightURL config and SENTRY_SPOTLIGHT env var are set. Using config URL: %s", options.SpotlightURL)
+			options.Spotlight = true
+		case options.Spotlight && envConfig.url != "":
+			// Config enables Spotlight but no URL, env var has URL: use env var URL
+			options.SpotlightURL = envConfig.url
+			debuglog.Printf("Spotlight enabled via config but using URL from SENTRY_SPOTLIGHT: %s", envConfig.url)
+		case !options.Spotlight:
+			// Config doesn't set Spotlight: use env var setting
+			options.Spotlight = envConfig.enabled
+			if envConfig.url != "" {
+				options.SpotlightURL = envConfig.url
+			}
+			if envConfig.enabled {
+				debuglog.Println("Spotlight enabled via SENTRY_SPOTLIGHT env var")
+			} else {
+				debuglog.Println("Spotlight disabled via SENTRY_SPOTLIGHT env var")
+			}
+		}
+	}
+
+	// Spotlight is a local development tool: always deliver 100% of events
+	// with full PII so the developer sees everything their app is generating.
+	if options.Spotlight {
+		if options.SampleRate != 1.0 {
+			debuglog.Printf("Overriding SampleRate from %.2f to 1.0 for Spotlight", options.SampleRate)
+			options.SampleRate = 1.0
+		}
+		if !options.SendDefaultPII {
+			debuglog.Println("Enabling SendDefaultPII for Spotlight")
+			options.SendDefaultPII = true
+		}
 	}
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
@@ -463,6 +537,10 @@ func (client *Client) setupTransport() {
 		}
 	}
 
+	if opts.Spotlight {
+		transport = NewSpotlightTransport(transport)
+	}
+
 	transport.Configure(opts)
 	client.Transport = transport
 }
@@ -528,6 +606,7 @@ func (client *Client) setupIntegrations() {
 		new(ignoreErrorsIntegration),
 		new(ignoreTransactionsIntegration),
 		new(globalTagsIntegration),
+		new(spotlightIntegration),
 	}
 
 	if client.options.Integrations != nil {
@@ -907,6 +986,12 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 			debuglog.Println("Event dropped: telemetry buffer full or unavailable")
 		}
 	} else {
+		// For Spotlight: build and send envelope for enhanced data collection
+		if client.options.Spotlight {
+			envelope := client.buildEnvelopeFromEvent(event)
+			client.Transport.SendEnvelope(envelope)
+		}
+		// Default path: send event directly for backwards compatibility
 		client.Transport.SendEvent(event)
 	}
 
@@ -1025,6 +1110,45 @@ func (client *Client) integrationAlreadyInstalled(name string) bool {
 		}
 	}
 	return false
+}
+
+// buildEnvelopeFromEvent builds an envelope from an event.
+// This is used to send events via the envelope-based transport API.
+func (client *Client) buildEnvelopeFromEvent(event *Event) *protocol.Envelope {
+	header := &protocol.EnvelopeHeader{
+		EventID: string(event.EventID),
+		SentAt:  time.Now(),
+		Sdk: &protocol.SdkInfo{
+			Name:    event.Sdk.Name,
+			Version: event.Sdk.Version,
+		},
+	}
+
+	if client.dsn != nil {
+		header.Dsn = client.dsn.String()
+	}
+
+	if header.EventID == "" {
+		header.EventID = protocol.GenerateEventID()
+	}
+
+	envelope := protocol.NewEnvelope(header)
+
+	// Convert event to envelope item
+	item, err := event.ToEnvelopeItem()
+	if err != nil {
+		debuglog.Printf("Failed to convert event to envelope item: %v", err)
+		return envelope
+	}
+	envelope.AddItem(item)
+
+	// Add attachments
+	for _, attachment := range event.Attachments {
+		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
+		envelope.AddItem(attachmentItem)
+	}
+
+	return envelope
 }
 
 // sample returns true with the given probability, which must be in the range
