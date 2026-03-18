@@ -10,6 +10,9 @@ import (
 
 // TransactionEntry holds a reference to the root transaction span and
 // tracks the number of active spans belonging to this trace.
+//
+// Deprecated: Prefer OTLP export via sentryotlp.NewTraceExporter. Will be removed alongside
+// [NewSentrySpanProcessor].
 type TransactionEntry struct {
 	root        *sentry.Span
 	activeCount atomic.Int64
@@ -28,6 +31,9 @@ func (te *TransactionEntry) HasSpan(spanID otelTrace.SpanID) bool {
 // SentrySpanMap is a mapping between OpenTelemetry spans and Sentry spans.
 // It stores spans per transaction for lookup by the propagator and event processor,
 // and manages transaction entries for creating child spans via the shared spanRecorder.
+//
+// Deprecated: Prefer OTLP export via sentryotlp.NewTraceExporter. Will be removed alongside
+// [NewSentrySpanProcessor].
 type SentrySpanMap struct {
 	transactions util.SyncMap[otelTrace.TraceID, *TransactionEntry]
 }

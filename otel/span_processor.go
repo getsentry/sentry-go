@@ -16,6 +16,12 @@ type sentrySpanProcessor struct{}
 // At the moment we do not support multiple instances.
 var sentrySpanProcessorInstance *sentrySpanProcessor
 
+// NewSentrySpanProcessor creates an OpenTelemetry span processor that mirrors
+// OTel spans into Sentry's native span model.
+//
+// Deprecated: Prefer OTLP export via sentryotlp.NewTraceExporter.
+// For collector-based setups, use the standard OTel exporter and register
+// sentryotel.NewEventProcessor for error linking.
 func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
 	if sentrySpanProcessorInstance != nil {
 		return sentrySpanProcessorInstance
