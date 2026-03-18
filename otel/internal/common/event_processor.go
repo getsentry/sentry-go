@@ -25,11 +25,15 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 	}
 
 	if event.Contexts == nil {
-		event.Contexts = make(map[string]map[string]any)
+		event.Contexts = make(map[string]sentry.Context)
 	}
-	event.Contexts["trace"] = map[string]any{
-		"trace_id": otelSpanContext.TraceID().String(),
-		"span_id":  otelSpanContext.SpanID().String(),
+
+	traceContext, found := event.Contexts["trace"]
+	if !found {
+		event.Contexts["trace"] = make(map[string]any)
+		traceContext = event.Contexts["trace"]
 	}
+	traceContext["trace_id"] = otelSpanContext.TraceID().String()
+	traceContext["span_id"] = otelSpanContext.SpanID().String()
 	return event
 }
