@@ -22,7 +22,7 @@ func TestLinkTraceContextToErrorEventSetsOTelIDs(t *testing.T) {
 		{name: "without existing trace context"},
 		{
 			name:          "with existing trace context",
-			existingTrace: map[string]any{"trace_id": "123", "parent_span_id": "456"},
+			existingTrace: map[string]any{"trace_id": "123", "parent_span_id": "456", "op": "http.server"},
 		},
 	}
 
@@ -43,10 +43,12 @@ func TestLinkTraceContextToErrorEventSetsOTelIDs(t *testing.T) {
 			}))
 
 			got := linkTraceContextToErrorEvent(event, &sentry.EventHint{Context: ctx})
-			assert.Equal(t, map[string]any{
-				"trace_id": traceID.String(),
-				"span_id":  spanID.String(),
-			}, got.Contexts["trace"])
+			assert.Equal(t, traceID.String(), got.Contexts["trace"]["trace_id"])
+			assert.Equal(t, spanID.String(), got.Contexts["trace"]["span_id"])
+			if tt.existingTrace != nil {
+				assert.Equal(t, "456", got.Contexts["trace"]["parent_span_id"])
+				assert.Equal(t, "http.server", got.Contexts["trace"]["op"])
+			}
 		})
 	}
 }
