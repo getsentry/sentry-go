@@ -5,8 +5,19 @@ import (
 	"github.com/getsentry/sentry-go/otel/internal/common"
 )
 
-// NewEventProcessor creates a Sentry event processor that links captured
-// errors to the active OpenTelemetry span by attaching the OTel trace and span IDs.
-func NewEventProcessor() sentry.EventProcessor {
-	return common.NewEventProcessor()
+type errorLinkingIntegration struct{}
+
+// NewErrorLinkingIntegration registers OpenTelemetry error linking with Sentry.
+//
+// It attaches the active OTel trace and span IDs to captured Sentry errors.
+func NewErrorLinkingIntegration() sentry.Integration {
+	return errorLinkingIntegration{}
+}
+
+func (errorLinkingIntegration) Name() string {
+	return "OtelErrorLinking"
+}
+
+func (errorLinkingIntegration) SetupOnce(_ *sentry.Client) {
+	sentry.AddGlobalEventProcessor(common.NewEventProcessor())
 }

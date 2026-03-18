@@ -6,8 +6,8 @@
 // setupTracerProviderWithCollector exports spans to a standard OpenTelemetry
 // Collector using otlptracehttp.New.
 //
-// To link Sentry errors, you need to register sentryotel.NewEventProcessor
-// to inject otel trace and span ids to the error.
+// To link Sentry errors, register sentryotel.NewErrorLinkingIntegration in
+// sentry.Init.
 package main
 
 import (
@@ -32,15 +32,13 @@ func main() {
 		Dsn:              dsn,
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
+		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
+			return append(integrations, sentryotel.NewErrorLinkingIntegration())
+		},
 	}); err != nil {
 		log.Fatalf("sentry.Init: %v", err)
 	}
 	defer sentry.Flush(2 * time.Second)
-
-	// Register error linking once. This works for both direct Sentry OTLP export
-	// and collector-based OTel export, as long as errors are captured with an
-	// EventHint containing the active context.
-	sentry.AddGlobalEventProcessor(sentryotel.NewEventProcessor())
 
 	ctx := context.Background()
 	// Direct-to-Sentry setup:
@@ -48,8 +46,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// When working with the collector, only the [sentryotel.NewEventProcessor] needs to be
-	// registered, to correctly link sentry errors with traces.
+	// When exporting through a collector, keep the same Sentry initialization above
+	// and switch only the TracerProvider setup:
 	//
 	// tp, err := setupTracerProviderWithCollector(ctx)
 	// ...
