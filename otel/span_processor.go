@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/otel/internal/common"
 	"github.com/getsentry/sentry-go/otel/internal/utils"
 	"go.opentelemetry.io/otel/attribute"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
@@ -16,11 +17,17 @@ type sentrySpanProcessor struct{}
 // At the moment we do not support multiple instances.
 var sentrySpanProcessorInstance *sentrySpanProcessor
 
+// NewSentrySpanProcessor creates an OpenTelemetry span processor that mirrors
+// OTel spans into Sentry's native span model.
+//
+// Deprecated: Prefer OTLP export via sentryotlp.NewTraceExporter.
+// For collector-based setups, use the standard OTel exporter and register
+// sentryotel.NewErrorLinkingIntegration for error linking.
 func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
 	if sentrySpanProcessorInstance != nil {
 		return sentrySpanProcessorInstance
 	}
-	sentry.AddGlobalEventProcessor(linkTraceContextToErrorEvent)
+	sentry.AddGlobalEventProcessor(common.NewEventProcessor())
 	sentrySpanProcessorInstance = &sentrySpanProcessor{}
 	return sentrySpanProcessorInstance
 }
