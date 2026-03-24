@@ -26,11 +26,11 @@ jobs:
       # this step for the whole matrix.
       RUN_RACE_TESTS: ${{ github.event_name != 'pull_request' || (matrix.go == '1.26' && matrix.os == 'ubuntu') }}
     steps:
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/checkout@v6
-      - uses: actions/cache@v5
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
         with:
           # In order:
           # * Module download cache
