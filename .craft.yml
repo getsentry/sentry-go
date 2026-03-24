@@ -5,6 +5,7 @@ versioning:
   policy: auto
 artifactProvider:
   name: none
+preReleaseCommand: bash scripts/bump-version.sh
 targets:
   - name: github
     tagPrefix: v
