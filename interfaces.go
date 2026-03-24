@@ -494,7 +494,7 @@ func (e *Event) safeMarshal() (b []byte, err error) {
 
 // ToEnvelopeItem converts the Event to a Sentry envelope item.
 func (e *Event) ToEnvelopeItem() (item *protocol.EnvelopeItem, err error) {
-	eventBody, err := e.safeMarshal()
+	eventBody, err := json.Marshal(e)
 	if err != nil {
 		// Try fallback: remove problematic fields and retry.
 		// Clear both original and pre-serialized versions.
