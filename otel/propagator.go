@@ -11,6 +11,12 @@ import (
 
 type sentryPropagator struct{}
 
+// NewSentryPropagator creates a propagator for Sentry trace headers.
+//
+// Deprecated: This propagator depends on the span-processor integration and does
+// not work for OTLP-based setups. Prefer the standard OpenTelemetry propagators.
+//
+// For more details: https://github.com/getsentry/sentry-go/issues/1221
 func NewSentryPropagator() propagation.TextMapPropagator {
 	return &sentryPropagator{}
 }
