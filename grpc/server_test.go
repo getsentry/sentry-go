@@ -130,7 +130,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 				gotTransaction := <-transactionsCh
 				assert.NotNil(t, gotTransaction, "Expected a transaction")
 				assert.Equal(t, "TestService.Method", gotTransaction.Transaction, "Transaction names should match")
-				assert.Equal(t, "grpc.server", gotTransaction.Contexts["trace"]["op"])
+				assert.Equal(t, "rpc.server", gotTransaction.Contexts["trace"]["op"])
 				assert.Equal(t, "TestService.Method", gotTransaction.Contexts["trace"]["description"])
 				assert.Equal(t, sentry.SourceCustom, gotTransaction.TransactionInfo.Source)
 				assert.Equal(t, "TestService.Method", gotTransaction.Contexts["grpc"]["method"])
@@ -270,12 +270,12 @@ func TestStreamServerInterceptor(t *testing.T) {
 				assert.NotNil(t, gotTransaction, "Expected a transaction")
 				traceContext, ok := gotTransaction.Contexts["trace"]
 				assert.True(t, ok, "Expected trace context on the transaction")
-				assert.Equal(t, "grpc.server", traceContext["op"])
+				assert.Equal(t, "rpc.server", traceContext["op"])
 				assert.Equal(t, "TestService.StreamMethod", gotTransaction.Transaction)
-				assert.Equal(t, codes.OK, gotTransaction.Contexts["trace"]["data"].(map[string]interface{})["rpc.grpc.status_code"])
+				assert.Equal(t, int(codes.OK), gotTransaction.Contexts["trace"]["data"].(map[string]interface{})["rpc.grpc.status_code"])
 				assert.Equal(t, "TestService.StreamMethod", gotTransaction.Contexts["trace"]["description"])
 				assert.Equal(t, "TestService.StreamMethod", gotTransaction.Contexts["grpc"]["method"])
-				assert.Equal(t, "TestService", gotTransaction.Contexts["trace"]["data"].(map[string]interface{})["rpc.service"])
+				assert.Equal(t, "TestService.StreamMethod", gotTransaction.Contexts["trace"]["data"].(map[string]interface{})["rpc.service"])
 			}
 
 			if test.options.Repanic {
