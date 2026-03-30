@@ -13,7 +13,7 @@ const SDKVersion = "0.44.1"
 const apiVersion = "7"
 
 // DefaultFlushTimeout is the default timeout used for flushing events.
-const DefaultFlushTimeout = 2 * time.Second
+const DefaultFlushTimeout = 5 * time.Second
 
 // Init initializes the SDK with options. The returned error is non-nil if
 // options is invalid, for instance if a malformed DSN is provided.
