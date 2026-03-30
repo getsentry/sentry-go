@@ -1,7 +1,11 @@
-minVersion: 0.35.0
-changelogPolicy: simple
+minVersion: 2.24.1
+changelog:
+  policy: auto
+versioning:
+  policy: auto
 artifactProvider:
   name: none
+preReleaseCommand: bash scripts/bump-version.sh
 targets:
   - name: github
     tagPrefix: v
@@ -21,6 +25,9 @@ targets:
     tagPrefix: gin/v
     tagOnly: true
   - name: github
+    tagPrefix: grpc/v
+    tagOnly: true
+  - name: github
     tagPrefix: iris/v
     tagOnly: true
   - name: github
@@ -36,7 +43,7 @@ targets:
     tagPrefix: zerolog/v
     tagOnly: true
   - name: github
-    tagPrefix: grpc/v
+    tagPrefix: zap/v
     tagOnly: true
   - name: registry
     sdks:

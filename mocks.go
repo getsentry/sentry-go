@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -39,9 +40,60 @@ func (t *MockTransport) SendEvent(event *Event) {
 func (t *MockTransport) Flush(_ time.Duration) bool {
 	return true
 }
+func (t *MockTransport) FlushWithContext(_ context.Context) bool { return true }
 func (t *MockTransport) Events() []*Event {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.events
 }
 func (t *MockTransport) Close() {}
+
+// MockLogEntry implements [sentry.LogEntry] for use in tests.
+type MockLogEntry struct {
+	Attributes map[string]any
+}
+
+func (m *MockLogEntry) StringSlice(key string, value []string) LogEntry {
+	m.Attributes[key] = value
+	return m
+}
+
+func (m *MockLogEntry) Int64Slice(key string, value []int64) LogEntry {
+	m.Attributes[key] = value
+	return m
+}
+
+func (m *MockLogEntry) Float64Slice(key string, value []float64) LogEntry {
+	m.Attributes[key] = value
+	return m
+}
+
+func (m *MockLogEntry) BoolSlice(key string, value []bool) LogEntry {
+	m.Attributes[key] = value
+	return m
+}
+
+func NewMockLogEntry() *MockLogEntry {
+	return &MockLogEntry{Attributes: make(map[string]any)}
+}
+
+func (m *MockLogEntry) WithCtx(_ context.Context) LogEntry { return m }
+func (m *MockLogEntry) String(key, value string) LogEntry  { m.Attributes[key] = value; return m }
+func (m *MockLogEntry) Int(key string, value int) LogEntry {
+	m.Attributes[key] = int64(value)
+	return m
+}
+func (m *MockLogEntry) Int64(key string, value int64) LogEntry {
+	m.Attributes[key] = value
+	return m
+}
+func (m *MockLogEntry) Float64(key string, value float64) LogEntry {
+	m.Attributes[key] = value
+	return m
+}
+func (m *MockLogEntry) Bool(key string, value bool) LogEntry {
+	m.Attributes[key] = value
+	return m
+}
+func (m *MockLogEntry) Emit(...any)          {}
+func (m *MockLogEntry) Emitf(string, ...any) {}

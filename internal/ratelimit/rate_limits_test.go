@@ -59,7 +59,9 @@ func TestParseXSentryRateLimits(t *testing.T) {
 		{
 			// ignore unknown categories
 			"8:error;default;unknown",
-			Map{CategoryError: Deadline(now.Add(8 * time.Second))},
+			Map{
+				CategoryError: Deadline(now.Add(8 * time.Second)),
+			},
 		},
 		{
 			"30:error:scope1, 20:error:scope2, 40:error",

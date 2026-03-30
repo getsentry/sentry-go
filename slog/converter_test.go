@@ -156,6 +156,10 @@ func TestAttrToSentryEvent(t *testing.T) {
 				}},
 			},
 		},
+		"fingerprint": {
+			attr:     slog.Attr{Key: "fingerprint", Value: slog.AnyValue([]string{"value1", "value2"})},
+			expected: &sentry.Event{Fingerprint: []string{"value1", "value2"}},
+		},
 	}
 
 	for name, tc := range tests {
@@ -171,6 +175,7 @@ func TestAttrToSentryEvent(t *testing.T) {
 			assert.Equal(t, tc.expected.Transaction, event.Transaction)
 			assert.Equal(t, tc.expected.User, event.User)
 			assert.Equal(t, tc.expected.Request, event.Request)
+			assert.Equal(t, tc.expected.Fingerprint, event.Fingerprint)
 			if len(tc.expected.Tags) == 0 {
 				assert.Empty(t, event.Tags)
 			} else {

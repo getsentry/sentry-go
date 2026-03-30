@@ -8,13 +8,16 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"strconv"
 	"testing"
 )
 
 type mockReadOnlySpan struct {
 	trace.ReadOnlySpan
+	name       string
 	status     trace.Status
+	spanKind   oteltrace.SpanKind
 	attributes []attribute.KeyValue
 }
 
@@ -26,6 +29,14 @@ func (m *mockReadOnlySpan) Attributes() []attribute.KeyValue {
 
 func (m *mockReadOnlySpan) Status() trace.Status {
 	return m.status
+}
+
+func (m *mockReadOnlySpan) SpanKind() oteltrace.SpanKind {
+	return m.spanKind
+}
+
+func (m *mockReadOnlySpan) Name() string {
+	return m.name
 }
 
 func TestMapOtelStatus(t *testing.T) {

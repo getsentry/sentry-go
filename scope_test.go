@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/getsentry/sentry-go/attribute"
 )
 
 const sharedContextsKey = "sharedContextsKey"
@@ -132,6 +134,43 @@ func TestScopeSetTagsOverrides(t *testing.T) {
 	scope.SetTags(map[string]string{"a": "bar", "b": "baz"})
 
 	assertEqual(t, map[string]string{"a": "bar", "b": "baz"}, scope.tags)
+}
+
+func TestScope_SetAttributes(t *testing.T) {
+	scope := NewScope()
+	scope.SetAttributes(
+		attribute.String("key.string", "str"),
+		attribute.Bool("key.bool", true),
+	)
+
+	assertEqual(t, map[string]attribute.Value{
+		"key.string": attribute.StringValue("str"),
+		"key.bool":   attribute.BoolValue(true),
+	}, scope.attributes)
+}
+
+func TestScopeRemoveAttributeOnEmptyScope(t *testing.T) {
+	scope := NewScope()
+	scope.RemoveAttribute("key.nonexistent")
+
+	assertEqual(t, make(map[string]attribute.Value), scope.attributes)
+}
+
+func TestScopeRemoveAttributeNotInPopulateAttrs(t *testing.T) {
+	scope := NewScope()
+	scope.SetAttributes(
+		attribute.String("key.one", "val1"),
+		attribute.String("key.two", "val2"),
+	)
+	scope.RemoveAttribute("key.two")
+
+	attrs := make(map[string]attribute.Value)
+	scope.populateAttrs(attrs)
+
+	if _, ok := attrs["key.two"]; ok {
+		t.Error("removed attribute should not appear in populateAttrs output")
+	}
+	assertEqual(t, attribute.StringValue("val1"), attrs["key.one"])
 }
 
 func TestScopeRemoveTag(t *testing.T) {
@@ -330,15 +369,15 @@ func TestScopeSetLevelOverrides(t *testing.T) {
 
 func TestAddBreadcrumbAddsBreadcrumb(t *testing.T) {
 	scope := NewScope()
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"}, defaultMaxBreadcrumbs)
 	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "test"}}, scope.breadcrumbs)
 }
 
 func TestAddBreadcrumbAppendsBreadcrumb(t *testing.T) {
 	scope := NewScope()
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test1"}, maxBreadcrumbs)
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test2"}, maxBreadcrumbs)
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test3"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test1"}, defaultMaxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test2"}, defaultMaxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test3"}, defaultMaxBreadcrumbs)
 
 	assertEqual(t, []*Breadcrumb{
 		{Timestamp: testNow, Message: "test1"},
@@ -350,7 +389,7 @@ func TestAddBreadcrumbAppendsBreadcrumb(t *testing.T) {
 func TestAddBreadcrumbDefaultLimit(t *testing.T) {
 	scope := NewScope()
 	for i := 0; i < 101; i++ {
-		scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"}, maxBreadcrumbs)
+		scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"}, defaultMaxBreadcrumbs)
 	}
 
 	if len(scope.breadcrumbs) != 100 {
@@ -361,7 +400,7 @@ func TestAddBreadcrumbDefaultLimit(t *testing.T) {
 func TestAddBreadcrumbAddsTimestamp(t *testing.T) {
 	scope := NewScope()
 	before := time.Now()
-	scope.AddBreadcrumb(&Breadcrumb{Message: "test"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Message: "test"}, defaultMaxBreadcrumbs)
 	after := time.Now()
 	ts := scope.breadcrumbs[0].Timestamp
 
@@ -412,7 +451,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone.SetExtra("foo", "bar")
 	clone.SetLevel(LevelDebug)
 	clone.SetFingerprint([]string{"foo"})
-	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, maxBreadcrumbs)
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, defaultMaxBreadcrumbs)
 	clone.AddAttachment(&Attachment{Filename: "foo.txt", Payload: []byte("foo")})
 	clone.SetUser(User{ID: "foo"})
 	r1 := httptest.NewRequest("GET", "/foo", nil)
@@ -427,7 +466,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	scope.SetExtra("foo", "baz")
 	scope.SetLevel(LevelFatal)
 	scope.SetFingerprint([]string{"bar"})
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"}, defaultMaxBreadcrumbs)
 	scope.AddAttachment(&Attachment{Filename: "bar.txt", Payload: []byte("bar")})
 	scope.SetUser(User{ID: "bar"})
 	r2 := httptest.NewRequest("GET", "/bar", nil)
@@ -447,7 +486,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r1, clone.request)
 	assertEqual(t, p1, clone.propagationContext)
-	assertEqual(t, s1, clone.span)
+	assertEqual(t, s1, clone.GetSpan())
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -458,7 +497,7 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r2, scope.request)
-	assertEqual(t, s2, scope.span)
+	assertEqual(t, s2, scope.GetSpan())
 }
 
 func TestScopeChildOverrideInheritance(t *testing.T) {
@@ -469,7 +508,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.SetExtra("foo", "baz")
 	scope.SetLevel(LevelFatal)
 	scope.SetFingerprint([]string{"bar"})
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"}, defaultMaxBreadcrumbs)
 	scope.AddAttachment(&Attachment{Filename: "bar.txt", Payload: []byte("bar")})
 	scope.SetUser(User{ID: "bar"})
 	r1 := httptest.NewRequest("GET", "/bar", nil)
@@ -488,7 +527,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.SetExtra("foo", "bar")
 	clone.SetLevel(LevelDebug)
 	clone.SetFingerprint([]string{"foo"})
-	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, maxBreadcrumbs)
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, defaultMaxBreadcrumbs)
 	clone.AddAttachment(&Attachment{Filename: "foo.txt", Payload: []byte("foo")})
 	clone.SetUser(User{ID: "foo"})
 	r2 := httptest.NewRequest("GET", "/foo", nil)
@@ -517,7 +556,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r2, clone.request)
 	assertEqual(t, p2, clone.propagationContext)
-	assertEqual(t, s2, clone.span)
+	assertEqual(t, s2, clone.GetSpan())
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -529,7 +568,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r1, scope.request)
 	assertEqual(t, p1, scope.propagationContext)
-	assertEqual(t, s1, scope.span)
+	assertEqual(t, s1, scope.GetSpan())
 
 	assertEqual(t, len(scope.eventProcessors), 1)
 	assertEqual(t, len(clone.eventProcessors), 2)
@@ -548,7 +587,7 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, (*http.Request)(nil), scope.request)
-	assertEqual(t, (*Span)(nil), scope.span)
+	assertEqual(t, (*Span)(nil), scope.GetSpan())
 }
 
 func TestClearAndReconfigure(t *testing.T) {
@@ -560,7 +599,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetExtra("foo", "bar")
 	scope.SetLevel(LevelDebug)
 	scope.SetFingerprint([]string{"foo"})
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, maxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, defaultMaxBreadcrumbs)
 	scope.AddAttachment(&Attachment{Filename: "foo.txt", Payload: []byte("foo")})
 	scope.SetUser(User{ID: "foo"})
 	r := httptest.NewRequest("GET", "/foo", nil)
@@ -580,7 +619,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, scope.user)
 	assertEqual(t, r, scope.request)
 	assertEqual(t, p, scope.propagationContext)
-	assertEqual(t, s, scope.span)
+	assertEqual(t, s, scope.GetSpan())
 }
 
 func TestClearBreadcrumbs(t *testing.T) {

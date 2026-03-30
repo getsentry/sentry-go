@@ -1,18 +1,23 @@
 package sentry
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,6 +52,7 @@ func setupClientTest() (*Client, *MockScope, *MockTransport) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:       "http://whatever@example.com/1337",
 		Transport: transport,
+		// keep default buffers enabled
 		Integrations: func(_ []Integration) []Integration {
 			return []Integration{}
 		},
@@ -80,7 +86,7 @@ func TestCaptureMessageEmptyString(t *testing.T) {
 	}
 	got := transport.lastEvent
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 			return &Event{
 				Exception: e.Exception,
@@ -162,12 +168,15 @@ func TestCaptureException(t *testing.T) {
 			err:  pkgErrors.WithStack(&customErr{}),
 			want: []Exception{
 				{
-					Type:  "*sentry.customErr",
-					Value: "wat",
+					Type:       "*sentry.customErr",
+					Value:      "wat",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
-						Type:             "generic",
-						ExceptionID:      0,
-						IsExceptionGroup: true,
+						Type:             MechanismTypeChained,
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						Source:           MechanismTypeUnwrap,
+						IsExceptionGroup: false,
 					},
 				},
 				{
@@ -175,10 +184,11 @@ func TestCaptureException(t *testing.T) {
 					Value:      "wat",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
-						Type:             "generic",
-						ExceptionID:      1,
-						ParentID:         Pointer(0),
-						IsExceptionGroup: true,
+						Type:             MechanismTypeGeneric,
+						ExceptionID:      0,
+						ParentID:         nil,
+						Source:           "",
+						IsExceptionGroup: false,
 					},
 				},
 			},
@@ -199,12 +209,15 @@ func TestCaptureException(t *testing.T) {
 			err:  &customErrWithCause{cause: &customErr{}},
 			want: []Exception{
 				{
-					Type:  "*sentry.customErr",
-					Value: "wat",
+					Type:       "*sentry.customErr",
+					Value:      "wat",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
-						Type:             "generic",
-						ExceptionID:      0,
-						IsExceptionGroup: true,
+						Type:             MechanismTypeChained,
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						Source:           "cause",
+						IsExceptionGroup: false,
 					},
 				},
 				{
@@ -212,10 +225,11 @@ func TestCaptureException(t *testing.T) {
 					Value:      "err",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
-						Type:             "generic",
-						ExceptionID:      1,
-						ParentID:         Pointer(0),
-						IsExceptionGroup: true,
+						Type:             MechanismTypeGeneric,
+						ExceptionID:      0,
+						ParentID:         nil,
+						Source:           "",
+						IsExceptionGroup: false,
 					},
 				},
 			},
@@ -225,12 +239,15 @@ func TestCaptureException(t *testing.T) {
 			err:  wrappedError{original: errors.New("original")},
 			want: []Exception{
 				{
-					Type:  "*errors.errorString",
-					Value: "original",
+					Type:       "*errors.errorString",
+					Value:      "original",
+					Stacktrace: nil,
 					Mechanism: &Mechanism{
-						Type:             "generic",
-						ExceptionID:      0,
-						IsExceptionGroup: true,
+						Type:             MechanismTypeChained,
+						ExceptionID:      1,
+						ParentID:         Pointer(0),
+						Source:           MechanismTypeUnwrap,
+						IsExceptionGroup: false,
 					},
 				},
 				{
@@ -238,10 +255,11 @@ func TestCaptureException(t *testing.T) {
 					Value:      "wrapped: original",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
-						Type:             "generic",
-						ExceptionID:      1,
-						ParentID:         Pointer(0),
-						IsExceptionGroup: true,
+						Type:             MechanismTypeGeneric,
+						ExceptionID:      0,
+						ParentID:         nil,
+						Source:           "",
+						IsExceptionGroup: false,
 					},
 				},
 			},
@@ -317,7 +335,7 @@ func TestCaptureEvent(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "sdkMetaData")}
+	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release"), cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser")}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
@@ -345,7 +363,7 @@ func TestCaptureEventNil(t *testing.T) {
 	}
 	got := transport.lastEvent
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 			return &Event{
 				Exception: e.Exception,
@@ -697,6 +715,137 @@ func TestIgnoreTransactions(t *testing.T) {
 	}
 }
 
+func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
+	transport := &MockTransport{}
+	ctx := NewTestContext(ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		Transport:        transport,
+	})
+
+	transaction := StartTransaction(ctx, "test")
+	// Transaction has no http.response.status_code
+	transaction.Finish()
+
+	dropped := transport.lastEvent == nil
+	assertEqual(t, dropped, false, "expected transaction to not be dropped")
+}
+
+func TestTraceIgnoreStatusCodes(t *testing.T) {
+	tests := map[string]struct {
+		ignoreStatusCodes [][]int
+		statusCode        interface{}
+		expectDrop        bool
+	}{
+		"Default behavior: ignoreStatusCodes = nil, should drop 404s": {
+			statusCode:        404,
+			ignoreStatusCodes: nil,
+			expectDrop:        true,
+		},
+		"Specify No ignored codes": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{},
+			expectDrop:        false,
+		},
+		"Status code not in ignore ranges": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        false,
+		},
+		"404 in ignore range": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        true,
+		},
+		"403 in ignore range": {
+			statusCode:        403,
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        true,
+		},
+		"200 not ignored": {
+			statusCode:        200,
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        false,
+		},
+		"wrong code not ignored": {
+			statusCode:        "something",
+			ignoreStatusCodes: [][]int{{400, 405}},
+			expectDrop:        false,
+		},
+		"Single status code as single-element slice": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{404}},
+			expectDrop:        true,
+		},
+		"Single status code not in single-element slice": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{404}},
+			expectDrop:        false,
+		},
+		"Multiple single codes": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{404}, {500}},
+			expectDrop:        true,
+		},
+		"Multiple ranges - code in first range": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{400, 405}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Multiple ranges - code in second range": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{400, 405}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Multiple ranges - code not in any range": {
+			statusCode:        200,
+			ignoreStatusCodes: [][]int{{400, 405}, {500, 599}},
+			expectDrop:        false,
+		},
+		"Mixed single codes and ranges": {
+			statusCode:        404,
+			ignoreStatusCodes: [][]int{{404}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Mixed single codes and ranges - code in range": {
+			statusCode:        500,
+			ignoreStatusCodes: [][]int{{404}, {500, 599}},
+			expectDrop:        true,
+		},
+		"Mixed single codes and ranges - code not matched": {
+			statusCode:        200,
+			ignoreStatusCodes: [][]int{{404}, {500, 599}},
+			expectDrop:        false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			transport := &MockTransport{}
+			ctx := NewTestContext(ClientOptions{
+				EnableTracing:          true,
+				TracesSampleRate:       1.0,
+				Transport:              transport,
+				TraceIgnoreStatusCodes: tt.ignoreStatusCodes,
+			})
+
+			transaction := StartTransaction(ctx, "test")
+			// Simulate HTTP response data like the integrations do
+			transaction.SetData("http.response.status_code", tt.statusCode)
+			transaction.Finish()
+
+			dropped := transport.lastEvent == nil
+			if tt.expectDrop != dropped {
+				if tt.expectDrop {
+					t.Errorf("expected transaction with status code %d to be dropped", tt.statusCode)
+				} else {
+					t.Errorf("expected transaction with status code %d not to be dropped", tt.statusCode)
+				}
+			}
+		})
+	}
+}
+
 func TestSampleRate(t *testing.T) {
 	tests := []struct {
 		SampleRate float64
@@ -751,6 +900,37 @@ func TestSampleRate(t *testing.T) {
 		})
 	}
 }
+func TestClient_ParseOrgID(t *testing.T) {
+	c, err := NewClient(ClientOptions{
+		Dsn: "https://example@o1.ingest.us.sentry.io/1337",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, uint64(1), c.dsn.GetOrgID(), "Custom org id should override the DSN parsed one")
+}
+
+func TestClient_ParseOrgIDInvalid(t *testing.T) {
+	c, err := NewClient(ClientOptions{
+		// org id is MaxUint64 + 1, should be considered empty
+		Dsn: "https://example@o18446744073709551616.ingest.us.sentry.io/1337",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, uint64(0), c.dsn.GetOrgID(), "Custom org id should override the DSN parsed one")
+}
+
+func TestClientOptions_OrgIDShouldOverrideParsed(t *testing.T) {
+	c, err := NewClient(ClientOptions{
+		Dsn:   "https://example@o1.ingest.us.sentry.io/1337",
+		OrgID: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.Equal(t, uint64(2), c.dsn.GetOrgID(), "Custom org id should override the DSN parsed one")
+}
 
 func BenchmarkProcessEvent(b *testing.B) {
 	c, err := NewClient(ClientOptions{
@@ -799,7 +979,7 @@ func TestRecover(t *testing.T) {
 		}
 		got := events[0]
 		opts := cmp.Options{
-			cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
+			cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 			cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
 				return &Event{
 					Message:   e.Message,
@@ -871,9 +1051,220 @@ func TestSDKIdentifier(t *testing.T) {
 }
 
 func TestClientSetsUpTransport(t *testing.T) {
-	client, _ := NewClient(ClientOptions{Dsn: testDsn})
-	require.IsType(t, &HTTPTransport{}, client.Transport)
+	client, _ := NewClient(ClientOptions{
+		Dsn: testDsn,
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return nil, fmt.Errorf("mock transport - no real connections")
+				},
+			},
+		},
+		Transport: &MockTransport{},
+	})
+	require.IsType(t, &MockTransport{}, client.Transport)
 
 	client, _ = NewClient(ClientOptions{})
 	require.IsType(t, &noopTransport{}, client.Transport)
+}
+
+func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
+	var buf bytes.Buffer
+	debuglog.SetOutput(&buf)
+	defer debuglog.SetOutput(&bytes.Buffer{})
+
+	client, err := NewClient(ClientOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if client.telemetryProcessor != nil {
+		t.Fatal("expected telemetryProcessor to be nil when DSN is missing")
+	}
+
+	if _, ok := client.Transport.(*noopTransport); !ok {
+		t.Fatalf("expected noopTransport, got %T", client.Transport)
+	}
+}
+
+type multiClientEnv struct {
+	client1, client2       *Client
+	transport1, transport2 *MockTransport
+	hub1, hub2             *Hub
+	ctx1, ctx2             context.Context
+	traceID1, traceID2     TraceID
+}
+
+func setupMultiClientEnv(t *testing.T) *multiClientEnv {
+	t.Helper()
+	mkClient := func(dsn string) (*Client, *MockTransport) {
+		tr := &MockTransport{}
+		c, err := NewClient(ClientOptions{
+			Dsn:        dsn,
+			Transport:  tr,
+			EnableLogs: true,
+			Integrations: func(_ []Integration) []Integration {
+				return []Integration{}
+			},
+		})
+		require.NoError(t, err)
+		return c, tr
+	}
+
+	e := &multiClientEnv{}
+	e.client1, e.transport1 = mkClient("https://public@example.com/sentry/1")
+	e.client2, e.transport2 = mkClient("https://public@example.com/sentry/2")
+	e.traceID1 = TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
+	e.traceID2 = TraceIDFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2")
+
+	scope1 := NewScope()
+	scope1.SetPropagationContext(PropagationContext{TraceID: e.traceID1})
+	scope2 := NewScope()
+	scope2.SetPropagationContext(PropagationContext{TraceID: e.traceID2})
+
+	e.hub1 = NewHub(e.client1, scope1)
+	e.hub2 = NewHub(e.client2, scope2)
+	e.ctx1 = SetHubOnContext(context.Background(), e.hub1)
+	e.ctx2 = SetHubOnContext(context.Background(), e.hub2)
+
+	t.Cleanup(func() {
+		e.client1.Close()
+		e.client2.Close()
+	})
+	return e
+}
+
+func (e *multiClientEnv) resetTransports() {
+	e.transport1.mu.Lock()
+	e.transport1.events = nil
+	e.transport1.mu.Unlock()
+	e.transport2.mu.Lock()
+	e.transport2.events = nil
+	e.transport2.mu.Unlock()
+}
+
+func (e *multiClientEnv) flushAll() {
+	e.client1.Flush(5 * time.Second)
+	e.client2.Flush(5 * time.Second)
+}
+
+func eventTraceID(t *testing.T, ev *Event) TraceID {
+	t.Helper()
+	traceCtx, ok := ev.Contexts["trace"]
+	require.True(t, ok, "event should have a trace context")
+	tid, ok := traceCtx["trace_id"].(TraceID)
+	require.True(t, ok, "trace context should contain a TraceID")
+	return tid
+}
+
+func TestClient_MultiClientSetup(t *testing.T) {
+	t.Run("signals_route_to_correct_client", func(t *testing.T) {
+		e := setupMultiClientEnv(t)
+
+		e.hub1.CaptureMessage("msg-from-client1")
+		e.hub2.CaptureMessage("msg-from-client2")
+
+		require.Len(t, e.transport1.Events(), 1)
+		require.Len(t, e.transport2.Events(), 1)
+		assert.Equal(t, "msg-from-client1", e.transport1.Events()[0].Message)
+		assert.Equal(t, "msg-from-client2", e.transport2.Events()[0].Message)
+		assert.Equal(t, e.traceID1, eventTraceID(t, e.transport1.Events()[0]),
+			"event on client1 should carry hub1's trace ID")
+		assert.Equal(t, e.traceID2, eventTraceID(t, e.transport2.Events()[0]),
+			"event on client2 should carry hub2's trace ID")
+		e.resetTransports()
+
+		NewLogger(e.ctx1).Info().WithCtx(e.ctx1).Emit("log-from-client1")
+		NewLogger(e.ctx2).Info().WithCtx(e.ctx2).Emit("log-from-client2")
+		e.flushAll()
+
+		require.Len(t, e.transport1.Events(), 1, "client1 transport should have 1 log event")
+		require.Len(t, e.transport2.Events(), 1, "client2 transport should have 1 log event")
+		require.Len(t, e.transport1.Events()[0].Logs, 1)
+		require.Len(t, e.transport2.Events()[0].Logs, 1)
+		assert.Equal(t, "log-from-client1", e.transport1.Events()[0].Logs[0].Body)
+		assert.Equal(t, "log-from-client2", e.transport2.Events()[0].Logs[0].Body)
+		assert.Equal(t, e.traceID1, e.transport1.Events()[0].Logs[0].TraceID,
+			"log on client1 should carry hub1's trace ID")
+		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
+			"log on client2 should carry hub2's trace ID")
+		e.resetTransports()
+
+		NewMeter(e.ctx1).Count("counter-from-client1", 1)
+		NewMeter(e.ctx2).Count("counter-from-client2", 2)
+		e.flushAll()
+
+		require.Len(t, e.transport1.Events(), 1, "client1 transport should have 1 metric event")
+		require.Len(t, e.transport2.Events(), 1, "client2 transport should have 1 metric event")
+		require.Len(t, e.transport1.Events()[0].Metrics, 1)
+		require.Len(t, e.transport2.Events()[0].Metrics, 1)
+		assert.Equal(t, "counter-from-client1", e.transport1.Events()[0].Metrics[0].Name)
+		assert.Equal(t, "counter-from-client2", e.transport2.Events()[0].Metrics[0].Name)
+	})
+
+	t.Run("signals_respect_emit_context_client", func(t *testing.T) {
+		e := setupMultiClientEnv(t)
+		logger := NewLogger(e.ctx1)
+		meter := NewMeter(e.ctx1)
+		logger.Info().WithCtx(e.ctx2).Emit("cross-context-log")
+		meter.WithCtx(e.ctx2).Count("cross-context-count", 1)
+		e.flushAll()
+
+		assert.Empty(t, e.transport1.Events(),
+			"creation-time client should NOT receive the log when emit context points elsewhere")
+		require.Len(t, e.transport2.Events(), 2,
+			"emit-context client should receive the signals")
+		require.Len(t, e.transport2.Events()[0].Logs, 1)
+		require.Len(t, e.transport2.Events()[1].Metrics, 1)
+		assert.Equal(t, "cross-context-log", e.transport2.Events()[0].Logs[0].Body)
+		assert.Equal(t, "cross-context-count", e.transport2.Events()[1].Metrics[0].Name)
+		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
+			"trace ID should come from the emit context's hub, not the creation context")
+	})
+
+	t.Run("signals_follow_bind_client", func(t *testing.T) {
+		e := setupMultiClientEnv(t)
+
+		traceID := TraceIDFromHex("cccccccccccccccccccccccccccccccc")
+		scope := NewScope()
+		scope.SetPropagationContext(PropagationContext{TraceID: traceID})
+		hub := NewHub(e.client1, scope)
+		ctx := SetHubOnContext(context.Background(), hub)
+		logger := NewLogger(ctx)
+		meter := NewMeter(ctx)
+
+		hub.BindClient(e.client2)
+
+		hub.CaptureMessage("event-after-rebind")
+		logger.Info().WithCtx(ctx).Emit("log-after-rebind")
+		meter.WithCtx(ctx).Count("count-after-rebind", 1)
+		e.flushAll()
+
+		assert.Empty(t, e.transport1.Events(),
+			"old client should not receive any signals after BindClient")
+		require.Len(t, e.transport2.Events(), 3,
+			"new client should receive all signals")
+
+		var gotEvent, gotLog, gotMetric bool
+		for _, ev := range e.transport2.Events() {
+			if ev.Message == "event-after-rebind" {
+				gotEvent = true
+				assert.Equal(t, traceID, eventTraceID(t, ev),
+					"event should carry the hub's trace ID")
+			}
+			if len(ev.Logs) == 1 && ev.Logs[0].Body == "log-after-rebind" {
+				gotLog = true
+				assert.Equal(t, traceID, ev.Logs[0].TraceID,
+					"log should carry the hub's trace ID")
+			}
+			if len(ev.Metrics) == 1 && ev.Metrics[0].Name == "count-after-rebind" {
+				gotMetric = true
+				assert.Equal(t, traceID, ev.Metrics[0].TraceID,
+					"count should carry the hub's trace ID")
+			}
+		}
+		assert.True(t, gotEvent, "event should arrive at new client")
+		assert.True(t, gotLog, "log should arrive at new client")
+		assert.True(t, gotMetric, "count should arrive at new client")
+	})
 }

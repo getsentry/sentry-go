@@ -354,8 +354,9 @@ func TestIntegration(t *testing.T) {
 	eventsCh := make(chan *sentry.Event, len(tests))
 	transactionsCh := make(chan *sentry.Event, len(tests))
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		EnableTracing:          true,
+		TracesSampleRate:       1.0,
+		TraceIgnoreStatusCodes: make([][]int, 0), // don't ignore any status codes
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
@@ -430,6 +431,8 @@ func TestIntegration(t *testing.T) {
 			"Contexts", "EventID", "Extra", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
 			"sdkMetaData",
+			"serializedExtra", "serializedContexts", "serializedBreadcrumbs",
+			"serializedException", "serializedUser",
 		),
 		cmpopts.IgnoreFields(
 			sentry.Request{},
@@ -454,6 +457,8 @@ func TestIntegration(t *testing.T) {
 			"EventID", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp",
 			"sdkMetaData", "StartTime", "Spans",
+			"serializedExtra", "serializedContexts", "serializedBreadcrumbs",
+			"serializedException", "serializedUser",
 		),
 		cmpopts.IgnoreFields(
 			sentry.Request{},

@@ -47,7 +47,7 @@ func captureMessage() {
 
 func configureScope() {
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetExtra("oristhis", "justfantasy")
+		scope.SetTag("oristhis", "justfantasy")
 		scope.SetTag("isthis", "reallife")
 		scope.SetLevel(sentry.LevelFatal)
 		scope.SetUser(sentry.User{
@@ -80,8 +80,8 @@ func addBreadcrumbs() {
 func withScopeAndConfigureScope() {
 	sentry.WithScope(func(scope *sentry.Scope) {
 		sentry.ConfigureScope(func(scope *sentry.Scope) {
-			scope.SetExtras(map[string]interface{}{
-				"istillcant": 42,
+			scope.SetTags(map[string]string{
+				"istillcant": "42",
 				"believe":    "that",
 			})
 			scope.SetTags(map[string]string{

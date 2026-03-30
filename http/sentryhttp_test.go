@@ -361,8 +361,8 @@ func TestIntegration(t *testing.T) {
 			sentry.Event{},
 			"Contexts", "EventID", "Extra", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
-			"sdkMetaData",
 		),
+		cmpopts.IgnoreFields(sentry.Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmpopts.IgnoreFields(
 			sentry.Request{},
 			"Env",
@@ -385,8 +385,9 @@ func TestIntegration(t *testing.T) {
 			sentry.Event{},
 			"EventID", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp",
-			"sdkMetaData", "StartTime", "Spans",
+			"StartTime", "Spans",
 		),
+		cmpopts.IgnoreFields(sentry.Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
 			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
 			for _, e := range ignoredCtxEntries {

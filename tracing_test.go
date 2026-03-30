@@ -155,8 +155,8 @@ func TestStartSpan(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
-			"sdkMetaData",
 		),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmpopts.EquateEmpty(),
 	}
 	if diff := cmp.Diff(want, events[0], opts); diff != "" {
@@ -220,8 +220,8 @@ func TestStartChild(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"EventID", "Level", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
-			"sdkMetaData",
 		),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmpopts.IgnoreMapEntries(func(k string, _ interface{}) bool {
 			return k != "trace"
 		}),
@@ -298,8 +298,8 @@ func TestStartTransaction(t *testing.T) {
 		cmpopts.IgnoreFields(Event{},
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
-			"sdkMetaData",
 		),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmpopts.EquateEmpty(),
 	}
 	if diff := cmp.Diff(want, events[0], opts); diff != "" {
@@ -485,6 +485,7 @@ func TestContinueSpanFromRequest(t *testing.T) {
 		sampled := sampled
 		t.Run(sampled.String(), func(t *testing.T) {
 			var s Span
+			s.ctx = context.Background()
 			hkey := http.CanonicalHeaderKey("sentry-trace")
 			hval := (&Span{
 				TraceID: traceID,
@@ -508,13 +509,14 @@ func TestContinueSpanFromRequest(t *testing.T) {
 
 func TestContinueTransactionFromHeaders(t *testing.T) {
 	tests := []struct {
+		name       string
 		traceStr   string
 		baggageStr string
 		// Using a pointer to Span so we don't implicitly copy Span.mu mutex
 		wantSpan *Span
 	}{
 		{
-			// No sentry-trace or baggage => nothing to do, unfrozen DSC
+			name:       "No sentry-trace or baggage => nothing to do, unfrozen DSC",
 			traceStr:   "",
 			baggageStr: "",
 			wantSpan: &Span{
@@ -526,20 +528,19 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			},
 		},
 		{
-			// Third-party baggage => nothing to do, unfrozen DSC
+			name:       "baggage => nothing to do, unfrozen DSC",
 			traceStr:   "",
 			baggageStr: "other-vendor-key1=value1;value2, other-vendor-key2=value3",
 			wantSpan: &Span{
 				Sampled: 0,
 				dynamicSamplingContext: DynamicSamplingContext{
 					Frozen:  false,
-					Entries: map[string]string{},
+					Entries: nil,
 				},
 			},
 		},
 		{
-			// sentry-trace and no baggage => we should create a new DSC and freeze it
-			// immediately.
+			name:       "sentry-trace and no baggage => we should create a new DSC and freeze it",
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
 			baggageStr: "",
 			wantSpan: &Span{
@@ -552,7 +553,7 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			},
 		},
 		{
-			// sentry-trace and baggage with Sentry values => we freeze immediately.
+			name:       "sentry-trace and baggage with Sentry values => we freeze immediately.",
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
 			baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
 			wantSpan: &Span{
@@ -569,14 +570,33 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:       "no sentry-trace and baggage with Sentry values => unfrozen DSC",
+			baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
+			wantSpan: &Span{
+				Sampled: 0,
+				dynamicSamplingContext: DynamicSamplingContext{
+					Frozen:  false,
+					Entries: nil,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
-		s := &Span{}
-		spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
-		spanOption(s)
+		t.Run(tt.name, func(t *testing.T) {
+			s := &Span{}
+			s.ctx = context.Background()
+			spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
+			spanOption(s)
 
-		assertEqual(t, s, tt.wantSpan)
+			if diff := cmp.Diff(tt.wantSpan, s, cmp.Options{
+				cmp.AllowUnexported(Span{}),
+				cmpopts.IgnoreFields(Span{}, "ctx", "mu", "finishOnce"),
+			}); diff != "" {
+				t.Fatalf("Expected no difference on spans, got: %s", diff)
+			}
+		})
 	}
 }
 
@@ -587,13 +607,14 @@ func TestContinueSpanFromTrace(t *testing.T) {
 	for _, sampled := range []Sampled{SampledTrue, SampledFalse, SampledUndefined} {
 		sampled := sampled
 		t.Run(sampled.String(), func(t *testing.T) {
-			var s Span
+			s := &Span{}
+			s.ctx = context.Background()
 			trace := (&Span{
 				TraceID: traceID,
 				SpanID:  spanID,
 				Sampled: sampled,
 			}).ToSentryTrace()
-			ContinueFromTrace(trace)(&s)
+			ContinueFromTrace(trace)(s)
 			if s.TraceID != traceID {
 				t.Errorf("got %q, want %q", s.TraceID, traceID)
 			}
@@ -1267,5 +1288,70 @@ func TestSpanScopeManagement(t *testing.T) {
 	}
 	if spanID != childSpan.SpanID {
 		t.Errorf("expected SpanID %s, got %s", transaction.SpanID, spanID)
+	}
+}
+
+func TestStrictTraceContinuation(t *testing.T) {
+	incomingTraceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
+	sentryTrace := "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1"
+
+	baggageWithOrg := func(orgID string) string {
+		return "sentry-org_id=" + orgID + ",sentry-trace_id=bc6d53f15eb88f4320054569b8c553d4"
+	}
+	baggageWithoutOrg := "sentry-trace_id=bc6d53f15eb88f4320054569b8c553d4"
+
+	tests := []struct {
+		name          string
+		baggageOrgID  string
+		sdkOrgID      uint64
+		strict        bool
+		wantContinued bool
+	}{
+		{"strict=false, baggage=1, sdk=1", "1", 1, false, true},
+		{"strict=false, baggage=none, sdk=1", "", 1, false, true},
+		{"strict=false, baggage=1, sdk=none", "1", 0, false, true},
+		{"strict=false, baggage=none, sdk=none", "", 0, false, true},
+		{"strict=false, baggage=1, sdk=2", "1", 2, false, false},
+
+		{"strict=true, baggage=1, sdk=1", "1", 1, true, true},
+		{"strict=true, baggage=none, sdk=1", "", 1, true, false},
+		{"strict=true, baggage=1, sdk=none", "1", 0, true, false},
+		{"strict=true, baggage=none, sdk=none", "", 0, true, true},
+		{"strict=true, baggage=1, sdk=2", "1", 2, true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &MockTransport{}
+			ctx := NewTestContext(ClientOptions{
+				Dsn:                     testDsn,
+				EnableTracing:           true,
+				TracesSampleRate:        1.0,
+				Transport:               transport,
+				StrictTraceContinuation: tt.strict,
+				OrgID:                   tt.sdkOrgID,
+			})
+
+			baggage := baggageWithoutOrg
+			if tt.baggageOrgID != "" {
+				baggage = baggageWithOrg(tt.baggageOrgID)
+			}
+
+			hub := GetHubFromContext(ctx)
+			transaction := StartTransaction(ctx, "test",
+				ContinueTrace(hub, sentryTrace, baggage),
+			)
+			transaction.Finish()
+
+			if tt.wantContinued {
+				if transaction.TraceID != incomingTraceID {
+					t.Errorf("expected trace to be continued, got new TraceID %s", transaction.TraceID)
+				}
+			} else {
+				if transaction.TraceID == incomingTraceID {
+					t.Errorf("expected new trace, but got continued TraceID %s", transaction.TraceID)
+				}
+			}
+		})
 	}
 }

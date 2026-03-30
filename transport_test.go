@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httptrace"
@@ -15,7 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/google/go-cmp/cmp"
 	"go.uber.org/goleak"
 )
@@ -25,9 +28,8 @@ type unserializableType struct {
 }
 
 const (
-	basicEvent                         = `{"message":"mkey","sdk":{},"user":{}}`
-	enhancedEventInvalidBreadcrumb     = `{"extra":{"info":"Could not encode original event as JSON. Succeeded by removing Breadcrumbs, Contexts and Extra. Please verify the data you attach to the scope. Error: json: error calling MarshalJSON for type *sentry.Event: json: error calling MarshalJSON for type *sentry.Breadcrumb: json: unsupported type: func()"},"message":"mkey","sdk":{},"user":{}}`
-	enhancedEventInvalidContextOrExtra = `{"extra":{"info":"Could not encode original event as JSON. Succeeded by removing Breadcrumbs, Contexts and Extra. Please verify the data you attach to the scope. Error: json: error calling MarshalJSON for type *sentry.Event: json: unsupported type: func()"},"message":"mkey","sdk":{},"user":{}}`
+	basicEvent         = `{"message":"mkey","sdk":{},"user":{}}`
+	invalidEventOutput = `{"extra":{"info":"Could not encode original event as JSON. Succeeded by removing Breadcrumbs, Contexts and Extra. Please verify the data you attach to the scope. Error: json: error calling MarshalJSON for type *sentry.Event: json: unsupported type: func()"},"message":"mkey","sdk":{},"user":{}}`
 )
 
 func TestGetRequestBodyFromEventValid(t *testing.T) {
@@ -54,7 +56,7 @@ func TestGetRequestBodyFromEventInvalidBreadcrumbsField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEventInvalidBreadcrumb
+	want := invalidEventOutput
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -70,7 +72,7 @@ func TestGetRequestBodyFromEventInvalidExtraField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEventInvalidContextOrExtra
+	want := invalidEventOutput
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -86,7 +88,7 @@ func TestGetRequestBodyFromEventInvalidContextField(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEventInvalidContextOrExtra
+	want := invalidEventOutput
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -110,7 +112,7 @@ func TestGetRequestBodyFromEventMultipleInvalidFields(t *testing.T) {
 	})
 
 	got := string(body)
-	want := enhancedEventInvalidBreadcrumb
+	want := invalidEventOutput
 
 	if got != want {
 		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
@@ -260,6 +262,44 @@ func TestEnvelopeFromCheckInEvent(t *testing.T) {
 	}
 }
 
+func TestEnvelopeFromLogEvent(t *testing.T) {
+	event := newTestEvent(logEvent.Type)
+	event.Logs = []Log{
+		{
+			TraceID:  TraceIDFromHex(LogTraceID),
+			Level:    LogLevelInfo,
+			Severity: LogSeverityInfo,
+			Body:     "test log message",
+			Attributes: map[string]attribute.Value{
+				"sentry.release":        attribute.StringValue("v1.2.3"),
+				"sentry.environment":    attribute.StringValue("testing"),
+				"sentry.server.address": attribute.StringValue("test-server"),
+				"sentry.sdk.name":       attribute.StringValue("sentry.go"),
+				"sentry.sdk.version":    attribute.StringValue("0.0.1"),
+				"key.int":               attribute.Int64Value(42),
+				"key.string":            attribute.StringValue("str"),
+				"key.float":             attribute.Float64Value(42.2),
+				"key.bool":              attribute.BoolValue(true),
+			},
+		},
+	}
+	sentAt := time.Unix(0, 0).UTC()
+
+	body := getRequestBodyFromEvent(event)
+	b, err := envelopeFromBody(event, newTestDSN(t), sentAt, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := b.String()
+	want := `{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sent_at":"1970-01-01T00:00:00Z","dsn":"http://public@example.com/sentry/1","sdk":{"name":"sentry.go","version":"0.0.1"}}
+{"type":"log","item_count":1,"content_type":"application/vnd.sentry.items.log+json"}
+{"event_id":"b81c5be4d31e48959103a1f878a1efcb","sdk":{"name":"sentry.go","version":"0.0.1"},"user":{},"items":[{"trace_id":"d49d9bf66f13450b81f65bc51cf49c03","level":"info","severity_number":9,"body":"test log message","attributes":{"key.bool":{"value":true,"type":"boolean"},"key.float":{"value":42.2,"type":"double"},"key.int":{"value":42,"type":"integer"},"key.string":{"value":"str","type":"string"},"sentry.environment":{"value":"testing","type":"string"},"sentry.release":{"value":"v1.2.3","type":"string"},"sentry.sdk.name":{"value":"sentry.go","type":"string"},"sentry.sdk.version":{"value":"0.0.1","type":"string"},"sentry.server.address":{"value":"test-server","type":"string"}}}]}
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Envelope mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestGetRequestFromEvent(t *testing.T) {
 	testCases := []struct {
 		testName string
@@ -288,7 +328,15 @@ func TestGetRequestFromEvent(t *testing.T) {
 		}
 
 		t.Run(test.testName, func(t *testing.T) {
-			req, err := getRequestFromEvent(context.TODO(), test.event, dsn)
+			body := getRequestBodyFromEvent(test.event)
+			if body == nil {
+				t.Fatal("failed to marshal event")
+			}
+			envelope, err := envelopeFromBody(test.event, dsn, time.Now(), body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req, err := getRequestFromEnvelope(context.TODO(), dsn, envelope, test.event.Sdk.Name, test.event.Sdk.Version)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -451,6 +499,120 @@ func TestHTTPTransport(t *testing.T) {
 		wg.Wait()
 	})
 }
+func TestHTTPTransport_CloseMultipleTimes(t *testing.T) {
+	server := newTestHTTPServer(t)
+	defer server.Close()
+	transport := NewHTTPTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        fmt.Sprintf("https://test@%s/1", server.Listener.Addr()),
+		HTTPClient: server.Client(),
+	})
+
+	// Closing multiple times should not panic.
+	for i := 0; i < 10; i++ {
+		transport.Close()
+	}
+
+	// Verify the done channel is closed
+	select {
+	case <-transport.done:
+		// Expected - channel should be closed
+	case <-time.After(time.Second):
+		t.Fatal("transport.done not closed")
+	}
+}
+
+func TestHTTPTransport_FlushWithContext(t *testing.T) {
+	server := newTestHTTPServer(t)
+	defer server.Close()
+
+	transport := NewHTTPTransport()
+	transport.Configure(ClientOptions{
+		Dsn:        fmt.Sprintf("https://test@%s/1", server.Listener.Addr()),
+		HTTPClient: server.Client(),
+	})
+
+	// Helpers
+
+	transportSendTestEvent := func(t *testing.T) (id string) {
+		t.Helper()
+
+		e := NewEvent()
+		id = uuid()
+		e.EventID = EventID(id)
+
+		transport.SendEvent(e)
+
+		t.Logf("[CLIENT] {%.4s} event sent", e.EventID)
+		return id
+	}
+
+	transportMustFlushWithCtx := func(t *testing.T, id string) {
+		t.Helper()
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		ok := transport.FlushWithContext(cancelCtx)
+		if !ok {
+			t.Fatalf("[CLIENT] {%.4s} Flush() timed out", id)
+		}
+	}
+
+	serverEventCountMustBe := func(t *testing.T, n uint64) {
+		t.Helper()
+
+		count := server.EventCount()
+		if count != n {
+			t.Fatalf("[SERVER] event count = %d, want %d", count, n)
+		}
+	}
+
+	testSendSingleEvent := func(t *testing.T) {
+		// Sending a single event should increase the server event count by
+		// exactly one.
+
+		initialCount := server.EventCount()
+		id := transportSendTestEvent(t)
+
+		// Server is blocked waiting for us, right now count must not have
+		// changed yet.
+		serverEventCountMustBe(t, initialCount)
+
+		// After unblocking the server, Flush must guarantee that the server
+		// event count increased by one.
+		server.Unblock()
+		transportMustFlushWithCtx(t, id)
+		serverEventCountMustBe(t, initialCount+1)
+	}
+
+	// Actual tests
+	t.Run("SendSingleEvent", testSendSingleEvent)
+
+	t.Run("FlushMultipleTimes", func(t *testing.T) {
+		// Flushing multiple times should not increase the server event count.
+
+		initialCount := server.EventCount()
+		for i := 0; i < 10; i++ {
+			transportMustFlushWithCtx(t, fmt.Sprintf("loop%d", i))
+		}
+		serverEventCountMustBe(t, initialCount)
+	})
+
+	t.Run("ConcurrentSendAndFlush", func(t *testing.T) {
+		// It should be safe to send events and flush concurrently.
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			testSendSingleEvent(t)
+		}()
+		go func() {
+			defer wg.Done()
+			transportMustFlushWithCtx(t, "from goroutine")
+		}()
+		wg.Wait()
+	})
+}
 
 // httptraceRoundTripper implements http.RoundTripper by wrapping
 // http.DefaultTransport and keeps track of whether TCP connections have been
@@ -486,7 +648,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 		// it doesn't matter for this test.
 		fmt.Fprintln(w, `{"id":"ec71d87189164e79ab1e61030c183af0"}`)
 		if largeResponse {
-			fmt.Fprintln(w, strings.Repeat(" ", maxDrainResponseBytes))
+			fmt.Fprintln(w, strings.Repeat(" ", util.MaxDrainResponseBytes))
 		}
 	}))
 	defer srv.Close()
@@ -636,19 +798,31 @@ func TestHTTPTransportDoesntLeakGoroutines(t *testing.T) {
 
 	transport := NewHTTPTransport()
 	transport.Configure(ClientOptions{
-		Dsn:        "https://test@foobar/1",
-		HTTPClient: http.DefaultClient,
+		Dsn: "https://test@foobar/1",
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return nil, fmt.Errorf("mock transport - no real connections")
+				},
+			},
+		},
 	})
 
-	transport.Flush(0)
+	transport.Flush(testutils.FlushTimeout())
 	transport.Close()
 }
 
 func TestHTTPTransportClose(t *testing.T) {
 	transport := NewHTTPTransport()
 	transport.Configure(ClientOptions{
-		Dsn:        "https://test@foobar/1",
-		HTTPClient: http.DefaultClient,
+		Dsn: "https://test@foobar/1",
+		HTTPClient: &http.Client{
+			Transport: &http.Transport{
+				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+					return nil, fmt.Errorf("mock transport - no real connections")
+				},
+			},
+		},
 	})
 
 	transport.Close()
@@ -667,4 +841,65 @@ func TestHTTPSyncTransportClose(_ *testing.T) {
 
 	tr := noopTransport{}
 	tr.Close()
+}
+
+func TestHTTPSyncTransport_Flush(t *testing.T) {
+	// Flush does not do anything for HTTPSyncTransport, added for coverage.
+	transport := HTTPSyncTransport{}
+	transport.Flush(testutils.FlushTimeout())
+
+	tr := noopTransport{}
+	ret := tr.Flush(testutils.FlushTimeout())
+	if ret != true {
+		t.Fatalf("expected Flush to be true, got: %v", ret)
+	}
+}
+
+func TestHTTPSyncTransport_FlushWithContext(_ *testing.T) {
+	// FlushWithContext does not do anything for HTTPSyncTransport, added for coverage.
+	transport := HTTPSyncTransport{}
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	transport.FlushWithContext(cancelCtx)
+
+	tr := noopTransport{}
+	tr.FlushWithContext(cancelCtx)
+}
+
+func TestInternalAsyncTransportAdapter(t *testing.T) {
+	transport := newInternalAsyncTransport()
+
+	transport.Configure(ClientOptions{
+		Dsn: "",
+	})
+
+	event := NewEvent()
+	event.Message = "test message"
+	transport.SendEvent(event)
+
+	if !transport.Flush(time.Second) {
+		t.Error("Flush should return true")
+	}
+
+	if !transport.FlushWithContext(context.Background()) {
+		t.Error("FlushWithContext should return true")
+	}
+
+	transport.Close()
+}
+
+func TestInternalAsyncTransportAdapter_WithValidDSN(_ *testing.T) {
+	transport := newInternalAsyncTransport()
+
+	transport.Configure(ClientOptions{
+		Dsn: "https://public@example.com/1",
+	})
+
+	event := NewEvent()
+	event.Message = "test message"
+	transport.SendEvent(event)
+
+	transport.Flush(100 * time.Millisecond)
+
+	transport.Close()
 }

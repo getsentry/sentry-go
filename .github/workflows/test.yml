@@ -20,12 +20,17 @@ jobs:
     env:
       GO111MODULE: "on"
       GOFLAGS: "-mod=readonly"
+      # The race detector adds considerable runtime overhead. To save time on
+      # pull requests, only run this step for a single job in the matrix. For
+      # all other workflow triggers (e.g., pushes to a release branch) run
+      # this step for the whole matrix.
+      RUN_RACE_TESTS: ${{ github.event_name != 'pull_request' || (matrix.go == '1.26' && matrix.os == 'ubuntu') }}
     steps:
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5
         with:
           # In order:
           # * Module download cache
@@ -40,30 +45,23 @@ jobs:
           key: ${{ runner.os }}-go-${{ matrix.go }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-${{ matrix.go }}-
+      - name: Tidy
+        run: make mod-tidy
+        if: ${{ matrix.go == '1.26' }}
       - name: Build
         run: make build
       - name: Vet
         run: make vet
-      - name: Check go.mod Tidiness
-        run: make mod-tidy
-        if: ${{ matrix.go == '1.21' }}
-      - name: Test
-        run: make test-coverage
+      - name: Test${{ env.RUN_RACE_TESTS == 'true' && ' (with race detection)' || '' }}
+        run: ${{ env.RUN_RACE_TESTS == 'true' && 'make test-race-coverage' || 'make test-coverage' }}
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@0565863a31f2c772f9f0395002a31e3f06189574 # pin@v5.4.0
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # pin@v5.5.2
         with:
           directory: .coverage
           token: ${{ secrets.CODECOV_TOKEN }}
-      - name: Test (with race detection)
-        run: make test-race
-        # The race detector adds considerable runtime overhead. To save time on
-        # pull requests, only run this step for a single job in the matrix. For
-        # all other workflow triggers (e.g., pushes to a release branch) run
-        # this step for the whole matrix.
-        if: ${{ github.event_name != 'pull_request' || (matrix.go == '1.23' && matrix.os == 'ubuntu') }}
     timeout-minutes: 15
     strategy:
       matrix:
-        go: ["1.24", "1.23", "1.22"]
+        go: ["1.26", "1.25", "1.24"]
         os: [ubuntu, windows, macos]
       fail-fast: false
