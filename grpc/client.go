@@ -5,13 +5,31 @@ package sentrygrpc
 
 import (
 	"context"
+	"io"
+	"sync"
 
 	"github.com/getsentry/sentry-go"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
-const defaultClientOperationName = "grpc.client"
+const defaultClientOperationName = "rpc.client"
+
+func hubFromClientContext(ctx context.Context) context.Context {
+	hub := sentry.GetHubFromContext(ctx)
+	if hub == nil {
+		hub = sentry.CurrentHub().Clone()
+		ctx = sentry.SetHubOnContext(ctx, hub)
+	}
+
+	if client := hub.Client(); client != nil {
+		client.SetSDKIdentifier(sdkIdentifier)
+	}
+
+	return ctx
+}
 
 func createOrUpdateMetadata(ctx context.Context, span *sentry.Span) context.Context {
 	md, ok := metadata.FromOutgoingContext(ctx)
@@ -33,18 +51,30 @@ func createOrUpdateMetadata(ctx context.Context, span *sentry.Span) context.Cont
 func UnaryClientInterceptor() grpc.UnaryClientInterceptor {
 	return func(ctx context.Context,
 		method string,
-		req, reply interface{},
+		req, reply any,
 		cc *grpc.ClientConn,
 		invoker grpc.UnaryInvoker,
 		callOpts ...grpc.CallOption) error {
-		span := sentry.StartSpan(ctx, defaultClientOperationName, sentry.WithDescription(method))
-		span.SetData("grpc.request.method", method)
+		ctx = hubFromClientContext(ctx)
+		span := sentry.StartSpan(
+			ctx,
+			defaultClientOperationName,
+			sentry.WithTransactionName(method),
+			sentry.WithDescription(method),
+		)
+		service, _ := splitGRPCMethod(method)
+		if service != "" {
+			span.SetData("rpc.service", service)
+		}
 		ctx = span.Context()
 
 		ctx = createOrUpdateMetadata(ctx, span)
 		defer span.Finish()
 
-		return invoker(ctx, method, req, reply, cc, callOpts...)
+		err := invoker(ctx, method, req, reply, cc, callOpts...)
+		span.Status = toSpanStatus(status.Code(err))
+		span.SetData("rpc.grpc.status_code", int(status.Code(err)))
+		return err
 	}
 }
 
@@ -55,13 +85,86 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 		method string,
 		streamer grpc.Streamer,
 		callOpts ...grpc.CallOption) (grpc.ClientStream, error) {
-		span := sentry.StartSpan(ctx, defaultClientOperationName, sentry.WithDescription(method))
-		span.SetData("grpc.request.method", method)
+		ctx = hubFromClientContext(ctx)
+		span := sentry.StartSpan(
+			ctx,
+			defaultClientOperationName,
+			sentry.WithTransactionName(method),
+			sentry.WithDescription(method),
+		)
+		service, _ := splitGRPCMethod(method)
+		if service != "" {
+			span.SetData("rpc.service", service)
+		}
 		ctx = span.Context()
 
 		ctx = createOrUpdateMetadata(ctx, span)
-		defer span.Finish()
 
-		return streamer(ctx, desc, cc, method, callOpts...)
+		stream, err := streamer(ctx, desc, cc, method, callOpts...)
+		if err != nil {
+			span.Status = toSpanStatus(status.Code(err))
+			span.SetData("rpc.grpc.status_code", int(status.Code(err)))
+			span.Finish()
+			return nil, err
+		}
+		if stream == nil {
+			return nil, nil
+		}
+
+		return &sentryClientStream{ClientStream: stream, span: span}, nil
 	}
+}
+
+type sentryClientStream struct {
+	grpc.ClientStream
+	span       *sentry.Span
+	finishOnce sync.Once
+}
+
+func (s *sentryClientStream) Header() (metadata.MD, error) {
+	md, err := s.ClientStream.Header()
+	if err != nil {
+		s.finish(err)
+	}
+	return md, err
+}
+
+func (s *sentryClientStream) CloseSend() error {
+	err := s.ClientStream.CloseSend()
+	if err != nil {
+		s.finish(err)
+	}
+	return err
+}
+
+func (s *sentryClientStream) SendMsg(m any) error {
+	err := s.ClientStream.SendMsg(m)
+	if err != nil {
+		s.finish(err)
+	}
+	return err
+}
+
+func (s *sentryClientStream) RecvMsg(m any) error {
+	err := s.ClientStream.RecvMsg(m)
+	if err != nil {
+		if err == io.EOF {
+			s.finish(nil)
+		} else {
+			s.finish(err)
+		}
+	}
+	return err
+}
+
+func (s *sentryClientStream) finish(err error) {
+	s.finishOnce.Do(func() {
+		s.span.Status = toSpanStatus(status.Code(err))
+		if err == nil {
+			s.span.SetData("rpc.grpc.status_code", int(codes.OK))
+		} else {
+			s.span.SetData("rpc.grpc.status_code", int(status.Code(err)))
+		}
+		s.span.Finish()
+	})
 }

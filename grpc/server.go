@@ -2,7 +2,6 @@ package sentrygrpc
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -15,7 +14,8 @@ import (
 
 const (
 	sdkIdentifier              = "sentry.go.grpc"
-	defaultServerOperationName = "grpc.server"
+	defaultServerOperationName = "rpc.server"
+	internalServerErrorMessage = "internal server error"
 )
 
 type ServerOptions struct {
@@ -35,9 +35,13 @@ func (o *ServerOptions) SetDefaults() {
 	}
 }
 
-func recoverWithSentry(ctx context.Context, hub *sentry.Hub, o ServerOptions) {
+func recoverWithSentry(ctx context.Context, hub *sentry.Hub, o ServerOptions, onRecover func()) {
 	if r := recover(); r != nil {
 		eventID := hub.RecoverWithContext(ctx, r)
+
+		if onRecover != nil {
+			onRecover()
+		}
 
 		if eventID != nil && o.WaitForDelivery {
 			hub.Flush(o.Timeout)
@@ -52,7 +56,7 @@ func recoverWithSentry(ctx context.Context, hub *sentry.Hub, o ServerOptions) {
 func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 	opts.SetDefaults()
 
-	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		hub := sentry.GetHubFromContext(ctx)
 		if hub == nil {
 			hub = sentry.CurrentHub().Clone()
@@ -64,41 +68,44 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 
 		md, ok := metadata.FromIncomingContext(ctx)
 		var sentryTraceHeader, sentryBaggageHeader string
-		data := make(map[string]string)
 		if ok {
 			sentryTraceHeader = getFirstHeader(md, sentry.SentryTraceHeader)
 			sentryBaggageHeader = getFirstHeader(md, sentry.SentryBaggageHeader)
-
-			for k, v := range md {
-				data[k] = strings.Join(v, ",")
-			}
 		}
+
+		setScopeMetadata(hub, info.FullMethod, md)
 
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
 			sentry.WithOpName(defaultServerOperationName),
 			sentry.WithDescription(info.FullMethod),
-			sentry.WithTransactionSource(sentry.SourceURL),
+			sentry.WithTransactionSource(sentry.SourceCustom),
 			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		}
 
+		service, _ := splitGRPCMethod(info.FullMethod)
 		transaction := sentry.StartTransaction(
 			sentry.SetHubOnContext(ctx, hub),
-			fmt.Sprintf("%s %s", "UnaryServerInterceptor", info.FullMethod),
+			info.FullMethod,
 			options...,
 		)
-
-		transaction.SetData("http.request.method", info.FullMethod)
+		if service != "" {
+			transaction.SetData("rpc.service", service)
+		}
 
 		ctx = transaction.Context()
 		defer transaction.Finish()
 
-		defer recoverWithSentry(ctx, hub, opts)
+		defer recoverWithSentry(ctx, hub, opts, func() {
+			err = status.Error(codes.Internal, internalServerErrorMessage)
+			transaction.Status = sentry.SpanStatusInternalError
+			transaction.SetData("rpc.grpc.status_code", int(codes.Internal))
+		})
 
-		resp, err := handler(ctx, req)
+		resp, err = handler(ctx, req)
 		statusCode := status.Code(err)
 		transaction.Status = toSpanStatus(statusCode)
-		transaction.SetData("http.response.status_code", statusCode.String())
+		transaction.SetData("rpc.grpc.status_code", int(statusCode))
 
 		return resp, err
 	}
@@ -107,7 +114,7 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 // StreamServerInterceptor provides Sentry integration for streaming gRPC calls.
 func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 	opts.SetDefaults()
-	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 		ctx := ss.Context()
 		hub := sentry.GetHubFromContext(ctx)
 		if hub == nil {
@@ -120,41 +127,45 @@ func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 
 		md, ok := metadata.FromIncomingContext(ctx)
 		var sentryTraceHeader, sentryBaggageHeader string
-		data := make(map[string]string)
 		if ok {
 			sentryTraceHeader = getFirstHeader(md, sentry.SentryTraceHeader)
 			sentryBaggageHeader = getFirstHeader(md, sentry.SentryBaggageHeader)
-
-			for k, v := range md {
-				data[k] = strings.Join(v, ",")
-			}
 		}
+
+		setScopeMetadata(hub, info.FullMethod, md)
 
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
+			sentry.WithOpName(defaultServerOperationName),
 			sentry.WithDescription(info.FullMethod),
-			sentry.WithTransactionSource(sentry.SourceURL),
+			sentry.WithTransactionSource(sentry.SourceCustom),
 			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		}
 
+		service, _ := splitGRPCMethod(info.FullMethod)
 		transaction := sentry.StartTransaction(
 			sentry.SetHubOnContext(ctx, hub),
-			fmt.Sprintf("%s %s", "StreamServerInterceptor", info.FullMethod),
+			info.FullMethod,
 			options...,
 		)
-
-		transaction.SetData("grpc.method", info.FullMethod)
+		if service != "" {
+			transaction.SetData("rpc.service", service)
+		}
 		ctx = transaction.Context()
 		defer transaction.Finish()
 
 		stream := wrapServerStream(ss, ctx)
 
-		defer recoverWithSentry(ctx, hub, opts)
+		defer recoverWithSentry(ctx, hub, opts, func() {
+			err = status.Error(codes.Internal, internalServerErrorMessage)
+			transaction.Status = sentry.SpanStatusInternalError
+			transaction.SetData("rpc.grpc.status_code", int(codes.Internal))
+		})
 
-		err := handler(srv, stream)
+		err = handler(srv, stream)
 		statusCode := status.Code(err)
 		transaction.Status = toSpanStatus(statusCode)
-		transaction.SetData("grpc.status", statusCode.String())
+		transaction.SetData("rpc.grpc.status_code", int(statusCode))
 
 		return err
 	}
@@ -165,6 +176,50 @@ func getFirstHeader(md metadata.MD, key string) string {
 		return values[0]
 	}
 	return ""
+}
+
+func setScopeMetadata(hub *sentry.Hub, method string, md metadata.MD) {
+	hub.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetContext("grpc", sentry.Context{
+			"method":   method,
+			"metadata": metadataToContext(md),
+		})
+	})
+}
+
+func metadataToContext(md metadata.MD) map[string]any {
+	if len(md) == 0 {
+		return nil
+	}
+
+	ctx := make(map[string]any, len(md))
+	for key, values := range md {
+		if len(values) == 1 {
+			ctx[key] = values[0]
+			continue
+		}
+
+		joined := make([]string, len(values))
+		copy(joined, values)
+		ctx[key] = joined
+	}
+
+	return ctx
+}
+
+func splitGRPCMethod(fullMethod string) (service string, method string) {
+	trimmed := strings.TrimPrefix(fullMethod, "/")
+	if trimmed == "" {
+		return "", ""
+	}
+
+	parts := strings.SplitN(trimmed, "/", 2)
+	service = parts[0]
+	if len(parts) > 1 {
+		method = parts[1]
+	}
+
+	return service, method
 }
 
 // wrapServerStream wraps a grpc.ServerStream, allowing you to inject a custom context.
