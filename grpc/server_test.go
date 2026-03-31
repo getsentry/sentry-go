@@ -3,6 +3,7 @@ package sentrygrpc_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	sentrygrpc "github.com/getsentry/sentry-go/grpc"
@@ -53,7 +54,7 @@ func TestServerOptions_SetDefaults(t *testing.T) {
 	}{
 		"zero value gets default timeout": {
 			input: sentrygrpc.ServerOptions{},
-			want:  sentrygrpc.ServerOptions{Timeout: sentry.DefaultFlushTimeout},
+			want:  sentrygrpc.ServerOptions{Timeout: 2 * time.Second},
 		},
 		"non-zero timeout is preserved": {
 			input: sentrygrpc.ServerOptions{Timeout: testutils.FlushTimeout()},
