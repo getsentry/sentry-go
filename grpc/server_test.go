@@ -70,16 +70,7 @@ func TestServerOptions_SetDefaults(t *testing.T) {
 }
 
 func TestUnaryServerInterceptor(t *testing.T) {
-	txCh := make(chan *sentry.Event, 1)
-	require.NoError(t, sentry.Init(sentry.ClientOptions{
-		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
-			txCh <- tx
-			return tx
-		},
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-	}))
-
+	transport := initMockTransport(t)
 	interceptor := sentrygrpc.UnaryServerInterceptor(sentrygrpc.ServerOptions{})
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value"))
 
@@ -92,6 +83,8 @@ func TestUnaryServerInterceptor(t *testing.T) {
 	require.NoError(t, err)
 	sentry.Flush(testutils.FlushTimeout())
 
+	events := transport.Events()
+	require.Len(t, events, 1)
 	if diff := cmp.Diff(txSummary{
 		Name:   "test.TestService/Method",
 		Op:     "rpc.server",
@@ -103,10 +96,10 @@ func TestUnaryServerInterceptor(t *testing.T) {
 			"rpc.grpc.status_code": int(codes.OK),
 		},
 		GRPC: map[string]any{
-			"method":   "/test.TestService/Method",
+			"method":   "test.TestService/Method",
 			"metadata": map[string]any{"key": "value"},
 		},
-	}, summarizeTx(<-txCh)); diff != "" {
+	}, summarizeTx(events[0])); diff != "" {
 		t.Errorf("transaction mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -167,16 +160,7 @@ func TestUnaryServerInterceptor_Panic(t *testing.T) {
 }
 
 func TestStreamServerInterceptor(t *testing.T) {
-	txCh := make(chan *sentry.Event, 1)
-	require.NoError(t, sentry.Init(sentry.ClientOptions{
-		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
-			txCh <- tx
-			return tx
-		},
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-	}))
-
+	transport := initMockTransport(t)
 	interceptor := sentrygrpc.StreamServerInterceptor(sentrygrpc.ServerOptions{})
 	ss := &stubServerStream{
 		ctx: metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value")),
@@ -194,6 +178,8 @@ func TestStreamServerInterceptor(t *testing.T) {
 	require.NoError(t, err)
 	sentry.Flush(testutils.FlushTimeout())
 
+	events := transport.Events()
+	require.Len(t, events, 1)
 	if diff := cmp.Diff(txSummary{
 		Name:   "test.TestService/StreamMethod",
 		Op:     "rpc.server",
@@ -205,10 +191,10 @@ func TestStreamServerInterceptor(t *testing.T) {
 			"rpc.grpc.status_code": int(codes.OK),
 		},
 		GRPC: map[string]any{
-			"method":   "/test.TestService/StreamMethod",
+			"method":   "test.TestService/StreamMethod",
 			"metadata": map[string]any{"key": "value"},
 		},
-	}, summarizeTx(<-txCh)); diff != "" {
+	}, summarizeTx(events[0])); diff != "" {
 		t.Errorf("transaction mismatch (-want +got):\n%s", diff)
 	}
 }

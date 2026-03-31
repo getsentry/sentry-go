@@ -76,14 +76,13 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 			sentryBaggageHeader = getFirstHeader(md, sentry.SentryBaggageHeader)
 		}
 
-		setScopeMetadata(hub, info.FullMethod, md)
-
 		name, service, method := parseGRPCMethod(info.FullMethod)
+		setScopeMetadata(hub, name, md)
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
 			sentry.WithOpName(defaultServerOperationName),
 			sentry.WithDescription(name),
-			sentry.WithTransactionSource(sentry.SourceCustom),
+			sentry.WithTransactionSource(sentry.SourceRoute),
 			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		}
 
@@ -139,14 +138,13 @@ func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 			sentryBaggageHeader = getFirstHeader(md, sentry.SentryBaggageHeader)
 		}
 
-		setScopeMetadata(hub, info.FullMethod, md)
-
 		name, service, method := parseGRPCMethod(info.FullMethod)
+		setScopeMetadata(hub, name, md)
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
 			sentry.WithOpName(defaultServerOperationName),
 			sentry.WithDescription(name),
-			sentry.WithTransactionSource(sentry.SourceCustom),
+			sentry.WithTransactionSource(sentry.SourceRoute),
 			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		}
 

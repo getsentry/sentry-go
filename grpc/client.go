@@ -162,10 +162,12 @@ func (s *sentryClientStream) SendMsg(m any) error {
 
 func (s *sentryClientStream) RecvMsg(m any) error {
 	err := s.ClientStream.RecvMsg(m)
-	if errors.Is(err, io.EOF) {
-		s.finish(nil)
-	} else {
-		s.finish(err)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			s.finish(nil)
+		} else {
+			s.finish(err)
+		}
 	}
 	return err
 }
