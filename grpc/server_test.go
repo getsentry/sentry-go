@@ -5,302 +5,267 @@ import (
 	"testing"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/internal/testutils"
 	sentrygrpc "github.com/getsentry/sentry-go/grpc"
+	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
+// stubServerStream provides a minimal grpc.ServerStream for testing.
+type stubServerStream struct {
+	grpc.ServerStream
+	ctx context.Context
+}
+
+func (s *stubServerStream) Context() context.Context { return s.ctx }
+
+// txSummary is a comparable snapshot of the span/transaction fields we assert.
+type txSummary struct {
+	Name   string
+	Op     string
+	Status sentry.SpanStatus
+	Data   map[string]any
+	GRPC   map[string]any
+}
+
+func summarizeTx(tx *sentry.Event) txSummary {
+	s := txSummary{
+		Name:   tx.Transaction,
+		Op:     tx.Contexts["trace"]["op"].(string),
+		Status: tx.Contexts["trace"]["status"].(sentry.SpanStatus),
+		Data:   tx.Contexts["trace"]["data"].(map[string]any),
+	}
+	if g, ok := tx.Contexts["grpc"]; ok {
+		s.GRPC = map[string]any(g)
+	}
+	return s
+}
+
 func TestServerOptions_SetDefaults(t *testing.T) {
 	tests := map[string]struct {
-		options    sentrygrpc.ServerOptions
-		assertions func(t *testing.T, options sentrygrpc.ServerOptions)
+		input sentrygrpc.ServerOptions
+		want  sentrygrpc.ServerOptions
 	}{
-		"Defaults are set when fields are empty": {
-			options: sentrygrpc.ServerOptions{},
-			assertions: func(t *testing.T, options sentrygrpc.ServerOptions) {
-				assert.Equal(t, sentry.DefaultFlushTimeout, options.Timeout, "Timeout should be set to default value")
-			},
+		"zero value gets default timeout": {
+			input: sentrygrpc.ServerOptions{},
+			want:  sentrygrpc.ServerOptions{Timeout: sentry.DefaultFlushTimeout},
 		},
-		"Custom Timeout is preserved": {
-			options: sentrygrpc.ServerOptions{
-				Timeout: testutils.FlushTimeout(),
-			},
-			assertions: func(t *testing.T, options sentrygrpc.ServerOptions) {
-				assert.Equal(t, testutils.FlushTimeout(), options.Timeout, "Timeout should be set to custom value")
-			},
+		"non-zero timeout is preserved": {
+			input: sentrygrpc.ServerOptions{Timeout: testutils.FlushTimeout()},
+			want:  sentrygrpc.ServerOptions{Timeout: testutils.FlushTimeout()},
 		},
 	}
 
-	for name, test := range tests {
+	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			test.options.SetDefaults()
-
-			test.assertions(t, test.options)
+			tc.input.SetDefaults()
+			assert.Equal(t, tc.want, tc.input)
 		})
 	}
 }
 
 func TestUnaryServerInterceptor(t *testing.T) {
+	txCh := make(chan *sentry.Event, 1)
+	require.NoError(t, sentry.Init(sentry.ClientOptions{
+		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			txCh <- tx
+			return tx
+		},
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	}))
+
+	interceptor := sentrygrpc.UnaryServerInterceptor(sentrygrpc.ServerOptions{})
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value"))
+
+	_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{
+		FullMethod: "/test.TestService/Method",
+	}, func(ctx context.Context, _ any) (any, error) {
+		return struct{}{}, nil
+	})
+
+	require.NoError(t, err)
+	sentry.Flush(testutils.FlushTimeout())
+
+	if diff := cmp.Diff(txSummary{
+		Name:   "test.TestService/Method",
+		Op:     "rpc.server",
+		Status: sentry.SpanStatusOK,
+		Data: map[string]any{
+			"rpc.system":           "grpc",
+			"rpc.service":          "test.TestService",
+			"rpc.method":           "Method",
+			"rpc.grpc.status_code": int(codes.OK),
+		},
+		GRPC: map[string]any{
+			"method":   "/test.TestService/Method",
+			"metadata": map[string]any{"key": "value"},
+		},
+	}, summarizeTx(<-txCh)); diff != "" {
+		t.Errorf("transaction mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestUnaryServerInterceptor_Panic(t *testing.T) {
 	tests := map[string]struct {
-		options           sentrygrpc.ServerOptions
-		handler           grpc.UnaryHandler
-		ctx               context.Context
-		expectedMetadata  string
-		expectedCode      codes.Code
-		expectError       bool
-		assertTransaction bool
+		options     sentrygrpc.ServerOptions
+		wantRepanic bool
 	}{
-		"Handle panic and return internal error": {
-			options:          sentrygrpc.ServerOptions{},
-			ctx:              metadata.NewIncomingContext(context.Background(), metadata.Pairs("md", "some")),
-			expectedMetadata: "some",
-			expectedCode:     codes.Internal,
-			expectError:      true,
-			handler: func(ctx context.Context, req any) (any, error) {
-				panic("test panic")
-			},
+		"panic is recovered and returns Internal error": {
+			options: sentrygrpc.ServerOptions{},
 		},
-		"Handle panic and re-panic": {
-			options:          sentrygrpc.ServerOptions{Repanic: true},
-			ctx:              metadata.NewIncomingContext(context.Background(), metadata.Pairs("md", "some")),
-			expectedMetadata: "some",
-			expectedCode:     codes.Internal,
-			expectError:      true,
-			handler: func(ctx context.Context, req any) (any, error) {
-				panic("test panic")
-			},
-		},
-		"Successful handler produces transaction": {
-			options:           sentrygrpc.ServerOptions{},
-			ctx:               metadata.NewIncomingContext(context.Background(), metadata.Pairs("md", "some")),
-			assertTransaction: true,
-			handler: func(ctx context.Context, req any) (any, error) {
-				return struct{}{}, nil
-			},
+		"panic is re-panicked when Repanic is set": {
+			options:     sentrygrpc.ServerOptions{Repanic: true},
+			wantRepanic: true,
 		},
 	}
 
-	for name, test := range tests {
+	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			eventsCh := make(chan *sentry.Event, 1)
-			transactionsCh := make(chan *sentry.Event, 1)
-
-			err := sentry.Init(sentry.ClientOptions{
-				BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-					eventsCh <- event
-					return event
-				},
-				BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-					transactionsCh <- tx
-					return tx
+			require.NoError(t, sentry.Init(sentry.ClientOptions{
+				BeforeSend: func(e *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+					eventsCh <- e
+					return e
 				},
 				EnableTracing:    true,
 				TracesSampleRate: 1.0,
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
+			}))
 
-			interceptor := sentrygrpc.UnaryServerInterceptor(test.options)
+			interceptor := sentrygrpc.UnaryServerInterceptor(tc.options)
+			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value"))
 
-			defer func() {
-				if r := recover(); r != nil {
-					if test.options.Repanic {
-						assert.Equal(t, "test panic", r, "Expected panic to propagate with message 'test panic'")
-					}
-				}
+			var (
+				err       error
+				recovered any
+			)
+			func() {
+				defer func() { recovered = recover() }()
+				_, err = interceptor(ctx, nil, &grpc.UnaryServerInfo{
+					FullMethod: "/test.TestService/Method",
+				}, func(context.Context, any) (any, error) {
+					panic("test panic")
+				})
 			}()
 
-			_, err = interceptor(test.ctx, nil, &grpc.UnaryServerInfo{
-				FullMethod: "/test.TestService/Method",
-			}, test.handler)
-
-			if test.expectError && !test.options.Repanic {
-				assert.Error(t, err)
-				assert.Equal(t, test.expectedCode, status.Code(err))
-			}
-
-			if test.expectedMetadata != "" {
-				sentry.Flush(testutils.FlushTimeout())
-				gotEvent := <-eventsCh
-
-				assert.NotNil(t, gotEvent, "Expected an event")
-				grpcContext, ok := gotEvent.Contexts["grpc"]
-				assert.True(t, ok, "Expected gRPC context on the event")
-				metadataContext, ok := grpcContext["metadata"].(map[string]interface{})
-				assert.True(t, ok, "Expected metadata to be attached to the gRPC context")
-				assert.Equal(t, test.expectedMetadata, metadataContext["md"])
-			}
-
-			if test.assertTransaction {
-				sentry.Flush(testutils.FlushTimeout())
-				gotTransaction := <-transactionsCh
-				assert.NotNil(t, gotTransaction, "Expected a transaction")
-				assert.Equal(t, "test.TestService/Method", gotTransaction.Transaction, "Transaction names should match")
-				assert.Equal(t, "rpc.server", gotTransaction.Contexts["trace"]["op"])
-				assert.Equal(t, "test.TestService/Method", gotTransaction.Contexts["trace"]["description"])
-				assert.Equal(t, sentry.SourceCustom, gotTransaction.TransactionInfo.Source)
-				assert.Equal(t, "/test.TestService/Method", gotTransaction.Contexts["grpc"]["method"])
-				assert.Equal(t, sentry.SpanStatusOK, gotTransaction.Contexts["trace"]["status"])
-				data := gotTransaction.Contexts["trace"]["data"].(map[string]interface{})
-				assert.Equal(t, "test.TestService", data["rpc.service"])
-				assert.Equal(t, "Method", data["rpc.method"])
-				assert.Equal(t, "grpc", data["rpc.system"])
-				assert.Equal(t, int(codes.OK), data["rpc.grpc.status_code"])
-			}
-
 			sentry.Flush(testutils.FlushTimeout())
+			require.NotNil(t, <-eventsCh)
+
+			if tc.wantRepanic {
+				assert.Equal(t, "test panic", recovered)
+			} else {
+				assert.Nil(t, recovered)
+				assert.Equal(t, codes.Internal, status.Code(err))
+			}
 		})
 	}
 }
 
-// wrappedServerStream is a wrapper around grpc.ServerStream that overrides the Context method.
-type wrappedServerStream struct {
-	grpc.ServerStream
-	ctx context.Context
-}
-
-// Context returns the custom context for the stream.
-func (w *wrappedServerStream) Context() context.Context {
-	return w.ctx
-}
-
 func TestStreamServerInterceptor(t *testing.T) {
+	txCh := make(chan *sentry.Event, 1)
+	require.NoError(t, sentry.Init(sentry.ClientOptions{
+		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			txCh <- tx
+			return tx
+		},
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	}))
+
+	interceptor := sentrygrpc.StreamServerInterceptor(sentrygrpc.ServerOptions{})
+	ss := &stubServerStream{
+		ctx: metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value")),
+	}
+
+	err := interceptor(nil, ss, &grpc.StreamServerInfo{
+		FullMethod: "/test.TestService/StreamMethod",
+	}, func(_ any, stream grpc.ServerStream) error {
+		md, ok := metadata.FromIncomingContext(stream.Context())
+		require.True(t, ok)
+		require.Contains(t, md, "key")
+		return nil
+	})
+
+	require.NoError(t, err)
+	sentry.Flush(testutils.FlushTimeout())
+
+	if diff := cmp.Diff(txSummary{
+		Name:   "test.TestService/StreamMethod",
+		Op:     "rpc.server",
+		Status: sentry.SpanStatusOK,
+		Data: map[string]any{
+			"rpc.system":           "grpc",
+			"rpc.service":          "test.TestService",
+			"rpc.method":           "StreamMethod",
+			"rpc.grpc.status_code": int(codes.OK),
+		},
+		GRPC: map[string]any{
+			"method":   "/test.TestService/StreamMethod",
+			"metadata": map[string]any{"key": "value"},
+		},
+	}, summarizeTx(<-txCh)); diff != "" {
+		t.Errorf("transaction mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestStreamServerInterceptor_Panic(t *testing.T) {
 	tests := map[string]struct {
-		options           sentrygrpc.ServerOptions
-		handler           grpc.StreamHandler
-		expectedMetadata  bool
-		expectedEvent     bool
-		expectedCode      codes.Code
-		assertTransaction bool
+		options     sentrygrpc.ServerOptions
+		wantRepanic bool
 	}{
-		"Default behavior, no error": {
+		"panic is recovered and returns Internal error": {
 			options: sentrygrpc.ServerOptions{},
-			handler: func(srv any, stream grpc.ServerStream) error {
-				return nil
-			},
-			expectedMetadata: false,
-			expectedEvent:    false,
 		},
-		"Repanic is enabled": {
-			options: sentrygrpc.ServerOptions{
-				Repanic: true,
-			},
-			handler: func(srv any, stream grpc.ServerStream) error {
-				panic("test panic")
-			},
-			expectedMetadata: false,
-			expectedEvent:    true,
-			expectedCode:     codes.Internal,
-		},
-		"Recovered panic returns internal error": {
-			options: sentrygrpc.ServerOptions{},
-			handler: func(srv any, stream grpc.ServerStream) error {
-				panic("test panic")
-			},
-			expectedMetadata: false,
-			expectedEvent:    true,
-			expectedCode:     codes.Internal,
-		},
-		"Metadata is propagated": {
-			options: sentrygrpc.ServerOptions{},
-			handler: func(srv any, stream grpc.ServerStream) error {
-				md, ok := metadata.FromIncomingContext(stream.Context())
-				if !ok || len(md) == 0 {
-					return status.Error(codes.InvalidArgument, "metadata missing")
-				}
-				return nil
-			},
-			expectedMetadata:  true,
-			expectedEvent:     false,
-			assertTransaction: true,
+		"panic is re-panicked when Repanic is set": {
+			options:     sentrygrpc.ServerOptions{Repanic: true},
+			wantRepanic: true,
 		},
 	}
 
-	for name, test := range tests {
+	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-
 			eventsCh := make(chan *sentry.Event, 1)
-			transactionsCh := make(chan *sentry.Event, 1)
-
-			err := sentry.Init(sentry.ClientOptions{
-				BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-					eventsCh <- event
-					return event
-				},
-				BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-					transactionsCh <- tx
-					return tx
+			require.NoError(t, sentry.Init(sentry.ClientOptions{
+				BeforeSend: func(e *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+					eventsCh <- e
+					return e
 				},
 				EnableTracing:    true,
 				TracesSampleRate: 1.0,
-			})
-			if err != nil {
-				t.Fatal(err)
+			}))
+
+			interceptor := sentrygrpc.StreamServerInterceptor(tc.options)
+			ss := &stubServerStream{
+				ctx: metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value")),
 			}
 
-			interceptor := sentrygrpc.StreamServerInterceptor(test.options)
-
-			// Simulate a server stream
-			stream := &wrappedServerStream{
-				ServerStream: nil,
-				ctx:          metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value")),
-			}
-
-			var recovered interface{}
+			var (
+				err       error
+				recovered any
+			)
 			func() {
-				defer func() {
-					recovered = recover()
-				}()
-				err = interceptor(nil, stream, &grpc.StreamServerInfo{FullMethod: "/test.TestService/StreamMethod"}, test.handler)
+				defer func() { recovered = recover() }()
+				err = interceptor(nil, ss, &grpc.StreamServerInfo{
+					FullMethod: "/test.TestService/StreamMethod",
+				}, func(_ any, _ grpc.ServerStream) error {
+					panic("test panic")
+				})
 			}()
 
-			if test.expectedMetadata {
-				md, ok := metadata.FromIncomingContext(stream.Context())
-				assert.True(t, ok, "Expected metadata to be propagated in context")
-				assert.Contains(t, md, "key", "Expected metadata to include 'key'")
-			}
-
-			if test.expectedEvent {
-				sentry.Flush(testutils.FlushTimeout())
-				gotEvent := <-eventsCh
-				assert.NotNil(t, gotEvent, "Expected an event to be captured")
-			} else {
-				assert.Empty(t, eventsCh, "Expected no event to be captured")
-			}
-
-			if test.expectedCode != codes.OK && !test.options.Repanic {
-				assert.Error(t, err)
-				assert.Equal(t, test.expectedCode, status.Code(err))
-			}
-
-			if test.assertTransaction {
-				sentry.Flush(testutils.FlushTimeout())
-				gotTransaction := <-transactionsCh
-				assert.NotNil(t, gotTransaction, "Expected a transaction")
-				traceContext, ok := gotTransaction.Contexts["trace"]
-				assert.True(t, ok, "Expected trace context on the transaction")
-				assert.Equal(t, "rpc.server", traceContext["op"])
-				assert.Equal(t, "test.TestService/StreamMethod", gotTransaction.Transaction)
-				assert.Equal(t, "test.TestService/StreamMethod", gotTransaction.Contexts["trace"]["description"])
-				assert.Equal(t, "/test.TestService/StreamMethod", gotTransaction.Contexts["grpc"]["method"])
-				data := gotTransaction.Contexts["trace"]["data"].(map[string]interface{})
-				assert.Equal(t, "test.TestService", data["rpc.service"])
-				assert.Equal(t, "StreamMethod", data["rpc.method"])
-				assert.Equal(t, "grpc", data["rpc.system"])
-				assert.Equal(t, int(codes.OK), data["rpc.grpc.status_code"])
-			}
-
-			if test.options.Repanic {
-				assert.NotNil(t, recovered, "Expected panic to be re-raised")
-				assert.Equal(t, "test panic", recovered, "Panic value should match")
-			}
-
 			sentry.Flush(testutils.FlushTimeout())
+			require.NotNil(t, <-eventsCh)
+
+			if tc.wantRepanic {
+				assert.Equal(t, "test panic", recovered)
+			} else {
+				assert.Nil(t, recovered)
+				assert.Equal(t, codes.Internal, status.Code(err))
+			}
 		})
 	}
 }
