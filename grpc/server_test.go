@@ -104,6 +104,33 @@ func TestUnaryServerInterceptor(t *testing.T) {
 	}
 }
 
+func TestUnaryServerInterceptor_ScrubsSensitiveMetadata(t *testing.T) {
+	transport := initMockTransport(t)
+	interceptor := sentrygrpc.UnaryServerInterceptor(sentrygrpc.ServerOptions{})
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		"authorization", "Bearer secret-token",
+		"x-api-key", "top-secret",
+		"cookie", "session=secret",
+		"key", "value",
+	))
+
+	_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{
+		FullMethod: "/test.TestService/Method",
+	}, func(ctx context.Context, _ any) (any, error) {
+		return struct{}{}, nil
+	})
+
+	require.NoError(t, err)
+	sentry.Flush(testutils.FlushTimeout())
+
+	events := transport.Events()
+	require.Len(t, events, 1)
+	grpcContext := map[string]any(events[0].Contexts["grpc"])
+	metadataContext, ok := grpcContext["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, map[string]any{"key": "value"}, metadataContext)
+}
+
 func TestUnaryServerInterceptor_Panic(t *testing.T) {
 	tests := map[string]struct {
 		options     sentrygrpc.ServerOptions

@@ -203,6 +203,10 @@ func metadataToContext(md metadata.MD) map[string]any {
 
 	ctx := make(map[string]any, len(md))
 	for key, values := range md {
+		if sentry.IsSensitiveHeader(key) {
+			continue
+		}
+
 		if len(values) == 1 {
 			ctx[key] = values[0]
 			continue
@@ -211,6 +215,10 @@ func metadataToContext(md metadata.MD) map[string]any {
 		joined := make([]string, len(values))
 		copy(joined, values)
 		ctx[key] = joined
+	}
+
+	if len(ctx) == 0 {
+		return nil
 	}
 
 	return ctx
