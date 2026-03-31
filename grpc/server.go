@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Part of this code is derived from [github.com/johnbellone/grpc-middleware-sentry], licensed under the Apache 2.0 License.
+
 package sentrygrpc
 
 import (

@@ -61,6 +61,7 @@ func UnaryClientInterceptor() grpc.UnaryClientInterceptor {
 			defaultClientOperationName,
 			sentry.WithTransactionName(method),
 			sentry.WithDescription(method),
+			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		)
 		service, _ := splitGRPCMethod(method)
 		if service != "" {
@@ -91,6 +92,7 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 			defaultClientOperationName,
 			sentry.WithTransactionName(method),
 			sentry.WithDescription(method),
+			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		)
 		service, _ := splitGRPCMethod(method)
 		if service != "" {
@@ -108,6 +110,9 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 			return nil, err
 		}
 		if stream == nil {
+			span.Status = toSpanStatus(codes.OK)
+			span.SetData("rpc.grpc.status_code", int(codes.OK))
+			span.Finish()
 			return nil, nil
 		}
 
