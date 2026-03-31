@@ -3,9 +3,9 @@ package sentrygrpc_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	sentrygrpc "github.com/getsentry/sentry-go/grpc"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -27,10 +27,10 @@ func TestServerOptions_SetDefaults(t *testing.T) {
 		},
 		"Custom Timeout is preserved": {
 			options: sentrygrpc.ServerOptions{
-				Timeout: 5 * time.Second,
+				Timeout: testutils.FlushTimeout(),
 			},
 			assertions: func(t *testing.T, options sentrygrpc.ServerOptions) {
-				assert.Equal(t, 5*time.Second, options.Timeout, "Timeout should be set to custom value")
+				assert.Equal(t, testutils.FlushTimeout(), options.Timeout, "Timeout should be set to custom value")
 			},
 		},
 	}
@@ -51,6 +51,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		ctx               context.Context
 		expectedMetadata  string
 		expectedCode      codes.Code
+		expectError       bool
 		assertTransaction bool
 	}{
 		"Handle panic and return internal error": {
@@ -58,6 +59,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 			ctx:              metadata.NewIncomingContext(context.Background(), metadata.Pairs("md", "some")),
 			expectedMetadata: "some",
 			expectedCode:     codes.Internal,
+			expectError:      true,
 			handler: func(ctx context.Context, req any) (any, error) {
 				panic("test panic")
 			},
@@ -67,8 +69,17 @@ func TestUnaryServerInterceptor(t *testing.T) {
 			ctx:              metadata.NewIncomingContext(context.Background(), metadata.Pairs("md", "some")),
 			expectedMetadata: "some",
 			expectedCode:     codes.Internal,
+			expectError:      true,
 			handler: func(ctx context.Context, req any) (any, error) {
 				panic("test panic")
+			},
+		},
+		"Successful handler produces transaction": {
+			options:           sentrygrpc.ServerOptions{},
+			ctx:               metadata.NewIncomingContext(context.Background(), metadata.Pairs("md", "some")),
+			assertTransaction: true,
+			handler: func(ctx context.Context, req any) (any, error) {
+				return struct{}{}, nil
 			},
 		},
 	}
@@ -105,16 +116,16 @@ func TestUnaryServerInterceptor(t *testing.T) {
 			}()
 
 			_, err = interceptor(test.ctx, nil, &grpc.UnaryServerInfo{
-				FullMethod: "TestService.Method",
+				FullMethod: "/test.TestService/Method",
 			}, test.handler)
 
-			if !test.options.Repanic {
+			if test.expectError && !test.options.Repanic {
 				assert.Error(t, err)
 				assert.Equal(t, test.expectedCode, status.Code(err))
 			}
 
 			if test.expectedMetadata != "" {
-				sentry.Flush(2 * time.Second)
+				sentry.Flush(testutils.FlushTimeout())
 				gotEvent := <-eventsCh
 
 				assert.NotNil(t, gotEvent, "Expected an event")
@@ -126,20 +137,23 @@ func TestUnaryServerInterceptor(t *testing.T) {
 			}
 
 			if test.assertTransaction {
-				sentry.Flush(2 * time.Second)
+				sentry.Flush(testutils.FlushTimeout())
 				gotTransaction := <-transactionsCh
 				assert.NotNil(t, gotTransaction, "Expected a transaction")
-				assert.Equal(t, "TestService.Method", gotTransaction.Transaction, "Transaction names should match")
+				assert.Equal(t, "test.TestService/Method", gotTransaction.Transaction, "Transaction names should match")
 				assert.Equal(t, "rpc.server", gotTransaction.Contexts["trace"]["op"])
-				assert.Equal(t, "TestService.Method", gotTransaction.Contexts["trace"]["description"])
+				assert.Equal(t, "test.TestService/Method", gotTransaction.Contexts["trace"]["description"])
 				assert.Equal(t, sentry.SourceCustom, gotTransaction.TransactionInfo.Source)
-				assert.Equal(t, "TestService.Method", gotTransaction.Contexts["grpc"]["method"])
+				assert.Equal(t, "/test.TestService/Method", gotTransaction.Contexts["grpc"]["method"])
 				assert.Equal(t, sentry.SpanStatusOK, gotTransaction.Contexts["trace"]["status"])
-				assert.Equal(t, "TestService.Method", gotTransaction.Contexts["trace"]["data"].(map[string]interface{})["rpc.service"])
-				assert.Equal(t, codes.OK, gotTransaction.Contexts["trace"]["data"].(map[string]interface{})["rpc.grpc.status_code"])
+				data := gotTransaction.Contexts["trace"]["data"].(map[string]interface{})
+				assert.Equal(t, "test.TestService", data["rpc.service"])
+				assert.Equal(t, "Method", data["rpc.method"])
+				assert.Equal(t, "grpc", data["rpc.system"])
+				assert.Equal(t, int(codes.OK), data["rpc.grpc.status_code"])
 			}
 
-			sentry.Flush(2 * time.Second)
+			sentry.Flush(testutils.FlushTimeout())
 		})
 	}
 }
@@ -242,7 +256,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 				defer func() {
 					recovered = recover()
 				}()
-				err = interceptor(nil, stream, &grpc.StreamServerInfo{FullMethod: "TestService.StreamMethod"}, test.handler)
+				err = interceptor(nil, stream, &grpc.StreamServerInfo{FullMethod: "/test.TestService/StreamMethod"}, test.handler)
 			}()
 
 			if test.expectedMetadata {
@@ -252,7 +266,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 			}
 
 			if test.expectedEvent {
-				sentry.Flush(2 * time.Second)
+				sentry.Flush(testutils.FlushTimeout())
 				gotEvent := <-eventsCh
 				assert.NotNil(t, gotEvent, "Expected an event to be captured")
 			} else {
@@ -265,17 +279,20 @@ func TestStreamServerInterceptor(t *testing.T) {
 			}
 
 			if test.assertTransaction {
-				sentry.Flush(2 * time.Second)
+				sentry.Flush(testutils.FlushTimeout())
 				gotTransaction := <-transactionsCh
 				assert.NotNil(t, gotTransaction, "Expected a transaction")
 				traceContext, ok := gotTransaction.Contexts["trace"]
 				assert.True(t, ok, "Expected trace context on the transaction")
 				assert.Equal(t, "rpc.server", traceContext["op"])
-				assert.Equal(t, "TestService.StreamMethod", gotTransaction.Transaction)
-				assert.Equal(t, int(codes.OK), gotTransaction.Contexts["trace"]["data"].(map[string]interface{})["rpc.grpc.status_code"])
-				assert.Equal(t, "TestService.StreamMethod", gotTransaction.Contexts["trace"]["description"])
-				assert.Equal(t, "TestService.StreamMethod", gotTransaction.Contexts["grpc"]["method"])
-				assert.Equal(t, "TestService.StreamMethod", gotTransaction.Contexts["trace"]["data"].(map[string]interface{})["rpc.service"])
+				assert.Equal(t, "test.TestService/StreamMethod", gotTransaction.Transaction)
+				assert.Equal(t, "test.TestService/StreamMethod", gotTransaction.Contexts["trace"]["description"])
+				assert.Equal(t, "/test.TestService/StreamMethod", gotTransaction.Contexts["grpc"]["method"])
+				data := gotTransaction.Contexts["trace"]["data"].(map[string]interface{})
+				assert.Equal(t, "test.TestService", data["rpc.service"])
+				assert.Equal(t, "StreamMethod", data["rpc.method"])
+				assert.Equal(t, "grpc", data["rpc.system"])
+				assert.Equal(t, int(codes.OK), data["rpc.grpc.status_code"])
 			}
 
 			if test.options.Repanic {
@@ -283,7 +300,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 				assert.Equal(t, "test panic", recovered, "Panic value should match")
 			}
 
-			sentry.Flush(2 * time.Second)
+			sentry.Flush(testutils.FlushTimeout())
 		})
 	}
 }

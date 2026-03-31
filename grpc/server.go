@@ -78,23 +78,27 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 
 		setScopeMetadata(hub, info.FullMethod, md)
 
+		name, service, method := parseGRPCMethod(info.FullMethod)
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
 			sentry.WithOpName(defaultServerOperationName),
-			sentry.WithDescription(info.FullMethod),
+			sentry.WithDescription(name),
 			sentry.WithTransactionSource(sentry.SourceCustom),
 			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		}
 
-		service, _ := splitGRPCMethod(info.FullMethod)
 		transaction := sentry.StartTransaction(
 			sentry.SetHubOnContext(ctx, hub),
-			info.FullMethod,
+			name,
 			options...,
 		)
 		if service != "" {
 			transaction.SetData("rpc.service", service)
 		}
+		if method != "" {
+			transaction.SetData("rpc.method", method)
+		}
+		transaction.SetData("rpc.system", "grpc")
 
 		ctx = transaction.Context()
 		defer transaction.Finish()
@@ -137,23 +141,27 @@ func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 
 		setScopeMetadata(hub, info.FullMethod, md)
 
+		name, service, method := parseGRPCMethod(info.FullMethod)
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
 			sentry.WithOpName(defaultServerOperationName),
-			sentry.WithDescription(info.FullMethod),
+			sentry.WithDescription(name),
 			sentry.WithTransactionSource(sentry.SourceCustom),
 			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		}
 
-		service, _ := splitGRPCMethod(info.FullMethod)
 		transaction := sentry.StartTransaction(
 			sentry.SetHubOnContext(ctx, hub),
-			info.FullMethod,
+			name,
 			options...,
 		)
 		if service != "" {
 			transaction.SetData("rpc.service", service)
 		}
+		if method != "" {
+			transaction.SetData("rpc.method", method)
+		}
+		transaction.SetData("rpc.system", "grpc")
 		ctx = transaction.Context()
 		defer transaction.Finish()
 
@@ -210,19 +218,22 @@ func metadataToContext(md metadata.MD) map[string]any {
 	return ctx
 }
 
-func splitGRPCMethod(fullMethod string) (service string, method string) {
-	trimmed := strings.TrimPrefix(fullMethod, "/")
-	if trimmed == "" {
-		return "", ""
+// parseGRPCMethod parses a gRPC full method name and returns the span name, service, and method components.
+//
+// It expects the format "/service/method" and parsing is compatible with:
+// https://github.com/grpc/grpc-go/blob/v1.79.3/internal/grpcutil/method.go#L28
+//
+// Returns the original string as name and empty service/method if the format is invalid.
+func parseGRPCMethod(fullMethod string) (name, service, method string) {
+	if !strings.HasPrefix(fullMethod, "/") {
+		return fullMethod, "", ""
 	}
-
-	parts := strings.SplitN(trimmed, "/", 2)
-	service = parts[0]
-	if len(parts) > 1 {
-		method = parts[1]
+	name = fullMethod[1:]
+	pos := strings.LastIndex(name, "/")
+	if pos < 0 {
+		return name, "", ""
 	}
-
-	return service, method
+	return name, name[:pos], name[pos+1:]
 }
 
 // wrapServerStream wraps a grpc.ServerStream, allowing you to inject a custom context.

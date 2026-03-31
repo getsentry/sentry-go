@@ -5,6 +5,7 @@ package sentrygrpc
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 
@@ -56,17 +57,21 @@ func UnaryClientInterceptor() grpc.UnaryClientInterceptor {
 		invoker grpc.UnaryInvoker,
 		callOpts ...grpc.CallOption) error {
 		ctx = hubFromClientContext(ctx)
+		name, service, rpcMethod := parseGRPCMethod(method)
 		span := sentry.StartSpan(
 			ctx,
 			defaultClientOperationName,
-			sentry.WithTransactionName(method),
-			sentry.WithDescription(method),
+			sentry.WithTransactionName(name),
+			sentry.WithDescription(name),
 			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		)
-		service, _ := splitGRPCMethod(method)
 		if service != "" {
 			span.SetData("rpc.service", service)
 		}
+		if rpcMethod != "" {
+			span.SetData("rpc.method", rpcMethod)
+		}
+		span.SetData("rpc.system", "grpc")
 		ctx = span.Context()
 
 		ctx = createOrUpdateMetadata(ctx, span)
@@ -87,17 +92,21 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 		streamer grpc.Streamer,
 		callOpts ...grpc.CallOption) (grpc.ClientStream, error) {
 		ctx = hubFromClientContext(ctx)
+		name, service, rpcMethod := parseGRPCMethod(method)
 		span := sentry.StartSpan(
 			ctx,
 			defaultClientOperationName,
-			sentry.WithTransactionName(method),
-			sentry.WithDescription(method),
+			sentry.WithTransactionName(name),
+			sentry.WithDescription(name),
 			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 		)
-		service, _ := splitGRPCMethod(method)
 		if service != "" {
 			span.SetData("rpc.service", service)
 		}
+		if rpcMethod != "" {
+			span.SetData("rpc.method", rpcMethod)
+		}
+		span.SetData("rpc.system", "grpc")
 		ctx = span.Context()
 
 		ctx = createOrUpdateMetadata(ctx, span)
@@ -110,10 +119,11 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 			return nil, err
 		}
 		if stream == nil {
-			span.Status = toSpanStatus(codes.OK)
-			span.SetData("rpc.grpc.status_code", int(codes.OK))
+			nilErr := status.Error(codes.Internal, "streamer returned nil stream without error")
+			span.Status = toSpanStatus(codes.Internal)
+			span.SetData("rpc.grpc.status_code", int(codes.Internal))
 			span.Finish()
-			return nil, nil
+			return nil, nilErr
 		}
 
 		return &sentryClientStream{ClientStream: stream, span: span}, nil
@@ -152,12 +162,10 @@ func (s *sentryClientStream) SendMsg(m any) error {
 
 func (s *sentryClientStream) RecvMsg(m any) error {
 	err := s.ClientStream.RecvMsg(m)
-	if err != nil {
-		if err == io.EOF {
-			s.finish(nil)
-		} else {
-			s.finish(err)
-		}
+	if errors.Is(err, io.EOF) {
+		s.finish(nil)
+	} else {
+		s.finish(err)
 	}
 	return err
 }
