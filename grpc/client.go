@@ -36,8 +36,8 @@ func createOrUpdateMetadata(ctx context.Context, span *sentry.Span) context.Cont
 	md, ok := metadata.FromOutgoingContext(ctx)
 	if ok {
 		md = md.Copy()
-		md.Append(sentry.SentryTraceHeader, span.ToSentryTrace())
-		md.Append(sentry.SentryBaggageHeader, span.ToBaggage())
+		md.Set(sentry.SentryTraceHeader, span.ToSentryTrace())
+		md.Set(sentry.SentryBaggageHeader, span.ToBaggage())
 		return metadata.NewOutgoingContext(ctx, md)
 	}
 

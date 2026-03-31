@@ -109,6 +109,34 @@ func TestUnaryClientInterceptor(t *testing.T) {
 	}
 }
 
+func TestUnaryClientInterceptor_ReplacesExistingTraceHeaders(t *testing.T) {
+	transport := initMockTransport(t)
+	interceptor := sentrygrpc.UnaryClientInterceptor()
+
+	oldTrace := "0123456789abcdef0123456789abcdef-0123456789abcdef-1"
+	oldBaggage := "sentry-trace_id=0123456789abcdef0123456789abcdef"
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+		sentry.SentryTraceHeader, oldTrace,
+		sentry.SentryBaggageHeader, oldBaggage,
+		"existing", "value",
+	))
+
+	err := interceptor(ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
+		md, ok := metadata.FromOutgoingContext(ctx)
+		require.True(t, ok)
+		assert.Equal(t, []string{"value"}, md.Get("existing"))
+		assert.Len(t, md.Get(sentry.SentryTraceHeader), 1)
+		assert.Len(t, md.Get(sentry.SentryBaggageHeader), 1)
+		assert.NotEqual(t, oldTrace, md.Get(sentry.SentryTraceHeader)[0])
+		assert.NotEqual(t, oldBaggage, md.Get(sentry.SentryBaggageHeader)[0])
+		return nil
+	})
+
+	require.NoError(t, err)
+	sentry.Flush(testutils.FlushTimeout())
+	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
+}
+
 func TestStreamClientInterceptor(t *testing.T) {
 	tests := map[string]struct {
 		streamer grpc.Streamer
