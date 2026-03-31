@@ -42,14 +42,12 @@ func main() {
 
 	// Create gRPC server with Sentry interceptors
 	server := grpc.NewServer(
-		sentrygrpc.UnaryServerInterceptor(sentrygrpc.ServerOptions{
-			Repanic:         true,
-			WaitForDelivery: true,
-		}),
-		sentrygrpc.StreamServerInterceptor(sentrygrpc.ServerOptions{
-			Repanic:         true,
-			WaitForDelivery: true,
-		}),
+		grpc.UnaryInterceptor(sentrygrpc.UnaryServerInterceptor(sentrygrpc.ServerOptions{
+			Repanic: true,
+		})),
+		grpc.StreamInterceptor(sentrygrpc.StreamServerInterceptor(sentrygrpc.ServerOptions{
+			Repanic: true,
+		})),
 	)
 
 	// Register reflection for debugging
@@ -79,6 +77,7 @@ import (
 	"fmt"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/getsentry/sentry-go"
 	sentrygrpc "github.com/getsentry/sentry-go/grpc"
@@ -93,9 +92,9 @@ func main() {
 	}
 
 	// Create gRPC client with Sentry interceptors
-	conn, err := grpc.Dial(
+	conn, err := grpc.NewClient(
 		"localhost:50051",
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithUnaryInterceptor(sentrygrpc.UnaryClientInterceptor()),
 		grpc.WithStreamInterceptor(sentrygrpc.StreamClientInterceptor()),
 	)
@@ -133,27 +132,6 @@ type ServerOptions struct {
 
 	// Timeout sets the maximum duration for Sentry event delivery.
 	Timeout time.Duration
-
-	// ReportOn defines the conditions under which errors are reported to Sentry.
-	ReportOn func(error) bool
-
-	// CaptureRequestBody determines whether to capture and send request bodies to Sentry.
-	CaptureRequestBody bool
-
-	// OperationName overrides the default operation name (grpc.server).
-	OperationName string
-}
-```
-
-### Client Options
-
-```go
-type ClientOptions struct {
-	// ReportOn defines the conditions under which errors are reported to Sentry.
-	ReportOn func(error) bool
-
-	// OperationName overrides the default operation name (grpc.client).
-	OperationName string
 }
 ```
 

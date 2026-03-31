@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"grpcdemo/cmd/server/examplepb"
 	"log"
 	"net"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	sentrygrpc "github.com/getsentry/sentry-go/grpc"
+	"github.com/sentry-go/_examples/grpc/server/examplepb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -71,8 +71,7 @@ func main() {
 	// Create a new gRPC server with Sentry interceptors
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(sentrygrpc.UnaryServerInterceptor(sentrygrpc.ServerOptions{
-			Repanic:            true,
-			CaptureRequestBody: true,
+			Repanic: true,
 		})),
 		grpc.StreamInterceptor(sentrygrpc.StreamServerInterceptor(sentrygrpc.ServerOptions{
 			Repanic: true,
