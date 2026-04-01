@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.44.1
+
+> [!NOTE]  
+> The v0.44.0 is missing due to a technical issue and had to be released again as v0.44.1
+
+### New Features ✨
+
+- Add RemoveAttribute api on the scope. by @giortzisg in [#1224](https://github.com/getsentry/sentry-go/pull/1224)
+- Deprecate `Scope.SetExtra`, `Scope.SetExtras`, and `Scope.RemoveExtra` in favor of `Scope.SetAttributes` and `Scope.RemoveAttribute` by @giortzisg in [#1224](https://github.com/getsentry/sentry-go/pull/1224)
+  - The recommended migration path is to use `SetAttributes` to attach values to logs and metrics. Note that attributes do not appear on error events; if you only capture errors, use `SetTag` or `SetContext` instead.
+  - Before:
+  ```go
+  scope.SetExtra("key.string", "str")
+  scope.SetExtra("key.int", 42)
+  ```
+  - After (for error events) — use tags and contexts:
+  ```go
+  scope.SetTag("key.string", "str")
+  scope.SetContext("my_data", sentry.Context{"key.int": 42})
+  ```
+  - After (for logs and metrics) — use attributes:
+  ```go
+  scope.SetAttributes(
+      attribute.String("key.string", "str"),
+      attribute.Int("key.int", 42),
+  )
+  ```
+- Add support for homogenous arrays by @giortzisg in [#1203](https://github.com/getsentry/sentry-go/pull/1203)
+- Add support for client reports by @giortzisg in [#1192](https://github.com/getsentry/sentry-go/pull/1192)
+- Add org id propagation in sentry_baggage by @giortzisg in [#1210](https://github.com/getsentry/sentry-go/pull/1210)
+- Add OrgID and StrictTraceContinuation client options. by @giortzisg in [#1210](https://github.com/getsentry/sentry-go/pull/1210)
+- Add the option to set attributes on the scope by @giortzisg in [#1208](https://github.com/getsentry/sentry-go/pull/1208)
+
+### Bug Fixes 🐛
+
+- (serialization) Pre-serialize mutable event fields to prevent race panics by @giortzisg in [#1214](https://github.com/getsentry/sentry-go/pull/1214)
+- Use HEROKU_BUILD_COMMIT with HEROKU_SLUG_COMMIT as fallback by @ericapisani in [#1220](https://github.com/getsentry/sentry-go/pull/1220)
+
+### Internal Changes 🔧
+
+#### Ai
+
+- Add AGENTS.md and testing guidelines by @giortzisg in [#1216](https://github.com/getsentry/sentry-go/pull/1216)
+- Add dotagents configuration by @giortzisg in [#1211](https://github.com/getsentry/sentry-go/pull/1211)
+
+#### Deps
+
+- Bump github.com/buger/jsonparser from 1.1.1 to 1.1.2 in /zerolog by @dependabot in [#1231](https://github.com/getsentry/sentry-go/pull/1231)
+- Bump github.com/gofiber/fiber/v2 from 2.52.11 to 2.52.12 in /fiber by @dependabot in [#1209](https://github.com/getsentry/sentry-go/pull/1209)
+
+#### Other
+
+- Pin GitHub Actions to full-length commit SHAs by @joshuarli in [#1230](https://github.com/getsentry/sentry-go/pull/1230)
+- Bump getsentry/craft to 2.24.1 by @giortzisg in [#1225](https://github.com/getsentry/sentry-go/pull/1225)
+- Handle independent go module versions for integrations by @giortzisg in [#1217](https://github.com/getsentry/sentry-go/pull/1217)
+
 ## 0.43.0
 
 ### Breaking Changes 🛠
