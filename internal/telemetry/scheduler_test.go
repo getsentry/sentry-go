@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
@@ -294,7 +293,7 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(sentry.DefaultFlushTimeout):
+	case <-time.After(2 * time.Second):
 		t.Error("Scheduler stop took too long")
 	}
 }
