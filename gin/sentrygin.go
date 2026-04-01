@@ -46,7 +46,7 @@ type Options struct {
 // It can be used with Use() methods.
 func New(options Options) gin.HandlerFunc {
 	if options.Timeout == 0 {
-		options.Timeout = 2 * time.Second
+		options.Timeout = sentry.DefaultFlushTimeout
 	}
 
 	return (&handler{

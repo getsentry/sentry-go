@@ -54,7 +54,7 @@ type Options struct {
 // existing HTTP handlers.
 func New(options Options) *Handler {
 	if options.Timeout == 0 {
-		options.Timeout = 2 * time.Second
+		options.Timeout = sentry.DefaultFlushTimeout
 	}
 
 	return &Handler{

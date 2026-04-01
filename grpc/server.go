@@ -34,7 +34,7 @@ type ServerOptions struct {
 
 func (o *ServerOptions) SetDefaults() {
 	if o.Timeout == 0 {
-		o.Timeout = 2 * time.Second
+		o.Timeout = sentry.DefaultFlushTimeout
 	}
 }
 

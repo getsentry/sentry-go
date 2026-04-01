@@ -47,7 +47,7 @@ type Options struct {
 // that satisfy fasthttp.RequestHandler interface.
 func New(options Options) *Handler {
 	if options.Timeout == 0 {
-		options.Timeout = 2 * time.Second
+		options.Timeout = sentry.DefaultFlushTimeout
 	}
 
 	return &Handler{
