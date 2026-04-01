@@ -134,6 +134,10 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 		resp, err = handler(ctx, req)
 		setRPCStatus(transaction, err)
 
+		if opts.WaitForDelivery {
+			hub.Flush(opts.Timeout)
+		}
+
 		return resp, err
 	}
 }
@@ -154,6 +158,10 @@ func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 
 		err = handler(srv, stream)
 		setRPCStatus(transaction, err)
+
+		if opts.WaitForDelivery {
+			hub.Flush(opts.Timeout)
+		}
 
 		return err
 	}
