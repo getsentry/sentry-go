@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"time"
 
@@ -107,8 +108,10 @@ func streamExample(client examplepb.ExampleServiceClient) {
 	for {
 		res, err := stream.Recv()
 		if err != nil {
-			fmt.Printf("Stream Recv Error: %v\n", err)
-			sentry.CaptureException(err)
+			if err != io.EOF {
+				fmt.Printf("Stream Recv Error: %v\n", err)
+				sentry.CaptureException(err)
+			}
 			break
 		}
 		fmt.Printf("Stream Response: %s\n", res.Message)

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/_examples/grpc/server/examplepb"
 	sentrygrpc "github.com/getsentry/sentry-go/grpc"
-	"github.com/sentry-go/_examples/grpc/server/examplepb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
