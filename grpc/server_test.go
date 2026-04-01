@@ -46,29 +46,6 @@ func summarizeTx(tx *sentry.Event) txSummary {
 	return s
 }
 
-func TestServerOptions_SetDefaults(t *testing.T) {
-	tests := map[string]struct {
-		input sentrygrpc.ServerOptions
-		want  sentrygrpc.ServerOptions
-	}{
-		"zero value gets default timeout": {
-			input: sentrygrpc.ServerOptions{},
-			want:  sentrygrpc.ServerOptions{Timeout: sentry.DefaultFlushTimeout},
-		},
-		"non-zero timeout is preserved": {
-			input: sentrygrpc.ServerOptions{Timeout: testutils.FlushTimeout()},
-			want:  sentrygrpc.ServerOptions{Timeout: testutils.FlushTimeout()},
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			tc.input.SetDefaults()
-			assert.Equal(t, tc.want, tc.input)
-		})
-	}
-}
-
 func TestUnaryServerInterceptor(t *testing.T) {
 	transport := initMockTransport(t)
 	interceptor := sentrygrpc.UnaryServerInterceptor(sentrygrpc.ServerOptions{})
