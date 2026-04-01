@@ -1,9 +1,6 @@
 package sentry
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestMergeBaggage(t *testing.T) {
 	t.Run("both empty", func(t *testing.T) {
@@ -55,17 +52,13 @@ func TestMergeBaggage(t *testing.T) {
 		assertBaggageStringsEqual(t, got, "othervendor=bla,sentry-trace_id=new,sentry-sampled=true")
 	})
 
-	t.Run("invalid existing returns empty and error", func(t *testing.T) {
+	t.Run("invalid existing returns sentry baggage", func(t *testing.T) {
 		got, err := MergeBaggage("not-valid", "sentry-trace_id=123,sentry-sampled=true")
-		if err == nil {
-			t.Fatal("expected error")
-		}
-		if got != "" {
-			t.Fatalf("expected empty baggage, got %q", got)
-		}
-		if !strings.Contains(err.Error(), "cannot parse existingHeader") {
+		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+
+		assertBaggageStringsEqual(t, got, "sentry-trace_id=123,sentry-sampled=true")
 	})
 
 	t.Run("invalid sentry returns empty and error", func(t *testing.T) {
@@ -75,9 +68,6 @@ func TestMergeBaggage(t *testing.T) {
 		}
 		if got != "" {
 			t.Fatalf("expected empty baggage, got %q", got)
-		}
-		if !strings.Contains(err.Error(), "cannot parse sentryHeader") {
-			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 

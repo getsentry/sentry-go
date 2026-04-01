@@ -167,6 +167,28 @@ func TestUnaryClientInterceptor_PreservesExistingBaggageMembers(t *testing.T) {
 	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
 
+func TestUnaryClientInterceptor_PropagatesSentryBaggageWhenExistingBaggageIsMalformed(t *testing.T) {
+	transport := initMockTransport(t)
+	interceptor := sentrygrpc.UnaryClientInterceptor()
+
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+		sentry.SentryBaggageHeader, "not-valid",
+	))
+
+	err := interceptor(ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
+		md, ok := metadata.FromOutgoingContext(ctx)
+		require.True(t, ok)
+		baggageHeader := strings.Join(md.Get(sentry.SentryBaggageHeader), ",")
+		assert.NotContains(t, baggageHeader, "not-valid")
+		assert.Contains(t, baggageHeader, "sentry-trace_id")
+		return nil
+	})
+
+	require.NoError(t, err)
+	sentry.Flush(testutils.FlushTimeout())
+	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
+}
+
 func TestStreamClientInterceptor(t *testing.T) {
 	tests := map[string]struct {
 		ctx      context.Context
