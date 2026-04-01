@@ -18,6 +18,6 @@ func (errorLinkingIntegration) Name() string {
 	return "OtelErrorLinking"
 }
 
-func (errorLinkingIntegration) SetupOnce(_ *sentry.Client) {
-	sentry.AddGlobalEventProcessor(common.NewEventProcessor())
+func (errorLinkingIntegration) SetupOnce(client *sentry.Client) {
+	client.AddEventProcessor(common.NewEventProcessor())
 }
