@@ -32,7 +32,7 @@ type ServerOptions struct {
 	Timeout time.Duration
 }
 
-func (o *ServerOptions) SetDefaults() {
+func (o *ServerOptions) setDefaults() {
 	if o.Timeout == 0 {
 		o.Timeout = sentry.DefaultFlushTimeout
 	}
@@ -56,62 +56,83 @@ func recoverWithSentry(ctx context.Context, hub *sentry.Hub, o ServerOptions, on
 	}
 }
 
+func hubFromServerContext(ctx context.Context) *sentry.Hub {
+	hub := sentry.GetHubFromContext(ctx)
+	if hub == nil {
+		hub = sentry.CurrentHub().Clone()
+	}
+
+	if client := hub.Client(); client != nil {
+		client.SetSDKIdentifier(sdkIdentifier)
+	}
+
+	return hub
+}
+
+func traceHeadersFromContext(ctx context.Context) (metadata.MD, string, string) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	return md, getFirstHeader(md, sentry.SentryTraceHeader), getFirstHeader(md, sentry.SentryBaggageHeader)
+}
+
+func startServerTransaction(ctx context.Context, fullMethod string) (context.Context, *sentry.Hub, *sentry.Span) {
+	hub := hubFromServerContext(ctx)
+	md, sentryTraceHeader, sentryBaggageHeader := traceHeadersFromContext(ctx)
+	name, service, method := parseGRPCMethod(fullMethod)
+
+	setScopeMetadata(hub, name, md)
+
+	transaction := sentry.StartTransaction(
+		sentry.SetHubOnContext(ctx, hub),
+		name,
+		sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
+		sentry.WithOpName(defaultServerOperationName),
+		sentry.WithDescription(name),
+		sentry.WithTransactionSource(sentry.SourceRoute),
+		sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
+	)
+	if service != "" {
+		transaction.SetData("rpc.service", service)
+	}
+	if method != "" {
+		transaction.SetData("rpc.method", method)
+	}
+	transaction.SetData("rpc.system", "grpc")
+
+	return transaction.Context(), hub, transaction
+}
+
+func setRPCStatus(span *sentry.Span, err error) {
+	code := grpcStatusCode(err)
+	span.Status = toSpanStatus(code)
+	span.SetData("rpc.grpc.status_code", int(code))
+}
+
+func grpcStatusCode(err error) codes.Code {
+	if err == nil {
+		return codes.OK
+	}
+
+	if s, ok := status.FromError(err); ok {
+		return s.Code()
+	}
+
+	return status.FromContextError(err).Code()
+}
+
 func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
-	opts.SetDefaults()
+	opts.setDefaults()
 
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-		hub := sentry.GetHubFromContext(ctx)
-		if hub == nil {
-			hub = sentry.CurrentHub().Clone()
-		}
-
-		if client := hub.Client(); client != nil {
-			client.SetSDKIdentifier(sdkIdentifier)
-		}
-
-		md, ok := metadata.FromIncomingContext(ctx)
-		var sentryTraceHeader, sentryBaggageHeader string
-		if ok {
-			sentryTraceHeader = getFirstHeader(md, sentry.SentryTraceHeader)
-			sentryBaggageHeader = getFirstHeader(md, sentry.SentryBaggageHeader)
-		}
-
-		name, service, method := parseGRPCMethod(info.FullMethod)
-		setScopeMetadata(hub, name, md)
-		options := []sentry.SpanOption{
-			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
-			sentry.WithOpName(defaultServerOperationName),
-			sentry.WithDescription(name),
-			sentry.WithTransactionSource(sentry.SourceRoute),
-			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
-		}
-
-		transaction := sentry.StartTransaction(
-			sentry.SetHubOnContext(ctx, hub),
-			name,
-			options...,
-		)
-		if service != "" {
-			transaction.SetData("rpc.service", service)
-		}
-		if method != "" {
-			transaction.SetData("rpc.method", method)
-		}
-		transaction.SetData("rpc.system", "grpc")
-
-		ctx = transaction.Context()
+		ctx, hub, transaction := startServerTransaction(ctx, info.FullMethod)
 		defer transaction.Finish()
 
 		defer recoverWithSentry(ctx, hub, opts, func() {
 			err = status.Error(codes.Internal, internalServerErrorMessage)
-			transaction.Status = sentry.SpanStatusInternalError
-			transaction.SetData("rpc.grpc.status_code", int(codes.Internal))
+			setRPCStatus(transaction, err)
 		})
 
 		resp, err = handler(ctx, req)
-		statusCode := status.Code(err)
-		transaction.Status = toSpanStatus(statusCode)
-		transaction.SetData("rpc.grpc.status_code", int(statusCode))
+		setRPCStatus(transaction, err)
 
 		return resp, err
 	}
@@ -119,62 +140,20 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 
 // StreamServerInterceptor provides Sentry integration for streaming gRPC calls.
 func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
-	opts.SetDefaults()
+	opts.setDefaults()
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
-		ctx := ss.Context()
-		hub := sentry.GetHubFromContext(ctx)
-		if hub == nil {
-			hub = sentry.CurrentHub().Clone()
-		}
-
-		if client := hub.Client(); client != nil {
-			client.SetSDKIdentifier(sdkIdentifier)
-		}
-
-		md, ok := metadata.FromIncomingContext(ctx)
-		var sentryTraceHeader, sentryBaggageHeader string
-		if ok {
-			sentryTraceHeader = getFirstHeader(md, sentry.SentryTraceHeader)
-			sentryBaggageHeader = getFirstHeader(md, sentry.SentryBaggageHeader)
-		}
-
-		name, service, method := parseGRPCMethod(info.FullMethod)
-		setScopeMetadata(hub, name, md)
-		options := []sentry.SpanOption{
-			sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
-			sentry.WithOpName(defaultServerOperationName),
-			sentry.WithDescription(name),
-			sentry.WithTransactionSource(sentry.SourceRoute),
-			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
-		}
-
-		transaction := sentry.StartTransaction(
-			sentry.SetHubOnContext(ctx, hub),
-			name,
-			options...,
-		)
-		if service != "" {
-			transaction.SetData("rpc.service", service)
-		}
-		if method != "" {
-			transaction.SetData("rpc.method", method)
-		}
-		transaction.SetData("rpc.system", "grpc")
-		ctx = transaction.Context()
+		ctx, hub, transaction := startServerTransaction(ss.Context(), info.FullMethod)
 		defer transaction.Finish()
 
 		stream := wrapServerStream(ss, ctx)
 
 		defer recoverWithSentry(ctx, hub, opts, func() {
 			err = status.Error(codes.Internal, internalServerErrorMessage)
-			transaction.Status = sentry.SpanStatusInternalError
-			transaction.SetData("rpc.grpc.status_code", int(codes.Internal))
+			setRPCStatus(transaction, err)
 		})
 
 		err = handler(srv, stream)
-		statusCode := status.Code(err)
-		transaction.Status = toSpanStatus(statusCode)
-		transaction.SetData("rpc.grpc.status_code", int(statusCode))
+		setRPCStatus(transaction, err)
 
 		return err
 	}
@@ -207,14 +186,18 @@ func metadataToContext(md metadata.MD) map[string]any {
 			continue
 		}
 
+		if len(values) == 0 {
+			continue
+		}
+
 		if len(values) == 1 {
 			ctx[key] = values[0]
 			continue
 		}
 
-		joined := make([]string, len(values))
-		copy(joined, values)
-		ctx[key] = joined
+		copied := make([]string, len(values))
+		copy(copied, values)
+		ctx[key] = copied
 	}
 
 	if len(ctx) == 0 {
@@ -235,7 +218,7 @@ func parseGRPCMethod(fullMethod string) (name, service, method string) {
 		return fullMethod, "", ""
 	}
 	name = fullMethod[1:]
-	pos := strings.LastIndex(name, "/")
+	pos := strings.Index(name, "/")
 	if pos < 0 {
 		return name, "", ""
 	}
