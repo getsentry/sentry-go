@@ -49,7 +49,7 @@ func main() {
 	app.GET("/", func(ctx echo.Context) error {
 		if hub := sentryecho.GetHubFromContext(ctx); hub != nil {
 			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetExtra("unwantedQuery", "someQueryDataMaybe")
+				scope.SetTag("unwantedQuery", "someQueryDataMaybe")
 				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
 			})
 		}
