@@ -17,7 +17,7 @@ import (
 // This race is between json.Marshal on the scheduler goroutine and user
 // mutations on the calling goroutine. It validates that we don't hold
 // mutable user data on the SDK.
-func TestTelemetryProcessorRace(t *testing.T) {
+func TestTelemetryProcessorRace(_ *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
