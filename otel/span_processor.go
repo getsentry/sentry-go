@@ -22,8 +22,7 @@ var sentrySpanProcessorInstance *sentrySpanProcessor
 //
 // Deprecated: Prefer OTLP export via sentryotlp.NewTraceExporter.
 // For collector-based setups, use the standard OTel exporter and register
-// sentryotel.NewLinkingIntegration for linking.
-// Will be removed in 0.47.0.
+// sentryotel.NewOtelIntegration for linking.
 // Will be removed in 0.47.0.
 func NewSentrySpanProcessor() otelSdkTrace.SpanProcessor {
 	if sentrySpanProcessorInstance != nil {

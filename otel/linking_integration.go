@@ -7,11 +7,11 @@ import (
 
 type integration struct{}
 
-// NewLinkingIntegration registers OpenTelemetry linking with Sentry.
+// NewOtelIntegration registers OpenTelemetry linking with Sentry.
 //
 // It links captured Sentry errors, logs, and metrics to the active
 // OpenTelemetry trace when a context carrying an active OTel span is used.
-func NewLinkingIntegration() sentry.Integration {
+func NewOtelIntegration() sentry.Integration {
 	return integration{}
 }
 
