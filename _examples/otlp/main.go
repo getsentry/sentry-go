@@ -6,7 +6,7 @@
 // setupTracerProviderWithCollector exports spans to a standard OpenTelemetry
 // Collector using otlptracehttp.New.
 //
-// To link Sentry errors, register sentryotel.NewErrorLinkingIntegration in
+// To link Sentry errors, register sentryotel.NewLinkingIntegration in
 // sentry.Init.
 package main
 
@@ -33,7 +33,7 @@ func main() {
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
-			return append(integrations, sentryotel.NewErrorLinkingIntegration())
+			return append(integrations, sentryotel.NewLinkingIntegration())
 		},
 	}); err != nil {
 		log.Fatalf("sentry.Init: %v", err)
