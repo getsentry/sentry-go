@@ -150,8 +150,7 @@ func (h *eventHook) Fire(entry *logrus.Entry) error {
 	if entry.Context != nil {
 		hint = &sentry.EventHint{Context: entry.Context}
 	}
-	client := hub.Client()
-	if client == nil || client.CaptureEvent(event, hint, hub.Scope()) == nil {
+	if hub.CaptureEventWithHint(event, hint) == nil {
 		if h.fallback != nil {
 			return h.fallback(entry)
 		}
