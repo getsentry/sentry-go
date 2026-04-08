@@ -2,6 +2,7 @@ package sentryotel
 
 import (
 	"context"
+	"errors"
 	"log"
 	"testing"
 
@@ -491,4 +492,28 @@ func TestTransactionsStayIndependent(t *testing.T) {
 
 	otelRoot1.End()
 	otelRoot2.End()
+}
+
+func TestLinkTraceContextToErrorEventWithSpanProcessor(t *testing.T) {
+	_, _, tracer := setupSpanProcessorTest()
+
+	ctx, otelSpan := tracer.Start(emptyContextWithSentry(), "spanName")
+	hub := sentry.GetHubFromContext(ctx)
+	client, scope := hub.Client(), hub.Scope()
+
+	client.CaptureException(
+		errors.New("span processor linked error"),
+		&sentry.EventHint{Context: ctx},
+		scope,
+	)
+
+	transport := client.Transport.(*sentry.MockTransport)
+	events := transport.Events()
+	assertEqual(t, len(events), 1)
+
+	errEvent := events[0]
+	assertEqual(t, errEvent.Contexts["trace"], map[string]any{
+		"trace_id": otelSpan.SpanContext().TraceID().String(),
+		"span_id":  otelSpan.SpanContext().SpanID().String(),
+	})
 }

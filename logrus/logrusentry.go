@@ -146,7 +146,11 @@ func (h *eventHook) Levels() []logrus.Level {
 func (h *eventHook) Fire(entry *logrus.Entry) error {
 	hub := h.hubProvider()
 	event := h.entryToEvent(entry)
-	if id := hub.CaptureEvent(event); id == nil {
+	var hint *sentry.EventHint
+	if entry.Context != nil {
+		hint = &sentry.EventHint{Context: entry.Context}
+	}
+	if hub.CaptureEventWithHint(event, hint) == nil {
 		if h.fallback != nil {
 			return h.fallback(entry)
 		}
