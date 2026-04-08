@@ -81,7 +81,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	}
 
 	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(ctx.Context(), hub),
+		sentry.SetHubOnContext(ctx.UserContext(), hub),
 		fmt.Sprintf("%s %s", r.Method, transactionName),
 		options...,
 	)
@@ -94,6 +94,8 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	}()
 
 	transaction.SetData("http.request.method", r.Method)
+	ctx.SetUserContext(transaction.Context())
+	r = r.WithContext(transaction.Context())
 
 	scope := hub.Scope()
 	scope.SetRequest(r)
