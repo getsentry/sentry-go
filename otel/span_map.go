@@ -11,8 +11,8 @@ import (
 // TransactionEntry holds a reference to the root transaction span and
 // tracks the number of active spans belonging to this trace.
 //
-// Deprecated: Prefer OTLP export via sentryotlp.NewTraceExporter. Will be removed alongside
-// [NewSentrySpanProcessor].
+// Deprecated: Prefer OTLP export via sentryotlp.NewTraceExporter.
+// Will be removed in 0.47.0 alongside [NewSentrySpanProcessor].
 type TransactionEntry struct {
 	root        *sentry.Span
 	activeCount atomic.Int64
@@ -32,8 +32,8 @@ func (te *TransactionEntry) HasSpan(spanID otelTrace.SpanID) bool {
 // It stores spans per transaction for lookup by the propagator and event processor,
 // and manages transaction entries for creating child spans via the shared spanRecorder.
 //
-// Deprecated: Prefer OTLP export via sentryotlp.NewTraceExporter. Will be removed alongside
-// [NewSentrySpanProcessor].
+// Deprecated: Prefer OTLP export via sentryotlp.NewTraceExporter.
+// Will be removed in 0.47.0 alongside [NewSentrySpanProcessor].
 type SentrySpanMap struct {
 	transactions util.SyncMap[otelTrace.TraceID, *TransactionEntry]
 }

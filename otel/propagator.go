@@ -15,6 +15,7 @@ type sentryPropagator struct{}
 //
 // Deprecated: This propagator depends on the span-processor integration and does
 // not work for OTLP-based setups. Prefer the standard OpenTelemetry propagators.
+// Will be removed in 0.47.0.
 //
 // For more details: https://github.com/getsentry/sentry-go/issues/1221
 func NewSentryPropagator() propagation.TextMapPropagator {
