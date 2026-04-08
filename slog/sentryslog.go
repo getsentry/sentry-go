@@ -193,7 +193,7 @@ func (h *eventHandler) Handle(ctx context.Context, record slog.Record) error {
 
 	fromContext := contextExtractor(ctx, h.option.AttrFromContext)
 	event := h.option.Converter(h.option.AddSource, h.option.ReplaceAttr, append(h.attrs, fromContext...), h.groups, &record, hub)
-	hub.CaptureEvent(event)
+	hub.Client().CaptureEvent(event, &sentry.EventHint{Context: ctx}, hub.Scope())
 	return nil
 }
 
