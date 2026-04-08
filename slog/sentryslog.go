@@ -193,9 +193,7 @@ func (h *eventHandler) Handle(ctx context.Context, record slog.Record) error {
 
 	fromContext := contextExtractor(ctx, h.option.AttrFromContext)
 	event := h.option.Converter(h.option.AddSource, h.option.ReplaceAttr, append(h.attrs, fromContext...), h.groups, &record, hub)
-	if hub.CaptureEventWithHint(event, &sentry.EventHint{Context: ctx}) == nil {
-		return errors.New("failed to send to sentry")
-	}
+	hub.CaptureEventWithHint(event, &sentry.EventHint{Context: ctx})
 	return nil
 }
 
