@@ -1,6 +1,8 @@
 package common
 
 import (
+	"context"
+
 	"github.com/getsentry/sentry-go"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -19,8 +21,8 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 		return event
 	}
 
-	otelSpanContext := trace.SpanContextFromContext(hint.Context)
-	if !otelSpanContext.IsValid() {
+	traceID, spanID, ok := ResolveTraceContext(hint.Context)
+	if !ok {
 		return event
 	}
 
@@ -33,7 +35,21 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 		event.Contexts["trace"] = make(map[string]any)
 		traceContext = event.Contexts["trace"]
 	}
-	traceContext["trace_id"] = otelSpanContext.TraceID().String()
-	traceContext["span_id"] = otelSpanContext.SpanID().String()
+	traceContext["trace_id"] = traceID.String()
+	traceContext["span_id"] = spanID.String()
 	return event
+}
+
+// ResolveTraceContext returns Sentry trace/span IDs from the active OTel span in ctx.
+func ResolveTraceContext(ctx context.Context) (sentry.TraceID, sentry.SpanID, bool) {
+	if ctx == nil {
+		return sentry.TraceID{}, sentry.SpanID{}, false
+	}
+
+	otelSpanContext := trace.SpanContextFromContext(ctx)
+	if !otelSpanContext.IsValid() {
+		return sentry.TraceID{}, sentry.SpanID{}, false
+	}
+
+	return sentry.TraceID(otelSpanContext.TraceID()), sentry.SpanID(otelSpanContext.SpanID()), true
 }
