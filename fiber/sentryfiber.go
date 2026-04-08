@@ -110,7 +110,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
 	if err := recover(); err != nil {
 		eventID := hub.RecoverWithContext(
-			context.WithValue(context.Background(), sentry.RequestContextKey, ctx),
+			context.WithValue(ctx.UserContext(), sentry.RequestContextKey, ctx),
 			err,
 		)
 		if eventID != nil && h.waitForDelivery {
