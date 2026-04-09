@@ -494,7 +494,7 @@ func (t *AsyncTransport) sendClientReport() {
 	}
 	header := &protocol.EnvelopeHeader{
 		SentAt: time.Now(),
-		Dsn:    t.dsn.String(),
+		Dsn:    t.dsn,
 	}
 	envelope := protocol.NewEnvelope(header)
 	envelope.AddItem(item)

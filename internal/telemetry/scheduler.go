@@ -237,10 +237,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 	switch category {
 	case ratelimit.CategoryLog:
 		logs := protocol.Logs(items)
-		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Sdk: s.sdkInfo}
-		if s.dsn != nil {
-			header.Dsn = s.dsn.String()
-		}
+		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Dsn: s.dsn, Sdk: s.sdkInfo}
 		envelope := protocol.NewEnvelope(header)
 		item, err := logs.ToEnvelopeItem()
 		if err != nil {
@@ -254,10 +251,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 		return
 	case ratelimit.CategoryTraceMetric:
 		metrics := protocol.Metrics(items)
-		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Sdk: s.sdkInfo}
-		if s.dsn != nil {
-			header.Dsn = s.dsn.String()
-		}
+		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Dsn: s.dsn, Sdk: s.sdkInfo}
 		envelope := protocol.NewEnvelope(header)
 		item, err := metrics.ToEnvelopeItem()
 		if err != nil {
@@ -287,14 +281,12 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeItemConvertible) {
 	header := &protocol.EnvelopeHeader{
 		EventID: item.GetEventID(),
 		SentAt:  time.Now(),
+		Dsn:     s.dsn,
 		Trace:   item.GetDynamicSamplingContext(),
 		Sdk:     s.sdkInfo,
 	}
 	if header.EventID == "" {
 		header.EventID = protocol.GenerateEventID()
-	}
-	if s.dsn != nil {
-		header.Dsn = s.dsn.String()
 	}
 	envelope := protocol.NewEnvelope(header)
 	envItem, err := item.ToEnvelopeItem()

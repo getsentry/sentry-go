@@ -227,7 +227,7 @@ func recordForBatchItem(recorder report.ClientReportRecorder, reason report.Disc
 type envelopeHeader struct {
 	EventID EventID           `json:"event_id,omitempty"`
 	SentAt  time.Time         `json:"sent_at"`
-	Dsn     string            `json:"dsn,omitempty"`
+	Dsn     *Dsn              `json:"dsn,omitempty"`
 	Sdk     map[string]string `json:"sdk,omitempty"`
 	Trace   map[string]string `json:"trace,omitempty"`
 }
@@ -253,7 +253,7 @@ func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMes
 		EventID: event.EventID,
 		SentAt:  sentAt,
 		Trace:   trace,
-		Dsn:     dsn.String(),
+		Dsn:     dsn,
 		Sdk: map[string]string{
 			"name":    event.Sdk.Name,
 			"version": event.Sdk.Version,
@@ -611,7 +611,7 @@ func (t *HTTPTransport) worker() {
 					enc := json.NewEncoder(&buf)
 					if err := encodeEnvelopeHeader(enc, &envelopeHeader{
 						SentAt: time.Now(),
-						Dsn:    t.dsn.String(),
+						Dsn:    t.dsn,
 						Sdk: map[string]string{
 							"name":    sdkIdentifier,
 							"version": SDKVersion,
@@ -933,10 +933,7 @@ func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
 }
 
 func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
-	header := &protocol.EnvelopeHeader{EventID: string(event.EventID), SentAt: time.Now(), Sdk: &protocol.SdkInfo{Name: event.Sdk.Name, Version: event.Sdk.Version}}
-	if a.dsn != nil {
-		header.Dsn = a.dsn.String()
-	}
+	header := &protocol.EnvelopeHeader{EventID: string(event.EventID), SentAt: time.Now(), Dsn: a.dsn, Sdk: &protocol.SdkInfo{Name: event.Sdk.Name, Version: event.Sdk.Version}}
 	if header.EventID == "" {
 		header.EventID = protocol.GenerateEventID()
 	}

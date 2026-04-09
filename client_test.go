@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	internalHttp "github.com/getsentry/sentry-go/internal/http"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
@@ -1063,9 +1064,6 @@ func TestClientSetsUpTransport(t *testing.T) {
 		Transport: &MockTransport{},
 	})
 	require.IsType(t, &MockTransport{}, client.Transport)
-
-	client, _ = NewClient(ClientOptions{})
-	require.IsType(t, &noopTransport{}, client.Transport)
 }
 
 func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
@@ -1078,13 +1076,10 @@ func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if client.telemetryProcessor != nil {
-		t.Fatal("expected telemetryProcessor to be nil when DSN is missing")
+	if client.telemetryProcessor == nil {
+		t.Fatal("expected telemetryProcessor to not be nil when DSN is missing")
 	}
-
-	if _, ok := client.Transport.(*noopTransport); !ok {
-		t.Fatalf("expected noopTransport, got %T", client.Transport)
-	}
+	require.IsType(t, &internalHttp.NoopTransport{}, client.Transport.(*internalAsyncTransportAdapter).transport)
 }
 
 type multiClientEnv struct {
