@@ -42,6 +42,7 @@ type TransportOptions struct {
 	CaCerts       *x509.CertPool
 	Recorder      report.ClientReportRecorder
 	Provider      report.ClientReportProvider
+	SdkInfo       *protocol.SdkInfo
 }
 
 func getProxyConfig(options TransportOptions) func(*http.Request) (*url.URL, error) {
@@ -74,8 +75,11 @@ func getTLSConfig(options TransportOptions) *tls.Config {
 func getSentryRequestFromEnvelope(ctx context.Context, dsn *protocol.Dsn, envelope *protocol.Envelope) (r *http.Request, err error) {
 	defer func() {
 		if r != nil {
-			sdkName := envelope.Header.Sdk.Name
-			sdkVersion := envelope.Header.Sdk.Version
+			var sdkName, sdkVersion string
+			if envelope.Header.Sdk != nil {
+				sdkVersion = envelope.Header.Sdk.Version
+				sdkName = envelope.Header.Sdk.Name
+			}
 
 			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", sdkName, sdkVersion))
 			r.Header.Set("Content-Type", "application/x-sentry-envelope")
@@ -151,6 +155,7 @@ type SyncTransport struct {
 	transport http.RoundTripper
 	recorder  report.ClientReportRecorder
 	provider  report.ClientReportProvider
+	sdkInfo   *protocol.SdkInfo
 
 	mu     sync.Mutex
 	limits ratelimit.Map
@@ -173,6 +178,10 @@ func NewSyncTransport(options TransportOptions) protocol.TelemetryTransport {
 	if provider == nil {
 		provider = report.NoopProvider()
 	}
+	sdkInfo := &protocol.SdkInfo{}
+	if options.SdkInfo != nil {
+		sdkInfo = options.SdkInfo
+	}
 
 	transport := &SyncTransport{
 		Timeout:  defaultTimeout,
@@ -180,6 +189,7 @@ func NewSyncTransport(options TransportOptions) protocol.TelemetryTransport {
 		dsn:      dsn,
 		recorder: recorder,
 		provider: provider,
+		sdkInfo:  sdkInfo,
 	}
 
 	if options.HTTPTransport != nil {
@@ -288,6 +298,7 @@ type AsyncTransport struct {
 	transport http.RoundTripper
 	recorder  report.ClientReportRecorder
 	provider  report.ClientReportProvider
+	sdkInfo   *protocol.SdkInfo
 
 	queue chan *protocol.Envelope
 
@@ -321,6 +332,10 @@ func NewAsyncTransport(options TransportOptions) protocol.TelemetryTransport {
 	if provider == nil {
 		provider = report.NoopProvider()
 	}
+	sdkInfo := &protocol.SdkInfo{}
+	if options.SdkInfo != nil {
+		sdkInfo = options.SdkInfo
+	}
 
 	transport := &AsyncTransport{
 		QueueSize: defaultQueueSize,
@@ -330,6 +345,7 @@ func NewAsyncTransport(options TransportOptions) protocol.TelemetryTransport {
 		dsn:       dsn,
 		recorder:  recorder,
 		provider:  provider,
+		sdkInfo:   sdkInfo,
 	}
 
 	transport.queue = make(chan *protocol.Envelope, transport.QueueSize)
@@ -495,6 +511,7 @@ func (t *AsyncTransport) sendClientReport() {
 	header := &protocol.EnvelopeHeader{
 		SentAt: time.Now(),
 		Dsn:    t.dsn,
+		Sdk:    t.sdkInfo,
 	}
 	envelope := protocol.NewEnvelope(header)
 	envelope.AddItem(item)

@@ -479,6 +479,15 @@ func (client *Client) setupTransport() {
 }
 
 func (client *Client) setupTelemetryProcessor() {
+	sdkInfo := &protocol.SdkInfo{
+		Name:         client.GetSDKIdentifier(),
+		Version:      SDKVersion,
+		Integrations: client.listIntegrations(),
+		Packages: []SdkPackage{{
+			Name:    "sentry-go",
+			Version: SDKVersion,
+		}},
+	}
 	transport := httpInternal.NewAsyncTransport(httpInternal.TransportOptions{
 		Dsn:           client.options.Dsn,
 		HTTPClient:    client.options.HTTPClient,
@@ -488,6 +497,7 @@ func (client *Client) setupTelemetryProcessor() {
 		CaCerts:       client.options.CaCerts,
 		Recorder:      client.reportRecorder,
 		Provider:      client.reportProvider,
+		SdkInfo:       sdkInfo,
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
@@ -497,11 +507,6 @@ func (client *Client) setupTelemetryProcessor() {
 		ratelimit.CategoryLog:         telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
 		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder),
 		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
-	}
-
-	sdkInfo := &protocol.SdkInfo{
-		Name:    client.sdkIdentifier,
-		Version: client.sdkVersion,
 	}
 
 	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, client.dsn, sdkInfo, client.reportRecorder)
