@@ -5,7 +5,7 @@ go 1.24.0
 replace github.com/getsentry/sentry-go => ../../
 
 require (
-	github.com/getsentry/sentry-go v0.45.0
+	github.com/getsentry/sentry-go v0.45.1
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.40.0
 	go.opentelemetry.io/otel/sdk v1.40.0
 )
