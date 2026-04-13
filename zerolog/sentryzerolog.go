@@ -60,11 +60,15 @@ const (
 	logger = "zerolog"
 )
 
+// Deprecated: Config is used by [New] which is deprecated. Capture errors separately
+// using sentry.CaptureException.
 type Config struct {
 	sentry.ClientOptions
 	Options
 }
 
+// Deprecated: Options is used by [New] and [NewWithHub] which are deprecated. Capture
+// errors separately using sentry.CaptureException.
 type Options struct {
 	// Levels specifies the log levels that will trigger event sending to Sentry.
 	// Only log messages at these levels will be sent. By default, the levels are
@@ -97,7 +101,8 @@ func (o *Options) SetDefaults() {
 	}
 }
 
-// New creates writer with provided DSN and options.
+// Deprecated: New creates issues/events from log entries, which is confusing and
+// error-prone. Capture errors separately using sentry.CaptureException.
 func New(cfg Config) (*Writer, error) {
 	client, err := sentry.NewClient(cfg.ClientOptions)
 	if err != nil {
@@ -121,7 +126,8 @@ func New(cfg Config) (*Writer, error) {
 	}, nil
 }
 
-// NewWithHub creates a writer using an existing sentry Hub and options.
+// Deprecated: NewWithHub creates issues/events from log entries, which is confusing and
+// error-prone. Capture errors separately using sentry.CaptureException.
 func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 	if hub == nil {
 		return nil, errors.New("hub cannot be nil")
@@ -142,7 +148,8 @@ func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 	}, nil
 }
 
-// Writer is a sentry events writer with std io.Writer interface.
+// Deprecated: Writer creates issues/events from log entries, which is confusing and
+// error-prone. Capture errors separately using sentry.CaptureException.
 type Writer struct {
 	hub             *sentry.Hub
 	levels          map[zerolog.Level]struct{}

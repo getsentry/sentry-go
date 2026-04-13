@@ -22,8 +22,12 @@ var (
 	name = "slog"
 )
 
+// Deprecated: Converter is only used by the deprecated event capture functionality.
+// Capture errors separately using sentry.CaptureException.
 type Converter func(addSource bool, replaceAttr func(groups []string, a slog.Attr) slog.Attr, loggerAttr []slog.Attr, groups []string, record *slog.Record, hub *sentry.Hub) *sentry.Event
 
+// Deprecated: DefaultConverter is only used by the deprecated event capture functionality.
+// Capture errors separately using sentry.CaptureException.
 func DefaultConverter(addSource bool, replaceAttr func(groups []string, a slog.Attr) slog.Attr, loggerAttr []slog.Attr, groups []string, record *slog.Record, hub *sentry.Hub) *sentry.Event {
 	// aggregate all attributes
 	attrs := appendRecordAttrsToAttrs(loggerAttr, groups, record)
