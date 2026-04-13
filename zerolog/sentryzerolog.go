@@ -60,17 +60,11 @@ const (
 	logger = "zerolog"
 )
 
-// Deprecated: Config is used by [New] which is deprecated. Errors should only be captured
-// using sentry.CaptureException instead of being converted from log entries.
-// Will be removed in 0.48.0.
 type Config struct {
 	sentry.ClientOptions
 	Options
 }
 
-// Deprecated: Options is used by [New] and [NewWithHub] which are deprecated. Errors
-// should only be captured using sentry.CaptureException instead of being converted from
-// log entries. Will be removed in 0.48.0.
 type Options struct {
 	// Levels specifies the log levels that will trigger event sending to Sentry.
 	// Only log messages at these levels will be sent. By default, the levels are
@@ -103,9 +97,7 @@ func (o *Options) SetDefaults() {
 	}
 }
 
-// Deprecated: New creates issues/events from log entries. Errors should only be captured
-// using sentry.CaptureException instead of being converted from log entries.
-// Will be removed in 0.48.0.
+// New creates writer with provided DSN and options.
 func New(cfg Config) (*Writer, error) {
 	client, err := sentry.NewClient(cfg.ClientOptions)
 	if err != nil {
@@ -129,9 +121,7 @@ func New(cfg Config) (*Writer, error) {
 	}, nil
 }
 
-// Deprecated: NewWithHub creates issues/events from log entries. Errors should only be
-// captured using sentry.CaptureException instead of being converted from log entries.
-// Will be removed in 0.48.0.
+// NewWithHub creates a writer using an existing sentry Hub and options.
 func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 	if hub == nil {
 		return nil, errors.New("hub cannot be nil")
@@ -152,9 +142,7 @@ func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 	}, nil
 }
 
-// Deprecated: Writer creates issues/events from log entries. Errors should only be
-// captured using sentry.CaptureException instead of being converted from log entries.
-// Will be removed in 0.48.0.
+// Writer is a sentry events writer with std io.Writer interface.
 type Writer struct {
 	hub             *sentry.Hub
 	levels          map[zerolog.Level]struct{}
