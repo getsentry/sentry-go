@@ -164,7 +164,7 @@ func TestOption_NewSentryHandler(t *testing.T) {
 		"Default options": {
 			option: Option{},
 			expected: Option{
-				EventLevel:      []slog.Level{},
+				EventLevel:      []slog.Level{slog.LevelError, LevelFatal},
 				LogLevel:        []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
 				Converter:       DefaultConverter,
 				AttrFromContext: []func(ctx context.Context) []slog.Attr{}},
@@ -220,7 +220,7 @@ func TestOption_NewSentryHandler_BackwardsCompatibility(t *testing.T) {
 			expectedEvent: []slog.Level{slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
 			expectedLog:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal},
 		},
-		"Level set to Error (backwards compat)": {
+		"Level set to Error": {
 			option: Option{
 				Level: slog.LevelError,
 			},

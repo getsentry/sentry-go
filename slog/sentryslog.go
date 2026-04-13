@@ -36,6 +36,7 @@ var (
 	_ slog.Handler = (*SentryHandler)(nil)
 
 	// Deprecated: LogLevels is only used by the deprecated event capture functionality.
+	// Will be removed in 0.48.0.
 	LogLevels = map[slog.Level]sentry.Level{
 		slog.LevelDebug: sentry.LevelDebug,
 		slog.LevelInfo:  sentry.LevelInfo,
@@ -53,9 +54,9 @@ type Option struct {
 	// Deprecated: Use EventLevel instead. Level is kept for backwards compatibility and defaults to EventLevel.
 	Level slog.Leveler
 
-	// Deprecated: EventLevel creates issues/events from log entries, which is confusing
-	// and error-prone. Use LogLevel instead for structured logging, and capture errors
-	// separately using sentry.CaptureException. Defaults to empty (no events created).
+	// Deprecated: EventLevel creates issues/events from log entries. Errors should only be
+	// captured using sentry.CaptureException instead of being converted from log entries.
+	// Use LogLevel for structured logging. Will be removed in 0.48.0.
 	EventLevel []slog.Level
 
 	// LogLevel specifies the exact log levels to capture and send to Sentry as Log entries.
@@ -63,12 +64,14 @@ type Option struct {
 	// Defaults to []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal}.
 	LogLevel []slog.Level
 
-	// Deprecated: Hub is only used by the deprecated event capture functionality.
-	// Capture errors separately using sentry.CaptureException.
+	// Deprecated: Hub is only used by the deprecated event capture functionality. Errors
+	// should only be captured using sentry.CaptureException instead of being converted
+	// from log entries. Will be removed in 0.48.0.
 	Hub *sentry.Hub
 
 	// Deprecated: Converter is only used by the deprecated event capture functionality.
-	// Capture errors separately using sentry.CaptureException.
+	// Errors should only be captured using sentry.CaptureException instead of being
+	// converted from log entries. Will be removed in 0.48.0.
 	Converter Converter
 
 	// AttrFromContext is an optional slice of functions that extract attributes
@@ -92,7 +95,7 @@ func (o Option) NewSentryHandler(ctx context.Context) slog.Handler {
 		if o.Level != nil {
 			o.EventLevel = levelsFromMinimum(o.Level.Level())
 		} else {
-			o.EventLevel = []slog.Level{}
+			o.EventLevel = []slog.Level{slog.LevelError, LevelFatal}
 		}
 	}
 	if o.LogLevel == nil {

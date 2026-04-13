@@ -84,12 +84,16 @@ type Hook interface {
 	FlushWithContext(ctx context.Context) bool
 }
 
-// Deprecated: New creates issues/events from log entries. Use [NewLogHook] instead.
+// Deprecated: New creates issues/events from log entries. Errors should only be captured
+// using sentry.CaptureException instead of being converted from log entries.
+// Use [NewLogHook] for structured logging. Will be removed in 0.48.0.
 func New(levels []logrus.Level, opts sentry.ClientOptions) (Hook, error) {
 	return NewEventHook(levels, opts)
 }
 
-// Deprecated: NewFromClient creates issues/events from log entries. Use [NewLogHookFromClient] instead.
+// Deprecated: NewFromClient creates issues/events from log entries. Errors should only be
+// captured using sentry.CaptureException instead of being converted from log entries.
+// Use [NewLogHookFromClient] for structured logging. Will be removed in 0.48.0.
 func NewFromClient(levels []logrus.Level, client *sentry.Client) Hook {
 	return NewEventHookFromClient(levels, client)
 }
@@ -232,9 +236,9 @@ func (h *eventHook) FlushWithContext(ctx context.Context) bool {
 	return h.hubProvider().Client().FlushWithContext(ctx)
 }
 
-// Deprecated: NewEventHook creates issues/events from log entries, which is confusing and
-// error-prone. Use [NewLogHook] instead, which sends log entries to Sentry's structured
-// logging system. Capture errors separately using sentry.CaptureException.
+// Deprecated: NewEventHook creates issues/events from log entries. Errors should only be
+// captured using sentry.CaptureException instead of being converted from log entries.
+// Use [NewLogHook] for structured logging. Will be removed in 0.48.0.
 func NewEventHook(levels []logrus.Level, opts sentry.ClientOptions) (Hook, error) {
 	client, err := sentry.NewClient(opts)
 	if err != nil {
@@ -245,10 +249,9 @@ func NewEventHook(levels []logrus.Level, opts sentry.ClientOptions) (Hook, error
 	return NewEventHookFromClient(levels, client), nil
 }
 
-// Deprecated: NewEventHookFromClient creates issues/events from log entries, which is
-// confusing and error-prone. Use [NewLogHookFromClient] instead, which sends log entries
-// to Sentry's structured logging system. Capture errors separately using
-// sentry.CaptureException.
+// Deprecated: NewEventHookFromClient creates issues/events from log entries. Errors should
+// only be captured using sentry.CaptureException instead of being converted from log
+// entries. Use [NewLogHookFromClient] for structured logging. Will be removed in 0.48.0.
 func NewEventHookFromClient(levels []logrus.Level, client *sentry.Client) Hook {
 	defaultHub := sentry.NewHub(client, sentry.NewScope())
 	return &eventHook{

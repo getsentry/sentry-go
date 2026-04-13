@@ -60,15 +60,17 @@ const (
 	logger = "zerolog"
 )
 
-// Deprecated: Config is used by [New] which is deprecated. Capture errors separately
-// using sentry.CaptureException.
+// Deprecated: Config is used by [New] which is deprecated. Errors should only be captured
+// using sentry.CaptureException instead of being converted from log entries.
+// Will be removed in 0.48.0.
 type Config struct {
 	sentry.ClientOptions
 	Options
 }
 
-// Deprecated: Options is used by [New] and [NewWithHub] which are deprecated. Capture
-// errors separately using sentry.CaptureException.
+// Deprecated: Options is used by [New] and [NewWithHub] which are deprecated. Errors
+// should only be captured using sentry.CaptureException instead of being converted from
+// log entries. Will be removed in 0.48.0.
 type Options struct {
 	// Levels specifies the log levels that will trigger event sending to Sentry.
 	// Only log messages at these levels will be sent. By default, the levels are
@@ -101,8 +103,9 @@ func (o *Options) SetDefaults() {
 	}
 }
 
-// Deprecated: New creates issues/events from log entries, which is confusing and
-// error-prone. Capture errors separately using sentry.CaptureException.
+// Deprecated: New creates issues/events from log entries. Errors should only be captured
+// using sentry.CaptureException instead of being converted from log entries.
+// Will be removed in 0.48.0.
 func New(cfg Config) (*Writer, error) {
 	client, err := sentry.NewClient(cfg.ClientOptions)
 	if err != nil {
@@ -126,8 +129,9 @@ func New(cfg Config) (*Writer, error) {
 	}, nil
 }
 
-// Deprecated: NewWithHub creates issues/events from log entries, which is confusing and
-// error-prone. Capture errors separately using sentry.CaptureException.
+// Deprecated: NewWithHub creates issues/events from log entries. Errors should only be
+// captured using sentry.CaptureException instead of being converted from log entries.
+// Will be removed in 0.48.0.
 func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 	if hub == nil {
 		return nil, errors.New("hub cannot be nil")
@@ -148,8 +152,9 @@ func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 	}, nil
 }
 
-// Deprecated: Writer creates issues/events from log entries, which is confusing and
-// error-prone. Capture errors separately using sentry.CaptureException.
+// Deprecated: Writer creates issues/events from log entries. Errors should only be
+// captured using sentry.CaptureException instead of being converted from log entries.
+// Will be removed in 0.48.0.
 type Writer struct {
 	hub             *sentry.Hub
 	levels          map[zerolog.Level]struct{}
