@@ -131,12 +131,12 @@ func TestIntegration(t *testing.T) {
 				Status:      sentry.SpanStatusInvalidArgument,
 			},
 		},
-		{
+		{ //nolint:gosec // G101: not real credentials
 			RequestMethod:      "POST",
 			RequestURL:         "https://john:verysecurepassword@example.com:4321/secret",
 			WantStatus:         200,
 			WantResponseLength: 1024,
-			WantSpan: &sentry.Span{
+			WantSpan: &sentry.Span{ //nolint:gosec // G101: not real credentials
 				Data: map[string]interface{}{
 					"http.fragment":                string(""),
 					"http.query":                   string(""),
