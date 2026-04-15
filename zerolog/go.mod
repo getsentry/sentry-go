@@ -2,8 +2,6 @@ module github.com/getsentry/sentry-go/zerolog
 
 go 1.25.0
 
-replace github.com/getsentry/sentry-go => ../
-
 require (
 	github.com/buger/jsonparser v1.1.2
 	github.com/getsentry/sentry-go v0.45.1

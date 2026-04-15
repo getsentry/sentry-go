@@ -1,0 +1,17 @@
+go 1.25.0
+
+use (
+	.
+	./echo
+	./fasthttp
+	./fiber
+	./gin
+	./iris
+	./logrus
+	./negroni
+	./otel
+	./otel/otlp
+	./slog
+	./zap
+	./zerolog
+)

@@ -2,8 +2,6 @@ module github.com/getsentry/sentry-go/otel/otlp
 
 go 1.25.0
 
-replace github.com/getsentry/sentry-go => ../../
-
 require (
 	github.com/getsentry/sentry-go v0.45.1
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0
