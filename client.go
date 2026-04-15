@@ -412,6 +412,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		reportRecorder: report.NoopRecorder(),
 		reportProvider: report.NoopProvider(),
 	}
+	client.setupIntegrations()
 
 	if !options.DisableClientReports {
 		a := report.NewAggregator()
@@ -441,7 +442,6 @@ func NewClient(options ClientOptions) (*Client, error) {
 	if options.OrgID != 0 && client.dsn != nil {
 		client.dsn.SetOrgID(options.OrgID)
 	}
-	client.setupIntegrations()
 
 	return &client, nil
 }
