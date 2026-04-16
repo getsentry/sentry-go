@@ -198,6 +198,7 @@ func (f *Fixture) Events() []*sentry.Event {
 
 // AssertEventCount flushes and asserts the number of captured events.
 func (f *Fixture) AssertEventCount(want int) {
+	f.T.Helper()
 	f.assertCount("event", want)
 }
 
@@ -213,6 +214,7 @@ func (f *Fixture) assertCount(kind string, want int) {
 // against want. Uses [DefaultEventCmpOpts] merged with any additional opts.
 // Returns "" when events match.
 func (f *Fixture) DiffEvents(want []*sentry.Event, opts ...cmp.Option) string {
+	f.T.Helper()
 	f.Flush()
 	combined := make(cmp.Options, 0, len(DefaultEventCmpOpts)+len(opts))
 	combined = append(combined, DefaultEventCmpOpts...)
