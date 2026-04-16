@@ -83,7 +83,7 @@ func TestNewContext(t *testing.T) {
 	t.Parallel()
 
 	parent := context.WithValue(context.Background(), contextKey{}, "value")
-	ctx := NewContext(t, parent)
+	ctx := NewContext(parent, t)
 
 	assert.Equal(t, "value", ctx.Value(contextKey{}), "context value")
 	assert.NotNil(t, sentry.GetHubFromContext(ctx), "context hub")
@@ -92,7 +92,7 @@ func TestNewContext(t *testing.T) {
 func TestNewContext_NilParent(t *testing.T) {
 	t.Parallel()
 
-	ctx := NewContext(t, nil)
+	ctx := NewContext(nil, t) // nolint: staticcheck // SA1012: passing nil context for the test
 
 	assert.NotNil(t, sentry.GetHubFromContext(ctx), "context hub")
 	assert.Nil(t, ctx.Value(contextKey{}), "context value")

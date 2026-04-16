@@ -113,7 +113,7 @@ func NewFixture(t testing.TB, opts ...Option) *Fixture {
 
 // NewContext creates a context backed by a new [Fixture] without a synctest
 // bubble. If parent is nil, [context.Background] is used.
-func NewContext(t testing.TB, parent context.Context, opts ...Option) context.Context {
+func NewContext(parent context.Context, t testing.TB, opts ...Option) context.Context {
 	t.Helper()
 	return NewFixture(t, opts...).NewContext(parent)
 }
