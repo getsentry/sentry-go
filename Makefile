@@ -33,6 +33,7 @@ $(TEST_TARGETS): test
 test: $(ALL_GO_MOD_DIRS:%=test/%)  ## Run tests
 test-parallel: ## Run tests across all modules in parallel with race detection
 	$(MAKE) -j test-race
+.PHONY: test-parallel
 test/%: DIR=$*
 test/%:
 	@MOD_GO=$$(sed -n 's/^go \([0-9]*\.[0-9]*\).*/\1/p' "$(DIR)/go.mod"); \
