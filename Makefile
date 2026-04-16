@@ -32,7 +32,7 @@ test-verbose: ARGS=-v -race
 $(TEST_TARGETS): test
 test: $(ALL_GO_MOD_DIRS:%=test/%)  ## Run tests
 test-parallel: ## Run tests across all modules in parallel with race detection
-	$(MAKE) -j test-race
+	@$(MAKE) -j test-race
 .PHONY: test-parallel
 test/%: DIR=$*
 test/%:
