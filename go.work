@@ -2,11 +2,11 @@ go 1.25.0
 
 use (
 	.
+	./crosstest
 	./echo
 	./fasthttp
 	./fiber
 	./gin
-	./crosstest
 	./iris
 	./logrus
 	./negroni
