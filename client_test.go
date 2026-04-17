@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	internalHttp "github.com/getsentry/sentry-go/internal/http"
+	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
@@ -1064,6 +1068,59 @@ func TestClientSetsUpTransport(t *testing.T) {
 		Transport: &MockTransport{},
 	})
 	require.IsType(t, &MockTransport{}, client.Transport)
+}
+
+type namedIntegration struct{ name string }
+
+func (n *namedIntegration) Name() string        { return n.name }
+func (n *namedIntegration) SetupOnce(_ *Client) {}
+
+func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
+	var (
+		mu     sync.Mutex
+		bodies [][]byte
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		mu.Lock()
+		bodies = append(bodies, b)
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	dsn := strings.Replace(srv.URL, "//", "//pubkey@", 1) + "/1"
+	client, err := NewClient(ClientOptions{
+		Dsn: dsn,
+		Integrations: func(defaults []Integration) []Integration {
+			return append(defaults, &namedIntegration{name: "CustomRegressionIntegration"})
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { client.Close() })
+
+	client.CaptureMessage("ping", nil, &MockScope{})
+	require.True(t, client.Flush(testutils.FlushTimeout()), "flush timed out")
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, bodies, "expected at least one envelope to be sent")
+
+	body := bodies[0]
+	nl := bytes.IndexByte(body, '\n')
+	require.Positive(t, nl, "envelope body missing header newline")
+	var header struct {
+		Sdk struct {
+			Name         string   `json:"name"`
+			Integrations []string `json:"integrations"`
+		} `json:"sdk"`
+	}
+	require.NoError(t, json.Unmarshal(body[:nl], &header))
+
+	assert.Equal(t, sdkIdentifier, header.Sdk.Name)
+	assert.Contains(t, header.Sdk.Integrations, "CustomRegressionIntegration")
+	assert.Contains(t, header.Sdk.Integrations, "ContextifyFrames")
 }
 
 func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {

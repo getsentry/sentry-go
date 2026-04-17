@@ -412,7 +412,6 @@ func NewClient(options ClientOptions) (*Client, error) {
 		reportRecorder: report.NoopRecorder(),
 		reportProvider: report.NoopProvider(),
 	}
-	client.setupIntegrations()
 
 	if !options.DisableClientReports {
 		a := report.NewAggregator()
@@ -439,6 +438,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 			client.batchMeter.Start()
 		}
 	}
+	client.setupIntegrations()
 	if options.OrgID != 0 && client.dsn != nil {
 		client.dsn.SetOrgID(options.OrgID)
 	}
@@ -478,8 +478,8 @@ func (client *Client) setupTransport() {
 	client.Transport = transport
 }
 
-func (client *Client) setupTelemetryProcessor() {
-	sdkInfo := &protocol.SdkInfo{
+func (client *Client) sdkInfo() *protocol.SdkInfo {
+	return &protocol.SdkInfo{
 		Name:         client.GetSDKIdentifier(),
 		Version:      SDKVersion,
 		Integrations: client.listIntegrations(),
@@ -488,6 +488,9 @@ func (client *Client) setupTelemetryProcessor() {
 			Version: SDKVersion,
 		}},
 	}
+}
+
+func (client *Client) setupTelemetryProcessor() {
 	transport := httpInternal.NewAsyncTransport(httpInternal.TransportOptions{
 		Dsn:           client.options.Dsn,
 		HTTPClient:    client.options.HTTPClient,
@@ -497,7 +500,7 @@ func (client *Client) setupTelemetryProcessor() {
 		CaCerts:       client.options.CaCerts,
 		Recorder:      client.reportRecorder,
 		Provider:      client.reportProvider,
-		SdkInfo:       sdkInfo,
+		SdkInfo:       client.sdkInfo,
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
@@ -509,7 +512,7 @@ func (client *Client) setupTelemetryProcessor() {
 		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
 	}
 
-	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, client.dsn, sdkInfo, client.reportRecorder)
+	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, client.dsn, client.sdkInfo, client.reportRecorder)
 }
 
 func (client *Client) setupIntegrations() {

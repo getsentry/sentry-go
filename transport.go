@@ -918,9 +918,11 @@ func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
 		CaCerts:       options.CaCerts,
 		Recorder:      a.recorder,
 		Provider:      a.provider,
-		SdkInfo: &protocol.SdkInfo{
-			Name:    sdkIdentifier,
-			Version: SDKVersion,
+		SdkInfo: func() *protocol.SdkInfo {
+			return &protocol.SdkInfo{
+				Name:    sdkIdentifier,
+				Version: SDKVersion,
+			}
 		},
 	}
 

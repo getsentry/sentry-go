@@ -16,7 +16,7 @@ type Scheduler struct {
 	buffers   map[ratelimit.Category]Buffer[protocol.TelemetryItem]
 	transport protocol.TelemetryTransport
 	dsn       *protocol.Dsn
-	sdkInfo   *protocol.SdkInfo
+	sdkInfo   func() *protocol.SdkInfo
 	recorder  report.ClientReportRecorder
 
 	currentCycle []ratelimit.Priority
@@ -36,7 +36,7 @@ func NewScheduler(
 	buffers map[ratelimit.Category]Buffer[protocol.TelemetryItem],
 	transport protocol.TelemetryTransport,
 	dsn *protocol.Dsn,
-	sdkInfo *protocol.SdkInfo,
+	sdkInfo func() *protocol.SdkInfo,
 	recorder report.ClientReportRecorder,
 ) *Scheduler {
 	if recorder == nil {
@@ -83,6 +83,13 @@ func NewScheduler(
 	s.cond = sync.NewCond(&s.mu)
 
 	return s
+}
+
+func (s *Scheduler) resolveSdkInfo() *protocol.SdkInfo {
+	if s.sdkInfo == nil {
+		return &protocol.SdkInfo{}
+	}
+	return s.sdkInfo()
 }
 
 func (s *Scheduler) Start() {
@@ -237,7 +244,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 	switch category {
 	case ratelimit.CategoryLog:
 		logs := protocol.Logs(items)
-		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Dsn: s.dsn, Sdk: s.sdkInfo}
+		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Dsn: s.dsn, Sdk: s.resolveSdkInfo()}
 		envelope := protocol.NewEnvelope(header)
 		item, err := logs.ToEnvelopeItem()
 		if err != nil {
@@ -251,7 +258,7 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 		return
 	case ratelimit.CategoryTraceMetric:
 		metrics := protocol.Metrics(items)
-		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Dsn: s.dsn, Sdk: s.sdkInfo}
+		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Dsn: s.dsn, Sdk: s.resolveSdkInfo()}
 		envelope := protocol.NewEnvelope(header)
 		item, err := metrics.ToEnvelopeItem()
 		if err != nil {
@@ -283,7 +290,7 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeItemConvertible) {
 		SentAt:  time.Now(),
 		Dsn:     s.dsn,
 		Trace:   item.GetDynamicSamplingContext(),
-		Sdk:     s.sdkInfo,
+		Sdk:     s.resolveSdkInfo(),
 	}
 	if header.EventID == "" {
 		header.EventID = protocol.GenerateEventID()
