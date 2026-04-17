@@ -1,11 +1,9 @@
 module github.com/getsentry/sentry-go/slog
 
-go 1.24.0
-
-replace github.com/getsentry/sentry-go => ../
+go 1.25.0
 
 require (
-	github.com/getsentry/sentry-go v0.44.1
+	github.com/getsentry/sentry-go v0.45.1
 	github.com/stretchr/testify v1.9.0
 )
 

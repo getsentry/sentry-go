@@ -1,11 +1,9 @@
 module github.com/getsentry/sentry-go/logrus
 
-go 1.24.0
-
-replace github.com/getsentry/sentry-go => ../
+go 1.25.0
 
 require (
-	github.com/getsentry/sentry-go v0.44.1
+	github.com/getsentry/sentry-go v0.45.1
 	github.com/google/go-cmp v0.6.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3

@@ -1,23 +1,14 @@
 module github.com/getsentry/sentry-go/echo
 
-go 1.24.0
-
-replace github.com/getsentry/sentry-go => ../
+go 1.25.0
 
 require (
-	github.com/getsentry/sentry-go v0.44.1
+	github.com/getsentry/sentry-go v0.45.1
 	github.com/google/go-cmp v0.5.9
-	github.com/labstack/echo/v4 v4.10.1
+	github.com/labstack/echo/v5 v5.0.0
 )
 
 require (
-	github.com/labstack/gommon v0.4.2 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasttemplate v1.2.2 // indirect
-	golang.org/x/crypto v0.48.0 // indirect
-	golang.org/x/net v0.50.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
-	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/text v0.33.0 // indirect
 )

@@ -18,7 +18,7 @@ type DsnTest struct {
 }
 
 var dsnTests = map[string]DsnTest{
-	"AllFields": {
+	"AllFields": { //nolint:gosec // G101: not real credentials
 		in: "https://public:secret@domain:8888/foo/bar/42",
 		dsn: &Dsn{
 			scheme:    SchemeHTTPS,
@@ -58,7 +58,6 @@ var dsnTests = map[string]DsnTest{
 	},
 }
 
-// nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestNewDsn(t *testing.T) {
 	for name, tt := range dsnTests {
 		t.Run(name, func(t *testing.T) {
@@ -99,7 +98,6 @@ var invalidDsnTests = map[string]invalidDsnTest{
 	"TrailingSlash": {"https://public:secret@domain:8888/42/", "empty project id"},
 }
 
-// nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestNewDsnInvalidInput(t *testing.T) {
 	for name, tt := range invalidDsnTests {
 		t.Run(name, func(t *testing.T) {
@@ -119,7 +117,7 @@ func TestNewDsnInvalidInput(t *testing.T) {
 }
 
 func TestDsnSerializeDeserialize(t *testing.T) {
-	url := "https://public:secret@domain:8888/foo/bar/42"
+	url := "https://public:secret@domain:8888/foo/bar/42" //nolint:gosec // G101: not real credentials
 	dsn, dsnErr := NewDsn(url)
 	serialized, _ := json.Marshal(dsn)
 	var deserialized Dsn
@@ -131,7 +129,7 @@ func TestDsnSerializeDeserialize(t *testing.T) {
 	if dsnErr != nil {
 		t.Error("expected NewDsn to not return error")
 	}
-	expected := `"https://public:secret@domain:8888/foo/bar/42"`
+	expected := `"https://public:secret@domain:8888/foo/bar/42"` //nolint:gosec // G101: not real credentials
 	if string(serialized) != expected {
 		t.Errorf("Expected %s, got %s", expected, string(serialized))
 	}
@@ -176,7 +174,7 @@ func TestRequestHeadersWithoutSecretKey(t *testing.T) {
 }
 
 func TestRequestHeadersWithSecretKey(t *testing.T) {
-	url := "https://public:secret@domain/42"
+	url := "https://public:secret@domain/42" //nolint:gosec // G101: not real credentials
 	dsn, err := NewDsn(url)
 	if err != nil {
 		t.Fatal(err)

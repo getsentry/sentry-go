@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
 )
 
 func TraceIDFromHex(s string) TraceID {
@@ -921,6 +922,72 @@ func TestSampleRatePropagation(t *testing.T) {
 			if transaction.sampleRate != tt.expectedRate {
 				t.Errorf("Expected sample rate %f, got %f", tt.expectedRate, transaction.sampleRate)
 			}
+		})
+	}
+}
+
+func TestTracesSamplerReceivesRemoteParent(t *testing.T) {
+	t.Parallel()
+
+	ptrFloat := func(f float64) *float64 { return &f }
+
+	tests := []struct {
+		name                 string
+		traceHeader          string
+		baggageHeader        string
+		wantParentSampled    Sampled
+		wantParentSampleRate *float64
+	}{
+		{
+			name:                 "remote parent sampled=true with rate",
+			traceHeader:          "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
+			baggageHeader:        "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=true,sentry-sample_rate=0.8",
+			wantParentSampled:    SampledTrue,
+			wantParentSampleRate: ptrFloat(0.8),
+		},
+		{
+			name:                 "remote parent sampled=false with rate",
+			traceHeader:          "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
+			baggageHeader:        "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=false,sentry-sample_rate=0.1",
+			wantParentSampled:    SampledFalse,
+			wantParentSampleRate: ptrFloat(0.1),
+		},
+		{
+			name:                 "remote parent sampled=defer no rate",
+			traceHeader:          "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963",
+			baggageHeader:        "sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
+			wantParentSampled:    SampledUndefined,
+			wantParentSampleRate: nil,
+		},
+		{
+			name:                 "no remote parent",
+			traceHeader:          "",
+			baggageHeader:        "",
+			wantParentSampled:    SampledUndefined,
+			wantParentSampleRate: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var gotCtx SamplingContext
+			ctx := NewTestContext(ClientOptions{
+				EnableTracing: true,
+				TracesSampler: func(samplingContext SamplingContext) float64 {
+					gotCtx = samplingContext
+					return 1.0
+				},
+			})
+
+			hub := GetHubFromContext(ctx)
+			txn := StartTransaction(ctx, "test-txn", ContinueTrace(hub, tt.traceHeader, tt.baggageHeader))
+			txn.Finish()
+
+			assert.Nil(t, gotCtx.Parent, "SamplingContext.Parent should be nil for remote parent")
+			assert.Equal(t, tt.wantParentSampled, gotCtx.ParentSampled)
+			assert.Equal(t, tt.wantParentSampleRate, gotCtx.ParentSampleRate)
 		})
 	}
 }

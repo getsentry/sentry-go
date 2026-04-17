@@ -25,7 +25,6 @@ func BenchmarkNewStacktrace(b *testing.B) {
 	}
 }
 
-// nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestSplitQualifiedFunctionName(t *testing.T) {
 	tests := []struct {
 		in  string
@@ -69,7 +68,6 @@ func TestSplitQualifiedFunctionName(t *testing.T) {
 	}
 }
 
-// nolint: scopelint // false positive https://github.com/kyoh86/scopelint/issues/4
 func TestCreateFrames(t *testing.T) {
 	tests := []struct {
 		in  []runtime.Frame

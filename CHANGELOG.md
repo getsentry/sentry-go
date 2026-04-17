@@ -1,5 +1,69 @@
 # Changelog
 
+## 0.45.1
+
+### Bug Fixes 🐛
+
+- Add missing TracesSampler fields for SamplingContext by @giortzisg in [#1259](https://github.com/getsentry/sentry-go/pull/1259)
+
+## 0.45.0
+
+### Breaking Changes 🛠
+
+- Add support for Echo v5 by @Scorfly in [#1183](https://github.com/getsentry/sentry-go/pull/1183)
+
+### New Features ✨
+
+- Add OTLP trace exporter via new otel/otlp sub-module by @giortzisg in [#1229](https://github.com/getsentry/sentry-go/pull/1229)
+  - sentryotlp.NewTraceExporter sends OTel spans directly to Sentry's OTLP endpoint.
+  - sentryotel.NewOtelIntegration links Sentry errors, logs, and metrics to the active OTel trace. Works with both direct-to-Sentry and collector-based setups.
+  - NewSentrySpanProcessor, NewSentryPropagator, and SentrySpanMap are deprecated and will be removed in 0.47.0. To Migrate use `sentryotlp.NewTraceExporter` instead:
+  ```go
+  // Before
+  sentry.Init(sentry.ClientOptions{Dsn: dsn, EnableTracing: true, TracesSampleRate: 1.0})
+  
+  tp := sdktrace.NewTracerProvider(
+  	sdktrace.WithSpanProcessor(sentryotel.NewSentrySpanProcessor()),
+  )
+  otel.SetTextMapPropagator(sentryotel.NewSentryPropagator())
+  otel.SetTracerProvider(tp)
+  
+  // After:
+  sentry.Init(sentry.ClientOptions{
+  	Dsn: dsn, EnableTracing: true, TracesSampleRate: 1.0,
+  	Integrations: func(i []sentry.Integration) []sentry.Integration {
+  		return append(i, sentryotel.NewOtelIntegration())
+  	},
+  })
+  
+  exporter, _ := sentryotlp.NewTraceExporter(ctx, dsn)
+  tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter))
+  otel.SetTracerProvider(tp)
+  ```
+- Add IsSensitiveHeader helper to easily distinguish which headers to scrub for PII. by @giortzisg in [#1239](https://github.com/getsentry/sentry-go/pull/1239)
+
+### Bug Fixes 🐛
+
+- (ci) Update validate-pr action to remove draft enforcement by @stephanie-anderson in [#1237](https://github.com/getsentry/sentry-go/pull/1237)
+- (fiber) Use UserContext for transaction to enable OTel trace linking by @giortzisg in [#1252](https://github.com/getsentry/sentry-go/pull/1252)
+- Race condition when getting envelope identifier by @giortzisg in [#1250](https://github.com/getsentry/sentry-go/pull/1250)
+
+### Internal Changes 🔧
+
+#### Deps
+
+- Bump OpenTelemetry SDK to 1.40.0 by @giortzisg in [#1243](https://github.com/getsentry/sentry-go/pull/1243)
+- Bump changelog-preview.yml from 2.24.1 to 2.25.2 by @dependabot in [#1247](https://github.com/getsentry/sentry-go/pull/1247)
+- Bump getsentry/craft from 2.24.1 to 2.25.2 by @dependabot in [#1248](https://github.com/getsentry/sentry-go/pull/1248)
+- Bump codecov/codecov-action from 5.5.2 to 6.0.0 by @dependabot in [#1245](https://github.com/getsentry/sentry-go/pull/1245)
+- Bump actions/create-github-app-token from 2.2.1 to 3.0.0 by @dependabot in [#1246](https://github.com/getsentry/sentry-go/pull/1246)
+- Bump actions/setup-go from 6.3.0 to 6.4.0 by @dependabot in [#1244](https://github.com/getsentry/sentry-go/pull/1244)
+
+#### Other
+
+- Update validate-pr workflow by @stephanie-anderson in [#1242](https://github.com/getsentry/sentry-go/pull/1242)
+- Add PR validation workflow by @stephanie-anderson in [#1234](https://github.com/getsentry/sentry-go/pull/1234)
+
 ## 0.44.1
 
 > [!NOTE]  

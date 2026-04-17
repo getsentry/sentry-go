@@ -80,11 +80,17 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),
 	}
 
+	savedCtx := ctx.UserContext()
+	requestCtx, cancel := context.WithCancel(savedCtx)
+	defer cancel()
+	defer func() { ctx.SetUserContext(savedCtx) }()
+
 	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(ctx.Context(), hub),
+		sentry.SetHubOnContext(requestCtx, hub),
 		fmt.Sprintf("%s %s", r.Method, transactionName),
 		options...,
 	)
+	ctx.SetUserContext(transaction.Context())
 
 	defer func() {
 		status := ctx.Response().StatusCode()
@@ -94,6 +100,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	}()
 
 	transaction.SetData("http.request.method", r.Method)
+	r = r.WithContext(transaction.Context())
 
 	scope := hub.Scope()
 	scope.SetRequest(r)
@@ -108,7 +115,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
 	if err := recover(); err != nil {
 		eventID := hub.RecoverWithContext(
-			context.WithValue(context.Background(), sentry.RequestContextKey, ctx),
+			context.WithValue(ctx.UserContext(), sentry.RequestContextKey, ctx),
 			err,
 		)
 		if eventID != nil && h.waitForDelivery {

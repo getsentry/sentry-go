@@ -35,6 +35,8 @@ import (
 var (
 	_ slog.Handler = (*SentryHandler)(nil)
 
+	// Deprecated: LogLevels is only used by the deprecated event capture functionality.
+	// Will be removed in 0.48.0.
 	LogLevels = map[slog.Level]sentry.Level{
 		slog.LevelDebug: sentry.LevelDebug,
 		slog.LevelInfo:  sentry.LevelInfo,
@@ -51,9 +53,10 @@ const SlogOrigin = "auto.log.slog"
 type Option struct {
 	// Deprecated: Use EventLevel instead. Level is kept for backwards compatibility and defaults to EventLevel.
 	Level slog.Leveler
-	// EventLevel specifies the exact log levels to capture and send to Sentry as Events.
-	// Only logs at these specific levels will be processed as events.
-	// Defaults to []slog.Level{slog.LevelError, LevelFatal}.
+
+	// Deprecated: EventLevel creates issues/events from log entries. Errors should only be
+	// captured using sentry.CaptureException instead of being converted from log entries.
+	// Use LogLevel for structured logging. Will be removed in 0.48.0.
 	EventLevel []slog.Level
 
 	// LogLevel specifies the exact log levels to capture and send to Sentry as Log entries.
@@ -61,12 +64,14 @@ type Option struct {
 	// Defaults to []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal}.
 	LogLevel []slog.Level
 
-	// Hub specifies the Sentry Hub to use for capturing events.
-	// If not provided, the current Hub is used by default.
+	// Deprecated: Hub is only used by the deprecated event capture functionality. Errors
+	// should only be captured using sentry.CaptureException instead of being converted
+	// from log entries. Will be removed in 0.48.0.
 	Hub *sentry.Hub
 
-	// Converter is an optional function that customizes how log records
-	// are converted into Sentry events. By default, the DefaultConverter is used.
+	// Deprecated: Converter is only used by the deprecated event capture functionality.
+	// Errors should only be captured using sentry.CaptureException instead of being
+	// converted from log entries. Will be removed in 0.48.0.
 	Converter Converter
 
 	// AttrFromContext is an optional slice of functions that extract attributes
@@ -193,7 +198,7 @@ func (h *eventHandler) Handle(ctx context.Context, record slog.Record) error {
 
 	fromContext := contextExtractor(ctx, h.option.AttrFromContext)
 	event := h.option.Converter(h.option.AddSource, h.option.ReplaceAttr, append(h.attrs, fromContext...), h.groups, &record, hub)
-	hub.CaptureEvent(event)
+	hub.CaptureEventWithHint(event, &sentry.EventHint{Context: ctx})
 	return nil
 }
 
