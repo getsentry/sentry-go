@@ -51,6 +51,12 @@ mod-tidy: ## Check go.mod tidiness
 	git diff --exit-code
 .PHONY: mod-tidy
 
+gotidy: $(ALL_GO_MOD_DIRS:%=gotidy/%) ## Run go mod tidy across all modules
+gotidy/%: DIR=$*
+gotidy/%:
+	@echo "==> $(DIR)" && (cd "$(DIR)" && $(GO) mod tidy)
+.PHONY: gotidy
+
 lint: ## Lint (using "golangci-lint")
 	golangci-lint run
 .PHONY: lint
