@@ -1076,12 +1076,17 @@ func (n *namedIntegration) Name() string        { return n.name }
 func (n *namedIntegration) SetupOnce(_ *Client) {}
 
 func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
-	var bodies [][]byte
+	var (
+		mu     sync.Mutex
+		bodies [][]byte
+	)
 	requestReceived := make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
+		mu.Lock()
 		bodies = append(bodies, b)
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 		select {
 		case requestReceived <- struct{}{}:
@@ -1109,9 +1114,10 @@ func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
 		t.Fatal("server never received an envelope")
 	}
 
+	mu.Lock()
 	require.NotEmpty(t, bodies, "expected at least one envelope to be sent")
-
 	body := bodies[0]
+	mu.Unlock()
 	nl := bytes.IndexByte(body, '\n')
 	require.Positive(t, nl, "envelope body missing header newline")
 	var header struct {
