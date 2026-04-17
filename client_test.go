@@ -1076,17 +1076,17 @@ func (n *namedIntegration) Name() string        { return n.name }
 func (n *namedIntegration) SetupOnce(_ *Client) {}
 
 func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
-	var (
-		mu     sync.Mutex
-		bodies [][]byte
-	)
+	var bodies [][]byte
+	requestReceived := make(chan struct{}, 1)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
-		mu.Lock()
 		bodies = append(bodies, b)
-		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
+		select {
+		case requestReceived <- struct{}{}:
+		default:
+		}
 	}))
 	defer srv.Close()
 
@@ -1103,8 +1103,12 @@ func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
 	client.CaptureMessage("ping", nil, &MockScope{})
 	require.True(t, client.Flush(testutils.FlushTimeout()), "flush timed out")
 
-	mu.Lock()
-	defer mu.Unlock()
+	select {
+	case <-requestReceived:
+	case <-time.After(testutils.FlushTimeout()):
+		t.Fatal("server never received an envelope")
+	}
+
 	require.NotEmpty(t, bodies, "expected at least one envelope to be sent")
 
 	body := bodies[0]
