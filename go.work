@@ -6,6 +6,7 @@ use (
 	./fasthttp
 	./fiber
 	./gin
+	./grpc
 	./iris
 	./logrus
 	./negroni
