@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/otel/baggage"
@@ -20,7 +21,7 @@ func MergeBaggage(existingHeader, sentryHeader string) (string, error) {
 		return "", fmt.Errorf("cannot parse sentryHeader: %w", err)
 	}
 
-	finalBaggage, err := baggage.Parse(existingHeader)
+	existingBaggage, err := baggage.Parse(existingHeader)
 	if err != nil {
 		if sentryBaggage.Len() == 0 {
 			return "", fmt.Errorf("cannot parse existingHeader: %w", err)
@@ -31,12 +32,21 @@ func MergeBaggage(existingHeader, sentryHeader string) (string, error) {
 		return sentryBaggage.String(), nil
 	}
 
+	sentryKeys := make(map[string]struct{}, sentryBaggage.Len())
 	for _, member := range sentryBaggage.Members() {
-		finalBaggage, err = finalBaggage.SetMember(member)
-		if err != nil {
-			return "", fmt.Errorf("cannot merge baggage: %w", err)
-		}
+		sentryKeys[member.Key()] = struct{}{}
 	}
 
-	return finalBaggage.String(), nil
+	parts := make([]string, 0, sentryBaggage.Len()+existingBaggage.Len())
+	if s := sentryBaggage.String(); s != "" {
+		parts = append(parts, s)
+	}
+	for _, member := range existingBaggage.Members() {
+		if _, collides := sentryKeys[member.Key()]; collides {
+			continue
+		}
+		parts = append(parts, member.String())
+	}
+
+	return strings.Join(parts, ","), nil
 }

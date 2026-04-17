@@ -40,14 +40,10 @@ func (o *ServerOptions) setDefaults() {
 
 func recoverWithSentry(ctx context.Context, hub *sentry.Hub, o ServerOptions, onRecover func()) {
 	if r := recover(); r != nil {
-		eventID := hub.RecoverWithContext(ctx, r)
+		hub.RecoverWithContext(ctx, r)
 
 		if onRecover != nil {
 			onRecover()
-		}
-
-		if eventID != nil && o.WaitForDelivery {
-			hub.Flush(o.Timeout)
 		}
 
 		if o.Repanic {
