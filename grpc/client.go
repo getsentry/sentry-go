@@ -113,7 +113,11 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 			return nil, nilErr
 		}
 
-		wrappedStream := &sentryClientStream{ClientStream: stream, span: span}
+		wrappedStream := &sentryClientStream{
+			ClientStream: stream,
+			span:         span,
+			stopMonitor:  func() bool { return false },
+		}
 		wrappedStream.stopMonitor = context.AfterFunc(ctx, func() {
 			wrappedStream.finish(ctx.Err())
 		})
