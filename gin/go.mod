@@ -1,11 +1,9 @@
 module github.com/getsentry/sentry-go/gin
 
-go 1.24.0
-
-replace github.com/getsentry/sentry-go => ../
+go 1.25.0
 
 require (
-	github.com/getsentry/sentry-go v0.45.0
+	github.com/getsentry/sentry-go v0.45.1
 	github.com/gin-gonic/gin v1.9.1
 	github.com/google/go-cmp v0.5.9
 )

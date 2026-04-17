@@ -43,7 +43,7 @@ func NewScheduler(
 		recorder = report.NoopRecorder()
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118: cancel is stored in s.cancel and called in Shutdown()
 
 	priorityWeights := map[ratelimit.Priority]int{
 		ratelimit.PriorityCritical: 5,
