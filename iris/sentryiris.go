@@ -44,7 +44,7 @@ type Options struct {
 // It can be used with Use() method.
 func New(options Options) iris.Handler {
 	if options.Timeout == 0 {
-		options.Timeout = 2 * time.Second
+		options.Timeout = sentry.DefaultFlushTimeout
 	}
 
 	return (&handler{

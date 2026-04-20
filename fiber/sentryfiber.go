@@ -48,7 +48,7 @@ type Options struct {
 // New returns a handler struct which satisfies Fiber's middleware interface
 func New(options Options) fiber.Handler {
 	if options.Timeout == 0 {
-		options.Timeout = 2 * time.Second
+		options.Timeout = sentry.DefaultFlushTimeout
 	}
 
 	return (&handler{
