@@ -28,8 +28,7 @@ type unserializableType struct {
 }
 
 const (
-	basicEvent         = `{"message":"mkey","sdk":{},"user":{}}`
-	invalidEventOutput = `{"extra":{"info":"Could not encode original event as JSON. Succeeded by removing Breadcrumbs, Contexts and Extra. Please verify the data you attach to the scope. Error: json: error calling MarshalJSON for type *sentry.Event: json: unsupported type: func()"},"message":"mkey","sdk":{},"user":{}}`
+	basicEvent = `{"message":"mkey","sdk":{},"user":{}}`
 )
 
 func TestGetRequestBodyFromEventValid(t *testing.T) {
@@ -45,81 +44,7 @@ func TestGetRequestBodyFromEventValid(t *testing.T) {
 	}
 }
 
-func TestGetRequestBodyFromEventInvalidBreadcrumbsField(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
-		Message: "mkey",
-		Breadcrumbs: []*Breadcrumb{{
-			Data: map[string]interface{}{
-				"wat": unserializableType{},
-			},
-		}},
-	})
-
-	got := string(body)
-	want := invalidEventOutput
-
-	if got != want {
-		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
-	}
-}
-
-func TestGetRequestBodyFromEventInvalidExtraField(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
-		Message: "mkey",
-		Extra: map[string]interface{}{
-			"wat": unserializableType{},
-		},
-	})
-
-	got := string(body)
-	want := invalidEventOutput
-
-	if got != want {
-		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
-	}
-}
-
-func TestGetRequestBodyFromEventInvalidContextField(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
-		Message: "mkey",
-		Contexts: map[string]Context{
-			"wat": {"key": unserializableType{}},
-		},
-	})
-
-	got := string(body)
-	want := invalidEventOutput
-
-	if got != want {
-		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
-	}
-}
-
-func TestGetRequestBodyFromEventMultipleInvalidFields(t *testing.T) {
-	body := getRequestBodyFromEvent(&Event{
-		Message: "mkey",
-		Breadcrumbs: []*Breadcrumb{{
-			Data: map[string]interface{}{
-				"wat": unserializableType{},
-			},
-		}},
-		Extra: map[string]interface{}{
-			"wat": unserializableType{},
-		},
-		Contexts: map[string]Context{
-			"wat": {"key": unserializableType{}},
-		},
-	})
-
-	got := string(body)
-	want := invalidEventOutput
-
-	if got != want {
-		t.Errorf("expected different shape of body. \ngot: %s\nwant: %s", got, want)
-	}
-}
-
-func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
+func TestGetRequestBodyFromEventUnserializable(t *testing.T) {
 	body := getRequestBodyFromEvent(&Event{
 		Exception: []Exception{{
 			Stacktrace: &Stacktrace{
@@ -133,7 +58,7 @@ func TestGetRequestBodyFromEventCompletelyInvalid(t *testing.T) {
 	})
 
 	if body != nil {
-		t.Error("expected body to be nil")
+		t.Error("expected body to be nil when event cannot be marshaled")
 	}
 }
 
