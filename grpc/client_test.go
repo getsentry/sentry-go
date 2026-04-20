@@ -20,11 +20,10 @@ import (
 
 // mockClientStream implements grpc.ClientStream for testing.
 type mockClientStream struct {
-	headerFn    func() (metadata.MD, error)
-	closeSendFn func() error
-	contextFn   func() context.Context
-	sendMsgFn   func(msg any) error
-	recvMsgFn   func(msg any) error
+	headerFn  func() (metadata.MD, error)
+	contextFn func() context.Context
+	sendMsgFn func(msg any) error
+	recvMsgFn func(msg any) error
 }
 
 func (m *mockClientStream) Header() (metadata.MD, error) {
@@ -34,12 +33,7 @@ func (m *mockClientStream) Header() (metadata.MD, error) {
 	return metadata.MD{}, nil
 }
 func (m *mockClientStream) Trailer() metadata.MD { return metadata.MD{} }
-func (m *mockClientStream) CloseSend() error {
-	if m.closeSendFn != nil {
-		return m.closeSendFn()
-	}
-	return nil
-}
+func (m *mockClientStream) CloseSend() error     { return nil }
 func (m *mockClientStream) Context() context.Context {
 	if m.contextFn != nil {
 		return m.contextFn()
@@ -75,6 +69,12 @@ func spanStatusCode(t *testing.T, transport *sentry.MockTransport) int {
 	events := transport.Events()
 	require.Len(t, events, 1)
 	return events[0].Contexts["trace"]["data"].(map[string]any)["rpc.grpc.status_code"].(int)
+}
+
+func flushEventCount(t *testing.T, transport *sentry.MockTransport) int {
+	t.Helper()
+	sentry.Flush(testutils.FlushTimeout())
+	return len(transport.Events())
 }
 
 func TestUnaryClientInterceptor(t *testing.T) {
@@ -238,14 +238,6 @@ func TestStreamClientInterceptor(t *testing.T) {
 			streamOp: func(stream grpc.ClientStream) { stream.RecvMsg(nil) },
 			wantCode: codes.Unavailable,
 		},
-		"CloseSend error records error status": {
-			ctx: context.Background(),
-			streamer: func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
-				return &mockClientStream{closeSendFn: func() error { return status.Error(codes.Internal, "internal") }}, nil
-			},
-			streamOp: func(stream grpc.ClientStream) { stream.CloseSend() },
-			wantCode: codes.Internal,
-		},
 		"SendMsg error records error status": {
 			ctx: context.Background(),
 			streamer: func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
@@ -267,13 +259,13 @@ func TestStreamClientInterceptor(t *testing.T) {
 			streamer: func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
 				rpcErr := status.Error(codes.Canceled, "canceled")
 				return &mockClientStream{
-					recvMsgFn:   func(_ any) error { return rpcErr },
-					closeSendFn: func() error { return rpcErr },
+					sendMsgFn: func(_ any) error { return rpcErr },
+					recvMsgFn: func(_ any) error { return rpcErr },
 				}, nil
 			},
 			streamOp: func(stream grpc.ClientStream) {
+				stream.SendMsg(nil)
 				stream.RecvMsg(nil)
-				stream.CloseSend()
 			},
 			wantCode: codes.Canceled,
 		},
@@ -293,6 +285,64 @@ func TestStreamClientInterceptor(t *testing.T) {
 			assert.Equal(t, int(tc.wantCode), spanStatusCode(t, transport))
 		})
 	}
+}
+
+func TestStreamClientInterceptor_FinishesNonServerStreamingResponseOnFirstRecv(t *testing.T) {
+	transport := initMockTransport(t)
+	interceptor := sentrygrpc.StreamClientInterceptor()
+
+	stream, err := interceptor(context.Background(), &grpc.StreamDesc{}, nil, "/test.TestService/Method", func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
+		return &mockClientStream{recvMsgFn: func(_ any) error { return nil }}, nil
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, stream)
+	require.NoError(t, stream.RecvMsg(nil))
+
+	sentry.Flush(testutils.FlushTimeout())
+	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
+}
+
+func TestStreamClientInterceptor_CloseSendWaitsForRecvMsg(t *testing.T) {
+	transport := initMockTransport(t)
+	interceptor := sentrygrpc.StreamClientInterceptor()
+
+	stream, err := interceptor(context.Background(), &grpc.StreamDesc{ClientStreams: true}, nil, "/test.TestService/Method", func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
+		return &mockClientStream{recvMsgFn: func(_ any) error { return nil }}, nil
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, stream)
+	require.NoError(t, stream.CloseSend())
+	assert.Equal(t, 0, flushEventCount(t, transport))
+
+	require.NoError(t, stream.RecvMsg(nil))
+	sentry.Flush(testutils.FlushTimeout())
+	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
+}
+
+func TestStreamClientInterceptor_SendMsgEOFWaitsForRecvMsgStatus(t *testing.T) {
+	transport := initMockTransport(t)
+	interceptor := sentrygrpc.StreamClientInterceptor()
+
+	stream, err := interceptor(context.Background(), &grpc.StreamDesc{ClientStreams: true, ServerStreams: true}, nil, "/test.TestService/Method", func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
+		return &mockClientStream{
+			sendMsgFn: func(_ any) error { return io.EOF },
+			recvMsgFn: func(_ any) error { return status.Error(codes.Unavailable, "down") },
+		}, nil
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, stream)
+	assert.ErrorIs(t, stream.SendMsg(nil), io.EOF)
+	assert.Equal(t, 0, flushEventCount(t, transport))
+
+	err = stream.RecvMsg(nil)
+	require.Error(t, err)
+	assert.Equal(t, codes.Unavailable, status.Code(err))
+
+	sentry.Flush(testutils.FlushTimeout())
+	assert.Equal(t, int(codes.Unavailable), spanStatusCode(t, transport))
 }
 
 func TestStreamClientInterceptor_FinishesOnContextCancellation(t *testing.T) {

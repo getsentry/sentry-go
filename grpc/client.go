@@ -112,13 +112,12 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 		}
 
 		wrappedStream := &sentryClientStream{
-			ClientStream: stream,
-			span:         span,
+			ClientStream:  stream,
+			serverStreams: desc != nil && desc.ServerStreams,
+			span:          span,
 		}
 		wrappedStream.stopMonitor = context.AfterFunc(ctx, func() {
-			wrappedStream.finishOnce.Do(func() {
-				finishSpan(wrappedStream.span, ctx.Err())
-			})
+			wrappedStream.finish(ctx.Err())
 		})
 		return wrappedStream, nil
 	}
@@ -126,9 +125,10 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 
 type sentryClientStream struct {
 	grpc.ClientStream
-	span        *sentry.Span
-	stopMonitor func() bool
-	finishOnce  sync.Once
+	serverStreams bool
+	span          *sentry.Span
+	stopMonitor   func() bool
+	finishOnce    sync.Once
 }
 
 func (s *sentryClientStream) Header() (metadata.MD, error) {
@@ -138,18 +138,9 @@ func (s *sentryClientStream) Header() (metadata.MD, error) {
 	}
 	return md, err
 }
-
-func (s *sentryClientStream) CloseSend() error {
-	err := s.ClientStream.CloseSend()
-	if err != nil {
-		s.finish(err)
-	}
-	return err
-}
-
 func (s *sentryClientStream) SendMsg(m any) error {
 	err := s.ClientStream.SendMsg(m)
-	if err != nil {
+	if err != nil && !errors.Is(err, io.EOF) {
 		s.finish(err)
 	}
 	return err
@@ -157,19 +148,21 @@ func (s *sentryClientStream) SendMsg(m any) error {
 
 func (s *sentryClientStream) RecvMsg(m any) error {
 	err := s.ClientStream.RecvMsg(m)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			s.finish(nil)
-		} else {
-			s.finish(err)
-		}
+	if err == nil && !s.serverStreams {
+		s.finish(nil)
+	} else if errors.Is(err, io.EOF) {
+		s.finish(nil)
+	} else if err != nil {
+		s.finish(err)
 	}
 	return err
 }
 
 func (s *sentryClientStream) finish(err error) {
 	s.finishOnce.Do(func() {
-		s.stopMonitor()
+		if s.stopMonitor != nil {
+			s.stopMonitor()
+		}
 		finishSpan(s.span, err)
 	})
 }
