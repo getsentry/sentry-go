@@ -463,28 +463,7 @@ func (e *Event) safeMarshal() (b []byte, err error) {
 func (e *Event) ToEnvelopeItem() (item *protocol.EnvelopeItem, err error) {
 	eventBody, err := e.safeMarshal()
 	if err != nil {
-		// Try fallback: remove problematic fields and retry.
-		// Clear both original and pre-serialized versions.
-		e.Breadcrumbs = nil
-		e.serializedBreadcrumbs = nil
-		e.Contexts = nil
-		e.serializedContexts = nil
-		e.serializedException = nil
-		e.serializedUser = nil
-		e.serializedExtra = nil
-		e.Extra = map[string]interface{}{
-			"info": fmt.Sprintf("Could not encode original event as JSON. "+
-				"Succeeded by removing Breadcrumbs, Contexts and Extra. "+
-				"Please verify the data you attach to the scope. "+
-				"Error: %s", err),
-		}
-
-		eventBody, err = json.Marshal(e)
-		if err != nil {
-			return nil, fmt.Errorf("event could not be marshaled even with fallback: %w", err)
-		}
-
-		DebugLogger.Printf("Event marshaling succeeded with fallback after removing problematic fields")
+		return nil, fmt.Errorf("could not encode event as JSON, skipping delivery: %w", err)
 	}
 
 	// TODO: all event types should be abstracted to implement EnvelopeItemConvertible and convert themselves.

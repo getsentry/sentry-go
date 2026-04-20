@@ -709,61 +709,52 @@ func TestEvent_ToCategory(t *testing.T) {
 	}
 }
 
-func TestEvent_ToEnvelopeItem_FallbackOnMarshalError(t *testing.T) {
-	unmarshalableFunc := func() string { return "test" }
-
+func TestEvent_ToEnvelopeItem_ErrorOnMarshalFailure(t *testing.T) {
 	event := &Event{
-		EventID:   "12345678901234567890123456789012",
-		Message:   "test message with fallback",
-		Level:     LevelError,
-		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-		Extra: map[string]interface{}{
-			"bad_data": unmarshalableFunc,
-		},
+		EventID: "12345678901234567890123456789012",
+		Exception: []Exception{{
+			Stacktrace: &Stacktrace{
+				Frames: []Frame{{
+					Vars: map[string]interface{}{
+						"bad": func() string { return "test" },
+					},
+				}},
+			},
+		}},
 	}
 
 	item, err := event.ToEnvelopeItem()
-	if err != nil {
-		t.Errorf("ToEnvelopeItem() should not error even with unmarshalable data, got: %v", err)
-		return
+	if err == nil {
+		t.Fatal("ToEnvelopeItem() expected error for unmarshalable event, got nil")
 	}
-	if item == nil {
-		t.Fatal("ToEnvelopeItem() returned nil item")
-	}
-
-	var payload map[string]interface{}
-	if err := json.Unmarshal(item.Payload, &payload); err != nil {
-		t.Fatalf("Failed to unmarshal item payload: %v", err)
-	}
-
-	extra, exists := payload["extra"].(map[string]interface{})
-	if !exists {
-		t.Fatal("Expected extra field after fallback in ToEnvelopeItem")
-	}
-
-	info, exists := extra["info"].(string)
-	if !exists || !strings.Contains(info, "Could not encode original event as JSON") {
-		t.Fatal("Expected fallback info message in extra field for ToEnvelopeItem")
+	if item != nil {
+		t.Fatal("ToEnvelopeItem() expected nil item on marshal failure")
 	}
 }
 
 func TestEvent_ToEnvelopeItem_RecoverFromPanic(t *testing.T) {
 	// Verify that safeMarshal recovers from panics and ToEnvelopeItem
-	// falls back to a stripped-down event instead of crashing.
+	// returns an error instead of crashing.
 	event := &Event{
 		EventID: "panic-test",
-		Extra: map[string]interface{}{
-			// json.Marshal will panic on a channel value.
-			"bad": make(chan int),
-		},
+		Exception: []Exception{{
+			Stacktrace: &Stacktrace{
+				Frames: []Frame{{
+					Vars: map[string]interface{}{
+						// json.Marshal will error on a channel value.
+						"bad": make(chan int),
+					},
+				}},
+			},
+		}},
 	}
 
 	item, err := event.ToEnvelopeItem()
-	if err != nil {
-		t.Fatalf("ToEnvelopeItem() should recover from panic and use fallback, got error: %v", err)
+	if err == nil {
+		t.Fatal("ToEnvelopeItem() expected error from unmarshalable data, got nil")
 	}
-	if item == nil {
-		t.Fatal("ToEnvelopeItem() returned nil item after panic recovery")
+	if item != nil {
+		t.Fatal("ToEnvelopeItem() expected nil item on marshal failure")
 	}
 }
 

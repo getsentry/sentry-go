@@ -63,34 +63,26 @@ func getTLSConfig(options ClientOptions) *tls.Config {
 	return nil
 }
 
+// eventDebugContext returns a panic-safe summary of an event for debug logging.
+// It only touches scalar fields and len() of collections, which do not trigger
+// the runtime concurrent-map-access fatal nor invoke user-defined Stringers.
+func eventDebugContext(event *Event) string {
+	return fmt.Sprintf(
+		"event=%s type=%s level=%s "+
+			"breadcrumbs=%d exceptions=%d extra=%d tags=%d contexts=%d attachments=%d",
+		event.EventID, event.Type, event.Level,
+		len(event.Breadcrumbs), len(event.Exception), len(event.Extra),
+		len(event.Tags), len(event.Contexts), len(event.Attachments),
+	)
+}
+
 func getRequestBodyFromEvent(event *Event) []byte {
 	body, err := json.Marshal(event)
-	if err == nil {
-		return body
+	if err != nil {
+		debuglog.Printf("Could not encode event as JSON, skipping delivery. %s: %v", eventDebugContext(event), err)
+		return nil
 	}
-
-	msg := fmt.Sprintf("Could not encode original event as JSON. "+
-		"Succeeded by removing Breadcrumbs, Contexts and Extra. "+
-		"Please verify the data you attach to the scope. "+
-		"Error: %s", err)
-	// Try to serialize the event, with all the contextual data that allows for interface{} stripped.
-	event.Breadcrumbs = nil
-	event.Contexts = nil
-	event.Extra = map[string]interface{}{
-		"info": msg,
-	}
-	body, err = json.Marshal(event)
-	if err == nil {
-		debuglog.Println(msg)
-		return body
-	}
-
-	// This should _only_ happen when Event.Exception[0].Stacktrace.Frames[0].Vars is unserializable
-	// Which won't ever happen, as we don't use it now (although it's the part of public interface accepted by Sentry)
-	// Juuust in case something, somehow goes utterly wrong.
-	debuglog.Println("Event couldn't be marshaled, even with stripped contextual data. Skipping delivery. " +
-		"Please notify the SDK owners with possibly broken payload.")
-	return nil
+	return body
 }
 
 func encodeAttachment(enc *json.Encoder, b io.Writer, attachment *Attachment) error {
@@ -462,6 +454,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 	}
 	envelope, err := envelopeFromBody(event, t.dsn, time.Now(), body)
 	if err != nil {
+		debuglog.Printf("Failed to build envelope, skipping delivery. %s: %v", eventDebugContext(event), err)
 		recordForEvent(t.recorder, report.ReasonInternalError, event)
 		return
 	}
@@ -500,7 +493,7 @@ func (t *HTTPTransport) SendEventWithContext(ctx context.Context, event *Event) 
 			t.dsn.GetProjectID(),
 		)
 	default:
-		debuglog.Println("Event dropped due to transport buffer being full.")
+		debuglog.Printf("Event dropped due to transport buffer being full. %s", eventDebugContext(event))
 		recordForEvent(t.recorder, report.ReasonQueueOverflow, event)
 	}
 
@@ -799,6 +792,7 @@ func (t *HTTPSyncTransport) SendEventWithContext(ctx context.Context, event *Eve
 
 	envelope, err := envelopeFromBody(event, t.dsn, time.Now(), body)
 	if err != nil {
+		debuglog.Printf("Failed to build envelope, skipping delivery. %s: %v", eventDebugContext(event), err)
 		recordForEvent(t.recorder, report.ReasonInternalError, event)
 		return
 	}
@@ -946,7 +940,7 @@ func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
 	envelope := protocol.NewEnvelope(header)
 	item, err := event.ToEnvelopeItem()
 	if err != nil {
-		debuglog.Printf("Failed to convert event to envelope item: %v", err)
+		debuglog.Printf("Failed to convert event to envelope item, skipping delivery. %s: %v", eventDebugContext(event), err)
 		if a.recorder != nil {
 			recordForEvent(a.recorder, report.ReasonInternalError, event)
 		}
