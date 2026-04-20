@@ -171,11 +171,6 @@ func TestAttrToSentryEvent(t *testing.T) {
 			} else {
 				assert.Equal(t, tc.expected.Tags, event.Tags)
 			}
-			if len(tc.expected.Tags) == 0 {
-				assert.Empty(t, event.Tags)
-			} else {
-				assert.Equal(t, tc.expected.Tags, event.Tags)
-			}
 		})
 	}
 }
