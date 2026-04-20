@@ -40,10 +40,14 @@ func (o *ServerOptions) setDefaults() {
 
 func recoverWithSentry(ctx context.Context, hub *sentry.Hub, o ServerOptions, onRecover func()) {
 	if r := recover(); r != nil {
-		hub.RecoverWithContext(ctx, r)
+		eventID := hub.RecoverWithContext(ctx, r)
 
 		if onRecover != nil {
 			onRecover()
+		}
+
+		if eventID != nil && o.WaitForDelivery {
+			hub.Flush(o.Timeout)
 		}
 
 		if o.Repanic {
@@ -120,12 +124,7 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		ctx, hub, transaction := startServerTransaction(ctx, info.FullMethod)
-		defer func() {
-			transaction.Finish()
-			if opts.WaitForDelivery {
-				hub.Flush(opts.Timeout)
-			}
-		}()
+		defer transaction.Finish()
 
 		defer recoverWithSentry(ctx, hub, opts, func() {
 			err = status.Error(codes.Internal, internalServerErrorMessage)
@@ -144,12 +143,7 @@ func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 	opts.setDefaults()
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
 		ctx, hub, transaction := startServerTransaction(ss.Context(), info.FullMethod)
-		defer func() {
-			transaction.Finish()
-			if opts.WaitForDelivery {
-				hub.Flush(opts.Timeout)
-			}
-		}()
+		defer transaction.Finish()
 
 		stream := wrapServerStream(ss, ctx)
 
