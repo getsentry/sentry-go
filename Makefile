@@ -29,12 +29,12 @@ $(COVERAGE_DIR):
 
 test-coverage: $(COVERAGE_DIR) ## Test with coverage enabled
 	rm -f $(COVERAGE_DIR)/*
-	$(GO) test -count=1 -timeout $(TIMEOUT)s -coverpkg=work -covermode=$(COVERAGE_MODE) -coverprofile=$(COVERAGE_PROFILE) work
+	$(GO) test -count=1 -timeout $(TIMEOUT)s -covermode=$(COVERAGE_MODE) -coverprofile=$(COVERAGE_PROFILE) work
 .PHONY: test-coverage
 
 test-race-coverage: $(COVERAGE_DIR) ## Run tests with race detection and coverage
 	rm -f $(COVERAGE_DIR)/*
-	$(GO) test -count=1 -timeout $(TIMEOUT)s -race -coverpkg=work -covermode=$(COVERAGE_MODE) -coverprofile=$(COVERAGE_PROFILE) work
+	$(GO) test -count=1 -timeout $(TIMEOUT)s -race -covermode=$(COVERAGE_MODE) -coverprofile=$(COVERAGE_PROFILE) work
 .PHONY: test-race-coverage
 
 vet: ## Run "go vet" across all workspace modules
