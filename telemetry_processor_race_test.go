@@ -28,7 +28,7 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 		),
 	}
 
-	proc := telemetry.NewProcessor(buffers, transport, dsn, sdkInfo, report.NoopRecorder())
+	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, report.NoopRecorder())
 	defer proc.Close(2 * time.Second)
 
 	const numEvents = 100

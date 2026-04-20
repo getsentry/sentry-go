@@ -7,22 +7,28 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/report"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/require"
 )
 
 // TestClientReports_Integration tests that client reports are properly generated
 // and sent when events are dropped for various reasons.
 func TestClientReports_Integration(t *testing.T) {
 	var receivedBodies [][]byte
+	var mu sync.Mutex
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
 		receivedBodies = append(receivedBodies, body)
+		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"id":"test-event-id"}`))
 	}))
@@ -73,21 +79,23 @@ func TestClientReports_Integration(t *testing.T) {
 	}
 
 	var got report.ClientReport
-	found := false
-	for _, b := range receivedBodies {
-		for _, line := range bytes.Split(b, []byte("\n")) {
-			if json.Unmarshal(line, &got) == nil && len(got.DiscardedEvents) > 0 {
-				found = true
-				break
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		bodies := make([][]byte, len(receivedBodies))
+		copy(bodies, receivedBodies)
+		mu.Unlock()
+
+		for _, b := range bodies {
+			for _, line := range bytes.Split(b, []byte("\n")) {
+				var report report.ClientReport
+				if json.Unmarshal(line, &report) == nil && len(report.DiscardedEvents) > 0 {
+					got = report
+					return true
+				}
 			}
 		}
-		if found {
-			break
-		}
-	}
-	if !found {
-		t.Fatal("no client report found in envelope bodies")
-	}
+		return false
+	}, time.Second, 10*time.Millisecond, "no client report found in envelope bodies with: %v", got)
 
 	if got.Timestamp.IsZero() {
 		t.Error("client report missing timestamp")

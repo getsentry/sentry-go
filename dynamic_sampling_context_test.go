@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/testutils"
 )
 
@@ -192,7 +193,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				},
 			},
 			client: func() *Client {
-				dsn, _ := NewDsn("http://public@example.com/sentry/1")
+				dsn, _ := protocol.NewDsn("http://public@example.com/sentry/1")
 				return &Client{
 					options: ClientOptions{
 						Dsn:         dsn.String(),
