@@ -162,14 +162,19 @@ func (w *Writer) addBreadcrumb(event *sentry.Event) {
 		breadcrumbType = "error"
 	}
 
-	category, _ := event.Extra["category"].(string)
+	category := event.Tags["category"]
+
+	data := make(map[string]interface{}, len(event.Tags))
+	for k, v := range event.Tags {
+		data[k] = v
+	}
 
 	w.hub.AddBreadcrumb(&sentry.Breadcrumb{
 		Type:     breadcrumbType,
 		Category: category,
 		Message:  event.Message,
 		Level:    event.Level,
-		Data:     event.Extra,
+		Data:     data,
 	}, nil)
 }
 
@@ -254,11 +259,9 @@ func parseLogLevel(data []byte) (zerolog.Level, error) {
 }
 
 func parseLogEvent(data []byte) (*sentry.Event, bool) {
-	event := sentry.Event{
-		Timestamp: now(),
-		Logger:    logger,
-		Extra:     map[string]any{},
-	}
+	event := sentry.NewEvent()
+	event.Timestamp = now()
+	event.Logger = logger
 
 	err := jsonparser.ObjectEach(data, func(key, value []byte, _ jsonparser.ValueType, _ int) error {
 		k := string(key)
@@ -275,7 +278,7 @@ func parseLogEvent(data []byte) (*sentry.Event, bool) {
 			var user sentry.User
 			err := json.Unmarshal(value, &user)
 			if err != nil {
-				event.Extra[k] = string(value)
+				event.Tags[k] = string(value)
 			} else {
 				event.User = user
 			}
@@ -285,15 +288,15 @@ func parseLogEvent(data []byte) (*sentry.Event, bool) {
 			var fp []string
 			err := json.Unmarshal(value, &fp)
 			if err != nil {
-				event.Extra[k] = string(value)
+				event.Tags[k] = string(value)
 			} else {
 				event.Fingerprint = fp
 			}
 		case FieldGoVersion, FieldMaxProcs:
 		default:
-			event.Extra[k] = string(value)
+			event.Tags[k] = string(value)
 		}
 		return nil
 	})
-	return &event, err == nil
+	return event, err == nil
 }

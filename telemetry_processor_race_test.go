@@ -41,11 +41,9 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 		event.EventID = EventID(fmt.Sprintf("%032x", i))
 		event.Level = LevelError
 		event.Message = fmt.Sprintf("test event %d", i)
-		event.Extra = map[string]interface{}{
-			"initial_key": "initial_value",
-		}
 		event.Contexts = map[string]Context{
 			"initial_context": {"key": "value"},
+			"race_context":    {"initial_key": "initial_value"},
 		}
 		event.Breadcrumbs = []*Breadcrumb{
 			{Message: "initial breadcrumb", Timestamp: time.Now()},
@@ -60,7 +58,6 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 			defer wg.Done()
 			for j := 0; j < numMutations; j++ {
 				// Map writes — "concurrent map read and map write"
-				ev.Extra[fmt.Sprintf("key-%d-%d", idx, j)] = fmt.Sprintf("value-%d", j)
 				ev.Contexts[fmt.Sprintf("ctx-%d-%d", idx, j)] = Context{
 					"dynamic": fmt.Sprintf("value-%d", j),
 				}

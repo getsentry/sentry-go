@@ -69,9 +69,9 @@ func getTLSConfig(options ClientOptions) *tls.Config {
 func eventDebugContext(event *Event) string {
 	return fmt.Sprintf(
 		"event=%s type=%s level=%s "+
-			"breadcrumbs=%d exceptions=%d extra=%d tags=%d contexts=%d attachments=%d",
+			"breadcrumbs=%d exceptions=%d tags=%d contexts=%d attachments=%d",
 		event.EventID, event.Type, event.Level,
-		len(event.Breadcrumbs), len(event.Exception), len(event.Extra),
+		len(event.Breadcrumbs), len(event.Exception),
 		len(event.Tags), len(event.Contexts), len(event.Attachments),
 	)
 }

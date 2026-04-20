@@ -630,8 +630,8 @@ func TestSentryHandler_EventType(t *testing.T) {
 	assert.Nil(t, events[0].Logs, "should not have logs for EventType")
 	assert.Equal(t, message, events[0].Message, "event message should match")
 
-	_, found := events[0].Extra["attr_key"]
-	assert.True(t, found, "attribute should be in event's Extra map")
+	_, found := events[0].Tags["attr_key"]
+	assert.True(t, found, "attribute should be in event tags")
 }
 
 func TestSentryHandler_EventTypeWithReplaceAttr(t *testing.T) {
@@ -657,14 +657,14 @@ func TestSentryHandler_EventTypeWithReplaceAttr(t *testing.T) {
 	assert.Equal(t, 1, len(events))
 
 	// Check if attribute was replaced
-	fooAttr, found := events[0].Extra["foo"]
+	fooAttr, found := events[0].Tags["foo"]
 	assert.True(t, found)
 	assert.Equal(t, "replaced_bar", fooAttr)
 
 	// Check if non-string attribute is unchanged
-	numAttr, found := events[0].Extra["num"]
+	numAttr, found := events[0].Tags["num"]
 	assert.True(t, found)
-	assert.Equal(t, int64(123), numAttr)
+	assert.Equal(t, "123", numAttr)
 }
 
 func TestSentryHandler_CaptureAsEventAndLog(t *testing.T) {
@@ -685,8 +685,8 @@ func TestSentryHandler_CaptureAsEventAndLog(t *testing.T) {
 
 	assert.Equal(t, message, event.Message, "event message should match")
 	assert.Equal(t, sentry.LevelWarning, event.Level)
-	eventAttrVal, found := event.Extra["common_attr"]
-	assert.True(t, found, "attribute should be in event's Extra map")
+	eventAttrVal, found := event.Tags["common_attr"]
+	assert.True(t, found, "attribute should be in event tags")
 	assert.Equal(t, "common_value", eventAttrVal)
 
 	event = events[1]

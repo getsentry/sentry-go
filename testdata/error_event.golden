@@ -13,9 +13,6 @@
     },
     "environment": "production",
     "event_id": "0123456789abcdef",
-    "extra": {
-        "extra_key": "extra_val"
-    },
     "fingerprint": [
         "abcd"
     ],

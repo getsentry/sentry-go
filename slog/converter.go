@@ -83,7 +83,9 @@ func attrToSentryEvent(attr slog.Attr, event *sentry.Event) {
 	case k == "server_name" && kind == slog.KindString:
 		event.ServerName = v.String()
 	case k == "tags" && kind == slog.KindGroup:
-		event.Tags = attrsToString(v.Group()...)
+		for tk, tv := range attrsToString(v.Group()...) {
+			event.Tags[tk] = tv
+		}
 	case k == "transaction" && kind == slog.KindString:
 		event.Transaction = v.String()
 	case k == "user" && kind == slog.KindGroup:
@@ -93,9 +95,9 @@ func attrToSentryEvent(attr slog.Attr, event *sentry.Event) {
 	case k == "fingerprint" && kind == slog.KindAny:
 		handleFingerprint(v, event)
 	case kind == slog.KindGroup:
-		event.Extra[k] = attrsToMap(v.Group()...)
+		event.Tags[k] = fmt.Sprint(attrsToMap(v.Group()...))
 	default:
-		event.Extra[k] = v.Any()
+		event.Tags[k] = fmt.Sprint(v.Any())
 	}
 }
 

@@ -51,7 +51,6 @@ func TestConcurrentScopeUsage(_ *testing.T) {
 func touchScope(scope *sentry.Scope, x int) {
 	scope.SetTag("foo", "bar")
 	scope.SetContext("foo", sentry.Context{"foo": "bar"})
-	scope.SetExtra("foo", "bar")
 	scope.SetAttributes(attribute.String("foo", "bar"))
 	scope.RemoveAttribute("foo")
 	scope.SetLevel(sentry.LevelDebug)

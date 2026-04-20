@@ -228,7 +228,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			entry: &logrus.Entry{},
 			want: &sentry.Event{
 				Level:  "fatal",
-				Extra:  map[string]any{},
 				Logger: name,
 			},
 		},
@@ -241,7 +240,7 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level:  sentry.LevelFatal,
-				Extra:  map[string]any{"bar": "oink", "foo": 123.4},
+				Tags:   map[string]string{"bar": "oink", "foo": "123.4"},
 				Logger: name,
 			},
 		},
@@ -251,7 +250,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level:  sentry.LevelInfo,
-				Extra:  map[string]any{},
 				Logger: name,
 			},
 		},
@@ -261,7 +259,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level:   sentry.LevelFatal,
-				Extra:   map[string]any{},
 				Message: "the only thing we have to fear is fear itself",
 				Logger:  name,
 			},
@@ -272,7 +269,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level:     sentry.LevelFatal,
-				Extra:     map[string]any{},
 				Timestamp: time.Unix(1, 2).UTC(),
 				Logger:    name,
 			},
@@ -285,7 +281,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level: sentry.LevelFatal,
-				Extra: map[string]any{},
 				Request: &sentry.Request{
 					URL:     "http://example.com/",
 					Method:  http.MethodGet,
@@ -305,7 +300,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level: sentry.LevelFatal,
-				Extra: map[string]any{},
 				Request: &sentry.Request{
 					URL:    "http://example.com/",
 					Method: http.MethodGet,
@@ -324,7 +318,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level: sentry.LevelFatal,
-				Extra: map[string]any{},
 				Request: &sentry.Request{
 					URL:    "http://example.com/",
 					Method: http.MethodGet,
@@ -340,7 +333,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level: sentry.LevelFatal,
-				Extra: map[string]any{},
 				Exception: []sentry.Exception{
 					{Type: "*errors.errorString", Value: "things failed", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
 				},
@@ -354,10 +346,8 @@ func TestEventHook_entryToEvent(t *testing.T) {
 				},
 			},
 			want: &sentry.Event{
-				Level: sentry.LevelFatal,
-				Extra: map[string]any{
-					"error": "this isn't really an error",
-				},
+				Level:  sentry.LevelFatal,
+				Tags:   map[string]string{"error": "this isn't really an error"},
 				Logger: name,
 			},
 		},
@@ -369,7 +359,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level: sentry.LevelFatal,
-				Extra: map[string]any{},
 				Exception: []sentry.Exception{
 					{
 						Type:       "*errors.errorString",
@@ -411,7 +400,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level: sentry.LevelFatal,
-				Extra: map[string]any{},
 				User: sentry.User{
 					ID: "bob",
 				},
@@ -428,7 +416,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			},
 			want: &sentry.Event{
 				Level: sentry.LevelFatal,
-				Extra: map[string]any{},
 				User: sentry.User{
 					ID: "alice",
 				},
@@ -442,10 +429,8 @@ func TestEventHook_entryToEvent(t *testing.T) {
 				},
 			},
 			want: &sentry.Event{
-				Level: sentry.LevelFatal,
-				Extra: map[string]any{
-					"user": "just say no to drugs",
-				},
+				Level:  sentry.LevelFatal,
+				Tags:   map[string]string{"user": "just say no to drugs"},
 				Logger: name,
 			},
 		},
@@ -458,7 +443,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			want: &sentry.Event{
 				Level:       sentry.LevelError,
 				Message:     "transaction error",
-				Extra:       map[string]any{},
 				Transaction: "payment_process",
 				Logger:      name,
 			},
@@ -472,7 +456,6 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			want: &sentry.Event{
 				Level:       sentry.LevelError,
 				Message:     "fingerprinted error",
-				Extra:       map[string]any{},
 				Fingerprint: []string{"{{ default }}", "custom-fingerprint"},
 				Logger:      name,
 			},
@@ -498,8 +481,9 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			got := hook.entryToEvent(tt.entry)
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(sentry.Event{}, "Contexts", "EventID", "Platform", "Release", "ServerName", "Modules", "Sdk", "Timestamp"),
-				cmpopts.IgnoreFields(sentry.Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
+				cmpopts.IgnoreFields(sentry.Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 				cmpopts.IgnoreFields(sentry.Stacktrace{}, "Frames"),
+				cmpopts.EquateEmpty(),
 			}
 			if d := cmp.Diff(tt.want, got, opts); d != "" {
 				t.Errorf("entryToEvent mismatch (-want +got):\n%s", d)
