@@ -48,9 +48,7 @@ func createOrUpdateMetadata(ctx context.Context, span *sentry.Span) context.Cont
 }
 
 func finishSpan(span *sentry.Span, err error) {
-	code := grpcStatusCode(err)
-	span.Status = toSpanStatus(code)
-	span.SetData("rpc.grpc.status_code", int(code))
+	setRPCStatus(span, err)
 	span.Finish()
 }
 
