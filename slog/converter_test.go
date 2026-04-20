@@ -44,6 +44,25 @@ func TestDefaultConverter(t *testing.T) {
 	assert.Equal(t, "mockValue", event.Tags["mockKey"])
 }
 
+func TestDefaultConverterTagsDoesNotOverrideExistingTags(t *testing.T) {
+	record := &slog.Record{
+		Time:    time.Now(),
+		Level:   slog.LevelInfo,
+		Message: "Test message",
+	}
+	record.AddAttrs(
+		slog.String("custom_key", "custom_val"),
+		slog.Group("tags",
+			slog.String("t1", "v1"),
+		),
+	)
+
+	event := DefaultConverter(false, nil, nil, nil, record, nil)
+
+	assert.Equal(t, "custom_val", event.Tags["custom_key"])
+	assert.Equal(t, "v1", event.Tags["t1"])
+}
+
 func TestAttrToSentryEvent(t *testing.T) {
 	reqURL, _ := url.Parse("http://example.com")
 
