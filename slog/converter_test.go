@@ -41,14 +41,7 @@ func TestDefaultConverter(t *testing.T) {
 	assert.Equal(t, name, event.Logger)
 
 	// Check if the attributes are correctly converted
-	var foundMockKey bool
-	for key, value := range event.Extra {
-		if key == "mockKey" && value == "mockValue" {
-			foundMockKey = true
-			break
-		}
-	}
-	assert.True(t, foundMockKey)
+	assert.Equal(t, "mockValue", event.Tags["mockKey"])
 }
 
 func TestAttrToSentryEvent(t *testing.T) {
@@ -142,19 +135,16 @@ func TestAttrToSentryEvent(t *testing.T) {
 		},
 		"request_str": {
 			attr:     slog.Attr{Key: "request", Value: slog.StringValue("GET http://")},
-			expected: &sentry.Event{Extra: map[string]any{"request": "GET http://"}},
+			expected: &sentry.Event{Tags: map[string]string{"request": "GET http://"}},
 		},
 		"context_group": {
 			attr: slog.Attr{Key: "context", Value: slog.GroupValue(
 				slog.Attr{Key: "key1", Value: slog.StringValue("value1")},
 				slog.Attr{Key: "key2", Value: slog.StringValue("value2")},
 			)},
-			expected: &sentry.Event{Extra: map[string]any{
-				"context": map[string]any{
-					"key1": "value1",
-					"key2": "value2",
-				}},
-			},
+			expected: &sentry.Event{Tags: map[string]string{
+				"context": "map[key1:value1 key2:value2]",
+			}},
 		},
 		"fingerprint": {
 			attr:     slog.Attr{Key: "fingerprint", Value: slog.AnyValue([]string{"value1", "value2"})},
@@ -181,10 +171,10 @@ func TestAttrToSentryEvent(t *testing.T) {
 			} else {
 				assert.Equal(t, tc.expected.Tags, event.Tags)
 			}
-			if len(tc.expected.Extra) == 0 {
-				assert.Empty(t, event.Extra)
+			if len(tc.expected.Tags) == 0 {
+				assert.Empty(t, event.Tags)
 			} else {
-				assert.Equal(t, tc.expected.Extra, event.Extra)
+				assert.Equal(t, tc.expected.Tags, event.Tags)
 			}
 		})
 	}

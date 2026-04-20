@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -60,15 +61,20 @@ func TestPushScopeAddsScopeOnTopOfStack(t *testing.T) {
 
 func TestPushScopeInheritsScopeData(t *testing.T) {
 	hub, _, scope := setupHubTest()
-	scope.SetExtra("foo", "bar")
+	scope.SetAttributes(attribute.String("foo", "bar"))
 	hub.PushScope()
-	scope.SetExtra("baz", "qux")
+	scope.SetAttributes(attribute.String("baz", "qux"))
 
 	if (*hub.stack)[0].scope == (*hub.stack)[1].scope {
 		t.Error("Scope shouldnt point to the same struct")
 	}
-	assertEqual(t, map[string]interface{}{"foo": "bar", "baz": "qux"}, (*hub.stack)[0].scope.extra)
-	assertEqual(t, map[string]interface{}{"foo": "bar"}, (*hub.stack)[1].scope.extra)
+	assertEqual(t, map[string]attribute.Value{
+		"foo": attribute.StringValue("bar"),
+		"baz": attribute.StringValue("qux"),
+	}, (*hub.stack)[0].scope.attributes)
+	assertEqual(t, map[string]attribute.Value{
+		"foo": attribute.StringValue("bar"),
+	}, (*hub.stack)[1].scope.attributes)
 }
 
 func TestPushScopeInheritsClient(t *testing.T) {
@@ -141,40 +147,40 @@ func TestWithScopeBindClient(t *testing.T) {
 
 func TestWithScopeDirectChanges(t *testing.T) {
 	hub, _, _ := setupHubTest()
-	hub.Scope().SetExtra("extra", "foo")
+	hub.Scope().SetAttributes(attribute.String("extra", "foo"))
 
 	hub.WithScope(func(scope *Scope) {
-		scope.SetExtra("extra", "bar")
-		assertEqual(t, map[string]interface{}{"extra": "bar"}, hub.stackTop().scope.extra)
+		scope.SetAttributes(attribute.String("extra", "bar"))
+		assertEqual(t, map[string]attribute.Value{"extra": attribute.StringValue("bar")}, hub.stackTop().scope.attributes)
 	})
 
-	assertEqual(t, map[string]interface{}{"extra": "foo"}, hub.stackTop().scope.extra)
+	assertEqual(t, map[string]attribute.Value{"extra": attribute.StringValue("foo")}, hub.stackTop().scope.attributes)
 }
 
 func TestWithScopeChangesThroughConfigureScope(t *testing.T) {
 	hub, _, _ := setupHubTest()
-	hub.Scope().SetExtra("extra", "foo")
+	hub.Scope().SetAttributes(attribute.String("extra", "foo"))
 
 	hub.WithScope(func(_ *Scope) {
 		hub.ConfigureScope(func(scope *Scope) {
-			scope.SetExtra("extra", "bar")
+			scope.SetAttributes(attribute.String("extra", "bar"))
 		})
-		assertEqual(t, map[string]interface{}{"extra": "bar"}, hub.stackTop().scope.extra)
+		assertEqual(t, map[string]attribute.Value{"extra": attribute.StringValue("bar")}, hub.stackTop().scope.attributes)
 	})
 
-	assertEqual(t, map[string]interface{}{"extra": "foo"}, hub.stackTop().scope.extra)
+	assertEqual(t, map[string]attribute.Value{"extra": attribute.StringValue("foo")}, hub.stackTop().scope.attributes)
 }
 
 func TestConfigureScope(t *testing.T) {
 	hub, _, _ := setupHubTest()
-	hub.Scope().SetExtra("extra", "foo")
+	hub.Scope().SetAttributes(attribute.String("extra", "foo"))
 
 	hub.ConfigureScope(func(scope *Scope) {
-		scope.SetExtra("extra", "bar")
-		assertEqual(t, map[string]interface{}{"extra": "bar"}, hub.stackTop().scope.extra)
+		scope.SetAttributes(attribute.String("extra", "bar"))
+		assertEqual(t, map[string]attribute.Value{"extra": attribute.StringValue("bar")}, hub.stackTop().scope.attributes)
 	})
 
-	assertEqual(t, map[string]interface{}{"extra": "bar"}, hub.stackTop().scope.extra)
+	assertEqual(t, map[string]attribute.Value{"extra": attribute.StringValue("bar")}, hub.stackTop().scope.attributes)
 }
 
 func TestLastEventID(t *testing.T) {

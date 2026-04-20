@@ -445,10 +445,11 @@ func TestIntegration(t *testing.T) {
 	opt := cmp.Options{
 		cmpopts.IgnoreFields(
 			sentry.Event{},
-			"Contexts", "EventID", "Extra", "Platform", "Modules",
+			"Contexts", "EventID", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
 			"sdkMetaData",
-			"serializedExtra", "serializedContexts", "serializedBreadcrumbs",
+			"serializedTags",
+			"serializedContexts", "serializedBreadcrumbs",
 			"serializedException", "serializedUser",
 		),
 		cmpopts.IgnoreFields(
@@ -479,7 +480,8 @@ func TestIntegration(t *testing.T) {
 			"EventID", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp",
 			"sdkMetaData", "StartTime", "Spans",
-			"serializedExtra", "serializedContexts", "serializedBreadcrumbs",
+			"serializedTags",
+			"serializedContexts", "serializedBreadcrumbs",
 			"serializedException", "serializedUser",
 		),
 		cmpopts.IgnoreFields(

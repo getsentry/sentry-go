@@ -157,7 +157,7 @@ func TestStartSpan(t *testing.T) {
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
 		),
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmpopts.EquateEmpty(),
 	}
 	if diff := cmp.Diff(want, events[0], opts); diff != "" {
@@ -222,7 +222,7 @@ func TestStartChild(t *testing.T) {
 			"EventID", "Level", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
 		),
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmpopts.IgnoreMapEntries(func(k string, _ interface{}) bool {
 			return k != "trace"
 		}),
@@ -300,7 +300,7 @@ func TestStartTransaction(t *testing.T) {
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
 		),
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedExtra", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
 		cmpopts.EquateEmpty(),
 	}
 	if diff := cmp.Diff(want, events[0], opts); diff != "" {

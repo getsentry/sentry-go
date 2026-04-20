@@ -628,9 +628,6 @@ func TestStructSnapshots(t *testing.T) {
 						"data_key": "data_val",
 					},
 				}},
-				Extra: map[string]interface{}{
-					"extra_key": "extra_val",
-				},
 				Contexts: map[string]Context{
 					"context_key": {
 						"context_key": "context_val",
@@ -929,30 +926,6 @@ func TestMetric_GetterMethods(t *testing.T) {
 }
 
 func TestMakeSerializationSafe(t *testing.T) {
-	t.Run("pre-serializes Extra", func(t *testing.T) {
-		event := &Event{
-			Extra: map[string]interface{}{
-				"key": "value",
-				"nested": map[string]interface{}{
-					"inner": "data",
-				},
-			},
-		}
-		event.MakeSerializationSafe()
-
-		if event.serializedExtra == nil {
-			t.Fatal("serializedExtra should be set")
-		}
-
-		var got map[string]interface{}
-		if err := json.Unmarshal(event.serializedExtra, &got); err != nil {
-			t.Fatalf("invalid serializedExtra JSON: %v", err)
-		}
-		if got["key"] != "value" {
-			t.Errorf("expected key=value, got %v", got["key"])
-		}
-	})
-
 	t.Run("pre-serializes Contexts", func(t *testing.T) {
 		event := &Event{
 			Contexts: map[string]Context{
@@ -1021,8 +994,7 @@ func TestMakeSerializationSafe(t *testing.T) {
 
 	t.Run("pre-serializes User when Data is empty", func(t *testing.T) {
 		event := &Event{
-			Extra: map[string]interface{}{"key": "value"},
-			User:  User{ID: "1", Email: "user@example.com"},
+			User: User{ID: "1", Email: "user@example.com"},
 		}
 		event.MakeSerializationSafe()
 
@@ -1091,9 +1063,9 @@ func TestMakeSerializationSafe(t *testing.T) {
 			EventID: "12345678901234567890123456789012",
 			Message: "test message",
 			Level:   LevelError,
-			Extra: map[string]interface{}{
+			Tags: map[string]string{
 				"string_val": "hello",
-				"number_val": float64(42),
+				"number_val": "42",
 			},
 			Contexts: map[string]Context{
 				"os": {"name": "linux", "version": "5.4"},
@@ -1116,9 +1088,9 @@ func TestMakeSerializationSafe(t *testing.T) {
 			EventID: "12345678901234567890123456789012",
 			Message: "test message",
 			Level:   LevelError,
-			Extra: map[string]interface{}{
+			Tags: map[string]string{
 				"string_val": "hello",
-				"number_val": float64(42),
+				"number_val": "42",
 			},
 			Contexts: map[string]Context{
 				"os": {"name": "linux", "version": "5.4"},
@@ -1156,17 +1128,15 @@ func TestMakeSerializationSafe(t *testing.T) {
 }
 
 func TestMakeSerializationSafe_ConcurrentAccess(t *testing.T) {
-	extra := map[string]interface{}{
-		"key1": "value1",
+	ctx := Context{
+		"info": "context_value",
 		"nested": map[string]interface{}{
 			"inner": "data",
 		},
 	}
-	ctx := Context{"info": "context_value"}
 	bcData := map[string]interface{}{"bc_key": "bc_value"}
 
 	event := &Event{
-		Extra:    extra,
 		Contexts: map[string]Context{"ctx": ctx},
 		Breadcrumbs: []*Breadcrumb{
 			{Message: "crumb", Data: bcData},
@@ -1191,9 +1161,6 @@ func TestMakeSerializationSafe_ConcurrentAccess(t *testing.T) {
 	}()
 	close(start)
 	for range 1000 {
-		extra["key1"] = "mutated"
-		extra["new_key"] = "new_value"
-		delete(extra, "new_key")
 		ctx["info"] = "mutated"
 		bcData["bc_key"] = "mutated"
 		event.User.Data["role"] = "mutated"
@@ -1272,10 +1239,6 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 
 	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil)
 
-	extra := map[string]interface{}{
-		"request_id": "original-123",
-		"nested":     map[string]interface{}{"deep": "value"},
-	}
 	contexts := map[string]Context{
 		"app": {"version": "1.0"},
 	}
@@ -1283,10 +1246,13 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 	mechData := map[string]any{"errno": float64(42)}
 
 	event := &Event{
-		EventID:  "aaaabbbbccccddddeeeeffffaaaabbbb",
-		Message:  "test event",
-		Level:    LevelError,
-		Extra:    extra,
+		EventID: "aaaabbbbccccddddeeeeffffaaaabbbb",
+		Message: "test event",
+		Level:   LevelError,
+		Tags: map[string]string{
+			"request_id": "original-123",
+			"nested":     "map[deep:value]",
+		},
 		Contexts: contexts,
 		Breadcrumbs: []*Breadcrumb{
 			{Message: "clicked", Data: bcData},
@@ -1309,9 +1275,9 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 		t.Fatal("Add returned false")
 	}
 
-	extra["request_id"] = "MUTATED"
-	delete(extra, "nested")
-	extra["injected"] = "should-not-appear"
+	event.Tags["request_id"] = "MUTATED"
+	delete(event.Tags, "nested")
+	event.Tags["injected"] = "should-not-appear"
 	contexts["app"]["version"] = "MUTATED"
 	bcData["target"] = "MUTATED"
 	mechData["errno"] = "MUTATED"
@@ -1329,16 +1295,15 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 		t.Fatalf("invalid JSON payload: %v", err)
 	}
 
-	gotExtra, _ := body["extra"].(map[string]interface{})
-	if gotExtra["request_id"] != "original-123" {
-		t.Errorf("extra.request_id = %v, want original-123", gotExtra["request_id"])
+	gotTags, _ := body["tags"].(map[string]interface{})
+	if gotTags["request_id"] != "original-123" {
+		t.Errorf("tags.request_id = %v, want original-123", gotTags["request_id"])
 	}
-	if _, ok := gotExtra["injected"]; ok {
-		t.Error("injected key should not appear in serialized extra")
+	if _, ok := gotTags["injected"]; ok {
+		t.Error("injected key should not appear in serialized tags")
 	}
-	nested, _ := gotExtra["nested"].(map[string]interface{})
-	if nested["deep"] != "value" {
-		t.Errorf("extra.nested.deep = %v, want value", nested["deep"])
+	if gotTags["nested"] != "map[deep:value]" {
+		t.Errorf("tags.nested = %v, want map[deep:value]", gotTags["nested"])
 	}
 	gotContexts, _ := body["contexts"].(map[string]interface{})
 	gotApp, _ := gotContexts["app"].(map[string]interface{})

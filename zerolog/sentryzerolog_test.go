@@ -38,8 +38,8 @@ func TestParseLogEvent(t *testing.T) {
 	require.Len(t, ev.Exception, 1)
 	assert.Equal(t, "dial timeout", ev.Exception[0].Value)
 
-	require.Len(t, ev.Extra, 1)
-	assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", ev.Extra["requestId"])
+	require.Len(t, ev.Tags, 1)
+	assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", ev.Tags["requestId"])
 }
 
 func TestFailedClientCreation(t *testing.T) {
@@ -79,7 +79,7 @@ func TestWrite(t *testing.T) {
 				require.Len(t, event.Exception, 1)
 				assert.Equal(t, "dial timeout", event.Exception[0].Value)
 				assert.True(t, time.Since(event.Timestamp).Minutes() < 1)
-				assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", event.Extra["requestId"])
+				assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", event.Tags["requestId"])
 				beforeSendCalled = true
 				return event
 			},
@@ -162,7 +162,7 @@ func TestWriteLevel(t *testing.T) {
 				require.Len(t, event.Exception, 1)
 				assert.Equal(t, "dial timeout", event.Exception[0].Value)
 				assert.True(t, time.Since(event.Timestamp).Minutes() < 1)
-				assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", event.Extra["requestId"])
+				assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", event.Tags["requestId"])
 				beforeSendCalled = true
 				return event
 			},
@@ -196,7 +196,7 @@ func TestWriteInvalidLevel(t *testing.T) {
 				require.Len(t, event.Exception, 1)
 				assert.Equal(t, "dial timeout", event.Exception[0].Value)
 				assert.True(t, time.Since(event.Timestamp).Minutes() < 1)
-				assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", event.Extra["requestId"])
+				assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", event.Tags["requestId"])
 				return event
 			},
 		},

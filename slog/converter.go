@@ -93,9 +93,9 @@ func attrToSentryEvent(attr slog.Attr, event *sentry.Event) {
 	case k == "fingerprint" && kind == slog.KindAny:
 		handleFingerprint(v, event)
 	case kind == slog.KindGroup:
-		event.Extra[k] = attrsToMap(v.Group()...)
+		event.Tags[k] = fmt.Sprint(attrsToMap(v.Group()...))
 	default:
-		event.Extra[k] = v.Any()
+		event.Tags[k] = fmt.Sprint(v.Any())
 	}
 }
 

@@ -28,7 +28,6 @@ var DefaultEventCmpOpts = cmp.Options{
 	cmpopts.IgnoreFields(sentry.Event{},
 		"Contexts",
 		"EventID",
-		"Extra",
 		"Modules",
 		"Platform",
 		"Release",
