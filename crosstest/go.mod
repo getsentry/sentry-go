@@ -2,7 +2,19 @@ module github.com/getsentry/sentry-go/crosstest
 
 go 1.25.0
 
-replace github.com/getsentry/sentry-go => ../
+replace (
+	github.com/getsentry/sentry-go => ../
+	github.com/getsentry/sentry-go/echo => ../echo
+	github.com/getsentry/sentry-go/fasthttp => ../fasthttp
+	github.com/getsentry/sentry-go/fiber => ../fiber
+	github.com/getsentry/sentry-go/gin => ../gin
+	github.com/getsentry/sentry-go/iris => ../iris
+	github.com/getsentry/sentry-go/logrus => ../logrus
+	github.com/getsentry/sentry-go/negroni => ../negroni
+	github.com/getsentry/sentry-go/otel => ../otel
+	github.com/getsentry/sentry-go/slog => ../slog
+	github.com/getsentry/sentry-go/zap => ../zap
+)
 
 require (
 	github.com/getsentry/sentry-go v0.45.1

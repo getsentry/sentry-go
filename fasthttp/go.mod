@@ -2,6 +2,8 @@ module github.com/getsentry/sentry-go/fasthttp
 
 go 1.25.0
 
+replace github.com/getsentry/sentry-go => ../
+
 require (
 	github.com/getsentry/sentry-go v0.45.1
 	github.com/google/go-cmp v0.5.9
