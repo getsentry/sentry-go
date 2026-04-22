@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 GO = go
-ALL_GO_MOD_DIRS := $(shell $(GO) work edit -json | sed -n 's/^[[:space:]]*"DiskPath": "\(.*\)".*/\1/p')
+ALL_GO_MOD_DIRS := $(shell $(GO) work edit -json | jq -r '.Use[].DiskPath')
 WORK_LINT_TARGETS := $(patsubst %, %/..., $(ALL_GO_MOD_DIRS))
 TIMEOUT = 300
 
