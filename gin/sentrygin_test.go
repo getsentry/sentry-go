@@ -38,7 +38,7 @@ func TestIntegration(t *testing.T) {
 			RoutePath:   "/panic/:id",
 			Method:      "GET",
 			WantStatus:  200,
-			Handler: func(c *gin.Context) {
+			Handler: func(_ *gin.Context) {
 				panic("test")
 			},
 			WantTransaction: &sentry.Event{
@@ -357,11 +357,11 @@ func TestIntegration(t *testing.T) {
 		EnableTracing:          true,
 		TracesSampleRate:       1.0,
 		TraceIgnoreStatusCodes: make([][]int, 0), // don't ignore any status codes
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
 		},
-		BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			fmt.Println("BeforeSendTransaction")
 			transactionsCh <- tx
 			return tx
@@ -466,7 +466,7 @@ func TestIntegration(t *testing.T) {
 			sentry.Request{},
 			"Env",
 		),
-		cmpopts.IgnoreMapEntries(func(k string, v any) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
 			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
 			for _, e := range ignoredCtxEntries {
 				if k == e {

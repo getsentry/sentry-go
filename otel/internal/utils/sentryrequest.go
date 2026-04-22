@@ -15,14 +15,14 @@ func IsSentryRequestSpan(ctx context.Context, s trace.ReadOnlySpan) bool {
 	// TODO(michi): can we access the attribute directly?
 	for _, attribute := range attributes {
 		if attribute.Key == semconv.HTTPURLKey {
-			return isSentryRequestUrl(ctx, attribute.Value.AsString())
+			return isSentryRequestURL(ctx, attribute.Value.AsString())
 		}
 	}
 
 	return false
 }
 
-func isSentryRequestUrl(ctx context.Context, url string) bool {
+func isSentryRequestURL(ctx context.Context, url string) bool {
 	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
 		hub = sentry.CurrentHub()

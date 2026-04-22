@@ -67,15 +67,15 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#onendspan
 func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
-	otelSpanId := s.SpanContext().SpanID()
-	otelTraceId := s.SpanContext().TraceID()
-	sentrySpan, ok := sentrySpanMap.Get(otelTraceId, otelSpanId)
+	otelSpanID := s.SpanContext().SpanID()
+	otelTraceID := s.SpanContext().TraceID()
+	sentrySpan, ok := sentrySpanMap.Get(otelTraceID, otelSpanID)
 	if !ok || sentrySpan == nil {
 		return
 	}
 
 	if utils.IsSentryRequestSpan(sentrySpan.Context(), s) {
-		sentrySpanMap.MarkFinished(otelSpanId, otelTraceId)
+		sentrySpanMap.MarkFinished(otelSpanID, otelTraceID)
 		return
 	}
 
@@ -88,7 +88,7 @@ func (ssp *sentrySpanProcessor) OnEnd(s otelSdkTrace.ReadOnlySpan) {
 	sentrySpan.EndTime = s.EndTime()
 	sentrySpan.Finish()
 
-	sentrySpanMap.MarkFinished(otelSpanId, otelTraceId)
+	sentrySpanMap.MarkFinished(otelSpanID, otelTraceID)
 }
 
 // https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/sdk.md#shutdown-1

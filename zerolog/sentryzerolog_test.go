@@ -73,7 +73,7 @@ func TestWrite(t *testing.T) {
 	var beforeSendCalled bool
 	cfg := Config{
 		ClientOptions: sentry.ClientOptions{
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				assert.Equal(t, sentry.LevelError, event.Level)
 				assert.Equal(t, "test message", event.Message)
 				require.Len(t, event.Exception, 1)
@@ -122,7 +122,7 @@ func TestWrite_TraceDoesNotPanic(t *testing.T) {
 	var beforeSendCalled bool
 	cfg := Config{
 		ClientOptions: sentry.ClientOptions{
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				beforeSendCalled = true
 				return event
 			},
@@ -156,7 +156,7 @@ func TestWriteLevel(t *testing.T) {
 	var beforeSendCalled bool
 	cfg := Config{
 		ClientOptions: sentry.ClientOptions{
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				assert.Equal(t, sentry.LevelError, event.Level)
 				assert.Equal(t, "test message", event.Message)
 				require.Len(t, event.Exception, 1)
@@ -190,7 +190,7 @@ func TestWriteLevel(t *testing.T) {
 func TestWriteInvalidLevel(t *testing.T) {
 	cfg := Config{
 		ClientOptions: sentry.ClientOptions{
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				assert.Equal(t, sentry.LevelError, event.Level)
 				assert.Equal(t, "test message", event.Message)
 				require.Len(t, event.Exception, 1)
@@ -217,7 +217,7 @@ func TestWrite_Disabled(t *testing.T) {
 	var beforeSendCalled bool
 	cfg := Config{
 		ClientOptions: sentry.ClientOptions{
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				beforeSendCalled = true
 				return event
 			},
@@ -252,7 +252,7 @@ func TestWriteLevel_Disabled(t *testing.T) {
 	var beforeSendCalled bool
 	cfg := Config{
 		ClientOptions: sentry.ClientOptions{
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				beforeSendCalled = true
 				return event
 			},
@@ -285,7 +285,7 @@ func TestWriteLevelFatal(t *testing.T) {
 	var beforeSendCalled bool
 	cfg := Config{
 		ClientOptions: sentry.ClientOptions{
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				beforeSendCalled = true
 				return event
 			},

@@ -77,11 +77,37 @@ func flushEventCount(t *testing.T, transport *sentry.MockTransport) int {
 	return len(transport.Events())
 }
 
+func requireUnaryClientBaggagePropagation(
+	t *testing.T,
+	existingBaggage string,
+	assertBaggage func(t *testing.T, baggageHeader string),
+) {
+	t.Helper()
+
+	transport := initMockTransport(t)
+	interceptor := sentrygrpc.UnaryClientInterceptor()
+	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+		sentry.SentryBaggageHeader, existingBaggage,
+	))
+
+	err := interceptor(ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
+		md, ok := metadata.FromOutgoingContext(ctx)
+		require.True(t, ok)
+		assertBaggage(t, strings.Join(md.Get(sentry.SentryBaggageHeader), ","))
+		return nil
+	})
+
+	require.NoError(t, err)
+	sentry.Flush(testutils.FlushTimeout())
+	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
+}
+
 func TestUnaryClientInterceptor(t *testing.T) {
 	tests := map[string]struct {
-		ctx      context.Context
-		invoker  grpc.UnaryInvoker
-		wantCode codes.Code
+		ctx       context.Context
+		invoker   grpc.UnaryInvoker
+		assertErr assert.ErrorAssertionFunc
+		wantCode  codes.Code
 	}{
 		"records span and propagates trace headers": {
 			ctx: metadata.NewOutgoingContext(context.Background(), metadata.Pairs("existing", "value")),
@@ -93,14 +119,16 @@ func TestUnaryClientInterceptor(t *testing.T) {
 				assert.Contains(t, md, "existing")
 				return nil
 			},
-			wantCode: codes.OK,
+			assertErr: assert.NoError,
+			wantCode:  codes.OK,
 		},
 		"records span with error status on handler error": {
 			ctx: context.Background(),
 			invoker: func(_ context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
 				return status.Error(codes.NotFound, "not found")
 			},
-			wantCode: codes.NotFound,
+			assertErr: assert.Error,
+			wantCode:  codes.NotFound,
 		},
 	}
 
@@ -109,7 +137,8 @@ func TestUnaryClientInterceptor(t *testing.T) {
 			transport := initMockTransport(t)
 			interceptor := sentrygrpc.UnaryClientInterceptor()
 
-			interceptor(tc.ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, tc.invoker)
+			err := interceptor(tc.ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, tc.invoker)
+			tc.assertErr(t, err)
 			sentry.Flush(testutils.FlushTimeout())
 
 			assert.Equal(t, int(tc.wantCode), spanStatusCode(t, transport))
@@ -146,47 +175,17 @@ func TestUnaryClientInterceptor_ReplacesExistingTraceHeaders(t *testing.T) {
 }
 
 func TestUnaryClientInterceptor_PreservesExistingBaggageMembers(t *testing.T) {
-	transport := initMockTransport(t)
-	interceptor := sentrygrpc.UnaryClientInterceptor()
-
-	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
-		sentry.SentryBaggageHeader, "othervendor=bla",
-	))
-
-	err := interceptor(ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
-		md, ok := metadata.FromOutgoingContext(ctx)
-		require.True(t, ok)
-		baggageHeader := strings.Join(md.Get(sentry.SentryBaggageHeader), ",")
+	requireUnaryClientBaggagePropagation(t, "othervendor=bla", func(t *testing.T, baggageHeader string) {
 		assert.Contains(t, baggageHeader, "othervendor=bla")
 		assert.Contains(t, baggageHeader, "sentry-trace_id")
-		return nil
 	})
-
-	require.NoError(t, err)
-	sentry.Flush(testutils.FlushTimeout())
-	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
 
 func TestUnaryClientInterceptor_PropagatesSentryBaggageWhenExistingBaggageIsMalformed(t *testing.T) {
-	transport := initMockTransport(t)
-	interceptor := sentrygrpc.UnaryClientInterceptor()
-
-	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
-		sentry.SentryBaggageHeader, "not-valid",
-	))
-
-	err := interceptor(ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
-		md, ok := metadata.FromOutgoingContext(ctx)
-		require.True(t, ok)
-		baggageHeader := strings.Join(md.Get(sentry.SentryBaggageHeader), ",")
+	requireUnaryClientBaggagePropagation(t, "not-valid", func(t *testing.T, baggageHeader string) {
 		assert.NotContains(t, baggageHeader, "not-valid")
 		assert.Contains(t, baggageHeader, "sentry-trace_id")
-		return nil
 	})
-
-	require.NoError(t, err)
-	sentry.Flush(testutils.FlushTimeout())
-	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
 
 func TestStreamClientInterceptor(t *testing.T) {
@@ -205,7 +204,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 				assert.Contains(t, md, sentry.SentryBaggageHeader)
 				return &mockClientStream{recvMsgFn: func(_ any) error { return io.EOF }}, nil
 			},
-			streamOp: func(stream grpc.ClientStream) { stream.RecvMsg(nil) },
+			streamOp: func(stream grpc.ClientStream) { require.ErrorIs(t, stream.RecvMsg(nil), io.EOF) },
 			wantCode: codes.OK,
 		},
 		"streamer error records span with error status": {
@@ -227,7 +226,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 			streamer: func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
 				return &mockClientStream{recvMsgFn: func(_ any) error { return io.EOF }}, nil
 			},
-			streamOp: func(stream grpc.ClientStream) { stream.RecvMsg(nil) },
+			streamOp: func(stream grpc.ClientStream) { require.Error(t, stream.RecvMsg(nil)) },
 			wantCode: codes.OK,
 		},
 		"RecvMsg error records error status": {
@@ -235,7 +234,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 			streamer: func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
 				return &mockClientStream{recvMsgFn: func(_ any) error { return status.Error(codes.Unavailable, "down") }}, nil
 			},
-			streamOp: func(stream grpc.ClientStream) { stream.RecvMsg(nil) },
+			streamOp: func(stream grpc.ClientStream) { require.Error(t, stream.RecvMsg(nil)) },
 			wantCode: codes.Unavailable,
 		},
 		"SendMsg error records error status": {
@@ -243,7 +242,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 			streamer: func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
 				return &mockClientStream{sendMsgFn: func(_ any) error { return status.Error(codes.DeadlineExceeded, "timeout") }}, nil
 			},
-			streamOp: func(stream grpc.ClientStream) { stream.SendMsg(nil) },
+			streamOp: func(stream grpc.ClientStream) { require.Error(t, stream.SendMsg(nil)) },
 			wantCode: codes.DeadlineExceeded,
 		},
 		"Header error records error status": {
@@ -251,7 +250,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 			streamer: func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
 				return &mockClientStream{headerFn: func() (metadata.MD, error) { return nil, status.Error(codes.NotFound, "not found") }}, nil
 			},
-			streamOp: func(stream grpc.ClientStream) { stream.Header() },
+			streamOp: func(stream grpc.ClientStream) { _, err := stream.Header(); require.Error(t, err) },
 			wantCode: codes.NotFound,
 		},
 		"finish is idempotent across multiple error paths": {
@@ -264,8 +263,8 @@ func TestStreamClientInterceptor(t *testing.T) {
 				}, nil
 			},
 			streamOp: func(stream grpc.ClientStream) {
-				stream.SendMsg(nil)
-				stream.RecvMsg(nil)
+				require.Error(t, stream.SendMsg(nil))
+				require.Error(t, stream.RecvMsg(nil))
 			},
 			wantCode: codes.Canceled,
 		},
@@ -276,7 +275,10 @@ func TestStreamClientInterceptor(t *testing.T) {
 			transport := initMockTransport(t)
 			interceptor := sentrygrpc.StreamClientInterceptor()
 
-			stream, _ := interceptor(tc.ctx, &grpc.StreamDesc{}, nil, "/test.TestService/Method", tc.streamer)
+			stream, err := interceptor(tc.ctx, &grpc.StreamDesc{}, nil, "/test.TestService/Method", tc.streamer)
+			if tc.wantCode == codes.OK {
+				require.NoError(t, err)
+			}
 			if tc.streamOp != nil && stream != nil {
 				tc.streamOp(stream)
 			}

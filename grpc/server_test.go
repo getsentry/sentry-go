@@ -41,7 +41,7 @@ func summarizeTx(tx *sentry.Event) txSummary {
 		Data:   tx.Contexts["trace"]["data"].(map[string]any),
 	}
 	if g, ok := tx.Contexts["grpc"]; ok {
-		s.GRPC = map[string]any(g)
+		s.GRPC = g
 	}
 	return s
 }
@@ -53,7 +53,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 
 	_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{
 		FullMethod: "/test.TestService/Method",
-	}, func(ctx context.Context, _ any) (any, error) {
+	}, func(_ context.Context, _ any) (any, error) {
 		return struct{}{}, nil
 	})
 
@@ -93,7 +93,7 @@ func TestUnaryServerInterceptor_ScrubsSensitiveMetadata(t *testing.T) {
 
 	_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{
 		FullMethod: "/test.TestService/Method",
-	}, func(ctx context.Context, _ any) (any, error) {
+	}, func(_ context.Context, _ any) (any, error) {
 		return struct{}{}, nil
 	})
 
@@ -102,7 +102,7 @@ func TestUnaryServerInterceptor_ScrubsSensitiveMetadata(t *testing.T) {
 
 	events := transport.Events()
 	require.Len(t, events, 1)
-	grpcContext := map[string]any(events[0].Contexts["grpc"])
+	grpcContext := events[0].Contexts["grpc"]
 	metadataContext, ok := grpcContext["metadata"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, map[string]any{"key": "value"}, metadataContext)

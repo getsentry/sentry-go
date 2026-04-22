@@ -97,6 +97,16 @@ type uint64LogEntry interface {
 	Uint64(key string, value uint64) sentry.LogEntry
 }
 
+func int64BitsToUint64(value int64) uint64 {
+	//nolint:gosec // zap stores unsigned integers and float bit patterns in Field.Integer.
+	return uint64(value)
+}
+
+func int64BitsToUint32(value int64) uint32 {
+	//nolint:gosec // zap stores float32 bit patterns in the lower 32 bits of Field.Integer.
+	return uint32(value)
+}
+
 // zapFieldToLogEntry converts a zap Field to a sentry LogEntry attribute.
 //
 //nolint:gocyclo
@@ -111,16 +121,16 @@ func zapFieldToLogEntry(entry sentry.LogEntry, field zapcore.Field) sentry.LogEn
 		return entry.Int64(key, field.Integer)
 	case zapcore.Uint64Type:
 		if e, ok := entry.(uint64LogEntry); ok {
-			return e.Uint64(key, uint64(field.Integer))
+			return e.Uint64(key, int64BitsToUint64(field.Integer))
 		}
 		debuglog.Println("Internal error: log entry does not implement unsigned int conversion")
 		return entry
 	case zapcore.UintptrType:
 		return entry.String(key, fmt.Sprintf("0x%x", field.Integer))
 	case zapcore.Float64Type:
-		return entry.Float64(key, math.Float64frombits(uint64(field.Integer)))
+		return entry.Float64(key, math.Float64frombits(int64BitsToUint64(field.Integer)))
 	case zapcore.Float32Type:
-		return entry.Float64(key, float64(math.Float32frombits(uint32(field.Integer))))
+		return entry.Float64(key, float64(math.Float32frombits(int64BitsToUint32(field.Integer))))
 	case zapcore.StringType:
 		return entry.String(key, field.String)
 	case zapcore.ByteStringType:

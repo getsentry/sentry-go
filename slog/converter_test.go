@@ -26,7 +26,7 @@ func TestDefaultConverter(t *testing.T) {
 	}
 
 	// Mock replaceAttr function
-	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
+	replaceAttr := func(_ []string, a slog.Attr) slog.Attr {
 		return a
 	}
 
