@@ -46,7 +46,7 @@ var (
 	}
 )
 
-// LevelFatal is a custom [slog.Level] that maps to [sentry.LevelFatal]
+// LevelFatal is a custom [slog.Level] that maps to [sentry.LevelFatal].
 const LevelFatal = slog.Level(12)
 const SlogOrigin = "auto.log.slog"
 

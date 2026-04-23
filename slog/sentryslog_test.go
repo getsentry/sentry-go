@@ -206,7 +206,7 @@ func TestOption_NewSentryHandler(t *testing.T) {
 	}
 }
 
-// Test backwards compatibility with the deprecated Level field
+// Test backwards compatibility with the deprecated Level field.
 func TestOption_NewSentryHandler_BackwardsCompatibility(t *testing.T) {
 	tests := map[string]struct {
 		option        Option
@@ -558,7 +558,7 @@ func TestSentryHandler_LogLevels(t *testing.T) {
 }
 
 func TestSentryHandler_ReplaceAttr(t *testing.T) {
-	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
+	replaceAttr := func(_ []string, a slog.Attr) slog.Attr {
 		if a.Value.Kind() == slog.KindString {
 			return slog.String(a.Key, "replaced")
 		}
@@ -635,7 +635,7 @@ func TestSentryHandler_EventType(t *testing.T) {
 }
 
 func TestSentryHandler_EventTypeWithReplaceAttr(t *testing.T) {
-	replaceAttr := func(groups []string, a slog.Attr) slog.Attr {
+	replaceAttr := func(_ []string, a slog.Attr) slog.Attr {
 		if a.Value.Kind() == slog.KindString {
 			return slog.String(a.Key, "replaced_"+a.Value.String())
 		}
@@ -767,7 +767,7 @@ func TestSentryHandler_CustomLogLevels(t *testing.T) {
 	}
 }
 
-// Test that Enabled returns false for levels not in the slices
+// Test that Enabled returns false for levels not in the slices.
 func TestSentryHandler_EnabledSpecificLevels(t *testing.T) {
 	tests := map[string]struct {
 		eventLevels []slog.Level

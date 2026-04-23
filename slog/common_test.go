@@ -388,7 +388,7 @@ func TestContextExtractor(t *testing.T) {
 		"SingleFunction": {
 			ctx: context.Background(),
 			fns: []func(ctx context.Context) []slog.Attr{
-				func(ctx context.Context) []slog.Attr {
+				func(_ context.Context) []slog.Attr {
 					return []slog.Attr{slog.String("key1", "value1")}
 				},
 			},
@@ -397,10 +397,10 @@ func TestContextExtractor(t *testing.T) {
 		"MultipleFunctions": {
 			ctx: context.Background(),
 			fns: []func(ctx context.Context) []slog.Attr{
-				func(ctx context.Context) []slog.Attr {
+				func(_ context.Context) []slog.Attr {
 					return []slog.Attr{slog.String("key1", "value1")}
 				},
-				func(ctx context.Context) []slog.Attr {
+				func(_ context.Context) []slog.Attr {
 					return []slog.Attr{slog.String("key2", "value2")}
 				},
 			},

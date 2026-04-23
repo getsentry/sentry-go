@@ -19,6 +19,39 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
+func wantFiberTransaction(path, method, body string, status int) *sentry.Event {
+	headers := map[string]string{
+		"Host":       "example.com",
+		"User-Agent": "fiber",
+	}
+	if body != "" || method == http.MethodPost {
+		headers["Content-Length"] = fmt.Sprintf("%d", len(body))
+	}
+
+	return &sentry.Event{
+		Level:       sentry.LevelInfo,
+		Type:        "transaction",
+		Transaction: fmt.Sprintf("%s %s", method, path),
+		Request: &sentry.Request{
+			URL:     "http://example.com" + path,
+			Method:  method,
+			Data:    body,
+			Headers: headers,
+		},
+		TransactionInfo: &sentry.TransactionInfo{Source: "url"},
+		Contexts: map[string]sentry.Context{
+			"trace": sentry.TraceContext{
+				Data: map[string]interface{}{
+					"http.request.method":       method,
+					"http.response.status_code": status,
+				},
+				Op:     "http.server",
+				Status: sentry.HTTPtoSpanStatus(status),
+			}.Map(),
+		},
+	}
+}
+
 func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
 	sentryHandler := sentryfiber.New(sentryfiber.Options{Timeout: 3 * time.Second, WaitForDelivery: true})
@@ -34,7 +67,7 @@ func TestIntegration(t *testing.T) {
 
 	app.Use(sentryHandler)
 
-	app.Get("/panic", func(c *fiber.Ctx) error {
+	app.Get("/panic", func(_ *fiber.Ctx) error {
 		panic("test")
 	})
 	app.Post("/post", func(c *fiber.Ctx) error {
@@ -65,7 +98,7 @@ func TestIntegration(t *testing.T) {
 		hub.CaptureMessage("body ignored")
 		return nil
 	})
-	app.Post("/post/error-handler", func(c *fiber.Ctx) error {
+	app.Post("/post/error-handler", func(_ *fiber.Ctx) error {
 		return exception
 	})
 
@@ -137,32 +170,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "POST /post",
-				Request: &sentry.Request{
-					URL:    "http://example.com/post",
-					Method: http.MethodPost,
-					Data:   "payload",
-					Headers: map[string]string{
-						"Host":           "example.com",
-						"Content-Length": "7",
-						"User-Agent":     "fiber",
-					},
-				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]interface{}{
-							"http.request.method":       http.MethodPost,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
-				},
-			},
+			WantTransaction: wantFiberTransaction("/post", http.MethodPost, "payload", http.StatusOK),
 		},
 		{
 			Path:       "/get",
@@ -314,32 +322,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "POST /post/body-ignored",
-				Request: &sentry.Request{
-					URL:    "http://example.com/post/body-ignored",
-					Method: http.MethodPost,
-					Data:   "client sends, fiber always reads, SDK reports",
-					Headers: map[string]string{
-						"Content-Length": "45",
-						"Host":           "example.com",
-						"User-Agent":     "fiber",
-					},
-				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]interface{}{
-							"http.request.method":       http.MethodPost,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
-				},
-			},
+			WantTransaction: wantFiberTransaction("/post/body-ignored", http.MethodPost, "client sends, fiber always reads, SDK reports", http.StatusOK),
 		},
 		{
 			Path:       "/post/error-handler",
@@ -397,11 +380,11 @@ func TestIntegration(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
 		},
-		BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			transactionsCh <- tx
 			return tx
 		},
@@ -492,7 +475,7 @@ func TestIntegration(t *testing.T) {
 			sentry.Exception{},
 			"Stacktrace",
 		),
-		cmpopts.IgnoreMapEntries(func(k string, v any) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
 			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
 			for _, e := range ignoredCtxEntries {
 				if k == e {
@@ -603,7 +586,7 @@ func TestSetHubOnContext(t *testing.T) {
 }
 
 // TestMalformedURLNoPanic verifies that malformed URLs don't cause panics
-// when tracing is enabled,
+// when tracing is enabled.
 func TestMalformedURLNoPanic(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,

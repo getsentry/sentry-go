@@ -148,11 +148,12 @@ func (s *sentryClientStream) SendMsg(m any) error {
 
 func (s *sentryClientStream) RecvMsg(m any) error {
 	err := s.ClientStream.RecvMsg(m)
-	if err == nil && !s.serverStreams {
+	switch {
+	case err == nil && !s.serverStreams:
 		s.finish(nil)
-	} else if errors.Is(err, io.EOF) {
+	case errors.Is(err, io.EOF):
 		s.finish(nil)
-	} else if err != nil {
+	case err != nil:
 		s.finish(err)
 	}
 	return err

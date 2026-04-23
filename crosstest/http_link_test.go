@@ -51,9 +51,9 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "http"
 			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
-			var logger sentry.Logger = sentry.NewLogger(baseCtx)
-			var meter sentry.Meter = sentry.NewMeter(baseCtx)
-			handler := sentryhttp.New(sentryhttp.Options{WaitForDelivery: true}).HandleFunc(func(w http.ResponseWriter, r *http.Request) {
+			logger := sentry.NewLogger(baseCtx)
+			meter := sentry.NewMeter(baseCtx)
+			handler := sentryhttp.New(sentryhttp.Options{WaitForDelivery: true}).HandleFunc(func(_ http.ResponseWriter, r *http.Request) {
 				sendSignals(r.Context(), identifier, logger, meter)
 			})
 
@@ -71,8 +71,8 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "gin"
 			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
-			var logger sentry.Logger = sentry.NewLogger(baseCtx)
-			var meter sentry.Meter = sentry.NewMeter(baseCtx)
+			logger := sentry.NewLogger(baseCtx)
+			meter := sentry.NewMeter(baseCtx)
 			gin.SetMode(gin.ReleaseMode)
 			router := gin.New()
 			router.Use(func(c *gin.Context) {
@@ -97,8 +97,8 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "echo"
 			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
-			var logger sentry.Logger = sentry.NewLogger(baseCtx)
-			var meter sentry.Meter = sentry.NewMeter(baseCtx)
+			logger := sentry.NewLogger(baseCtx)
+			meter := sentry.NewMeter(baseCtx)
 			e := echo.New()
 			e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 				return func(c *echo.Context) error {
@@ -126,14 +126,14 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "negroni"
 			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
-			var logger sentry.Logger = sentry.NewLogger(baseCtx)
-			var meter sentry.Meter = sentry.NewMeter(baseCtx)
+			logger := sentry.NewLogger(baseCtx)
+			meter := sentry.NewMeter(baseCtx)
 			n := negroni.New()
 			n.Use(negroni.HandlerFunc(func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 				next(w, r.WithContext(sentry.SetHubOnContext(otelCtx, f.Hub)))
 			}))
 			n.Use(sentrynegroni.New(sentrynegroni.Options{WaitForDelivery: true}))
-			n.UseHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			n.UseHandler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				sendSignals(r.Context(), identifier, logger, meter)
 			}))
 
@@ -150,8 +150,8 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "iris"
 			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
-			var logger sentry.Logger = sentry.NewLogger(baseCtx)
-			var meter sentry.Meter = sentry.NewMeter(baseCtx)
+			logger := sentry.NewLogger(baseCtx)
+			meter := sentry.NewMeter(baseCtx)
 			app := iris.New()
 			app.Use(func(ctx iris.Context) {
 				ctx.ResetRequest(ctx.Request().WithContext(sentry.SetHubOnContext(otelCtx, f.Hub)))
@@ -181,8 +181,8 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		f := sentrytest.NewFixture(t, otelOpts()...)
 		const identifier = "fiber"
 		baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
-		var logger sentry.Logger = sentry.NewLogger(baseCtx)
-		var meter sentry.Meter = sentry.NewMeter(baseCtx)
+		logger := sentry.NewLogger(baseCtx)
+		meter := sentry.NewMeter(baseCtx)
 		app := fiber.New()
 		app.Use(func(c *fiber.Ctx) error {
 			c.SetUserContext(sentry.SetHubOnContext(otelCtx, f.Hub))
@@ -196,9 +196,11 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		})
 
 		req := httptest.NewRequest(http.MethodGet, "http://example.com/test", nil)
-		if _, err := app.Test(req); err != nil {
+		resp, err := app.Test(req)
+		if err != nil {
 			t.Fatalf("fiber request: %v", err)
 		}
+		defer resp.Body.Close()
 
 		f.Flush()
 		requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)

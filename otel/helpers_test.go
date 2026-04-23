@@ -14,7 +14,6 @@ import (
 )
 
 var assertEqual = testutils.AssertEqual
-var assertNotEqual = testutils.AssertNotEqual
 var assertTrue = testutils.AssertTrue
 var assertFalse = testutils.AssertFalse
 
@@ -23,7 +22,7 @@ var assertFalse = testutils.AssertFalse
 //
 // It is needed because some headers (e.g. "baggage") might contain the same set of values/attributes,
 // (and therefore be semantically equal), but serialized in different order.
-func assertMapCarrierEqual(t *testing.T, got, want propagation.MapCarrier, userMessage ...interface{}) {
+func assertMapCarrierEqual(t *testing.T, got, want propagation.MapCarrier, _ ...interface{}) {
 	t.Helper()
 
 	// Make sure that keys are the same
@@ -66,7 +65,7 @@ func assertMapCarrierEqual(t *testing.T, got, want propagation.MapCarrier, userM
 	}
 }
 
-// FIXME: copied from tracing_test.go
+// FIXME: copied from tracing_test.go.
 func TraceIDFromHex(s string) sentry.TraceID {
 	var id sentry.TraceID
 	_, err := hex.Decode(id[:], []byte(s))

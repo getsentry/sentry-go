@@ -145,7 +145,7 @@ func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 		ctx, hub, transaction := startServerTransaction(ss.Context(), info.FullMethod)
 		defer transaction.Finish()
 
-		stream := wrapServerStream(ss, ctx)
+		stream := wrapServerStream(ctx, ss)
 
 		defer recoverWithSentry(ctx, hub, opts, func() {
 			err = status.Error(codes.Internal, internalServerErrorMessage)
@@ -226,7 +226,7 @@ func parseGRPCMethod(fullMethod string) (name, service, method string) {
 }
 
 // wrapServerStream wraps a grpc.ServerStream, allowing you to inject a custom context.
-func wrapServerStream(ss grpc.ServerStream, ctx context.Context) grpc.ServerStream {
+func wrapServerStream(ctx context.Context, ss grpc.ServerStream) grpc.ServerStream {
 	return &wrappedServerStream{ServerStream: ss, ctx: ctx}
 }
 

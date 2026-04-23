@@ -209,9 +209,9 @@ func TestSentryCore_WriteWithAccumulatedFields(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, "my-service", serviceAttr.AsInterface())
 
-	reqIdAttr, found := log.Attributes["request_id"]
+	reqIDAttr, found := log.Attributes["request_id"]
 	assert.True(t, found)
-	assert.Equal(t, "123", reqIdAttr.AsInterface())
+	assert.Equal(t, "123", reqIDAttr.AsInterface())
 }
 
 func TestSentryCore_WriteWithCaller(t *testing.T) {
@@ -422,9 +422,9 @@ func TestSentryCore_Integration(t *testing.T) {
 	assert.Equal(t, "user logged in", log1.Body)
 	assert.Equal(t, sentry.LogLevelInfo, log1.Level)
 
-	userIdAttr, found := log1.Attributes["user_id"]
+	userIDAttr, found := log1.Attributes["user_id"]
 	assert.True(t, found)
-	assert.Equal(t, "123", userIdAttr.AsInterface())
+	assert.Equal(t, "123", userIDAttr.AsInterface())
 
 	// Check second log
 	log2 := events[0].Logs[1]

@@ -106,7 +106,7 @@ func New(cfg Config) (*Writer, error) {
 
 	client.SetSDKIdentifier(sdkIdentifier)
 
-	cfg.Options.SetDefaults()
+	cfg.SetDefaults()
 
 	levels := make(map[zerolog.Level]struct{}, len(cfg.Levels))
 	for _, lvl := range cfg.Levels {

@@ -135,7 +135,7 @@ func (c *SentryCore) Check(entry zapcore.Entry, ce *zapcore.CheckedEntry) *zapco
 
 // Write serializes the Entry and any Fields and sends them to Sentry.
 func (c *SentryCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
-	logEntry := c.getLogEntry(entry.Level, c.ctx)
+	logEntry := c.getLogEntry(c.ctx, entry.Level)
 	if logEntry == nil {
 		return nil
 	}
@@ -179,7 +179,7 @@ func (c *SentryCore) Sync() error {
 }
 
 // getLogEntry returns the appropriate sentry.LogEntry for the given zap level.
-func (c *SentryCore) getLogEntry(level zapcore.Level, ctx context.Context) sentry.LogEntry {
+func (c *SentryCore) getLogEntry(ctx context.Context, level zapcore.Level) sentry.LogEntry {
 	var logEntry sentry.LogEntry
 
 	switch level {

@@ -326,11 +326,11 @@ func TestIntegration(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
 		},
-		BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			transactionsCh <- tx
 			return tx
 		},
@@ -359,7 +359,7 @@ func TestIntegration(t *testing.T) {
 	}()
 
 	c := &fasthttp.Client{
-		Dial: func(addr string) (net.Conn, error) {
+		Dial: func(_ string) (net.Conn, error) {
 			return ln.Dial()
 		},
 		ReadTimeout:  time.Second,
@@ -410,7 +410,7 @@ func TestIntegration(t *testing.T) {
 			sentry.Exception{},
 			"Stacktrace",
 		),
-		cmpopts.IgnoreMapEntries(func(k string, v string) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ string) bool {
 			// fasthttp changed Content-Length behavior in
 			// https://github.com/valyala/fasthttp/commit/097fa05a697fc638624a14ab294f1336da9c29b0.
 			// fasthttp changed Content-Type behavior in
@@ -452,7 +452,7 @@ func TestIntegration(t *testing.T) {
 			sentry.Exception{},
 			"Stacktrace",
 		),
-		cmpopts.IgnoreMapEntries(func(k string, v string) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ string) bool {
 			// fasthttp changed Content-Length behavior in
 			// https://github.com/valyala/fasthttp/commit/097fa05a697fc638624a14ab294f1336da9c29b0.
 			// fasthttp changed Content-Type behavior in
@@ -462,7 +462,7 @@ func TestIntegration(t *testing.T) {
 			// ignore them.
 			return k == "Content-Length" || k == "Content-Type"
 		}),
-		cmpopts.IgnoreMapEntries(func(k string, v any) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
 			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
 			for _, e := range ignoredCtxEntries {
 				if k == e {
@@ -533,7 +533,7 @@ func TestGetTransactionFromContext(t *testing.T) {
 			}()
 
 			c := &fasthttp.Client{
-				Dial: func(addr string) (net.Conn, error) {
+				Dial: func(_ string) (net.Conn, error) {
 					return ln.Dial()
 				},
 				ReadTimeout:  time.Second,
@@ -579,7 +579,7 @@ func TestSetHubOnContext(t *testing.T) {
 }
 
 // TestMalformedURLNoPanic verifies that malformed URLs don't cause panics
-// when tracing is enabled
+// when tracing is enabled.
 func TestMalformedURLNoPanic(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,

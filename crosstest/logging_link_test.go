@@ -15,6 +15,8 @@ import (
 	"go.uber.org/zap"
 )
 
+type noopContextKey struct{}
+
 func TestLogrusLogHookLinksOTelTrace(t *testing.T) {
 	t.Parallel()
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
@@ -22,7 +24,7 @@ func TestLogrusLogHookLinksOTelTrace(t *testing.T) {
 
 		logger := logrus.New()
 		logger.AddHook(sentrylogrus.NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, f.Client))
-		logger.WithContext(context.WithValue(otelCtx, struct{}{}, "noop")).Info("logrus linked log")
+		logger.WithContext(context.WithValue(otelCtx, noopContextKey{}, "noop")).Info("logrus linked log")
 
 		f.Flush()
 		requireLinked(t, f.Events(), linkedLogEvent(traceID, spanID, "logrus linked log"))
@@ -35,6 +37,7 @@ func TestLogrusEventHookLinksOTelTrace(t *testing.T) {
 		otelCtx, traceID, spanID := fixedOTelContext()
 
 		logger := logrus.New()
+		//nolint:staticcheck // coverage for the deprecated event hook remains intentional until removal.
 		logger.AddHook(sentrylogrus.NewEventHookFromClient([]logrus.Level{logrus.ErrorLevel}, f.Client))
 		logger.WithContext(otelCtx).WithError(errors.New("logrus linked error event")).Error("logrus linked error event")
 

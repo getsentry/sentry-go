@@ -63,7 +63,7 @@ func TestZapFieldToLogEntry(t *testing.T) {
 	}
 
 	// Ignore timestamp key for cmp.Diff since time formatting can vary by locale
-	if diff := cmp.Diff(expected, entry.Attributes, cmpopts.IgnoreMapEntries(func(k string, v any) bool {
+	if diff := cmp.Diff(expected, entry.Attributes, cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
 		return k == "timestamp"
 	}), cmpopts.EquateApprox(0, 0.0001)); diff != "" {
 		t.Errorf("Attributes mismatch (-want +got):\n%s", diff)

@@ -78,7 +78,7 @@ func TestIntegration(t *testing.T) {
 			Path:   "/post",
 			Method: "POST",
 			Body:   "payload",
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				hub := sentry.GetHubFromContext(r.Context())
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
@@ -130,7 +130,7 @@ func TestIntegration(t *testing.T) {
 		},
 		{
 			Path: "/get",
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				hub := sentry.GetHubFromContext(r.Context())
 				hub.CaptureMessage("get")
 			}),
@@ -176,7 +176,7 @@ func TestIntegration(t *testing.T) {
 			Path:   "/post/large",
 			Method: "POST",
 			Body:   largePayload,
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				hub := sentry.GetHubFromContext(r.Context())
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
@@ -232,7 +232,7 @@ func TestIntegration(t *testing.T) {
 			Path:   "/post/body-ignored",
 			Method: "POST",
 			Body:   "client sends, server ignores, SDK doesn't read",
-			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				hub := sentry.GetHubFromContext(r.Context())
 				hub.CaptureMessage("body ignored")
 			}),
@@ -287,11 +287,11 @@ func TestIntegration(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
 		},
-		BeforeSendTransaction: func(tx *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			transactionsCh <- tx
 			return tx
 		},
@@ -399,7 +399,7 @@ func TestIntegration(t *testing.T) {
 			sentry.Request{},
 			"Env",
 		),
-		cmpopts.IgnoreMapEntries(func(k string, v any) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
 			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
 			for _, e := range ignoredCtxEntries {
 				if k == e {

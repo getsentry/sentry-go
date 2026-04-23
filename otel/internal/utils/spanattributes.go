@@ -19,7 +19,7 @@ type SpanAttributes struct {
 func ParseSpanAttributes(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 	for _, attribute := range s.Attributes() {
 		if attribute.Key == semconv.HTTPMethodKey {
-			return descriptionForHttpMethod(s)
+			return descriptionForHTTPMethod(s)
 		}
 		if attribute.Key == semconv.DBSystemKey {
 			return descriptionForDbSystem(s)
@@ -74,7 +74,7 @@ func descriptionForDbSystem(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 	}
 }
 
-func descriptionForHttpMethod(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
+func descriptionForHTTPMethod(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 	op := "http"
 	switch s.SpanKind() {
 	case otelTrace.SpanKindClient:
@@ -86,7 +86,7 @@ func descriptionForHttpMethod(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 	var httpTarget string
 	var httpRoute string
 	var httpMethod string
-	var httpUrl string
+	var httpURL string
 
 	for _, attribute := range s.Attributes() {
 		switch attribute.Key {
@@ -97,27 +97,28 @@ func descriptionForHttpMethod(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 		case semconv.HTTPMethodKey:
 			httpMethod = attribute.Value.AsString()
 		case semconv.HTTPURLKey:
-			httpUrl = attribute.Value.AsString()
+			httpURL = attribute.Value.AsString()
 		}
 	}
 
 	var httpPath string
 
 	// Prefer httpRoute if available
-	if httpRoute != "" {
+	switch {
+	case httpRoute != "":
 		httpPath = httpRoute
-	} else if httpTarget != "" {
-		if parsedUrl, err := url.Parse(httpTarget); err == nil {
+	case httpTarget != "":
+		if parsedURL, err := url.Parse(httpTarget); err == nil {
 			// Do not include the query and fragment parts
-			httpPath = parsedUrl.Path
+			httpPath = parsedURL.Path
 		} else {
 			httpPath = httpTarget
 		}
-	} else if httpUrl != "" {
+	case httpURL != "":
 		// This is normally the HTTP-client case
-		if parsedUrl, err := url.Parse(httpUrl); err == nil {
+		if parsedURL, err := url.Parse(httpURL); err == nil {
 			// Do not include the query and fragment parts
-			httpPath = fmt.Sprintf("%s://%s%s", parsedUrl.Scheme, parsedUrl.Host, parsedUrl.Path)
+			httpPath = fmt.Sprintf("%s://%s%s", parsedURL.Scheme, parsedURL.Host, parsedURL.Path)
 		}
 	}
 

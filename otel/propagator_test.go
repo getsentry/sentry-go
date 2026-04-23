@@ -200,7 +200,7 @@ func TestInjectUsesSetsValidTraceFromChildSpan(t *testing.T) {
 
 /// Extract
 
-// No sentry-trace header, no baggage header
+// No sentry-trace header, no baggage header.
 func TestExtractDoesNotChangeContextWithEmptyHeaders(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
 
@@ -212,7 +212,7 @@ func TestExtractDoesNotChangeContextWithEmptyHeaders(t *testing.T) {
 	)
 }
 
-// No sentry-trace header, 3rd-party baggage header
+// No sentry-trace header, 3rd-party baggage header.
 func TestExtractSetsUndefinedDynamicSamplingContext(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
 	carrier.Set(sentry.SentryBaggageHeader, "othervendor=bla")
@@ -225,7 +225,7 @@ func TestExtractSetsUndefinedDynamicSamplingContext(t *testing.T) {
 	)
 }
 
-// With sentry-trace header, no baggage header
+// With sentry-trace header, no baggage header.
 func TestExtractSetsSentrySpanContext(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
 	carrier.Set(
@@ -237,20 +237,20 @@ func TestExtractSetsSentrySpanContext(t *testing.T) {
 
 	// Make sure that Extract added a proper span context to context
 	spanContext := trace.SpanContextFromContext(ctx)
-	spanId, _ := trace.SpanIDFromHex("6e0c63257de34c92")
-	traceId, _ := trace.TraceIDFromHex("d4cda95b652f4a1592b449d5929fda1b")
+	spanID, _ := trace.SpanIDFromHex("6e0c63257de34c92")
+	traceID, _ := trace.TraceIDFromHex("d4cda95b652f4a1592b449d5929fda1b")
 	assertEqual(t,
 		spanContext,
 		trace.NewSpanContext(trace.SpanContextConfig{
 			Remote:     true,
-			SpanID:     spanId,
-			TraceID:    traceId,
+			SpanID:     spanID,
+			TraceID:    traceID,
 			TraceFlags: trace.FlagsSampled,
 		}),
 	)
 }
 
-// With sentry-trace header, no baggage header
+// With sentry-trace header, no baggage header.
 func TestExtractHandlesInvalidTraceHeader(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
 	carrier.Set(
@@ -266,7 +266,7 @@ func TestExtractHandlesInvalidTraceHeader(t *testing.T) {
 	assertEqual(t, spanContext.IsValid(), false)
 }
 
-// No sentry-trace header, with baggage header
+// No sentry-trace header, with baggage header.
 func TestExtractSetsDefinedDynamicSamplingContext(t *testing.T) {
 	propagator, carrier := setupPropagatorTest()
 	carrier.Set(

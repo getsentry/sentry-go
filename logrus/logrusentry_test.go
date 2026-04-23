@@ -140,14 +140,14 @@ func TestEventHook_Fire(t *testing.T) {
 	t.Run("with fallback", func(t *testing.T) {
 		failClient, _ := sentry.NewClient(sentry.ClientOptions{
 			Dsn: "http://whatever@example.com/1337",
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			BeforeSend: func(_ *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				return nil // Simulate failure by returning nil
 			},
 		})
 
 		var fallbackCalled bool
 		failHook := NewEventHookFromClient([]logrus.Level{logrus.ErrorLevel}, failClient)
-		failHook.SetFallback(func(entry *logrus.Entry) error {
+		failHook.SetFallback(func(_ *logrus.Entry) error {
 			fallbackCalled = true
 			return nil
 		})
@@ -166,7 +166,7 @@ func TestEventHook_Fire(t *testing.T) {
 	t.Run("capture fails no fallback", func(t *testing.T) {
 		failClient, _ := sentry.NewClient(sentry.ClientOptions{
 			Dsn: "http://whatever@example.com/1337",
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			BeforeSend: func(_ *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				return nil
 			},
 			Transport: &sentry.MockTransport{},
@@ -498,7 +498,7 @@ func TestEventHook_AddTags(t *testing.T) {
 
 	tags := map[string]string{"tag1": "value1", "tag2": "value2"}
 	hook.AddTags(tags)
-	hook.Fire(&logrus.Entry{})
+	assert.NoError(t, hook.Fire(&logrus.Entry{}))
 	hook.Flush(testutils.FlushTimeout())
 	got := transport.Events()
 	assert.Equal(t, 1, len(got), "unexpected number of events")
@@ -557,7 +557,7 @@ func TestLogHookSetFallback(t *testing.T) {
 	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
 
 	var called bool
-	fallback := FallbackFunc(func(entry *logrus.Entry) error {
+	fallback := FallbackFunc(func(_ *logrus.Entry) error {
 		called = true
 		return nil
 	})
@@ -657,11 +657,11 @@ func TestLogHook_AddTags(t *testing.T) {
 
 	tags := map[string]string{"tag1": "value1", "tag2": "value2"}
 	hook.AddTags(tags)
-	hook.Fire(&logrus.Entry{
+	assert.NoError(t, hook.Fire(&logrus.Entry{
 		Context: context.Background(),
 		Level:   logrus.InfoLevel,
 		Message: "Something",
-	})
+	}))
 	hook.Flush(testutils.FlushTimeout())
 	got := transport.Events()
 	assert.Equal(t, 1, len(got), "unexpected number of events")
@@ -739,7 +739,7 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 	assert.Equal(t, 1, len(got), "unexpected number of events")
 	if diff := cmp.Diff(wantLog.Attributes, got[0].Logs[0].Attributes,
 		cmp.AllowUnexported(attribute.Value{}),
-		cmpopts.IgnoreMapEntries(func(k string, v attribute.Value) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ attribute.Value) bool {
 			return k == "sentry.sdk.name" || k == "sentry.release" || k == "sentry.sdk.version" || k == "sentry.server.address"
 		}),
 	); diff != "" {
