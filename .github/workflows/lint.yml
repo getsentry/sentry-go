@@ -30,4 +30,5 @@ jobs:
         with:
           version: v2.11.4
           args: --timeout=10m ${{ steps.lint-targets.outputs.targets }}
+          cache-dependency-path: "**/go.sum"
     timeout-minutes: 10
