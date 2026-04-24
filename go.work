@@ -14,6 +14,7 @@ use (
 	./otel
 	./otel/otlp
 	./slog
+	./sql
 	./zap
 	./zerolog
 )
