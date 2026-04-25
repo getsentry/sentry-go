@@ -1,7 +1,5 @@
 package redis
 
-import "time"
-
 // InstrumentationType selects which Sentry Insights module the hooks reports itself as.
 type InstrumentationType int
 
@@ -28,15 +26,3 @@ type Address struct {
 	Port int
 }
 
-const DefaultTimeout = 2 * time.Second
-
-// Options configures the Sentry Redis like instrumentation hook.
-type Options struct {
-	// Type determines the Sentry Insights module.
-	// TypeCache (default) reports cache.get / cache.put spans.
-	// TypeDB reports db spans with scrubbed command descriptions.
-	Type InstrumentationType
-
-	// Timeout is the timeout for flushing Sentry events. Defaults to 2s.
-	Timeout time.Duration
-}

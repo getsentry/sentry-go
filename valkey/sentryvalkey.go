@@ -30,14 +30,10 @@ type Options struct {
 	// TypeCache (default) reports cache.get / cache.put spans.
 	// TypeDB reports db spans with scrubbed command descriptions.
 	Type InstrumentationType
-
-	// Timeout is the timeout for flushing Sentry events. Defaults to 2s.
-	Timeout time.Duration
 }
 
 type sentryHook struct {
-	typ     redis.InstrumentationType
-	timeout time.Duration
+	typ redis.InstrumentationType
 }
 
 var _ valkeyhook.Hook = (*sentryHook)(nil)
@@ -207,13 +203,8 @@ func (h *sentryHook) DoMultiStream(client valkey.Client, ctx context.Context, mu
 
 // New creates a new valkey instrumentation hook using Sentry.
 func New(options Options) valkeyhook.Hook {
-	if options.Timeout == 0 {
-		options.Timeout = redis.DefaultTimeout
-	}
-
 	return &sentryHook{
-		typ:     options.Type,
-		timeout: options.Timeout,
+		typ: options.Type,
 	}
 }
 
