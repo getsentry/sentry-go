@@ -41,6 +41,9 @@ func TestScrubCommand(t *testing.T) {
 		{name: "LSET key index value", cmds: []string{"LSET", "mylist", "0", "newvalue"}, want: "LSET mylist 0 ?"},
 		{name: "ZINCRBY key increment member", cmds: []string{"ZINCRBY", "myzset", "2", "member1"}, want: "ZINCRBY myzset 2 ?"},
 		{name: "HSETNX key field value", cmds: []string{"HSETNX", "myhash", "field1", "value1"}, want: "HSETNX myhash field1 ?"},
+		{name: "ZADD scrubs members and scores", cmds: []string{"ZADD", "myzset", "100", "user@email.com"}, want: "ZADD myzset ? ?"},
+		{name: "ZADD multiple score-member pairs", cmds: []string{"ZADD", "myzset", "1", "alice", "2", "bob"}, want: "ZADD myzset ? ? ? ?"},
+		{name: "ZADD with NX flag", cmds: []string{"ZADD", "myzset", "NX", "100", "user@email.com"}, want: "ZADD myzset ? ? ?"},
 	}
 
 	for _, tt := range tests {

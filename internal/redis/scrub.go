@@ -81,7 +81,7 @@ var commandPatterns = map[string]commandPattern{
 	"SPOP":        {fixed: []argRole{roleKey}, tailRole: roleField},
 
 	// Sorted set commands
-	"ZADD":          {fixed: []argRole{roleKey}, tailRole: roleField},
+	"ZADD":          {fixed: []argRole{roleKey}},
 	"ZREM":          {fixed: []argRole{roleKey}, repeating: []argRole{roleValue}},
 	"ZSCORE":        {fixed: []argRole{roleKey, roleValue}},
 	"ZRANGE":        {fixed: []argRole{roleKey, roleField, roleField}, tailRole: roleField},
