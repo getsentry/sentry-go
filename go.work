@@ -13,6 +13,7 @@ use (
 	./negroni
 	./otel
 	./otel/otlp
+	./rueidis
 	./slog
 	./valkey
 	./zap
