@@ -17,6 +17,9 @@ func Open(driverName, dataSourceName string, opts ...Option) (*sql.DB, error) {
 		}
 		cfg.system = sys
 	}
+	if cfg.driverName == "" {
+		cfg.driverName = driverName
+	}
 	drv, err := getDriver(driverName, dataSourceName)
 	if err != nil {
 		return nil, err
@@ -77,6 +80,9 @@ func Register(name string, drv driver.Driver, opts ...Option) error {
 		} else {
 			return errSystemUnrecognized(name)
 		}
+	}
+	if cfg.driverName == "" {
+		cfg.driverName = name
 	}
 	wrapped := newDriver(drv, cfg)
 	registerMu.Lock()

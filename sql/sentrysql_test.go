@@ -75,7 +75,7 @@ func TestOpen_PassthroughContextDriver(t *testing.T) {
 	db, err := sentrysql.Open("fake-ctx-open", "",
 		sentrysql.WithDatabaseSystem(sentrysql.SystemPostgreSQL),
 		sentrysql.WithDatabaseName("appdb"),
-		sentrysql.WithServerAddress("localhost", "5432"),
+		sentrysql.WithServerAddress("localhost", 5432),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
