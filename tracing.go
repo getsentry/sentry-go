@@ -79,6 +79,9 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	finishOnce sync.Once
 	// explicitSampled is a flag for configuring sampling by using `WithSpanSampled` option.
 	explicitSampled Sampled
+	// Pre-serialized copies of mutable fields, set by MakeSerializationSafe.
+	serializedTags json.RawMessage
+	serializedData json.RawMessage
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -226,6 +229,41 @@ func (s *Span) Context() context.Context { return s.ctx }
 // StartSpan(span.Context(), operation, options...).
 func (s *Span) StartChild(operation string, options ...SpanOption) *Span {
 	return StartSpan(s.Context(), operation, options...)
+}
+
+// MakeSerializationSafe pre-serializes user mutable fields.
+func (s *Span) MakeSerializationSafe() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(s.Tags) > 0 {
+		if b, err := json.Marshal(s.Tags); err == nil {
+			s.serializedTags = b
+		}
+	}
+	if len(s.Data) > 0 {
+		if b, err := json.Marshal(s.Data); err == nil {
+			s.serializedData = b
+		}
+	}
+}
+
+// MarshalJSON emits the span using pre-serialized fields if available.
+func (s *Span) MarshalJSON() ([]byte, error) {
+	type spanAlias Span
+	if s.serializedTags == nil && s.serializedData == nil {
+		return json.Marshal((*spanAlias)(s))
+	}
+	type safeSpan struct {
+		*spanAlias
+		Tags json.RawMessage `json:"tags,omitempty"`
+		Data json.RawMessage `json:"data,omitempty"`
+	}
+	return json.Marshal(safeSpan{
+		spanAlias: (*spanAlias)(s),
+		Tags:      s.serializedTags,
+		Data:      s.serializedData,
+	})
 }
 
 // SetTag sets a tag on the span. It is recommended to use SetTag instead of

@@ -903,4 +903,8 @@ func (e *Event) MakeSerializationSafe() {
 			e.serializedUser = b
 		}
 	}
+
+	for _, span := range e.Spans {
+		span.MakeSerializationSafe()
+	}
 }
