@@ -33,36 +33,44 @@ func (s *sentryStmt) Query(args []driver.Value) (driver.Rows, error) {
 }
 
 // ExecContext implements driver.StmtExecContext with fallback to Exec.
-func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (driver.Result, error) {
+func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (res driver.Result, err error) {
 	if ec, ok := s.stmt.(driver.StmtExecContext); ok {
+		span := startSpan(ctx, s.cfg, opExec, s.query)
+		defer func() { finishSpan(span, err) }()
 		return ec.ExecContext(ctx, args)
 	}
-	values, err := namedValuesToValues(args)
-	if err != nil {
-		return nil, err
+	values, cerr := namedValuesToValues(args)
+	if cerr != nil {
+		return nil, cerr
 	}
 	select {
 	default:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	span := startSpan(ctx, s.cfg, opExec, s.query)
+	defer func() { finishSpan(span, err) }()
 	return s.stmt.Exec(values) //nolint:staticcheck // legacy driver.Stmt.Exec fallback is intentional.
 }
 
 // QueryContext implements driver.StmtQueryContext with fallback to Query.
-func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (driver.Rows, error) {
+func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (rows driver.Rows, err error) {
 	if qc, ok := s.stmt.(driver.StmtQueryContext); ok {
+		span := startSpan(ctx, s.cfg, opQuery, s.query)
+		defer func() { finishSpan(span, err) }()
 		return qc.QueryContext(ctx, args)
 	}
-	values, err := namedValuesToValues(args)
-	if err != nil {
-		return nil, err
+	values, cerr := namedValuesToValues(args)
+	if cerr != nil {
+		return nil, cerr
 	}
 	select {
 	default:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	span := startSpan(ctx, s.cfg, opQuery, s.query)
+	defer func() { finishSpan(span, err) }()
 	return s.stmt.Query(values) //nolint:staticcheck // legacy driver.Stmt.Query fallback is intentional.
 }
 

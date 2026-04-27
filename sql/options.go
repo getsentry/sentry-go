@@ -57,10 +57,14 @@ func systemFromDriverName(name string) (DatabaseSystem, bool) {
 type Option func(*config)
 
 type config struct {
-	system DatabaseSystem
-	dbName string
-	host   string
-	port   string
+	system        DatabaseSystem
+	dbName        string
+	dbUser        string
+	driverName    string
+	host          string
+	port          int
+	socketAddress string
+	socketPort    int
 }
 
 // WithDatabaseSystem sets the db.system span attribute. Prefer one of the
@@ -74,17 +78,40 @@ func WithDatabaseSystem(system DatabaseSystem) Option {
 	return func(c *config) { c.system = system }
 }
 
-// WithDatabaseName sets the db.name span attribute.
+// WithDatabaseName sets the db.namespace span attribute (logical database
+// name).
 func WithDatabaseName(name string) Option {
 	return func(c *config) { c.dbName = name }
 }
 
-// WithServerAddress sets the server.address and server.port span attributes.
-// Port may be empty.
-func WithServerAddress(host, port string) Option {
+// WithDatabaseUser sets the db.user span attribute.
+func WithDatabaseUser(user string) Option {
+	return func(c *config) { c.dbUser = user }
+}
+
+// WithDriverName sets the db.driver.name span attribute. Open and Register
+// populate this automatically from the registered driver name; pass it
+// explicitly when using OpenDB / WrapDriver / WrapConnector.
+func WithDriverName(name string) Option {
+	return func(c *config) { c.driverName = name }
+}
+
+// WithServerAddress sets the server.address (logical hostname) and
+// server.port (logical port) span attributes. Pass port = 0 to omit it.
+func WithServerAddress(host string, port int) Option {
 	return func(c *config) {
 		c.host = host
 		c.port = port
+	}
+}
+
+// WithServerSocketAddress sets the server.socket.address (physical IP or Unix
+// socket path) and server.socket.port (physical port) span attributes. Pass
+// port = 0 to omit it.
+func WithServerSocketAddress(addr string, port int) Option {
+	return func(c *config) {
+		c.socketAddress = addr
+		c.socketPort = port
 	}
 }
 
