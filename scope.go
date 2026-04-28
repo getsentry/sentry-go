@@ -304,6 +304,13 @@ func (scope *Scope) SetPropagationContext(propagationContext PropagationContext)
 	scope.propagationContext = propagationContext
 }
 
+func (scope *Scope) propagationContextSnapshot() PropagationContext {
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+
+	return scope.propagationContext
+}
+
 // GetSpan returns the span from the current scope.
 func (scope *Scope) GetSpan() *Span {
 	scope.mu.RLock()

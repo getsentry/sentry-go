@@ -905,6 +905,6 @@ func (e *Event) MakeSerializationSafe() {
 	}
 
 	for _, span := range e.Spans {
-		span.MakeSerializationSafe()
+		span.makeSerializationSafe()
 	}
 }

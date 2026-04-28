@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -231,8 +232,8 @@ func (s *Span) StartChild(operation string, options ...SpanOption) *Span {
 	return StartSpan(s.Context(), operation, options...)
 }
 
-// MakeSerializationSafe pre-serializes user mutable fields.
-func (s *Span) MakeSerializationSafe() {
+// makeSerializationSafe pre-serializes user mutable fields.
+func (s *Span) makeSerializationSafe() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -683,7 +684,7 @@ func (s *Span) toEvent() *Event {
 	for k, v := range s.contexts {
 		contexts[k] = cloneContext(v)
 	}
-	contexts["trace"] = s.traceContext().Map()
+	contexts["trace"] = s.traceContextLocked().Map()
 
 	// Make sure that the transaction source is valid
 	transactionSource := s.Source
@@ -708,7 +709,27 @@ func (s *Span) toEvent() *Event {
 	}
 }
 
+// traceContext returns a TraceContext snapshot for an active span.
+//
+// It needs to clone span Data to avoid holding any user mutable state.
 func (s *Span) traceContext() *TraceContext {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return &TraceContext{
+		TraceID:      s.TraceID,
+		SpanID:       s.SpanID,
+		ParentSpanID: s.ParentSpanID,
+		Op:           s.Op,
+		Data:         maps.Clone(s.Data),
+		Description:  s.Description,
+		Status:       s.Status,
+	}
+}
+
+// traceContextLocked is the lock-free variant of traceContext.
+//
+// This is supposed to be used only when span Finish() was already called.
+func (s *Span) traceContextLocked() *TraceContext {
 	return &TraceContext{
 		TraceID:      s.TraceID,
 		SpanID:       s.SpanID,
