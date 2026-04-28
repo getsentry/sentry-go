@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -104,7 +103,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	scope := hub.Scope()
 	scope.SetRequest(r)
-	scope.SetRequestBody(ctx.Request().Body())
+	scope.SetRequestBody(bytes.Clone(ctx.Request().Body()))
 	ctx.Locals(valuesKey, hub)
 	ctx.Locals(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, ctx)
@@ -185,8 +184,6 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	})
 
 	r.RemoteAddr = ctx.Context().RemoteAddr().String()
-
-	r.Body = io.NopCloser(bytes.NewReader(ctx.Request().Body()))
 
 	return r
 }
