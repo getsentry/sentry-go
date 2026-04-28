@@ -26,6 +26,8 @@ func (c *sentryConn) Ping(ctx context.Context) error {
 
 // QueryContext implements driver.QueryerContext with fallback to the legacy
 // driver.Queryer path.
+//
+// nolint: dupl // we don't want to use a helper for Query/Exec Context.
 func (c *sentryConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (rows driver.Rows, err error) {
 	if qc, ok := c.conn.(driver.QueryerContext); ok {
 		span := startSpan(ctx, c.cfg, opQuery, query)
@@ -52,6 +54,8 @@ func (c *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 
 // ExecContext implements driver.ExecerContext with fallback to the legacy
 // driver.Execer path.
+//
+// nolint: dupl // we don't want to use a helper for Query/Exec Context.
 func (c *sentryConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (res driver.Result, err error) {
 	if ec, ok := c.conn.(driver.ExecerContext); ok {
 		span := startSpan(ctx, c.cfg, opExec, query)
