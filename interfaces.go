@@ -425,6 +425,7 @@ type Event struct {
 	serializedBreadcrumbs json.RawMessage
 	serializedException   json.RawMessage
 	serializedUser        json.RawMessage
+	serializationSafe     bool
 }
 
 // SetException appends the unwrapped errors to the event's exception list.
@@ -596,11 +597,7 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 }
 
 func (e *Event) hasPreSerializedFields() bool {
-	return e.serializedTags != nil ||
-		e.serializedContexts != nil ||
-		e.serializedBreadcrumbs != nil ||
-		e.serializedException != nil ||
-		e.serializedUser != nil
+	return e.serializationSafe
 }
 
 // preSerializedMarshalJSON handles marshaling when MakeSerializationSafe has
@@ -907,4 +904,6 @@ func (e *Event) MakeSerializationSafe() {
 	for _, span := range e.Spans {
 		span.makeSerializationSafe()
 	}
+
+	e.serializationSafe = true
 }

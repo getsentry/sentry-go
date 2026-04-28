@@ -81,8 +81,9 @@ type Span struct { //nolint: maligned // prefer readability over optimal memory 
 	// explicitSampled is a flag for configuring sampling by using `WithSpanSampled` option.
 	explicitSampled Sampled
 	// Pre-serialized copies of mutable fields, set by MakeSerializationSafe.
-	serializedTags json.RawMessage
-	serializedData json.RawMessage
+	serializedTags    json.RawMessage
+	serializedData    json.RawMessage
+	serializationSafe bool
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -247,23 +248,33 @@ func (s *Span) makeSerializationSafe() {
 			s.serializedData = b
 		}
 	}
+
+	s.serializationSafe = true
 }
 
 // MarshalJSON emits the span using pre-serialized fields if available.
 func (s *Span) MarshalJSON() ([]byte, error) {
-	type spanAlias Span
-	if s.serializedTags == nil && s.serializedData == nil {
-		return json.Marshal((*spanAlias)(s))
+	s.mu.RLock()
+	serializationSafe := s.serializationSafe
+	serializedTags := s.serializedTags
+	serializedData := s.serializedData
+	s.mu.RUnlock()
+
+	if !serializationSafe {
+		type span Span
+		return json.Marshal((*span)(s))
 	}
+
+	type span Span
 	type safeSpan struct {
-		*spanAlias
+		*span
 		Tags json.RawMessage `json:"tags,omitempty"`
 		Data json.RawMessage `json:"data,omitempty"`
 	}
 	return json.Marshal(safeSpan{
-		spanAlias: (*spanAlias)(s),
-		Tags:      s.serializedTags,
-		Data:      s.serializedData,
+		span: (*span)(s),
+		Tags: serializedTags,
+		Data: serializedData,
 	})
 }
 
@@ -696,7 +707,7 @@ func (s *Span) toEvent() *Event {
 		Type:        transactionType,
 		Transaction: s.Name,
 		Contexts:    contexts,
-		Tags:        s.Tags,
+		Tags:        maps.Clone(s.Tags),
 		Timestamp:   s.EndTime,
 		StartTime:   s.StartTime,
 		Spans:       finished,
