@@ -26,45 +26,57 @@ func (c *sentryConn) Ping(ctx context.Context) error {
 
 // QueryContext implements driver.QueryerContext with fallback to the legacy
 // driver.Queryer path.
-func (c *sentryConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+//
+// nolint: dupl // we don't want to use a helper for Query/Exec Context.
+func (c *sentryConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (rows driver.Rows, err error) {
 	if qc, ok := c.conn.(driver.QueryerContext); ok {
+		span := startSpan(ctx, c.cfg, opQuery, query)
+		defer func() { finishSpan(span, err) }()
 		return qc.QueryContext(ctx, query, args)
 	}
 	qr, ok := c.conn.(driver.Queryer) //nolint:staticcheck // legacy driver.Queryer fallback is intentional.
 	if !ok {
 		return nil, driver.ErrSkip
 	}
-	values, err := namedValuesToValues(args)
-	if err != nil {
-		return nil, err
+	values, cerr := namedValuesToValues(args)
+	if cerr != nil {
+		return nil, cerr
 	}
 	select {
 	default:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	span := startSpan(ctx, c.cfg, opQuery, query)
+	defer func() { finishSpan(span, err) }()
 	return qr.Query(query, values)
 }
 
 // ExecContext implements driver.ExecerContext with fallback to the legacy
 // driver.Execer path.
-func (c *sentryConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+//
+// nolint: dupl // we don't want to use a helper for Query/Exec Context.
+func (c *sentryConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (res driver.Result, err error) {
 	if ec, ok := c.conn.(driver.ExecerContext); ok {
+		span := startSpan(ctx, c.cfg, opExec, query)
+		defer func() { finishSpan(span, err) }()
 		return ec.ExecContext(ctx, query, args)
 	}
 	ex, ok := c.conn.(driver.Execer) //nolint:staticcheck // legacy driver.Execer fallback is intentional.
 	if !ok {
 		return nil, driver.ErrSkip
 	}
-	values, err := namedValuesToValues(args)
-	if err != nil {
-		return nil, err
+	values, cerr := namedValuesToValues(args)
+	if cerr != nil {
+		return nil, cerr
 	}
 	select {
 	default:
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
+	span := startSpan(ctx, c.cfg, opExec, query)
+	defer func() { finishSpan(span, err) }()
 	return ex.Exec(query, values)
 }
 
