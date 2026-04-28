@@ -300,7 +300,7 @@ func TestIntegration(t *testing.T) {
 			sentry.Span{},
 			"TraceID", "SpanID", "ParentSpanID", "StartTime", "EndTime",
 			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "contexts",
-			"explicitSampled",
+			"explicitSampled", "serializedTags", "serializedData", "serializationSafe",
 		),
 	}
 	for i, tt := range tests {
@@ -390,7 +390,7 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 			sentry.Span{},
 			"TraceID", "SpanID", "ParentSpanID", "StartTime", "EndTime",
 			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "contexts",
-			"explicitSampled",
+			"explicitSampled", "serializedTags", "serializedData", "serializationSafe",
 		),
 	}
 
