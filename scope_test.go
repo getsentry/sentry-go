@@ -615,6 +615,45 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	assertEqual(t, processedEvent.Request, NewRequest(scope.request), "should use scope request")
 }
 
+func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
+	previousClient := currentHub.Client()
+	currentHub.BindClient(&Client{
+		options: ClientOptions{
+			SendDefaultPII: true,
+		},
+	})
+	defer currentHub.BindClient(previousClient)
+
+	scope := NewScope()
+	request := httptest.NewRequest("POST", "http://example.com/test", nil)
+	request.Header.Set("Authorization", "Bearer secret")
+	request.Header.Set("Cookie", "foo=bar")
+	request.Header.Set("Some-Header", "some-header value")
+	scope.SetRequest(request)
+
+	event := scope.ApplyToEvent(NewEvent(), nil, &Client{
+		options: ClientOptions{
+			SendDefaultPII: false,
+		},
+	})
+
+	if event.Request == nil {
+		t.Fatal("expected request to be attached")
+	}
+
+	want := &Request{
+		URL:         "http://example.com/test",
+		Method:      "POST",
+		QueryString: "",
+		Headers: map[string]string{
+			"Host":        "example.com",
+			"Some-Header": "some-header value",
+		},
+	}
+
+	assertEqual(t, event.Request, want, "should honor the request-scoped client PII setting")
+}
+
 func TestEventProcessorsModifiesEvent(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
