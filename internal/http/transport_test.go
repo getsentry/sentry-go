@@ -330,6 +330,19 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 			t.Error("FlushWithContext should timeout")
 		}
 	})
+
+	t.Run("closed transport", func(t *testing.T) {
+		tr := NewAsyncTransport(TransportOptions{Dsn: "https://key@sentry.io/123"})
+		transport, ok := tr.(*AsyncTransport)
+		if !ok {
+			t.Fatalf("expected *AsyncTransport, got %T", tr)
+		}
+		transport.Close()
+
+		if transport.FlushWithContext(context.Background()) {
+			t.Error("FlushWithContext should fail for a closed transport")
+		}
+	})
 }
 
 func TestAsyncTransport_Close(t *testing.T) {
