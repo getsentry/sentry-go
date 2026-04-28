@@ -100,6 +100,7 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	parentSpan := sentry.SpanFromContext(request.Context())
 	if parentSpan == nil {
 		if hub := sentry.GetHubFromContext(request.Context()); hub != nil {
+			request = request.Clone(request.Context())
 			request.Header.Add(sentry.SentryBaggageHeader, hub.GetBaggage())
 			request.Header.Add(sentry.SentryTraceHeader, hub.GetTraceparent())
 			if s.propagateTraceparent {
@@ -122,6 +123,7 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	span.SetData("server.port", request.URL.Port())
 
 	// Always add `Baggage` and `Sentry-Trace` headers.
+	request = request.Clone(request.Context())
 	request.Header.Add(sentry.SentryBaggageHeader, span.ToBaggage())
 	request.Header.Add(sentry.SentryTraceHeader, span.ToSentryTrace())
 	if s.propagateTraceparent {

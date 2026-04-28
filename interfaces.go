@@ -247,11 +247,11 @@ type Request struct {
 	Env         map[string]string `json:"env,omitempty"`
 }
 
-// NewRequest returns a new Sentry Request from the given http.Request.
-//
-// NewRequest avoids operations that depend on network access. In particular, it
-// does not read r.Body.
-func NewRequest(r *http.Request) *Request {
+func sendDefaultPIIEnabled(client *Client) bool {
+	return client != nil && client.options.SendDefaultPII
+}
+
+func newRequest(r *http.Request, sendDefaultPII bool) *Request {
 	prot := protocol.SchemeHTTP
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		prot = protocol.SchemeHTTPS
@@ -262,7 +262,7 @@ func NewRequest(r *http.Request) *Request {
 	var env map[string]string
 	headers := map[string]string{}
 
-	if client := CurrentHub().Client(); client != nil && client.options.SendDefaultPII {
+	if sendDefaultPII {
 		// We read only the first Cookie header because of the specification:
 		// https://tools.ietf.org/html/rfc6265#section-5.4
 		// When the user agent generates an HTTP request, the user agent MUST NOT
@@ -295,6 +295,14 @@ func NewRequest(r *http.Request) *Request {
 		Headers:     headers,
 		Env:         env,
 	}
+}
+
+// NewRequest returns a new Sentry Request from the given http.Request.
+//
+// NewRequest avoids operations that depend on network access. In particular, it
+// does not read r.Body.
+func NewRequest(r *http.Request) *Request {
+	return newRequest(r, sendDefaultPIIEnabled(CurrentHub().Client()))
 }
 
 // Mechanism is the mechanism by which an exception was generated and handled.
