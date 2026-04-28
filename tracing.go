@@ -695,7 +695,7 @@ func (s *Span) toEvent() *Event {
 	for k, v := range s.contexts {
 		contexts[k] = cloneContext(v)
 	}
-	contexts["trace"] = s.traceContextLocked().Map()
+	contexts["trace"] = s.traceContextLockFree().Map()
 
 	// Make sure that the transaction source is valid
 	transactionSource := s.Source
@@ -737,10 +737,10 @@ func (s *Span) traceContext() *TraceContext {
 	}
 }
 
-// traceContextLocked is the lock-free variant of traceContext.
+// traceContextLockFree is the lock-free variant of traceContext.
 //
 // This is supposed to be used only when span Finish() was already called.
-func (s *Span) traceContextLocked() *TraceContext {
+func (s *Span) traceContextLockFree() *TraceContext {
 	return &TraceContext{
 		TraceID:      s.TraceID,
 		SpanID:       s.SpanID,
