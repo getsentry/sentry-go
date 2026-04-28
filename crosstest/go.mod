@@ -17,7 +17,7 @@ replace (
 )
 
 require (
-	github.com/getsentry/sentry-go v0.46.0
+	github.com/getsentry/sentry-go v0.46.1
 	github.com/getsentry/sentry-go/echo v0.45.1
 	github.com/getsentry/sentry-go/fasthttp v0.45.1
 	github.com/getsentry/sentry-go/fiber v0.45.1
