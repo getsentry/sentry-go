@@ -32,6 +32,10 @@ func TestSpanOp(t *testing.T) {
 		{name: "Cache flush FLUSHDB", typ: TypeCache, cmds: []string{"FLUSHDB"}, want: "cache.flush"},
 		{name: "Cache flush FLUSHALL", typ: TypeCache, cmds: []string{"FLUSHALL"}, want: "cache.flush"},
 		{name: "Cache pipeline", typ: TypeCache, isPipeline: true, want: "cache.pipeline"},
+		{name: "Cache AUTH not instrumented", typ: TypeCache, cmds: []string{"AUTH", "pass"}, want: ""},
+		{name: "Cache ECHO not instrumented", typ: TypeCache, cmds: []string{"ECHO", "hello"}, want: ""},
+		{name: "Cache PING not instrumented", typ: TypeCache, cmds: []string{"PING"}, want: ""},
+		{name: "Cache SELECT not instrumented", typ: TypeCache, cmds: []string{"SELECT", "1"}, want: ""},
 	}
 
 	for _, tt := range tests {
@@ -92,6 +96,7 @@ func TestSpanDescription(t *testing.T) {
 		{name: "DB mode HSET scrubs fields and values", typ: TypeDB, cmds: []string{"HSET", "user:1", "name", "Alice", "age", "30"}, want: "HSET user:1 ? ? ? ?"},
 		{name: "Cache mode HSET returns only hash key", typ: TypeCache, cmds: []string{"HSET", "user:1", "name", "Alice"}, want: "user:1"},
 		{name: "DB mode AUTH scrubs password", typ: TypeDB, cmds: []string{"AUTH", "supersecret"}, want: "AUTH ?"},
+		{name: "unknown type returns empty", typ: InstrumentationType(99), cmds: []string{"GET", "key"}, want: ""},
 
 		// With SendDefaultPII, fields are preserved but values are still scrubbed.
 		{name: "PII HSET preserves fields", typ: TypeDB, cmds: []string{"HSET", "user:1", "name", "Alice", "age", "30"}, sendDefaultPII: true, want: "HSET user:1 name ? age ?"},
@@ -141,6 +146,28 @@ func TestJoinTruncated(t *testing.T) {
 		got := joinTruncated(items, " | ")
 		assert.LessOrEqual(t, len(got), maxDescriptionLen+3, "output should be truncated")
 	})
+
+	t.Run("single item exceeding max length", func(t *testing.T) {
+		t.Parallel()
+		long := strings.Repeat("x", maxDescriptionLen+50)
+		got := joinTruncated([]string{long}, ", ")
+		assert.Equal(t, "...", got)
+	})
+
+	t.Run("second item causes truncation without separator room", func(t *testing.T) {
+		t.Parallel()
+		first := strings.Repeat("a", maxDescriptionLen-1)
+		got := joinTruncated([]string{first, "b"}, ", ")
+		assert.Equal(t, first+"...", got)
+	})
+
+	t.Run("item after separator exceeds max", func(t *testing.T) {
+		t.Parallel()
+		// First item fits, separator fits, but second item pushes past the limit.
+		first := strings.Repeat("a", maxDescriptionLen-3) // leaves room for ", " separator
+		got := joinTruncated([]string{first, strings.Repeat("b", 10)}, ", ")
+		assert.True(t, strings.HasSuffix(got, "..."))
+	})
 }
 
 func TestPipelineDescription(t *testing.T) {
@@ -166,6 +193,45 @@ func TestPipelineDescription(t *testing.T) {
 		}
 		assert.Equal(t, "k1, k2, k3", pipelineDescription(ctx, TypeCache, cmds))
 	})
+
+	t.Run("unknown type returns empty", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "", pipelineDescription(ctx, InstrumentationType(99), [][]string{{"GET", "k"}}))
+	})
+}
+
+func TestSpanContext(t *testing.T) {
+	t.Parallel()
+
+	fallback := t.Context()
+
+	t.Run("nil span returns fallback", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, fallback, SpanContext(nil, fallback))
+	})
+
+	t.Run("non-nil span returns span context", func(t *testing.T) {
+		t.Parallel()
+		span := sentry.StartSpan(t.Context(), "test.op")
+		defer span.Finish()
+		assert.Equal(t, span.Context(), SpanContext(span, fallback))
+	})
+}
+
+func TestFinishIfNotNil(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil span does not panic", func(t *testing.T) {
+		t.Parallel()
+		assert.NotPanics(t, func() { FinishIfNotNil(nil) })
+	})
+
+	t.Run("non-nil span is finished", func(t *testing.T) {
+		t.Parallel()
+		span := sentry.StartSpan(t.Context(), "test.op")
+		FinishIfNotNil(span)
+		assert.False(t, span.EndTime.IsZero(), "span should have an end time after Finish")
+	})
 }
 
 var tracingOpts = sentrytest.WithClientOptions(sentry.ClientOptions{
@@ -178,57 +244,61 @@ func startTx(f *sentrytest.Fixture) *sentry.Span {
 	return sentry.StartTransaction(ctx, "test")
 }
 
-func TestStartSpan_DB(t *testing.T) {
-	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
-		tx := startTx(f)
+func TestStartSpan(t *testing.T) {
+	t.Run("DB command", func(t *testing.T) {
+		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+			tx := startTx(f)
 
-		cmds := []string{"SET", "mykey", "myvalue"}
-		addr := Address{Host: "localhost", Port: 6379}
+			span := StartSpan(tx.Context(), TypeDB, DBSystemValkey, []string{"SET", "mykey", "myvalue"}, false, Address{Host: "localhost", Port: 6379})
+			span.Finish()
+			tx.Finish()
+			f.Flush()
 
-		span := StartSpan(tx.Context(), TypeDB, DBSystemValkey, cmds, false, addr)
-		span.Finish()
-		tx.Finish()
-		f.Flush()
+			events := f.Events()
+			assert.Len(t, events, 1)
+			assert.Len(t, events[0].Spans, 1)
 
-		events := f.Events()
-		assert.Len(t, events, 1, "event count")
-		assert.Len(t, events[0].Spans, 1, "span count")
+			s := events[0].Spans[0]
+			assert.Equal(t, "db.query", s.Op)
+			assert.Equal(t, "SET mykey ?", s.Description)
+			assert.Equal(t, sentry.SpanOrigin("auto.db.valkey"), s.Origin)
+			assert.Equal(t, "valkey", s.Data["db.system"])
+			assert.Equal(t, "SET", s.Data["db.operation"])
+			assert.Equal(t, "localhost", s.Data["server.address"])
+			assert.Equal(t, 6379, s.Data["server.port"])
+		}, tracingOpts)
+	})
 
-		s := events[0].Spans[0]
-		assert.Equal(t, "db.query", s.Op)
-		assert.Equal(t, "SET mykey ?", s.Description)
-		assert.Equal(t, sentry.SpanOrigin("auto.db.valkey"), s.Origin)
-		assert.Equal(t, "valkey", s.Data["db.system"])
-		assert.Equal(t, "SET", s.Data["db.operation"])
-		assert.Equal(t, "localhost", s.Data["server.address"])
-		assert.Equal(t, 6379, s.Data["server.port"])
-	}, tracingOpts)
-}
+	t.Run("Cache command", func(t *testing.T) {
+		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+			tx := startTx(f)
 
-func TestStartSpan_Cache(t *testing.T) {
-	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
-		tx := startTx(f)
+			span := StartSpan(tx.Context(), TypeCache, DBSystemRedis, []string{"GET", "session:abc"}, true, Address{Host: "10.0.0.1", Port: 6380})
+			span.Finish()
+			tx.Finish()
+			f.Flush()
 
-		cmds := []string{"GET", "session:abc"}
-		addr := Address{Host: "10.0.0.1", Port: 6380}
+			events := f.Events()
+			assert.Len(t, events, 1)
+			assert.Len(t, events[0].Spans, 1)
 
-		span := StartSpan(tx.Context(), TypeCache, DBSystemRedis, cmds, true, addr)
-		span.Finish()
-		tx.Finish()
-		f.Flush()
+			s := events[0].Spans[0]
+			assert.Equal(t, "cache.get", s.Op)
+			assert.Equal(t, "session:abc", s.Description)
+			assert.Equal(t, sentry.SpanOrigin("auto.cache.redis"), s.Origin)
+			assert.Equal(t, []string{"session:abc"}, s.Data["cache.key"])
+			assert.Equal(t, "10.0.0.1", s.Data["network.peer.address"])
+			assert.Equal(t, 6380, s.Data["network.peer.port"])
+		}, tracingOpts)
+	})
 
-		events := f.Events()
-		assert.Len(t, events, 1, "event count")
-		assert.Len(t, events[0].Spans, 1, "span count")
-
-		s := events[0].Spans[0]
-		assert.Equal(t, "cache.get", s.Op)
-		assert.Equal(t, "session:abc", s.Description)
-		assert.Equal(t, sentry.SpanOrigin("auto.cache.redis"), s.Origin)
-		assert.Equal(t, []string{"session:abc"}, s.Data["cache.key"])
-		assert.Equal(t, "10.0.0.1", s.Data["network.peer.address"])
-		assert.Equal(t, 6380, s.Data["network.peer.port"])
-	}, tracingOpts)
+	t.Run("nil for non-cache command", func(t *testing.T) {
+		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+			tx := startTx(f)
+			span := StartSpan(tx.Context(), TypeCache, DBSystemRedis, []string{"AUTH", "pass"}, false, Address{})
+			assert.Nil(t, span)
+		}, tracingOpts)
+	})
 }
 
 func TestFinishSpan(t *testing.T) {
@@ -322,47 +392,110 @@ func TestFinishSpan(t *testing.T) {
 			}, tracingOpts)
 		})
 	}
+
+	t.Run("nil span does not panic", func(t *testing.T) {
+		t.Parallel()
+		assert.NotPanics(t, func() {
+			FinishSpan(nil, TypeCache, true, nil, false, 0)
+		})
+	})
 }
 
 func TestStartPipelineSpan(t *testing.T) {
-	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
-		tx := startTx(f)
+	t.Run("DB pipeline with children", func(t *testing.T) {
+		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+			tx := startTx(f)
 
-		cmdsSlice := [][]string{
-			{"SET", "k1", "v1"},
-			{"GET", "k2"},
-		}
-		addr := Address{Host: "localhost", Port: 6379}
-
-		parent := StartPipelineSpan(tx.Context(), TypeDB, DBSystemValkey, cmdsSlice, addr)
-
-		child1 := StartChildSpan(parent, TypeDB, DBSystemValkey, cmdsSlice[0], false, addr)
-		FinishSpan(child1, TypeDB, false, nil, false, 0)
-		child1.Finish()
-
-		child2 := StartChildSpan(parent, TypeDB, DBSystemValkey, cmdsSlice[1], true, addr)
-		FinishSpan(child2, TypeDB, true, nil, false, 5)
-		child2.Finish()
-
-		FinishPipelineSpan(parent, false)
-		parent.Finish()
-		tx.Finish()
-		f.Flush()
-
-		events := f.Events()
-		assert.Len(t, events, 1, "event count")
-		assert.Len(t, events[0].Spans, 3, "1 parent + 2 children")
-
-		var parentSpan *sentry.Span
-		for _, s := range events[0].Spans {
-			if s.Op == "db.query.pipeline" {
-				parentSpan = s
-				break
+			cmdsSlice := [][]string{
+				{"SET", "k1", "v1"},
+				{"GET", "k2"},
 			}
-		}
-		assert.NotNil(t, parentSpan, "pipeline parent span")
-		assert.Equal(t, "SET, GET", parentSpan.Description)
-		assert.Equal(t, sentry.SpanStatusOK, parentSpan.Status)
-		assert.Equal(t, "valkey", parentSpan.Data["db.system"])
-	}, tracingOpts)
+			addr := Address{Host: "localhost", Port: 6379}
+
+			parent := StartPipelineSpan(tx.Context(), TypeDB, DBSystemValkey, cmdsSlice, addr)
+
+			child1 := StartChildSpan(parent, TypeDB, DBSystemValkey, cmdsSlice[0], false, addr)
+			FinishSpan(child1, TypeDB, false, nil, false, 0)
+			child1.Finish()
+
+			child2 := StartChildSpan(parent, TypeDB, DBSystemValkey, cmdsSlice[1], true, addr)
+			FinishSpan(child2, TypeDB, true, nil, false, 5)
+			child2.Finish()
+
+			FinishPipelineSpan(parent, false)
+			parent.Finish()
+			tx.Finish()
+			f.Flush()
+
+			events := f.Events()
+			assert.Len(t, events, 1, "event count")
+			assert.Len(t, events[0].Spans, 3, "1 parent + 2 children")
+
+			var parentSpan *sentry.Span
+			for _, s := range events[0].Spans {
+				if s.Op == "db.query.pipeline" {
+					parentSpan = s
+					break
+				}
+			}
+			assert.NotNil(t, parentSpan, "pipeline parent span")
+			assert.Equal(t, "SET, GET", parentSpan.Description)
+			assert.Equal(t, sentry.SpanStatusOK, parentSpan.Status)
+			assert.Equal(t, "valkey", parentSpan.Data["db.system"])
+		}, tracingOpts)
+	})
+
+	t.Run("Cache pipeline with error", func(t *testing.T) {
+		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+			tx := startTx(f)
+
+			cmdsSlice := [][]string{
+				{"SET", "k1", "v1"},
+				{"GET", "k2"},
+			}
+			addr := Address{Host: "10.0.0.1", Port: 6380}
+
+			parent := StartPipelineSpan(tx.Context(), TypeCache, DBSystemRedis, cmdsSlice, addr)
+			FinishPipelineSpan(parent, true)
+			parent.Finish()
+			tx.Finish()
+			f.Flush()
+
+			events := f.Events()
+			assert.Len(t, events, 1)
+			assert.Len(t, events[0].Spans, 1)
+
+			s := events[0].Spans[0]
+			assert.Equal(t, "cache.pipeline", s.Op)
+			assert.Equal(t, "k1, k2", s.Description)
+			assert.Equal(t, sentry.SpanStatusInternalError, s.Status)
+			assert.Equal(t, "10.0.0.1", s.Data["network.peer.address"])
+			assert.Equal(t, 6380, s.Data["network.peer.port"])
+		}, tracingOpts)
+	})
+
+	t.Run("FinishPipelineSpan nil does not panic", func(t *testing.T) {
+		t.Parallel()
+		assert.NotPanics(t, func() {
+			FinishPipelineSpan(nil, true)
+		})
+	})
+}
+
+func TestStartChildSpan(t *testing.T) {
+	t.Run("nil parent returns nil", func(t *testing.T) {
+		t.Parallel()
+		span := StartChildSpan(nil, TypeDB, DBSystemValkey, []string{"GET", "key"}, true, Address{})
+		assert.Nil(t, span)
+	})
+
+	t.Run("non-cache command returns nil", func(t *testing.T) {
+		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+			tx := startTx(f)
+			parent := StartPipelineSpan(tx.Context(), TypeCache, DBSystemRedis, [][]string{{"PING"}}, Address{})
+			child := StartChildSpan(parent, TypeCache, DBSystemRedis, []string{"PING"}, true, Address{})
+			assert.Nil(t, child)
+			parent.Finish()
+		}, tracingOpts)
+	})
 }

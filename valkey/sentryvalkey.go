@@ -44,9 +44,9 @@ func (h *sentryHook) Do(client valkey.Client, ctx context.Context, cmd valkey.Co
 	addr := extractAddr(client)
 
 	span := redis.StartSpan(ctx, h.typ, redis.DBSystemValkey, cmds, cmd.IsReadOnly(), addr)
-	defer span.Finish()
+	defer redis.FinishIfNotNil(span)
 
-	result := client.Do(span.Context(), cmd)
+	result := client.Do(redis.SpanContext(span, ctx), cmd)
 
 	redis.FinishSpan(span, h.typ, cmd.IsReadOnly(), result.Error(), valkey.IsValkeyNil(result.Error()), respSize(result))
 	return result
@@ -60,13 +60,13 @@ func (h *sentryHook) DoCache(client valkey.Client, ctx context.Context, cmd valk
 	addr := extractAddr(client)
 
 	span := redis.StartSpan(ctx, h.typ, redis.DBSystemValkey, cmds, isReadOnly, addr)
-	defer span.Finish()
+	defer redis.FinishIfNotNil(span)
 
-	if h.typ == redis.TypeCache {
+	if span != nil && h.typ == redis.TypeCache {
 		span.SetData("cache.ttl", int(ttl.Seconds()))
 	}
 
-	result := client.DoCache(span.Context(), cmd, ttl)
+	result := client.DoCache(redis.SpanContext(span, ctx), cmd, ttl)
 
 	redis.FinishSpan(span, h.typ, isReadOnly, result.Error(), valkey.IsValkeyNil(result.Error()), respSize(result))
 	return result
@@ -82,9 +82,9 @@ func (h *sentryHook) DoMulti(client valkey.Client, ctx context.Context, multi ..
 	}
 
 	parentSpan := redis.StartPipelineSpan(ctx, h.typ, redis.DBSystemValkey, cmdsSlice, addr)
-	defer parentSpan.Finish()
+	defer redis.FinishIfNotNil(parentSpan)
 
-	results := client.DoMulti(parentSpan.Context(), multi...)
+	results := client.DoMulti(redis.SpanContext(parentSpan, ctx), multi...)
 
 	hasError := false
 	for i, cmd := range multi {
@@ -96,7 +96,7 @@ func (h *sentryHook) DoMulti(client valkey.Client, ctx context.Context, multi ..
 			hasError = true
 		}
 		redis.FinishSpan(childSpan, h.typ, cmd.IsReadOnly(), err, isNil, respSize(results[i]))
-		childSpan.Finish()
+		redis.FinishIfNotNil(childSpan)
 	}
 
 	redis.FinishPipelineSpan(parentSpan, hasError)
@@ -113,9 +113,9 @@ func (h *sentryHook) DoMultiCache(client valkey.Client, ctx context.Context, mul
 	}
 
 	parentSpan := redis.StartPipelineSpan(ctx, h.typ, redis.DBSystemValkey, cmdsSlice, addr)
-	defer parentSpan.Finish()
+	defer redis.FinishIfNotNil(parentSpan)
 
-	results := client.DoMultiCache(parentSpan.Context(), multi...)
+	results := client.DoMultiCache(redis.SpanContext(parentSpan, ctx), multi...)
 
 	hasError := false
 	for i, ct := range multi {
@@ -124,7 +124,7 @@ func (h *sentryHook) DoMultiCache(client valkey.Client, ctx context.Context, mul
 		isReadOnly := completed.IsReadOnly()
 
 		childSpan := redis.StartChildSpan(parentSpan, h.typ, redis.DBSystemValkey, cmds, isReadOnly, addr)
-		if h.typ == redis.TypeCache {
+		if childSpan != nil && h.typ == redis.TypeCache {
 			childSpan.SetData("cache.ttl", int(ct.TTL.Seconds()))
 		}
 
@@ -134,7 +134,7 @@ func (h *sentryHook) DoMultiCache(client valkey.Client, ctx context.Context, mul
 			hasError = true
 		}
 		redis.FinishSpan(childSpan, h.typ, isReadOnly, err, isNil, respSize(results[i]))
-		childSpan.Finish()
+		redis.FinishIfNotNil(childSpan)
 	}
 
 	redis.FinishPipelineSpan(parentSpan, hasError)
@@ -147,14 +147,16 @@ func (h *sentryHook) Receive(client valkey.Client, ctx context.Context, subscrib
 	addr := extractAddr(client)
 
 	span := redis.StartSpan(ctx, h.typ, redis.DBSystemValkey, cmds, subscribe.IsReadOnly(), addr)
-	defer span.Finish()
+	defer redis.FinishIfNotNil(span)
 
-	err := client.Receive(span.Context(), subscribe, fn)
+	err := client.Receive(redis.SpanContext(span, ctx), subscribe, fn)
 
-	if err != nil {
-		span.Status = sentry.SpanStatusInternalError
-	} else {
-		span.Status = sentry.SpanStatusOK
+	if span != nil {
+		if err != nil {
+			span.Status = sentry.SpanStatusInternalError
+		} else {
+			span.Status = sentry.SpanStatusOK
+		}
 	}
 	return err
 }
@@ -166,14 +168,16 @@ func (h *sentryHook) DoStream(client valkey.Client, ctx context.Context, cmd val
 
 	span := redis.StartSpan(ctx, h.typ, redis.DBSystemValkey, cmds, cmd.IsReadOnly(), addr)
 
-	stream := client.DoStream(span.Context(), cmd)
+	stream := client.DoStream(redis.SpanContext(span, ctx), cmd)
 
-	if err := stream.Error(); err != nil {
-		span.Status = sentry.SpanStatusInternalError
-	} else {
-		span.Status = sentry.SpanStatusOK
+	if span != nil {
+		if err := stream.Error(); err != nil {
+			span.Status = sentry.SpanStatusInternalError
+		} else {
+			span.Status = sentry.SpanStatusOK
+		}
+		span.Finish()
 	}
-	span.Finish()
 
 	return stream
 }
@@ -189,14 +193,16 @@ func (h *sentryHook) DoMultiStream(client valkey.Client, ctx context.Context, mu
 
 	parentSpan := redis.StartPipelineSpan(ctx, h.typ, redis.DBSystemValkey, cmdsSlice, addr)
 
-	stream := client.DoMultiStream(parentSpan.Context(), multi...)
+	stream := client.DoMultiStream(redis.SpanContext(parentSpan, ctx), multi...)
 
-	if err := stream.Error(); err != nil {
-		parentSpan.Status = sentry.SpanStatusInternalError
-	} else {
-		parentSpan.Status = sentry.SpanStatusOK
+	if parentSpan != nil {
+		if err := stream.Error(); err != nil {
+			parentSpan.Status = sentry.SpanStatusInternalError
+		} else {
+			parentSpan.Status = sentry.SpanStatusOK
+		}
+		parentSpan.Finish()
 	}
-	parentSpan.Finish()
 
 	return stream
 }
