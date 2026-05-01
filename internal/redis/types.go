@@ -25,4 +25,3 @@ type Address struct {
 	Host string
 	Port int
 }
-

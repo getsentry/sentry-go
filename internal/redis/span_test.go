@@ -173,8 +173,6 @@ func TestJoinTruncated(t *testing.T) {
 func TestPipelineDescription(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
-
 	t.Run("DB mode joins command names", func(t *testing.T) {
 		t.Parallel()
 		cmds := [][]string{
@@ -182,7 +180,7 @@ func TestPipelineDescription(t *testing.T) {
 			{"GET", "k2"},
 			{"DEL", "k3"},
 		}
-		assert.Equal(t, "SET, GET, DEL", pipelineDescription(ctx, TypeDB, cmds))
+		assert.Equal(t, "SET, GET, DEL", pipelineDescription(TypeDB, cmds))
 	})
 
 	t.Run("Cache mode joins all keys", func(t *testing.T) {
@@ -191,12 +189,12 @@ func TestPipelineDescription(t *testing.T) {
 			{"SET", "k1", "v1"},
 			{"MGET", "k2", "k3"},
 		}
-		assert.Equal(t, "k1, k2, k3", pipelineDescription(ctx, TypeCache, cmds))
+		assert.Equal(t, "k1, k2, k3", pipelineDescription(TypeCache, cmds))
 	})
 
 	t.Run("unknown type returns empty", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, "", pipelineDescription(ctx, InstrumentationType(99), [][]string{{"GET", "k"}}))
+		assert.Equal(t, "", pipelineDescription(InstrumentationType(99), [][]string{{"GET", "k"}}))
 	})
 }
 
@@ -207,14 +205,14 @@ func TestSpanContext(t *testing.T) {
 
 	t.Run("nil span returns fallback", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, fallback, SpanContext(nil, fallback))
+		assert.Equal(t, fallback, SpanContext(fallback, nil))
 	})
 
 	t.Run("non-nil span returns span context", func(t *testing.T) {
 		t.Parallel()
 		span := sentry.StartSpan(t.Context(), "test.op")
 		defer span.Finish()
-		assert.Equal(t, span.Context(), SpanContext(span, fallback))
+		assert.Equal(t, span.Context(), SpanContext(fallback, span))
 	})
 }
 

@@ -10,7 +10,7 @@ import (
 const maxDescriptionLen = 200
 
 // SpanContext returns the span's context, or the fallback if span is nil.
-func SpanContext(span *sentry.Span, fallback context.Context) context.Context {
+func SpanContext(fallback context.Context, span *sentry.Span) context.Context {
 	if span != nil {
 		return span.Context()
 	}
@@ -43,7 +43,7 @@ func StartSpan(ctx context.Context, typ InstrumentationType, dbSys DBSystem, cmd
 // StartPipelineSpan creates a parent span for a batch of commands.
 func StartPipelineSpan(ctx context.Context, typ InstrumentationType, dbSys DBSystem, cmdsSlice [][]string, addr Address) *sentry.Span {
 	span := sentry.StartSpan(ctx, spanOp(typ, nil, false, true),
-		sentry.WithDescription(pipelineDescription(ctx, typ, cmdsSlice)),
+		sentry.WithDescription(pipelineDescription(typ, cmdsSlice)),
 		sentry.WithSpanOrigin(spanOrigin(dbSys, typ)),
 	)
 	setAddressData(span, typ, dbSys, addr)
@@ -216,7 +216,7 @@ func setAddressData(span *sentry.Span, typ InstrumentationType, dbSys DBSystem, 
 	}
 }
 
-func pipelineDescription(ctx context.Context, typ InstrumentationType, cmdsSlice [][]string) string {
+func pipelineDescription(typ InstrumentationType, cmdsSlice [][]string) string {
 	switch typ {
 	case TypeDB:
 		names := make([]string, len(cmdsSlice))
