@@ -13,7 +13,7 @@ const maxDescriptionLen = 200
 // isReadOnly comes from the library's cmd.IsReadOnly() — determines cache.get vs cache.put.
 func StartSpan(ctx context.Context, typ InstrumentationType, dbSys DBSystem, cmds []string, isReadOnly bool, addr Address) *sentry.Span {
 	span := sentry.StartSpan(ctx, spanOp(typ, cmds, isReadOnly, false),
-		sentry.WithDescription(spanDescription(typ, cmds)),
+		sentry.WithDescription(spanDescription(ctx, typ, cmds)),
 		sentry.WithSpanOrigin(spanOrigin(dbSys, typ)),
 	)
 	setSpanData(span, typ, dbSys, cmds, addr)
@@ -23,7 +23,7 @@ func StartSpan(ctx context.Context, typ InstrumentationType, dbSys DBSystem, cmd
 // StartPipelineSpan creates a parent span for a batch of commands.
 func StartPipelineSpan(ctx context.Context, typ InstrumentationType, dbSys DBSystem, cmdsSlice [][]string, addr Address) *sentry.Span {
 	span := sentry.StartSpan(ctx, spanOp(typ, nil, false, true),
-		sentry.WithDescription(pipelineDescription(typ, cmdsSlice)),
+		sentry.WithDescription(pipelineDescription(ctx, typ, cmdsSlice)),
 		sentry.WithSpanOrigin(spanOrigin(dbSys, typ)),
 	)
 	setAddressData(span, typ, dbSys, addr)
@@ -33,8 +33,9 @@ func StartPipelineSpan(ctx context.Context, typ InstrumentationType, dbSys DBSys
 // StartChildSpan creates a child span under a pipeline parent.
 // isReadOnly comes from the library's cmd.IsReadOnly().
 func StartChildSpan(parent *sentry.Span, typ InstrumentationType, dbSys DBSystem, cmds []string, isReadOnly bool, addr Address) *sentry.Span {
-	span := sentry.StartSpan(parent.Context(), spanOp(typ, cmds, isReadOnly, false),
-		sentry.WithDescription(spanDescription(typ, cmds)),
+	ctx := parent.Context()
+	span := sentry.StartSpan(ctx, spanOp(typ, cmds, isReadOnly, false),
+		sentry.WithDescription(spanDescription(ctx, typ, cmds)),
 		sentry.WithSpanOrigin(spanOrigin(dbSys, typ)),
 	)
 	setSpanData(span, typ, dbSys, cmds, addr)
@@ -107,11 +108,21 @@ func spanOrigin(dbSys DBSystem, typ InstrumentationType) sentry.SpanOrigin {
 	return sentry.SpanOrigin("auto.db." + string(dbSys))
 }
 
+// sendDefaultPII extracts the SendDefaultPII flag from the context's hub.
+func sendDefaultPII(ctx context.Context) bool {
+	if hub := sentry.GetHubFromContext(ctx); hub != nil {
+		if client := hub.Client(); client != nil {
+			return client.Options().SendDefaultPII
+		}
+	}
+	return false
+}
+
 // spanDescription builds the span description based on module type.
-func spanDescription(typ InstrumentationType, cmds []string) string {
+func spanDescription(ctx context.Context, typ InstrumentationType, cmds []string) string {
 	switch typ {
 	case TypeDB:
-		return ScrubCommand(cmds)
+		return ScrubCommand(cmds, sendDefaultPII(ctx))
 	case TypeCache:
 		keys := ExtractKeys(cmds)
 		return strings.Join(keys, ", ")
@@ -160,7 +171,7 @@ func setAddressData(span *sentry.Span, typ InstrumentationType, dbSys DBSystem, 
 	}
 }
 
-func pipelineDescription(typ InstrumentationType, cmdsSlice [][]string) string {
+func pipelineDescription(ctx context.Context, typ InstrumentationType, cmdsSlice [][]string) string {
 	switch typ {
 	case TypeDB:
 		names := make([]string, len(cmdsSlice))

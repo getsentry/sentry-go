@@ -120,6 +120,7 @@ var commandPatterns = map[string]commandPattern{
 	"PUBLISH":      {fixed: []argRole{roleKey, roleValue}},
 
 	// Server / misc
+	"AUTH":     {repeating: []argRole{roleValue}},
 	"PING":     {},
 	"ECHO":     {fixed: []argRole{roleValue}},
 	"SELECT":   {fixed: []argRole{roleField}},
@@ -137,8 +138,9 @@ var deleteCommands = map[string]bool{
 }
 
 // ScrubCommand returns a scrubbed command string with user-supplied values replaced
-// by "?". Keys and field names are preserved.
-func ScrubCommand(cmds []string) string {
+// by "?". Keys are always preserved. Field names (indices, flags, hash fields) are
+// preserved only when sendDefaultPII is true; otherwise they are scrubbed too.
+func ScrubCommand(cmds []string, sendDefaultPII bool) string {
 	if len(cmds) == 0 {
 		return ""
 	}
@@ -149,10 +151,10 @@ func ScrubCommand(cmds []string) string {
 		return fallbackScrub(cmds)
 	}
 
-	return applyScrubPattern(cmds, pattern)
+	return applyScrubPattern(cmds, pattern, sendDefaultPII)
 }
 
-func applyScrubPattern(cmds []string, pattern commandPattern) string {
+func applyScrubPattern(cmds []string, pattern commandPattern, sendDefaultPII bool) string {
 	var b strings.Builder
 	b.WriteString(cmds[0])
 
@@ -163,10 +165,9 @@ func applyScrubPattern(cmds []string, pattern commandPattern) string {
 		b.WriteByte(' ')
 
 		role := roleForPosition(i, fixedLen, pattern)
-		switch role {
-		case roleKey, roleField:
+		if role == roleKey || (sendDefaultPII && role == roleField) {
 			b.WriteString(arg)
-		default:
+		} else {
 			b.WriteByte('?')
 		}
 	}
@@ -208,6 +209,7 @@ func ExtractKeys(cmds []string) []string {
 	cmdName := strings.ToUpper(cmds[0])
 	pattern, known := commandPatterns[cmdName]
 	if !known {
+		// Unknown commands: best-effort, return first arg as key.
 		return []string{cmds[1]}
 	}
 
@@ -221,9 +223,8 @@ func ExtractKeys(cmds []string) []string {
 		}
 	}
 
-	if len(keys) == 0 && len(cmds) > 1 {
-		return []string{cmds[1]}
-	}
+	// For known commands, trust the pattern. If no roleKey positions exist
+	// (e.g. AUTH, ECHO, SELECT), return nil to avoid leaking sensitive data.
 	return keys
 }
 

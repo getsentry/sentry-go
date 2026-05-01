@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -62,26 +63,45 @@ func TestSpanOrigin(t *testing.T) {
 	}
 }
 
+// ctxWithPII returns a context with a Hub whose SendDefaultPII matches the flag.
+func ctxWithPII(t *testing.T, sendPII bool) context.Context {
+	t.Helper()
+	if !sendPII {
+		return t.Context()
+	}
+	client, _ := sentry.NewClient(sentry.ClientOptions{SendDefaultPII: true})
+	hub := sentry.NewHub(client, sentry.NewScope())
+	return sentry.SetHubOnContext(t.Context(), hub)
+}
+
 func TestSpanDescription(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		typ  InstrumentationType
-		cmds []string
-		want string
+		name           string
+		typ            InstrumentationType
+		cmds           []string
+		sendDefaultPII bool
+		want           string
 	}{
-		{name: "DB mode returns scrubbed command", typ: TypeDB, cmds: []string{"SET", "mykey", "myvalue"}, want: "SET mykey ?"},
+		{name: "DB mode scrubs command", typ: TypeDB, cmds: []string{"SET", "mykey", "myvalue"}, want: "SET mykey ?"},
 		{name: "Cache mode returns keys only", typ: TypeCache, cmds: []string{"GET", "session:abc"}, want: "session:abc"},
 		{name: "Cache mode MGET comma-separated", typ: TypeCache, cmds: []string{"MGET", "k1", "k2", "k3"}, want: "k1, k2, k3"},
-		{name: "DB mode HSET scrubs values", typ: TypeDB, cmds: []string{"HSET", "user:1", "name", "Alice", "age", "30"}, want: "HSET user:1 name ? age ?"},
+		{name: "DB mode HSET scrubs fields and values", typ: TypeDB, cmds: []string{"HSET", "user:1", "name", "Alice", "age", "30"}, want: "HSET user:1 ? ? ? ?"},
 		{name: "Cache mode HSET returns only hash key", typ: TypeCache, cmds: []string{"HSET", "user:1", "name", "Alice"}, want: "user:1"},
+		{name: "DB mode AUTH scrubs password", typ: TypeDB, cmds: []string{"AUTH", "supersecret"}, want: "AUTH ?"},
+
+		// With SendDefaultPII, fields are preserved but values are still scrubbed.
+		{name: "PII HSET preserves fields", typ: TypeDB, cmds: []string{"HSET", "user:1", "name", "Alice", "age", "30"}, sendDefaultPII: true, want: "HSET user:1 name ? age ?"},
+		{name: "PII SET preserves flags", typ: TypeDB, cmds: []string{"SET", "mykey", "secret", "EX", "60"}, sendDefaultPII: true, want: "SET mykey ? EX 60"},
+		{name: "PII AUTH still scrubs password", typ: TypeDB, cmds: []string{"AUTH", "supersecret"}, sendDefaultPII: true, want: "AUTH ?"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, spanDescription(tt.typ, tt.cmds))
+			ctx := ctxWithPII(t, tt.sendDefaultPII)
+			assert.Equal(t, tt.want, spanDescription(ctx, tt.typ, tt.cmds))
 		})
 	}
 }
@@ -124,6 +144,8 @@ func TestJoinTruncated(t *testing.T) {
 func TestPipelineDescription(t *testing.T) {
 	t.Parallel()
 
+	ctx := t.Context()
+
 	t.Run("DB mode joins command names", func(t *testing.T) {
 		t.Parallel()
 		cmds := [][]string{
@@ -131,7 +153,7 @@ func TestPipelineDescription(t *testing.T) {
 			{"GET", "k2"},
 			{"DEL", "k3"},
 		}
-		assert.Equal(t, "SET, GET, DEL", pipelineDescription(TypeDB, cmds))
+		assert.Equal(t, "SET, GET, DEL", pipelineDescription(ctx, TypeDB, cmds))
 	})
 
 	t.Run("Cache mode joins all keys", func(t *testing.T) {
@@ -140,7 +162,7 @@ func TestPipelineDescription(t *testing.T) {
 			{"SET", "k1", "v1"},
 			{"MGET", "k2", "k3"},
 		}
-		assert.Equal(t, "k1, k2, k3", pipelineDescription(TypeCache, cmds))
+		assert.Equal(t, "k1, k2, k3", pipelineDescription(ctx, TypeCache, cmds))
 	})
 }
 
