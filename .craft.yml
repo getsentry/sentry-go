@@ -40,7 +40,13 @@ targets:
     tagPrefix: logrus/v
     tagOnly: true
   - name: github
+    tagPrefix: rueidis/v
+    tagOnly: true
+  - name: github
     tagPrefix: slog/v
+    tagOnly: true
+  - name: github
+    tagPrefix: valkey/v
     tagOnly: true
   - name: github
     tagPrefix: zerolog/v
