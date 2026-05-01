@@ -54,12 +54,21 @@ func FinishSpan(span *sentry.Span, typ InstrumentationType, isReadOnly bool, err
 		span.Status = sentry.SpanStatusOK
 	}
 
-	if typ == TypeCache && isReadOnly {
-		if isNilErr {
-			span.SetData("cache.hit", false)
-		} else if err == nil {
-			span.SetData("cache.hit", true)
-			if itemSize > 0 {
+	if typ == TypeCache {
+		span.SetData("cache.success", err == nil || isNilErr)
+
+		if isReadOnly {
+			if isNilErr {
+				span.SetData("cache.hit", false)
+			} else if err == nil {
+				span.SetData("cache.hit", true)
+				if itemSize > 0 {
+					span.SetData("cache.item_size", itemSize)
+				}
+			}
+		} else {
+			span.SetData("cache.write", err == nil)
+			if err == nil && itemSize > 0 {
 				span.SetData("cache.item_size", itemSize)
 			}
 		}
@@ -88,6 +97,9 @@ func spanOp(typ InstrumentationType, cmds []string, isReadOnly bool, isPipeline 
 	case TypeCache:
 		if isPipeline {
 			return "cache.pipeline"
+		}
+		if IsFlushCommand(cmds) {
+			return "cache.flush"
 		}
 		if IsDeleteCommand(cmds) {
 			return "cache.remove"

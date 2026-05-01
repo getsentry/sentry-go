@@ -137,6 +137,12 @@ var deleteCommands = map[string]bool{
 	"GETDEL": true,
 }
 
+// flushCommands lists commands that clear the entire cache, mapped to cache.flush.
+var flushCommands = map[string]bool{
+	"FLUSHDB":  true,
+	"FLUSHALL": true,
+}
+
 // ScrubCommand returns a scrubbed command string with user-supplied values replaced
 // by "?". Keys are always preserved. Field names (indices, flags, hash fields) are
 // preserved only when sendDefaultPII is true; otherwise they are scrubbed too.
@@ -242,4 +248,12 @@ func IsDeleteCommand(cmds []string) bool {
 		return false
 	}
 	return deleteCommands[strings.ToUpper(cmds[0])]
+}
+
+// IsFlushCommand reports whether the command clears the entire cache (FLUSHDB, FLUSHALL).
+func IsFlushCommand(cmds []string) bool {
+	if len(cmds) == 0 {
+		return false
+	}
+	return flushCommands[strings.ToUpper(cmds[0])]
 }

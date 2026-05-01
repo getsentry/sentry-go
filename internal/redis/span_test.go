@@ -29,6 +29,8 @@ func TestSpanOp(t *testing.T) {
 		{name: "Cache delete DEL", typ: TypeCache, cmds: []string{"DEL", "key"}, want: "cache.remove"},
 		{name: "Cache delete UNLINK", typ: TypeCache, cmds: []string{"UNLINK", "key"}, want: "cache.remove"},
 		{name: "Cache delete GETDEL", typ: TypeCache, cmds: []string{"GETDEL", "key"}, want: "cache.remove"},
+		{name: "Cache flush FLUSHDB", typ: TypeCache, cmds: []string{"FLUSHDB"}, want: "cache.flush"},
+		{name: "Cache flush FLUSHALL", typ: TypeCache, cmds: []string{"FLUSHALL"}, want: "cache.flush"},
 		{name: "Cache pipeline", typ: TypeCache, isPipeline: true, want: "cache.pipeline"},
 	}
 
@@ -229,74 +231,97 @@ func TestStartSpan_Cache(t *testing.T) {
 	}, tracingOpts)
 }
 
-func TestFinishSpan_CacheHit(t *testing.T) {
-	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
-		tx := startTx(f)
+func TestFinishSpan(t *testing.T) {
+	tests := []struct {
+		name       string
+		typ        InstrumentationType
+		isReadOnly bool
+		err        error
+		isNilErr   bool
+		itemSize   int
+		wantStatus sentry.SpanStatus
+		wantData   map[string]interface{}
+	}{
+		{
+			name:       "cache read hit",
+			typ:        TypeCache,
+			isReadOnly: true,
+			itemSize:   42,
+			wantStatus: sentry.SpanStatusOK,
+			wantData:   map[string]interface{}{"cache.hit": true, "cache.item_size": 42, "cache.success": true},
+		},
+		{
+			name:       "cache read miss",
+			typ:        TypeCache,
+			isReadOnly: true,
+			err:        errors.New("redis: nil"),
+			isNilErr:   true,
+			wantStatus: sentry.SpanStatusOK,
+			wantData:   map[string]interface{}{"cache.hit": false, "cache.success": true},
+		},
+		{
+			name:       "cache read error",
+			typ:        TypeCache,
+			isReadOnly: true,
+			err:        errors.New("connection refused"),
+			wantStatus: sentry.SpanStatusInternalError,
+			wantData:   map[string]interface{}{"cache.success": false},
+		},
+		{
+			name:       "cache write success",
+			typ:        TypeCache,
+			isReadOnly: false,
+			itemSize:   100,
+			wantStatus: sentry.SpanStatusOK,
+			wantData:   map[string]interface{}{"cache.write": true, "cache.item_size": 100, "cache.success": true},
+		},
+		{
+			name:       "cache write error",
+			typ:        TypeCache,
+			isReadOnly: false,
+			err:        errors.New("connection refused"),
+			wantStatus: sentry.SpanStatusInternalError,
+			wantData:   map[string]interface{}{"cache.write": false, "cache.success": false},
+		},
+		{
+			name:       "DB error",
+			typ:        TypeDB,
+			isReadOnly: false,
+			err:        errors.New("connection refused"),
+			wantStatus: sentry.SpanStatusInternalError,
+			wantData:   map[string]interface{}{},
+		},
+	}
 
-		cmds := []string{"GET", "key"}
-		addr := Address{Host: "localhost", Port: 6379}
-		span := StartSpan(tx.Context(), TypeCache, DBSystemValkey, cmds, true, addr)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+				tx := startTx(f)
 
-		FinishSpan(span, TypeCache, true, nil, false, 42)
-		span.Finish()
-		tx.Finish()
-		f.Flush()
+				cmds := []string{"SET", "key", "val"}
+				if tt.isReadOnly {
+					cmds = []string{"GET", "key"}
+				}
+				addr := Address{Host: "localhost", Port: 6379}
+				span := StartSpan(tx.Context(), tt.typ, DBSystemValkey, cmds, tt.isReadOnly, addr)
 
-		events := f.Events()
-		assert.Len(t, events, 1)
-		assert.Len(t, events[0].Spans, 1)
+				FinishSpan(span, tt.typ, tt.isReadOnly, tt.err, tt.isNilErr, tt.itemSize)
+				span.Finish()
+				tx.Finish()
+				f.Flush()
 
-		s := events[0].Spans[0]
-		assert.Equal(t, sentry.SpanStatusOK, s.Status)
-		assert.Equal(t, true, s.Data["cache.hit"])
-		assert.Equal(t, 42, s.Data["cache.item_size"])
-	}, tracingOpts)
-}
+				events := f.Events()
+				assert.Len(t, events, 1)
+				assert.Len(t, events[0].Spans, 1)
 
-func TestFinishSpan_CacheMiss(t *testing.T) {
-	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
-		tx := startTx(f)
-
-		cmds := []string{"GET", "key"}
-		addr := Address{Host: "localhost", Port: 6379}
-		span := StartSpan(tx.Context(), TypeCache, DBSystemRedis, cmds, true, addr)
-
-		nilErr := errors.New("redis: nil")
-		FinishSpan(span, TypeCache, true, nilErr, true, 0)
-		span.Finish()
-		tx.Finish()
-		f.Flush()
-
-		events := f.Events()
-		assert.Len(t, events, 1)
-		assert.Len(t, events[0].Spans, 1)
-
-		s := events[0].Spans[0]
-		assert.Equal(t, sentry.SpanStatusOK, s.Status, "nil error should be OK")
-		assert.Equal(t, false, s.Data["cache.hit"])
-	}, tracingOpts)
-}
-
-func TestFinishSpan_Error(t *testing.T) {
-	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
-		tx := startTx(f)
-
-		cmds := []string{"SET", "key", "val"}
-		addr := Address{Host: "localhost", Port: 6379}
-		span := StartSpan(tx.Context(), TypeDB, DBSystemValkey, cmds, false, addr)
-
-		FinishSpan(span, TypeDB, false, errors.New("connection refused"), false, 0)
-		span.Finish()
-		tx.Finish()
-		f.Flush()
-
-		events := f.Events()
-		assert.Len(t, events, 1)
-		assert.Len(t, events[0].Spans, 1)
-
-		s := events[0].Spans[0]
-		assert.Equal(t, sentry.SpanStatusInternalError, s.Status)
-	}, tracingOpts)
+				s := events[0].Spans[0]
+				assert.Equal(t, tt.wantStatus, s.Status)
+				for k, v := range tt.wantData {
+					assert.Equal(t, v, s.Data[k], "span data %q", k)
+				}
+			}, tracingOpts)
+		})
+	}
 }
 
 func TestStartPipelineSpan(t *testing.T) {

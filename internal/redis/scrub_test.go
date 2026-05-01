@@ -155,3 +155,26 @@ func TestIsDeleteCommand(t *testing.T) {
 		})
 	}
 }
+
+func TestIsFlushCommand(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cmds []string
+		want bool
+	}{
+		{name: "FLUSHDB", cmds: []string{"FLUSHDB"}, want: true},
+		{name: "FLUSHALL", cmds: []string{"FLUSHALL"}, want: true},
+		{name: "DEL is not flush", cmds: []string{"DEL", "key"}, want: false},
+		{name: "GET is not flush", cmds: []string{"GET", "key"}, want: false},
+		{name: "empty", cmds: nil, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, IsFlushCommand(tt.cmds))
+		})
+	}
+}
