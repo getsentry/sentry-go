@@ -10,6 +10,9 @@
 //     the required driver.Conn methods (Prepare, Close, Begin). No Execer or
 //     Queryer, which forces database/sql to fall back to Prepare + Stmt.Exec/
 //     Stmt.Query, exercising the deepest wrapper fallback paths.
+//   - SkipDriver: implements the context-aware query/exec interfaces but
+//     returns driver.ErrSkip from them, forcing database/sql to fall back to
+//     prepared statements.
 //
 // Use NewCtx / NewLegacy / NewMinimal to construct each shape and Register to
 // expose it by name via database/sql.
@@ -89,6 +92,18 @@ func (d *MinimalDriver) Open(_ string) (driver.Conn, error) {
 	return &minimalConn{drv: d}, nil
 }
 
+// SkipDriver forces database/sql to fall back after the context-aware methods
+// return driver.ErrSkip.
+type SkipDriver struct{}
+
+// NewSkip returns a new SkipDriver.
+func NewSkip() *SkipDriver { return &SkipDriver{} }
+
+// Open implements driver.Driver.
+func (d *SkipDriver) Open(_ string) (driver.Conn, error) {
+	return &skipConn{}, nil
+}
+
 // CtxConnector is an exported connector wrapper backed by a CtxDriver. Unlike
 // the internal ctxConnector returned by CtxDriver.OpenConnector, this one
 // implements io.Closer with an observable close counter so tests can verify
@@ -138,6 +153,8 @@ var (
 	_ driver.Driver = (*LegacyDriver)(nil)
 
 	_ driver.Driver = (*MinimalDriver)(nil)
+
+	_ driver.Driver = (*SkipDriver)(nil)
 
 	_ driver.Connector = (*CtxConnector)(nil)
 	_ driver.Connector = (*LegacyConnector)(nil)

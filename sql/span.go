@@ -2,6 +2,8 @@ package sentrysql
 
 import (
 	"context"
+	"database/sql/driver"
+	"errors"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -75,7 +77,11 @@ func sendDefaultPII(ctx context.Context) bool {
 }
 
 func finishSpan(span *sentry.Span, err error) {
-	if span == nil {
+	// driver.ErrSkip instructs the driver to fallback to the next available method. In these cases
+	// we get two or more spans for the same transaction, so to avoid duplication we don't finish
+	// these spans. Currently this works because the spanRecorder skips unfinished spans and doesn't add
+	// them to the transactions. We might need a span.Discard in the future if this behavior changes.
+	if span == nil || errors.Is(err, driver.ErrSkip) {
 		return
 	}
 	if err != nil {

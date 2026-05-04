@@ -97,3 +97,22 @@ func (s *minimalStmt) Query(_ []driver.Value) (driver.Rows, error) {
 	}
 	return &fakeRows{}, nil
 }
+
+// skipStmt is used after skipConn returns driver.ErrSkip from the context-aware
+// connection methods.
+type skipStmt struct {
+	query string
+}
+
+func (s *skipStmt) Close() error  { return nil }
+func (s *skipStmt) NumInput() int { return -1 }
+
+//nolint:staticcheck // required method on driver.Stmt.
+func (s *skipStmt) Exec(_ []driver.Value) (driver.Result, error) {
+	return fakeResult{}, nil
+}
+
+//nolint:staticcheck // required method on driver.Stmt.
+func (s *skipStmt) Query(_ []driver.Value) (driver.Rows, error) {
+	return &fakeRows{}, nil
+}

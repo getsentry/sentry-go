@@ -155,6 +155,58 @@ func TestIntegration_EmitsQueryAndExecSpans(t *testing.T) {
 	}
 }
 
+func TestIntegration_ErrSkipDoesNotDuplicateSpans(t *testing.T) {
+	t.Parallel()
+
+	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+		drv := fakedriver.NewSkip()
+		name := fmt.Sprintf("fake-skip-integration-%p", drv)
+		fakedriver.Register(name, drv)
+
+		db, err := sentrysql.Open(name, "",
+			sentrysql.WithDatabaseSystem(sentrysql.SystemPostgreSQL),
+			sentrysql.WithDatabaseName("appdb"),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = db.Close() })
+
+		ctx := f.NewContext(context.Background())
+		parent := sentry.StartSpan(ctx, "root",
+			sentry.WithTransactionName("root"))
+		ctx = parent.Context()
+
+		_, err = db.ExecContext(ctx, "INSERT INTO t VALUES (1)")
+		require.NoError(t, err)
+
+		rows, err := db.QueryContext(ctx, "SELECT * FROM t")
+		require.NoError(t, err)
+		_ = rows.Close()
+
+		parent.Finish()
+		f.Flush()
+
+		txns := transactionEvents(f)
+		require.Len(t, txns, 1)
+		require.Len(t, txns[0].Spans, 2, "ErrSkip fallback must record exactly one span per operation")
+
+		var execCount, queryCount int
+		for _, span := range txns[0].Spans {
+			assert.Equal(t, parent.SpanID, span.ParentSpanID)
+			assert.Equal(t, sentry.SpanStatusOK, span.Status)
+
+			switch span.Op {
+			case "db.sql.exec":
+				execCount++
+			case "db.sql.query":
+				queryCount++
+			}
+		}
+
+		assert.Equal(t, 1, execCount, "exec fallback must not create a duplicate span")
+		assert.Equal(t, 1, queryCount, "query fallback must not create a duplicate span")
+	}, tracingOpts())
+}
+
 func TestIntegration_ErrorStatusPropagates(t *testing.T) {
 	t.Parallel()
 

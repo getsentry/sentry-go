@@ -80,6 +80,22 @@ func (c *minimalConn) Prepare(query string) (driver.Stmt, error) {
 func (c *minimalConn) Close() error              { return nil }
 func (c *minimalConn) Begin() (driver.Tx, error) { return fakeTx{}, nil }
 
+// skipConn returns driver.ErrSkip from the context-aware methods so
+// database/sql falls back to Prepare + Stmt.Exec/Stmt.Query.
+type skipConn struct{}
+
+func (c *skipConn) Prepare(query string) (driver.Stmt, error) { return &skipStmt{query: query}, nil }
+func (c *skipConn) Close() error                              { return nil }
+func (c *skipConn) Begin() (driver.Tx, error)                 { return fakeTx{}, nil }
+
+func (c *skipConn) ExecContext(_ context.Context, _ string, _ []driver.NamedValue) (driver.Result, error) {
+	return nil, driver.ErrSkip
+}
+
+func (c *skipConn) QueryContext(_ context.Context, _ string, _ []driver.NamedValue) (driver.Rows, error) {
+	return nil, driver.ErrSkip
+}
+
 // Compile-time interface guarantees.
 var (
 	_ driver.Conn               = (*ctxConn)(nil)
@@ -96,6 +112,10 @@ var (
 	_ driver.Queryer = (*legacyConn)(nil)
 
 	_ driver.Conn = (*minimalConn)(nil)
+
+	_ driver.Conn           = (*skipConn)(nil)
+	_ driver.ExecerContext  = (*skipConn)(nil)
+	_ driver.QueryerContext = (*skipConn)(nil)
 )
 
 // fakeTx, fakeResult, and fakeRows are returned by the connection methods
