@@ -1,12 +1,14 @@
 package telemetry
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	reportpkg "github.com/getsentry/sentry-go/report"
 )
 
 type testTelemetryItem struct {
@@ -23,6 +25,14 @@ func (t *testTelemetryItem) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 		},
 		Payload: []byte(payload),
 	}, nil
+}
+
+func (t *testTelemetryItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+	item, err := t.ToEnvelopeItem()
+	if err != nil {
+		return nil, err
+	}
+	return protocol.NewEnvelope(header, item), nil
 }
 
 func (t *testTelemetryItem) GetCategory() ratelimit.Category {
@@ -48,6 +58,19 @@ func (t *testTelemetryItem) GetDynamicSamplingContext() map[string]string {
 }
 
 func (t *testTelemetryItem) MakeSerializationSafe() {}
+
+type failingTransactionTelemetryItem struct {
+	testTelemetryItem
+	spanCount int
+}
+
+func (f *failingTransactionTelemetryItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+	return nil, errors.New("boom")
+}
+
+func (f *failingTransactionTelemetryItem) GetSpanCount() int {
+	return f.spanCount
+}
 
 func TestNewTelemetryScheduler(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
@@ -295,5 +318,46 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Error("Scheduler stop took too long")
+	}
+}
+
+func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	dsn := &protocol.Dsn{}
+	recorder := reportpkg.NewAggregator()
+
+	buffer := NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTransaction, 10, OverflowPolicyDropOldest, 1, 0, nil)
+	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
+		ratelimit.CategoryTransaction: buffer,
+	}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
+
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, recorder)
+
+	buffer.Offer(&failingTransactionTelemetryItem{
+		testTelemetryItem: testTelemetryItem{data: "tx", category: ratelimit.CategoryTransaction},
+		spanCount:         3,
+	})
+
+	scheduler.Flush(time.Second)
+
+	clientReport := recorder.TakeReport()
+	if clientReport == nil {
+		t.Fatal("expected client report")
+	}
+
+	outcomes := map[ratelimit.Category]int64{}
+	for _, discarded := range clientReport.DiscardedEvents {
+		if discarded.Reason != reportpkg.ReasonInternalError {
+			t.Fatalf("unexpected reason: %s", discarded.Reason)
+		}
+		outcomes[discarded.Category] += discarded.Quantity
+	}
+
+	if outcomes[ratelimit.CategoryTransaction] != 1 {
+		t.Fatalf("expected one discarded transaction, got %d", outcomes[ratelimit.CategoryTransaction])
+	}
+	if outcomes[ratelimit.CategorySpan] != 3 {
+		t.Fatalf("expected discarded span count to be recorded, got %d", outcomes[ratelimit.CategorySpan])
 	}
 }
