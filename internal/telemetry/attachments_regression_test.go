@@ -13,8 +13,6 @@ import (
 )
 
 func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
-	t.Parallel()
-
 	event := sentry.NewEvent()
 	event.Message = "test with attachment"
 	event.Level = sentry.LevelInfo
@@ -42,10 +40,10 @@ func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
 		},
 		nil,
 	)
-	t.Cleanup(func() { processor.Close(testutils.FlushTimeout()) })
 
 	require.True(t, processor.Add(event), "add failed")
 	require.True(t, processor.Flush(testutils.FlushTimeout()), "flush timed out")
+	processor.Close(testutils.FlushTimeout())
 
 	envelopes := transport.GetSentEnvelopes()
 	require.Len(t, envelopes, 1, "expected a single envelope")
