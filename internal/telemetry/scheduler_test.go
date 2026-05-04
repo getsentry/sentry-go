@@ -64,7 +64,7 @@ type failingTransactionTelemetryItem struct {
 	spanCount int
 }
 
-func (f *failingTransactionTelemetryItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+func (f *failingTransactionTelemetryItem) ToEnvelope(_ *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
 	return nil, errors.New("boom")
 }
 
