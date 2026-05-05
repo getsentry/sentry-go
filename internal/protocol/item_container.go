@@ -2,12 +2,14 @@ package protocol
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 )
 
-// ItemContainer is a batched envelope producer built from buffered telemetry items.
+var errNoSerializableItems = errors.New("item container contains no serializable items")
+
 type ItemContainer struct {
 	items    []TelemetryItem
 	category ratelimit.Category
@@ -40,7 +42,7 @@ func (b ItemContainer) marshalPayload() ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	return payload, len(b.items), nil
+	return payload, len(items), nil
 }
 
 func (b ItemContainer) newEnvelopeItem(itemCount int, payload []byte) (*EnvelopeItem, error) {
@@ -58,6 +60,9 @@ func (b ItemContainer) ToEnvelopeItem() (*EnvelopeItem, error) {
 	payload, itemCount, err := b.marshalPayload()
 	if err != nil {
 		return nil, err
+	}
+	if len(payload) == 0 {
+		return nil, errNoSerializableItems
 	}
 
 	return b.newEnvelopeItem(itemCount, payload)
