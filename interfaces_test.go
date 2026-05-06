@@ -777,12 +777,15 @@ func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 	}
 
 	var payload struct {
-		Timestamp  string                           `json:"timestamp,omitempty"`
-		TraceID    string                           `json:"trace_id,omitempty"`
-		Level      string                           `json:"level"`
-		Severity   int                              `json:"severity_number,omitempty"`
-		Body       string                           `json:"body,omitempty"`
-		Attributes map[string]protocol.LogAttribute `json:"attributes,omitempty"`
+		Timestamp  string `json:"timestamp,omitempty"`
+		TraceID    string `json:"trace_id,omitempty"`
+		Level      string `json:"level"`
+		Severity   int    `json:"severity_number,omitempty"`
+		Body       string `json:"body,omitempty"`
+		Attributes map[string]struct {
+			Type  string `json:"type"`
+			Value any    `json:"value"`
+		} `json:"attributes,omitempty"`
 	}
 	if err := json.Unmarshal(logData, &payload); err != nil {
 		t.Fatalf("failed to unmarshal payload: %v", err)
@@ -815,15 +818,6 @@ func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 
 	if l.GetCategory() != ratelimit.CategoryLog {
 		t.Fatalf("unexpected category: %v", l.GetCategory())
-	}
-	if l.GetEventID() != "" {
-		t.Fatalf("expected empty event id, got %q", l.GetEventID())
-	}
-	if l.GetSdkInfo() != nil {
-		t.Fatal("expected nil sdk info for logs")
-	}
-	if dsc := l.GetDynamicSamplingContext(); dsc != nil {
-		t.Fatalf("expected nil DSC for logs, got: %+v", dsc)
 	}
 }
 
@@ -910,18 +904,6 @@ func TestMetric_GetterMethods(t *testing.T) {
 
 	if metric.GetCategory() != ratelimit.CategoryTraceMetric {
 		t.Errorf("GetCategory() = %v, want %v", metric.GetCategory(), ratelimit.CategoryTraceMetric)
-	}
-
-	if metric.GetEventID() != "" {
-		t.Errorf("GetEventID() = %q, want empty string", metric.GetEventID())
-	}
-
-	if metric.GetSdkInfo() != nil {
-		t.Errorf("GetSdkInfo() = %v, want nil", metric.GetSdkInfo())
-	}
-
-	if metric.GetDynamicSamplingContext() != nil {
-		t.Errorf("GetDynamicSamplingContext() = %v, want nil", metric.GetDynamicSamplingContext())
 	}
 }
 

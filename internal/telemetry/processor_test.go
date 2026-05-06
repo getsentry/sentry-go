@@ -12,7 +12,17 @@ import (
 type bwItem struct{ id string }
 
 func (b bwItem) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
-	return &protocol.EnvelopeItem{Header: &protocol.EnvelopeItemHeader{Type: protocol.EnvelopeItemTypeEvent}, Payload: []byte(`{"message":"ok"}`)}, nil
+	return &protocol.EnvelopeItem{
+		Header:  &protocol.EnvelopeItemHeader{Type: protocol.EnvelopeItemTypeEvent},
+		Payload: []byte(`{"message":"ok"}`),
+	}, nil
+}
+func (b bwItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+	item, err := b.ToEnvelopeItem()
+	if err != nil {
+		return nil, err
+	}
+	return protocol.NewEnvelope(header, item), nil
 }
 func (b bwItem) GetCategory() ratelimit.Category              { return ratelimit.CategoryError }
 func (b bwItem) GetEventID() string                           { return b.id }
