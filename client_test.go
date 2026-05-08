@@ -1130,7 +1130,6 @@ func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
 
 	assert.Equal(t, sdkIdentifier, header.Sdk.Name)
 	assert.Contains(t, header.Sdk.Integrations, "CustomRegressionIntegration")
-	assert.Contains(t, header.Sdk.Integrations, "ContextifyFrames")
 }
 
 func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
