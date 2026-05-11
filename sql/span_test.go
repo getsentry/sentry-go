@@ -35,8 +35,8 @@ func TestStartSpan_SpanData(t *testing.T) {
 		span := startSpan(parent.Context(), cfg, opQuery, "SELECT 1")
 		require.NotNil(t, span)
 
-		assert.Equal(t, "SELECT 1", span.Description)
-		assert.Equal(t, "SELECT 1", span.Data["db.query.text"])
+		assert.Equal(t, "SELECT ?", span.Description)
+		assert.Equal(t, "SELECT ?", span.Data["db.query.text"])
 		assert.Equal(t, "postgresql", span.Data["db.system.name"])
 		assert.Equal(t, "pgx", span.Data["db.driver.name"])
 		assert.Equal(t, "appdb", span.Data["db.namespace"])

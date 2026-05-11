@@ -21,12 +21,16 @@ func startSpan(ctx context.Context, cfg *config, op, query string) *sentry.Span 
 		return nil
 	}
 
+	description := query
+	if cfg != nil {
+		description = cfg.obfuscateQuery(query)
+	}
+
 	span := parent.StartChild(op,
-		sentry.WithDescription(query),
+		sentry.WithDescription(description),
 		sentry.WithSpanOrigin(SpanOrigin),
 	)
-
-	span.SetData("db.query.text", query)
+	span.SetData("db.query.text", description)
 
 	if cfg != nil {
 		if cfg.system != "" {
@@ -55,11 +59,12 @@ func startSpan(ctx context.Context, cfg *config, op, query string) *sentry.Span 
 		}
 	}
 
-	// TODO: on the next PR we add the query parser, we then need to set:
+	// TODO: add the remaining db span attributes once we have a proper query
+	// analyzer for them:
 	// - db.operation.name
 	// - db.query.summary
 	// - db.collection.name
-	// - db.query.parameter.<key> PII gate
+	// - db.query.parameter.<key> behind the PII gate
 
 	return span
 }

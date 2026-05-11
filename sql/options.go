@@ -3,68 +3,42 @@ package sentrysql
 import (
 	"errors"
 	"fmt"
+	"strings"
+
+	sqllexer "github.com/DataDog/go-sqllexer"
+	"github.com/getsentry/sentry-go/sql/internal/dbsystem"
 )
 
-// DatabaseSystem identifies the DBMS for the db.system span attribute. Use one
-// of the provided constants, or a custom value that matches the Sentry Queries
-// module expectations.
-type DatabaseSystem string
+type DatabaseSystem = dbsystem.Name
 
-// Known DatabaseSystem values. This is not exhaustive; pass a custom string
-// via DatabaseSystem("…") for databases not listed here.
 const (
-	SystemPostgreSQL DatabaseSystem = "postgresql"
-	SystemMySQL      DatabaseSystem = "mysql"
-	SystemMariaDB    DatabaseSystem = "mariadb"
-	SystemSQLite     DatabaseSystem = "sqlite"
-	SystemMSSQL      DatabaseSystem = "mssql"
-	SystemOracle     DatabaseSystem = "oracle"
-	SystemClickhouse DatabaseSystem = "clickhouse"
-	SystemSnowflake  DatabaseSystem = "snowflake"
+	SystemPostgreSQL = dbsystem.PostgreSQL
+	SystemMySQL      = dbsystem.MySQL
+	SystemMariaDB    = dbsystem.MariaDB
+	SystemSQLite     = dbsystem.SQLite
+	SystemMSSQL      = dbsystem.MSSQL
+	SystemOracle     = dbsystem.Oracle
+	SystemClickhouse = dbsystem.Clickhouse
+	SystemSnowflake  = dbsystem.Snowflake
 )
-
-// driverNameToSystem is a best effort map of common Go SQL driver registration names.
-var driverNameToSystem = map[string]DatabaseSystem{
-	// PostgreSQL and flavors
-	"postgres":         SystemPostgreSQL,
-	"pgx":              SystemPostgreSQL,
-	"cloudsqlpostgres": SystemPostgreSQL,
-	// MySQL / MariaDB
-	"mysql":   SystemMySQL,
-	"mariadb": SystemMariaDB,
-	// SQLite
-	"sqlite":  SystemSQLite,
-	"sqlite3": SystemSQLite,
-	// MS SQL Server
-	"sqlserver": SystemMSSQL,
-	"mssql":     SystemMSSQL,
-	// Oracle
-	"oracle": SystemOracle,
-	"godror": SystemOracle,
-	"goora":  SystemOracle,
-	"oci8":   SystemOracle,
-	// Others
-	"clickhouse": SystemClickhouse,
-	"snowflake":  SystemSnowflake,
-}
 
 func systemFromDriverName(name string) (DatabaseSystem, bool) {
-	sys, ok := driverNameToSystem[name]
-	return sys, ok
+	return dbsystem.FromDriverName(name)
 }
 
 // Option configures sql wrappers.
 type Option func(*config)
 
 type config struct {
-	system        DatabaseSystem
-	dbName        string
-	dbUser        string
-	driverName    string
-	host          string
-	port          int
-	socketAddress string
-	socketPort    int
+	system         DatabaseSystem
+	dbName         string
+	dbUser         string
+	driverName     string
+	host           string
+	port           int
+	socketAddress  string
+	socketPort     int
+	obfuscatorDBMS sqllexer.DBMSType
 }
 
 // WithDatabaseSystem sets the db.system span attribute. Prefer one of the
@@ -130,5 +104,116 @@ func newConfig(opts []Option) *config {
 			opt(c)
 		}
 	}
+	c.obfuscatorDBMS = obfuscatorDBMS(c.system)
 	return c
+}
+
+func (c *config) obfuscateQuery(query string) string {
+	if c == nil {
+		return query
+	}
+
+	w := queryObfuscator{
+		lexer:    newQueryLexer(query, c.obfuscatorDBMS),
+		sqlite:   c.system == SystemSQLite,
+		capacity: len(query),
+	}
+	return w.run()
+}
+
+func newQueryLexer(query string, dbms sqllexer.DBMSType) *sqllexer.Lexer {
+	if dbms == "" {
+		return sqllexer.New(query)
+	}
+	return sqllexer.New(query, sqllexer.WithDBMS(dbms))
+}
+
+type queryObfuscator struct {
+	lexer            *sqllexer.Lexer
+	sqlite           bool
+	capacity         int
+	out              strings.Builder
+	prevPlaceholder  bool
+	prevSQLiteQuoted bool
+	pendingSQLiteDot bool
+}
+
+func (o *queryObfuscator) run() string {
+	o.out.Grow(o.capacity)
+
+	for {
+		tok := o.lexer.Scan()
+		switch tok.Type {
+		case sqllexer.EOF:
+			o.flushSQLiteDot()
+			return strings.TrimSpace(o.out.String())
+		case sqllexer.COMMENT, sqllexer.MULTILINE_COMMENT:
+			continue
+		case sqllexer.NUMBER, sqllexer.STRING, sqllexer.INCOMPLETE_STRING, sqllexer.DOLLAR_QUOTED_STRING, sqllexer.DOLLAR_QUOTED_FUNCTION:
+			o.writePlaceholder(o.sqlite && tok.Type == sqllexer.STRING)
+		case sqllexer.QUOTED_IDENT:
+			if o.sqlite {
+				o.writePlaceholder(true)
+				continue
+			}
+			o.writeValue(tok.Value)
+		case sqllexer.PUNCTUATION:
+			if o.sqlite && tok.Value == "." && o.prevSQLiteQuoted {
+				o.pendingSQLiteDot = true
+				continue
+			}
+			o.writeValue(tok.Value)
+		default:
+			o.writeValue(tok.Value)
+		}
+	}
+}
+
+func (o *queryObfuscator) writePlaceholder(sqliteQuoted bool) {
+	if o.pendingSQLiteDot {
+		if sqliteQuoted && o.prevSQLiteQuoted {
+			o.pendingSQLiteDot = false
+			return
+		}
+		o.out.WriteByte('.')
+		o.pendingSQLiteDot = false
+	}
+	if o.prevPlaceholder {
+		return
+	}
+	o.out.WriteByte('?')
+	o.prevPlaceholder = true
+	o.prevSQLiteQuoted = sqliteQuoted
+}
+
+func (o *queryObfuscator) writeValue(value string) {
+	o.flushSQLiteDot()
+	o.out.WriteString(value)
+	o.prevPlaceholder = false
+	o.prevSQLiteQuoted = false
+}
+
+func (o *queryObfuscator) flushSQLiteDot() {
+	if !o.pendingSQLiteDot {
+		return
+	}
+	o.out.WriteByte('.')
+	o.pendingSQLiteDot = false
+}
+
+func obfuscatorDBMS(system DatabaseSystem) sqllexer.DBMSType {
+	switch system {
+	case SystemPostgreSQL:
+		return sqllexer.DBMSPostgres
+	case SystemMySQL, SystemMariaDB, SystemSQLite:
+		return sqllexer.DBMSMySQL
+	case SystemMSSQL:
+		return sqllexer.DBMSSQLServer
+	case SystemOracle:
+		return sqllexer.DBMSOracle
+	case SystemSnowflake:
+		return sqllexer.DBMSSnowflake
+	default:
+		return ""
+	}
 }
