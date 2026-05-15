@@ -50,6 +50,16 @@ func (ssp *sentrySpanProcessor) OnStart(parent context.Context, s otelSdkTrace.R
 		return
 	}
 	traceParentContext := getTraceParentContext(parent)
+	// If there is no explicit Sentry sampling decision from an incoming
+	// sentry-trace header, use the OTel span's sampling decision so that
+	// both stacks agree on whether the trace is sampled.
+	if traceParentContext.Sampled == sentry.SampledUndefined {
+		if otelSpanContext.IsSampled() {
+			traceParentContext.Sampled = sentry.SampledTrue
+		} else {
+			traceParentContext.Sampled = sentry.SampledFalse
+		}
+	}
 	transaction := sentry.StartTransaction(
 		parent,
 		s.Name(),

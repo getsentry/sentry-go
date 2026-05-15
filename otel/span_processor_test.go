@@ -517,3 +517,99 @@ func TestLinkTraceContextToErrorEventWithSpanProcessor(t *testing.T) {
 		"span_id":  otelSpan.SpanContext().SpanID().String(),
 	})
 }
+
+func TestOnStartRespectsOtelSamplingDecision(t *testing.T) {
+	// Setup with NeverSample so OTel marks spans as not sampled
+	sentrySpanMap.Clear()
+	spanProcessor := NewSentrySpanProcessor()
+	tp := otelSdkTrace.NewTracerProvider(
+		otelSdkTrace.WithSampler(otelSdkTrace.NeverSample()),
+		otelSdkTrace.WithResource(
+			resource.NewWithAttributes(
+				"",
+				semconv.ServiceNameKey.String("test-otel"),
+			),
+		),
+	)
+	tp.RegisterSpanProcessor(spanProcessor)
+	tracer := tp.Tracer("test-tracer")
+
+	// Use a Sentry client with TracesSampleRate=1.0 to show that OTel
+	// decision takes precedence when no sentry-trace header is present.
+	_, otelSpan := tracer.Start(emptyContextWithSentry(), "notSampledSpan")
+
+	// With NeverSample, the span processor's OnStart is not called by the
+	// OTel SDK (non-recording spans don't trigger processors). This is
+	// actually the correct behavior: if OTel decides not to sample, the
+	// span processor never fires, so no Sentry transaction is created.
+	// Verify the span is not sampled from OTel's perspective.
+	assertFalse(t, otelSpan.SpanContext().IsSampled())
+
+	// Now test with AlwaysSample: OTel sampled = Sentry sampled
+	sentrySpanMap.Clear()
+	tp2 := otelSdkTrace.NewTracerProvider(
+		otelSdkTrace.WithSampler(otelSdkTrace.AlwaysSample()),
+		otelSdkTrace.WithResource(
+			resource.NewWithAttributes(
+				"",
+				semconv.ServiceNameKey.String("test-otel"),
+			),
+		),
+	)
+	tp2.RegisterSpanProcessor(NewSentrySpanProcessor())
+	tracer2 := tp2.Tracer("test-tracer")
+
+	// Sentry client has TracesSampleRate=1.0 but even if it were 0.0,
+	// the explicit OTel sampling decision should win.
+	ctx := emptyContextWithSentry()
+	_, otelSpan2 := tracer2.Start(ctx, "sampledSpan")
+
+	sentrySpan, ok := sentrySpanMap.Get(otelSpan2.SpanContext().TraceID(), otelSpan2.SpanContext().SpanID())
+	if !ok {
+		t.Fatal("Sentry span not found in the map")
+	}
+	assertTrue(t, otelSpan2.SpanContext().IsSampled())
+	assertEqual(t, sentrySpan.Sampled, sentry.SampledTrue)
+}
+
+func TestOnStartOtelSampledOverridesSentryRate(t *testing.T) {
+	// This test verifies the core fix for #788:
+	// When OTel says "sampled" but Sentry TracesSampleRate is 0.0,
+	// the transaction should still be sampled because OTel already decided.
+	sentrySpanMap.Clear()
+
+	spanProcessor := NewSentrySpanProcessor()
+	tp := otelSdkTrace.NewTracerProvider(
+		otelSdkTrace.WithSampler(otelSdkTrace.AlwaysSample()),
+		otelSdkTrace.WithResource(
+			resource.NewWithAttributes(
+				"",
+				semconv.ServiceNameKey.String("test-otel"),
+			),
+		),
+	)
+	tp.RegisterSpanProcessor(spanProcessor)
+	tracer := tp.Tracer("test-tracer")
+
+	// Create a Sentry client with TracesSampleRate=0.0
+	client, _ := sentry.NewClient(sentry.ClientOptions{
+		Dsn:              "https://abc@example.com/123",
+		Environment:      "testing",
+		Release:          "1.2.3",
+		EnableTracing:    true,
+		TracesSampleRate: 0.0,
+		Transport:        &sentry.MockTransport{},
+	})
+	hub := sentry.NewHub(client, sentry.NewScope())
+	ctx := sentry.SetHubOnContext(context.Background(), hub)
+
+	_, otelSpan := tracer.Start(ctx, "shouldBeSampled")
+
+	sentrySpan, ok := sentrySpanMap.Get(otelSpan.SpanContext().TraceID(), otelSpan.SpanContext().SpanID())
+	if !ok {
+		t.Fatal("Sentry span not found in the map")
+	}
+	// OTel says sampled, so Sentry should respect that regardless of TracesSampleRate
+	assertTrue(t, otelSpan.SpanContext().IsSampled())
+	assertEqual(t, sentrySpan.Sampled, sentry.SampledTrue)
+}
