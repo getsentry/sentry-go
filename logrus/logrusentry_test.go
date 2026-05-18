@@ -481,7 +481,7 @@ func TestEventHook_entryToEvent(t *testing.T) {
 			got := hook.entryToEvent(tt.entry)
 			opts := cmp.Options{
 				cmpopts.IgnoreFields(sentry.Event{}, "Contexts", "EventID", "Platform", "Release", "ServerName", "Modules", "Sdk", "Timestamp"),
-				cmpopts.IgnoreFields(sentry.Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser"),
+				cmpopts.IgnoreFields(sentry.Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
 				cmpopts.IgnoreFields(sentry.Stacktrace{}, "Frames"),
 				cmpopts.EquateEmpty(),
 			}

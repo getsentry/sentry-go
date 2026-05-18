@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -94,7 +93,7 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 
 		scope := hub.Scope()
 		scope.SetRequest(r)
-		scope.SetRequestBody(ctx.Request.Body())
+		scope.SetRequestBody(bytes.Clone(ctx.Request.Body()))
 		ctx.SetUserValue(valuesKey, hub)
 		ctx.SetUserValue(transactionKey, transaction)
 		defer h.recoverWithSentry(hub, ctx)
@@ -177,8 +176,6 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 	})
 
 	r.RemoteAddr = ctx.RemoteAddr().String()
-
-	r.Body = io.NopCloser(bytes.NewReader(ctx.Request.Body()))
 
 	return r
 }
