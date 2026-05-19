@@ -53,6 +53,19 @@ func (n *noopRoundTripper) RoundTrip(request *http.Request) (*http.Response, err
 	}, nil
 }
 
+type captureRoundTripper struct {
+	requests []*http.Request
+}
+
+func (c *captureRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	c.requests = append(c.requests, request)
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader("")),
+		Request:    request,
+	}, nil
+}
+
 func TestIntegration(t *testing.T) {
 	tests := []struct {
 		RequestMethod      string
@@ -287,7 +300,7 @@ func TestIntegration(t *testing.T) {
 			sentry.Span{},
 			"TraceID", "SpanID", "ParentSpanID", "StartTime", "EndTime",
 			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "contexts",
-			"explicitSampled",
+			"explicitSampled", "serializedTags", "serializedData", "serializationSafe",
 		),
 	}
 	for i, tt := range tests {
@@ -377,7 +390,7 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 			sentry.Span{},
 			"TraceID", "SpanID", "ParentSpanID", "StartTime", "EndTime",
 			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "contexts",
-			"explicitSampled",
+			"explicitSampled", "serializedTags", "serializedData", "serializationSafe",
 		),
 	}
 
@@ -517,6 +530,62 @@ func TestPropagateTraceparentHeader(t *testing.T) {
 
 	if want := traceparentFromSentryTraceHeader(t, sentryTrace); traceparent != want {
 		t.Fatalf(`Unexpected "traceparent" header value, got %q want %q`, traceparent, want)
+	}
+}
+
+func TestRoundTripDoesNotMutateCallerRequest(t *testing.T) {
+	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hub := sentry.NewHub(sentryClient, sentry.NewScope())
+	ctx := sentry.SetHubOnContext(context.Background(), hub)
+	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+	t.Cleanup(span.Finish)
+
+	request, err := http.NewRequestWithContext(span.Context(), http.MethodGet, "https://example.com/foo", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	roundTripper := &captureRoundTripper{}
+	wrapped := sentryhttpclient.NewSentryRoundTripper(roundTripper)
+
+	for i := 0; i < 3; i++ {
+		response, err := wrapped.RoundTrip(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.Body != nil {
+			response.Body.Close()
+		}
+	}
+
+	if got := request.Header.Values(sentry.SentryTraceHeader); len(got) != 0 {
+		t.Fatalf("caller request mutated, got %d sentry-trace headers", len(got))
+	}
+	if got := request.Header.Values(sentry.SentryBaggageHeader); len(got) != 0 {
+		t.Fatalf("caller request mutated, got %d baggage headers", len(got))
+	}
+
+	if len(roundTripper.requests) != 3 {
+		t.Fatalf("got %d requests, want 3", len(roundTripper.requests))
+	}
+
+	for i, roundTripRequest := range roundTripper.requests {
+		if roundTripRequest == request {
+			t.Fatalf("round trip %d reused the caller request", i)
+		}
+		if got := len(roundTripRequest.Header.Values(sentry.SentryTraceHeader)); got != 1 {
+			t.Fatalf("round trip %d got %d sentry-trace headers, want 1", i, got)
+		}
+		if got := len(roundTripRequest.Header.Values(sentry.SentryBaggageHeader)); got != 1 {
+			t.Fatalf("round trip %d got %d baggage headers, want 1", i, got)
+		}
 	}
 }
 

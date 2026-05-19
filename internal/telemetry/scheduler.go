@@ -241,68 +241,50 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 		return
 	}
 
-	switch category {
-	case ratelimit.CategoryLog:
-		logs := protocol.Logs(items)
-		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Dsn: s.dsn, Sdk: s.resolveSdkInfo()}
-		envelope := protocol.NewEnvelope(header)
-		item, err := logs.ToEnvelopeItem()
-		if err != nil {
-			debuglog.Printf("error creating log batch envelope item: %v", err)
-			return
-		}
-		envelope.AddItem(item)
-		if err := s.transport.SendEnvelope(envelope); err != nil {
-			debuglog.Printf("error sending envelope: %v", err)
-		}
-		return
-	case ratelimit.CategoryTraceMetric:
-		metrics := protocol.Metrics(items)
-		header := &protocol.EnvelopeHeader{EventID: protocol.GenerateEventID(), SentAt: time.Now(), Dsn: s.dsn, Sdk: s.resolveSdkInfo()}
-		envelope := protocol.NewEnvelope(header)
-		item, err := metrics.ToEnvelopeItem()
-		if err != nil {
-			debuglog.Printf("error creating trace metric batch envelope item: %v", err)
-			return
-		}
-		envelope.AddItem(item)
-		if err := s.transport.SendEnvelope(envelope); err != nil {
-			debuglog.Printf("error sending envelope: %v", err)
-		}
-		return
-	default:
-		// if the buffers are properly configured, buffer.PollIfReady should return a single item for every category
-		// other than logs. We still iterate over the items just in case, because we don't want to send broken envelopes.
-		for _, it := range items {
-			convertible, ok := it.(protocol.EnvelopeItemConvertible)
-			if !ok {
-				debuglog.Printf("item does not implement EnvelopeItemConvertible: %T", it)
-				continue
-			}
-			s.sendItem(convertible)
-		}
+	for _, item := range s.envelopeConvertibles(category, items) {
+		s.sendItem(item)
 	}
 }
 
-func (s *Scheduler) sendItem(item protocol.EnvelopeItemConvertible) {
+// envelopeConvertibles converts single items or batches to satisfy the EnvelopeConvertible interface.
+func (s *Scheduler) envelopeConvertibles(category ratelimit.Category, items []protocol.TelemetryItem) []protocol.EnvelopeConvertible {
+	switch category {
+	case ratelimit.CategoryLog, ratelimit.CategoryTraceMetric:
+		return []protocol.EnvelopeConvertible{protocol.NewItemContainer(category, items)}
+	default:
+		convertibles := make([]protocol.EnvelopeConvertible, 0, len(items))
+		for _, item := range items {
+			if convertible, ok := item.(protocol.EnvelopeConvertible); ok {
+				convertibles = append(convertibles, convertible)
+				continue
+			}
+			debuglog.Printf("item does not implement envelope conversion: %T", item)
+		}
+		return convertibles
+	}
+}
+
+func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
 	header := &protocol.EnvelopeHeader{
 		EventID: item.GetEventID(),
 		SentAt:  time.Now(),
 		Dsn:     s.dsn,
 		Trace:   item.GetDynamicSamplingContext(),
-		Sdk:     s.resolveSdkInfo(),
+		Sdk:     item.GetSdkInfo(),
 	}
 	if header.EventID == "" {
 		header.EventID = protocol.GenerateEventID()
 	}
-	envelope := protocol.NewEnvelope(header)
-	envItem, err := item.ToEnvelopeItem()
+	if header.Sdk == nil {
+		header.Sdk = s.resolveSdkInfo()
+	}
+
+	envelope, err := item.ToEnvelope(header)
 	if err != nil {
-		debuglog.Printf("error while converting to envelope item: %v", err)
+		debuglog.Printf("error while converting to envelope: %v", err)
 		s.recorder.RecordItem(report.ReasonInternalError, item)
 		return
 	}
-	envelope.AddItem(envItem)
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)
 	}

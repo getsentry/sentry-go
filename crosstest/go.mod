@@ -17,7 +17,7 @@ replace (
 )
 
 require (
-	github.com/getsentry/sentry-go v0.46.0
+	github.com/getsentry/sentry-go v0.46.2
 	github.com/getsentry/sentry-go/echo v0.45.1
 	github.com/getsentry/sentry-go/fasthttp v0.45.1
 	github.com/getsentry/sentry-go/fiber v0.45.1
@@ -29,7 +29,7 @@ require (
 	github.com/getsentry/sentry-go/slog v0.45.1
 	github.com/getsentry/sentry-go/zap v0.45.1
 	github.com/gin-gonic/gin v1.9.1
-	github.com/gofiber/fiber/v2 v2.52.12
+	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/google/go-cmp v0.7.0
 	github.com/kataras/iris/v12 v12.2.0
 	github.com/labstack/echo/v5 v5.0.3

@@ -5,8 +5,8 @@ go 1.25.0
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.46.0
-	github.com/gofiber/fiber/v2 v2.52.12
+	github.com/getsentry/sentry-go v0.46.2
+	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/google/go-cmp v0.5.9
 )
 
