@@ -9,54 +9,22 @@ import (
 )
 
 const (
-	opQuery = "db.sql.query"
-	opExec  = "db.sql.exec"
+	opQuery       = "db.sql.query"
+	opExec        = "db.sql.exec"
+	opTransaction = "db.sql.transaction"
 )
 
-// startSpan creates a child span for a SQL operation only
+// startQuerySpan creates a child span for a SQL operation only
 // when a parent span exists in the passed ctx.
-func startSpan(ctx context.Context, cfg *config, op, query string) *sentry.Span {
-	parent := sentry.SpanFromContext(ctx)
-	if parent == nil {
-		return nil
-	}
-
+func startQuerySpan(ctx context.Context, conn *sentryConn, cfg *config, op, query string) *sentry.Span {
 	description := query
 	if cfg != nil {
 		description = cfg.obfuscateQuery(query)
 	}
 
-	span := parent.StartChild(op,
-		sentry.WithDescription(description),
-		sentry.WithSpanOrigin(SpanOrigin),
-	)
-	span.SetData("db.query.text", description)
-
-	if cfg != nil {
-		if cfg.system != "" {
-			span.SetData("db.system.name", string(cfg.system))
-		}
-		if cfg.driverName != "" {
-			span.SetData("db.driver.name", cfg.driverName)
-		}
-		if cfg.dbName != "" {
-			span.SetData("db.namespace", cfg.dbName)
-		}
-		if cfg.dbUser != "" && sendDefaultPII(ctx) {
-			span.SetData("db.user", cfg.dbUser)
-		}
-		if cfg.host != "" {
-			span.SetData("server.address", cfg.host)
-		}
-		if cfg.port != 0 {
-			span.SetData("server.port", cfg.port)
-		}
-		if cfg.socketAddress != "" {
-			span.SetData("server.socket.address", cfg.socketAddress)
-		}
-		if cfg.socketPort != 0 {
-			span.SetData("server.socket.port", cfg.socketPort)
-		}
+	span := startSpan(ctx, cfg, spanParent(ctx, conn), op, description)
+	if span != nil {
+		span.SetData("db.query.text", description)
 	}
 
 	// TODO: add the remaining db span attributes once we have a proper query
@@ -67,6 +35,62 @@ func startSpan(ctx context.Context, cfg *config, op, query string) *sentry.Span 
 	// - db.query.parameter.<key> behind the PII gate
 
 	return span
+}
+
+func startTxSpan(ctx context.Context, cfg *config) *sentry.Span {
+	return startSpan(ctx, cfg, sentry.SpanFromContext(ctx), opTransaction, "transaction")
+}
+
+func startSpan(ctx context.Context, cfg *config, parent *sentry.Span, op, description string) *sentry.Span {
+	if parent == nil {
+		return nil
+	}
+
+	span := parent.StartChild(op,
+		sentry.WithDescription(description),
+		sentry.WithSpanOrigin(SpanOrigin),
+	)
+	setSQLData(span, ctx, cfg)
+	return span
+}
+
+func spanParent(ctx context.Context, conn *sentryConn) *sentry.Span {
+	if conn != nil {
+		if txSpan := conn.txSpanOrNil(); txSpan != nil {
+			return txSpan
+		}
+	}
+	return sentry.SpanFromContext(ctx)
+}
+
+func setSQLData(span *sentry.Span, ctx context.Context, cfg *config) {
+	if span == nil || cfg == nil {
+		return
+	}
+	if cfg.system != "" {
+		span.SetData("db.system.name", string(cfg.system))
+	}
+	if cfg.driverName != "" {
+		span.SetData("db.driver.name", cfg.driverName)
+	}
+	if cfg.dbName != "" {
+		span.SetData("db.namespace", cfg.dbName)
+	}
+	if cfg.dbUser != "" && sendDefaultPII(ctx) {
+		span.SetData("db.user", cfg.dbUser)
+	}
+	if cfg.host != "" {
+		span.SetData("server.address", cfg.host)
+	}
+	if cfg.port != 0 {
+		span.SetData("server.port", cfg.port)
+	}
+	if cfg.socketAddress != "" {
+		span.SetData("server.socket.address", cfg.socketAddress)
+	}
+	if cfg.socketPort != 0 {
+		span.SetData("server.socket.port", cfg.socketPort)
+	}
 }
 
 func sendDefaultPII(ctx context.Context) bool {
