@@ -13,7 +13,6 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 		Dsn:              testDsn,
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
-		EnableLogs:       true,
 		Transport:        transport,
 	})
 	if err != nil {

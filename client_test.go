@@ -1164,7 +1164,6 @@ func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 		c, err := NewClient(ClientOptions{
 			Dsn:        dsn,
 			Transport:  tr,
-			EnableLogs: true,
 			Integrations: func(_ []Integration) []Integration {
 				return []Integration{}
 			},

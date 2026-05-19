@@ -24,7 +24,6 @@ func setupClientTest() (*sentry.Client, *sentry.MockTransport) {
 	mockClient, _ := sentry.NewClient(sentry.ClientOptions{
 		Dsn:        "http://whatever@example.com/1337",
 		Transport:  mockTransport,
-		EnableLogs: true,
 	})
 	hub := sentry.CurrentHub()
 	hub.BindClient(mockClient)
@@ -511,7 +510,6 @@ func TestNewLogHook(t *testing.T) {
 	hook, err := NewLogHook(levels, sentry.ClientOptions{
 		Dsn:         "http://whatever@example.com/1337",
 		Environment: "test",
-		EnableLogs:  true,
 	})
 
 	assert.NoError(t, err)

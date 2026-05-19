@@ -27,7 +27,6 @@ func main() {
     // Initialize Sentry with logs enabled
     err := sentry.Init(sentry.ClientOptions{
         Dsn:        "your-sentry-dsn",
-        EnableLogs: true,
     })
     if err != nil {
         panic(err)
@@ -87,7 +86,6 @@ func main() {
     // Initialize Sentry
     sentry.Init(sentry.ClientOptions{
         Dsn:        "your-sentry-dsn",
-        EnableLogs: true,
     })
     defer sentry.Flush(2 * time.Second)
 
@@ -130,11 +128,11 @@ func main() {
 
 ### Option struct
 
-| Field | Type | Description | Default |
-|-------|------|-------------|---------|
-| `Level` | `[]zapcore.Level` | Zap levels to capture and send to Sentry | All levels (Debug through Fatal) |
-| `AddCaller` | `bool` | Include caller info (file, line, function) | `false` |
-| `FlushTimeout` | `time.Duration` | How long to wait when syncing/flushing | 5 seconds |
+| Field          | Type              | Description                                | Default                          |
+| -------------- | ----------------- | ------------------------------------------ | -------------------------------- |
+| `Level`        | `[]zapcore.Level` | Zap levels to capture and send to Sentry   | All levels (Debug through Fatal) |
+| `AddCaller`    | `bool`            | Include caller info (file, line, function) | `false`                          |
+| `FlushTimeout` | `time.Duration`   | How long to wait when syncing/flushing     | 5 seconds                        |
 
 ## Context and Tracing
 
@@ -182,5 +180,5 @@ scopedLogger.Info("Processing completed")
 ## Notes
 
 - This integration only sends logs to Sentry (not events/errors). For error reporting, use the main `sentry-go` package.
-- Ensure `EnableLogs: true` is set in your Sentry client options.
+- Logs are enabled by default. If you have `DisableLogs: true`, remove it to enable log emission.
 - Call `sentry.Flush()` before your application exits to ensure all logs are sent.
