@@ -89,30 +89,34 @@ func (d *MinimalDriver) Open(_ string) (driver.Conn, error) {
 	return &minimalConn{drv: d}, nil
 }
 
-// CtxConnector is an exported connector wrapper backed by a CtxDriver. Unlike
+// CtxConnectorWithCloseCount is an exported connector wrapper backed by a CtxDriver. Unlike
 // the internal ctxConnector returned by CtxDriver.OpenConnector, this one
 // implements io.Closer with an observable close counter so tests can verify
 // that the sentrysql wrapper propagates DB.Close through to inner connectors.
-type CtxConnector struct {
+type CtxConnectorWithCloseCount struct {
 	drv   *CtxDriver
 	count atomic.Int32
 }
 
-// NewCtxConnector constructs a CtxConnector.
-func NewCtxConnector(drv *CtxDriver) *CtxConnector { return &CtxConnector{drv: drv} }
+// NewCtxConnectorWithCloseCount constructs a CtxConnectorWithCloseCount.
+func NewCtxConnectorWithCloseCount(drv *CtxDriver) *CtxConnectorWithCloseCount {
+	return &CtxConnectorWithCloseCount{drv: drv}
+}
 
 // Connect implements driver.Connector.
-func (c *CtxConnector) Connect(_ context.Context) (driver.Conn, error) { return c.drv.Open("") }
+func (c *CtxConnectorWithCloseCount) Connect(_ context.Context) (driver.Conn, error) {
+	return c.drv.Open("")
+}
 
 // Driver implements driver.Connector.
-func (c *CtxConnector) Driver() driver.Driver { return c.drv }
+func (c *CtxConnectorWithCloseCount) Driver() driver.Driver { return c.drv }
 
 // Close implements io.Closer. The counter it increments is observable via
 // CloseCount for verification in tests.
-func (c *CtxConnector) Close() error { c.count.Add(1); return nil }
+func (c *CtxConnectorWithCloseCount) Close() error { c.count.Add(1); return nil }
 
 // CloseCount reports how many times Close was invoked on this connector.
-func (c *CtxConnector) CloseCount() int { return int(c.count.Load()) }
+func (c *CtxConnectorWithCloseCount) CloseCount() int { return int(c.count.Load()) }
 
 // LegacyConnector wraps a LegacyDriver as a driver.Connector so tests can
 // exercise the sentrysql wrapper's behavior when a connector's Driver() does
@@ -139,7 +143,7 @@ var (
 
 	_ driver.Driver = (*MinimalDriver)(nil)
 
-	_ driver.Connector = (*CtxConnector)(nil)
+	_ driver.Connector = (*CtxConnectorWithCloseCount)(nil)
 	_ driver.Connector = (*LegacyConnector)(nil)
 )
 
