@@ -517,7 +517,6 @@ func (client *Client) setupTelemetryProcessor() {
 
 func (client *Client) setupIntegrations() {
 	integrations := []Integration{
-		new(contextifyFramesIntegration),
 		new(environmentIntegration),
 		new(modulesIntegration),
 		new(ignoreErrorsIntegration),

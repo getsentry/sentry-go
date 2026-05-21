@@ -3,7 +3,6 @@ package sentry
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"regexp"
 	"runtime/debug"
 	"testing"
@@ -225,76 +224,6 @@ func TestIgnoreTransactionsIntegration(t *testing.T) {
 	if iei.processor(thisDroppedAsWell, &EventHint{}) != nil {
 		t.Error("Transaction should be dropped")
 	}
-}
-
-func TestContextifyFrames(t *testing.T) {
-	cfi := contextifyFramesIntegration{
-		sr:           newSourceReader(),
-		contextLines: 5,
-	}
-
-	filename := "errors_test.go"
-	abspath, err := filepath.Abs("errors_test.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	frames := cfi.contextify([]Frame{{
-		Function: "Trace",
-		Module:   "github.com/getsentry/sentry-go",
-		Filename: filename,
-		AbsPath:  abspath,
-		Lineno:   12,
-		InApp:    true,
-	}})
-	if len(frames) != 1 {
-		t.Fatalf("got %d frames, want 1", len(frames))
-	}
-	frame := frames[0]
-
-	assertEqual(t, frame.PreContext, []string{
-		")",
-		"",
-		"// NOTE: if you modify this file, you are also responsible for updating LoC position in Stacktrace tests",
-		"",
-		"func Trace() *Stacktrace {",
-	})
-	assertEqual(t, frame.ContextLine, "\treturn NewStacktrace()")
-	assertEqual(t, frame.PostContext, []string{
-		"}",
-		"",
-		"func RedPkgErrorsRanger() error {",
-		"\treturn BluePkgErrorsRanger()",
-		"}",
-	})
-}
-
-func TestContextifyFramesNonexistingFilesShouldNotDropFrames(t *testing.T) {
-	cfi := contextifyFramesIntegration{
-		sr:           newSourceReader(),
-		contextLines: 5,
-	}
-
-	frames := []Frame{{
-		InApp:    true,
-		Function: "fnName",
-		Module:   "same",
-		Filename: "wat.go",
-		AbsPath:  "this/doesnt/exist/wat.go",
-		Lineno:   1,
-		Colno:    2,
-	}, {
-		InApp:    false,
-		Function: "fnNameFoo",
-		Module:   "sameFoo",
-		Filename: "foo.go",
-		AbsPath:  "this/doesnt/exist/foo.go",
-		Lineno:   3,
-		Colno:    5,
-	}}
-
-	contextifiedFrames := cfi.contextify(frames)
-	assertEqual(t, len(contextifiedFrames), len(frames))
 }
 
 func TestExtractModules(t *testing.T) {
