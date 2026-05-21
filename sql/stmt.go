@@ -8,12 +8,13 @@ import (
 // sentryStmt wraps a driver.Stmt.
 type sentryStmt struct {
 	stmt  driver.Stmt
+	conn  *sentryConn
 	cfg   *config
 	query string
 }
 
-func newStmt(s driver.Stmt, cfg *config, query string) driver.Stmt {
-	return &sentryStmt{stmt: s, cfg: cfg, query: query}
+func newStmt(s driver.Stmt, conn *sentryConn, cfg *config, query string) driver.Stmt {
+	return &sentryStmt{stmt: s, conn: conn, cfg: cfg, query: query}
 }
 
 // Close implements driver.Stmt.
@@ -69,10 +70,19 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 // CheckNamedValue implements driver.NamedValueChecker when the underlying
 // statement supports it.
 func (s *sentryStmt) CheckNamedValue(nv *driver.NamedValue) error {
-	if ch, ok := s.stmt.(driver.NamedValueChecker); ok {
-		return ch.CheckNamedValue(nv)
+	namedValueChecker, ok := s.stmt.(driver.NamedValueChecker)
+	if !ok {
+		// Fallback to sentryConn.CheckNamedValue
+		// The `database/sql` package checks whether the stmt or conn implement this method
+		// and calls the first one. Since our implementation satisfies both, we need to manually
+		// follow the same fallback logic.
+		if s.conn == nil {
+			return driver.ErrSkip
+		}
+		return s.conn.CheckNamedValue(nv)
 	}
-	return driver.ErrSkip
+
+	return namedValueChecker.CheckNamedValue(nv)
 }
 
 // ColumnConverter implements driver.ColumnConverter when the underlying
