@@ -22,8 +22,8 @@ import (
 func setupClientTest() (*sentry.Client, *sentry.MockTransport) {
 	mockTransport := &sentry.MockTransport{}
 	mockClient, _ := sentry.NewClient(sentry.ClientOptions{
-		Dsn:        "http://whatever@example.com/1337",
-		Transport:  mockTransport,
+		Dsn:       "http://whatever@example.com/1337",
+		Transport: mockTransport,
 	})
 	hub := sentry.CurrentHub()
 	hub.BindClient(mockClient)
