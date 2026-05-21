@@ -1,0 +1,47 @@
+name: Sentry Skill Drift
+
+# Pilot install of the Flue-powered skill-drift detector. On every merged PR,
+# this workflow invokes the reusable detector workflow in `getsentry/sentry-for-ai`,
+# which compares the PR's changes against `skills/sentry-go-sdk/` and, if any drift
+# is detected, opens a PR or files an issue in `getsentry/sentry-for-ai`.
+#
+# The detector is read-only against this repo — it never modifies sentry-go code.
+# All write actions happen in the sentry-for-ai repo via a scoped GitHub App token.
+#
+# This is the per-SDK side of the inverted architecture documented in
+# https://github.com/getsentry/sentry-for-ai/blob/main/docs/agent-port/04-flue-implementation.md
+#
+# Pre-requisites (set up by org admin before this workflow can run successfully):
+#   - The "Sentry Skill Drift" GitHub App installed on this repo (contents: read)
+#     and on getsentry/sentry-for-ai (contents: write, pull-requests: write, issues: write)
+#   - Org-level secrets: SENTRY_AI_ANTHROPIC_API_KEY,
+#     SENTRY_SKILL_DRIFT_APP_ID, SENTRY_SKILL_DRIFT_APP_PRIVATE_KEY
+#
+# The `uses:` reference below pins to the in-flight branch on sentry-for-ai while
+# PR #127 is in review. Once that PR merges, flip the reference to `@main`.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'CHANGELOG*'
+      - '.github/**'
+      - '**/*_test.go'
+      - '**/testdata/**'
+
+jobs:
+  detect-drift:
+    if: github.event.pull_request.merged == true
+    uses: getsentry/sentry-for-ai/.github/workflows/flue-skill-drift-detector-reusable.yml@flue/skill-drift-port
+    with:
+      skill_name: sentry-go-sdk
+      sdk_repo: ${{ github.repository }}
+      pr_number: ${{ github.event.pull_request.number }}
+      pr_url: ${{ github.event.pull_request.html_url }}
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.SENTRY_AI_ANTHROPIC_API_KEY }}
+      SKILL_DRIFT_APP_ID: ${{ secrets.SENTRY_SKILL_DRIFT_APP_ID }}
+      SKILL_DRIFT_APP_PRIVATE_KEY: ${{ secrets.SENTRY_SKILL_DRIFT_APP_PRIVATE_KEY }}
