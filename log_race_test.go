@@ -79,9 +79,8 @@ func TestLoggingRaceConditions(t *testing.T) {
 
 func testConcurrentLoggerSetAttributes(t *testing.T) {
 	client, _ := NewClient(ClientOptions{
-		Dsn:        testDsn,
-		EnableLogs: true,
-		Transport:  &MockTransport{},
+		Dsn:       testDsn,
+		Transport: &MockTransport{},
 	})
 	hub := NewHub(client, NewScope())
 	ctx := SetHubOnContext(context.Background(), hub)
@@ -129,9 +128,8 @@ func testConcurrentLoggerSetAttributes(t *testing.T) {
 
 func testConcurrentLogEmission(_ *testing.T) {
 	client, _ := NewClient(ClientOptions{
-		Dsn:        testDsn,
-		EnableLogs: true,
-		Transport:  &MockTransport{},
+		Dsn:       testDsn,
+		Transport: &MockTransport{},
 	})
 	hub := NewHub(client, NewScope())
 	ctx := SetHubOnContext(context.Background(), hub)
@@ -208,9 +206,8 @@ func testConcurrentLogEntryOperations(t *testing.T) {
 	t.Skip("A single instance of a log entry should not be used concurrently")
 
 	client, _ := NewClient(ClientOptions{
-		Dsn:        testDsn,
-		EnableLogs: true,
-		Transport:  &MockTransport{},
+		Dsn:       testDsn,
+		Transport: &MockTransport{},
 	})
 	hub := NewHub(client, NewScope())
 	ctx := SetHubOnContext(context.Background(), hub)
@@ -264,9 +261,8 @@ func testConcurrentLogEntryOperations(t *testing.T) {
 
 func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 	client, _ := NewClient(ClientOptions{
-		Dsn:        testDsn,
-		EnableLogs: true,
-		Transport:  &MockTransport{},
+		Dsn:       testDsn,
+		Transport: &MockTransport{},
 	})
 	hub := NewHub(client, NewScope())
 
@@ -316,7 +312,6 @@ func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 func testConcurrentLogWithSpanOperations(_ *testing.T) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:              testDsn,
-		EnableLogs:       true,
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Transport:        &MockTransport{},
