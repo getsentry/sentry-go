@@ -2,7 +2,10 @@ package sentry
 
 import (
 	"context"
+	"net/http"
 	"time"
+
+	"github.com/getsentry/sentry-go/attribute"
 )
 
 // The version of the SDK.
@@ -24,34 +27,154 @@ func Init(options ClientOptions) error {
 		return err
 	}
 	hub.BindClient(client)
+	globalScope.client = client
 	return nil
 }
 
-// AddBreadcrumb records a new breadcrumb.
-//
-// The total number of breadcrumbs that can be recorded are limited by the
-// configuration on the client.
-func AddBreadcrumb(breadcrumb *Breadcrumb) {
-	hub := CurrentHub()
-	hub.AddBreadcrumb(breadcrumb, nil)
+// AddBreadcrumb records a new breadcrumb on the derived context scope.
+func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setBreadcrumb(breadcrumb)
+	return contextWithScope(ctx, scope)
+}
+
+// AddEventProcessor returns a derived context with event processor stored on the current Sentry scope.
+func AddEventProcessor(ctx context.Context, processor EventProcessor) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.addEventProcessor(processor)
+	return contextWithScope(ctx, scope)
+}
+
+// SetAttributes returns a derived context with attributes stored on the current Sentry scope.
+func SetAttributes(ctx context.Context, attrs ...attribute.Builder) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setAttributes(attrs...)
+	return contextWithScope(ctx, scope)
+}
+
+// RemoveAttribute returns a derived context with the attribute removed from the current Sentry scope.
+func RemoveAttribute(ctx context.Context, key string) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.removeAttribute(key)
+	return contextWithScope(ctx, scope)
+}
+
+// SetContext returns a derived context with the context stored on the current Sentry scope.
+func SetContext(ctx context.Context, key string, value Context) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setContext(key, value)
+	return contextWithScope(ctx, scope)
+}
+
+// SetContexts returns a derived context with contexts stored on the current Sentry scope.
+func SetContexts(ctx context.Context, contexts map[string]Context) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setContexts(contexts)
+	return contextWithScope(ctx, scope)
+}
+
+// SetFingerprint returns a derived context with fingerprint stored on the current Sentry scope.
+func SetFingerprint(ctx context.Context, fingerprint []string) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setFingerprint(fingerprint)
+	return contextWithScope(ctx, scope)
+}
+
+// SetLevel returns a derived context with level stored on the current Sentry scope.
+func SetLevel(ctx context.Context, level Level) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setLevel(level)
+	return contextWithScope(ctx, scope)
+}
+
+// SetRequest returns a derived context with request stored on the current Sentry scope.
+func SetRequest(ctx context.Context, r *http.Request) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setRequest(r)
+	return contextWithScope(ctx, scope)
+}
+
+// SetRequestBody returns a derived context with request body stored on the current Sentry scope.
+func SetRequestBody(ctx context.Context, b []byte) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setRequestBody(b)
+	return contextWithScope(ctx, scope)
+}
+
+// SetTag returns a derived context with the tag stored on the current Sentry scope.
+func SetTag(ctx context.Context, key, value string) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setTag(key, value)
+	return contextWithScope(ctx, scope)
+}
+
+// SetTags returns a derived context with tags stored on the current Sentry scope.
+func SetTags(ctx context.Context, tags map[string]string) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setTags(tags)
+	return contextWithScope(ctx, scope)
+}
+
+// SetUser returns a derived context with user stored on the current Sentry scope.
+func SetUser(ctx context.Context, user User) context.Context {
+	scope := scopeFromContext(ctx)
+	scope.setUser(user)
+	return contextWithScope(ctx, scope)
+}
+
+// SetGlobalAttributes sets process-wide default attributes.
+func SetGlobalAttributes(attrs ...attribute.Builder) {
+	globalScope.setAttributes(attrs...)
+}
+
+// SetGlobalContext sets a process-wide default context entry.
+func SetGlobalContext(key string, value Context) {
+	globalScope.setContext(key, value)
+}
+
+// SetGlobalContexts sets process-wide default context entries.
+func SetGlobalContexts(contexts map[string]Context) {
+	globalScope.setContexts(contexts)
+}
+
+// SetGlobalFingerprint sets the process-wide default fingerprint.
+func SetGlobalFingerprint(fingerprint []string) {
+	globalScope.setFingerprint(fingerprint)
+}
+
+// SetGlobalLevel sets the process-wide default level.
+func SetGlobalLevel(level Level) {
+	globalScope.setLevel(level)
+}
+
+// SetGlobalTag sets a process-wide default tag.
+func SetGlobalTag(key, value string) {
+	globalScope.setTag(key, value)
+}
+
+// SetGlobalTags sets process-wide default tags.
+func SetGlobalTags(tags map[string]string) {
+	globalScope.setTags(tags)
+}
+
+// SetGlobalUser sets the process-wide default user.
+func SetGlobalUser(user User) {
+	globalScope.setUser(user)
 }
 
 // CaptureMessage captures an arbitrary message.
-func CaptureMessage(message string) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureMessage(message)
+func CaptureMessage(ctx context.Context, message string) *EventID {
+	return scopeFromContext(ctx).captureMessage(message)
 }
 
 // CaptureException captures an error.
-func CaptureException(exception error) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureException(exception)
+func CaptureException(ctx context.Context, exception error) *EventID {
+	return scopeFromContext(ctx).captureException(exception)
 }
 
 // CaptureCheckIn captures a (cron) monitor check-in.
-func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureCheckIn(checkIn, monitorConfig)
+func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+	return scopeFromContext(ctx).captureCheckIn(checkIn, monitorConfig)
 }
 
 // CaptureEvent captures an event on the currently active client if any.
@@ -59,39 +182,30 @@ func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 // The event must already be assembled. Typically code would instead use
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
-func CaptureEvent(event *Event) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureEvent(event)
+func CaptureEvent(ctx context.Context, event *Event) *EventID {
+	return scopeFromContext(ctx).captureEvent(event)
 }
 
 // Recover captures a panic.
-func Recover() *EventID {
-	if err := recover(); err != nil {
-		hub := CurrentHub()
-		return hub.Recover(err)
-	}
-	return nil
+func Recover(ctx context.Context) *EventID {
+	return scopeFromContext(ctx).recover(ctx)
 }
 
-// RecoverWithContext captures a panic and passes relevant context object.
-func RecoverWithContext(ctx context.Context) *EventID {
-	err := recover()
-	if err == nil {
-		return nil
-	}
-
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub()
-	}
-
-	return hub.RecoverWithContext(ctx, err)
-}
-
-// WithScope is a shorthand for CurrentHub().WithScope.
-func WithScope(f func(scope *Scope)) {
-	hub := CurrentHub()
-	hub.WithScope(f)
+// WithScope batches multiple scope mutations on a single derived context.
+//
+// Usage:
+//
+//	ctx = sentry.WithScope(ctx, func(s *sentry.ContextBuilder) {
+//		s.SetTag("key", "value")
+//		s.SetUser(sentry.User{ID: "123"})
+//	})
+//
+// TODO: function signature should be f func(*Scope)
+// currently naming it ScopeBuilder to avoid breaking the old Scope.
+func WithScope(ctx context.Context, f func(*ScopeBuilder)) context.Context {
+	b := &ScopeBuilder{ctx: normalizeContext(ctx)}
+	f(b)
+	return b.ctx
 }
 
 // ConfigureScope is a shorthand for CurrentHub().ConfigureScope.

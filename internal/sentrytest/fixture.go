@@ -35,6 +35,7 @@ var DefaultEventCmpOpts = cmp.Options{
 		"ServerName",
 		"Timestamp",
 	),
+	cmpopts.IgnoreFields(sentry.Breadcrumb{}, "Timestamp"),
 	cmpopts.IgnoreFields(sentry.Request{}, "Env"),
 	cmpopts.IgnoreUnexported(sentry.Event{}),
 	cmpopts.EquateEmpty(),
