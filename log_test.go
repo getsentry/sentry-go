@@ -327,6 +327,26 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Emit message with literal percent sign",
+			logFunc: func(ctx context.Context, l Logger, msg any) {
+				l.Info().WithCtx(ctx).Emit(msg)
+			},
+			args: "disk 95% full",
+			wantEvents: []Event{
+				{
+					Logs: []Log{
+						{
+							TraceID:    TraceIDFromHex(LogTraceID),
+							Level:      LogLevelInfo,
+							Severity:   LogSeverityInfo,
+							Body:       "disk 95% full",
+							Attributes: attrs,
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {

@@ -138,11 +138,13 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		attrs[k] = v
 	}
 
+	body := message
 	if len(args) > 0 {
 		attrs["sentry.message.template"] = attribute.StringValue(message)
 		for i, p := range args {
 			attrs[fmt.Sprintf("sentry.message.parameters.%d", i)] = attribute.StringValue(fmt.Sprintf("%+v", p))
 		}
+		body = fmt.Sprintf(message, args...)
 	}
 
 	log := &Log{
@@ -151,7 +153,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		SpanID:     spanID,
 		Level:      level,
 		Severity:   severity,
-		Body:       fmt.Sprintf(message, args...),
+		Body:       body,
 		Attributes: attrs,
 	}
 	log.approximateSize = computeLogSize(log)
