@@ -35,7 +35,7 @@ func TestOpen_AutodetectsSystemFromDriverName(t *testing.T) {
 
 func TestOpenDB_RequiresDatabaseSystem(t *testing.T) {
 	t.Parallel()
-	conn := fakedriver.NewCtxConnectorWithCloseCount(fakedriver.NewCtx())
+	conn := fakedriver.NewCtxConnector(fakedriver.NewCtx())
 	_, err := sentrysql.OpenDB(conn)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "WithDatabaseSystem is required")
@@ -50,7 +50,7 @@ func TestWrapDriver_RequiresDatabaseSystem(t *testing.T) {
 
 func TestWrapConnector_RequiresDatabaseSystem(t *testing.T) {
 	t.Parallel()
-	conn := fakedriver.NewCtxConnectorWithCloseCount(fakedriver.NewCtx())
+	conn := fakedriver.NewCtxConnector(fakedriver.NewCtx())
 	_, err := sentrysql.WrapConnector(conn)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "WithDatabaseSystem is required")
@@ -75,7 +75,7 @@ func TestOpen_PassthroughContextDriver(t *testing.T) {
 	db, err := sentrysql.Open("fake-ctx-open", "",
 		sentrysql.WithDatabaseSystem(sentrysql.SystemPostgreSQL),
 		sentrysql.WithDatabaseName("appdb"),
-		sentrysql.WithServerAddress("localhost", "5432"),
+		sentrysql.WithServerAddress("localhost", 5432),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
@@ -201,7 +201,7 @@ func TestBeginTx_RejectsNonDefaultOptsOnLegacyDriver(t *testing.T) {
 
 func TestOpenDB_PropagatesConnectorClose(t *testing.T) {
 	t.Parallel()
-	conn := fakedriver.NewCtxConnectorWithCloseCount(fakedriver.NewCtx())
+	conn := fakedriver.NewCtxConnector(fakedriver.NewCtx())
 	db, err := sentrysql.OpenDB(conn, sentrysql.WithDatabaseSystem("postgresql"))
 	require.NoError(t, err)
 
@@ -225,7 +225,7 @@ func TestWrapConnector_LegacyDriverHidesDriverContext(t *testing.T) {
 
 func TestWrapConnector_CtxDriverExposesDriverContext(t *testing.T) {
 	t.Parallel()
-	conn := fakedriver.NewCtxConnectorWithCloseCount(fakedriver.NewCtx())
+	conn := fakedriver.NewCtxConnector(fakedriver.NewCtx())
 	db, err := sentrysql.OpenDB(conn, sentrysql.WithDatabaseSystem("postgresql"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })

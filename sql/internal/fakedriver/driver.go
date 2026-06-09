@@ -10,6 +10,9 @@
 //     the required driver.Conn methods (Prepare, Close, Begin). No Execer or
 //     Queryer, which forces database/sql to fall back to Prepare + Stmt.Exec/
 //     Stmt.Query, exercising the deepest wrapper fallback paths.
+//   - SkipDriver: implements the context-aware query/exec interfaces but
+//     returns driver.ErrSkip from them, forcing database/sql to fall back to
+//     prepared statements.
 //
 // Use NewCtx / NewLegacy / NewMinimal to construct each shape and Register to
 // expose it by name via database/sql.
@@ -89,34 +92,42 @@ func (d *MinimalDriver) Open(_ string) (driver.Conn, error) {
 	return &minimalConn{drv: d}, nil
 }
 
-// CtxConnectorWithCloseCount is an exported connector wrapper backed by a CtxDriver. Unlike
+// SkipDriver forces database/sql to fall back after the context-aware methods
+// return driver.ErrSkip.
+type SkipDriver struct{}
+
+// NewSkip returns a new SkipDriver.
+func NewSkip() *SkipDriver { return &SkipDriver{} }
+
+// Open implements driver.Driver.
+func (d *SkipDriver) Open(_ string) (driver.Conn, error) {
+	return &skipConn{}, nil
+}
+
+// CtxConnector is an exported connector wrapper backed by a CtxDriver. Unlike
 // the internal ctxConnector returned by CtxDriver.OpenConnector, this one
 // implements io.Closer with an observable close counter so tests can verify
 // that the sentrysql wrapper propagates DB.Close through to inner connectors.
-type CtxConnectorWithCloseCount struct {
+type CtxConnector struct {
 	drv   *CtxDriver
 	count atomic.Int32
 }
 
-// NewCtxConnectorWithCloseCount constructs a CtxConnectorWithCloseCount.
-func NewCtxConnectorWithCloseCount(drv *CtxDriver) *CtxConnectorWithCloseCount {
-	return &CtxConnectorWithCloseCount{drv: drv}
-}
+// NewCtxConnector constructs a CtxConnector.
+func NewCtxConnector(drv *CtxDriver) *CtxConnector { return &CtxConnector{drv: drv} }
 
 // Connect implements driver.Connector.
-func (c *CtxConnectorWithCloseCount) Connect(_ context.Context) (driver.Conn, error) {
-	return c.drv.Open("")
-}
+func (c *CtxConnector) Connect(_ context.Context) (driver.Conn, error) { return c.drv.Open("") }
 
 // Driver implements driver.Connector.
-func (c *CtxConnectorWithCloseCount) Driver() driver.Driver { return c.drv }
+func (c *CtxConnector) Driver() driver.Driver { return c.drv }
 
 // Close implements io.Closer. The counter it increments is observable via
 // CloseCount for verification in tests.
-func (c *CtxConnectorWithCloseCount) Close() error { c.count.Add(1); return nil }
+func (c *CtxConnector) Close() error { c.count.Add(1); return nil }
 
 // CloseCount reports how many times Close was invoked on this connector.
-func (c *CtxConnectorWithCloseCount) CloseCount() int { return int(c.count.Load()) }
+func (c *CtxConnector) CloseCount() int { return int(c.count.Load()) }
 
 // LegacyConnector wraps a LegacyDriver as a driver.Connector so tests can
 // exercise the sentrysql wrapper's behavior when a connector's Driver() does
@@ -143,7 +154,9 @@ var (
 
 	_ driver.Driver = (*MinimalDriver)(nil)
 
-	_ driver.Connector = (*CtxConnectorWithCloseCount)(nil)
+	_ driver.Driver = (*SkipDriver)(nil)
+
+	_ driver.Connector = (*CtxConnector)(nil)
 	_ driver.Connector = (*LegacyConnector)(nil)
 )
 
