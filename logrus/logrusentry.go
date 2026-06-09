@@ -418,8 +418,8 @@ func (h *logHook) FlushWithContext(ctx context.Context) bool {
 // NewLogHook initializes a new Logrus hook which sends logs to a new Sentry client
 // configured according to opts.
 func NewLogHook(levels []logrus.Level, opts sentry.ClientOptions) (Hook, error) {
-	if !opts.EnableLogs {
-		return nil, errors.New("cannot create log hook, EnableLogs is set to false")
+	if opts.DisableLogs {
+		return nil, errors.New("cannot create log hook, DisableLogs is set to true")
 	}
 	client, err := sentry.NewClient(opts)
 	if err != nil {

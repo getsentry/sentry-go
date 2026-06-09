@@ -39,7 +39,6 @@ func otelOpts() []sentrytest.Option {
 		sentrytest.WithClientOptions(sentry.ClientOptions{
 			EnableTracing:    true,
 			TracesSampleRate: 1.0,
-			EnableLogs:       true,
 			Integrations: func(integrations []sentry.Integration) []sentry.Integration {
 				return append(integrations, sentryotel.NewOtelIntegration())
 			},

@@ -53,7 +53,6 @@ func main() {
 				return event
 			},
 			// need to have logs enabled
-			EnableLogs:       true,
 			Debug:            true,
 			AttachStacktrace: true,
 		})
