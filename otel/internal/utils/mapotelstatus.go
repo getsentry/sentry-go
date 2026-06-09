@@ -4,7 +4,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 )
 
 // // OpenTelemetry span status can be Unset, Ok, Error. HTTP and Grpc codes contained in tags can make it more detailed.
@@ -48,7 +48,7 @@ func MapOtelStatus(s trace.ReadOnlySpan) sentry.SpanStatus {
 	statusCode := s.Status().Code
 
 	for _, attribute := range s.Attributes() {
-		if attribute.Key == semconv.HTTPStatusCodeKey {
+		if isHTTPStatusCodeKey(attribute.Key) {
 			if status, ok := canonicalCodesHTTPMap[attribute.Value.Emit()]; ok {
 				return status
 			}

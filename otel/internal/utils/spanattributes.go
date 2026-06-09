@@ -6,7 +6,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	otelSdkTrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	otelTrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -18,10 +18,10 @@ type SpanAttributes struct {
 
 func ParseSpanAttributes(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 	for _, attribute := range s.Attributes() {
-		if attribute.Key == semconv.HTTPMethodKey {
+		if isHTTPMethodKey(attribute.Key) {
 			return descriptionForHTTPMethod(s)
 		}
-		if attribute.Key == semconv.DBSystemKey {
+		if isDBSystemKey(attribute.Key) {
 			return descriptionForDbSystem(s)
 		}
 		if attribute.Key == semconv.RPCSystemKey {
@@ -58,10 +58,10 @@ func ParseSpanAttributes(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 func descriptionForDbSystem(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 	description := s.Name()
 	for _, attribute := range s.Attributes() {
-		if attribute.Key == semconv.DBStatementKey {
+		if isDBStatementKey(attribute.Key) {
 			// TODO(michi)
 			// Note: The value may be sanitized to exclude sensitive information.
-			// See: https://pkg.go.dev/go.opentelemetry.io/otel/semconv/v1.12.0
+			// See: https://pkg.go.dev/go.opentelemetry.io/otel/semconv/v1.30.0
 			description = attribute.Value.AsString()
 			break
 		}
@@ -83,23 +83,7 @@ func descriptionForHTTPMethod(s otelSdkTrace.ReadOnlySpan) SpanAttributes {
 		op = "http.server"
 	}
 
-	var httpTarget string
-	var httpRoute string
-	var httpMethod string
-	var httpURL string
-
-	for _, attribute := range s.Attributes() {
-		switch attribute.Key {
-		case semconv.HTTPTargetKey:
-			httpTarget = attribute.Value.AsString()
-		case semconv.HTTPRouteKey:
-			httpRoute = attribute.Value.AsString()
-		case semconv.HTTPMethodKey:
-			httpMethod = attribute.Value.AsString()
-		case semconv.HTTPURLKey:
-			httpURL = attribute.Value.AsString()
-		}
-	}
+	httpMethod, httpRoute, httpTarget, httpURL := httpSpanData(s.Attributes())
 
 	var httpPath string
 

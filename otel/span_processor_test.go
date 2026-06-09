@@ -517,3 +517,49 @@ func TestLinkTraceContextToErrorEventWithSpanProcessor(t *testing.T) {
 		"span_id":  otelSpan.SpanContext().SpanID().String(),
 	})
 }
+
+func TestOnEndDoesNotFinishSentryRequestsWithURLFull(t *testing.T) {
+	_, tracer := setupSpanProcessorTest()
+	ctx, otelSpan := tracer.Start(
+		emptyContextWithSentry(),
+		"POST to Sentry",
+		trace.WithAttributes(attribute.String("url.full", "https://example.com/api/123/envelope/")),
+	)
+	sentrySpan, _ := sentrySpanMap.Get(otelSpan.SpanContext().TraceID(), otelSpan.SpanContext().SpanID())
+	otelSpan.End()
+
+	assertEqual(t, sentrySpanMap.Len(), 0)
+	assertTrue(t, sentrySpan.EndTime.IsZero())
+	sentryTransport := getSentryTransportFromContext(ctx)
+	assertEqual(t, len(sentryTransport.Events()), 0)
+}
+
+func TestParseSpanAttributesHttpClientWithNewSemconv(t *testing.T) {
+	_, tracer := setupSpanProcessorTest()
+	ctx, otelRootSpan := tracer.Start(
+		emptyContextWithSentry(),
+		"rootSpan",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(attribute.String("http.request.method", "GET")),
+		trace.WithAttributes(attribute.String("url.full", "http://localhost:1234/api/checkout1?q1=q2#fragment")),
+	)
+	_, otelChildSpan := tracer.Start(ctx,
+		"childSpan",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(attribute.String("http.request.method", "POST")),
+		trace.WithAttributes(attribute.String("url.path", "/api/checkout2")),
+		trace.WithAttributes(attribute.String("url.full", "http://localhost:2345/api/checkout2?q1=q2#fragment")),
+	)
+
+	sentryTransaction, _ := sentrySpanMap.Get(otelRootSpan.SpanContext().TraceID(), otelRootSpan.SpanContext().SpanID())
+	sentrySpan, _ := sentrySpanMap.Get(otelChildSpan.SpanContext().TraceID(), otelChildSpan.SpanContext().SpanID())
+
+	otelChildSpan.End()
+	otelRootSpan.End()
+
+	assertEqual(t, sentryTransaction.Name, "GET http://localhost:1234/api/checkout1")
+	assertEqual(t, sentryTransaction.Op, "http.client")
+	assertEqual(t, sentryTransaction.Source, sentry.TransactionSource("url"))
+	assertEqual(t, sentrySpan.Description, "POST /api/checkout2")
+	assertEqual(t, sentrySpan.Op, "http.client")
+}

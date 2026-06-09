@@ -10,7 +10,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
+	oldsemconv "go.opentelemetry.io/otel/semconv/v1.12.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.30.0"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -50,36 +51,28 @@ func TestMapOtelStatus(t *testing.T) {
 			{
 				name: "Should return SpanStatusOk if given a Ok status",
 				span: &mockReadOnlySpan{
-					status: trace.Status{
-						Code: codes.Ok,
-					},
+					status: trace.Status{Code: codes.Ok},
 				},
 				want: sentry.SpanStatusOK,
 			},
 			{
 				name: "Should return SpanStatusOk if given a Unset status",
 				span: &mockReadOnlySpan{
-					status: trace.Status{
-						Code: codes.Unset,
-					},
+					status: trace.Status{Code: codes.Unset},
 				},
 				want: sentry.SpanStatusOK,
 			},
 			{
 				name: "Should return SpanStatusError if given a Error status",
 				span: &mockReadOnlySpan{
-					status: trace.Status{
-						Code: codes.Error,
-					},
+					status: trace.Status{Code: codes.Error},
 				},
 				want: sentry.SpanStatusInternalError,
 			},
 			{
 				name: "Should return SpanStatusUnknown if given an unknown status",
 				span: &mockReadOnlySpan{
-					status: trace.Status{
-						Code: 1337,
-					},
+					status: trace.Status{Code: 1337},
 				},
 				want: sentry.SpanStatusUnknown,
 			},
@@ -101,7 +94,7 @@ func TestMapOtelStatus(t *testing.T) {
 		return key.String(strconv.Itoa(i)), "as a string attribute"
 	}
 
-	t.Run("Given a HTTP Status code", func(t *testing.T) {
+	t.Run("Given a legacy HTTP Status code", func(t *testing.T) {
 		tts := []struct {
 			code    int
 			factory func(key attribute.Key, i int) (attribute.KeyValue, string)
@@ -132,13 +125,8 @@ func TestMapOtelStatus(t *testing.T) {
 		}
 
 		for _, tt := range tts {
-			attr, how := tt.factory(semconv.HTTPStatusCodeKey, tt.code)
-			span := &mockReadOnlySpan{
-				attributes: []attribute.KeyValue{
-					attr,
-				},
-			}
-
+			attr, how := tt.factory(oldsemconv.HTTPStatusCodeKey, tt.code)
+			span := &mockReadOnlySpan{attributes: []attribute.KeyValue{attr}}
 			name := fmt.Sprintf("Should return %s given the code %d %s", tt.want, tt.code, how)
 
 			t.Run(name, func(t *testing.T) {
@@ -146,6 +134,15 @@ func TestMapOtelStatus(t *testing.T) {
 					t.Errorf("MapOtelStatus() = %v, want %v", got, tt.want)
 				}
 			})
+		}
+	})
+
+	t.Run("Given a v1.30 HTTP Status code", func(t *testing.T) {
+		attr := semconv.HTTPResponseStatusCodeKey.Int(503)
+		span := &mockReadOnlySpan{attributes: []attribute.KeyValue{attr}}
+
+		if got := utils.MapOtelStatus(span); got != sentry.SpanStatusUnavailable {
+			t.Errorf("MapOtelStatus() = %v, want %v", got, sentry.SpanStatusUnavailable)
 		}
 	})
 
@@ -191,12 +188,7 @@ func TestMapOtelStatus(t *testing.T) {
 
 		for _, tt := range tts {
 			attr, how := tt.factory(semconv.RPCGRPCStatusCodeKey, tt.code)
-			span := &mockReadOnlySpan{
-				attributes: []attribute.KeyValue{
-					attr,
-				},
-			}
-
+			span := &mockReadOnlySpan{attributes: []attribute.KeyValue{attr}}
 			name := fmt.Sprintf("Should return %s given the code %d %s", tt.want, tt.code, how)
 			t.Run(name, func(t *testing.T) {
 				if got := utils.MapOtelStatus(span); got != tt.want {

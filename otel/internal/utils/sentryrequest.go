@@ -6,23 +6,17 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 )
 
 func IsSentryRequestSpan(ctx context.Context, s trace.ReadOnlySpan) bool {
-	attributes := s.Attributes()
-
-	// TODO(michi): can we access the attribute directly?
-	for _, attribute := range attributes {
-		if attribute.Key == semconv.HTTPURLKey {
-			return isSentryRequestURL(ctx, attribute.Value.AsString())
-		}
-	}
-
-	return false
+	return isSentryRequestURL(ctx, sentryRequestURL(s.Attributes()))
 }
 
 func isSentryRequestURL(ctx context.Context, url string) bool {
+	if url == "" {
+		return false
+	}
+
 	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
 		hub = sentry.CurrentHub()
