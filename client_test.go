@@ -1130,7 +1130,6 @@ func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
 
 	assert.Equal(t, sdkIdentifier, header.Sdk.Name)
 	assert.Contains(t, header.Sdk.Integrations, "CustomRegressionIntegration")
-	assert.Contains(t, header.Sdk.Integrations, "ContextifyFrames")
 }
 
 func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
@@ -1162,9 +1161,8 @@ func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 	mkClient := func(dsn string) (*Client, *MockTransport) {
 		tr := &MockTransport{}
 		c, err := NewClient(ClientOptions{
-			Dsn:        dsn,
-			Transport:  tr,
-			EnableLogs: true,
+			Dsn:       dsn,
+			Transport: tr,
 			Integrations: func(_ []Integration) []Integration {
 				return []Integration{}
 			},

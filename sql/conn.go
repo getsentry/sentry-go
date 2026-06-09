@@ -88,7 +88,7 @@ func (c *sentryConn) PrepareContext(ctx context.Context, query string) (driver.S
 		if err != nil {
 			return nil, err
 		}
-		return newStmt(stmt, c.cfg, query), nil
+		return newStmt(stmt, c, c.cfg, query), nil
 	}
 	stmt, err := c.Prepare(query)
 	if err != nil {
@@ -108,7 +108,7 @@ func (c *sentryConn) Prepare(query string) (driver.Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newStmt(stmt, c.cfg, query), nil
+	return newStmt(stmt, c, c.cfg, query), nil
 }
 
 // Close implements driver.Conn.

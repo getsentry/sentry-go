@@ -8,12 +8,13 @@ import (
 // sentryStmt wraps a driver.Stmt.
 type sentryStmt struct {
 	stmt  driver.Stmt
+	conn  *sentryConn
 	cfg   *config
 	query string
 }
 
-func newStmt(s driver.Stmt, cfg *config, query string) driver.Stmt {
-	return &sentryStmt{stmt: s, cfg: cfg, query: query}
+func newStmt(s driver.Stmt, conn *sentryConn, cfg *config, query string) driver.Stmt {
+	return &sentryStmt{stmt: s, conn: conn, cfg: cfg, query: query}
 }
 
 // Close implements driver.Stmt.
@@ -79,6 +80,9 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 func (s *sentryStmt) CheckNamedValue(nv *driver.NamedValue) error {
 	if ch, ok := s.stmt.(driver.NamedValueChecker); ok {
 		return ch.CheckNamedValue(nv)
+	}
+	if s.conn != nil {
+		return s.conn.CheckNamedValue(nv)
 	}
 	return driver.ErrSkip
 }

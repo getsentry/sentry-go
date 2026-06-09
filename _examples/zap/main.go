@@ -15,7 +15,6 @@ func main() {
 	// Initialize Sentry with logs enabled
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:        "your-sentry-dsn",
-		EnableLogs: true,
 	})
 	if err != nil {
 		panic(err)
