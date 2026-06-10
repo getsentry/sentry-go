@@ -142,13 +142,13 @@ func TestIntegration_EmitsQueryAndExecSpans(t *testing.T) {
 
 				assert.Equal(t, sentrysql.SpanOrigin, gotExec.Origin)
 				assert.Equal(t, sentrysql.SpanOrigin, gotQuery.Origin)
-				assert.Equal(t, "INSERT INTO t VALUES (1)", gotExec.Description)
+				assert.Equal(t, "INSERT INTO t VALUES (?)", gotExec.Description)
 				assert.Equal(t, "SELECT * FROM t", gotQuery.Description)
 				assert.Equal(t, sentry.SpanStatusOK, gotExec.Status)
 				assert.Equal(t, sentry.SpanStatusOK, gotQuery.Status)
 
 				assert.NotEmpty(t, gotExec.Data["db.system.name"])
-				assert.Equal(t, "INSERT INTO t VALUES (1)", gotExec.Data["db.query.text"])
+				assert.Equal(t, "INSERT INTO t VALUES (?)", gotExec.Data["db.query.text"])
 				assert.Equal(t, "SELECT * FROM t", gotQuery.Data["db.query.text"])
 			}, tracingOpts())
 		})

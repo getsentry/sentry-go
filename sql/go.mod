@@ -5,6 +5,7 @@ go 1.25.0
 replace github.com/getsentry/sentry-go => ../
 
 require (
+	github.com/DataDog/go-sqllexer v0.2.1
 	github.com/getsentry/sentry-go v0.46.0
 	github.com/stretchr/testify v1.11.1
 )
