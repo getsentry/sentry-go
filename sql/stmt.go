@@ -80,6 +80,9 @@ func (s *sentryStmt) CheckNamedValue(nv *driver.NamedValue) error {
 	if ch, ok := s.stmt.(driver.NamedValueChecker); ok {
 		return ch.CheckNamedValue(nv)
 	}
+	if s.conn != nil {
+		return s.conn.CheckNamedValue(nv)
+	}
 	return driver.ErrSkip
 }
 

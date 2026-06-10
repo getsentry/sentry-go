@@ -39,7 +39,6 @@ func setupMockTransport() (context.Context, *MockTransport) {
 		Release:       "v1.2.3",
 		Environment:   "testing",
 		ServerName:    "test-server",
-		EnableLogs:    true,
 		EnableTracing: true,
 	})
 	mockClient.sdkIdentifier = "sentry.go"
@@ -626,7 +625,6 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 	mockClient, _ := NewClient(ClientOptions{
 		Dsn:                    testDsn,
 		Transport:              mockTransport,
-		EnableLogs:             true,
 		DisableTelemetryBuffer: true,
 	})
 	hub := CurrentHub()
@@ -675,7 +673,6 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 		Release:       "v1.2.3",
 		Environment:   "testing",
 		ServerName:    "test-server",
-		EnableLogs:    true,
 		EnableTracing: true,
 		BeforeSendLog: func(_ *Log) *Log {
 			return nil
@@ -750,19 +747,19 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 
 func TestSentryLogger_DebugLogging(t *testing.T) {
 	tests := []struct {
-		name       string
-		enableLogs bool
-		message    string
+		name        string
+		disableLogs bool
+		message     string
 	}{
 		{
-			name:       "Debug enabled",
-			enableLogs: true,
-			message:    "test message",
+			name:        "Logs enabled (default)",
+			disableLogs: false,
+			message:     "test message",
 		},
 		{
-			name:       "Debug disabled",
-			enableLogs: false,
-			message:    "test message",
+			name:        "Logs disabled",
+			disableLogs: true,
+			message:     "test message",
 		},
 	}
 
@@ -772,9 +769,9 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 
 			ctx := context.Background()
 			mockClient, _ := NewClient(ClientOptions{
-				Transport:  &MockTransport{},
-				EnableLogs: tt.enableLogs,
-				Debug:      true,
+				Transport:   &MockTransport{},
+				DisableLogs: tt.disableLogs,
+				Debug:       true,
 			})
 			hub := CurrentHub()
 			hub.BindClient(mockClient)
@@ -787,7 +784,7 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 			logger.Info().WithCtx(ctx).Emit(tt.message)
 
 			got := buf.String()
-			if tt.enableLogs {
+			if !tt.disableLogs {
 				assertEqual(t, strings.Contains(got, "test message"), true)
 			} else {
 				assertEqual(t, strings.Contains(got, "test message"), false)
@@ -805,7 +802,6 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 		Release:       "v1.2.3",
 		Environment:   "testing",
 		ServerName:    "test-server",
-		EnableLogs:    true,
 		EnableTracing: true,
 	})
 	mockClient.sdkIdentifier = "sentry.go"

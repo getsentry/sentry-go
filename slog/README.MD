@@ -37,7 +37,6 @@ func main() {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn: "your-public-dsn",
 		Debug: true,
-        EnableLogs: true, 
 	})
 	if err != nil {
 		panic(err)
