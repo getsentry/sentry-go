@@ -4,17 +4,17 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
-	"sync"
+	"sync/atomic"
 
 	"github.com/getsentry/sentry-go"
 )
 
 // sentryConn wraps a driver.Conn.
 type sentryConn struct {
-	mu     sync.RWMutex
-	cfg    *config
-	conn   driver.Conn
-	txSpan *sentry.Span
+	cfg  *config
+	conn driver.Conn
+	// activeTx points to the transaction currently open on this connection.
+	activeTx atomic.Pointer[sentryTx]
 }
 
 func newConn(c driver.Conn, cfg *config) driver.Conn {
@@ -125,8 +125,9 @@ func (c *sentryConn) Begin() (driver.Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.setTxSpan(nil)
-	return &sentryTx{tx: tx, conn: c}, nil
+	t := newTx(tx, nil)
+	c.activeTx.Store(t)
+	return t, nil
 }
 
 // BeginTx implements driver.ConnBeginTx with fallback to Begin.
@@ -158,9 +159,9 @@ func (c *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 		}
 	}
 
-	span := startTxSpan(ctx, c.cfg)
-	c.setTxSpan(span)
-	return &sentryTx{tx: tx, conn: c, span: span}, nil
+	t := newTx(tx, startTxSpan(ctx, c.cfg))
+	c.activeTx.Store(t)
+	return t, nil
 }
 
 // ResetSession implements driver.SessionResetter.
@@ -194,20 +195,9 @@ func (c *sentryConn) Raw() driver.Conn {
 	return c.conn
 }
 
-// txSpanOrNil returns the parent transaction span set in the connection.
-// If it doesn't exist, this returns a nil span.
+// txSpanOrNil returns the span of the transaction currently open on the connection.
 func (c *sentryConn) txSpanOrNil() *sentry.Span {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.txSpan
-}
-
-// setTxSpan sets a span in the connection. This is meant to be set on BeginTx
-// and removed on Commit/Rollback.
-func (c *sentryConn) setTxSpan(span *sentry.Span) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.txSpan = span
+	return c.activeTx.Load().spanOrNil()
 }
 
 // namedValuesToValues converts []driver.NamedValue to []driver.Value for
