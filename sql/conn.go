@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
-	"sync/atomic"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -14,7 +13,7 @@ type sentryConn struct {
 	cfg  *config
 	conn driver.Conn
 	// activeTx points to the transaction currently open on this connection.
-	activeTx atomic.Pointer[sentryTx]
+	activeTx *sentryTx
 }
 
 func newConn(c driver.Conn, cfg *config) driver.Conn {
@@ -126,7 +125,7 @@ func (c *sentryConn) Begin() (driver.Tx, error) {
 		return nil, err
 	}
 	t := newTx(tx, nil)
-	c.activeTx.Store(t)
+	c.activeTx = t
 	return t, nil
 }
 
@@ -160,7 +159,7 @@ func (c *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 	}
 
 	t := newTx(tx, startTxSpan(ctx, c.cfg))
-	c.activeTx.Store(t)
+	c.activeTx = t
 	return t, nil
 }
 
@@ -197,7 +196,7 @@ func (c *sentryConn) Raw() driver.Conn {
 
 // txSpanOrNil returns the span of the transaction currently open on the connection.
 func (c *sentryConn) txSpanOrNil() *sentry.Span {
-	return c.activeTx.Load().spanOrNil()
+	return c.activeTx.spanOrNil()
 }
 
 // namedValuesToValues converts []driver.NamedValue to []driver.Value for

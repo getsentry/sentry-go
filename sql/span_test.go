@@ -112,7 +112,7 @@ func TestStartQuerySpan_UsesTransactionParent(t *testing.T) {
 		conn := &sentryConn{cfg: cfg}
 		txSpan := startTxSpan(parent.Context(), cfg)
 		require.NotNil(t, txSpan)
-		conn.activeTx.Store(newTx(nil, txSpan))
+		conn.activeTx = newTx(nil, txSpan)
 
 		querySpan := startQuerySpan(context.Background(), conn, cfg, opQuery, "SELECT 42")
 		require.NotNil(t, querySpan)
@@ -134,7 +134,7 @@ func (testTx) Rollback() error { return nil }
 
 func TestBeginClearsActiveTxSpan(t *testing.T) {
 	conn := &sentryConn{conn: testConn{}, cfg: &config{system: SystemPostgreSQL}}
-	conn.activeTx.Store(newTx(nil, &sentry.Span{}))
+	conn.activeTx = newTx(nil, &sentry.Span{})
 
 	tx, err := conn.Begin()
 	require.NoError(t, err)
@@ -156,7 +156,7 @@ func TestSentryTxFinishClearsConnSpan(t *testing.T) {
 		require.NotNil(t, span)
 
 		tx := newTx(nil, span)
-		conn.activeTx.Store(tx)
+		conn.activeTx = tx
 		tx.finish(nil, sentry.SpanStatusOK)
 
 		assert.Nil(t, conn.txSpanOrNil())
