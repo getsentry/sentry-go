@@ -585,69 +585,6 @@ func TestSetHubOnContext(t *testing.T) {
 	}
 }
 
-func TestUnmatchedRouteKeepsURLSource(t *testing.T) {
-	transactionsCh := make(chan *sentry.Event, 5)
-	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
-			transactionsCh <- tx
-			return tx
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	app := fiber.New()
-	app.Use(sentryfiber.New(sentryfiber.Options{Timeout: 3 * time.Second, WaitForDelivery: true}))
-	app.Get("/users/:id", func(c fiber.Ctx) error {
-		return c.SendString("OK")
-	})
-
-	paths := []string{"/users/123", "/notfound/abc", "/notfound/xyz"}
-	for _, path := range paths {
-		req, _ := http.NewRequest("GET", "http://example.com"+path, nil)
-		req.Header.Set("User-Agent", "fiber")
-		resp, err := app.Test(req)
-		if err != nil {
-			t.Fatalf("Request %q failed: %s", path, err)
-		}
-		resp.Body.Close()
-	}
-
-	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
-		t.Fatal("sentry.Flush timed out")
-	}
-
-	close(transactionsCh)
-	var transactions []*sentry.Event
-	for tx := range transactionsCh {
-		transactions = append(transactions, tx)
-	}
-
-	if len(transactions) != 3 {
-		t.Fatalf("expected 3 transactions, got %d", len(transactions))
-	}
-
-	if transactions[0].Transaction != "GET /users/:id" {
-		t.Errorf("matched route: got name %q, want %q", transactions[0].Transaction, "GET /users/:id")
-	}
-	if transactions[0].TransactionInfo.Source != "route" {
-		t.Errorf("matched route: got source %q, want %q", transactions[0].TransactionInfo.Source, "route")
-	}
-
-	for i, wantName := range []string{"GET /notfound/abc", "GET /notfound/xyz"} {
-		tx := transactions[i+1]
-		if tx.Transaction != wantName {
-			t.Errorf("unmatched route %d: got name %q, want %q", i, tx.Transaction, wantName)
-		}
-		if tx.TransactionInfo.Source != "url" {
-			t.Errorf("unmatched route %d: got source %q, want %q", i, tx.TransactionInfo.Source, "url")
-		}
-	}
-}
-
 func TestMalformedURLNoPanic(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,

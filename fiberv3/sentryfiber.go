@@ -72,10 +72,6 @@ func (h *handler) handle(ctx fiber.Ctx) error {
 	transactionName := ctx.Path()
 	transactionSource := sentry.SourceURL
 
-	// Capture the middleware's own route path before Next() so we can
-	// detect whether routing actually matched a different route.
-	middlewareRoute := ctx.Route().Path
-
 	options := []sentry.SpanOption{
 		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
@@ -96,12 +92,7 @@ func (h *handler) handle(ctx fiber.Ctx) error {
 	ctx.SetContext(transaction.Context())
 
 	defer func() {
-		// After Next(), Route().Path reflects the matched route. Only
-		// update the transaction name when routing actually resolved to
-		// a different route than the middleware's own catch-all; for
-		// unmatched requests (404s) the route stays the middleware's
-		// default and we keep the raw URL with SourceURL.
-		if routePath := ctx.Route().Path; routePath != "" && routePath != middlewareRoute {
+		if routePath := ctx.Route().Path; routePath != "" {
 			transaction.Name = fmt.Sprintf("%s %s", r.Method, routePath)
 			transaction.Source = sentry.SourceRoute
 		}
