@@ -73,7 +73,7 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
-			sentry.WithTransactionSource(sentry.SourceRoute),
+			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginFastHTTP),
 		}
 

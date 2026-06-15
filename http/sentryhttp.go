@@ -98,7 +98,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
-			sentry.WithTransactionSource(sentry.SourceURL),
+			sentry.WithTransactionSource(traceutils.GetHTTPTransactionSource(r)),
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
 		}
 
