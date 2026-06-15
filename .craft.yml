@@ -43,6 +43,9 @@ targets:
     tagPrefix: slog/v
     tagOnly: true
   - name: github
+    tagPrefix: sql/v
+    tagOnly: true
+  - name: github
     tagPrefix: zerolog/v
     tagOnly: true
   - name: github
