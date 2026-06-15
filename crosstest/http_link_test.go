@@ -195,7 +195,8 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			return nil
 		})
 
-		req := httptest.NewRequest(http.MethodGet, "http://example.com/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req.Host = "example.com"
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("fiber request: %v", err)

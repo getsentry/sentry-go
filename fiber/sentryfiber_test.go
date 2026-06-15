@@ -538,6 +538,7 @@ func TestHandlers(t *testing.T) {
 				t.Fatal(err)
 			}
 			req.Header.Set("User-Agent", "fiber")
+			req.Host = "example.com"
 
 			resp, err := app.Test(req)
 			if err != nil {
@@ -573,6 +574,7 @@ func TestSetHubOnContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Header.Set("User-Agent", "fiber")
+	req.Host = "example.com"
 
 	resp, err := app.Test(req)
 	if err != nil {

@@ -174,14 +174,14 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	r.Header = make(http.Header)
 	r.Header.Add("Host", host)
 
-	ctx.Request().Header.VisitAll(func(key, value []byte) {
+	for key, value := range ctx.Request().Header.All() {
 		r.Header.Add(string(key), string(value))
-	})
+	}
 
 	// Cookies
-	ctx.Request().Header.VisitAllCookie(func(key, value []byte) {
+	for key, value := range ctx.Request().Header.Cookies() {
 		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
-	})
+	}
 
 	r.RemoteAddr = ctx.Context().RemoteAddr().String()
 
