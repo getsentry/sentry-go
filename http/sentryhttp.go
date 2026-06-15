@@ -98,7 +98,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
-			sentry.WithTransactionSource(traceutils.GetHTTPTransactionSource(r)),
+			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
 		}
 
@@ -111,6 +111,12 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		rw := httputils.NewWrapResponseWriter(w, r.ProtoMajor)
 
 		defer func() {
+			// r.Pattern is populated by ServeMux after routing, so we
+			// read it here in the defer after the handler has run.
+			if r.Pattern != "" {
+				transaction.Name = traceutils.GetHTTPSpanName(r)
+				transaction.Source = sentry.SourceRoute
+			}
 			status := rw.Status()
 			transaction.Status = sentry.HTTPtoSpanStatus(status)
 			transaction.SetData("http.response.status_code", status)

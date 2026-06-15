@@ -59,7 +59,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 	options := []sentry.SpanOption{
 		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
-		sentry.WithTransactionSource(traceutils.GetHTTPTransactionSource(r)),
+		sentry.WithTransactionSource(sentry.SourceURL),
 		sentry.WithSpanOrigin(sentry.SpanOriginNegroni),
 	}
 
