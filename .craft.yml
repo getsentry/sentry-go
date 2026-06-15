@@ -25,6 +25,9 @@ targets:
     tagPrefix: fiber/v
     tagOnly: true
   - name: github
+    tagPrefix: fiberv3/v
+    tagOnly: true
+  - name: github
     tagPrefix: gin/v
     tagOnly: true
   - name: github
