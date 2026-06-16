@@ -28,3 +28,9 @@ GO_MOD_FILES=$(find . -type f -name 'go.mod' -not -path ./go.mod)
 for GO_MOD in ${GO_MOD_FILES}; do
     replace "github.com/getsentry/sentry-go v.*" "github.com/getsentry/sentry-go v${NEW_VERSION}" "${GO_MOD}"
 done
+
+# Replace sentry-go submodule versions (e.g., sentry-go/echo, sentry-go/gin)
+# in go.mod files that depend on multiple submodules (like crosstest/go.mod).
+for GO_MOD in ${GO_MOD_FILES}; do
+	perl -i -pe "s!(github\.com/getsentry/sentry-go/\S+) v[\w.\-]+!\$1 v${NEW_VERSION}!g" "${GO_MOD}"
+done
