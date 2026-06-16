@@ -6,6 +6,7 @@ use (
 	./echo
 	./fasthttp
 	./fiber
+	./fiberv3
 	./gin
 	./grpc
 	./iris

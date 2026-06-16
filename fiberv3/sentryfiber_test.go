@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
+	fiber "github.com/gofiber/fiber/v3"
 
 	"github.com/getsentry/sentry-go"
-	sentryfiber "github.com/getsentry/sentry-go/fiber"
+	sentryfiber "github.com/getsentry/sentry-go/fiberv3"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -58,7 +58,7 @@ func TestIntegration(t *testing.T) {
 	exception := errors.New("unknown error")
 
 	app := fiber.New(fiber.Config{
-		ErrorHandler: func(c *fiber.Ctx, e error) error {
+		ErrorHandler: func(c fiber.Ctx, e error) error {
 			hub := sentryfiber.GetHubFromContext(c)
 			hub.CaptureException(e)
 			return nil
@@ -67,38 +67,38 @@ func TestIntegration(t *testing.T) {
 
 	app.Use(sentryHandler)
 
-	app.Get("/panic", func(_ *fiber.Ctx) error {
+	app.Get("/panic", func(_ fiber.Ctx) error {
 		panic("test")
 	})
-	app.Post("/post", func(c *fiber.Ctx) error {
+	app.Post("/post", func(c fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage("post: " + string(c.Body()))
 		return nil
 	})
 
-	app.Get("/get", func(c *fiber.Ctx) error {
+	app.Get("/get", func(c fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage("get")
 		return nil
 	})
 
-	app.Get("/get/:id", func(c *fiber.Ctx) error {
+	app.Get("/get/:id", func(c fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage(fmt.Sprintf("get: %s", c.Params("id")))
 		return nil
 	})
 
-	app.Post("/post/large", func(c *fiber.Ctx) error {
+	app.Post("/post/large", func(c fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(c.Body())/1024))
 		return nil
 	})
-	app.Post("/post/body-ignored", func(c *fiber.Ctx) error {
+	app.Post("/post/body-ignored", func(c fiber.Ctx) error {
 		hub := sentryfiber.GetHubFromContext(c)
 		hub.CaptureMessage("body ignored")
 		return nil
 	})
-	app.Post("/post/error-handler", func(_ *fiber.Ctx) error {
+	app.Post("/post/error-handler", func(_ fiber.Ctx) error {
 		return exception
 	})
 
@@ -266,8 +266,7 @@ func TestIntegration(t *testing.T) {
 				Request: &sentry.Request{
 					URL:    "http://example.com/post/large",
 					Method: "POST",
-					// Actual request body omitted because too large.
-					Data: "",
+					Data:   "",
 					Headers: map[string]string{
 						"Content-Length": "15360",
 						"Host":           "example.com",
@@ -513,7 +512,6 @@ func TestHandlers(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// Create a new Fiber app
 			app := fiber.New()
 
 			if tc.useSentry {
@@ -521,7 +519,7 @@ func TestHandlers(t *testing.T) {
 				app.Use(sentryHandler)
 			}
 
-			handler := func(ctx *fiber.Ctx) error {
+			handler := func(ctx fiber.Ctx) error {
 				span := sentryfiber.GetSpanFromContext(ctx)
 				if tc.useSentry && span == nil {
 					t.Error("expecting span not to be nil")
@@ -533,11 +531,12 @@ func TestHandlers(t *testing.T) {
 			}
 
 			app.Get("/hello", handler)
-			req, err := http.NewRequest(http.MethodGet, "http://example.com/hello", nil)
+			req, err := http.NewRequest(http.MethodGet, "/hello", nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 			req.Header.Set("User-Agent", "fiber")
+			req.Host = "example.com"
 
 			resp, err := app.Test(req)
 			if err != nil {
@@ -556,7 +555,7 @@ func TestSetHubOnContext(t *testing.T) {
 	app := fiber.New()
 	hub := sentry.NewHub(sentry.CurrentHub().Client(), sentry.NewScope())
 
-	app.Get("/test", func(c *fiber.Ctx) error {
+	app.Get("/test", func(c fiber.Ctx) error {
 		sentryfiber.SetHubOnContext(c, hub)
 		retrievedHub := sentryfiber.GetHubFromContext(c)
 		if retrievedHub == nil {
@@ -568,11 +567,12 @@ func TestSetHubOnContext(t *testing.T) {
 		return nil
 	})
 
-	req, err := http.NewRequest(http.MethodGet, "http://example.com/test", nil)
+	req, err := http.NewRequest(http.MethodGet, "/test", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header.Set("User-Agent", "fiber")
+	req.Host = "example.com"
 
 	resp, err := app.Test(req)
 	if err != nil {
@@ -585,8 +585,6 @@ func TestSetHubOnContext(t *testing.T) {
 	}
 }
 
-// TestMalformedURLNoPanic verifies that malformed URLs don't cause panics
-// when tracing is enabled.
 func TestMalformedURLNoPanic(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
@@ -599,7 +597,7 @@ func TestMalformedURLNoPanic(t *testing.T) {
 	app := fiber.New()
 	app.Use(sentryfiber.New(sentryfiber.Options{Timeout: 3 * time.Second, WaitForDelivery: true}))
 
-	app.Get("/*", func(c *fiber.Ctx) error {
+	app.Get("/*", func(c fiber.Ctx) error {
 		return c.SendString("OK")
 	})
 

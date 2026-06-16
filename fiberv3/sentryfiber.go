@@ -8,21 +8,21 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/utils"
+	fiber "github.com/gofiber/fiber/v3"
+	"github.com/gofiber/utils/v2"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 const (
-	// sdkIdentifier is the identifier of the FastHTTP SDK.
-	sdkIdentifier = "sentry.go.fiber"
+	// sdkIdentifier is the identifier of the Fiber SDK.
+	sdkIdentifier = "sentry.go.fiberv3"
 
-	// valuesKey is used as a key to store the Sentry Hub instance on the fasthttp.RequestCtx.
+	// valuesKey is used as a key to store the Sentry Hub instance on the fiber.Ctx.
 	valuesKey = "sentry"
 
-	// transactionKey is used as a key to store the Sentry transaction on the fasthttp.RequestCtx.
+	// transactionKey is used as a key to store the Sentry transaction on the fiber.Ctx.
 	transactionKey = "sentry_transaction"
 )
 
@@ -57,7 +57,7 @@ func New(options Options) fiber.Handler {
 	}).handle
 }
 
-func (h *handler) handle(ctx *fiber.Ctx) error {
+func (h *handler) handle(ctx fiber.Ctx) error {
 	hub := GetHubFromContext(ctx)
 	if hub == nil {
 		hub = sentry.CurrentHub().Clone()
@@ -79,17 +79,17 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),
 	}
 
-	savedCtx := ctx.UserContext()
+	savedCtx := ctx.Context()
 	requestCtx, cancel := context.WithCancel(savedCtx)
 	defer cancel()
-	defer func() { ctx.SetUserContext(savedCtx) }()
+	defer ctx.SetContext(savedCtx)
 
 	transaction := sentry.StartTransaction(
 		sentry.SetHubOnContext(requestCtx, hub),
 		fmt.Sprintf("%s %s", r.Method, transactionName),
 		options...,
 	)
-	ctx.SetUserContext(transaction.Context())
+	ctx.SetContext(transaction.Context())
 
 	defer func() {
 		if routePath := ctx.Route().Path; routePath != "" {
@@ -107,7 +107,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	scope := hub.Scope()
 	scope.SetRequest(r)
-	scope.SetRequestBody(bytes.Clone(ctx.Request().Body()))
+	scope.SetRequestBody(bytes.Clone(ctx.Body()))
 	ctx.Locals(valuesKey, hub)
 	ctx.Locals(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, ctx)
@@ -115,10 +115,10 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	return ctx.Next()
 }
 
-func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
+func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx fiber.Ctx) {
 	if err := recover(); err != nil {
 		eventID := hub.RecoverWithContext(
-			context.WithValue(ctx.UserContext(), sentry.RequestContextKey, ctx),
+			context.WithValue(ctx.Context(), sentry.RequestContextKey, ctx),
 			err,
 		)
 		if eventID != nil && h.waitForDelivery {
@@ -130,28 +130,28 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
 	}
 }
 
-// GetHubFromContext retrieves the Hub instance from the *fiber.Ctx.
-func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
+// GetHubFromContext retrieves the Hub instance from the fiber.Ctx.
+func GetHubFromContext(ctx fiber.Ctx) *sentry.Hub {
 	if hub, ok := ctx.Locals(valuesKey).(*sentry.Hub); ok {
 		return hub
 	}
 	return nil
 }
 
-// SetHubOnContext sets the Hub instance on the *fiber.Ctx.
-func SetHubOnContext(ctx *fiber.Ctx, hub *sentry.Hub) {
+// SetHubOnContext sets the Hub instance on the fiber.Ctx.
+func SetHubOnContext(ctx fiber.Ctx, hub *sentry.Hub) {
 	ctx.Locals(valuesKey, hub)
 }
 
-// GetSpanFromContext retrieves the Span instance from the *fiber.Ctx.
-func GetSpanFromContext(ctx *fiber.Ctx) *sentry.Span {
+// GetSpanFromContext retrieves the Span instance from the fiber.Ctx.
+func GetSpanFromContext(ctx fiber.Ctx) *sentry.Span {
 	if span, ok := ctx.Locals(transactionKey).(*sentry.Span); ok {
 		return span
 	}
 	return nil
 }
 
-func convert(ctx *fiber.Ctx) *http.Request {
+func convert(ctx fiber.Ctx) *http.Request {
 	defer func() {
 		if err := recover(); err != nil {
 			debuglog.Printf("%v", err)
@@ -174,20 +174,18 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	host := utils.CopyString(ctx.Hostname())
 	r.Host = host
 
-	// Headers
 	r.Header = make(http.Header)
 	r.Header.Add("Host", host)
 
-	ctx.Request().Header.VisitAll(func(key, value []byte) { // nolint: staticcheck // this is intentional to support older versions of fasthttp for fiber v2
+	for key, value := range ctx.Request().Header.All() {
 		r.Header.Add(string(key), string(value))
-	})
+	}
 
-	// Cookies
-	ctx.Request().Header.VisitAllCookie(func(key, value []byte) { // nolint: staticcheck // this is intentional to support older versions of fasthttp for fiber v2
+	for key, value := range ctx.Request().Header.Cookies() {
 		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
-	})
+	}
 
-	r.RemoteAddr = ctx.Context().RemoteAddr().String()
+	r.RemoteAddr = ctx.RequestCtx().RemoteAddr().String()
 
 	return r
 }

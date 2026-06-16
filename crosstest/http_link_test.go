@@ -11,6 +11,7 @@ import (
 	sentryecho "github.com/getsentry/sentry-go/echo"
 	sentryfasthttp "github.com/getsentry/sentry-go/fasthttp"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
+	sentryfiberv3 "github.com/getsentry/sentry-go/fiberv3"
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/getsentry/sentry-go/internal/sentrytest"
@@ -18,6 +19,7 @@ import (
 	sentrynegroni "github.com/getsentry/sentry-go/negroni"
 	"github.com/gin-gonic/gin"
 	"github.com/gofiber/fiber/v2"
+	fiberv3 "github.com/gofiber/fiber/v3"
 	"github.com/kataras/iris/v12"
 	"github.com/labstack/echo/v5"
 	"github.com/urfave/negroni/v3"
@@ -195,10 +197,42 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			return nil
 		})
 
-		req := httptest.NewRequest(http.MethodGet, "http://example.com/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req.Host = "example.com"
 		resp, err := app.Test(req)
 		if err != nil {
 			t.Fatalf("fiber request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		f.Flush()
+		requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+	})
+
+	t.Run("fiberv3", func(t *testing.T) {
+		t.Parallel()
+		f := sentrytest.NewFixture(t, otelOpts()...)
+		const identifier = "fiberv3"
+		baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+		logger := sentry.NewLogger(baseCtx)
+		meter := sentry.NewMeter(baseCtx)
+		app := fiberv3.New()
+		app.Use(func(c fiberv3.Ctx) error {
+			c.SetContext(sentry.SetHubOnContext(otelCtx, f.Hub))
+			sentryfiberv3.SetHubOnContext(c, f.Hub)
+			return c.Next()
+		})
+		app.Use(sentryfiberv3.New(sentryfiberv3.Options{WaitForDelivery: true}))
+		app.Get("/test", func(c fiberv3.Ctx) error {
+			sendSignals(c.Context(), identifier, logger, meter)
+			return nil
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req.Host = "example.com"
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatalf("fiberv3 request: %v", err)
 		}
 		defer resp.Body.Close()
 
