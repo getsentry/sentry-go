@@ -63,7 +63,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fasthttp",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -111,7 +111,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fasthttp",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -155,7 +155,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fasthttp",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -204,7 +204,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fasthttp",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -254,7 +254,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fasthttp",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -306,7 +306,7 @@ func TestIntegration(t *testing.T) {
 						"Content-Length": "0",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{

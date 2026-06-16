@@ -111,6 +111,12 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		rw := httputils.NewWrapResponseWriter(w, r.ProtoMajor)
 
 		defer func() {
+			// r.Pattern is populated by ServeMux after routing, so we
+			// read it here in the defer after the handler has run.
+			if r.Pattern != "" {
+				transaction.Name = traceutils.GetHTTPSpanName(r)
+				transaction.Source = sentry.SourceRoute
+			}
 			status := rw.Status()
 			transaction.Status = sentry.HTTPtoSpanStatus(status)
 			transaction.SetData("http.response.status_code", status)
