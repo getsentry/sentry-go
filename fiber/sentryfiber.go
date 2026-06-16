@@ -92,6 +92,10 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	ctx.SetUserContext(transaction.Context())
 
 	defer func() {
+		if routePath := ctx.Route().Path; routePath != "" {
+			transaction.Name = fmt.Sprintf("%s %s", r.Method, routePath)
+			transaction.Source = sentry.SourceRoute
+		}
 		status := ctx.Response().StatusCode()
 		transaction.Status = sentry.HTTPtoSpanStatus(status)
 		transaction.SetData("http.response.status_code", status)
