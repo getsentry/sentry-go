@@ -4,12 +4,16 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
+
+	"github.com/getsentry/sentry-go"
 )
 
 // sentryConn wraps a driver.Conn.
 type sentryConn struct {
-	conn driver.Conn
 	cfg  *config
+	conn driver.Conn
+	// activeTx points to the transaction currently open on this connection.
+	activeTx *sentryTx
 }
 
 func newConn(c driver.Conn, cfg *config) driver.Conn {
@@ -30,7 +34,7 @@ func (c *sentryConn) Ping(ctx context.Context) error {
 // nolint: dupl // we don't want to use a helper for Query/Exec Context.
 func (c *sentryConn) QueryContext(ctx context.Context, query string, args []driver.NamedValue) (rows driver.Rows, err error) {
 	if qc, ok := c.conn.(driver.QueryerContext); ok {
-		span := startSpan(ctx, c.cfg, opQuery, query)
+		span := startQuerySpan(ctx, c, c.cfg, opQuery, query)
 		defer func() { finishSpan(span, err) }()
 		return qc.QueryContext(ctx, query, args)
 	}
@@ -47,7 +51,7 @@ func (c *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	span := startSpan(ctx, c.cfg, opQuery, query)
+	span := startQuerySpan(ctx, c, c.cfg, opQuery, query)
 	defer func() { finishSpan(span, err) }()
 	return qr.Query(query, values)
 }
@@ -58,7 +62,7 @@ func (c *sentryConn) QueryContext(ctx context.Context, query string, args []driv
 // nolint: dupl // we don't want to use a helper for Query/Exec Context.
 func (c *sentryConn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (res driver.Result, err error) {
 	if ec, ok := c.conn.(driver.ExecerContext); ok {
-		span := startSpan(ctx, c.cfg, opExec, query)
+		span := startQuerySpan(ctx, c, c.cfg, opExec, query)
 		defer func() { finishSpan(span, err) }()
 		return ec.ExecContext(ctx, query, args)
 	}
@@ -75,7 +79,7 @@ func (c *sentryConn) ExecContext(ctx context.Context, query string, args []drive
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	span := startSpan(ctx, c.cfg, opExec, query)
+	span := startQuerySpan(ctx, c, c.cfg, opExec, query)
 	defer func() { finishSpan(span, err) }()
 	return ex.Exec(query, values)
 }
@@ -88,7 +92,7 @@ func (c *sentryConn) PrepareContext(ctx context.Context, query string) (driver.S
 		if err != nil {
 			return nil, err
 		}
-		return newStmt(stmt, c, c.cfg, query), nil
+		return newStmt(stmt, c, query), nil
 	}
 	stmt, err := c.Prepare(query)
 	if err != nil {
@@ -108,7 +112,7 @@ func (c *sentryConn) Prepare(query string) (driver.Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newStmt(stmt, c, c.cfg, query), nil
+	return newStmt(stmt, c, query), nil
 }
 
 // Close implements driver.Conn.
@@ -120,33 +124,43 @@ func (c *sentryConn) Begin() (driver.Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &sentryTx{tx: tx}, nil
+	t := newTx(tx, nil)
+	c.activeTx = t
+	return t, nil
 }
 
 // BeginTx implements driver.ConnBeginTx with fallback to Begin.
 func (c *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver.Tx, error) {
+	var (
+		tx  driver.Tx
+		err error
+	)
+
 	if cb, ok := c.conn.(driver.ConnBeginTx); ok {
-		tx, err := cb.BeginTx(ctx, opts)
+		tx, err = cb.BeginTx(ctx, opts)
 		if err != nil {
 			return nil, err
 		}
-		return &sentryTx{tx: tx}, nil
+	} else {
+		// Mirror stdlib ctxDriverBegin: reject non-default TxOptions that can't be
+		// expressed through the legacy Begin().
+		if opts.Isolation != 0 || opts.ReadOnly {
+			return nil, errors.New("sentrysql: driver does not support non-default TxOptions")
+		}
+		tx, err = c.conn.Begin() //nolint:staticcheck // required for legacy BeginTx fallback.
+		if err != nil {
+			return nil, err
+		}
+		select {
+		default:
+		case <-ctx.Done():
+			return nil, errors.Join(ctx.Err(), tx.Rollback())
+		}
 	}
-	// Mirror stdlib ctxDriverBegin: reject non-default TxOptions that can't be
-	// expressed through the legacy Begin().
-	if opts.Isolation != 0 || opts.ReadOnly {
-		return nil, errors.New("sentrysql: driver does not support non-default TxOptions")
-	}
-	tx, err := c.Begin()
-	if err != nil {
-		return nil, err
-	}
-	select {
-	default:
-	case <-ctx.Done():
-		return nil, errors.Join(ctx.Err(), tx.Rollback())
-	}
-	return tx, nil
+
+	t := newTx(tx, startTxSpan(ctx, c.cfg))
+	c.activeTx = t
+	return t, nil
 }
 
 // ResetSession implements driver.SessionResetter.
@@ -178,6 +192,11 @@ func (c *sentryConn) CheckNamedValue(nv *driver.NamedValue) error {
 // Raw returns the underlying driver connection. Useful for type-assertions.
 func (c *sentryConn) Raw() driver.Conn {
 	return c.conn
+}
+
+// txSpanOrNil returns the span of the transaction currently open on the connection.
+func (c *sentryConn) txSpanOrNil() *sentry.Span {
+	return c.activeTx.spanOrNil()
 }
 
 // namedValuesToValues converts []driver.NamedValue to []driver.Value for

@@ -7,12 +7,12 @@ replace github.com/getsentry/sentry-go => ../
 require (
 	github.com/DataDog/go-sqllexer v0.2.1
 	github.com/getsentry/sentry-go v0.46.0
+	github.com/google/go-cmp v0.5.9
 	github.com/stretchr/testify v1.11.1
 )
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect

@@ -9,12 +9,11 @@ import (
 type sentryStmt struct {
 	stmt  driver.Stmt
 	conn  *sentryConn
-	cfg   *config
 	query string
 }
 
-func newStmt(s driver.Stmt, conn *sentryConn, cfg *config, query string) driver.Stmt {
-	return &sentryStmt{stmt: s, conn: conn, cfg: cfg, query: query}
+func newStmt(s driver.Stmt, conn *sentryConn, query string) driver.Stmt {
+	return &sentryStmt{stmt: s, conn: conn, query: query}
 }
 
 // Close implements driver.Stmt.
@@ -36,7 +35,7 @@ func (s *sentryStmt) Query(args []driver.Value) (driver.Rows, error) {
 // ExecContext implements driver.StmtExecContext with fallback to Exec.
 func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) (res driver.Result, err error) {
 	if ec, ok := s.stmt.(driver.StmtExecContext); ok {
-		span := startSpan(ctx, s.cfg, opExec, s.query)
+		span := startQuerySpan(ctx, s.conn, s.conn.cfg, opExec, s.query)
 		defer func() { finishSpan(span, err) }()
 		return ec.ExecContext(ctx, args)
 	}
@@ -49,7 +48,7 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	span := startSpan(ctx, s.cfg, opExec, s.query)
+	span := startQuerySpan(ctx, s.conn, s.conn.cfg, opExec, s.query)
 	defer func() { finishSpan(span, err) }()
 	return s.stmt.Exec(values) //nolint:staticcheck // legacy driver.Stmt.Exec fallback is intentional.
 }
@@ -57,7 +56,7 @@ func (s *sentryStmt) ExecContext(ctx context.Context, args []driver.NamedValue) 
 // QueryContext implements driver.StmtQueryContext with fallback to Query.
 func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue) (rows driver.Rows, err error) {
 	if qc, ok := s.stmt.(driver.StmtQueryContext); ok {
-		span := startSpan(ctx, s.cfg, opQuery, s.query)
+		span := startQuerySpan(ctx, s.conn, s.conn.cfg, opQuery, s.query)
 		defer func() { finishSpan(span, err) }()
 		return qc.QueryContext(ctx, args)
 	}
@@ -70,7 +69,7 @@ func (s *sentryStmt) QueryContext(ctx context.Context, args []driver.NamedValue)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	span := startSpan(ctx, s.cfg, opQuery, s.query)
+	span := startQuerySpan(ctx, s.conn, s.conn.cfg, opQuery, s.query)
 	defer func() { finishSpan(span, err) }()
 	return s.stmt.Query(values) //nolint:staticcheck // legacy driver.Stmt.Query fallback is intentional.
 }
