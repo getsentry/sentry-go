@@ -102,7 +102,7 @@ func sendDefaultPII(ctx context.Context) bool {
 	if client == nil {
 		return false
 	}
-	return client.Options().SendDefaultPII
+	return client.Options().SendDefaultPII // nolint: staticcheck // TODO: remove this later in favor of DataCollection
 }
 
 func finishSpan(span *sentry.Span, err error) {
