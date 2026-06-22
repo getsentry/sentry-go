@@ -305,7 +305,6 @@ type Client struct {
 	mu                    sync.RWMutex
 	options               ClientOptions
 	dsn                   *protocol.Dsn
-	dataCollection        DataCollection
 	eventProcessors       []EventProcessor
 	integrations          []Integration
 	externalTraceResolver externalContextTraceResolver
@@ -384,7 +383,6 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	resolvedDataCollection := newDataCollection(options.DataCollection, options.SendDefaultPII)
-	// replace options.DataCollection with a snapshot of current settings.
 	options.DataCollection = cloneDataCollection(&resolvedDataCollection)
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
@@ -422,7 +420,6 @@ func NewClient(options ClientOptions) (*Client, error) {
 	client := Client{
 		options:        options,
 		dsn:            dsn,
-		dataCollection: resolvedDataCollection,
 		sdkIdentifier:  sdkIdentifier,
 		sdkVersion:     SDKVersion,
 		reportRecorder: report.NoopRecorder(),
@@ -605,26 +602,13 @@ func (client *Client) Options() ClientOptions {
 	return opts
 }
 
-// CollectUserInfo reports whether automatic user-info collection is enabled.
-// After NewClient, UserInfo is always resolved.
-func (client *Client) CollectUserInfo() bool {
-	if client == nil {
-		return false
-	}
-	return client.dataCollection.UserInfo.Value
-}
-
 // GetDataCollection returns a copy of the resolved data collection
 // configuration used by the client.
 func (client *Client) GetDataCollection() DataCollection {
-	if client == nil {
+	if client == nil || client.options.DataCollection == nil {
 		return DataCollection{}
 	}
-	cloned := cloneDataCollection(&client.dataCollection)
-	if cloned == nil {
-		return DataCollection{}
-	}
-	return *cloned
+	return *cloneDataCollection(client.options.DataCollection)
 }
 
 // CaptureMessage captures an arbitrary message.
