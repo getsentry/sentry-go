@@ -64,7 +64,7 @@ type DataCollection struct {
 	//
 	// This does NOT gate data explicitly set via Scope.SetUser(); that is
 	// always attached. Defaults to true.
-	UserInfo *bool
+	UserInfo Option[bool]
 
 	// Cookies configures collection of HTTP cookies.
 	//
@@ -91,29 +91,13 @@ type DataCollection struct {
 	// within stack frames are included.
 	//
 	// Defaults to true.
-	StackFrameVariables *bool
+	StackFrameVariables Option[bool]
 
 	// FrameContextLines controls how many source code lines to include above
 	// and below each stack frame.
 	//
 	// Defaults to 5.
-	FrameContextLines *int
-}
-
-// cloneBool returns a copy of b.
-func cloneBool(b *bool) *bool {
-	if b == nil {
-		return nil
-	}
-	return Pointer(*b)
-}
-
-// cloneInt returns a copy of n.
-func cloneInt(n *int) *int {
-	if n == nil {
-		return nil
-	}
-	return Pointer(*n)
+	FrameContextLines Option[int]
 }
 
 // cloneKeyValueCollectionBehavior returns a deep copy of b.
@@ -145,12 +129,12 @@ func cloneDataCollection(dc *DataCollection) *DataCollection {
 		return nil
 	}
 	cloned := &DataCollection{
-		UserInfo:            cloneBool(dc.UserInfo),
+		UserInfo:            dc.UserInfo,
 		Cookies:             cloneKeyValueCollectionBehavior(dc.Cookies),
 		HTTPHeaders:         cloneHeaderCollectionConfig(dc.HTTPHeaders),
 		QueryParams:         cloneKeyValueCollectionBehavior(dc.QueryParams),
-		StackFrameVariables: cloneBool(dc.StackFrameVariables),
-		FrameContextLines:   cloneInt(dc.FrameContextLines),
+		StackFrameVariables: dc.StackFrameVariables,
+		FrameContextLines:   dc.FrameContextLines,
 	}
 	if dc.HTTPBodies != nil {
 		cloned.HTTPBodies = append([]BodyType{}, dc.HTTPBodies...)
@@ -185,20 +169,20 @@ func newDataCollection(dc *DataCollection, sendDefaultPII bool) DataCollection {
 		resolved = *cloned
 	}
 
-	isZero := dc == nil || (resolved.UserInfo == nil &&
+	isZero := dc == nil || (!resolved.UserInfo.IsSet &&
 		resolved.Cookies == nil &&
 		resolved.HTTPHeaders == nil &&
 		resolved.HTTPBodies == nil &&
 		resolved.QueryParams == nil &&
-		resolved.StackFrameVariables == nil &&
-		resolved.FrameContextLines == nil)
+		!resolved.StackFrameVariables.IsSet &&
+		!resolved.FrameContextLines.IsSet)
 
 	// TODO: should consider sendDefaultPII on how to apply and use DataCollection for
 	// backward compatibility. Will be used in a next step.
 	_ = isZero && sendDefaultPII
 
-	if resolved.UserInfo == nil {
-		resolved.UserInfo = Pointer(true)
+	if !resolved.UserInfo.IsSet {
+		resolved.UserInfo = Set(true)
 	}
 	if resolved.Cookies == nil {
 		resolved.Cookies = defaultKeyValueBehavior()
@@ -218,11 +202,11 @@ func newDataCollection(dc *DataCollection, sendDefaultPII bool) DataCollection {
 	if resolved.QueryParams == nil {
 		resolved.QueryParams = defaultKeyValueBehavior()
 	}
-	if resolved.StackFrameVariables == nil {
-		resolved.StackFrameVariables = Pointer(true)
+	if !resolved.StackFrameVariables.IsSet {
+		resolved.StackFrameVariables = Set(true)
 	}
-	if resolved.FrameContextLines == nil {
-		resolved.FrameContextLines = Pointer(defaultFrameContextLines)
+	if !resolved.FrameContextLines.IsSet {
+		resolved.FrameContextLines = Set(defaultFrameContextLines)
 	}
 
 	return resolved

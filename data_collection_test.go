@@ -8,13 +8,13 @@ import (
 
 func defaultResolvedDataCollection() DataCollection {
 	return DataCollection{
-		UserInfo:            Pointer(true),
+		UserInfo:            Set(true),
 		Cookies:             &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 		HTTPHeaders:         &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
 		HTTPBodies:          allBodyTypes(),
 		QueryParams:         &KeyValueCollectionBehavior{Mode: CollectionDenyList},
-		StackFrameVariables: Pointer(true),
-		FrameContextLines:   Pointer(defaultFrameContextLines),
+		StackFrameVariables: Set(true),
+		FrameContextLines:   Set(defaultFrameContextLines),
 	}
 }
 
@@ -34,7 +34,7 @@ func TestNewDataCollection(t *testing.T) {
 		{
 			name: "explicit overrides",
 			input: &DataCollection{
-				UserInfo: Pointer(false),
+				UserInfo: Set(false),
 				Cookies: &KeyValueCollectionBehavior{
 					Mode:  CollectionAllowList,
 					Terms: []string{"session_id"},
@@ -43,7 +43,7 @@ func TestNewDataCollection(t *testing.T) {
 			},
 			want: func() DataCollection {
 				want := defaultResolvedDataCollection()
-				want.UserInfo = Pointer(false)
+				want.UserInfo = Set(false)
 				want.Cookies = &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}}
 				want.HTTPBodies = []BodyType{BodyIncomingRequest}
 				return want
@@ -68,12 +68,12 @@ func TestNewDataCollection(t *testing.T) {
 		{
 			name: "explicit overrides take precedence over SendDefaultPII",
 			input: &DataCollection{
-				UserInfo: Pointer(false),
+				UserInfo: Set(false),
 			},
 			sendDefaultPII: true,
 			want: func() DataCollection {
 				want := defaultResolvedDataCollection()
-				want.UserInfo = Pointer(false)
+				want.UserInfo = Set(false)
 				return want
 			}(),
 		},
@@ -163,13 +163,13 @@ func TestNewClientDataCollection(t *testing.T) {
 			options: ClientOptions{
 				Dsn: "https://key@sentry.io/1",
 				DataCollection: &DataCollection{
-					UserInfo:   Pointer(false),
+					UserInfo:   Set(false),
 					HTTPBodies: []BodyType{},
 				},
 			},
 			want: func() DataCollection {
 				want := defaultResolvedDataCollection()
-				want.UserInfo = Pointer(false)
+				want.UserInfo = Set(false)
 				want.HTTPBodies = []BodyType{}
 				return want
 			}(),
@@ -199,7 +199,7 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 		t.Parallel()
 
 		input := &DataCollection{
-			UserInfo:   Pointer(false),
+			UserInfo:   Set(false),
 			HTTPBodies: []BodyType{BodyIncomingRequest},
 			Cookies: &KeyValueCollectionBehavior{
 				Mode:  CollectionAllowList,
@@ -214,13 +214,13 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		*input.UserInfo = true
+		input.UserInfo = Set(true)
 		input.HTTPBodies[0] = BodyOutgoingResponse
 		input.Cookies.Mode = CollectionOff
 		input.Cookies.Terms[0] = "changed"
 
 		want := defaultResolvedDataCollection()
-		want.UserInfo = Pointer(false)
+		want.UserInfo = Set(false)
 		want.Cookies = &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}}
 		want.HTTPBodies = []BodyType{BodyIncomingRequest}
 
@@ -238,13 +238,13 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 		}
 
 		got := client.GetDataCollection()
-		*got.UserInfo = false
+		got.UserInfo = Set(false)
 		got.HTTPBodies[0] = BodyOutgoingResponse
 		got.Cookies.Mode = CollectionOff
 		got.HTTPHeaders.Request.Mode = CollectionAllowList
 		got.QueryParams.Mode = CollectionOff
-		*got.StackFrameVariables = false
-		*got.FrameContextLines = 0
+		got.StackFrameVariables = Set(false)
+		got.FrameContextLines = Set(0)
 
 		if diff := cmp.Diff(defaultResolvedDataCollection(), client.GetDataCollection()); diff != "" {
 			t.Errorf("returned config mutation should not affect client (-want +got):\n%s", diff)

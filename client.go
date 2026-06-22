@@ -384,6 +384,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	resolvedDataCollection := newDataCollection(options.DataCollection, options.SendDefaultPII)
+	// replace options.DataCollection with a snapshot of current settings.
 	options.DataCollection = cloneDataCollection(&resolvedDataCollection)
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
@@ -599,12 +600,26 @@ func (client *Client) externalTraceContextFromContext(ctx context.Context) (Trac
 // Options return ClientOptions for the current Client.
 func (client *Client) Options() ClientOptions {
 	// Note: internally, consider using `client.options` instead of `client.Options()` to avoid copying the object each time.
-	return client.options
+	opts := client.options
+	opts.DataCollection = cloneDataCollection(client.options.DataCollection)
+	return opts
+}
+
+// CollectUserInfo reports whether automatic user-info collection is enabled.
+// After NewClient, UserInfo is always resolved.
+func (client *Client) CollectUserInfo() bool {
+	if client == nil {
+		return false
+	}
+	return client.dataCollection.UserInfo.Value
 }
 
 // GetDataCollection returns a copy of the resolved data collection
 // configuration used by the client.
 func (client *Client) GetDataCollection() DataCollection {
+	if client == nil {
+		return DataCollection{}
+	}
 	cloned := cloneDataCollection(&client.dataCollection)
 	if cloned == nil {
 		return DataCollection{}
