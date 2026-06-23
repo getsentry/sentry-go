@@ -86,18 +86,6 @@ type DataCollection struct {
 	//
 	// Defaults to using the built-in DenyList.
 	QueryParams *KeyValueCollectionBehavior
-
-	// StackFrameVariables controls whether local variable values captured
-	// within stack frames are included.
-	//
-	// Defaults to true.
-	StackFrameVariables Option[bool]
-
-	// FrameContextLines controls how many source code lines to include above
-	// and below each stack frame.
-	//
-	// Defaults to 5.
-	FrameContextLines Option[int]
 }
 
 // cloneKeyValueCollectionBehavior returns a deep copy of b.
@@ -129,12 +117,10 @@ func cloneDataCollection(dc *DataCollection) *DataCollection {
 		return nil
 	}
 	cloned := &DataCollection{
-		UserInfo:            dc.UserInfo,
-		Cookies:             cloneKeyValueCollectionBehavior(dc.Cookies),
-		HTTPHeaders:         cloneHeaderCollectionConfig(dc.HTTPHeaders),
-		QueryParams:         cloneKeyValueCollectionBehavior(dc.QueryParams),
-		StackFrameVariables: dc.StackFrameVariables,
-		FrameContextLines:   dc.FrameContextLines,
+		UserInfo:    dc.UserInfo,
+		Cookies:     cloneKeyValueCollectionBehavior(dc.Cookies),
+		HTTPHeaders: cloneHeaderCollectionConfig(dc.HTTPHeaders),
+		QueryParams: cloneKeyValueCollectionBehavior(dc.QueryParams),
 	}
 	if dc.HTTPBodies != nil {
 		cloned.HTTPBodies = append([]BodyType{}, dc.HTTPBodies...)
@@ -146,9 +132,6 @@ func cloneDataCollection(dc *DataCollection) *DataCollection {
 func defaultKeyValueBehavior() *KeyValueCollectionBehavior {
 	return &KeyValueCollectionBehavior{Mode: CollectionDenyList}
 }
-
-// defaultFrameContextLines is the default number of source context lines.
-const defaultFrameContextLines = 5
 
 // allBodyTypes returns all valid body types.
 func allBodyTypes() []BodyType {
@@ -173,9 +156,7 @@ func newDataCollection(dc *DataCollection, sendDefaultPII bool) DataCollection {
 		resolved.Cookies == nil &&
 		resolved.HTTPHeaders == nil &&
 		resolved.HTTPBodies == nil &&
-		resolved.QueryParams == nil &&
-		!resolved.StackFrameVariables.IsSet &&
-		!resolved.FrameContextLines.IsSet)
+		resolved.QueryParams == nil)
 
 	// TODO: should consider sendDefaultPII on how to apply and use DataCollection for
 	// backward compatibility. Will be used in a next step.
@@ -202,13 +183,6 @@ func newDataCollection(dc *DataCollection, sendDefaultPII bool) DataCollection {
 	if resolved.QueryParams == nil {
 		resolved.QueryParams = defaultKeyValueBehavior()
 	}
-	if !resolved.StackFrameVariables.IsSet {
-		resolved.StackFrameVariables = Set(true)
-	}
-	if !resolved.FrameContextLines.IsSet {
-		resolved.FrameContextLines = Set(defaultFrameContextLines)
-	}
-
 	return resolved
 }
 
