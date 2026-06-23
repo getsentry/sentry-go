@@ -56,33 +56,71 @@ func TestStartSpan_UserEmittedOnlyWithPII(t *testing.T) {
 		dbUser: "alice",
 	}
 
-	t.Run("PII off", func(t *testing.T) {
-		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
-			ctx := f.NewContext(context.Background())
-			parent := sentry.StartSpan(ctx, "root", sentry.WithTransactionName("root"))
-			t.Cleanup(parent.Finish)
+	tests := []struct {
+		name    string
+		options sentry.ClientOptions
+		want    any
+	}{
+		{
+			name: "legacy default does not collect db.user",
+			want: nil,
+		},
+		{
+			name: "explicit spec default collects db.user",
+			options: sentry.ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 1.0,
+				DataCollection:   &sentry.DataCollection{},
+			},
+			want: "alice",
+		},
+		{
+			name: "legacy SendDefaultPII on",
+			options: sentry.ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 1.0,
+				SendDefaultPII:   true,
+			},
+			want: "alice",
+		},
+		{
+			name: "explicit DataCollection false overrides legacy true",
+			options: sentry.ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 1.0,
+				SendDefaultPII:   true,
+				DataCollection: &sentry.DataCollection{
+					UserInfo: sentry.Set(false),
+				},
+			},
+			want: nil,
+		},
+		{
+			name: "explicit DataCollection true enables db.user",
+			options: sentry.ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 1.0,
+				DataCollection: &sentry.DataCollection{
+					UserInfo: sentry.Set(true),
+				},
+			},
+			want: "alice",
+		},
+	}
 
-			span := startQuerySpan(parent.Context(), nil, cfg, opQuery, "SELECT 1")
-			require.NotNil(t, span)
-			assert.Nil(t, span.Data["db.user"], "db.user must not be set when SendDefaultPII is false")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+				ctx := f.NewContext(context.Background())
+				parent := sentry.StartSpan(ctx, "root", sentry.WithTransactionName("root"))
+				t.Cleanup(parent.Finish)
+
+				span := startQuerySpan(parent.Context(), nil, cfg, opQuery, "SELECT 1")
+				require.NotNil(t, span)
+				assert.Equal(t, tt.want, span.Data["db.user"])
+			}, sentrytest.WithClientOptions(tt.options))
 		})
-	})
-
-	t.Run("PII on", func(t *testing.T) {
-		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
-			ctx := f.NewContext(context.Background())
-			parent := sentry.StartSpan(ctx, "root", sentry.WithTransactionName("root"))
-			t.Cleanup(parent.Finish)
-
-			span := startQuerySpan(parent.Context(), nil, cfg, opQuery, "SELECT 1")
-			require.NotNil(t, span)
-			assert.Equal(t, "alice", span.Data["db.user"], "db.user must be set when SendDefaultPII is true")
-		}, sentrytest.WithClientOptions(sentry.ClientOptions{
-			EnableTracing:    true,
-			TracesSampleRate: 1.0,
-			SendDefaultPII:   true,
-		}))
-	})
+	}
 }
 
 func TestFinishSpan_StatusMapping(t *testing.T) {

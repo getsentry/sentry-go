@@ -170,40 +170,43 @@ func setScopeMetadata(hub *sentry.Hub, method string, md metadata.MD) {
 	hub.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetContext("grpc", sentry.Context{
 			"method":   method,
-			"metadata": metadataToContext(md),
+			"metadata": metadataToContext(hub.Client(), md),
 		})
 	})
 }
 
-func metadataToContext(md metadata.MD) map[string]any {
+func metadataToContext(client *sentry.Client, md metadata.MD) map[string]any {
 	if len(md) == 0 {
 		return nil
 	}
 
-	ctx := make(map[string]any, len(md))
-	for key, values := range md {
-		if sentry.IsSensitiveHeader(key) { // nolint: staticcheck // TODO: remove this later.
-			continue
-		}
+	var dc sentry.DataCollection
+	if client != nil {
+		dc = client.GetDataCollection()
+	}
 
+	raw := make(map[string]string, len(md))
+	for key, values := range md {
 		if len(values) == 0 {
 			continue
 		}
-
-		if len(values) == 1 {
-			ctx[key] = values[0]
+		if strings.EqualFold(key, "cookie") || strings.EqualFold(key, "set-cookie") {
+			if !dc.CollectCookies() {
+				continue
+			}
+			raw[key] = "[Filtered]"
 			continue
 		}
-
-		copied := make([]string, len(values))
-		copy(copied, values)
-		ctx[key] = copied
+		raw[key] = strings.Join(values, ",")
 	}
-
-	if len(ctx) == 0 {
+	filtered := dc.FilterRequestHeaders(raw)
+	if len(filtered) == 0 {
 		return nil
 	}
-
+	ctx := make(map[string]any, len(filtered))
+	for key, value := range filtered {
+		ctx[key] = value
+	}
 	return ctx
 }
 
