@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -74,109 +75,169 @@ func TestUserMarshalJson(t *testing.T) {
 }
 
 func TestNewRequest(t *testing.T) {
-	currentHub.BindClient(&Client{
-		options: ClientOptions{
-			SendDefaultPII: true,
-		},
-	})
-	// Unbind the client afterwards, to not affect other tests
-	defer currentHub.stackTop().SetClient(nil)
+	t.Parallel()
 
-	t.Run("standard request", func(t *testing.T) {
-		const payload = `{"test_data": true}`
-		r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
-		r.Header.Add("Authorization", "Bearer 1234567890")
-		r.Header.Add("Proxy-Authorization", "Bearer 123")
-		r.Header.Add("Cookie", "foo=bar")
-		r.Header.Add("X-Forwarded-For", "127.0.0.1")
-		r.Header.Add("X-Real-Ip", "127.0.0.1")
-		r.Header.Add("Some-Header", "some-header value")
-
-		got := NewRequest(r)
-		want := &Request{
-			URL:         "http://example.com/test/",
-			Method:      "POST",
-			Data:        "",
-			QueryString: "q=sentry",
-			Cookies:     "foo=bar",
-			Headers: map[string]string{
-				"Authorization":       "Bearer 1234567890",
-				"Proxy-Authorization": "Bearer 123",
-				"Cookie":              "foo=bar",
-				"Host":                "example.com",
-				"X-Forwarded-For":     "127.0.0.1",
-				"X-Real-Ip":           "127.0.0.1",
-				"Some-Header":         "some-header value",
-			},
-			Env: map[string]string{
-				"REMOTE_ADDR": "192.0.2.1",
-				"REMOTE_PORT": "1234",
-			},
+	makeClient := func(t *testing.T, dc *DataCollection) *Client {
+		t.Helper()
+		if dc == nil {
+			dc = &DataCollection{}
 		}
-		if diff := cmp.Diff(want, got); diff != "" {
-			t.Errorf("Request mismatch (-want +got):\n%s", diff)
+		client, err := NewClient(ClientOptions{
+			Dsn:            "https://key@sentry.io/1",
+			DataCollection: dc,
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
-	})
-
-	t.Run("request with TLS", func(t *testing.T) {
-		r := httptest.NewRequest("POST", "https://example.com/test", nil)
-		r.TLS = &tls.ConnectionState{} // Simulate TLS connection
-
-		got := NewRequest(r)
-
-		if !strings.HasPrefix(got.URL, "https://") {
-			t.Errorf("Request with TLS should have HTTPS URL, got %s", got.URL)
-		}
-	})
-
-	t.Run("request with X-Forwarded-Proto header", func(t *testing.T) {
-		r := httptest.NewRequest("POST", "http://example.com/test", nil)
-		r.Header.Set("X-Forwarded-Proto", "https")
-
-		got := NewRequest(r)
-
-		if !strings.HasPrefix(got.URL, "https://") {
-			t.Errorf("Request with X-Forwarded-Proto: https should have HTTPS URL, got %s", got.URL)
-		}
-	})
-
-	t.Run("request with malformed RemoteAddr", func(t *testing.T) {
-		r := httptest.NewRequest("POST", "http://example.com/test", nil)
-		r.RemoteAddr = "malformed-address" // Invalid format
-
-		got := NewRequest(r)
-
-		if got.Env != nil {
-			t.Error("Request with malformed RemoteAddr should not set Env")
-		}
-	})
-}
-
-func TestNewRequestWithNoPII(t *testing.T) {
-	const payload = `{"test_data": true}`
-	r := httptest.NewRequest("POST", "/test/?q=sentry", strings.NewReader(payload))
-	r.Header.Add("Authorization", "Bearer 1234567890")
-	r.Header.Add("Proxy-Authorization", "Bearer 123")
-	r.Header.Add("Cookie", "foo=bar")
-	r.Header.Add("X-Forwarded-For", "127.0.0.1")
-	r.Header.Add("X-Real-Ip", "127.0.0.1")
-	r.Header.Add("Some-Header", "some-header value")
-
-	got := NewRequest(r)
-	want := &Request{
-		URL:         "http://example.com/test/",
-		Method:      "POST",
-		Data:        "",
-		QueryString: "q=sentry",
-		Cookies:     "",
-		Headers: map[string]string{
-			"Host":        "example.com",
-			"Some-Header": "some-header value",
-		},
-		Env: nil,
+		return client
 	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("Request mismatch (-want +got):\n%s", diff)
+
+	tests := []struct {
+		name    string
+		dc      *DataCollection
+		makeReq func() *http.Request
+		want    *Request
+	}{
+		{
+			name: "default denylist filtering",
+			makeReq: func() *http.Request {
+				r := httptest.NewRequest("POST", "/test/?q=sentry", nil)
+				r.Header.Add("Authorization", "Bearer 1234567890")
+				r.Header.Add("Proxy-Authorization", "Bearer 123")
+				r.Header.Add("Cookie", "foo=bar")
+				r.Header.Add("X-Forwarded-For", "127.0.0.1")
+				r.Header.Add("X-Real-Ip", "127.0.0.1")
+				r.Header.Add("Some-Header", "some-header value")
+				return r
+			},
+			want: &Request{
+				URL:         "http://example.com/test/",
+				Method:      "POST",
+				QueryString: "q=sentry",
+				Cookies:     "foo=bar",
+				Headers: map[string]string{
+					"Authorization":       "[Filtered]",
+					"Proxy-Authorization": "[Filtered]",
+					"Cookie":              "foo=bar",
+					"Host":                "example.com",
+					"X-Forwarded-For":     "127.0.0.1",
+					"X-Real-Ip":           "127.0.0.1",
+					"Some-Header":         "some-header value",
+				},
+				Env: map[string]string{"REMOTE_ADDR": "192.0.2.1", "REMOTE_PORT": "1234"},
+			},
+		},
+		{
+			name: "user info disabled omits env",
+			dc:   &DataCollection{UserInfo: Set(false)},
+			makeReq: func() *http.Request {
+				r := httptest.NewRequest("POST", "/test/?token=abc123&page=5", nil)
+				r.Header.Add("Authorization", "Bearer 1234567890")
+				r.Header.Add("Cookie", "user_session=abc; theme=dark-mode")
+				r.Header.Add("X-Request-Id", "req-123")
+				r.Header.Add("Some-Header", "some-header value")
+				return r
+			},
+			want: &Request{
+				URL:         "http://example.com/test/",
+				Method:      "POST",
+				QueryString: "token=[Filtered]&page=5",
+				Cookies:     "user_session=[Filtered]; theme=dark-mode",
+				Headers: map[string]string{
+					"Authorization": "[Filtered]",
+					"Cookie":        "user_session=[Filtered]; theme=dark-mode",
+					"Host":          "example.com",
+					"Some-Header":   "some-header value",
+					"X-Request-Id":  "req-123",
+				},
+				Env: nil,
+			},
+		},
+		{
+			name: "off modes omit categories entirely",
+			dc: &DataCollection{
+				UserInfo: Set(false),
+				Cookies:  &KeyValueCollectionBehavior{Mode: CollectionOff},
+				HTTPHeaders: &HeaderCollectionConfig{
+					Request: &KeyValueCollectionBehavior{Mode: CollectionOff},
+				},
+				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionOff},
+			},
+			makeReq: func() *http.Request {
+				r := httptest.NewRequest("POST", "/test/?token=abc123&page=5", nil)
+				r.Header.Add("Authorization", "Bearer 1234567890")
+				r.Header.Add("Cookie", "user_session=abc; theme=dark-mode")
+				r.Header.Add("X-Request-Id", "req-123")
+				r.Header.Add("Some-Header", "some-header value")
+				return r
+			},
+			want: &Request{
+				URL:     "http://example.com/test/",
+				Method:  "POST",
+				Headers: nil,
+				Env:     nil,
+			},
+		},
+		{
+			name: "TLS request uses https",
+			makeReq: func() *http.Request {
+				r := httptest.NewRequest("POST", "https://example.com/test", nil)
+				r.TLS = &tls.ConnectionState{}
+				return r
+			},
+			want: &Request{
+				URL:    "https://example.com/test",
+				Method: "POST",
+				Headers: map[string]string{
+					"Host": "example.com",
+				},
+				Env: map[string]string{"REMOTE_ADDR": "192.0.2.1", "REMOTE_PORT": "1234"},
+			},
+		},
+		{
+			name: "X-Forwarded-Proto header uses https",
+			makeReq: func() *http.Request {
+				r := httptest.NewRequest("POST", "http://example.com/test", nil)
+				r.Header.Set("X-Forwarded-Proto", "https")
+				return r
+			},
+			want: &Request{
+				URL:    "https://example.com/test",
+				Method: "POST",
+				Headers: map[string]string{
+					"Host":              "example.com",
+					"X-Forwarded-Proto": "https",
+				},
+				Env: map[string]string{"REMOTE_ADDR": "192.0.2.1", "REMOTE_PORT": "1234"},
+			},
+		},
+		{
+			name: "malformed RemoteAddr omits env",
+			makeReq: func() *http.Request {
+				r := httptest.NewRequest("POST", "http://example.com/test", nil)
+				r.RemoteAddr = "malformed-address"
+				return r
+			},
+			want: &Request{
+				URL:    "http://example.com/test",
+				Method: "POST",
+				Headers: map[string]string{
+					"Host": "example.com",
+				},
+				Env: nil,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			client := makeClient(t, tt.dc)
+			got := newRequest(tt.makeReq(), client)
+			if diff := cmp.Diff(tt.want, got, testutils.EquateKeyValueStrings()); diff != "" {
+				t.Errorf("Request mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
