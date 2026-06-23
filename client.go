@@ -382,7 +382,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		options.TraceIgnoreStatusCodes = [][]int{{404}}
 	}
 
-	resolvedDataCollection := newDataCollection(options.DataCollection, options.SendDefaultPII)
+	resolvedDataCollection := snapshotDataCollection(options.DataCollection, options.SendDefaultPII)
 	options.DataCollection = cloneDataCollection(&resolvedDataCollection)
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
@@ -709,7 +709,7 @@ func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
 
 // Recover captures a panic.
 // Returns EventID if successfully, or nil if there's no error to recover from.
-func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModifier) *EventID {
+func (client *Client) Recover(err any, hint *EventHint, scope EventModifier) *EventID {
 	if err == nil {
 		err = recover()
 	}
@@ -726,7 +726,7 @@ func (client *Client) Recover(err interface{}, hint *EventHint, scope EventModif
 // Returns EventID if successfully, or nil if there's no error to recover from.
 func (client *Client) RecoverWithContext(
 	ctx context.Context,
-	err interface{},
+	err any,
 	hint *EventHint,
 	scope EventModifier,
 ) *EventID {

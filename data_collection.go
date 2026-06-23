@@ -1,23 +1,26 @@
 package sentry
 
+import "slices"
+
 // CollectionMode controls how key-value data (headers, cookies, query params) is collected.
-type CollectionMode string
+//
+// Defaults to CollectionDenyList.
+type CollectionMode int
 
 const (
-	// CollectionOff disables collection of the category entirely.
-	CollectionOff CollectionMode = "off"
-
 	// CollectionDenyList keeps all keys and filters denied values.
-	CollectionDenyList CollectionMode = "denyList"
+	CollectionDenyList CollectionMode = iota
 
-	// CollectionAllowList keeps all keys and sends real values only for allowed
-	// keys; all other values are filtered.
-	CollectionAllowList CollectionMode = "allowList"
+	// CollectionOff disables collection of the category entirely.
+	CollectionOff
+
+	// CollectionAllowList keeps all keys and sends real values only for allowed keys.
+	CollectionAllowList
 )
 
 // KeyValueCollectionBehavior configures how key-value data is collected and filtered.
 type KeyValueCollectionBehavior struct {
-	// Mode controls the collection strategy. Default: CollectionDenyList.
+	// Mode controls the collection strategy.
 	Mode CollectionMode
 	// Terms is a list of additional terms used by the active mode.
 	Terms []string
@@ -26,9 +29,9 @@ type KeyValueCollectionBehavior struct {
 // HeaderCollectionConfig configures how HTTP headers are collected for
 // requests and responses independently.
 type HeaderCollectionConfig struct {
-	// Request configures collection of HTTP request headers. Defaults to DenyList.
+	// Request configures collection of HTTP request headers.
 	Request *KeyValueCollectionBehavior
-	// Response configures collection of HTTP response headers. Defaults to DenyList.
+	// Response configures collection of HTTP response headers.
 	Response *KeyValueCollectionBehavior
 }
 
@@ -128,11 +131,6 @@ func cloneDataCollection(dc *DataCollection) *DataCollection {
 	return cloned
 }
 
-// defaultKeyValueBehavior returns the default key-value collection behavior.
-func defaultKeyValueBehavior() *KeyValueCollectionBehavior {
-	return &KeyValueCollectionBehavior{Mode: CollectionDenyList}
-}
-
 // allBodyTypes returns all valid body types.
 func allBodyTypes() []BodyType {
 	return []BodyType{
@@ -143,59 +141,87 @@ func allBodyTypes() []BodyType {
 	}
 }
 
-// newDataCollection builds a fully-populated DataCollection by applying
-// defaults to any nil fields. It also handles backward compatibility with the
-// legacy SendDefaultPII option.
-func newDataCollection(dc *DataCollection, sendDefaultPII bool) DataCollection {
+// snapshotDataCollection builds a fully-populated DataCollection based on given options.
+// It handles any unspecified values by applying the defaults. If the given opts are nil, this
+// provides a best-effort snapshot to align with sendDefaultPII for backwards compatibility.
+func snapshotDataCollection(opts *DataCollection, sendDefaultPII bool) DataCollection {
+	if opts == nil {
+		return legacyDataCollection(sendDefaultPII)
+	}
+	return resolveDataCollection(opts)
+}
+
+func resolveDataCollection(dc *DataCollection) DataCollection {
 	var resolved DataCollection
 	if cloned := cloneDataCollection(dc); cloned != nil {
 		resolved = *cloned
 	}
 
-	isZero := dc == nil || (!resolved.UserInfo.IsSet &&
-		resolved.Cookies == nil &&
-		resolved.HTTPHeaders == nil &&
-		resolved.HTTPBodies == nil &&
-		resolved.QueryParams == nil)
-
-	// TODO: should consider sendDefaultPII on how to apply and use DataCollection for
-	// backward compatibility. Will be used in a next step.
-	_ = isZero && sendDefaultPII
-
 	if !resolved.UserInfo.IsSet {
 		resolved.UserInfo = Set(true)
 	}
 	if resolved.Cookies == nil {
-		resolved.Cookies = defaultKeyValueBehavior()
+		resolved.Cookies = &KeyValueCollectionBehavior{}
 	}
 	if resolved.HTTPHeaders == nil {
 		resolved.HTTPHeaders = &HeaderCollectionConfig{}
 	}
 	if resolved.HTTPHeaders.Request == nil {
-		resolved.HTTPHeaders.Request = defaultKeyValueBehavior()
+		resolved.HTTPHeaders.Request = &KeyValueCollectionBehavior{}
 	}
 	if resolved.HTTPHeaders.Response == nil {
-		resolved.HTTPHeaders.Response = defaultKeyValueBehavior()
+		resolved.HTTPHeaders.Response = &KeyValueCollectionBehavior{}
 	}
 	if resolved.HTTPBodies == nil {
 		resolved.HTTPBodies = allBodyTypes()
 	}
 	if resolved.QueryParams == nil {
-		resolved.QueryParams = defaultKeyValueBehavior()
+		resolved.QueryParams = &KeyValueCollectionBehavior{}
 	}
 	return resolved
 }
 
-// isHTTPBodyCollected reports whether the given body type should be collected
-// according to the DataCollection configuration.
-func (dc *DataCollection) isHTTPBodyCollected(bt BodyType) bool {
-	if dc == nil || dc.HTTPBodies == nil {
-		return true
-	}
-	for _, t := range dc.HTTPBodies {
-		if t == bt {
-			return true
+func legacyDataCollection(sendDefaultPII bool) DataCollection {
+	if sendDefaultPII {
+		return DataCollection{
+			UserInfo:    Set(true),
+			Cookies:     &KeyValueCollectionBehavior{},
+			HTTPHeaders: &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{}, Response: &KeyValueCollectionBehavior{}},
+			HTTPBodies:  allBodyTypes(),
+			QueryParams: &KeyValueCollectionBehavior{},
 		}
 	}
-	return false
+
+	terms := PrivacyDenyTerms()
+	return resolveDataCollection(&DataCollection{
+		UserInfo:   Set(false),
+		HTTPBodies: []BodyType{},
+		Cookies:    &KeyValueCollectionBehavior{Mode: CollectionOff},
+		HTTPHeaders: &HeaderCollectionConfig{
+			Request:  &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: slices.Clone(terms)},
+			Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: slices.Clone(terms)},
+		},
+		QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: slices.Clone(terms)},
+	})
+}
+
+// extendedDenyTerms are optional privacy terms documented by the dataCollection
+// spec. They are not part of the built-in sensitive denylist.
+var extendedDenyTerms = []string{
+	"forwarded",
+	"-ip",
+	"remote-",
+	"via",
+	"-user",
+}
+
+// PrivacyDenyTerms returns the optional privacy deny terms documented by the
+// dataCollection spec.
+//
+// These terms cover user-identifying data such as IP forwarding headers and
+// user IDs. They are not part of the built-in sensitive denylist. Pass them as
+// custom denyList terms for cookies, HTTP headers, or query params when you
+// need stricter privacy filtering.
+func PrivacyDenyTerms() []string {
+	return slices.Clone(extendedDenyTerms)
 }
