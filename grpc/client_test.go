@@ -58,6 +58,7 @@ func initMockTransport(t *testing.T) *sentry.MockTransport {
 	transport := &sentry.MockTransport{}
 	require.NoError(t, sentry.Init(sentry.ClientOptions{
 		Transport:        transport,
+		DataCollection:   &sentry.DataCollection{},
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 	}))

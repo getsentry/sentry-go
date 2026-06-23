@@ -76,7 +76,7 @@ func setSQLData(ctx context.Context, span *sentry.Span, cfg *config) {
 	if cfg.dbName != "" {
 		span.SetData("db.namespace", cfg.dbName)
 	}
-	if cfg.dbUser != "" && sendDefaultPII(ctx) {
+	if cfg.dbUser != "" && collectDBUser(ctx) {
 		span.SetData("db.user", cfg.dbUser)
 	}
 	if cfg.host != "" {
@@ -93,7 +93,7 @@ func setSQLData(ctx context.Context, span *sentry.Span, cfg *config) {
 	}
 }
 
-func sendDefaultPII(ctx context.Context) bool {
+func collectDBUser(ctx context.Context) bool {
 	hub := sentry.GetHubFromContext(ctx)
 	if hub == nil {
 		hub = sentry.CurrentHub()
@@ -102,7 +102,7 @@ func sendDefaultPII(ctx context.Context) bool {
 	if client == nil {
 		return false
 	}
-	return client.Options().SendDefaultPII // nolint: staticcheck // TODO: remove this later in favor of DataCollection
+	return client.GetDataCollection().UserInfo.Value
 }
 
 func finishSpan(span *sentry.Span, err error) {
