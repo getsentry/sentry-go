@@ -247,50 +247,48 @@ type Request struct {
 	Env         map[string]string `json:"env,omitempty"`
 }
 
-func sendDefaultPIIEnabled(client *Client) bool {
-	return client != nil && client.options.SendDefaultPII
-}
-
-func newRequest(r *http.Request, sendDefaultPII bool) *Request {
+func newRequest(r *http.Request, client *Client) *Request {
 	prot := protocol.SchemeHTTP
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		prot = protocol.SchemeHTTPS
 	}
 	url := fmt.Sprintf("%s://%s%s", prot, r.Host, r.URL.Path)
 
-	var cookies string
-	var env map[string]string
-	headers := map[string]string{}
-
-	if sendDefaultPII {
-		// We read only the first Cookie header because of the specification:
-		// https://tools.ietf.org/html/rfc6265#section-5.4
-		// When the user agent generates an HTTP request, the user agent MUST NOT
-		// attach more than one Cookie header field.
-		cookies = r.Header.Get("Cookie")
-
-		headers = make(map[string]string, len(r.Header))
-		for k, v := range r.Header {
-			headers[k] = strings.Join(v, ",")
+	dc := snapshotDataCollection(nil, false)
+	if client != nil && client.options.DataCollection != nil {
+		dc = *client.options.DataCollection
+	}
+	cookies := dc.FilterCookies(r.Header.Get("Cookie"))
+	headers := make(map[string]string, len(r.Header)+1)
+	for k, v := range r.Header {
+		if strings.EqualFold(k, "Cookie") {
+			continue
 		}
-
-		if addr, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-			env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
-		}
-	} else {
-		for k, v := range r.Header {
-			if !IsSensitiveHeader(k) {
-				headers[k] = strings.Join(v, ",")
+		headers[k] = strings.Join(v, ",")
+	}
+	if rawCookie := r.Header.Get("Cookie"); rawCookie != "" {
+		if dc.CollectCookies() {
+			if cookies != "" {
+				headers["Cookie"] = cookies
+			} else {
+				headers["Cookie"] = filteredValue
 			}
 		}
 	}
-
 	headers["Host"] = r.Host
+	headers = dc.FilterRequestHeaders(headers)
+
+	var env map[string]string
+	if dc.UserInfo.Value {
+		if addr, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
+		}
+	}
 
 	return &Request{
 		URL:         url,
 		Method:      r.Method,
-		QueryString: r.URL.RawQuery,
+		QueryString: dc.FilterQueryString(r.URL.RawQuery),
 		Cookies:     cookies,
 		Headers:     headers,
 		Env:         env,
@@ -302,7 +300,7 @@ func newRequest(r *http.Request, sendDefaultPII bool) *Request {
 // NewRequest avoids operations that depend on network access. In particular, it
 // does not read r.Body.
 func NewRequest(r *http.Request) *Request {
-	return newRequest(r, sendDefaultPIIEnabled(CurrentHub().Client()))
+	return newRequest(r, CurrentHub().Client())
 }
 
 // Mechanism is the mechanism by which an exception was generated and handled.

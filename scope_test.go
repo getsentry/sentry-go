@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/google/go-cmp/cmp"
 )
 
 const sharedContextsKey = "sharedContextsKey"
@@ -649,11 +651,11 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 
 func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
 	previousClient := currentHub.Client()
-	currentHub.BindClient(&Client{
-		options: ClientOptions{
-			SendDefaultPII: true,
-		},
-	})
+	currentClient, err := NewClient(ClientOptions{Dsn: "https://key@sentry.io/1", SendDefaultPII: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	currentHub.BindClient(currentClient)
 	defer currentHub.BindClient(previousClient)
 
 	scope := NewScope()
@@ -663,11 +665,17 @@ func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
 	request.Header.Set("Some-Header", "some-header value")
 	scope.SetRequest(request)
 
-	event := scope.ApplyToEvent(NewEvent(), nil, &Client{
-		options: ClientOptions{
-			SendDefaultPII: false,
+	requestClient, err := NewClient(ClientOptions{
+		Dsn: "https://key@sentry.io/1",
+		DataCollection: &DataCollection{
+			UserInfo: Set(false),
 		},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	event := scope.ApplyToEvent(NewEvent(), nil, requestClient)
 
 	if event.Request == nil {
 		t.Fatal("expected request to be attached")
@@ -677,13 +685,98 @@ func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
 		URL:         "http://example.com/test",
 		Method:      "POST",
 		QueryString: "",
+		Cookies:     "foo=bar",
 		Headers: map[string]string{
-			"Host":        "example.com",
-			"Some-Header": "some-header value",
+			"Authorization": "[Filtered]",
+			"Cookie":        "foo=bar",
+			"Host":          "example.com",
+			"Some-Header":   "some-header value",
+		},
+		Env: nil,
+	}
+
+	assertEqual(t, event.Request, want, "should honor the passed client data collection setting")
+}
+
+func TestApplyToEventUsesExplicitDataCollectionForRequest(t *testing.T) {
+	client, err := NewClient(ClientOptions{
+		Dsn: "https://key@sentry.io/1",
+		DataCollection: &DataCollection{
+			UserInfo: Set(false),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scope := NewScope()
+	request := httptest.NewRequest("POST", "http://example.com/test?token=secret&page=5", nil)
+	request.Header.Set("Authorization", "Bearer secret")
+	request.Header.Set("Cookie", "user_session=abc; theme=dark")
+	request.Header.Set("Some-Header", "some-header value")
+	scope.SetRequest(request)
+
+	event := scope.ApplyToEvent(NewEvent(), nil, client)
+	if event.Request == nil {
+		t.Fatal("expected request to be attached")
+	}
+
+	want := &Request{
+		URL:         "http://example.com/test",
+		Method:      "POST",
+		QueryString: "token=[Filtered]&page=5",
+		Cookies:     "user_session=[Filtered]; theme=dark",
+		Headers: map[string]string{
+			"Authorization": "[Filtered]",
+			"Cookie":        "user_session=[Filtered]; theme=dark",
+			"Host":          "example.com",
+			"Some-Header":   "some-header value",
 		},
 	}
 
-	assertEqual(t, event.Request, want, "should honor the request-scoped client PII setting")
+	if diff := cmp.Diff(want, event.Request, testutils.EquateKeyValueStrings()); diff != "" {
+		t.Errorf("request mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestApplyToEventHTTPBodyCollection(t *testing.T) {
+	tests := []struct {
+		name     string
+		bodies   []BodyType
+		body     []byte
+		wantData string
+	}{
+		{name: "default collects and filters incoming request body", bodies: nil, body: []byte(`{"key":"value","safe":"value"}`), wantData: `{"key":"[Filtered]","safe":"value"}`},
+		{name: "empty disables request body", bodies: []BodyType{}, body: []byte(`{"key":"value"}`), wantData: ""},
+		{name: "incoming request enabled", bodies: []BodyType{BodyIncomingRequest}, body: []byte(`{"safe":"value"}`), wantData: `{"safe":"value"}`},
+		{name: "other body type does not collect request body", bodies: []BodyType{BodyOutgoingRequest}, body: []byte(`{"key":"value"}`), wantData: ""},
+		{name: "opaque body is filtered entirely", bodies: nil, body: []byte(`raw body`), wantData: filteredValue},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewClient(ClientOptions{
+				Dsn:            "https://key@sentry.io/1",
+				DataCollection: &DataCollection{HTTPBodies: tt.bodies},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			scope := NewScope()
+			request := httptest.NewRequest("POST", "http://example.com/test", nil)
+			scope.SetRequest(request)
+			scope.SetRequestBody(tt.body)
+
+			event := scope.ApplyToEvent(NewEvent(), nil, client)
+			if event.Request == nil {
+				t.Fatal("expected request to be attached")
+			}
+			if diff := cmp.Diff(tt.wantData, event.Request.Data); diff != "" {
+				t.Errorf("request body mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
 }
 
 func TestEventProcessorsModifiesEvent(t *testing.T) {

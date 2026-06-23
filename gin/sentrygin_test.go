@@ -28,6 +28,7 @@ func TestIntegration(t *testing.T) {
 		Method      string
 		WantStatus  int
 		Body        string
+		ContentType string
 		Handler     gin.HandlerFunc
 
 		WantEvent       *sentry.Event
@@ -114,7 +115,8 @@ func TestIntegration(t *testing.T) {
 			RoutePath:   "/post",
 			Method:      "POST",
 			WantStatus:  200,
-			Body:        "payload",
+			Body:        `{"safe":"value"}`,
+			ContentType: "application/json",
 			Handler: func(c *gin.Context) {
 				hub := sentry.GetHubFromContext(c.Request.Context())
 				body, err := io.ReadAll(c.Request.Body)
@@ -131,9 +133,10 @@ func TestIntegration(t *testing.T) {
 				Request: &sentry.Request{
 					URL:    "/post",
 					Method: "POST",
-					Data:   "payload",
+					Data:   `{"safe":"value"}`,
 					Headers: map[string]string{
-						"Content-Length":  "7",
+						"Content-Length":  "16",
+						"Content-Type":    "application/json",
 						"Accept-Encoding": "gzip",
 						"User-Agent":      "Go-http-client/1.1",
 					},
@@ -151,14 +154,15 @@ func TestIntegration(t *testing.T) {
 				}},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
-				Message: "post: payload",
+				Message: `post: {"safe":"value"}`,
 				Request: &sentry.Request{
 					URL:    "/post",
 					Method: "POST",
-					Data:   "payload",
+					Data:   `{"safe":"value"}`,
 					Headers: map[string]string{
 						"Accept-Encoding": "gzip",
-						"Content-Length":  "7",
+						"Content-Length":  "16",
+						"Content-Type":    "application/json",
 						"User-Agent":      "Go-http-client/1.1",
 					},
 				},
@@ -356,6 +360,7 @@ func TestIntegration(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:          true,
 		TracesSampleRate:       1.0,
+		DataCollection:         &sentry.DataCollection{},
 		TraceIgnoreStatusCodes: make([][]int, 0), // don't ignore any status codes
 		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
@@ -403,6 +408,9 @@ func TestIntegration(t *testing.T) {
 		req, err := http.NewRequest(tt.Method, srv.URL+tt.RequestPath, strings.NewReader(tt.Body))
 		if err != nil {
 			t.Fatal(err)
+		}
+		if tt.ContentType != "" {
+			req.Header.Set("Content-Type", tt.ContentType)
 		}
 		res, err := c.Do(req)
 		if err != nil {
