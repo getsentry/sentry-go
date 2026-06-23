@@ -13,8 +13,6 @@ func defaultResolvedDataCollection() DataCollection {
 		HTTPHeaders:         &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
 		HTTPBodies:          allBodyTypes(),
 		QueryParams:         &KeyValueCollectionBehavior{Mode: CollectionDenyList},
-		StackFrameVariables: Set(true),
-		FrameContextLines:   Set(defaultFrameContextLines),
 	}
 }
 
@@ -243,8 +241,6 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 		got.Cookies.Mode = CollectionOff
 		got.HTTPHeaders.Request.Mode = CollectionAllowList
 		got.QueryParams.Mode = CollectionOff
-		got.StackFrameVariables = Set(false)
-		got.FrameContextLines = Set(0)
 
 		if diff := cmp.Diff(defaultResolvedDataCollection(), client.GetDataCollection()); diff != "" {
 			t.Errorf("returned config mutation should not affect client (-want +got):\n%s", diff)
