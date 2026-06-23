@@ -8,11 +8,11 @@ import (
 
 func defaultResolvedDataCollection() DataCollection {
 	return DataCollection{
-		UserInfo:            Set(true),
-		Cookies:             &KeyValueCollectionBehavior{Mode: CollectionDenyList},
-		HTTPHeaders:         &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
-		HTTPBodies:          allBodyTypes(),
-		QueryParams:         &KeyValueCollectionBehavior{Mode: CollectionDenyList},
+		UserInfo:    Set(true),
+		Cookies:     &KeyValueCollectionBehavior{Mode: CollectionDenyList},
+		HTTPHeaders: &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
+		HTTPBodies:  allBodyTypes(),
+		QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 	}
 }
 
