@@ -98,7 +98,7 @@ func cloneKeyValueCollectionBehavior(b *KeyValueCollectionBehavior) *KeyValueCol
 	}
 	cloned := &KeyValueCollectionBehavior{Mode: b.Mode}
 	if b.Terms != nil {
-		cloned.Terms = append([]string(nil), b.Terms...)
+		cloned.Terms = slices.Clone(b.Terms)
 	}
 	return cloned
 }
@@ -126,7 +126,7 @@ func cloneDataCollection(dc *DataCollection) *DataCollection {
 		QueryParams: cloneKeyValueCollectionBehavior(dc.QueryParams),
 	}
 	if dc.HTTPBodies != nil {
-		cloned.HTTPBodies = append([]BodyType{}, dc.HTTPBodies...)
+		cloned.HTTPBodies = slices.Clone(dc.HTTPBodies)
 	}
 	return cloned
 }
