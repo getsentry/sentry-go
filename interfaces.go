@@ -254,9 +254,16 @@ func newRequest(r *http.Request, client *Client) *Request {
 	}
 	url := fmt.Sprintf("%s://%s%s", prot, r.Host, r.URL.Path)
 
-	dc := snapshotDataCollection(nil, false)
+	legacyPII := false
+	if client != nil {
+		legacyPII = client.options.SendDefaultPII // nolint: staticcheck // intended use for backwards compatibility
+	}
+
+	var dc DataCollection
 	if client != nil && client.options.DataCollection != nil {
 		dc = *client.options.DataCollection
+	} else {
+		dc = snapshotDataCollection(nil, legacyPII)
 	}
 	cookies := dc.FilterCookies(r.Header.Get("Cookie"))
 	headers := make(map[string]string, len(r.Header)+1)
