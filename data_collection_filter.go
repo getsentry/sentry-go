@@ -115,8 +115,8 @@ func (dc DataCollection) FilterQueryString(rawQuery string) string {
 	if rawQuery == "" {
 		return ""
 	}
-	parsed := parseKeyValueString(rawQuery, '&')
-	if parsed == nil {
+	parsed, err := parseQueryString(rawQuery)
+	if err != nil {
 		return filteredValue
 	}
 	filtered := filterKeyValues(parsed, dc.QueryParams)
@@ -152,7 +152,11 @@ func (dc DataCollection) FilterHTTPBody(body []byte, contentType string) string 
 	if strings.Contains(strings.ToLower(contentType), "application/json") || looksLikeJSON(body) {
 		var value any
 		if err := json.Unmarshal(body, &value); err == nil {
-			filtered, err := json.Marshal(filterJSONValue(value))
+			filteredValue := filterJSONValue(value, dc.QueryParams)
+			if filteredValue == nil {
+				return ""
+			}
+			filtered, err := json.Marshal(filteredValue)
 			if err == nil {
 				return string(filtered)
 			}
@@ -161,11 +165,11 @@ func (dc DataCollection) FilterHTTPBody(body []byte, contentType string) string 
 
 	if strings.Contains(strings.ToLower(contentType), "application/x-www-form-urlencoded") {
 		if values, err := url.ParseQuery(string(body)); err == nil {
-			filtered := make(map[string]string, len(values))
-			for key, value := range values {
-				filtered[key] = strings.Join(value, ",")
+			filtered := filterKeyValues(flattenValues(values), dc.QueryParams)
+			if filtered == nil {
+				return ""
 			}
-			return joinKeyValuePairs(filterKeyValues(filtered, &KeyValueCollectionBehavior{}), "&", "=")
+			return joinKeyValuePairs(filtered, "&", "=")
 		}
 	}
 
@@ -177,26 +181,45 @@ func looksLikeJSON(body []byte) bool {
 	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
 }
 
-func filterJSONValue(value any) any {
+func filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
+	if behavior != nil && behavior.Mode == CollectionOff {
+		return nil
+	}
+
 	switch value := value.(type) {
 	case map[string]any:
 		filtered := make(map[string]any, len(value))
 		for key, child := range value {
-			if isSensitiveKey(key) {
+			if shouldFilterKey(key, behavior) {
 				filtered[key] = filteredValue
 			} else {
-				filtered[key] = filterJSONValue(child)
+				filtered[key] = filterJSONValue(child, behavior)
 			}
 		}
 		return filtered
 	case []any:
 		filtered := make([]any, len(value))
 		for i, child := range value {
-			filtered[i] = filterJSONValue(child)
+			filtered[i] = filterJSONValue(child, behavior)
 		}
 		return filtered
 	default:
 		return value
+	}
+}
+
+func shouldFilterKey(key string, behavior *KeyValueCollectionBehavior) bool {
+	if behavior == nil {
+		behavior = &KeyValueCollectionBehavior{}
+	}
+
+	switch behavior.Mode {
+	case CollectionOff:
+		return true
+	case CollectionAllowList:
+		return isSensitiveKey(key) || !matchesDenyTerms(key, behavior.Terms)
+	default:
+		return isSensitiveKey(key) || matchesDenyTerms(key, behavior.Terms)
 	}
 }
 
@@ -205,15 +228,23 @@ func filterJSONValue(value any) any {
 func matchesDenyTerms(key string, terms []string) bool {
 	lower := strings.ToLower(key)
 	for _, term := range terms {
-		if strings.Contains(lower, term) {
+		if strings.Contains(lower, strings.ToLower(term)) {
 			return true
 		}
 	}
 	return false
 }
 
+func parseQueryString(s string) (map[string]string, error) {
+	values, err := url.ParseQuery(s)
+	if err != nil {
+		return nil, err
+	}
+	return flattenValues(values), nil
+}
+
 // parseKeyValueString splits a string like "a=1&b=2" or "a=1; b=2" into a
-// map. It returns nil when any part cannot be split on '='.
+// map. Parts without '=' are treated as keys with empty values.
 func parseKeyValueString(s string, separator rune) map[string]string {
 	result := make(map[string]string)
 	for _, part := range strings.Split(s, string(separator)) {
@@ -223,9 +254,17 @@ func parseKeyValueString(s string, separator rune) map[string]string {
 		}
 		key, value, ok := strings.Cut(part, "=")
 		if !ok {
-			return nil
+			key = part
 		}
 		result[key] = value
+	}
+	return result
+}
+
+func flattenValues(values url.Values) map[string]string {
+	result := make(map[string]string, len(values))
+	for key, value := range values {
+		result[key] = strings.Join(value, ",")
 	}
 	return result
 }
