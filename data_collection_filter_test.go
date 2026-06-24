@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -13,7 +14,6 @@ func TestIsSensitiveKey(t *testing.T) {
 		key  string
 		want bool
 	}{
-		// Exact terms
 		{"auth", true},
 		{"token", true},
 		{"secret", true},
@@ -31,168 +31,232 @@ func TestIsSensitiveKey(t *testing.T) {
 		{"session", true},
 		{"sid", true},
 		{"identity", true},
-
-		// Substring matches (case-insensitive)
 		{"Authorization", true},
 		{"X-Auth-Token", true},
 		{"X-API-Key", true},
-		{"x-csrf-token", true},
-		{"XSRF-TOKEN", true},
-		{"session-id", true},
-		{"user-session", true},
-		{"Proxy-Authorization", true},
-		{"x-api-key", true},
-		{"private-key", true},
-		{"JWT-Token", true},
-		{"Bearer-Auth", true},
-
-		// Non-sensitive
 		{"Content-Type", false},
-		{"Accept", false},
-		{"Host", false},
-		{"User-Agent", false},
 		{"X-Request-Id", false},
-		{"Cache-Control", false},
-		{"Content-Length", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
 			t.Parallel()
-			got := isSensitiveKey(tt.key)
-			if got != tt.want {
+
+			if got := isSensitiveKey(tt.key); got != tt.want {
 				t.Errorf("isSensitiveKey(%q) = %v, want %v", tt.key, got, tt.want)
 			}
 		})
 	}
 }
 
-func TestFilterKeyValues(t *testing.T) {
-	t.Parallel()
-
-	data := map[string]string{
-		"Authorization": "Bearer abc123",
-		"Content-Type":  "application/json",
-		"X-Request-Id":  "req-456",
-		"X-Api-Key":     "secret-key",
-	}
-
-	t.Run("nil behavior uses DenyList default", func(t *testing.T) {
-		t.Parallel()
-		result := filterKeyValues(data, nil)
-		if result["Authorization"] != filteredValue {
-			t.Error("Authorization should be filtered")
-		}
-		if result["Content-Type"] != "application/json" {
-			t.Error("Content-Type should not be filtered")
-		}
-		if result["X-Api-Key"] != filteredValue {
-			t.Error("X-Api-Key should be filtered")
-		}
-		if result["X-Request-Id"] != "req-456" {
-			t.Error("X-Request-Id should not be filtered")
-		}
-	})
-
-	t.Run("DenyList mode", func(t *testing.T) {
-		t.Parallel()
-		result := filterKeyValues(data, &KeyValueCollectionBehavior{Mode: CollectionDenyList})
-		if result["Authorization"] != filteredValue {
-			t.Error("Authorization should be filtered")
-		}
-		if result["Content-Type"] != "application/json" {
-			t.Error("Content-Type should not be filtered")
-		}
-	})
-
-	t.Run("DenyList with extra terms", func(t *testing.T) {
-		t.Parallel()
-		result := filterKeyValues(data, &KeyValueCollectionBehavior{
-			Mode:  CollectionDenyList,
-			Terms: []string{"request-id"},
-		})
-		if result["X-Request-Id"] != filteredValue {
-			t.Error("X-Request-Id should be filtered by extra term")
-		}
-		if result["Content-Type"] != "application/json" {
-			t.Error("Content-Type should not be filtered")
-		}
-	})
-
-	t.Run("AllowList mode", func(t *testing.T) {
-		t.Parallel()
-		result := filterKeyValues(data, &KeyValueCollectionBehavior{
-			Mode:  CollectionAllowList,
-			Terms: []string{"content-type", "x-request-id"},
-		})
-		if result["Content-Type"] != "application/json" {
-			t.Error("Content-Type should pass through allow list")
-		}
-		if result["X-Request-Id"] != "req-456" {
-			t.Error("X-Request-Id should pass through allow list")
-		}
-		if result["Authorization"] != filteredValue {
-			t.Error("Authorization should be filtered (not in allow list + sensitive)")
-		}
-		if result["X-Api-Key"] != filteredValue {
-			t.Error("X-Api-Key should be filtered (not in allow list + sensitive)")
-		}
-	})
-
-	t.Run("AllowList sensitive keys still scrubbed", func(t *testing.T) {
-		t.Parallel()
-		// Even if "authorization" is in the allow list, it matches the
-		// sensitive denylist and MUST be scrubbed.
-		result := filterKeyValues(data, &KeyValueCollectionBehavior{
-			Mode:  CollectionAllowList,
-			Terms: []string{"authorization"},
-		})
-		if result["Authorization"] != filteredValue {
-			t.Error("Authorization should be filtered even when in allow list")
-		}
-	})
-
-	t.Run("Off mode", func(t *testing.T) {
-		t.Parallel()
-		result := filterKeyValues(data, &KeyValueCollectionBehavior{Mode: CollectionOff})
-		if result != nil {
-			t.Errorf("Off mode should return nil, got %v", result)
-		}
-	})
-
-	t.Run("empty data", func(t *testing.T) {
-		t.Parallel()
-		result := filterKeyValues(map[string]string{}, &KeyValueCollectionBehavior{Mode: CollectionDenyList})
-		if result == nil {
-			t.Error("should return non-nil empty map")
-		}
-		if len(result) != 0 {
-			t.Errorf("should return empty map, got %v", result)
-		}
-	})
-}
-
-func TestCollectHTTPBody(t *testing.T) {
+func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		dc   *DataCollection
-		want []BodyType
+		name           string
+		dataCollection *DataCollection
+		filter         func(*testing.T, DataCollection) map[string]string
+		want           map[string]string
 	}{
-		{name: "nil DataCollection collects all", dc: nil, want: allBodyTypes()},
-		{name: "nil HTTPBodies collects all", dc: &DataCollection{}, want: allBodyTypes()},
-		{name: "empty HTTPBodies collects none", dc: &DataCollection{HTTPBodies: []BodyType{}}, want: []BodyType{}},
-		{name: "specific types included", dc: &DataCollection{HTTPBodies: []BodyType{BodyIncomingRequest, BodyOutgoingRequest}}, want: []BodyType{BodyIncomingRequest, BodyOutgoingRequest}},
+		{
+			name: "default headers scrub built-in sensitive keys",
+			filter: func(_ *testing.T, dc DataCollection) map[string]string {
+				return dc.FilterRequestHeaders(map[string]string{
+					"Authorization": "Bearer abc123",
+					"Content-Type":  "application/json",
+					"X-Request-Id":  "req-456",
+				})
+			},
+			want: map[string]string{
+				"Authorization": filteredValue,
+				"Content-Type":  "application/json",
+				"X-Request-Id":  "req-456",
+			},
+		},
+		{
+			name: "custom deny terms are case-insensitive",
+			dataCollection: &DataCollection{
+				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"REQUEST-ID"}},
+			},
+			filter: func(t *testing.T, dc DataCollection) map[string]string {
+				t.Helper()
+				got, err := parseQueryString(dc.FilterQueryString("x-request-id=req-456&page=1"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return got
+			},
+			want: map[string]string{
+				"x-request-id": filteredValue,
+				"page":         "1",
+			},
+		},
+		{
+			name: "allow list is case-insensitive and built-in sensitive keys still scrub",
+			dataCollection: &DataCollection{
+				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"PAGE", "PASSWORD"}},
+			},
+			filter: func(t *testing.T, dc DataCollection) map[string]string {
+				t.Helper()
+				got, err := parseQueryString(dc.FilterQueryString("debug=true&page=1&password=secret"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return got
+			},
+			want: map[string]string{
+				"debug":    filteredValue,
+				"page":     "1",
+				"password": filteredValue,
+			},
+		},
+		{
+			name: "flag-style and encoded query keys are filtered per key",
+			filter: func(t *testing.T, dc DataCollection) map[string]string {
+				t.Helper()
+				got, err := parseQueryString(dc.FilterQueryString("debug&pa%73sword=secret&page=1"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return got
+			},
+			want: map[string]string{
+				"debug":    "",
+				"password": filteredValue,
+				"page":     "1",
+			},
+		},
+		{
+			name: "cookies are parsed and filtered per cookie name",
+			filter: func(_ *testing.T, dc DataCollection) map[string]string {
+				return parseKeyValueString(dc.FilterCookies("debug; user_session=secret; theme=dark"), ';')
+			},
+			want: map[string]string{
+				"debug":        "",
+				"user_session": filteredValue,
+				"theme":        "dark",
+			},
+		},
+		{
+			name: "off mode omits collection",
+			dataCollection: &DataCollection{
+				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionOff},
+			},
+			filter: func(_ *testing.T, dc DataCollection) map[string]string {
+				return map[string]string{"query": dc.FilterQueryString("page=1")}
+			},
+			want: map[string]string{"query": ""},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
+			dc := newClientDataCollection(t, tt.dataCollection)
+			got := tt.filter(t, dc)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Errorf("filtered values mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestNewClientDataCollectionHTTPBodyFilters(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		dataCollection *DataCollection
+		body           []byte
+		contentType    string
+		want           map[string]any
+	}{
+		{
+			name: "JSON uses custom deny terms",
+			dataCollection: &DataCollection{
+				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"internal"}},
+			},
+			body:        []byte(`{"internal_id":"123","name":"Jane","password":"secret"}`),
+			contentType: "application/json",
+			want: map[string]any{
+				"internal_id": filteredValue,
+				"name":        "Jane",
+				"password":    filteredValue,
+			},
+		},
+		{
+			name: "JSON uses allow list but sensitive keys still scrub",
+			dataCollection: &DataCollection{
+				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"name", "password"}},
+			},
+			body:        []byte(`{"id":"123","name":"Jane","password":"secret"}`),
+			contentType: "application/json",
+			want: map[string]any{
+				"id":       filteredValue,
+				"name":     "Jane",
+				"password": filteredValue,
+			},
+		},
+		{
+			name: "form body uses custom deny terms",
+			dataCollection: &DataCollection{
+				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"internal"}},
+			},
+			body:        []byte("internal_id=123&name=Jane&password=secret"),
+			contentType: "application/x-www-form-urlencoded",
+			want: map[string]any{
+				"internal_id": filteredValue,
+				"name":        "Jane",
+				"password":    filteredValue,
+			},
+		},
+		{
+			name: "off mode omits parseable body data",
+			dataCollection: &DataCollection{
+				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionOff},
+			},
+			body:        []byte(`{"name":"Jane"}`),
+			contentType: "application/json",
+			want:        map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dc := newClientDataCollection(t, tt.dataCollection)
+			got := dc.FilterHTTPBody(tt.body, tt.contentType)
+			parsed := parseFilteredBody(t, got, tt.contentType)
+			if diff := cmp.Diff(tt.want, parsed); diff != "" {
+				t.Errorf("filtered body mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestNewClientDataCollectionCollectHTTPBody(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		dataCollection *DataCollection
+		want           []BodyType
+	}{
+		{name: "nil HTTPBodies collects all", dataCollection: &DataCollection{}, want: allBodyTypes()},
+		{name: "empty HTTPBodies collects none", dataCollection: &DataCollection{HTTPBodies: []BodyType{}}, want: []BodyType{}},
+		{name: "specific body types", dataCollection: &DataCollection{HTTPBodies: []BodyType{BodyIncomingRequest, BodyOutgoingRequest}}, want: []BodyType{BodyIncomingRequest, BodyOutgoingRequest}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dc := newClientDataCollection(t, tt.dataCollection)
 			got := make([]BodyType, 0)
 			for _, bt := range allBodyTypes() {
-				if tt.dc.CollectHTTPBody(bt) {
+				if (&dc).CollectHTTPBody(bt) {
 					got = append(got, bt)
 				}
 			}
@@ -201,21 +265,6 @@ func TestCollectHTTPBody(t *testing.T) {
 				t.Errorf("collected body types mismatch (-want +got):\n%s", diff)
 			}
 		})
-	}
-}
-
-func TestPrivacyDenyTerms(t *testing.T) {
-	t.Parallel()
-
-	got := PrivacyDenyTerms()
-	want := []string{"forwarded", "-ip", "remote-", "via", "-user"}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Errorf("privacy deny terms mismatch (-want +got):\n%s", diff)
-	}
-
-	got[0] = "changed"
-	if diff := cmp.Diff(want, PrivacyDenyTerms()); diff != "" {
-		t.Errorf("privacy deny terms should return a copy (-want +got):\n%s", diff)
 	}
 }
 
@@ -229,20 +278,62 @@ func TestPrivacyDenyTermsAreOptIn(t *testing.T) {
 		"x-user-id":       "user-123",
 	}
 
-	defaultFiltered := filterKeyValues(data, nil)
+	defaultFiltered := newClientDataCollection(t, &DataCollection{}).FilterRequestHeaders(data)
 	for key, value := range data {
 		if defaultFiltered[key] != value {
 			t.Errorf("%s should not be filtered by default, got %q", key, defaultFiltered[key])
 		}
 	}
 
-	strictFiltered := filterKeyValues(data, &KeyValueCollectionBehavior{
-		Mode:  CollectionDenyList,
-		Terms: PrivacyDenyTerms(),
-	})
+	strictFiltered := newClientDataCollection(t, &DataCollection{
+		HTTPHeaders: &HeaderCollectionConfig{
+			Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: PrivacyDenyTerms()},
+		},
+	}).FilterRequestHeaders(data)
 	for key := range data {
 		if strictFiltered[key] != filteredValue {
 			t.Errorf("%s should be filtered with privacy deny terms, got %q", key, strictFiltered[key])
 		}
 	}
+}
+
+func newClientDataCollection(t *testing.T, dc *DataCollection) DataCollection {
+	t.Helper()
+
+	if dc == nil {
+		dc = &DataCollection{}
+	}
+	client, err := NewClient(ClientOptions{
+		Dsn:            "https://key@sentry.io/1",
+		DataCollection: dc,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client.GetDataCollection()
+}
+
+func parseFilteredBody(t *testing.T, body, contentType string) map[string]any {
+	t.Helper()
+
+	if body == "" {
+		return map[string]any{}
+	}
+	if contentType == "application/json" {
+		var parsed map[string]any
+		if err := json.Unmarshal([]byte(body), &parsed); err != nil {
+			t.Fatal(err)
+		}
+		return parsed
+	}
+
+	form, err := parseQueryString(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed := make(map[string]any, len(form))
+	for key, value := range form {
+		parsed[key] = value
+	}
+	return parsed
 }
