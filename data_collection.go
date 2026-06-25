@@ -89,6 +89,10 @@ type DataCollection struct {
 	//
 	// Defaults to using the built-in DenyList.
 	QueryParams *KeyValueCollectionBehavior
+
+	// sensitiveTerms is the deny-list used for built-in sensitive-key
+	// scrubbing.
+	sensitiveTerms []string
 }
 
 // cloneKeyValueCollectionBehavior returns a deep copy of b.
@@ -120,10 +124,11 @@ func cloneDataCollection(dc *DataCollection) *DataCollection {
 		return nil
 	}
 	cloned := &DataCollection{
-		UserInfo:    dc.UserInfo,
-		Cookies:     cloneKeyValueCollectionBehavior(dc.Cookies),
-		HTTPHeaders: cloneHeaderCollectionConfig(dc.HTTPHeaders),
-		QueryParams: cloneKeyValueCollectionBehavior(dc.QueryParams),
+		UserInfo:       dc.UserInfo,
+		Cookies:        cloneKeyValueCollectionBehavior(dc.Cookies),
+		HTTPHeaders:    cloneHeaderCollectionConfig(dc.HTTPHeaders),
+		QueryParams:    cloneKeyValueCollectionBehavior(dc.QueryParams),
+		sensitiveTerms: dc.sensitiveTerms,
 	}
 	if dc.HTTPBodies != nil {
 		cloned.HTTPBodies = slices.Clone(dc.HTTPBodies)
@@ -178,50 +183,68 @@ func resolveDataCollection(dc *DataCollection) DataCollection {
 	if resolved.QueryParams == nil {
 		resolved.QueryParams = &KeyValueCollectionBehavior{}
 	}
+	if resolved.sensitiveTerms == nil {
+		resolved.sensitiveTerms = defaultSensitiveTerms
+	}
 	return resolved
 }
 
 func legacyDataCollection(sendDefaultPII bool) DataCollection {
 	if sendDefaultPII {
-		return DataCollection{
+		return resolveDataCollection(&DataCollection{
 			UserInfo:    Set(true),
 			Cookies:     &KeyValueCollectionBehavior{},
 			HTTPHeaders: &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{}, Response: &KeyValueCollectionBehavior{}},
 			HTTPBodies:  allBodyTypes(),
 			QueryParams: &KeyValueCollectionBehavior{},
-		}
+		})
 	}
 
-	terms := PrivacyDenyTerms()
 	return resolveDataCollection(&DataCollection{
 		UserInfo:   Set(false),
 		HTTPBodies: []BodyType{},
 		Cookies:    &KeyValueCollectionBehavior{Mode: CollectionOff},
 		HTTPHeaders: &HeaderCollectionConfig{
-			Request:  &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: slices.Clone(terms)},
-			Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: slices.Clone(terms)},
+			Request:  &KeyValueCollectionBehavior{Mode: CollectionDenyList},
+			Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 		},
-		QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: slices.Clone(terms)},
+		QueryParams:    &KeyValueCollectionBehavior{Mode: CollectionDenyList},
+		sensitiveTerms: extendedSensitiveTerms,
 	})
 }
 
-// extendedDenyTerms are optional privacy terms documented by the dataCollection
-// spec. They are not part of the built-in sensitive denylist.
-var extendedDenyTerms = []string{
+// defaultSensitiveTerms is the canonical list of case-insensitive,
+// partial-match terms used for scrubbing.
+//
+// See https://develop.sentry.dev/sdk/foundations/client/data-collection/#sensitive-denylist
+var defaultSensitiveTerms = []string{
+	"auth",
+	"bearer",
+	"credentials",
+	"csrf",
+	"identity",
+	"jwt",
+	"key",
+	"passwd",
+	"password",
+	"pwd",
+	"saml",
+	"secret",
+	"session",
+	"sid",
+	"sso",
+	"token",
+	"xsrf",
+}
+
+// extendedSensitiveTerms is defaultSensitiveTerms plus additional privacy
+// terms that cover user-identifying data such as IP forwarding headers and
+// user IDs. Used for backwards compatibility with SendDefaultPII=false.
+var extendedSensitiveTerms = append(
+	slices.Clone(defaultSensitiveTerms),
 	"forwarded",
 	"-ip",
 	"remote-",
 	"via",
 	"-user",
-}
-
-// PrivacyDenyTerms returns the optional privacy deny terms documented by the
-// dataCollection spec.
-//
-// These terms cover user-identifying data such as IP forwarding headers and
-// user IDs. They are not part of the built-in sensitive denylist. Pass them as
-// custom denyList terms for cookies, HTTP headers, or query params when you
-// need stricter privacy filtering.
-func PrivacyDenyTerms() []string {
-	return slices.Clone(extendedDenyTerms)
-}
+)
