@@ -2,6 +2,8 @@ package sentry
 
 import (
 	"encoding/json"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -81,7 +83,7 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 			},
 			filter: func(t *testing.T, dc DataCollection) map[string]string {
 				t.Helper()
-				got, err := parseQueryString(dc.FilterQueryString("x-request-id=req-456&page=1"))
+				got, err := parseQueryString(t, dc.FilterQueryString("x-request-id=req-456&page=1"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -99,7 +101,7 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 			},
 			filter: func(t *testing.T, dc DataCollection) map[string]string {
 				t.Helper()
-				got, err := parseQueryString(dc.FilterQueryString("debug=true&page=1&password=secret"))
+				got, err := parseQueryString(t, dc.FilterQueryString("debug=true&page=1&password=secret"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -115,7 +117,7 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 			name: "flag-style and encoded query keys are filtered per key",
 			filter: func(t *testing.T, dc DataCollection) map[string]string {
 				t.Helper()
-				got, err := parseQueryString(dc.FilterQueryString("debug&pa%73sword=secret&page=1"))
+				got, err := parseQueryString(t, dc.FilterQueryString("debug&pa%73sword=secret&page=1"))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -128,12 +130,27 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 			},
 		},
 		{
-			name: "cookies are parsed and filtered per cookie name",
-			filter: func(_ *testing.T, dc DataCollection) map[string]string {
-				return parseKeyValueString(dc.FilterCookies("debug; user_session=secret; theme=dark"), ';')
+			name: "encoded query delimiters in values cannot inject sensitive parameters",
+			filter: func(t *testing.T, dc DataCollection) map[string]string {
+				t.Helper()
+				got, err := parseQueryString(t, dc.FilterQueryString("safe=hello%26password%3Dhunter2&page=1"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return got
 			},
 			want: map[string]string{
-				"debug":        "",
+				"safe": "hello&password=hunter2",
+				"page": "1",
+			},
+		},
+		{
+			name: "cookies are parsed and filtered per cookie name",
+			filter: func(_ *testing.T, dc DataCollection) map[string]string {
+				return parseKeyValueString(dc.FilterCookies("debug; =bad; empty=; user_session=secret; theme=dark"), ';')
+			},
+			want: map[string]string{
+				"empty":        "",
 				"user_session": filteredValue,
 				"theme":        "dark",
 			},
@@ -204,6 +221,15 @@ func TestNewClientDataCollectionHTTPBodyFilters(t *testing.T) {
 				"internal_id": "123",
 				"name":        "Jane",
 				"password":    filteredValue,
+			},
+		},
+		{
+			name:        "encoded form delimiters in values cannot inject sensitive parameters",
+			body:        []byte("safe=hello%26password%3Dhunter2&page=1"),
+			contentType: "application/x-www-form-urlencoded",
+			want: map[string]any{
+				"safe": "hello&password=hunter2",
+				"page": "1",
 			},
 		},
 		{
@@ -329,7 +355,7 @@ func parseFilteredBody(t *testing.T, body, contentType string) map[string]any {
 		return parsed
 	}
 
-	form, err := parseQueryString(body)
+	form, err := parseQueryString(t, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,4 +364,18 @@ func parseFilteredBody(t *testing.T, body, contentType string) map[string]any {
 		parsed[key] = value
 	}
 	return parsed
+}
+
+func parseQueryString(t *testing.T, s string) (map[string]string, error) {
+	t.Helper()
+
+	values, err := url.ParseQuery(s)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]string, len(values))
+	for key, value := range values {
+		result[key] = strings.Join(value, ",")
+	}
+	return result, nil
 }

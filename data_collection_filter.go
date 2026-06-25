@@ -72,15 +72,11 @@ func (dc DataCollection) FilterQueryString(rawQuery string) string {
 	if rawQuery == "" {
 		return ""
 	}
-	parsed, err := parseQueryString(rawQuery)
+	values, err := url.ParseQuery(rawQuery)
 	if err != nil {
 		return filteredValue
 	}
-	filtered := dc.filterKeyValues(parsed, dc.QueryParams)
-	if filtered == nil {
-		return ""
-	}
-	return joinKeyValuePairs(filtered, "&", "=")
+	return dc.filterURLValues(values, dc.QueryParams)
 }
 
 // FilterCookies applies the configured cookie collection behavior.
@@ -93,10 +89,15 @@ func (dc DataCollection) FilterCookies(rawCookies string) string {
 		return filteredValue
 	}
 	filtered := dc.filterKeyValues(parsed, dc.Cookies)
-	if filtered == nil {
+	if filtered == nil || len(filtered) == 0 {
 		return ""
 	}
-	return joinKeyValuePairs(filtered, "; ", "=")
+
+	parts := make([]string, 0, len(filtered))
+	for key, value := range filtered {
+		parts = append(parts, key+"="+value)
+	}
+	return strings.Join(parts, "; ")
 }
 
 // FilterHTTPBody applies sensitive-key filtering to parseable HTTP body data.
@@ -109,8 +110,8 @@ func (dc DataCollection) FilterHTTPBody(body []byte, contentType string) string 
 	if strings.Contains(strings.ToLower(contentType), "application/json") || looksLikeJSON(body) {
 		var value any
 		if err := json.Unmarshal(body, &value); err == nil {
-			filteredValue := dc.filterJSONValue(value, nil)
-			filtered, err := json.Marshal(filteredValue)
+			filteredJSON := dc.filterJSONValue(value, nil)
+			filtered, err := json.Marshal(filteredJSON)
 			if err == nil {
 				return string(filtered)
 			}
@@ -119,8 +120,7 @@ func (dc DataCollection) FilterHTTPBody(body []byte, contentType string) string 
 
 	if strings.Contains(strings.ToLower(contentType), "application/x-www-form-urlencoded") {
 		if values, err := url.ParseQuery(string(body)); err == nil {
-			filtered := dc.filterKeyValues(flattenValues(values), nil)
-			return joinKeyValuePairs(filtered, "&", "=")
+			return dc.filterURLValues(values, nil)
 		}
 	}
 
@@ -130,6 +130,21 @@ func (dc DataCollection) FilterHTTPBody(body []byte, contentType string) string 
 func looksLikeJSON(body []byte) bool {
 	trimmed := strings.TrimSpace(string(body))
 	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
+}
+
+func (dc DataCollection) filterURLValues(values url.Values, behavior *KeyValueCollectionBehavior) string {
+	if behavior == nil {
+		behavior = &KeyValueCollectionBehavior{}
+	}
+	if behavior.Mode == CollectionOff {
+		return ""
+	}
+	for key := range values {
+		if dc.shouldFilterKey(key, behavior) {
+			values.Set(key, filteredValue)
+		}
+	}
+	return values.Encode()
 }
 
 func (dc DataCollection) filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
@@ -189,16 +204,8 @@ func matchesDenyTerms(key string, terms []string) bool {
 	return false
 }
 
-func parseQueryString(s string) (map[string]string, error) {
-	values, err := url.ParseQuery(s)
-	if err != nil {
-		return nil, err
-	}
-	return flattenValues(values), nil
-}
-
-// parseKeyValueString splits a string like "a=1&b=2" or "a=1; b=2" into a
-// map. Parts without '=' are treated as keys with empty values.
+// parseKeyValueString splits a string like "a=1; b=2" into a map.
+// Malformed parts without '=' and parts with empty keys are skipped.
 func parseKeyValueString(s string, separator rune) map[string]string {
 	result := make(map[string]string)
 	for _, part := range strings.Split(s, string(separator)) {
@@ -207,30 +214,10 @@ func parseKeyValueString(s string, separator rune) map[string]string {
 			continue
 		}
 		key, value, ok := strings.Cut(part, "=")
-		if !ok {
-			key = part
+		if !ok || strings.TrimSpace(key) == "" {
+			continue
 		}
 		result[key] = value
 	}
 	return result
-}
-
-func flattenValues(values url.Values) map[string]string {
-	result := make(map[string]string, len(values))
-	for key, value := range values {
-		result[key] = strings.Join(value, ",")
-	}
-	return result
-}
-
-// joinKeyValuePairs reassembles a map into a string.
-func joinKeyValuePairs(values map[string]string, separator, assignment string) string {
-	if len(values) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(values))
-	for k, v := range values {
-		parts = append(parts, k+assignment+v)
-	}
-	return strings.Join(parts, separator)
 }
