@@ -32,11 +32,6 @@ var sensitiveDenyList = []string{
 // filteredValue is the replacement for sensitive values.
 const filteredValue = "[Filtered]"
 
-// isSensitiveKey reports whether a key name matches the built-in sensitive denylist.
-func isSensitiveKey(key string) bool {
-	return matchesDenyTerms(key, sensitiveDenyList)
-}
-
 // filterKeyValues applies a KeyValueCollectionBehavior to a map of key-value
 // pairs. Keys are always preserved and values are replaced with "[Filtered]".
 //
@@ -53,7 +48,7 @@ func filterKeyValues(data map[string]string, behavior *KeyValueCollectionBehavio
 	case CollectionAllowList:
 		result := make(map[string]string, len(data))
 		for k, v := range data {
-			if isSensitiveKey(k) || !matchesDenyTerms(k, behavior.Terms) {
+			if isSensitiveAllowList(k, behavior.Terms) {
 				result[k] = filteredValue
 			} else {
 				result[k] = v
@@ -64,7 +59,7 @@ func filterKeyValues(data map[string]string, behavior *KeyValueCollectionBehavio
 	default: // CollectionDenyList (also handles zero value)
 		result := make(map[string]string, len(data))
 		for k, v := range data {
-			if isSensitiveKey(k) || matchesDenyTerms(k, behavior.Terms) {
+			if isSensitiveDenyList(k, behavior.Terms) {
 				result[k] = filteredValue
 			} else {
 				result[k] = v
@@ -217,9 +212,9 @@ func shouldFilterKey(key string, behavior *KeyValueCollectionBehavior) bool {
 	case CollectionOff:
 		return true
 	case CollectionAllowList:
-		return isSensitiveKey(key) || !matchesDenyTerms(key, behavior.Terms)
+		return isSensitiveAllowList(key, behavior.Terms)
 	default:
-		return isSensitiveKey(key) || matchesDenyTerms(key, behavior.Terms)
+		return isSensitiveDenyList(key, behavior.Terms)
 	}
 }
 
@@ -233,6 +228,24 @@ func matchesDenyTerms(key string, terms []string) bool {
 		}
 	}
 	return false
+}
+
+// isSensitiveAllowList reports whether key's value must be redacted under
+// allow-list collection.
+//
+// The built-in sensitive denylist always wins, even if the user allow-lists a
+// matching term.
+func isSensitiveAllowList(key string, terms []string) bool {
+	return matchesDenyTerms(key, sensitiveDenyList) || !matchesDenyTerms(key, terms)
+}
+
+// isSensitiveDenyList reports whether key's value should be filtered when
+// deny-list collection is active.
+//
+// A key is filtered if it matches either the built-in sensitive denylist or any
+// user-provided deny-list term.
+func isSensitiveDenyList(key string, terms []string) bool {
+	return matchesDenyTerms(key, sensitiveDenyList) || matchesDenyTerms(key, terms)
 }
 
 func parseQueryString(s string) (map[string]string, error) {

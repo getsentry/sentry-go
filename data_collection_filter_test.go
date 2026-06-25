@@ -7,7 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestIsSensitiveKey(t *testing.T) {
+func TestSensitiveDenyListTerms(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -42,8 +42,8 @@ func TestIsSensitiveKey(t *testing.T) {
 		t.Run(tt.key, func(t *testing.T) {
 			t.Parallel()
 
-			if got := isSensitiveKey(tt.key); got != tt.want {
-				t.Errorf("isSensitiveKey(%q) = %v, want %v", tt.key, got, tt.want)
+			if got := isSensitiveDenyList(tt.key, nil); got != tt.want {
+				t.Errorf("isSensitiveDenyList(%q, nil) = %v, want %v", tt.key, got, tt.want)
 			}
 		})
 	}
