@@ -89,7 +89,7 @@ func (dc DataCollection) FilterCookies(rawCookies string) string {
 		return filteredValue
 	}
 	filtered := dc.filterKeyValues(parsed, dc.Cookies)
-	if filtered == nil || len(filtered) == 0 {
+	if len(filtered) == 0 {
 		return ""
 	}
 
