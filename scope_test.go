@@ -368,7 +368,10 @@ func TestScopeBasicInheritance(t *testing.T) {
 
 	assertEqual(t, scope.attributes, clone.attributes)
 	assertEqual(t, scope.requestBody, clone.requestBody)
-	assertEqual(t, scope.eventProcessors, clone.eventProcessors)
+	// Event processors are function values, which reflect.DeepEqual can only
+	// compare by identity through a shared backing array; compare the count
+	// instead so the clone keeps its own slice (see Clone).
+	assertEqual(t, len(scope.eventProcessors), len(clone.eventProcessors))
 }
 
 func TestScopeParentChangedInheritance(t *testing.T) {
@@ -501,6 +504,41 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 
 	assertEqual(t, len(scope.eventProcessors), 1)
 	assertEqual(t, len(clone.eventProcessors), 2)
+}
+
+func TestScopeCloneEventProcessorsIsolation(t *testing.T) {
+	var ran []string
+	mark := func(id string) EventProcessor {
+		return func(event *Event, _ *EventHint) *Event {
+			ran = append(ran, id)
+			return event
+		}
+	}
+
+	// Three processors give the parent's slice spare capacity (len 3, cap 4),
+	// which clones used to share, so appending to one clone overwrote the
+	// other clone's appended processor through the shared backing array.
+	scope := NewScope()
+	scope.AddEventProcessor(mark("a"))
+	scope.AddEventProcessor(mark("b"))
+	scope.AddEventProcessor(mark("c"))
+
+	clone1 := scope.Clone()
+	clone2 := scope.Clone()
+	clone1.AddEventProcessor(mark("x"))
+	clone2.AddEventProcessor(mark("y"))
+
+	ran = nil
+	clone1.ApplyToEvent(NewEvent(), nil, nil)
+	assertEqual(t, []string{"a", "b", "c", "x"}, ran)
+
+	ran = nil
+	clone2.ApplyToEvent(NewEvent(), nil, nil)
+	assertEqual(t, []string{"a", "b", "c", "y"}, ran)
+
+	ran = nil
+	scope.ApplyToEvent(NewEvent(), nil, nil)
+	assertEqual(t, []string{"a", "b", "c"}, ran)
 }
 
 func TestClear(t *testing.T) {
