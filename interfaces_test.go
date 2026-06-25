@@ -154,6 +154,24 @@ func TestNewRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "malformed cookies are dropped",
+			makeReq: func() *http.Request {
+				r := httptest.NewRequest("POST", "/test/", nil)
+				r.Header.Add("Cookie", "debug; user_session=abc; =empty; theme=dark")
+				return r
+			},
+			want: &Request{
+				URL:     "http://example.com/test/",
+				Method:  "POST",
+				Cookies: "user_session=[Filtered]; theme=dark",
+				Headers: map[string]string{
+					"Cookie": "user_session=[Filtered]; theme=dark",
+					"Host":   "example.com",
+				},
+				Env: map[string]string{"REMOTE_ADDR": "192.0.2.1", "REMOTE_PORT": "1234"},
+			},
+		},
+		{
 			name: "off modes omit categories entirely",
 			dc: &DataCollection{
 				UserInfo: Set(false),
