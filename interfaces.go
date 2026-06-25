@@ -265,22 +265,20 @@ func newRequest(r *http.Request, client *Client) *Request {
 	} else {
 		dc = snapshotDataCollection(nil, legacyPII)
 	}
-	cookies := dc.FilterCookies(r.Header.Get("Cookie"))
+	var cookies string
 	headers := make(map[string]string, len(r.Header)+1)
+	if dc.CollectCookies() {
+		rawCookie := r.Header.Get("Cookie")
+		cookies = dc.FilterCookies(rawCookie)
+		if cookies != "" {
+			headers["Cookie"] = cookies
+		}
+	}
 	for k, v := range r.Header {
 		if strings.EqualFold(k, "Cookie") {
 			continue
 		}
 		headers[k] = strings.Join(v, ",")
-	}
-	if rawCookie := r.Header.Get("Cookie"); rawCookie != "" {
-		if dc.CollectCookies() {
-			if cookies != "" {
-				headers["Cookie"] = cookies
-			} else {
-				headers["Cookie"] = filteredValue
-			}
-		}
 	}
 	headers["Host"] = r.Host
 	headers = dc.FilterRequestHeaders(headers)
