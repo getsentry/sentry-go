@@ -108,7 +108,7 @@ func TestUnaryServerInterceptor_ScrubsSensitiveMetadata(t *testing.T) {
 	if diff := cmp.Diff(
 		map[string]any{
 			"authorization": "[Filtered]",
-			"cookie":        "[Filtered]",
+			"cookie":        "session=[Filtered]",
 			"x-api-key":     "[Filtered]",
 			"x-request-id":  "req-123",
 		}, metadataContext,
