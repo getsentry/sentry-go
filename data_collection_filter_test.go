@@ -38,12 +38,13 @@ func TestSensitiveDenyListTerms(t *testing.T) {
 		{"X-Request-Id", false},
 	}
 
+	dc := DataCollection{sensitiveTerms: defaultSensitiveTerms}
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
 			t.Parallel()
 
-			if got := isSensitiveDenyList(tt.key, nil); got != tt.want {
-				t.Errorf("isSensitiveDenyList(%q, nil) = %v, want %v", tt.key, got, tt.want)
+			if got := dc.shouldFilterKey(tt.key, nil); got != tt.want {
+				t.Errorf("shouldFilterKey(%q, nil) = %v, want %v", tt.key, got, tt.want)
 			}
 		})
 	}
@@ -173,52 +174,49 @@ func TestNewClientDataCollectionHTTPBodyFilters(t *testing.T) {
 		want           map[string]any
 	}{
 		{
-			name: "JSON uses custom deny terms",
-			dataCollection: &DataCollection{
-				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"internal"}},
-			},
+			name:        "JSON uses built-in sensitive denylist",
 			body:        []byte(`{"internal_id":"123","name":"Jane","password":"secret"}`),
 			contentType: "application/json",
 			want: map[string]any{
-				"internal_id": filteredValue,
+				"internal_id": "123",
 				"name":        "Jane",
 				"password":    filteredValue,
 			},
 		},
 		{
-			name: "JSON uses allow list but sensitive keys still scrub",
+			name: "JSON ignores query param allow list",
 			dataCollection: &DataCollection{
 				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"name", "password"}},
 			},
 			body:        []byte(`{"id":"123","name":"Jane","password":"secret"}`),
 			contentType: "application/json",
 			want: map[string]any{
-				"id":       filteredValue,
+				"id":       "123",
 				"name":     "Jane",
 				"password": filteredValue,
 			},
 		},
 		{
-			name: "form body uses custom deny terms",
-			dataCollection: &DataCollection{
-				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"internal"}},
-			},
+			name:        "form body uses built-in sensitive denylist",
 			body:        []byte("internal_id=123&name=Jane&password=secret"),
 			contentType: "application/x-www-form-urlencoded",
 			want: map[string]any{
-				"internal_id": filteredValue,
+				"internal_id": "123",
 				"name":        "Jane",
 				"password":    filteredValue,
 			},
 		},
 		{
-			name: "off mode omits parseable body data",
+			name: "query params off does not omit parseable body data",
 			dataCollection: &DataCollection{
 				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionOff},
 			},
-			body:        []byte(`{"name":"Jane"}`),
+			body:        []byte(`{"name":"Jane","password":"secret"}`),
 			contentType: "application/json",
-			want:        map[string]any{},
+			want: map[string]any{
+				"name":     "Jane",
+				"password": filteredValue,
+			},
 		},
 	}
 
@@ -268,7 +266,7 @@ func TestNewClientDataCollectionCollectHTTPBody(t *testing.T) {
 	}
 }
 
-func TestPrivacyDenyTermsAreOptIn(t *testing.T) {
+func TestExtendedSensitiveTermsAreOptIn(t *testing.T) {
 	t.Parallel()
 
 	data := map[string]string{
@@ -278,6 +276,7 @@ func TestPrivacyDenyTermsAreOptIn(t *testing.T) {
 		"x-user-id":       "user-123",
 	}
 
+	// Default config uses only defaultSensitiveTerms — extended terms are not applied.
 	defaultFiltered := newClientDataCollection(t, &DataCollection{}).FilterRequestHeaders(data)
 	for key, value := range data {
 		if defaultFiltered[key] != value {
@@ -285,14 +284,17 @@ func TestPrivacyDenyTermsAreOptIn(t *testing.T) {
 		}
 	}
 
-	strictFiltered := newClientDataCollection(t, &DataCollection{
+	// Extended terms are applied when sensitiveTerms includes them (legacy path).
+	strictDC := newClientDataCollection(t, &DataCollection{
 		HTTPHeaders: &HeaderCollectionConfig{
-			Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: PrivacyDenyTerms()},
+			Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 		},
-	}).FilterRequestHeaders(data)
+	})
+	strictDC.sensitiveTerms = extendedSensitiveTerms
+	strictFiltered := strictDC.FilterRequestHeaders(data)
 	for key := range data {
 		if strictFiltered[key] != filteredValue {
-			t.Errorf("%s should be filtered with privacy deny terms, got %q", key, strictFiltered[key])
+			t.Errorf("%s should be filtered with extended sensitive terms, got %q", key, strictFiltered[key])
 		}
 	}
 }
