@@ -6,29 +6,6 @@ import (
 	"strings"
 )
 
-// sensitiveDenyList is the canonical list of case-insensitive, partial-match terms used for scrubbing.
-//
-// See https://develop.sentry.dev/sdk/foundations/client/data-collection/#sensitive-denylist
-var sensitiveDenyList = []string{
-	"auth",
-	"bearer",
-	"credentials",
-	"csrf",
-	"identity",
-	"jwt",
-	"key",
-	"passwd",
-	"password",
-	"pwd",
-	"saml",
-	"secret",
-	"session",
-	"sid",
-	"sso",
-	"token",
-	"xsrf",
-}
-
 // filteredValue is the replacement for sensitive values.
 const filteredValue = "[Filtered]"
 
@@ -36,37 +13,22 @@ const filteredValue = "[Filtered]"
 // pairs. Keys are always preserved and values are replaced with "[Filtered]".
 //
 // Returns nil when the mode is CollectionOff.
-func filterKeyValues(data map[string]string, behavior *KeyValueCollectionBehavior) map[string]string {
+func (dc DataCollection) filterKeyValues(data map[string]string, behavior *KeyValueCollectionBehavior) map[string]string {
 	if behavior == nil {
 		behavior = &KeyValueCollectionBehavior{}
 	}
-
-	switch behavior.Mode {
-	case CollectionOff:
+	if behavior.Mode == CollectionOff {
 		return nil
-
-	case CollectionAllowList:
-		result := make(map[string]string, len(data))
-		for k, v := range data {
-			if isSensitiveAllowList(k, behavior.Terms) {
-				result[k] = filteredValue
-			} else {
-				result[k] = v
-			}
-		}
-		return result
-
-	default: // CollectionDenyList (also handles zero value)
-		result := make(map[string]string, len(data))
-		for k, v := range data {
-			if isSensitiveDenyList(k, behavior.Terms) {
-				result[k] = filteredValue
-			} else {
-				result[k] = v
-			}
-		}
-		return result
 	}
+	result := make(map[string]string, len(data))
+	for k, v := range data {
+		if dc.shouldFilterKey(k, behavior) {
+			result[k] = filteredValue
+		} else {
+			result[k] = v
+		}
+	}
+	return result
 }
 
 // FilterRequestHeaders applies the configured request-header collection behavior.
@@ -75,7 +37,7 @@ func (dc DataCollection) FilterRequestHeaders(headers map[string]string) map[str
 	if dc.HTTPHeaders != nil {
 		behavior = dc.HTTPHeaders.Request
 	}
-	return filterKeyValues(headers, behavior)
+	return dc.filterKeyValues(headers, behavior)
 }
 
 // FilterResponseHeaders applies the configured response-header collection behavior.
@@ -84,7 +46,7 @@ func (dc DataCollection) FilterResponseHeaders(headers map[string]string) map[st
 	if dc.HTTPHeaders != nil {
 		behavior = dc.HTTPHeaders.Response
 	}
-	return filterKeyValues(headers, behavior)
+	return dc.filterKeyValues(headers, behavior)
 }
 
 // CollectHTTPBody reports whether the given body type should be collected.
@@ -114,7 +76,7 @@ func (dc DataCollection) FilterQueryString(rawQuery string) string {
 	if err != nil {
 		return filteredValue
 	}
-	filtered := filterKeyValues(parsed, dc.QueryParams)
+	filtered := dc.filterKeyValues(parsed, dc.QueryParams)
 	if filtered == nil {
 		return ""
 	}
@@ -130,7 +92,7 @@ func (dc DataCollection) FilterCookies(rawCookies string) string {
 	if parsed == nil {
 		return filteredValue
 	}
-	filtered := filterKeyValues(parsed, dc.Cookies)
+	filtered := dc.filterKeyValues(parsed, dc.Cookies)
 	if filtered == nil {
 		return ""
 	}
@@ -147,10 +109,7 @@ func (dc DataCollection) FilterHTTPBody(body []byte, contentType string) string 
 	if strings.Contains(strings.ToLower(contentType), "application/json") || looksLikeJSON(body) {
 		var value any
 		if err := json.Unmarshal(body, &value); err == nil {
-			filteredValue := filterJSONValue(value, dc.QueryParams)
-			if filteredValue == nil {
-				return ""
-			}
+			filteredValue := dc.filterJSONValue(value, nil)
 			filtered, err := json.Marshal(filteredValue)
 			if err == nil {
 				return string(filtered)
@@ -160,10 +119,7 @@ func (dc DataCollection) FilterHTTPBody(body []byte, contentType string) string 
 
 	if strings.Contains(strings.ToLower(contentType), "application/x-www-form-urlencoded") {
 		if values, err := url.ParseQuery(string(body)); err == nil {
-			filtered := filterKeyValues(flattenValues(values), dc.QueryParams)
-			if filtered == nil {
-				return ""
-			}
+			filtered := dc.filterKeyValues(flattenValues(values), nil)
 			return joinKeyValuePairs(filtered, "&", "=")
 		}
 	}
@@ -176,7 +132,7 @@ func looksLikeJSON(body []byte) bool {
 	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
 }
 
-func filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
+func (dc DataCollection) filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
 	if behavior != nil && behavior.Mode == CollectionOff {
 		return nil
 	}
@@ -185,17 +141,17 @@ func filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
 	case map[string]any:
 		filtered := make(map[string]any, len(value))
 		for key, child := range value {
-			if shouldFilterKey(key, behavior) {
+			if dc.shouldFilterKey(key, behavior) {
 				filtered[key] = filteredValue
 			} else {
-				filtered[key] = filterJSONValue(child, behavior)
+				filtered[key] = dc.filterJSONValue(child, behavior)
 			}
 		}
 		return filtered
 	case []any:
 		filtered := make([]any, len(value))
 		for i, child := range value {
-			filtered[i] = filterJSONValue(child, behavior)
+			filtered[i] = dc.filterJSONValue(child, behavior)
 		}
 		return filtered
 	default:
@@ -203,7 +159,10 @@ func filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
 	}
 }
 
-func shouldFilterKey(key string, behavior *KeyValueCollectionBehavior) bool {
+// shouldFilterKey reports whether a key's value should be redacted under the
+// given behavior. It combines the built-in sensitive terms with the behavior's
+// user-provided terms.
+func (dc DataCollection) shouldFilterKey(key string, behavior *KeyValueCollectionBehavior) bool {
 	if behavior == nil {
 		behavior = &KeyValueCollectionBehavior{}
 	}
@@ -212,9 +171,9 @@ func shouldFilterKey(key string, behavior *KeyValueCollectionBehavior) bool {
 	case CollectionOff:
 		return true
 	case CollectionAllowList:
-		return isSensitiveAllowList(key, behavior.Terms)
+		return matchesDenyTerms(key, dc.sensitiveTerms) || !matchesDenyTerms(key, behavior.Terms)
 	default:
-		return isSensitiveDenyList(key, behavior.Terms)
+		return matchesDenyTerms(key, dc.sensitiveTerms) || matchesDenyTerms(key, behavior.Terms)
 	}
 }
 
@@ -228,24 +187,6 @@ func matchesDenyTerms(key string, terms []string) bool {
 		}
 	}
 	return false
-}
-
-// isSensitiveAllowList reports whether key's value must be redacted under
-// allow-list collection.
-//
-// The built-in sensitive denylist always wins, even if the user allow-lists a
-// matching term.
-func isSensitiveAllowList(key string, terms []string) bool {
-	return matchesDenyTerms(key, sensitiveDenyList) || !matchesDenyTerms(key, terms)
-}
-
-// isSensitiveDenyList reports whether key's value should be filtered when
-// deny-list collection is active.
-//
-// A key is filtered if it matches either the built-in sensitive denylist or any
-// user-provided deny-list term.
-func isSensitiveDenyList(key string, terms []string) bool {
-	return matchesDenyTerms(key, sensitiveDenyList) || matchesDenyTerms(key, terms)
 }
 
 func parseQueryString(s string) (map[string]string, error) {
