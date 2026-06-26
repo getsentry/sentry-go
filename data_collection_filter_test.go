@@ -40,7 +40,7 @@ func TestSensitiveDenyListTerms(t *testing.T) {
 		{"X-Request-Id", false},
 	}
 
-	dc := DataCollection{sensitiveTerms: defaultSensitiveTerms}
+	dc := DataCollection{}
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
 			t.Parallel()

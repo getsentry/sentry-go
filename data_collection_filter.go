@@ -6,6 +6,30 @@ import (
 	"strings"
 )
 
+// defaultSensitiveTerms is the canonical list of case-insensitive,
+// partial-match terms used for scrubbing.
+//
+// See https://develop.sentry.dev/sdk/foundations/client/data-collection/#sensitive-denylist
+var defaultSensitiveTerms = []string{
+	"auth",
+	"bearer",
+	"credentials",
+	"csrf",
+	"identity",
+	"jwt",
+	"key",
+	"passwd",
+	"password",
+	"pwd",
+	"saml",
+	"secret",
+	"session",
+	"sid",
+	"sso",
+	"token",
+	"xsrf",
+}
+
 // filteredValue is the replacement for sensitive values.
 const filteredValue = "[Filtered]"
 
@@ -74,7 +98,7 @@ func (dc DataCollection) FilterQueryString(rawQuery string) string {
 	}
 	values, err := url.ParseQuery(rawQuery)
 	if err != nil {
-		return filteredValue
+		return ""
 	}
 	return dc.filterURLValues(values, dc.QueryParams)
 }
@@ -85,8 +109,8 @@ func (dc DataCollection) FilterCookies(rawCookies string) string {
 		return ""
 	}
 	parsed := parseKeyValueString(rawCookies, ';')
-	if parsed == nil {
-		return filteredValue
+	if len(parsed) == 0 {
+		return ""
 	}
 	filtered := dc.filterKeyValues(parsed, dc.Cookies)
 	if len(filtered) == 0 {
@@ -144,7 +168,7 @@ func (dc DataCollection) filterURLValues(values url.Values, behavior *KeyValueCo
 			values.Set(key, filteredValue)
 		}
 	}
-	return values.Encode()
+	return strings.ReplaceAll(values.Encode(), url.QueryEscape(filteredValue), filteredValue)
 }
 
 func (dc DataCollection) filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
@@ -182,13 +206,15 @@ func (dc DataCollection) shouldFilterKey(key string, behavior *KeyValueCollectio
 		behavior = &KeyValueCollectionBehavior{}
 	}
 
+	sensitive := matchesDenyTerms(key, defaultSensitiveTerms) || matchesDenyTerms(key, dc.sensitiveTerms)
+
 	switch behavior.Mode {
 	case CollectionOff:
 		return true
 	case CollectionAllowList:
-		return matchesDenyTerms(key, dc.sensitiveTerms) || !matchesDenyTerms(key, behavior.Terms)
+		return sensitive || !matchesDenyTerms(key, behavior.Terms)
 	default:
-		return matchesDenyTerms(key, dc.sensitiveTerms) || matchesDenyTerms(key, behavior.Terms)
+		return sensitive || matchesDenyTerms(key, behavior.Terms)
 	}
 }
 
