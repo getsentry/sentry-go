@@ -10,12 +10,11 @@ func TestNewClientDataCollection(t *testing.T) {
 	t.Parallel()
 
 	specDefaults := DataCollection{
-		UserInfo:       Set(true),
-		Cookies:        &KeyValueCollectionBehavior{Mode: CollectionDenyList},
-		HTTPHeaders:    &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
-		HTTPBodies:     allBodyTypes(),
-		QueryParams:    &KeyValueCollectionBehavior{Mode: CollectionDenyList},
-		sensitiveTerms: defaultSensitiveTerms,
+		UserInfo:    Set(true),
+		Cookies:     &KeyValueCollectionBehavior{Mode: CollectionDenyList},
+		HTTPHeaders: &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
+		HTTPBodies:  allBodyTypes(),
+		QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 	}
 	legacyPrivacyDefaults := DataCollection{
 		UserInfo:       Set(false),
@@ -79,12 +78,11 @@ func TestNewClientDataCollection(t *testing.T) {
 				SendDefaultPII: true,
 			},
 			want: DataCollection{
-				UserInfo:       Set(false),
-				Cookies:        &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}},
-				HTTPHeaders:    &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"x-request-id"}}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
-				HTTPBodies:     []BodyType{},
-				QueryParams:    &KeyValueCollectionBehavior{Mode: CollectionDenyList},
-				sensitiveTerms: defaultSensitiveTerms,
+				UserInfo:    Set(false),
+				Cookies:     &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}},
+				HTTPHeaders: &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"x-request-id"}}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
+				HTTPBodies:  []BodyType{},
+				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 			},
 		},
 	}
@@ -135,12 +133,11 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 	returned.QueryParams.Mode = CollectionOff
 
 	want := DataCollection{
-		UserInfo:       Set(false),
-		Cookies:        &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}},
-		HTTPHeaders:    &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
-		HTTPBodies:     []BodyType{BodyIncomingRequest},
-		QueryParams:    &KeyValueCollectionBehavior{Mode: CollectionDenyList},
-		sensitiveTerms: defaultSensitiveTerms,
+		UserInfo:    Set(false),
+		Cookies:     &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}},
+		HTTPHeaders: &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
+		HTTPBodies:  []BodyType{BodyIncomingRequest},
+		QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 	}
 
 	if diff := cmp.Diff(want, client.GetDataCollection(), cmp.AllowUnexported(DataCollection{})); diff != "" {

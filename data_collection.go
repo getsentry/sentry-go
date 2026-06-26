@@ -183,9 +183,6 @@ func resolveDataCollection(dc *DataCollection) DataCollection {
 	if resolved.QueryParams == nil {
 		resolved.QueryParams = &KeyValueCollectionBehavior{}
 	}
-	if resolved.sensitiveTerms == nil {
-		resolved.sensitiveTerms = defaultSensitiveTerms
-	}
 	return resolved
 }
 
@@ -213,38 +210,13 @@ func legacyDataCollection(sendDefaultPII bool) DataCollection {
 	})
 }
 
-// defaultSensitiveTerms is the canonical list of case-insensitive,
-// partial-match terms used for scrubbing.
-//
-// See https://develop.sentry.dev/sdk/foundations/client/data-collection/#sensitive-denylist
-var defaultSensitiveTerms = []string{
-	"auth",
-	"bearer",
-	"credentials",
-	"csrf",
-	"identity",
-	"jwt",
-	"key",
-	"passwd",
-	"password",
-	"pwd",
-	"saml",
-	"secret",
-	"session",
-	"sid",
-	"sso",
-	"token",
-	"xsrf",
-}
-
-// extendedSensitiveTerms is defaultSensitiveTerms plus additional privacy
-// terms that cover user-identifying data such as IP forwarding headers and
-// user IDs. Used for backwards compatibility with SendDefaultPII=false.
-var extendedSensitiveTerms = append(
-	slices.Clone(defaultSensitiveTerms),
+// extendedSensitiveTerms are additional privacy terms that cover
+// user-identifying data such as IP forwarding headers and user IDs. Used for
+// backwards compatibility with SendDefaultPII=false.
+var extendedSensitiveTerms = []string{
 	"forwarded",
 	"-ip",
 	"remote-",
 	"via",
 	"-user",
-)
+}
