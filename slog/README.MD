@@ -45,14 +45,13 @@ func main() {
 
 	ctx := context.Background()
 	handler := sentryslog.Option{
-		EventLevel: []slog.Level{slog.LevelError, sentryslog.LevelFatal}, // Only Error and Fatal as events
-		LogLevel:   []slog.Level{slog.LevelWarn, slog.LevelInfo},         // Only Warn and Info as logs
+		LogLevel: []slog.Level{slog.LevelWarn, slog.LevelInfo, slog.LevelError, sentryslog.LevelFatal},
 	}.NewSentryHandler(ctx)
-    logger := slog.New(handler)
+	logger := slog.New(handler)
 
 	// Example logging
-	logger.Info("This will be sent to sentry as a Log entry")
-	logger.Error("An error occurred", "user", "test-user") // this will be sent as an Event
+	logger.Info("This will be sent to Sentry as a log")
+	logger.Error("An error occurred", "user", "test-user")
 	// These will be ignored
 	logger.Debug("This will be ignored")
 }
@@ -62,17 +61,11 @@ func main() {
 
 The slog-sentry package offers several options to customize how logs are handled and sent to Sentry. These are specified through the Option struct:
 
-- `EventLevel`: Slice of specific levels to send `Events` to Sentry. Defaults to `[]slog.Level{slog.LevelError, LevelFatal}`.
-
 - `LogLevel`: Slice of specific levels to send `Log` entries to Sentry. Defaults to `[]slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, LevelFatal}`.
-
-- `Hub`: Custom Sentry hub to use; defaults to the current Sentry hub if not set.
-
-- `Converter`: Custom function to transform logs into Sentry events (default is DefaultConverter).
 
 - `AttrFromContext`: Functions to extract additional attributes from the context.
 
-- `AddSource`: Include file/line source info in Sentry events. Defaults to `false`.
+- `AddSource`: Include file/line source info in Sentry log attributes. Defaults to `false`.
 
 - `ReplaceAttr`:  Allows modification or filtering of attributes before sending to Sentry.
 
@@ -81,33 +74,10 @@ The slog-sentry package offers several options to customize how logs are handled
 
 ```go
 handler := slogSentry.Option{
-	EventLevel: slog.LevelWarn,
-	Converter: func(addSource bool, replaceAttr func([]string, slog.Attr) slog.Attr, attrs []slog.Attr, groups []string, record *slog.Record, hub *sentry.Hub) *sentry.Event {
-		// Custom conversion logic
-		return &sentry.Event{
-			Message: record.Message,
-		}
-	},
+	LogLevel: []slog.Level{slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
 	AddSource: true,
-}.NewSentryHandler()
-```
-
-### Backwards Compatibility
-
-The old `Level` field is Deprecated but still works and will be converted to a slice of all levels starting from the minimum level:
-
-```go
-// Old way (still works)
-handler := sentryslog.Option{
-    Level: slog.LevelWarn, // Will be converted to EventLevel: [Warn, Error, Fatal]
-}.NewSentryHandler(ctx)
-
-// New way (preferred)
-handler := sentryslog.Option{
-    EventLevel: []slog.Level{slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
-    LogLevel:   []slog.Level{slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError, sentryslog.LevelFatal},
 }.NewSentryHandler(ctx)
 ```
 ## Notes
 
-- Always call `Flush` or `FlushWithContext` to ensure all events are sent to Sentry before program termination
+- Always call `Flush` or `FlushWithContext` to ensure all logs are sent to Sentry before program termination

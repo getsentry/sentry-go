@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"reflect"
 	"time"
 
@@ -18,10 +17,6 @@ import (
 const (
 	// sdkIdentifier is the identifier of the Logrus SDK.
 	sdkIdentifier = "sentry.go.logrus"
-	// the name of the logger.
-	name = "logrus"
-
-	maxErrorDepth = 100
 )
 
 // These default log field keys are used to pass specific metadata in a way that
@@ -47,16 +42,6 @@ const (
 
 	LogrusOrigin = "auto.log.logrus"
 )
-
-var levelMap = map[logrus.Level]sentry.Level{
-	logrus.TraceLevel: sentry.LevelDebug,
-	logrus.DebugLevel: sentry.LevelDebug,
-	logrus.InfoLevel:  sentry.LevelInfo,
-	logrus.WarnLevel:  sentry.LevelWarning,
-	logrus.ErrorLevel: sentry.LevelError,
-	logrus.FatalLevel: sentry.LevelFatal,
-	logrus.PanicLevel: sentry.LevelFatal,
-}
 
 // Hook is the logrus hook for Sentry.
 //
@@ -84,187 +69,9 @@ type Hook interface {
 	FlushWithContext(ctx context.Context) bool
 }
 
-// Deprecated: New creates issues/events from log entries. Errors should only be captured
-// using sentry.CaptureException instead of being converted from log entries.
-// Use [NewLogHook] for structured logging. Will be removed in 0.48.0.
-func New(levels []logrus.Level, opts sentry.ClientOptions) (Hook, error) {
-	return NewEventHook(levels, opts)
-}
-
-// Deprecated: NewFromClient creates issues/events from log entries. Errors should only be
-// captured using sentry.CaptureException instead of being converted from log entries.
-// Use [NewLogHookFromClient] for structured logging. Will be removed in 0.48.0.
-func NewFromClient(levels []logrus.Level, client *sentry.Client) Hook {
-	return NewEventHookFromClient(levels, client)
-}
-
 // A FallbackFunc can be used to attempt to handle any errors in logging, before
 // resorting to Logrus's standard error reporting.
 type FallbackFunc func(*logrus.Entry) error
-
-type eventHook struct {
-	hubProvider func() *sentry.Hub
-	fallback    FallbackFunc
-	keys        map[string]string
-	levels      []logrus.Level
-}
-
-var _ Hook = &eventHook{}
-var _ logrus.Hook = &eventHook{} // eventHook still needs to be a logrus.Hook
-
-func (h *eventHook) SetHubProvider(provider func() *sentry.Hub) {
-	h.hubProvider = provider
-}
-
-func (h *eventHook) AddTags(tags map[string]string) {
-	h.hubProvider().Scope().SetTags(tags)
-}
-
-func (h *eventHook) SetFallback(fb FallbackFunc) {
-	h.fallback = fb
-}
-
-func (h *eventHook) SetKey(oldKey, newKey string) {
-	if oldKey == "" {
-		return
-	}
-	if newKey == "" {
-		delete(h.keys, oldKey)
-		return
-	}
-	delete(h.keys, newKey)
-	h.keys[oldKey] = newKey
-}
-
-func (h *eventHook) key(key string) string {
-	if val := h.keys[key]; val != "" {
-		return val
-	}
-	return key
-}
-
-func (h *eventHook) Levels() []logrus.Level {
-	return h.levels
-}
-
-func (h *eventHook) Fire(entry *logrus.Entry) error {
-	hub := h.hubProvider()
-	event := h.entryToEvent(entry)
-	var hint *sentry.EventHint
-	if entry.Context != nil {
-		hint = &sentry.EventHint{Context: entry.Context}
-	}
-	if hub.CaptureEventWithHint(event, hint) == nil {
-		if h.fallback != nil {
-			return h.fallback(entry)
-		}
-		return errors.New("failed to send to sentry")
-	}
-	return nil
-}
-
-func (h *eventHook) entryToEvent(l *logrus.Entry) *sentry.Event {
-	extra := make(logrus.Fields, len(l.Data))
-	for k, v := range l.Data {
-		extra[k] = v
-	}
-	s := sentry.NewEvent()
-	s.Level = levelMap[l.Level]
-	s.Message = l.Message
-	s.Timestamp = l.Time
-	s.Logger = name
-
-	key := h.key(FieldRequest)
-	switch request := extra[key].(type) {
-	case *http.Request:
-		delete(extra, key)
-		s.Request = sentry.NewRequest(request)
-	case sentry.Request:
-		delete(extra, key)
-		s.Request = &request
-	case *sentry.Request:
-		delete(extra, key)
-		s.Request = request
-	}
-
-	if err, ok := extra[logrus.ErrorKey].(error); ok {
-		delete(extra, logrus.ErrorKey)
-
-		errorDepth := maxErrorDepth
-		if hub := h.hubProvider(); hub != nil {
-			if client := hub.Client(); client != nil {
-				errorDepth = client.Options().MaxErrorDepth
-			}
-		}
-		s.SetException(err, errorDepth)
-	}
-
-	key = h.key(FieldUser)
-	switch user := extra[key].(type) {
-	case sentry.User:
-		delete(extra, key)
-		s.User = user
-	case *sentry.User:
-		delete(extra, key)
-		s.User = *user
-	}
-
-	key = h.key(FieldTransaction)
-	if txn, ok := extra[key].(string); ok {
-		delete(extra, key)
-		s.Transaction = txn
-	}
-
-	key = h.key(FieldFingerprint)
-	if fp, ok := extra[key].([]string); ok {
-		delete(extra, key)
-		s.Fingerprint = fp
-	}
-
-	delete(extra, FieldGoVersion)
-	delete(extra, FieldMaxProcs)
-
-	for key, value := range extra {
-		s.Tags[key] = fmt.Sprint(value)
-	}
-	return s
-}
-
-func (h *eventHook) Flush(timeout time.Duration) bool {
-	return h.hubProvider().Client().Flush(timeout)
-}
-
-func (h *eventHook) FlushWithContext(ctx context.Context) bool {
-	return h.hubProvider().Client().FlushWithContext(ctx)
-}
-
-// Deprecated: NewEventHook creates issues/events from log entries. Errors should only be
-// captured using sentry.CaptureException instead of being converted from log entries.
-// Use [NewLogHook] for structured logging. Will be removed in 0.48.0.
-func NewEventHook(levels []logrus.Level, opts sentry.ClientOptions) (Hook, error) {
-	client, err := sentry.NewClient(opts)
-	if err != nil {
-		return nil, err
-	}
-
-	client.SetSDKIdentifier(sdkIdentifier)
-	return NewEventHookFromClient(levels, client), nil
-}
-
-// Deprecated: NewEventHookFromClient creates issues/events from log entries. Errors should
-// only be captured using sentry.CaptureException instead of being converted from log
-// entries. Use [NewLogHookFromClient] for structured logging. Will be removed in 0.48.0.
-func NewEventHookFromClient(levels []logrus.Level, client *sentry.Client) Hook {
-	defaultHub := sentry.NewHub(client, sentry.NewScope())
-	return &eventHook{
-		levels: levels,
-		hubProvider: func() *sentry.Hub {
-			// Default to using the same hub if no specific provider is set
-			return defaultHub
-		},
-		keys: make(map[string]string),
-	}
-}
 
 type logHook struct {
 	hubProvider func() *sentry.Hub
@@ -389,13 +196,11 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 	// Add all the fields as attributes to this specific log entry
 	for k, v := range entry.Data {
 		// Skip specific fields that might be handled separately
-		if k == h.key(FieldRequest) || k == h.key(FieldUser) ||
-			k == h.key(FieldFingerprint) || k == FieldGoVersion ||
-			k == FieldMaxProcs || k == logrus.ErrorKey {
+		if k == FieldGoVersion || k == FieldMaxProcs {
 			continue
 		}
 
-		logEntry = logrusFieldToLogEntry(logEntry, k, v)
+		logEntry = logrusFieldToLogEntry(logEntry, h.key(k), v)
 	}
 
 	// Emit the log entry with the message
