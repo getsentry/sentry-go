@@ -76,7 +76,7 @@ func setSQLData(ctx context.Context, span *sentry.Span, cfg *config) {
 	if cfg.dbName != "" {
 		span.SetData("db.namespace", cfg.dbName)
 	}
-	if cfg.dbUser != "" && collectDBUser(ctx) {
+	if cfg.dbUser != "" {
 		span.SetData("db.user", cfg.dbUser)
 	}
 	if cfg.host != "" {
@@ -91,18 +91,6 @@ func setSQLData(ctx context.Context, span *sentry.Span, cfg *config) {
 	if cfg.socketPort != 0 {
 		span.SetData("server.socket.port", cfg.socketPort)
 	}
-}
-
-func collectDBUser(ctx context.Context) bool {
-	hub := sentry.GetHubFromContext(ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub()
-	}
-	client := hub.Client()
-	if client == nil {
-		return false
-	}
-	return client.GetDataCollection().UserInfo.Value
 }
 
 func finishSpan(span *sentry.Span, err error) {
