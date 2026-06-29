@@ -429,6 +429,38 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, s2, scope.GetSpan())
 }
 
+func TestScopeCloneEventProcessorsIsolation(t *testing.T) {
+	var ran []string
+	mark := func(id string) EventProcessor {
+		return func(event *Event, _ *EventHint) *Event {
+			ran = append(ran, id)
+			return event
+		}
+	}
+
+	scope := NewScope()
+	scope.AddEventProcessor(mark("a"))
+	scope.AddEventProcessor(mark("b"))
+	scope.AddEventProcessor(mark("c"))
+
+	clone1 := scope.Clone()
+	clone2 := scope.Clone()
+	clone1.AddEventProcessor(mark("x"))
+	clone2.AddEventProcessor(mark("y"))
+
+	ran = nil
+	clone1.ApplyToEvent(NewEvent(), nil, nil)
+	assertEqual(t, []string{"a", "b", "c", "x"}, ran)
+
+	ran = nil
+	clone2.ApplyToEvent(NewEvent(), nil, nil)
+	assertEqual(t, []string{"a", "b", "c", "y"}, ran)
+
+	ran = nil
+	scope.ApplyToEvent(NewEvent(), nil, nil)
+	assertEqual(t, []string{"a", "b", "c"}, ran)
+}
+
 func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope := NewScope()
 
