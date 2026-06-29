@@ -346,7 +346,7 @@ func (scope *Scope) Clone() *Scope {
 	clone.level = scope.level
 	clone.request = scope.request
 	clone.requestBody = scope.requestBody
-	clone.eventProcessors = scope.eventProcessors
+	clone.eventProcessors = scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
 	clone.propagationContext = scope.propagationContext
 	clone.span = scope.span
 	return clone
