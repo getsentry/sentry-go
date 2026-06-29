@@ -63,7 +63,7 @@ func spanParent(ctx context.Context, conn *sentryConn) *sentry.Span {
 	return sentry.SpanFromContext(ctx)
 }
 
-func setSQLData(ctx context.Context, span *sentry.Span, cfg *config) {
+func setSQLData(_ context.Context, span *sentry.Span, cfg *config) {
 	if span == nil || cfg == nil {
 		return
 	}
