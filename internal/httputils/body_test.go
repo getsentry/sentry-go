@@ -43,7 +43,7 @@ func TestLimitedBuffer(t *testing.T) {
 		if n != 5 {
 			t.Fatalf("Write returned %d, want 5", n)
 		}
-		if got := string(buf.Bytes()); got != "hello" {
+		if got := buf.String(); got != "hello" {
 			t.Fatalf("Bytes = %q, want %q", got, "hello")
 		}
 		if buf.Overflow() {
@@ -60,7 +60,7 @@ func TestLimitedBuffer(t *testing.T) {
 		if n != len("hello world") {
 			t.Fatalf("Write returned %d, want %d", n, len("hello world"))
 		}
-		if got := string(buf.Bytes()); got != "hello" {
+		if got := buf.String(); got != "hello" {
 			t.Fatalf("Bytes = %q, want %q", got, "hello")
 		}
 		if !buf.Overflow() {
@@ -70,7 +70,7 @@ func TestLimitedBuffer(t *testing.T) {
 
 	t.Run("initial bytes mark overflow", func(t *testing.T) {
 		buf := NewLimitedBufferFromBytes(5, []byte("hello world"))
-		if got := string(buf.Bytes()); got != "hello" {
+		if got := buf.String(); got != "hello" {
 			t.Fatalf("Bytes = %q, want %q", got, "hello")
 		}
 		if !buf.Overflow() {
