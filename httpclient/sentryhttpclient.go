@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/httputils"
 )
 
 // SentryRoundTripTracerOption provides a specific type in which defines the option for SentryRoundTripper.
@@ -138,6 +139,14 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	span.SetData("http.request.method", request.Method)
 	span.SetData("server.address", request.URL.Hostname())
 	span.SetData("server.port", request.URL.Port())
+	for key, value := range dc.FilterResponseHeaders(headerStringMap(request.Header)) {
+		span.SetData("http.request.header."+strings.ToLower(key), value)
+	}
+	if dc.CollectHTTPBody(sentry.BodyOutgoingRequest) {
+		if body := readOutgoingRequestBody(request); body != nil {
+			span.SetData("http.request.body", dc.FilterHTTPBody(body, request.Header.Get("Content-Type")))
+		}
+	}
 
 	// Always add `Baggage` and `Sentry-Trace` headers.
 	request = request.Clone(request.Context())
@@ -157,7 +166,37 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 		span.Status = sentry.HTTPtoSpanStatus(response.StatusCode)
 		span.SetData("http.response.status_code", response.StatusCode)
 		span.SetData("http.response_content_length", response.ContentLength)
+		for key, value := range dc.FilterResponseHeaders(headerStringMap(response.Header)) {
+			span.SetData("http.response.header."+strings.ToLower(key), value)
+		}
 	}
 
 	return response, err
+}
+
+// headerStringMap flattens HTTP headers into a map.
+func headerStringMap(h http.Header) map[string]string {
+	if len(h) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(h))
+	for key, values := range h {
+		m[key] = strings.Join(values, ",")
+	}
+	return m
+}
+
+// readOutgoingRequestBody returns a copy of the outgoing request body via
+// request.GetBody so the actual request stream sent to the server is left
+// untouched.
+func readOutgoingRequestBody(request *http.Request) []byte {
+	if request.GetBody == nil {
+		return nil
+	}
+	rc, err := request.GetBody()
+	if err != nil || rc == nil {
+		return nil
+	}
+	defer rc.Close()
+	return httputils.ReadBody(rc)
 }

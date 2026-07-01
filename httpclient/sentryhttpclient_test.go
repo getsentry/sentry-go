@@ -151,13 +151,14 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 1024,
 			WantSpan: &sentry.Span{ //nolint:gosec // G101: not real credentials
 				Data: map[string]interface{}{
-					"http.fragment":                string(""),
-					"http.query":                   string(""),
-					"http.request.method":          string("POST"),
-					"http.response.status_code":    int(200),
-					"http.response_content_length": int64(1024),
-					"server.address":               string("example.com"),
-					"server.port":                  string("4321"),
+					"http.fragment":                     string(""),
+					"http.query":                        string(""),
+					"http.request.method":               string("POST"),
+					"http.request.header.authorization": string("[Filtered]"),
+					"http.response.status_code":         int(200),
+					"http.response_content_length":      int64(1024),
+					"server.address":                    string("example.com"),
+					"server.port":                       string("4321"),
 				},
 				Description: "POST https://john:xxxxx@example.com:4321/secret",
 				Op:          "http.client",
@@ -314,6 +315,12 @@ func TestIntegration(t *testing.T) {
 			continue
 		}
 
+		// The noopRoundTripper always returns a Content-Length response header,
+		// which the default deny-list collects as span data.
+		if !tt.WantError {
+			tt.WantSpan.Data["http.response.header.content-length"] = strconv.Itoa(tt.WantResponseLength)
+		}
+
 		var foundMatch = false
 		var diffs []string
 		for _, gotSpan := range gotSpans {
@@ -328,6 +335,158 @@ func TestIntegration(t *testing.T) {
 		if !foundMatch {
 			t.Errorf("Span mismatch (-want +got):\n%s", strings.Join(diffs, "\n"))
 		}
+	}
+}
+
+type bodyRoundTripper struct {
+	responseBody    string
+	responseHeaders map[string]string
+}
+
+func (b *bodyRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	header := http.Header{}
+	for k, v := range b.responseHeaders {
+		header.Set(k, v)
+	}
+	return &http.Response{
+		StatusCode:    http.StatusOK,
+		Header:        header,
+		Body:          io.NopCloser(strings.NewReader(b.responseBody)),
+		ContentLength: int64(len(b.responseBody)),
+		Request:       request,
+	}, nil
+}
+
+func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
+	tests := []struct {
+		name           string
+		dataCollection *sentry.DataCollection
+		wantData       map[string]interface{}
+		wantAbsent     []string
+	}{
+		{
+			name:           "default collects and filters headers and bodies",
+			dataCollection: &sentry.DataCollection{},
+			wantData: map[string]interface{}{
+				"http.request.header.authorization": "[Filtered]",
+				"http.request.header.x-custom":      "custom-value",
+				"http.request.body":                 `{"password":"[Filtered]","safe":"keep"}`,
+				"http.response.header.content-type": "application/json",
+			},
+			wantAbsent: []string{"http.response.body"},
+		},
+		{
+			name: "bodies disabled keeps headers but drops bodies",
+			dataCollection: &sentry.DataCollection{
+				HTTPBodies: []sentry.BodyType{},
+			},
+			wantData: map[string]interface{}{
+				"http.request.header.x-custom":      "custom-value",
+				"http.response.header.content-type": "application/json",
+			},
+			wantAbsent: []string{"http.request.body", "http.response.body"},
+		},
+		{
+			name: "headers disabled keeps bodies but drops headers",
+			dataCollection: &sentry.DataCollection{
+				HTTPHeaders: &sentry.HeaderCollectionConfig{
+					Request:  &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
+					Response: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
+				},
+			},
+			wantData: map[string]interface{}{
+				"http.request.body": `{"password":"[Filtered]","safe":"keep"}`,
+			},
+			wantAbsent: []string{
+				"http.request.header.authorization",
+				"http.request.header.x-custom",
+				"http.response.header.content-type",
+				"http.response.body",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spansCh := make(chan []*sentry.Span, 1)
+			sentryClient, err := sentry.NewClient(sentry.ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 1.0,
+				DataCollection:   tt.dataCollection,
+				BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+					spansCh <- event.Spans
+					return event
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			hub := sentry.NewHub(sentryClient, sentry.NewScope())
+			ctx := sentry.SetHubOnContext(context.Background(), hub)
+			span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+			ctx = span.Context()
+
+			request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://example.com/api",
+				strings.NewReader(`{"password":"secret","safe":"keep"}`))
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Authorization", "Bearer secret")
+			request.Header.Set("X-Custom", "custom-value")
+
+			responseBody := `{"token":"abc","data":"ok"}`
+			roundTripper := &bodyRoundTripper{
+				responseBody:    responseBody,
+				responseHeaders: map[string]string{"Content-Type": "application/json"},
+			}
+			client := &http.Client{Transport: sentryhttpclient.NewSentryRoundTripper(roundTripper)}
+
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// The caller must still be able to read the full, untouched body.
+			gotBody, err := io.ReadAll(response.Body)
+			response.Body.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(gotBody) != responseBody {
+				t.Errorf("response body = %q, want %q", gotBody, responseBody)
+			}
+
+			span.Finish()
+			if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
+				t.Fatal("sentry.Flush timed out")
+			}
+			close(spansCh)
+
+			var got *sentry.Span
+			for spans := range spansCh {
+				for _, candidate := range spans {
+					if candidate.Op == "http.client" {
+						got = candidate
+					}
+				}
+			}
+			if got == nil {
+				t.Fatal("missing http.client span")
+			}
+
+			for key, want := range tt.wantData {
+				if diff := cmp.Diff(want, got.Data[key], testutils.EquateKeyValueStrings()); diff != "" {
+					t.Errorf("span data[%q] mismatch (-want +got):\n%s", key, diff)
+				}
+			}
+			for _, key := range tt.wantAbsent {
+				if _, ok := got.Data[key]; ok {
+					t.Errorf("span data[%q] should be absent, got %v", key, got.Data[key])
+				}
+			}
+		})
 	}
 }
 
@@ -398,13 +557,14 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 	gotSpan := got[0]
 	wantSpan := &sentry.Span{
 		Data: map[string]interface{}{
-			"http.fragment":                string(""),
-			"http.query":                   string(""),
-			"http.request.method":          string("POST"),
-			"http.response.status_code":    int(200),
-			"http.response_content_length": int64(48),
-			"server.address":               string("example.com"),
-			"server.port":                  string(""),
+			"http.fragment":                       string(""),
+			"http.query":                          string(""),
+			"http.request.method":                 string("POST"),
+			"http.response.status_code":           int(200),
+			"http.response_content_length":        int64(48),
+			"http.response.header.content-length": string("48"),
+			"server.address":                      string("example.com"),
+			"server.port":                         string(""),
 		},
 		Description: "POST https://example.com",
 		Op:          "http.client",
@@ -634,13 +794,14 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 			name:       "filters sensitive query values",
 			requestURL: "https://example.com/foo?page=1&token=secret#readme",
 			wantData: map[string]interface{}{
-				"http.fragment":                "readme",
-				"http.query":                   "page=1&token=[Filtered]",
-				"http.request.method":          "GET",
-				"http.response.status_code":    200,
-				"http.response_content_length": int64(0),
-				"server.address":               "example.com",
-				"server.port":                  "",
+				"http.fragment":                       "readme",
+				"http.query":                          "page=1&token=[Filtered]",
+				"http.request.method":                 "GET",
+				"http.response.status_code":           200,
+				"http.response_content_length":        int64(0),
+				"http.response.header.content-length": "0",
+				"server.address":                      "example.com",
+				"server.port":                         "",
 			},
 			wantDesc: "GET https://example.com/foo?page=1&token=[Filtered]#readme",
 		},
@@ -651,12 +812,13 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 			},
 			requestURL: "https://example.com/foo?page=1&token=secret#readme",
 			wantData: map[string]interface{}{
-				"http.fragment":                "readme",
-				"http.request.method":          "GET",
-				"http.response.status_code":    200,
-				"http.response_content_length": int64(0),
-				"server.address":               "example.com",
-				"server.port":                  "",
+				"http.fragment":                       "readme",
+				"http.request.method":                 "GET",
+				"http.response.status_code":           200,
+				"http.response_content_length":        int64(0),
+				"http.response.header.content-length": "0",
+				"server.address":                      "example.com",
+				"server.port":                         "",
 			},
 			wantDesc: "GET https://example.com/foo#readme",
 		},
