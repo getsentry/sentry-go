@@ -13,6 +13,7 @@ package sentryhttpclient
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -139,15 +140,9 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	span.SetData("http.request.method", request.Method)
 	span.SetData("server.address", request.URL.Hostname())
 	span.SetData("server.port", request.URL.Port())
-	for key, value := range dc.FilterRequestHeaders(headerStringMap(request.Header)) {
+	for key, value := range filterOutgoingRequestHeaders(dc, request.Header) {
 		span.SetData("http.request.header."+strings.ToLower(key), value)
 	}
-	if dc.CollectHTTPBody(sentry.BodyOutgoingRequest) {
-		if body := readOutgoingRequestBody(request); body != nil {
-			span.SetData("http.request.body", dc.FilterHTTPBody(body, request.Header.Get("Content-Type")))
-		}
-	}
-
 	// Always add `Baggage` and `Sentry-Trace` headers.
 	request = request.Clone(request.Context())
 	request.Header.Add(sentry.SentryBaggageHeader, span.ToBaggage())
@@ -156,7 +151,19 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 		request.Header.Add(sentry.TraceparentHeader, span.ToTraceparent())
 	}
 
+	var requestBody *httputils.LimitedBuffer
+	if dc.CollectHTTPBody(sentry.BodyOutgoingRequest) && request.Body != nil && request.Body != http.NoBody && request.ContentLength <= httputils.MaxBodyBytes {
+		requestBody = httputils.NewLimitedBuffer(httputils.MaxBodyBytes)
+		request.Body = &httputils.ReadCloser{
+			Reader: io.TeeReader(request.Body, requestBody),
+			Closer: request.Body,
+		}
+	}
+
 	response, err := s.originalRoundTripper.RoundTrip(request)
+	if requestBody != nil && !requestBody.Overflow() && requestBody.Len() > 0 {
+		span.SetData("http.request.body", dc.FilterHTTPBody(requestBody.Bytes(), request.Header.Get("Content-Type")))
+	}
 	if err != nil {
 		span.Status = sentry.SpanStatusInternalError
 		return response, err
@@ -166,7 +173,7 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 		span.Status = sentry.HTTPtoSpanStatus(response.StatusCode)
 		span.SetData("http.response.status_code", response.StatusCode)
 		span.SetData("http.response_content_length", response.ContentLength)
-		for key, value := range dc.FilterResponseHeaders(headerStringMap(response.Header)) {
+		for key, value := range filterIncomingResponseHeaders(dc, response.Header) {
 			span.SetData("http.response.header."+strings.ToLower(key), value)
 		}
 	}
@@ -174,29 +181,38 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	return response, err
 }
 
-// headerStringMap flattens HTTP headers into a map.
-func headerStringMap(h http.Header) map[string]string {
-	if len(h) == 0 {
-		return nil
-	}
-	m := make(map[string]string, len(h))
-	for key, values := range h {
-		m[key] = strings.Join(values, ",")
-	}
-	return m
+func filterOutgoingRequestHeaders(dc sentry.DataCollection, headers http.Header) map[string]string {
+	return dc.FilterRequestHeaders(headerStringMap(headers, dc, "Cookie"))
 }
 
-// readOutgoingRequestBody returns a copy of the outgoing request body via
-// request.GetBody so the actual request stream sent to the server is left
-// untouched.
-func readOutgoingRequestBody(request *http.Request) []byte {
-	if request.GetBody == nil {
+func filterIncomingResponseHeaders(dc sentry.DataCollection, headers http.Header) map[string]string {
+	return dc.FilterResponseHeaders(headerStringMap(headers, dc, "Set-Cookie"))
+}
+
+// headerStringMap flattens HTTP headers into a map. Cookie headers are parsed
+// and filtered through the cookie collection settings before header filtering.
+func headerStringMap(headers http.Header, dc sentry.DataCollection, cookieHeader string) map[string]string {
+	if len(headers) == 0 {
 		return nil
 	}
-	rc, err := request.GetBody()
-	if err != nil || rc == nil {
-		return nil
+
+	m := make(map[string]string, len(headers))
+	for key, values := range headers {
+		if len(values) == 0 {
+			continue
+		}
+
+		value := strings.Join(values, ",")
+		if strings.EqualFold(key, cookieHeader) {
+			if !dc.CollectCookies() {
+				continue
+			}
+			value = dc.FilterCookies(strings.Join(values, "; "))
+			if value == "" {
+				continue
+			}
+		}
+		m[key] = value
 	}
-	defer rc.Close()
-	return httputils.ReadBody(rc)
+	return m
 }
