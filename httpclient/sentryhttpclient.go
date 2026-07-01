@@ -139,7 +139,7 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	span.SetData("http.request.method", request.Method)
 	span.SetData("server.address", request.URL.Hostname())
 	span.SetData("server.port", request.URL.Port())
-	for key, value := range dc.FilterResponseHeaders(headerStringMap(request.Header)) {
+	for key, value := range dc.FilterRequestHeaders(headerStringMap(request.Header)) {
 		span.SetData("http.request.header."+strings.ToLower(key), value)
 	}
 	if dc.CollectHTTPBody(sentry.BodyOutgoingRequest) {

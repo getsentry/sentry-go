@@ -387,19 +387,19 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 			wantAbsent: []string{"http.request.body", "http.response.body"},
 		},
 		{
-			name: "headers disabled keeps bodies but drops headers",
+			name: "response headers disabled keeps request headers and bodies",
 			dataCollection: &sentry.DataCollection{
 				HTTPHeaders: &sentry.HeaderCollectionConfig{
-					Request:  &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
+					Request:  &sentry.KeyValueCollectionBehavior{},
 					Response: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
 				},
 			},
 			wantData: map[string]interface{}{
-				"http.request.body": `{"password":"[Filtered]","safe":"keep"}`,
+				"http.request.header.authorization": "[Filtered]",
+				"http.request.header.x-custom":      "custom-value",
+				"http.request.body":                 `{"password":"[Filtered]","safe":"keep"}`,
 			},
 			wantAbsent: []string{
-				"http.request.header.authorization",
-				"http.request.header.x-custom",
 				"http.response.header.content-type",
 				"http.response.body",
 			},
