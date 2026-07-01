@@ -7,7 +7,6 @@ replace github.com/getsentry/sentry-go => ../
 require (
 	github.com/getsentry/sentry-go v0.47.0
 	github.com/google/go-cmp v0.7.0
-	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
 )
