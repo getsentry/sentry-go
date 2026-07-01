@@ -344,6 +344,10 @@ type bodyRoundTripper struct {
 }
 
 func (b *bodyRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	if request.Body != nil {
+		_, _ = io.Copy(io.Discard, request.Body)
+		_ = request.Body.Close()
+	}
 	header := http.Header{}
 	for k, v := range b.responseHeaders {
 		header.Set(k, v)
@@ -369,9 +373,11 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 			dataCollection: &sentry.DataCollection{},
 			wantData: map[string]interface{}{
 				"http.request.header.authorization": "[Filtered]",
+				"http.request.header.cookie":        "session=[Filtered]; theme=dark",
 				"http.request.header.x-custom":      "custom-value",
 				"http.request.body":                 `{"password":"[Filtered]","safe":"keep"}`,
 				"http.response.header.content-type": "application/json",
+				"http.response.header.set-cookie":   "session=[Filtered]; theme=dark",
 			},
 			wantAbsent: []string{"http.response.body"},
 		},
@@ -381,8 +387,10 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 				HTTPBodies: []sentry.BodyType{},
 			},
 			wantData: map[string]interface{}{
+				"http.request.header.cookie":        "session=[Filtered]; theme=dark",
 				"http.request.header.x-custom":      "custom-value",
 				"http.response.header.content-type": "application/json",
+				"http.response.header.set-cookie":   "session=[Filtered]; theme=dark",
 			},
 			wantAbsent: []string{"http.request.body", "http.response.body"},
 		},
@@ -396,6 +404,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 			},
 			wantData: map[string]interface{}{
 				"http.request.header.authorization": "[Filtered]",
+				"http.request.header.cookie":        "session=[Filtered]; theme=dark",
 				"http.request.header.x-custom":      "custom-value",
 				"http.request.body":                 `{"password":"[Filtered]","safe":"keep"}`,
 			},
@@ -434,12 +443,16 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 			}
 			request.Header.Set("Content-Type", "application/json")
 			request.Header.Set("Authorization", "Bearer secret")
+			request.Header.Set("Cookie", "session=secret; theme=dark")
 			request.Header.Set("X-Custom", "custom-value")
 
 			responseBody := `{"token":"abc","data":"ok"}`
 			roundTripper := &bodyRoundTripper{
-				responseBody:    responseBody,
-				responseHeaders: map[string]string{"Content-Type": "application/json"},
+				responseBody: responseBody,
+				responseHeaders: map[string]string{
+					"Content-Type": "application/json",
+					"Set-Cookie":   "session=secret; theme=dark",
+				},
 			}
 			client := &http.Client{Transport: sentryhttpclient.NewSentryRoundTripper(roundTripper)}
 
