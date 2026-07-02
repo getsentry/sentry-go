@@ -182,7 +182,7 @@ func metadataToContext(md metadata.MD) map[string]any {
 
 	ctx := make(map[string]any, len(md))
 	for key, values := range md {
-		if sentry.IsSensitiveHeader(key) {
+		if sentry.IsSensitiveHeader(key) { // nolint: staticcheck // TODO: remove this later.
 			continue
 		}
 
