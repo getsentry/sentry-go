@@ -411,7 +411,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 	}
 
 	if event.Request == nil && scope.request != nil {
-		event.Request = newRequest(scope.request, sendDefaultPIIEnabled(client))
+		event.Request = newRequest(scope.request, client)
 		// NOTE: The SDK does not attempt to send partial request body data.
 		//
 		// The reason being that Sentry's ingest pipeline and UI are optimized
@@ -421,8 +421,9 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		//
 		// Users can still send more data along their events if they want to,
 		// for example using Event.Contexts.
-		if scope.requestBody != nil && !scope.requestBody.Overflow() {
-			event.Request.Data = string(scope.requestBody.Bytes())
+		dc := client.GetDataCollection()
+		if scope.requestBody != nil && !scope.requestBody.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
+			event.Request.Data = dc.FilterHTTPBody(scope.requestBody.Bytes(), scope.request.Header.Get("Content-Type"))
 		}
 	}
 

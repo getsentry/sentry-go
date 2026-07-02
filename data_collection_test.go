@@ -122,14 +122,14 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 	input.UserInfo = Set(true)
 	input.Cookies.Mode = CollectionOff
 	input.Cookies.Terms[0] = "changed"
-	input.HTTPBodies[0] = BodyOutgoingResponse
+	input.HTTPBodies[0] = BodyIncomingResponse
 
 	returned := client.GetDataCollection()
 	returned.UserInfo = Set(true)
 	returned.Cookies.Mode = CollectionOff
 	returned.Cookies.Terms[0] = "changed"
 	returned.HTTPHeaders.Request.Mode = CollectionAllowList
-	returned.HTTPBodies[0] = BodyOutgoingResponse
+	returned.HTTPBodies[0] = BodyIncomingResponse
 	returned.QueryParams.Mode = CollectionOff
 
 	want := DataCollection{

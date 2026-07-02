@@ -27,6 +27,9 @@ func wantFiberTransaction(routePath, requestURL, method, body string, status int
 	if body != "" || method == http.MethodPost {
 		headers["Content-Length"] = fmt.Sprintf("%d", len(body))
 	}
+	if strings.HasPrefix(body, "{") {
+		headers["Content-Type"] = "application/json"
+	}
 
 	return &sentry.Event{
 		Level:       sentry.LevelInfo,
@@ -106,6 +109,7 @@ func TestIntegration(t *testing.T) {
 		Path            string
 		Method          string
 		Body            string
+		ContentType     string
 		WantStatus      int
 		WantEvent       *sentry.Event
 		WantTransaction *sentry.Event
@@ -152,25 +156,27 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:       "/post",
-			Method:     "POST",
-			Body:       "payload",
-			WantStatus: 200,
+			Path:        "/post",
+			Method:      "POST",
+			Body:        `{"safe":"value"}`,
+			ContentType: "application/json",
+			WantStatus:  200,
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
-				Message: "post: payload",
+				Message: `post: {"safe":"value"}`,
 				Request: &sentry.Request{
 					URL:    "http://example.com/post",
 					Method: "POST",
-					Data:   "payload",
+					Data:   `{"safe":"value"}`,
 					Headers: map[string]string{
-						"Content-Length": "7",
+						"Content-Length": "16",
+						"Content-Type":   "application/json",
 						"Host":           "example.com",
 						"User-Agent":     "fiber",
 					},
 				},
 			},
-			WantTransaction: wantFiberTransaction("/post", "/post", http.MethodPost, "payload", http.StatusOK),
+			WantTransaction: wantFiberTransaction("/post", "/post", http.MethodPost, `{"safe":"value"}`, http.StatusOK),
 		},
 		{
 			Path:       "/get",
@@ -302,10 +308,11 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:       "/post/body-ignored",
-			WantStatus: 200,
-			Method:     "POST",
-			Body:       "client sends, fiber always reads, SDK reports",
+			Path:        "/post/body-ignored",
+			WantStatus:  200,
+			Method:      "POST",
+			Body:        `{"safe":"body ignored"}`,
+			ContentType: "application/json",
 
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -313,15 +320,16 @@ func TestIntegration(t *testing.T) {
 				Request: &sentry.Request{
 					URL:    "http://example.com/post/body-ignored",
 					Method: "POST",
-					Data:   "client sends, fiber always reads, SDK reports",
+					Data:   `{"safe":"body ignored"}`,
 					Headers: map[string]string{
-						"Content-Length": "45",
+						"Content-Length": "23",
+						"Content-Type":   "application/json",
 						"Host":           "example.com",
 						"User-Agent":     "fiber",
 					},
 				},
 			},
-			WantTransaction: wantFiberTransaction("/post/body-ignored", "/post/body-ignored", http.MethodPost, "client sends, fiber always reads, SDK reports", http.StatusOK),
+			WantTransaction: wantFiberTransaction("/post/body-ignored", "/post/body-ignored", http.MethodPost, `{"safe":"body ignored"}`, http.StatusOK),
 		},
 		{
 			Path:       "/post/error-handler",
@@ -379,6 +387,7 @@ func TestIntegration(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
+		DataCollection:   &sentry.DataCollection{},
 		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
@@ -402,6 +411,9 @@ func TestIntegration(t *testing.T) {
 		req, err := http.NewRequest(tt.Method, "http://example.com"+tt.Path, strings.NewReader(tt.Body))
 		if err != nil {
 			t.Fatal(err)
+		}
+		if tt.ContentType != "" {
+			req.Header.Set("Content-Type", tt.ContentType)
 		}
 		req.Header.Set("User-Agent", "fiber")
 		resp, err := app.Test(req)

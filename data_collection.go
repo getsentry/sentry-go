@@ -50,10 +50,6 @@ const (
 	// BodyIncomingResponse collects bodies from incoming HTTP responses
 	// (client-side).
 	BodyIncomingResponse BodyType = "incomingResponse"
-
-	// BodyOutgoingResponse collects bodies from outgoing HTTP responses
-	// (server-side).
-	BodyOutgoingResponse BodyType = "outgoingResponse"
 )
 
 // DataCollection configures what data the SDK collects automatically.
@@ -142,7 +138,6 @@ func allBodyTypes() []BodyType {
 		BodyIncomingRequest,
 		BodyOutgoingRequest,
 		BodyIncomingResponse,
-		BodyOutgoingResponse,
 	}
 }
 
