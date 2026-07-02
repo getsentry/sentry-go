@@ -49,7 +49,7 @@ func summarizeTx(tx *sentry.Event) txSummary {
 func TestUnaryServerInterceptor(t *testing.T) {
 	transport := initMockTransport(t)
 	interceptor := sentrygrpc.UnaryServerInterceptor(sentrygrpc.ServerOptions{})
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value"))
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-request-id", "req-123"))
 
 	_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{
 		FullMethod: "/test.TestService/Method",
@@ -74,7 +74,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 		},
 		GRPC: map[string]any{
 			"method":   "test.TestService/Method",
-			"metadata": map[string]any{"key": "value"},
+			"metadata": map[string]any{"x-request-id": "req-123"},
 		},
 	}, summarizeTx(events[0])); diff != "" {
 		t.Errorf("transaction mismatch (-want +got):\n%s", diff)
@@ -88,7 +88,7 @@ func TestUnaryServerInterceptor_ScrubsSensitiveMetadata(t *testing.T) {
 		"authorization", "Bearer secret-token",
 		"x-api-key", "top-secret",
 		"cookie", "session=secret",
-		"key", "value",
+		"x-request-id", "req-123",
 	))
 
 	_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{
@@ -105,7 +105,17 @@ func TestUnaryServerInterceptor_ScrubsSensitiveMetadata(t *testing.T) {
 	grpcContext := events[0].Contexts["grpc"]
 	metadataContext, ok := grpcContext["metadata"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, map[string]any{"key": "value"}, metadataContext)
+	if diff := cmp.Diff(
+		map[string]any{
+			"authorization": "[Filtered]",
+			"cookie":        "session=[Filtered]",
+			"x-api-key":     "[Filtered]",
+			"x-request-id":  "req-123",
+		}, metadataContext,
+		testutils.EquateKeyValueStrings(),
+	); diff != "" {
+		t.Fatalf("span data mismatch (-want +got):\n%s", diff)
+	}
 }
 
 func TestUnaryServerInterceptor_Panic(t *testing.T) {
@@ -135,7 +145,7 @@ func TestUnaryServerInterceptor_Panic(t *testing.T) {
 			}))
 
 			interceptor := sentrygrpc.UnaryServerInterceptor(tc.options)
-			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value"))
+			ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-request-id", "req-123"))
 
 			var (
 				err       error
@@ -167,7 +177,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 	transport := initMockTransport(t)
 	interceptor := sentrygrpc.StreamServerInterceptor(sentrygrpc.ServerOptions{})
 	ss := &stubServerStream{
-		ctx: metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value")),
+		ctx: metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-request-id", "req-123")),
 	}
 
 	err := interceptor(nil, ss, &grpc.StreamServerInfo{
@@ -175,7 +185,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 	}, func(_ any, stream grpc.ServerStream) error {
 		md, ok := metadata.FromIncomingContext(stream.Context())
 		require.True(t, ok)
-		require.Contains(t, md, "key")
+		require.Contains(t, md, "x-request-id")
 		return nil
 	})
 
@@ -196,7 +206,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 		},
 		GRPC: map[string]any{
 			"method":   "test.TestService/StreamMethod",
-			"metadata": map[string]any{"key": "value"},
+			"metadata": map[string]any{"x-request-id": "req-123"},
 		},
 	}, summarizeTx(events[0])); diff != "" {
 		t.Errorf("transaction mismatch (-want +got):\n%s", diff)
@@ -231,7 +241,7 @@ func TestStreamServerInterceptor_Panic(t *testing.T) {
 
 			interceptor := sentrygrpc.StreamServerInterceptor(tc.options)
 			ss := &stubServerStream{
-				ctx: metadata.NewIncomingContext(context.Background(), metadata.Pairs("key", "value")),
+				ctx: metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-request-id", "req-123")),
 			}
 
 			var (
