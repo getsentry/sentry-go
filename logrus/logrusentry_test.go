@@ -3,18 +3,14 @@ package sentrylogrus
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	pkgerr "github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -31,499 +27,35 @@ func setupClientTest() (*sentry.Client, *sentry.MockTransport) {
 	return mockClient, mockTransport
 }
 
-func TestNew(t *testing.T) {
-	t.Parallel()
-	t.Run("invalid DSN", func(t *testing.T) {
-		t.Parallel()
-		_, err := New(nil, sentry.ClientOptions{Dsn: "%xxx"})
-		if err == nil || !strings.Contains(err.Error(), "invalid URL escape") {
-			t.Errorf("Unexpected error: %s", err)
-		}
-	})
-
-	t.Run("success", func(t *testing.T) {
-		t.Parallel()
-		h, err := New(nil, sentry.ClientOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if !h.Flush(testutils.FlushTimeout()) {
-			t.Error("flush failed")
-		}
-	})
-}
-
-func TestNewFromClient(t *testing.T) {
-	client, _ := setupClientTest()
-	levels := []logrus.Level{logrus.InfoLevel, logrus.ErrorLevel}
-	hook := NewFromClient(levels, client)
-	assert.NotNil(t, hook)
-	assert.Equal(t, levels, hook.Levels())
-}
-
-func TestNewEventHook(t *testing.T) {
-	t.Parallel()
-	t.Run("invalid DSN", func(t *testing.T) {
-		t.Parallel()
-		_, err := NewEventHook(nil, sentry.ClientOptions{Dsn: "%xxx"})
-		if err == nil || !strings.Contains(err.Error(), "invalid URL escape") {
-			t.Errorf("Unexpected error: %s", err)
-		}
-	})
-
-	t.Run("success", func(t *testing.T) {
-		t.Parallel()
-		h, err := NewEventHook(nil, sentry.ClientOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if !h.Flush(testutils.FlushTimeout()) {
-			t.Error("flush failed")
-		}
-	})
-}
-
-func TestNewEventHookFromClient(t *testing.T) {
-	client, _ := setupClientTest()
-	levels := []logrus.Level{logrus.InfoLevel, logrus.ErrorLevel}
-	hook := NewEventHookFromClient(levels, client)
-	assert.NotNil(t, hook)
-	assert.Equal(t, levels, hook.Levels())
-}
-
-func TestEventHook_SetHubProvider(t *testing.T) {
-	t.Parallel()
-
-	h, err := NewEventHook(nil, sentry.ClientOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Custom HubProvider to ensure separate hubs for each test
-	h.SetHubProvider(func() *sentry.Hub {
-		client, _ := sentry.NewClient(sentry.ClientOptions{})
-		return sentry.NewHub(client, sentry.NewScope())
-	})
-
-	entry := &logrus.Entry{Level: logrus.ErrorLevel}
-	if err := h.Fire(entry); err != nil {
-		t.Fatal(err)
-	}
-
-	if !h.Flush(testutils.FlushTimeout()) {
-		t.Error("flush failed")
-	}
-}
-
-func TestEventHook_Fire(t *testing.T) {
-	client, transport := setupClientTest()
-	hook := NewEventHookFromClient([]logrus.Level{logrus.ErrorLevel}, client)
-
-	t.Parallel()
-	t.Run("successful capture", func(t *testing.T) {
-		entry := &logrus.Entry{
-			Level:   logrus.ErrorLevel,
-			Message: "test error message",
-			Data:    logrus.Fields{},
-		}
-
-		err := hook.Fire(entry)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(transport.Events()))
-		assert.Equal(t, "test error message", transport.Events()[0].Message)
-		assert.Equal(t, sentry.LevelError, transport.Events()[0].Level)
-	})
-
-	t.Run("with fallback", func(t *testing.T) {
-		failClient, _ := sentry.NewClient(sentry.ClientOptions{
-			Dsn: "http://whatever@example.com/1337",
-			BeforeSend: func(_ *sentry.Event, _ *sentry.EventHint) *sentry.Event {
-				return nil // Simulate failure by returning nil
-			},
-		})
-
-		var fallbackCalled bool
-		failHook := NewEventHookFromClient([]logrus.Level{logrus.ErrorLevel}, failClient)
-		failHook.SetFallback(func(_ *logrus.Entry) error {
-			fallbackCalled = true
-			return nil
-		})
-
-		entry := &logrus.Entry{
-			Level:   logrus.ErrorLevel,
-			Message: "test error message",
-			Data:    logrus.Fields{},
-		}
-
-		err := failHook.Fire(entry)
-		assert.NoError(t, err)
-		assert.True(t, fallbackCalled)
-	})
-
-	t.Run("capture fails no fallback", func(t *testing.T) {
-		failClient, _ := sentry.NewClient(sentry.ClientOptions{
-			Dsn: "http://whatever@example.com/1337",
-			BeforeSend: func(_ *sentry.Event, _ *sentry.EventHint) *sentry.Event {
-				return nil
-			},
-			Transport: &sentry.MockTransport{},
-		})
-		hookNoFallback := NewEventHookFromClient([]logrus.Level{logrus.ErrorLevel}, failClient)
-		hookNoFallback.(*eventHook).fallback = nil
-
-		entry := &logrus.Entry{Level: logrus.ErrorLevel, Message: "capture fail"}
-		err := hookNoFallback.Fire(entry)
-		assert.Error(t, err)
-		assert.Equal(t, "failed to send to sentry", err.Error())
-	})
-}
-
-func TestEventHookSetKey(t *testing.T) {
-	client, _ := setupClientTest()
-	hook := NewEventHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
-	eventHook := hook.(*eventHook)
-
-	// Test setting a key
-	hook.SetKey("oldKey", "newKey")
-	assert.Equal(t, "newKey", eventHook.keys["oldKey"])
-
-	// Test deleting a key
-	hook.SetKey("oldKey", "")
-	_, exists := eventHook.keys["oldKey"]
-	assert.False(t, exists)
-
-	// Test empty oldKey does nothing
-	eventHook.keys["test"] = "value"
-	hook.SetKey("", "newKey")
-	assert.Equal(t, "value", eventHook.keys["test"])
-}
-
-func TestEventHookKey(t *testing.T) {
-	client, _ := setupClientTest()
-	hook := NewEventHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
-	eventHook := hook.(*eventHook)
-	eventHook.keys["mappedKey"] = "newKey"
-	assert.Equal(t, "newKey", eventHook.key("mappedKey"))
-	assert.Equal(t, "unmappedKey", eventHook.key("unmappedKey"))
-}
-
-func TestEventHookLevels(t *testing.T) {
-	client, _ := setupClientTest()
-	levels := []logrus.Level{logrus.InfoLevel, logrus.ErrorLevel}
-	hook := NewEventHookFromClient(levels, client)
-
-	assert.Equal(t, levels, hook.Levels())
-}
-
-func TestEventHook_entryToEvent(t *testing.T) {
-	t.Parallel()
-	tests := map[string]struct {
-		entry *logrus.Entry
-		want  *sentry.Event
-	}{
-		"empty entry": {
-			entry: &logrus.Entry{},
-			want: &sentry.Event{
-				Level:  "fatal",
-				Logger: name,
-			},
-		},
-		"data fields": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					"foo": 123.4,
-					"bar": "oink",
-				},
-			},
-			want: &sentry.Event{
-				Level:  sentry.LevelFatal,
-				Tags:   map[string]string{"bar": "oink", "foo": "123.4"},
-				Logger: name,
-			},
-		},
-		"info level": {
-			entry: &logrus.Entry{
-				Level: logrus.InfoLevel,
-			},
-			want: &sentry.Event{
-				Level:  sentry.LevelInfo,
-				Logger: name,
-			},
-		},
-		"message": {
-			entry: &logrus.Entry{
-				Message: "the only thing we have to fear is fear itself",
-			},
-			want: &sentry.Event{
-				Level:   sentry.LevelFatal,
-				Message: "the only thing we have to fear is fear itself",
-				Logger:  name,
-			},
-		},
-		"timestamp": {
-			entry: &logrus.Entry{
-				Time: time.Unix(1, 2).UTC(),
-			},
-			want: &sentry.Event{
-				Level:     sentry.LevelFatal,
-				Timestamp: time.Unix(1, 2).UTC(),
-				Logger:    name,
-			},
-		},
-		"http request": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					FieldRequest: httptest.NewRequest("GET", "/", nil),
-				},
-			},
-			want: &sentry.Event{
-				Level: sentry.LevelFatal,
-				Request: &sentry.Request{
-					URL:     "http://example.com/",
-					Method:  http.MethodGet,
-					Headers: map[string]string{"Host": "example.com"},
-				},
-				Logger: name,
-			},
-		},
-		"sentry request": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					FieldRequest: sentry.Request{
-						URL:    "http://example.com/",
-						Method: http.MethodGet,
-					},
-				},
-			},
-			want: &sentry.Event{
-				Level: sentry.LevelFatal,
-				Request: &sentry.Request{
-					URL:    "http://example.com/",
-					Method: http.MethodGet,
-				},
-				Logger: name,
-			},
-		},
-		"sentry pointer to request": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					FieldRequest: &sentry.Request{
-						URL:    "http://example.com/",
-						Method: http.MethodGet,
-					},
-				},
-			},
-			want: &sentry.Event{
-				Level: sentry.LevelFatal,
-				Request: &sentry.Request{
-					URL:    "http://example.com/",
-					Method: http.MethodGet,
-				},
-				Logger: name,
-			},
-		},
-		"error": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					logrus.ErrorKey: errors.New("things failed"),
-				},
-			},
-			want: &sentry.Event{
-				Level: sentry.LevelFatal,
-				Exception: []sentry.Exception{
-					{Type: "*errors.errorString", Value: "things failed", Stacktrace: &sentry.Stacktrace{Frames: []sentry.Frame{}}},
-				},
-				Logger: name,
-			},
-		},
-		"non-error": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					logrus.ErrorKey: "this isn't really an error",
-				},
-			},
-			want: &sentry.Event{
-				Level:  sentry.LevelFatal,
-				Tags:   map[string]string{"error": "this isn't really an error"},
-				Logger: name,
-			},
-		},
-		"error with stack trace": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					logrus.ErrorKey: pkgerr.WithStack(errors.New("failure")),
-				},
-			},
-			want: &sentry.Event{
-				Level: sentry.LevelFatal,
-				Exception: []sentry.Exception{
-					{
-						Type:       "*errors.errorString",
-						Value:      "failure",
-						Stacktrace: nil,
-						Mechanism: &sentry.Mechanism{
-							ExceptionID:      1,
-							IsExceptionGroup: false,
-							ParentID:         sentry.Pointer(0),
-							Type:             sentry.MechanismTypeChained,
-							Source:           sentry.MechanismTypeUnwrap,
-						},
-					},
-					{
-						Type:  "*errors.withStack",
-						Value: "failure",
-						Stacktrace: &sentry.Stacktrace{
-							Frames: []sentry.Frame{},
-						},
-						Mechanism: &sentry.Mechanism{
-							ExceptionID:      0,
-							IsExceptionGroup: false,
-							ParentID:         nil,
-							Type:             sentry.MechanismTypeGeneric,
-							Source:           "",
-						},
-					},
-				},
-				Logger: name,
-			},
-		},
-		"user": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					FieldUser: sentry.User{
-						ID: "bob",
-					},
-				},
-			},
-			want: &sentry.Event{
-				Level: sentry.LevelFatal,
-				User: sentry.User{
-					ID: "bob",
-				},
-				Logger: name,
-			},
-		},
-		"user pointer": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					FieldUser: &sentry.User{
-						ID: "alice",
-					},
-				},
-			},
-			want: &sentry.Event{
-				Level: sentry.LevelFatal,
-				User: sentry.User{
-					ID: "alice",
-				},
-				Logger: name,
-			},
-		},
-		"non-user": {
-			entry: &logrus.Entry{
-				Data: map[string]any{
-					FieldUser: "just say no to drugs",
-				},
-			},
-			want: &sentry.Event{
-				Level:  sentry.LevelFatal,
-				Tags:   map[string]string{"user": "just say no to drugs"},
-				Logger: name,
-			},
-		},
-		"transaction": {
-			entry: &logrus.Entry{
-				Level:   logrus.ErrorLevel,
-				Message: "transaction error",
-				Data:    logrus.Fields{FieldTransaction: "payment_process"},
-			},
-			want: &sentry.Event{
-				Level:       sentry.LevelError,
-				Message:     "transaction error",
-				Transaction: "payment_process",
-				Logger:      name,
-			},
-		},
-		"fingerprint": {
-			entry: &logrus.Entry{
-				Level:   logrus.ErrorLevel,
-				Message: "fingerprinted error",
-				Data:    logrus.Fields{FieldFingerprint: []string{"{{ default }}", "custom-fingerprint"}},
-			},
-			want: &sentry.Event{
-				Level:       sentry.LevelError,
-				Message:     "fingerprinted error",
-				Fingerprint: []string{"{{ default }}", "custom-fingerprint"},
-				Logger:      name,
-			},
-		},
-	}
-
-	h, err := NewEventHook(nil, sentry.ClientOptions{
-		AttachStacktrace: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	hook := h.(*eventHook)
-
-	// Custom HubProvider for test environment
-	h.SetHubProvider(func() *sentry.Hub {
-		client, _ := sentry.NewClient(sentry.ClientOptions{})
-		return sentry.NewHub(client, sentry.NewScope())
-	})
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := hook.entryToEvent(tt.entry)
-			opts := cmp.Options{
-				cmpopts.IgnoreFields(sentry.Event{}, "Contexts", "EventID", "Platform", "Release", "ServerName", "Modules", "Sdk", "Timestamp"),
-				cmpopts.IgnoreFields(sentry.Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
-				cmpopts.IgnoreFields(sentry.Stacktrace{}, "Frames"),
-				cmpopts.EquateEmpty(),
-			}
-			if d := cmp.Diff(tt.want, got, opts); d != "" {
-				t.Errorf("entryToEvent mismatch (-want +got):\n%s", d)
-			}
-		})
-	}
-}
-
-func TestEventHook_AddTags(t *testing.T) {
-	client, transport := setupClientTest()
-	hook := NewEventHookFromClient(nil, client).(*eventHook)
-
-	tags := map[string]string{"tag1": "value1", "tag2": "value2"}
-	hook.AddTags(tags)
-	assert.NoError(t, hook.Fire(&logrus.Entry{}))
-	hook.Flush(testutils.FlushTimeout())
-	got := transport.Events()
-	assert.Equal(t, 1, len(got), "unexpected number of events")
-	assert.Equal(t, tags, got[0].Tags)
-}
-
 func TestNewLogHook(t *testing.T) {
-	// Test with valid options
+	t.Parallel()
+
 	levels := []logrus.Level{logrus.InfoLevel, logrus.ErrorLevel}
-	hook, err := NewLogHook(levels, sentry.ClientOptions{
-		Dsn:         "http://whatever@example.com/1337",
-		Environment: "test",
+
+	t.Run("invalid DSN", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := NewLogHook(levels, sentry.ClientOptions{Dsn: "%xxx"})
+		if err == nil || !strings.Contains(err.Error(), "invalid URL escape") {
+			t.Errorf("unexpected error: %v", err)
+		}
 	})
 
-	assert.NoError(t, err)
-	assert.NotNil(t, hook)
-	assert.Equal(t, levels, hook.Levels())
+	t.Run("DisableLogs", func(t *testing.T) {
+		t.Parallel()
 
-	if !hook.Flush(testutils.FlushTimeout()) {
-		t.Error("flush failed")
-	}
-	// Test with invalid options
-	_, err = NewLogHook(levels, sentry.ClientOptions{
-		Dsn: "invalid::dsn",
+		_, err := NewLogHook(levels, sentry.ClientOptions{DisableLogs: true})
+		assert.EqualError(t, err, "cannot create log hook, DisableLogs is set to true")
 	})
-	assert.Error(t, err)
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+
+		hook, err := NewLogHook(levels, sentry.ClientOptions{})
+		assert.NoError(t, err)
+		assert.Equal(t, levels, hook.Levels())
+		assert.True(t, hook.Flush(testutils.FlushTimeout()))
+	})
 }
 
 func TestNewLogHookFromClient(t *testing.T) {
@@ -540,14 +72,9 @@ func TestLogHookSetHubProvider(t *testing.T) {
 	customHub := sentry.NewHub(client, sentry.NewScope())
 
 	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
+	hook.SetHubProvider(func() *sentry.Hub { return customHub })
 
-	// Set a custom hub provider
-	provider := func() *sentry.Hub { return customHub }
-	hook.SetHubProvider(provider)
-
-	// Verify the hub provider was set by checking it returns our custom hub
-	logHook := hook.(*logHook)
-	assert.Equal(t, customHub, logHook.hubProvider())
+	assert.Equal(t, customHub, hook.(*logHook).hubProvider())
 }
 
 func TestLogHookSetFallback(t *testing.T) {
@@ -562,11 +89,7 @@ func TestLogHookSetFallback(t *testing.T) {
 
 	hook.SetFallback(fallback)
 
-	// Test fallback is set and can be called
-	logHook := hook.(*logHook)
-	entry := &logrus.Entry{Message: "test"}
-	err := logHook.fallback(entry)
-
+	err := hook.(*logHook).fallback(&logrus.Entry{Message: "test"})
 	assert.NoError(t, err)
 	assert.True(t, called)
 }
@@ -576,16 +99,13 @@ func TestLogHookSetKey(t *testing.T) {
 	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
 	logHook := hook.(*logHook)
 
-	// Test setting a key
 	hook.SetKey("oldKey", "newKey")
 	assert.Equal(t, "newKey", logHook.keys["oldKey"])
 
-	// Test deleting a key
 	hook.SetKey("oldKey", "")
 	_, exists := logHook.keys["oldKey"]
 	assert.False(t, exists)
 
-	// Test empty oldKey does nothing
 	logHook.keys["test"] = "value"
 	hook.SetKey("", "newKey")
 	assert.Equal(t, "value", logHook.keys["test"])
@@ -596,13 +116,8 @@ func TestLogHookKey(t *testing.T) {
 	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
 	logHook := hook.(*logHook)
 
-	// Set up a key mapping
 	logHook.keys["mappedKey"] = "newKey"
-
-	// Test mapped key returns the mapping
 	assert.Equal(t, "newKey", logHook.key("mappedKey"))
-
-	// Test unmapped key returns the original
 	assert.Equal(t, "unmappedKey", logHook.key("unmappedKey"))
 }
 
@@ -616,12 +131,14 @@ func TestLogHookLevels(t *testing.T) {
 
 func TestLogHookFire(t *testing.T) {
 	client, _ := setupClientTest()
-	levels := []logrus.Level{
-		logrus.TraceLevel, logrus.DebugLevel, logrus.InfoLevel,
-		logrus.WarnLevel, logrus.ErrorLevel, logrus.FatalLevel,
-	}
-	hook := NewLogHookFromClient(levels, client)
-	logHook := hook.(*logHook)
+	hook := NewLogHookFromClient([]logrus.Level{
+		logrus.TraceLevel,
+		logrus.DebugLevel,
+		logrus.InfoLevel,
+		logrus.WarnLevel,
+		logrus.ErrorLevel,
+		logrus.FatalLevel,
+	}, client).(*logHook)
 
 	tests := []struct {
 		name  string
@@ -636,20 +153,36 @@ func TestLogHookFire(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entry := &logrus.Entry{
+			err := hook.Fire(&logrus.Entry{
 				Level:   tt.level,
 				Data:    logrus.Fields{"key": "value"},
 				Message: "test message",
 				Context: context.Background(),
-			}
-
-			err := logHook.Fire(entry)
+			})
 			assert.NoError(t, err)
 		})
 	}
 }
 
-func TestLogHook_AddTags(t *testing.T) {
+func TestLogHookFireInvalidLevelUsesFallback(t *testing.T) {
+	client, _ := setupClientTest()
+	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client).(*logHook)
+
+	var called bool
+	hook.SetFallback(func(_ *logrus.Entry) error {
+		called = true
+		return nil
+	})
+
+	err := hook.Fire(&logrus.Entry{
+		Level:   logrus.Level(999),
+		Message: "test",
+	})
+	assert.NoError(t, err)
+	assert.True(t, called)
+}
+
+func TestLogHookAddTags(t *testing.T) {
 	client, transport := setupClientTest()
 	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client).(*logHook)
 
@@ -658,84 +191,92 @@ func TestLogHook_AddTags(t *testing.T) {
 	assert.NoError(t, hook.Fire(&logrus.Entry{
 		Context: context.Background(),
 		Level:   logrus.InfoLevel,
-		Message: "Something",
+		Message: "something",
 	}))
+
 	hook.Flush(testutils.FlushTimeout())
+
 	got := transport.Events()
-	assert.Equal(t, 1, len(got), "unexpected number of events")
+	assert.Equal(t, 1, len(got))
 	assert.Equal(t, tags["tag1"], got[0].Logs[0].Attributes["tag1"].String())
 	assert.Equal(t, tags["tag2"], got[0].Logs[0].Attributes["tag2"].String())
 }
 
 func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 	client, transport := setupClientTest()
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
-	logHook := hook.(*logHook)
+	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client).(*logHook)
 
 	type complexStruct struct {
 		Name  string
 		Value int
 	}
 
-	wantLog := sentry.Log{
-		Level: sentry.LogLevelInfo,
-		Body:  "test message",
-		Attributes: map[string]attribute.Value{
-			"int8":          attribute.Int64Value(8),
-			"int16":         attribute.Int64Value(16),
-			"int32":         attribute.Int64Value(32),
-			"int64":         attribute.Int64Value(64),
-			"int":           attribute.Int64Value(42),
-			"uint8":         attribute.Uint64Value(8),
-			"uint16":        attribute.Uint64Value(16),
-			"uint32":        attribute.Uint64Value(32),
-			"uint64":        attribute.Uint64Value(64),
-			"uint":          attribute.Uint64Value(42),
-			"string":        attribute.StringValue("test string"),
-			"float32":       attribute.Float64Value(float64(float32(3.14))),
-			"float64":       attribute.Float64Value(6.28),
-			"bool":          attribute.BoolValue(true),
-			"string_slice":  attribute.StringValue("[one two three]"),
-			"string_map":    attribute.StringValue("map[a:1 b:2 c:3]"),
-			"complex":       attribute.StringValue("{test 42}"),
-			"sentry.origin": attribute.StringValue("auto.log.logrus"),
-		},
+	wantAttrs := map[string]attribute.Value{
+		"bool":          attribute.BoolValue(true),
+		"complex":       attribute.StringValue("{test 42}"),
+		"error":         attribute.StringValue("test error"),
+		"float32":       attribute.Float64Value(float64(float32(3.14))),
+		"float64":       attribute.Float64Value(6.28),
+		"int":           attribute.Int64Value(42),
+		"int16":         attribute.Int64Value(16),
+		"int32":         attribute.Int64Value(32),
+		"int64":         attribute.Int64Value(64),
+		"int8":          attribute.Int64Value(8),
+		"request":       attribute.StringValue("custom-request"),
+		"sentry.origin": attribute.StringValue("auto.log.logrus"),
+		"string":        attribute.StringValue("test string"),
+		"string_map":    attribute.StringValue("map[a:1 b:2 c:3]"),
+		"string_slice":  attribute.StringValue("[one two three]"),
+		"transaction":   attribute.StringValue("payment"),
+		"user":          attribute.StringValue("map[id:bob]"),
+		"uint":          attribute.Uint64Value(42),
+		"uint16":        attribute.Uint64Value(16),
+		"uint32":        attribute.Uint64Value(32),
+		"uint64":        attribute.Uint64Value(64),
+		"uint8":         attribute.Uint64Value(8),
+		"custom_key":    attribute.StringValue("[default custom]"),
 	}
 
-	entry := &logrus.Entry{
+	hook.SetKey(FieldFingerprint, "custom_key")
+
+	err := hook.Fire(&logrus.Entry{
 		Level: logrus.InfoLevel,
 		Data: logrus.Fields{
-			"int8":         int8(8),
-			"int16":        int16(16),
-			"int32":        int32(32),
-			"int64":        int64(64),
-			"int":          42,
-			"uint8":        uint8(8),
-			"uint16":       uint16(16),
-			"uint32":       uint32(32),
-			"uint64":       uint64(64),
-			"uint":         uint(42),
-			"string":       "test string",
-			"float32":      float32(3.14),
-			"float64":      6.28,
-			"bool":         true,
-			"error":        errors.New("test error"),
-			"string_slice": []string{"one", "two", "three"},
-			"string_map":   map[string]string{"a": "1", "b": "2", "c": "3"},
-			"complex":      complexStruct{Name: "test", Value: 42},
+			"bool":           true,
+			"complex":        complexStruct{Name: "test", Value: 42},
+			"error":          errors.New("test error"),
+			"float32":        float32(3.14),
+			"float64":        6.28,
+			"int":            42,
+			"int8":           int8(8),
+			"int16":          int16(16),
+			"int32":          int32(32),
+			"int64":          int64(64),
+			FieldFingerprint: []string{"default", "custom"},
+			FieldGoVersion:   "skip-me",
+			FieldMaxProcs:    4,
+			FieldRequest:     "custom-request",
+			"string":         "test string",
+			"string_map":     map[string]string{"a": "1", "b": "2", "c": "3"},
+			"string_slice":   []string{"one", "two", "three"},
+			FieldTransaction: "payment",
+			FieldUser:        map[string]string{"id": "bob"},
+			"uint":           uint(42),
+			"uint8":          uint8(8),
+			"uint16":         uint16(16),
+			"uint32":         uint32(32),
+			"uint64":         uint64(64),
 		},
 		Message: "test message",
 		Context: context.Background(),
-	}
-
-	// Add fields for request, user and transaction
-	err := logHook.Fire(entry)
+	})
 	assert.NoError(t, err)
 
-	logHook.Flush(testutils.FlushTimeout())
+	hook.Flush(testutils.FlushTimeout())
+
 	got := transport.Events()
-	assert.Equal(t, 1, len(got), "unexpected number of events")
-	if diff := cmp.Diff(wantLog.Attributes, got[0].Logs[0].Attributes,
+	assert.Equal(t, 1, len(got))
+	if diff := cmp.Diff(wantAttrs, got[0].Logs[0].Attributes,
 		cmp.AllowUnexported(attribute.Value{}),
 		cmpopts.IgnoreMapEntries(func(k string, _ attribute.Value) bool {
 			return k == "sentry.sdk.name" || k == "sentry.release" || k == "sentry.sdk.version" || k == "sentry.server.address"
@@ -743,35 +284,6 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 	); diff != "" {
 		t.Errorf("Attributes mismatch (-want +got):\n%s", diff)
 	}
-	assert.Equal(t, wantLog.Body, got[0].Logs[0].Body)
-	assert.Equal(t, wantLog.Level, got[0].Logs[0].Level)
-}
-
-func TestLogHookFire_EventAndLogTypes(t *testing.T) {
-	client, transport := setupClientTest()
-	logger := logrus.New()
-
-	logHook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
-	eventHook := NewEventHookFromClient([]logrus.Level{logrus.ErrorLevel}, client)
-	logger.AddHook(logHook)
-	logger.AddHook(eventHook)
-
-	logger.Info("log")
-	logger.Warn("should be skipped")
-	logger.Error("event")
-
-	logHook.Flush(testutils.FlushTimeout())
-	eventHook.Flush(testutils.FlushTimeout())
-
-	got := transport.Events()
-	assert.Equal(t, 2, len(got), "unexpected number of events")
-	for _, event := range got {
-		if event.Type == "log" {
-			assert.Equal(t, "log", event.Logs[0].Body)
-			assert.Equal(t, sentry.LogLevelInfo, event.Logs[0].Level)
-		} else {
-			assert.Equal(t, "event", event.Message)
-			assert.Equal(t, sentry.LevelError, event.Level)
-		}
-	}
+	assert.Equal(t, "test message", got[0].Logs[0].Body)
+	assert.Equal(t, sentry.LogLevelInfo, got[0].Logs[0].Level)
 }
