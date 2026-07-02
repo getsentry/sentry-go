@@ -432,6 +432,61 @@ func Test_sentryLogger_Write(t *testing.T) {
 	}
 }
 
+func Test_sentryLogger_EmitPreservesLiteralPercent(t *testing.T) {
+	// Emit and Write are the non-format logging methods, so a literal '%' in
+	// the message must be preserved verbatim instead of being interpreted as a
+	// fmt verb.
+	tests := []struct {
+		name     string
+		logFunc  func(ctx context.Context, l Logger)
+		wantBody string
+	}{
+		{
+			name: "Emit with single percent",
+			logFunc: func(ctx context.Context, l Logger) {
+				l.Info().WithCtx(ctx).Emit("disk usage at 95% capacity")
+			},
+			wantBody: "disk usage at 95% capacity",
+		},
+		{
+			name: "Emit with format-like verbs",
+			logFunc: func(ctx context.Context, l Logger) {
+				l.Warn().WithCtx(ctx).Emit("got %s and %d, 100% done")
+			},
+			wantBody: "got %s and %d, 100% done",
+		},
+		{
+			name: "Write with percent",
+			logFunc: func(_ context.Context, l Logger) {
+				if _, err := l.Write([]byte("progress 50% complete\n")); err != nil {
+					t.Errorf("Write returned unexpected error: %v", err)
+				}
+			},
+			wantBody: "progress 50% complete",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, mockTransport := setupMockTransport()
+			l := NewLogger(ctx)
+			tt.logFunc(ctx, l)
+			flushFromContext(ctx, testutils.FlushTimeout())
+
+			gotEvents := mockTransport.Events()
+			if len(gotEvents) != 1 {
+				t.Fatalf("expected 1 event, got %d", len(gotEvents))
+			}
+			if len(gotEvents[0].Logs) != 1 {
+				t.Fatalf("expected 1 log, got %d", len(gotEvents[0].Logs))
+			}
+			if got := gotEvents[0].Logs[0].Body; got != tt.wantBody {
+				t.Errorf("Body mismatch: got %q, want %q", got, tt.wantBody)
+			}
+		})
+	}
+}
+
 func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 	msg := []byte("something")
 	ctx, mockTransport := setupMockTransport()
