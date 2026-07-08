@@ -260,6 +260,51 @@ func TestNewClientDataCollectionHTTPBodyFilters(t *testing.T) {
 	}
 }
 
+func TestFilterHTTPBodyRedactsScalarJSONBodies(t *testing.T) {
+	t.Parallel()
+
+	const secret = "hunter2-super-secret"
+
+	tests := []struct {
+		name        string
+		body        []byte
+		contentType string
+	}{
+		{
+			name:        "top-level JSON string",
+			body:        []byte(`"Bearer ` + secret + `"`),
+			contentType: "application/json",
+		},
+		{
+			name:        "top-level JSON array of scalars",
+			body:        []byte(`["user@example.com","` + secret + `"]`),
+			contentType: "application/json",
+		},
+		{
+			name:        "scalars in nested arrays",
+			body:        []byte(`[["` + secret + `"]]`),
+			contentType: "application/json",
+		},
+		{
+			name:        "sniffed JSON array with non-JSON content type",
+			body:        []byte(`["` + secret + `"]`),
+			contentType: "text/plain",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dc := newClientDataCollection(t, nil)
+			got := dc.FilterHTTPBody(tt.body, tt.contentType)
+			if strings.Contains(got, secret) {
+				t.Errorf("FilterHTTPBody(%q, %q) leaked sensitive scalar value: got %q", tt.body, tt.contentType, got)
+			}
+		})
+	}
+}
+
 func TestNewClientDataCollectionCollectHTTPBody(t *testing.T) {
 	t.Parallel()
 

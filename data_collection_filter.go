@@ -187,6 +187,11 @@ func (dc DataCollection) filterURLValues(values url.Values, behavior *KeyValueCo
 }
 
 func (dc DataCollection) filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
+	return dc.filterJSONNode(value, behavior, false)
+}
+
+// filterJSONNode recursively filters a decoded JSON value.
+func (dc DataCollection) filterJSONNode(value any, behavior *KeyValueCollectionBehavior, keyed bool) any {
 	if behavior != nil && behavior.Mode == CollectionOff {
 		return nil
 	}
@@ -198,17 +203,20 @@ func (dc DataCollection) filterJSONValue(value any, behavior *KeyValueCollection
 			if dc.shouldFilterKey(key, behavior) {
 				filtered[key] = filteredValue
 			} else {
-				filtered[key] = dc.filterJSONValue(child, behavior)
+				filtered[key] = dc.filterJSONNode(child, behavior, true)
 			}
 		}
 		return filtered
 	case []any:
 		filtered := make([]any, len(value))
 		for i, child := range value {
-			filtered[i] = dc.filterJSONValue(child, behavior)
+			filtered[i] = dc.filterJSONNode(child, behavior, keyed)
 		}
 		return filtered
 	default:
+		if !keyed {
+			return filteredValue
+		}
 		return value
 	}
 }
