@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: ${{ matrix.go }}
-          cache-dependency-path: '**/go.sum'
+          cache-dependency-path: "**/go.sum"
       - name: Tidy
         run: make mod-tidy
         if: ${{ matrix.go == '1.26' }}
@@ -56,4 +56,31 @@ jobs:
       matrix:
         go: ["1.26", "1.25"]
         os: [ubuntu, windows, macos]
+
+  test-armv7:
+    name: Module Mode (linux/arm/v7, Go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    env:
+      GO111MODULE: "on"
+      GOFLAGS: "-mod=readonly"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          platforms: arm
+      - name: Test all packages on armv7
+        run: |
+          docker run --rm -i --platform linux/arm/v7 \
+            -e GO111MODULE="${GO111MODULE}" \
+            -e GOFLAGS="${GOFLAGS}" \
+            -e GOTOOLCHAIN=local \
+            -v "$PWD":/src -w /src \
+            golang:${{ matrix.go }}-bookworm bash -euxo pipefail <<'SCRIPT'
+          go env GOOS GOARCH GOARM
+          go test work
+          SCRIPT
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        go: ["1.26", "1.25"]
       fail-fast: false
