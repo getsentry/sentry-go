@@ -145,6 +145,22 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 			},
 		},
 		{
+			name: "malformed query preserves successfully parsed parameters",
+			filter: func(t *testing.T, dc DataCollection) map[string]string {
+				t.Helper()
+				got, err := parseQueryString(t, dc.FilterQueryString("safe=ok&token=secret&bad=%ZZ&page=1"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return got
+			},
+			want: map[string]string{
+				"safe":  "ok",
+				"token": filteredValue,
+				"page":  "1",
+			},
+		},
+		{
 			name: "cookies are parsed and filtered per cookie name",
 			filter: func(_ *testing.T, dc DataCollection) map[string]string {
 				return parseKeyValueString(dc.FilterCookies("debug; =bad; empty=; user_session=secret; theme=dark"), ';')

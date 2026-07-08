@@ -101,10 +101,7 @@ func (dc DataCollection) FilterQueryString(rawQuery string) string {
 	if rawQuery == "" {
 		return ""
 	}
-	values, err := url.ParseQuery(rawQuery)
-	if err != nil {
-		return ""
-	}
+	values, _ := url.ParseQuery(rawQuery)
 	return dc.filterURLValues(values, dc.QueryParams)
 }
 
