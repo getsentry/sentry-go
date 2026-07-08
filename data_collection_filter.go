@@ -139,6 +139,31 @@ func (dc DataCollection) FilterCookies(rawCookies string) string {
 	return strings.Join(parts, "; ")
 }
 
+// FilterSetCookie applies the configured cookie collection behavior to a
+// single Set-Cookie header value.
+//
+// Multiple Set-Cookie headers must be filtered individually, never joined
+// beforehand.
+func (dc DataCollection) FilterSetCookie(setCookie string) string {
+	if !dc.CollectCookies() {
+		return ""
+	}
+	nameValue, attributes, hasAttributes := strings.Cut(setCookie, ";")
+	name, value, ok := strings.Cut(nameValue, "=")
+	name = strings.TrimSpace(name)
+	if !ok || name == "" {
+		return ""
+	}
+	if dc.shouldFilterKey(name, dc.Cookies) {
+		value = filteredValue
+	}
+	filtered := name + "=" + value
+	if hasAttributes {
+		filtered += ";" + attributes
+	}
+	return filtered
+}
+
 // FilterHTTPBody applies sensitive-key filtering to parseable HTTP body data.
 // Opaque raw bodies are replaced entirely.
 func (dc DataCollection) FilterHTTPBody(body []byte, contentType string) string {

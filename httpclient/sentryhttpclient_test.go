@@ -503,6 +503,79 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 	}
 }
 
+type headerRoundTripper struct {
+	header http.Header
+}
+
+func (h *headerRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     h.header.Clone(),
+		Body:       io.NopCloser(strings.NewReader("")),
+		Request:    request,
+	}, nil
+}
+
+func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
+	spansCh := make(chan []*sentry.Span, 1)
+	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		DataCollection:   &sentry.DataCollection{},
+		BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			spansCh <- event.Spans
+			return event
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	hub := sentry.NewHub(sentryClient, sentry.NewScope())
+	ctx := sentry.SetHubOnContext(context.Background(), hub)
+	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+	ctx = span.Context()
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com/api", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	header := http.Header{}
+	header.Add("Set-Cookie", "sessionid=abc123; Path=/; HttpOnly")
+	header.Add("Set-Cookie", "theme=dark; Path=/settings; Secure")
+	client := &http.Client{Transport: sentryhttpclient.NewSentryRoundTripper(&headerRoundTripper{header: header})}
+
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+
+	span.Finish()
+	if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
+		t.Fatal("sentry.Flush timed out")
+	}
+	close(spansCh)
+
+	var got *sentry.Span
+	for spans := range spansCh {
+		for _, candidate := range spans {
+			if candidate.Op == "http.client" {
+				got = candidate
+			}
+		}
+	}
+	if got == nil {
+		t.Fatal("missing http.client span")
+	}
+
+	want := "sessionid=[Filtered]; Path=/; HttpOnly, theme=dark; Path=/settings; Secure"
+	if diff := cmp.Diff(want, got.Data["http.response.header.set-cookie"]); diff != "" {
+		t.Errorf("span data[\"http.response.header.set-cookie\"] mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestIntegration_GlobalClientOptions(t *testing.T) {
 	spansCh := make(chan []*sentry.Span, 1)
 

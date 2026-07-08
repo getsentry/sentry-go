@@ -260,6 +260,78 @@ func TestNewClientDataCollectionHTTPBodyFilters(t *testing.T) {
 	}
 }
 
+func TestFilterSetCookie(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		dataCollection *DataCollection
+		setCookie      string
+		want           string
+	}{
+		{
+			name:      "sensitive cookie value redacted and attributes preserved",
+			setCookie: "sessionid=abc123; Path=/; HttpOnly; Secure; Max-Age=3600",
+			want:      "sessionid=[Filtered]; Path=/; HttpOnly; Secure; Max-Age=3600",
+		},
+		{
+			name:      "non-sensitive cookie unchanged",
+			setCookie: "theme=dark; Path=/settings; SameSite=Lax",
+			want:      "theme=dark; Path=/settings; SameSite=Lax",
+		},
+		{
+			name:      "attributes with commas and equals are not misparsed as cookies",
+			setCookie: "theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Domain=example.com",
+			want:      "theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Domain=example.com",
+		},
+		{
+			name:      "cookie without attributes",
+			setCookie: "token=abc",
+			want:      "token=[Filtered]",
+		},
+		{
+			name: "custom deny terms apply to the cookie name",
+			dataCollection: &DataCollection{
+				Cookies: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"theme"}},
+			},
+			setCookie: "theme=dark; Path=/",
+			want:      "theme=[Filtered]; Path=/",
+		},
+		{
+			name: "allow list still scrubs built-in sensitive names",
+			dataCollection: &DataCollection{
+				Cookies: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"sessionid", "theme"}},
+			},
+			setCookie: "sessionid=abc123; Path=/",
+			want:      "sessionid=[Filtered]; Path=/",
+		},
+		{
+			name: "off mode omits collection",
+			dataCollection: &DataCollection{
+				Cookies: &KeyValueCollectionBehavior{Mode: CollectionOff},
+			},
+			setCookie: "theme=dark; Path=/",
+			want:      "",
+		},
+		{
+			name:      "malformed value without name=value pair is dropped",
+			setCookie: "HttpOnly",
+			want:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dc := newClientDataCollection(t, tt.dataCollection)
+			if got := dc.FilterSetCookie(tt.setCookie); got != tt.want {
+				t.Errorf("FilterSetCookie(%q) = %q, want %q", tt.setCookie, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFilterHTTPBodyRedactsScalarJSONBodies(t *testing.T) {
 	t.Parallel()
 

@@ -83,6 +83,28 @@ func TestMetadataToContext(t *testing.T) {
 			},
 		},
 		{
+			name: "set-cookie metadata preserves attributes per cookie",
+			client: func() *sentry.Client {
+				client, err := sentry.NewClient(sentry.ClientOptions{
+					Dsn:            "https://key@sentry.io/1",
+					DataCollection: &sentry.DataCollection{},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return client
+			}(),
+			md: metadata.MD{
+				"set-cookie": []string{
+					"sessionid=abc123; Path=/; HttpOnly",
+					"theme=dark; Path=/settings; Secure",
+				},
+			},
+			want: map[string]any{
+				"set-cookie": "sessionid=[Filtered]; Path=/; HttpOnly, theme=dark; Path=/settings; Secure",
+			},
+		},
+		{
 			name: "cookie metadata can be disabled separately",
 			client: func() *sentry.Client {
 				client, err := sentry.NewClient(sentry.ClientOptions{
