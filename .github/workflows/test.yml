@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version: ${{ matrix.go }}
-          cache-dependency-path: '**/go.sum'
+          cache-dependency-path: "**/go.sum"
       - name: Tidy
         run: make mod-tidy
         if: ${{ matrix.go == '1.26' }}
@@ -39,18 +39,7 @@ jobs:
       - name: Vet
         run: make vet
       - name: Test${{ env.RUN_RACE_TESTS == 'true' && ' (with race detection)' || '' }}
-        run: |
-          if [ "${{ matrix.os }}" = "ubuntu" ] && [ "${{ matrix.go }}" = "1.26" ]; then
-            ${{ env.RUN_RACE_TESTS == 'true' && 'make test-race-coverage' || 'make test-coverage' }}
-          else
-            ${{ env.RUN_RACE_TESTS == 'true' && 'make test-race' || 'make test' }}
-          fi
-      - name: Upload coverage to Codecov
-        if: ${{ matrix.os == 'ubuntu' && matrix.go == '1.26' }}
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # pin@v7.0.0
-        with:
-          directory: .coverage
-          token: ${{ secrets.CODECOV_TOKEN }}
+        run: ${{ env.RUN_RACE_TESTS == 'true' && 'make test-race' || 'make test' }}
     timeout-minutes: 15
     strategy:
       matrix:
