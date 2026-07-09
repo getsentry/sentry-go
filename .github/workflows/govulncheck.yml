@@ -1,0 +1,39 @@
+name: Go vulnerability audit
+on:
+  push:
+    branches:
+      - master
+      - release/**
+  pull_request:
+  schedule:
+    - cron: "00 6 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: govulncheck-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  govulncheck:
+    name: Go vulnerability audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          # Always use the latest stable Go so standard-library vulnerabilities
+          # are checked against the newest patched toolchain.
+          go-version: stable
+          check-latest: true
+          cache-dependency-path: "**/go.sum"
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Show versions
+        run: |
+          go version
+          govulncheck -version
+      - name: Run govulncheck
+        run: govulncheck -show verbose work
