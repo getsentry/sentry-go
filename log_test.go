@@ -432,6 +432,66 @@ func Test_sentryLogger_Write(t *testing.T) {
 	}
 }
 
+func Test_sentryLogger_EmitPreservesLiteralPercent(t *testing.T) {
+	tests := []struct {
+		name     string
+		logFunc  func(t *testing.T, ctx context.Context, l Logger)
+		wantBody string
+	}{
+		{
+			name: "Emit with percent",
+			logFunc: func(t *testing.T, ctx context.Context, l Logger) {
+				t.Helper()
+				l.Info().WithCtx(ctx).Emit("disk usage at 95% capacity")
+			},
+			wantBody: "disk usage at 95% capacity",
+		},
+		{
+			name: "Emitf with escaped percent",
+			logFunc: func(t *testing.T, ctx context.Context, l Logger) {
+				t.Helper()
+				l.Warn().WithCtx(ctx).Emitf("got %s and %d, 100%% done", "string", 10)
+			},
+			wantBody: "got string and 10, 100% done",
+		},
+		{
+			name: "Write with percent",
+			logFunc: func(t *testing.T, _ context.Context, l Logger) {
+				t.Helper()
+				msg := []byte("progress 50% complete\n")
+				n, err := l.Write(msg)
+				if err != nil {
+					t.Errorf("Write returned unexpected error: %v", err)
+				}
+				if n != len(msg) {
+					t.Errorf("Write returned wrong byte count: got %d, want %d", n, len(msg))
+				}
+			},
+			wantBody: "progress 50% complete",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, mockTransport := setupMockTransport()
+			l := NewLogger(ctx)
+			tt.logFunc(t, ctx, l)
+			flushFromContext(ctx, testutils.FlushTimeout())
+
+			gotEvents := mockTransport.Events()
+			if len(gotEvents) != 1 {
+				t.Fatalf("expected 1 event, got %d", len(gotEvents))
+			}
+			if len(gotEvents[0].Logs) != 1 {
+				t.Fatalf("expected 1 log, got %d", len(gotEvents[0].Logs))
+			}
+			if got := gotEvents[0].Logs[0].Body; got != tt.wantBody {
+				t.Errorf("Body mismatch: got %q, want %q", got, tt.wantBody)
+			}
+		})
+	}
+}
+
 func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 	msg := []byte("something")
 	ctx, mockTransport := setupMockTransport()
@@ -754,7 +814,7 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 		{
 			name:        "Logs enabled (default)",
 			disableLogs: false,
-			message:     "test message",
+			message:     "disk usage at 95% capacity",
 		},
 		{
 			name:        "Logs disabled",
@@ -785,9 +845,10 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 
 			got := buf.String()
 			if !tt.disableLogs {
-				assertEqual(t, strings.Contains(got, "test message"), true)
+				assertEqual(t, strings.Contains(got, tt.message), true)
+				assertEqual(t, strings.Contains(got, "%!"), false)
 			} else {
-				assertEqual(t, strings.Contains(got, "test message"), false)
+				assertEqual(t, strings.Contains(got, tt.message), false)
 			}
 		})
 	}
