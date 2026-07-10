@@ -63,7 +63,7 @@ func spanParent(ctx context.Context, conn *sentryConn) *sentry.Span {
 	return sentry.SpanFromContext(ctx)
 }
 
-func setSQLData(ctx context.Context, span *sentry.Span, cfg *config) {
+func setSQLData(_ context.Context, span *sentry.Span, cfg *config) {
 	if span == nil || cfg == nil {
 		return
 	}
@@ -76,7 +76,7 @@ func setSQLData(ctx context.Context, span *sentry.Span, cfg *config) {
 	if cfg.dbName != "" {
 		span.SetData("db.namespace", cfg.dbName)
 	}
-	if cfg.dbUser != "" && sendDefaultPII(ctx) {
+	if cfg.dbUser != "" {
 		span.SetData("db.user", cfg.dbUser)
 	}
 	if cfg.host != "" {
@@ -91,18 +91,6 @@ func setSQLData(ctx context.Context, span *sentry.Span, cfg *config) {
 	if cfg.socketPort != 0 {
 		span.SetData("server.socket.port", cfg.socketPort)
 	}
-}
-
-func sendDefaultPII(ctx context.Context) bool {
-	hub := sentry.GetHubFromContext(ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub()
-	}
-	client := hub.Client()
-	if client == nil {
-		return false
-	}
-	return client.Options().SendDefaultPII // nolint: staticcheck // TODO: remove this later in favor of DataCollection
 }
 
 func finishSpan(span *sentry.Span, err error) {
