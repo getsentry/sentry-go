@@ -28,6 +28,7 @@ func TestIntegration(t *testing.T) {
 		Path            string
 		Method          string
 		Body            string
+		ContentType     string
 		WantStatus      int
 		Handler         fasthttp.RequestHandler
 		WantEvent       *sentry.Event
@@ -77,24 +78,26 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:       "/post",
-			Method:     http.MethodPost,
-			WantStatus: 200,
-			Body:       "payload",
+			Path:        "/post",
+			Method:      http.MethodPost,
+			WantStatus:  200,
+			Body:        `{"safe":"value"}`,
+			ContentType: "application/json",
 			Handler: func(ctx *fasthttp.RequestCtx) {
 				hub := sentryfasthttp.GetHubFromContext(ctx)
 				hub.CaptureMessage("post: " + string(ctx.Request.Body()))
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
-				Message: "post: payload",
+				Message: `post: {"safe":"value"}`,
 				Request: &sentry.Request{
 					URL:    "http://example.com/post",
 					Method: http.MethodPost,
-					Data:   "payload",
+					Data:   `{"safe":"value"}`,
 					Headers: map[string]string{
-						"Host":       "example.com",
-						"User-Agent": "fasthttp",
+						"Content-Type": "application/json",
+						"Host":         "example.com",
+						"User-Agent":   "fasthttp",
 					},
 				},
 			},
@@ -105,10 +108,11 @@ func TestIntegration(t *testing.T) {
 				Request: &sentry.Request{
 					URL:    "http://example.com/post",
 					Method: http.MethodPost,
-					Data:   "payload",
+					Data:   `{"safe":"value"}`,
 					Headers: map[string]string{
-						"Host":       "example.com",
-						"User-Agent": "fasthttp",
+						"Content-Type": "application/json",
+						"Host":         "example.com",
+						"User-Agent":   "fasthttp",
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
@@ -218,10 +222,11 @@ func TestIntegration(t *testing.T) {
 			},
 		},
 		{
-			Path:       "/post/body-ignored",
-			Method:     http.MethodPost,
-			Body:       "client sends, fasthttp always reads, SDK reports",
-			WantStatus: 200,
+			Path:        "/post/body-ignored",
+			Method:      http.MethodPost,
+			Body:        `{"safe":"body ignored"}`,
+			ContentType: "application/json",
+			WantStatus:  200,
 			Handler: func(ctx *fasthttp.RequestCtx) {
 				hub := sentryfasthttp.GetHubFromContext(ctx)
 				hub.CaptureMessage("body ignored")
@@ -234,10 +239,11 @@ func TestIntegration(t *testing.T) {
 					Method: http.MethodPost,
 					// Actual request body included because fasthttp always
 					// reads full request body.
-					Data: "client sends, fasthttp always reads, SDK reports",
+					Data: `{"safe":"body ignored"}`,
 					Headers: map[string]string{
-						"Host":       "example.com",
-						"User-Agent": "fasthttp",
+						"Content-Type": "application/json",
+						"Host":         "example.com",
+						"User-Agent":   "fasthttp",
 					},
 				},
 			},
@@ -248,10 +254,11 @@ func TestIntegration(t *testing.T) {
 				Request: &sentry.Request{
 					URL:    "http://example.com/post/body-ignored",
 					Method: http.MethodPost,
-					Data:   "client sends, fasthttp always reads, SDK reports",
+					Data:   `{"safe":"body ignored"}`,
 					Headers: map[string]string{
-						"Host":       "example.com",
-						"User-Agent": "fasthttp",
+						"Content-Type": "application/json",
+						"Host":         "example.com",
+						"User-Agent":   "fasthttp",
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
@@ -326,6 +333,7 @@ func TestIntegration(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
+		DataCollection:   &sentry.DataCollection{},
 		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
 			return event
@@ -378,6 +386,9 @@ func TestIntegration(t *testing.T) {
 		req.URI().SetPath(tt.Path)
 		req.Header.SetMethod(tt.Method)
 		req.SetBodyString(tt.Body)
+		if tt.ContentType != "" {
+			req.Header.SetContentType(tt.ContentType)
+		}
 		if err := c.Do(req, res); err != nil {
 			t.Fatalf("Request %q failed: %s", tt.Path, err)
 		}

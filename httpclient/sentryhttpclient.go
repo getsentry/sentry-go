@@ -79,6 +79,20 @@ type SentryRoundTripper struct {
 	tracePropagationTargets []string
 }
 
+func dataCollectionFromRequest(request *http.Request) sentry.DataCollection {
+	if hub := sentry.GetHubFromContext(request.Context()); hub != nil {
+		if client := hub.Client(); client != nil {
+			return client.GetDataCollection()
+		}
+	}
+	if hub := sentry.CurrentHub(); hub != nil {
+		if client := hub.Client(); client != nil {
+			return client.GetDataCollection()
+		}
+	}
+	return sentry.DataCollection{}
+}
+
 func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
 	// Respect trace propagation targets
 	if len(s.tracePropagationTargets) > 0 {
@@ -111,12 +125,15 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 		return s.originalRoundTripper.RoundTrip(request)
 	}
 
-	cleanRequestURL := request.URL.Redacted()
+	dc := dataCollectionFromRequest(request)
+	cleanRequestURL := dc.FilterURL(request.URL)
 
 	span := parentSpan.StartChild("http.client", sentry.WithDescription(fmt.Sprintf("%s %s", request.Method, cleanRequestURL)))
 	defer span.Finish()
 
-	span.SetData("http.query", request.URL.Query().Encode())
+	if dc.CollectQueryParams() {
+		span.SetData("http.query", dc.FilterQueryString(request.URL.RawQuery))
+	}
 	span.SetData("http.fragment", request.URL.Fragment)
 	span.SetData("http.request.method", request.Method)
 	span.SetData("server.address", request.URL.Hostname())

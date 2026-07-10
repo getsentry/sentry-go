@@ -130,7 +130,7 @@ func TestIntegration(t *testing.T) {
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
 					"http.fragment":                string(""),
-					"http.query":                   string("abc=def&bar=123"),
+					"http.query":                   string("bar=123&abc=def"),
 					"http.request.method":          string("HEAD"),
 					"http.response.status_code":    int(400),
 					"http.response_content_length": int64(0),
@@ -302,6 +302,7 @@ func TestIntegration(t *testing.T) {
 			"mu", "parent", "sampleRate", "ctx", "dynamicSamplingContext", "recorder", "finishOnce", "contexts",
 			"explicitSampled", "serializedTags", "serializedData", "serializationSafe",
 		),
+		testutils.EquateKeyValueStrings(),
 	}
 	for i, tt := range tests {
 		gotSpans := got[i]
@@ -619,4 +620,104 @@ func traceparentFromSentryTraceHeader(t *testing.T, sentryTrace string) string {
 	}
 
 	return fmt.Sprintf("00-%s-%s-%s", traceParentContext.TraceID.String(), traceParentContext.ParentSpanID.String(), traceFlags)
+}
+
+func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
+	tests := []struct {
+		name           string
+		dataCollection *sentry.DataCollection
+		requestURL     string
+		wantData       map[string]interface{}
+		wantDesc       string
+	}{
+		{
+			name:       "filters sensitive query values",
+			requestURL: "https://example.com/foo?page=1&token=secret#readme",
+			wantData: map[string]interface{}{
+				"http.fragment":                "readme",
+				"http.query":                   "page=1&token=[Filtered]",
+				"http.request.method":          "GET",
+				"http.response.status_code":    200,
+				"http.response_content_length": int64(0),
+				"server.address":               "example.com",
+				"server.port":                  "",
+			},
+			wantDesc: "GET https://example.com/foo?page=1&token=[Filtered]#readme",
+		},
+		{
+			name: "omits query values when disabled",
+			dataCollection: &sentry.DataCollection{
+				QueryParams: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
+			},
+			requestURL: "https://example.com/foo?page=1&token=secret#readme",
+			wantData: map[string]interface{}{
+				"http.fragment":                "readme",
+				"http.request.method":          "GET",
+				"http.response.status_code":    200,
+				"http.response_content_length": int64(0),
+				"server.address":               "example.com",
+				"server.port":                  "",
+			},
+			wantDesc: "GET https://example.com/foo#readme",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spansCh := make(chan []*sentry.Span, 1)
+			sentryClient, err := sentry.NewClient(sentry.ClientOptions{
+				EnableTracing:    true,
+				TracesSampleRate: 1.0,
+				DataCollection:   tt.dataCollection,
+				BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+					spansCh <- event.Spans
+					return event
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			hub := sentry.NewHub(sentryClient, sentry.NewScope())
+			ctx := sentry.SetHubOnContext(context.Background(), hub)
+			span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+			ctx = span.Context()
+
+			request, err := http.NewRequestWithContext(ctx, http.MethodGet, tt.requestURL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := &http.Client{Transport: sentryhttpclient.NewSentryRoundTripper(&noopRoundTripper{ExpectResponseStatus: http.StatusOK})}
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response.Body.Close()
+			span.Finish()
+
+			if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
+				t.Fatal("sentry.Flush timed out")
+			}
+			close(spansCh)
+
+			var got *sentry.Span
+			for spans := range spansCh {
+				for _, candidate := range spans {
+					if candidate.Op == "http.client" {
+						got = candidate
+						break
+					}
+				}
+			}
+			if got == nil {
+				t.Fatal("missing http.client span")
+			}
+			if diff := cmp.Diff(tt.wantData, got.Data, testutils.EquateKeyValueStrings()); diff != "" {
+				t.Fatalf("span data mismatch (-want +got):\n%s", diff)
+			}
+			if diff := cmp.Diff(tt.wantDesc, got.Description, testutils.EquateKeyValueStrings()); diff != "" {
+				t.Fatalf("span description mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
 }

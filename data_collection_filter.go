@@ -91,6 +91,11 @@ func (dc *DataCollection) CollectCookies() bool {
 	return dc == nil || dc.Cookies == nil || dc.Cookies.Mode != CollectionOff
 }
 
+// CollectQueryParams reports whether query parameters should be collected.
+func (dc DataCollection) CollectQueryParams() bool {
+	return dc.QueryParams == nil || dc.QueryParams.Mode != CollectionOff
+}
+
 // FilterQueryString applies the configured query-parameter collection behavior.
 func (dc DataCollection) FilterQueryString(rawQuery string) string {
 	if rawQuery == "" {
@@ -101,6 +106,16 @@ func (dc DataCollection) FilterQueryString(rawQuery string) string {
 		return ""
 	}
 	return dc.filterURLValues(values, dc.QueryParams)
+}
+
+// FilterURL applies query-parameter filtering to u and returns its redacted string form.
+func (dc DataCollection) FilterURL(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	filtered := *u
+	filtered.RawQuery = dc.FilterQueryString(u.RawQuery)
+	return filtered.Redacted()
 }
 
 // FilterCookies applies the configured cookie collection behavior.
