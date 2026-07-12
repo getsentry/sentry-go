@@ -30,11 +30,27 @@ type ServerOptions struct {
 
 	// Timeout sets the maximum duration for Sentry event delivery.
 	Timeout time.Duration
+
+	// SentryTraceHeaderKey sets or overrides the header key used to propagate the trace id.
+	// It defaults to `sentry-trace`.
+	SentryTraceHeaderKey string
+
+	// SentryBaggageHeaderKey sets or overrides the header key used to propagate the baggage.
+	// It defaults to `baggage`.
+	SentryBaggageHeaderKey string
 }
 
 func (o *ServerOptions) setDefaults() {
 	if o.Timeout == 0 {
 		o.Timeout = sentry.DefaultFlushTimeout
+	}
+
+	if o.SentryTraceHeaderKey == "" {
+		o.SentryTraceHeaderKey = sentry.SentryTraceHeader
+	}
+
+	if o.SentryBaggageHeaderKey == "" {
+		o.SentryBaggageHeaderKey = sentry.SentryBaggageHeader
 	}
 }
 
@@ -69,14 +85,14 @@ func hubFromServerContext(ctx context.Context) *sentry.Hub {
 	return hub
 }
 
-func traceHeadersFromContext(ctx context.Context) (metadata.MD, string, string) {
+func traceHeadersFromContext(ctx context.Context, traceHeaderKey string, baggageHeaderKey string) (metadata.MD, string, string) {
 	md, _ := metadata.FromIncomingContext(ctx)
-	return md, getFirstHeader(md, sentry.SentryTraceHeader), getFirstHeader(md, sentry.SentryBaggageHeader)
+	return md, getFirstHeader(md, traceHeaderKey), getFirstHeader(md, baggageHeaderKey)
 }
 
-func startServerTransaction(ctx context.Context, fullMethod string) (context.Context, *sentry.Hub, *sentry.Span) {
+func startServerTransaction(ctx context.Context, fullMethod string, o ServerOptions) (context.Context, *sentry.Hub, *sentry.Span) {
 	hub := hubFromServerContext(ctx)
-	md, sentryTraceHeader, sentryBaggageHeader := traceHeadersFromContext(ctx)
+	md, sentryTraceHeader, sentryBaggageHeader := traceHeadersFromContext(ctx, o.SentryTraceHeaderKey, o.SentryBaggageHeaderKey)
 	name, service, method := parseGRPCMethod(fullMethod)
 
 	setScopeMetadata(hub, name, md)
@@ -123,7 +139,7 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 	opts.setDefaults()
 
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-		ctx, hub, transaction := startServerTransaction(ctx, info.FullMethod)
+		ctx, hub, transaction := startServerTransaction(ctx, info.FullMethod, opts)
 		defer transaction.Finish()
 
 		defer recoverWithSentry(ctx, hub, opts, func() {
@@ -142,7 +158,7 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 	opts.setDefaults()
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
-		ctx, hub, transaction := startServerTransaction(ss.Context(), info.FullMethod)
+		ctx, hub, transaction := startServerTransaction(ss.Context(), info.FullMethod, opts)
 		defer transaction.Finish()
 
 		stream := wrapServerStream(ctx, ss)
