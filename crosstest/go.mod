@@ -31,7 +31,7 @@ require (
 	github.com/getsentry/sentry-go/slog v0.47.0
 	github.com/getsentry/sentry-go/zap v0.47.0
 	github.com/gin-gonic/gin v1.9.1
-	github.com/gofiber/fiber/v2 v2.52.13
+	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/gofiber/fiber/v3 v3.3.0
 	github.com/google/go-cmp v0.7.0
 	github.com/kataras/iris/v12 v12.2.0
