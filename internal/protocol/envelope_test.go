@@ -132,6 +132,31 @@ func TestEnvelope_ItemsAndSerialization(t *testing.T) {
 	})
 }
 
+func TestEnvelope_SerializationOmitsEmptyEventID(t *testing.T) {
+	envelope := NewEnvelope(
+		&EnvelopeHeader{SentAt: time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)},
+		NewClientReportItem([]byte(`{"timestamp":"2026-07-13T12:00:00Z","discarded_events":[]}`)),
+	)
+
+	data, err := envelope.Serialize()
+	if err != nil {
+		t.Fatalf("Serialize() failed: %v", err)
+	}
+
+	headerData, _, ok := bytes.Cut(data, []byte("\n"))
+	if !ok {
+		t.Fatal("Serialized envelope does not contain an item")
+	}
+
+	var header map[string]any
+	if err := json.Unmarshal(headerData, &header); err != nil {
+		t.Fatalf("Failed to unmarshal envelope header: %v", err)
+	}
+	if _, ok := header["event_id"]; ok {
+		t.Errorf("Envelope header contains an empty event_id: %s", headerData)
+	}
+}
+
 func TestEnvelope_WriteTo(t *testing.T) {
 	header := &EnvelopeHeader{
 		EventID: "12345678901234567890123456789012",
