@@ -11,6 +11,7 @@ import (
 	"time"
 
 	fiber "github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/cache"
 
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiberv3"
@@ -503,6 +504,48 @@ func TestIntegration(t *testing.T) {
 
 	if diff := cmp.Diff(wantCodes, gotCodes, cmp.Options{}); diff != "" {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTransactionNameWithCacheHit(t *testing.T) {
+	transactions := make(chan *sentry.Event, 2)
+	err := sentry.Init(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			transactions <- tx
+			return tx
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app := fiber.New()
+	app.Use(sentryfiber.New(sentryfiber.Options{}))
+	app.Use(cache.New(cache.Config{Expiration: 30 * time.Second}))
+	app.Get("/items", func(c fiber.Ctx) error {
+		c.Response().Header.Set(fiber.HeaderCacheControl, "public")
+		return c.SendString("ok")
+	})
+
+	for range 2 {
+		req, err := http.NewRequest(http.MethodGet, "http://example.com/items", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+
+	for i := range 2 {
+		tx := <-transactions
+		if tx.Transaction != "GET /items" {
+			t.Errorf("Transaction %d name = %q, want %q", i, tx.Transaction, "GET /items")
+		}
 	}
 }
 
