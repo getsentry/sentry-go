@@ -56,11 +56,13 @@ type Hook interface {
 type FallbackFunc func(*logrus.Entry) error
 
 type logHook struct {
-	hubProvider func() *sentry.Hub
-	fallback    FallbackFunc
-	keys        map[string]string
-	levels      []logrus.Level
-	logger      sentry.Logger
+	defaultHub        *sentry.Hub
+	hubProvider       func() *sentry.Hub
+	useCustomProvider bool
+	fallback          FallbackFunc
+	keys              map[string]string
+	levels            []logrus.Level
+	logger            sentry.Logger
 }
 
 var _ Hook = &logHook{}
@@ -68,6 +70,7 @@ var _ logrus.Hook = &logHook{} // logHook also needs to be a logrus.Hook
 
 func (h *logHook) SetHubProvider(provider func() *sentry.Hub) {
 	h.hubProvider = provider
+	h.useCustomProvider = true
 }
 
 func (h *logHook) AddTags(tags map[string]string) {
@@ -149,9 +152,17 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 	if entry.Context != nil {
 		ctx = entry.Context
 	}
-	if hub := h.hubProvider(); hub != nil && hub.Client() != nil {
-		ctx = sentry.SetHubOnContext(ctx, hub)
+
+	hub := sentry.GetHubFromContext(ctx)
+	if h.useCustomProvider {
+		if customHub := h.hubProvider(); customHub != nil && customHub.Client() != nil {
+			hub = customHub
+		}
 	}
+	if hub == nil {
+		hub = h.defaultHub
+	}
+	ctx = sentry.SetHubOnContext(ctx, hub)
 
 	// Create the base log entry for the appropriate level
 	var logEntry sentry.LogEntry
@@ -229,12 +240,13 @@ func NewLogHookFromClient(levels []logrus.Level, client *sentry.Client) Hook {
 	logger.SetAttributes(attribute.String("sentry.origin", LogrusOrigin))
 
 	return &logHook{
-		logger: logger,
-		levels: levels,
+		defaultHub: defaultHub,
+		levels:     levels,
 		hubProvider: func() *sentry.Hub {
 			// Default to using the same hub if no specific provider is set
 			return defaultHub
 		},
-		keys: make(map[string]string),
+		keys:   make(map[string]string),
+		logger: logger,
 	}
 }

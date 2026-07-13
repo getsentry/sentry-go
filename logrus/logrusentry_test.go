@@ -75,6 +75,7 @@ func TestLogHookSetHubProvider(t *testing.T) {
 	hook.SetHubProvider(func() *sentry.Hub { return customHub })
 
 	assert.Equal(t, customHub, hook.(*logHook).hubProvider())
+	assert.True(t, hook.(*logHook).useCustomProvider)
 }
 
 func TestLogHookSetHubProviderUsesProviderForLogs(t *testing.T) {
@@ -95,8 +96,10 @@ func TestLogHookSetHubProviderUsesProviderForLogs(t *testing.T) {
 
 	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, originalClient)
 	hook.SetHubProvider(func() *sentry.Hub { return providerHub })
+	ctx := sentry.SetHubOnContext(context.Background(), sentry.NewHub(originalClient, sentry.NewScope()))
 
 	err = hook.Fire(&logrus.Entry{
+		Context: ctx,
 		Level:   logrus.InfoLevel,
 		Message: "provider log",
 	})
@@ -108,6 +111,39 @@ func TestLogHookSetHubProviderUsesProviderForLogs(t *testing.T) {
 	assert.Equal(t, 1, len(got))
 	assert.Equal(t, 1, len(got[0].Logs))
 	assert.Equal(t, "provider log", got[0].Logs[0].Body)
+}
+
+func TestLogHookUsesContextHubWithoutCustomProvider(t *testing.T) {
+	defaultTransport := &sentry.MockTransport{}
+	defaultClient, err := sentry.NewClient(sentry.ClientOptions{
+		Dsn:       "http://whatever@example.com/1337",
+		Transport: defaultTransport,
+	})
+	assert.NoError(t, err)
+
+	contextTransport := &sentry.MockTransport{}
+	contextClient, err := sentry.NewClient(sentry.ClientOptions{
+		Dsn:       "http://whatever@example.com/1337",
+		Transport: contextTransport,
+	})
+	assert.NoError(t, err)
+	contextHub := sentry.NewHub(contextClient, sentry.NewScope())
+	ctx := sentry.SetHubOnContext(context.Background(), contextHub)
+
+	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, defaultClient)
+	err = hook.Fire(&logrus.Entry{
+		Context: ctx,
+		Level:   logrus.InfoLevel,
+		Message: "context log",
+	})
+	assert.NoError(t, err)
+	assert.True(t, contextHub.Flush(testutils.FlushTimeout()))
+
+	assert.Empty(t, defaultTransport.Events())
+	got := contextTransport.Events()
+	assert.Equal(t, 1, len(got))
+	assert.Equal(t, 1, len(got[0].Logs))
+	assert.Equal(t, "context log", got[0].Logs[0].Body)
 }
 
 func TestLogHookSetFallback(t *testing.T) {
