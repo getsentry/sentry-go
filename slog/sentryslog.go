@@ -177,7 +177,7 @@ func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
 		logEntry.Emit(record.Message)
 	default:
 		// Fatal level range: 12 and above
-		logEntry := h.logger.Fatal().WithCtx(ctx)
+		logEntry := h.logger.LFatal().WithCtx(ctx)
 		for _, attr := range attrs {
 			logEntry = slogAttrToLogEntry(logEntry, "", attr)
 		}
