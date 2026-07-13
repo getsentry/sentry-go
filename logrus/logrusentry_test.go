@@ -81,15 +81,17 @@ func TestLogHookSetHubProvider(t *testing.T) {
 func TestLogHookSetHubProviderUsesProviderForLogs(t *testing.T) {
 	originalTransport := &sentry.MockTransport{}
 	originalClient, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:       "http://whatever@example.com/1337",
-		Transport: originalTransport,
+		Dsn:         "http://whatever@example.com/1337",
+		Environment: "original",
+		Transport:   originalTransport,
 	})
 	assert.NoError(t, err)
 
 	providerTransport := &sentry.MockTransport{}
 	providerClient, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:       "http://whatever@example.com/1337",
-		Transport: providerTransport,
+		Dsn:         "http://whatever@example.com/1337",
+		Environment: "provider",
+		Transport:   providerTransport,
 	})
 	assert.NoError(t, err)
 	providerHub := sentry.NewHub(providerClient, sentry.NewScope())
@@ -111,20 +113,23 @@ func TestLogHookSetHubProviderUsesProviderForLogs(t *testing.T) {
 	assert.Equal(t, 1, len(got))
 	assert.Equal(t, 1, len(got[0].Logs))
 	assert.Equal(t, "provider log", got[0].Logs[0].Body)
+	assert.Equal(t, "provider", got[0].Logs[0].Attributes["sentry.environment"].String())
 }
 
 func TestLogHookUsesContextHubWithoutCustomProvider(t *testing.T) {
 	defaultTransport := &sentry.MockTransport{}
 	defaultClient, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:       "http://whatever@example.com/1337",
-		Transport: defaultTransport,
+		Dsn:         "http://whatever@example.com/1337",
+		Environment: "default",
+		Transport:   defaultTransport,
 	})
 	assert.NoError(t, err)
 
 	contextTransport := &sentry.MockTransport{}
 	contextClient, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:       "http://whatever@example.com/1337",
-		Transport: contextTransport,
+		Dsn:         "http://whatever@example.com/1337",
+		Environment: "context",
+		Transport:   contextTransport,
 	})
 	assert.NoError(t, err)
 	contextHub := sentry.NewHub(contextClient, sentry.NewScope())
@@ -144,6 +149,7 @@ func TestLogHookUsesContextHubWithoutCustomProvider(t *testing.T) {
 	assert.Equal(t, 1, len(got))
 	assert.Equal(t, 1, len(got[0].Logs))
 	assert.Equal(t, "context log", got[0].Logs[0].Body)
+	assert.Equal(t, "context", got[0].Logs[0].Attributes["sentry.environment"].String())
 }
 
 func TestLogHookSetFallback(t *testing.T) {
