@@ -145,8 +145,8 @@ func (dc DataCollection) FilterSetCookie(setCookie string) string {
 	if !dc.CollectCookies() {
 		return ""
 	}
-	nameValue, attributes, hasAttributes := strings.Cut(setCookie, ";")
-	name, value, ok := strings.Cut(nameValue, "=")
+	parts := strings.Split(setCookie, ";")
+	name, value, ok := strings.Cut(parts[0], "=")
 	name = strings.TrimSpace(name)
 	if !ok || name == "" {
 		return ""
@@ -154,11 +154,19 @@ func (dc DataCollection) FilterSetCookie(setCookie string) string {
 	if dc.shouldFilterKey(name, dc.Cookies) {
 		value = filteredValue
 	}
-	filtered := name + "=" + value
-	if hasAttributes {
-		filtered += ";" + attributes
+	parts[0] = name + "=" + value
+
+	for i := 1; i < len(parts); i++ {
+		attribute, _, ok := strings.Cut(parts[i], "=")
+		if !ok {
+			continue
+		}
+		if name := strings.TrimSpace(attribute); name != "" && dc.shouldFilterKey(name, dc.Cookies) {
+			parts[i] = attribute + "=" + filteredValue
+		}
 	}
-	return filtered
+
+	return strings.Join(parts, ";")
 }
 
 // FilterHTTPBody applies sensitive-key filtering to parseable HTTP body data.

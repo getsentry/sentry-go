@@ -301,6 +301,11 @@ func TestFilterSetCookie(t *testing.T) {
 			want:      "theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Domain=example.com",
 		},
 		{
+			name:      "sensitive attribute value redacted",
+			setCookie: "theme=dark; Password=hunter=2; Path=/; HttpOnly",
+			want:      "theme=dark; Password=[Filtered]; Path=/; HttpOnly",
+		},
+		{
 			name:      "cookie without attributes",
 			setCookie: "token=abc",
 			want:      "token=[Filtered]",
@@ -314,12 +319,20 @@ func TestFilterSetCookie(t *testing.T) {
 			want:      "theme=[Filtered]; Path=/",
 		},
 		{
+			name: "custom deny terms apply to attributes",
+			dataCollection: &DataCollection{
+				Cookies: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"domain"}},
+			},
+			setCookie: "theme=dark; Domain=private.example.com; Secure",
+			want:      "theme=dark; Domain=[Filtered]; Secure",
+		},
+		{
 			name: "allow list still scrubs built-in sensitive names",
 			dataCollection: &DataCollection{
 				Cookies: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"sessionid", "theme"}},
 			},
 			setCookie: "sessionid=abc123; Path=/",
-			want:      "sessionid=[Filtered]; Path=/",
+			want:      "sessionid=[Filtered]; Path=[Filtered]",
 		},
 		{
 			name: "off mode omits collection",

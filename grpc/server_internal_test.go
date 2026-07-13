@@ -73,12 +73,12 @@ func TestMetadataToContext(t *testing.T) {
 			}(),
 			md: metadata.MD{
 				"cookie":       []string{"session=secret; theme=dark"},
-				"set-cookie":   []string{"auth_token=secret; preference=blue"},
+				"set-cookie":   []string{"auth_token=secret; password=hunter2; preference=blue"},
 				"x-request-id": []string{"req-123"},
 			},
 			want: map[string]any{
 				"cookie":       "session=[Filtered]; theme=dark",
-				"set-cookie":   "auth_token=[Filtered]; preference=blue",
+				"set-cookie":   "auth_token=[Filtered]; password=[Filtered]; preference=blue",
 				"x-request-id": "req-123",
 			},
 		},

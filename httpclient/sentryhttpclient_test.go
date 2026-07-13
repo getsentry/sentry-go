@@ -543,7 +543,7 @@ func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
 
 	header := http.Header{}
 	header.Add("Set-Cookie", "sessionid=abc123; Path=/; HttpOnly")
-	header.Add("Set-Cookie", "theme=dark; Path=/settings; Secure")
+	header.Add("Set-Cookie", "theme=dark; Password=hunter2; Path=/settings; Secure")
 	client := &http.Client{Transport: sentryhttpclient.NewSentryRoundTripper(&headerRoundTripper{header: header})}
 
 	response, err := client.Do(request)
@@ -570,7 +570,7 @@ func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
 		t.Fatal("missing http.client span")
 	}
 
-	want := "sessionid=[Filtered]; Path=/; HttpOnly, theme=dark; Path=/settings; Secure"
+	want := "sessionid=[Filtered]; Path=/; HttpOnly, theme=dark; Password=[Filtered]; Path=/settings; Secure"
 	if diff := cmp.Diff(want, got.Data["http.response.header.set-cookie"]); diff != "" {
 		t.Errorf("span data[\"http.response.header.set-cookie\"] mismatch (-want +got):\n%s", diff)
 	}
