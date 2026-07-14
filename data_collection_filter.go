@@ -101,10 +101,7 @@ func (dc DataCollection) FilterQueryString(rawQuery string) string {
 	if rawQuery == "" {
 		return ""
 	}
-	values, err := url.ParseQuery(rawQuery)
-	if err != nil {
-		return ""
-	}
+	values, _ := url.ParseQuery(rawQuery)
 	return dc.filterURLValues(values, dc.QueryParams)
 }
 
@@ -119,11 +116,8 @@ func (dc DataCollection) FilterURL(u *url.URL) string {
 }
 
 // FilterCookies applies the configured cookie collection behavior.
-func (dc DataCollection) FilterCookies(rawCookies string) string {
-	if rawCookies == "" {
-		return ""
-	}
-	parsed := parseKeyValueString(rawCookies, ';')
+func (dc DataCollection) FilterCookies(values []string) string {
+	parsed := parseKeyValueStrings(values, ';')
 	if len(parsed) == 0 {
 		return ""
 	}
@@ -137,6 +131,46 @@ func (dc DataCollection) FilterCookies(rawCookies string) string {
 		parts = append(parts, key+"="+value)
 	}
 	return strings.Join(parts, "; ")
+}
+
+// FilterSetCookies applies the configured cookie collection behavior to
+// Set-Cookie header values.
+func (dc DataCollection) FilterSetCookies(values []string) string {
+	filtered := make([]string, 0, len(values))
+	for _, value := range values {
+		if cookie := dc.filterSetCookie(value); cookie != "" {
+			filtered = append(filtered, cookie)
+		}
+	}
+	return strings.Join(filtered, ", ")
+}
+
+func (dc DataCollection) filterSetCookie(setCookie string) string {
+	if !dc.CollectCookies() {
+		return ""
+	}
+	parts := strings.Split(setCookie, ";")
+	name, value, ok := strings.Cut(parts[0], "=")
+	name = strings.TrimSpace(name)
+	if !ok || name == "" {
+		return ""
+	}
+	if dc.shouldFilterKey(name, dc.Cookies) {
+		value = filteredValue
+	}
+	parts[0] = name + "=" + value
+
+	for i := 1; i < len(parts); i++ {
+		attribute, _, ok := strings.Cut(parts[i], "=")
+		if !ok {
+			continue
+		}
+		if name := strings.TrimSpace(attribute); name != "" && dc.shouldFilterKey(name, dc.Cookies) {
+			parts[i] = attribute + "=" + filteredValue
+		}
+	}
+
+	return strings.Join(parts, ";")
 }
 
 // FilterHTTPBody applies sensitive-key filtering to parseable HTTP body data.
@@ -187,6 +221,11 @@ func (dc DataCollection) filterURLValues(values url.Values, behavior *KeyValueCo
 }
 
 func (dc DataCollection) filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
+	return dc.filterJSONNode(value, behavior, false)
+}
+
+// filterJSONNode recursively filters a decoded JSON value.
+func (dc DataCollection) filterJSONNode(value any, behavior *KeyValueCollectionBehavior, keyed bool) any {
 	if behavior != nil && behavior.Mode == CollectionOff {
 		return nil
 	}
@@ -198,17 +237,20 @@ func (dc DataCollection) filterJSONValue(value any, behavior *KeyValueCollection
 			if dc.shouldFilterKey(key, behavior) {
 				filtered[key] = filteredValue
 			} else {
-				filtered[key] = dc.filterJSONValue(child, behavior)
+				filtered[key] = dc.filterJSONNode(child, behavior, true)
 			}
 		}
 		return filtered
 	case []any:
 		filtered := make([]any, len(value))
 		for i, child := range value {
-			filtered[i] = dc.filterJSONValue(child, behavior)
+			filtered[i] = dc.filterJSONNode(child, behavior, keyed)
 		}
 		return filtered
 	default:
+		if !keyed {
+			return filteredValue
+		}
 		return value
 	}
 }
@@ -245,20 +287,22 @@ func matchesDenyTerms(key string, terms []string) bool {
 	return false
 }
 
-// parseKeyValueString splits a string like "a=1; b=2" into a map.
+// parseKeyValueStrings splits strings like "a=1; b=2" into a map.
 // Malformed parts without '=' and parts with empty keys are skipped.
-func parseKeyValueString(s string, separator rune) map[string]string {
+func parseKeyValueStrings(values []string, separator rune) map[string]string {
 	result := make(map[string]string)
-	for _, part := range strings.Split(s, string(separator)) {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
+	for _, value := range values {
+		for _, part := range strings.Split(value, string(separator)) {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			key, value, ok := strings.Cut(part, "=")
+			if !ok || strings.TrimSpace(key) == "" {
+				continue
+			}
+			result[key] = value
 		}
-		key, value, ok := strings.Cut(part, "=")
-		if !ok || strings.TrimSpace(key) == "" {
-			continue
-		}
-		result[key] = value
 	}
 	return result
 }
