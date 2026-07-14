@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cache"
 
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
@@ -19,7 +20,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
-func wantFiberTransaction(routePath, requestURL, method, body string, status int) *sentry.Event {
+func wantFiberTransaction(requestURL, method, body string, status int) *sentry.Event {
 	headers := map[string]string{
 		"Host":       "example.com",
 		"User-Agent": "fiber",
@@ -34,14 +35,14 @@ func wantFiberTransaction(routePath, requestURL, method, body string, status int
 	return &sentry.Event{
 		Level:       sentry.LevelInfo,
 		Type:        "transaction",
-		Transaction: fmt.Sprintf("%s %s", method, routePath),
+		Transaction: fmt.Sprintf("%s %s", method, requestURL),
 		Request: &sentry.Request{
 			URL:     "http://example.com" + requestURL,
 			Method:  method,
 			Data:    body,
 			Headers: headers,
 		},
-		TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+		TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 		Contexts: map[string]sentry.Context{
 			"trace": sentry.TraceContext{
 				Data: map[string]interface{}{
@@ -142,7 +143,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -176,7 +177,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: wantFiberTransaction("/post", "/post", http.MethodPost, `{"safe":"value"}`, http.StatusOK),
+			WantTransaction: wantFiberTransaction("/post", http.MethodPost, `{"safe":"value"}`, http.StatusOK),
 		},
 		{
 			Path:       "/get",
@@ -207,7 +208,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -239,7 +240,7 @@ func TestIntegration(t *testing.T) {
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
 				Type:        "transaction",
-				Transaction: "GET /get/:id",
+				Transaction: "GET /get/123",
 				Request: &sentry.Request{
 					URL:    "http://example.com/get/123",
 					Method: http.MethodGet,
@@ -248,7 +249,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent": "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -295,7 +296,7 @@ func TestIntegration(t *testing.T) {
 						"User-Agent":     "fiber",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -330,7 +331,7 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: wantFiberTransaction("/post/body-ignored", "/post/body-ignored", http.MethodPost, `{"safe":"body ignored"}`, http.StatusOK),
+			WantTransaction: wantFiberTransaction("/post/body-ignored", http.MethodPost, `{"safe":"body ignored"}`, http.StatusOK),
 		},
 		{
 			Path:       "/post/error-handler",
@@ -368,7 +369,7 @@ func TestIntegration(t *testing.T) {
 						"Content-Length": "0",
 					},
 				},
-				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
+				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
 						Data: map[string]interface{}{
@@ -504,6 +505,48 @@ func TestIntegration(t *testing.T) {
 
 	if diff := cmp.Diff(wantCodes, gotCodes, cmp.Options{}); diff != "" {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestTransactionNameWithCacheHit(t *testing.T) {
+	transactions := make(chan *sentry.Event, 2)
+	err := sentry.Init(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			transactions <- tx
+			return tx
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app := fiber.New()
+	app.Use(sentryfiber.New(sentryfiber.Options{}))
+	app.Use(cache.New(cache.Config{Expiration: 30 * time.Second}))
+	app.Get("/items", func(c *fiber.Ctx) error {
+		c.Response().Header.Set(fiber.HeaderCacheControl, "public")
+		return c.SendString("ok")
+	})
+
+	for range 2 {
+		req, err := http.NewRequest(http.MethodGet, "http://example.com/items", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+
+	for i := range 2 {
+		tx := <-transactions
+		if tx.Transaction != "GET /items" {
+			t.Errorf("Transaction %d name = %q, want %q", i, tx.Transaction, "GET /items")
+		}
 	}
 }
 
