@@ -259,8 +259,7 @@ func newRequest(r *http.Request, client *Client) *Request {
 	var cookies string
 	headers := make(map[string]string, len(r.Header)+1)
 	if dc.CollectCookies() {
-		rawCookie := r.Header.Get("Cookie")
-		cookies = dc.FilterCookies(rawCookie)
+		cookies = dc.FilterCookies(r.Header.Values("Cookie"))
 		if cookies != "" {
 			headers["Cookie"] = cookies
 		}

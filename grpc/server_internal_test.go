@@ -73,13 +73,35 @@ func TestMetadataToContext(t *testing.T) {
 			}(),
 			md: metadata.MD{
 				"cookie":       []string{"session=secret; theme=dark"},
-				"set-cookie":   []string{"auth_token=secret; preference=blue"},
+				"set-cookie":   []string{"auth_token=secret; password=hunter2; preference=blue"},
 				"x-request-id": []string{"req-123"},
 			},
 			want: map[string]any{
 				"cookie":       "session=[Filtered]; theme=dark",
-				"set-cookie":   "auth_token=[Filtered]; preference=blue",
+				"set-cookie":   "auth_token=[Filtered]; password=[Filtered]; preference=blue",
 				"x-request-id": "req-123",
+			},
+		},
+		{
+			name: "set-cookie metadata preserves attributes per cookie",
+			client: func() *sentry.Client {
+				client, err := sentry.NewClient(sentry.ClientOptions{
+					Dsn:            "https://key@sentry.io/1",
+					DataCollection: &sentry.DataCollection{},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return client
+			}(),
+			md: metadata.MD{
+				"set-cookie": []string{
+					"sessionid=abc123; Path=/; HttpOnly",
+					"theme=dark; Path=/settings; Secure",
+				},
+			},
+			want: map[string]any{
+				"set-cookie": "sessionid=[Filtered]; Path=/; HttpOnly, theme=dark; Path=/settings; Secure",
 			},
 		},
 		{

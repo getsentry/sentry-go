@@ -92,7 +92,7 @@ func (h *handler) handle(ctx fiber.Ctx) error {
 	ctx.SetContext(transaction.Context())
 
 	defer func() {
-		if routePath := ctx.Route().Path; routePath != "" {
+		if routePath := ctx.Route().Path; routePath != "" && !ctx.IsMiddleware() {
 			transaction.Name = fmt.Sprintf("%s %s", r.Method, routePath)
 			transaction.Source = sentry.SourceRoute
 		}
