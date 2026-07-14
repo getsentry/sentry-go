@@ -116,11 +116,8 @@ func (dc DataCollection) FilterURL(u *url.URL) string {
 }
 
 // FilterCookies applies the configured cookie collection behavior.
-func (dc DataCollection) FilterCookies(rawCookies string) string {
-	if rawCookies == "" {
-		return ""
-	}
-	parsed := parseKeyValueString(rawCookies, ';')
+func (dc DataCollection) FilterCookies(values []string) string {
+	parsed := parseKeyValueStrings(values, ';')
 	if len(parsed) == 0 {
 		return ""
 	}
@@ -136,12 +133,19 @@ func (dc DataCollection) FilterCookies(rawCookies string) string {
 	return strings.Join(parts, "; ")
 }
 
-// FilterSetCookie applies the configured cookie collection behavior to a
-// single Set-Cookie header value.
-//
-// Multiple Set-Cookie headers must be filtered individually, never joined
-// beforehand.
-func (dc DataCollection) FilterSetCookie(setCookie string) string {
+// FilterSetCookies applies the configured cookie collection behavior to
+// Set-Cookie header values.
+func (dc DataCollection) FilterSetCookies(values []string) string {
+	filtered := make([]string, 0, len(values))
+	for _, value := range values {
+		if cookie := dc.filterSetCookie(value); cookie != "" {
+			filtered = append(filtered, cookie)
+		}
+	}
+	return strings.Join(filtered, ", ")
+}
+
+func (dc DataCollection) filterSetCookie(setCookie string) string {
 	if !dc.CollectCookies() {
 		return ""
 	}
@@ -283,20 +287,22 @@ func matchesDenyTerms(key string, terms []string) bool {
 	return false
 }
 
-// parseKeyValueString splits a string like "a=1; b=2" into a map.
+// parseKeyValueStrings splits strings like "a=1; b=2" into a map.
 // Malformed parts without '=' and parts with empty keys are skipped.
-func parseKeyValueString(s string, separator rune) map[string]string {
+func parseKeyValueStrings(values []string, separator rune) map[string]string {
 	result := make(map[string]string)
-	for _, part := range strings.Split(s, string(separator)) {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
+	for _, value := range values {
+		for _, part := range strings.Split(value, string(separator)) {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			key, value, ok := strings.Cut(part, "=")
+			if !ok || strings.TrimSpace(key) == "" {
+				continue
+			}
+			result[key] = value
 		}
-		key, value, ok := strings.Cut(part, "=")
-		if !ok || strings.TrimSpace(key) == "" {
-			continue
-		}
-		result[key] = value
 	}
 	return result
 }

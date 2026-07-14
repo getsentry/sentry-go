@@ -163,7 +163,7 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 		{
 			name: "cookies are parsed and filtered per cookie name",
 			filter: func(_ *testing.T, dc DataCollection) map[string]string {
-				return parseKeyValueString(dc.FilterCookies("debug; =bad; empty=; user_session=secret; theme=dark"), ';')
+				return parseKeyValueStrings([]string{dc.FilterCookies([]string{"debug; =bad; empty=", "user_session=secret; theme=dark"})}, ';')
 			},
 			want: map[string]string{
 				"empty":        "",
@@ -276,76 +276,84 @@ func TestNewClientDataCollectionHTTPBodyFilters(t *testing.T) {
 	}
 }
 
-func TestFilterSetCookie(t *testing.T) {
+func TestFilterSetCookies(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name           string
 		dataCollection *DataCollection
-		setCookie      string
+		setCookies     []string
 		want           string
 	}{
 		{
-			name:      "sensitive cookie value redacted and attributes preserved",
-			setCookie: "sessionid=abc123; Path=/; HttpOnly; Secure; Max-Age=3600",
-			want:      "sessionid=[Filtered]; Path=/; HttpOnly; Secure; Max-Age=3600",
+			name:       "sensitive cookie value redacted and attributes preserved",
+			setCookies: []string{"sessionid=abc123; Path=/; HttpOnly; Secure; Max-Age=3600"},
+			want:       "sessionid=[Filtered]; Path=/; HttpOnly; Secure; Max-Age=3600",
 		},
 		{
-			name:      "non-sensitive cookie unchanged",
-			setCookie: "theme=dark; Path=/settings; SameSite=Lax",
-			want:      "theme=dark; Path=/settings; SameSite=Lax",
+			name:       "non-sensitive cookie unchanged",
+			setCookies: []string{"theme=dark; Path=/settings; SameSite=Lax"},
+			want:       "theme=dark; Path=/settings; SameSite=Lax",
 		},
 		{
-			name:      "attributes with commas and equals are not misparsed as cookies",
-			setCookie: "theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Domain=example.com",
-			want:      "theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Domain=example.com",
+			name:       "attributes with commas and equals are not misparsed as cookies",
+			setCookies: []string{"theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Domain=example.com"},
+			want:       "theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Domain=example.com",
 		},
 		{
-			name:      "sensitive attribute value redacted",
-			setCookie: "theme=dark; Password=hunter=2; Path=/; HttpOnly",
-			want:      "theme=dark; Password=[Filtered]; Path=/; HttpOnly",
+			name:       "sensitive attribute value redacted",
+			setCookies: []string{"theme=dark; Password=hunter=2; Path=/; HttpOnly"},
+			want:       "theme=dark; Password=[Filtered]; Path=/; HttpOnly",
 		},
 		{
-			name:      "cookie without attributes",
-			setCookie: "token=abc",
-			want:      "token=[Filtered]",
+			name:       "cookie without attributes",
+			setCookies: []string{"token=abc"},
+			want:       "token=[Filtered]",
+		},
+		{
+			name: "multiple header values are filtered separately",
+			setCookies: []string{
+				"sessionid=abc123; Path=/; HttpOnly",
+				"theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT",
+			},
+			want: "sessionid=[Filtered]; Path=/; HttpOnly, theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT",
 		},
 		{
 			name: "custom deny terms apply to the cookie name",
 			dataCollection: &DataCollection{
 				Cookies: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"theme"}},
 			},
-			setCookie: "theme=dark; Path=/",
-			want:      "theme=[Filtered]; Path=/",
+			setCookies: []string{"theme=dark; Path=/"},
+			want:       "theme=[Filtered]; Path=/",
 		},
 		{
 			name: "custom deny terms apply to attributes",
 			dataCollection: &DataCollection{
 				Cookies: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"domain"}},
 			},
-			setCookie: "theme=dark; Domain=private.example.com; Secure",
-			want:      "theme=dark; Domain=[Filtered]; Secure",
+			setCookies: []string{"theme=dark; Domain=private.example.com; Secure"},
+			want:       "theme=dark; Domain=[Filtered]; Secure",
 		},
 		{
 			name: "allow list still scrubs built-in sensitive names",
 			dataCollection: &DataCollection{
 				Cookies: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"sessionid", "theme"}},
 			},
-			setCookie: "sessionid=abc123; Path=/",
-			want:      "sessionid=[Filtered]; Path=[Filtered]",
+			setCookies: []string{"sessionid=abc123; Path=/"},
+			want:       "sessionid=[Filtered]; Path=[Filtered]",
 		},
 		{
 			name: "off mode omits collection",
 			dataCollection: &DataCollection{
 				Cookies: &KeyValueCollectionBehavior{Mode: CollectionOff},
 			},
-			setCookie: "theme=dark; Path=/",
-			want:      "",
+			setCookies: []string{"theme=dark; Path=/"},
+			want:       "",
 		},
 		{
-			name:      "malformed value without name=value pair is dropped",
-			setCookie: "HttpOnly",
-			want:      "",
+			name:       "malformed value without name=value pair is dropped",
+			setCookies: []string{"HttpOnly"},
+			want:       "",
 		},
 	}
 
@@ -354,8 +362,8 @@ func TestFilterSetCookie(t *testing.T) {
 			t.Parallel()
 
 			dc := newClientDataCollection(t, tt.dataCollection)
-			if got := dc.FilterSetCookie(tt.setCookie); got != tt.want {
-				t.Errorf("FilterSetCookie(%q) = %q, want %q", tt.setCookie, got, tt.want)
+			if got := dc.FilterSetCookies(tt.setCookies); got != tt.want {
+				t.Errorf("FilterSetCookies(%q) = %q, want %q", tt.setCookies, got, tt.want)
 			}
 		})
 	}

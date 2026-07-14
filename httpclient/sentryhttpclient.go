@@ -183,34 +183,17 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 }
 
 func filterOutgoingRequestHeaders(dc sentry.DataCollection, headers http.Header) map[string]string {
-	return dc.FilterRequestHeaders(headerStringMap(headers, dc, "Cookie", filterCookieValues))
+	return dc.FilterRequestHeaders(headerStringMap(headers, dc, "Cookie", dc.FilterCookies))
 }
 
 func filterIncomingResponseHeaders(dc sentry.DataCollection, headers http.Header) map[string]string {
-	return dc.FilterResponseHeaders(headerStringMap(headers, dc, "Set-Cookie", filterSetCookieValues))
-}
-
-// filterCookieValues filters Cookie header values, which hold semicolon-
-// separated name=value pairs and may be joined before parsing.
-func filterCookieValues(dc sentry.DataCollection, values []string) string {
-	return dc.FilterCookies(strings.Join(values, "; "))
-}
-
-// filterSetCookieValues filters each Set-Cookie header individually.
-func filterSetCookieValues(dc sentry.DataCollection, values []string) string {
-	filtered := make([]string, 0, len(values))
-	for _, value := range values {
-		if cookie := dc.FilterSetCookie(value); cookie != "" {
-			filtered = append(filtered, cookie)
-		}
-	}
-	return strings.Join(filtered, ", ")
+	return dc.FilterResponseHeaders(headerStringMap(headers, dc, "Set-Cookie", dc.FilterSetCookies))
 }
 
 // headerStringMap flattens HTTP headers into a map. Cookie headers are parsed
 // and filtered through the cookie collection settings via filterCookies
 // before header filtering.
-func headerStringMap(headers http.Header, dc sentry.DataCollection, cookieHeader string, filterCookies func(sentry.DataCollection, []string) string) map[string]string {
+func headerStringMap(headers http.Header, dc sentry.DataCollection, cookieHeader string, filterCookies func([]string) string) map[string]string {
 	if len(headers) == 0 {
 		return nil
 	}
@@ -226,7 +209,7 @@ func headerStringMap(headers http.Header, dc sentry.DataCollection, cookieHeader
 			if !dc.CollectCookies() {
 				continue
 			}
-			value = filterCookies(dc, values)
+			value = filterCookies(values)
 			if value == "" {
 				continue
 			}
