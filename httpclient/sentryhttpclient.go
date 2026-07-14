@@ -152,7 +152,8 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	}
 
 	var requestBody *httputils.LimitedBuffer
-	if dc.CollectHTTPBody(sentry.BodyOutgoingRequest) && request.Body != nil && request.Body != http.NoBody && request.ContentLength <= httputils.MaxBodyBytes {
+	hasRequestBody := request.Body != nil && request.Body != http.NoBody
+	if dc.CollectHTTPBody(sentry.BodyOutgoingRequest) && hasRequestBody && request.ContentLength <= httputils.MaxBodyBytes {
 		requestBody = httputils.NewLimitedBuffer(httputils.MaxBodyBytes)
 		request.Body = &httputils.ReadCloser{
 			Reader: io.TeeReader(request.Body, requestBody),
