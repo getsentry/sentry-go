@@ -92,10 +92,9 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	ctx.SetUserContext(transaction.Context())
 
 	defer func() {
-		if routePath := ctx.Route().Path; routePath != "" {
-			transaction.Name = fmt.Sprintf("%s %s", r.Method, routePath)
-			transaction.Source = sentry.SourceRoute
-		}
+		// Fiber v2 does not expose whether ctx.Route() originates from a middleware. We keep the
+		// URL-based name (opposite to v3) because middlewares that short-circuits the handler chain can
+		// otherwise replace the ctx.Route(). See https://github.com/getsentry/sentry-go/issues/1361.
 		status := ctx.Response().StatusCode()
 		transaction.Status = sentry.HTTPtoSpanStatus(status)
 		transaction.SetData("http.response.status_code", status)

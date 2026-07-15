@@ -99,17 +99,6 @@ func groupValuesByKey(attrs []slog.Attr) map[string][]slog.Value {
 	return result
 }
 
-func attrsToString(attrs ...slog.Attr) map[string]string {
-	output := make(map[string]string, len(attrs))
-
-	for _, attr := range attrs {
-		k, v := attr.Key, attr.Value
-		output[k] = valueToString(v)
-	}
-
-	return output
-}
-
 func valueToString(v slog.Value) string {
 	switch v.Kind() {
 	case slog.KindInt64, slog.KindUint64, slog.KindFloat64, slog.KindString, slog.KindBool, slog.KindDuration:

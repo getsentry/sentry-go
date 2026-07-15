@@ -175,11 +175,13 @@ func setScopeMetadata(hub *sentry.Hub, method string, md metadata.MD) {
 	})
 }
 
-func filterMetadataCookies(dc sentry.DataCollection, values []string) (string, bool) {
-	if !dc.CollectCookies() {
-		return "", false
+func filterMetadataCookies(dc sentry.DataCollection, key string, values []string) (string, bool) {
+	var cookies string
+	if strings.EqualFold(key, "set-cookie") {
+		cookies = dc.FilterSetCookies(values)
+	} else {
+		cookies = dc.FilterCookies(values)
 	}
-	cookies := dc.FilterCookies(strings.Join(values, "; "))
 	return cookies, cookies != ""
 }
 
@@ -198,7 +200,7 @@ func metadataToContext(client *sentry.Client, md metadata.MD) map[string]any {
 		value := strings.Join(values, ",")
 		if strings.EqualFold(key, "cookie") || strings.EqualFold(key, "set-cookie") {
 			var ok bool
-			value, ok = filterMetadataCookies(dc, values)
+			value, ok = filterMetadataCookies(dc, key, values)
 			if !ok {
 				continue
 			}

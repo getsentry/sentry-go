@@ -145,9 +145,25 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 			},
 		},
 		{
+			name: "malformed query preserves successfully parsed parameters",
+			filter: func(t *testing.T, dc DataCollection) map[string]string {
+				t.Helper()
+				got, err := parseQueryString(t, dc.FilterQueryString("safe=ok&token=secret&bad=%ZZ&page=1"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return got
+			},
+			want: map[string]string{
+				"safe":  "ok",
+				"token": filteredValue,
+				"page":  "1",
+			},
+		},
+		{
 			name: "cookies are parsed and filtered per cookie name",
 			filter: func(_ *testing.T, dc DataCollection) map[string]string {
-				return parseKeyValueString(dc.FilterCookies("debug; =bad; empty=; user_session=secret; theme=dark"), ';')
+				return parseKeyValueStrings([]string{dc.FilterCookies([]string{"debug; =bad; empty=", "user_session=secret; theme=dark"})}, ';')
 			},
 			want: map[string]string{
 				"empty":        "",
@@ -255,6 +271,144 @@ func TestNewClientDataCollectionHTTPBodyFilters(t *testing.T) {
 			parsed := parseFilteredBody(t, got, tt.contentType)
 			if diff := cmp.Diff(tt.want, parsed); diff != "" {
 				t.Errorf("filtered body mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestFilterSetCookies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		dataCollection *DataCollection
+		setCookies     []string
+		want           string
+	}{
+		{
+			name:       "sensitive cookie value redacted and attributes preserved",
+			setCookies: []string{"sessionid=abc123; Path=/; HttpOnly; Secure; Max-Age=3600"},
+			want:       "sessionid=[Filtered]; Path=/; HttpOnly; Secure; Max-Age=3600",
+		},
+		{
+			name:       "non-sensitive cookie unchanged",
+			setCookies: []string{"theme=dark; Path=/settings; SameSite=Lax"},
+			want:       "theme=dark; Path=/settings; SameSite=Lax",
+		},
+		{
+			name:       "attributes with commas and equals are not misparsed as cookies",
+			setCookies: []string{"theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Domain=example.com"},
+			want:       "theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Domain=example.com",
+		},
+		{
+			name:       "sensitive attribute value redacted",
+			setCookies: []string{"theme=dark; Password=hunter=2; Path=/; HttpOnly"},
+			want:       "theme=dark; Password=[Filtered]; Path=/; HttpOnly",
+		},
+		{
+			name:       "cookie without attributes",
+			setCookies: []string{"token=abc"},
+			want:       "token=[Filtered]",
+		},
+		{
+			name: "multiple header values are filtered separately",
+			setCookies: []string{
+				"sessionid=abc123; Path=/; HttpOnly",
+				"theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT",
+			},
+			want: "sessionid=[Filtered]; Path=/; HttpOnly, theme=dark; Expires=Wed, 21 Oct 2015 07:28:00 GMT",
+		},
+		{
+			name: "custom deny terms apply to the cookie name",
+			dataCollection: &DataCollection{
+				Cookies: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"theme"}},
+			},
+			setCookies: []string{"theme=dark; Path=/"},
+			want:       "theme=[Filtered]; Path=/",
+		},
+		{
+			name: "custom deny terms apply to attributes",
+			dataCollection: &DataCollection{
+				Cookies: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"domain"}},
+			},
+			setCookies: []string{"theme=dark; Domain=private.example.com; Secure"},
+			want:       "theme=dark; Domain=[Filtered]; Secure",
+		},
+		{
+			name: "allow list still scrubs built-in sensitive names",
+			dataCollection: &DataCollection{
+				Cookies: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"sessionid", "theme"}},
+			},
+			setCookies: []string{"sessionid=abc123; Path=/"},
+			want:       "sessionid=[Filtered]; Path=[Filtered]",
+		},
+		{
+			name: "off mode omits collection",
+			dataCollection: &DataCollection{
+				Cookies: &KeyValueCollectionBehavior{Mode: CollectionOff},
+			},
+			setCookies: []string{"theme=dark; Path=/"},
+			want:       "",
+		},
+		{
+			name:       "malformed value without name=value pair is dropped",
+			setCookies: []string{"HttpOnly"},
+			want:       "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dc := newClientDataCollection(t, tt.dataCollection)
+			if got := dc.FilterSetCookies(tt.setCookies); got != tt.want {
+				t.Errorf("FilterSetCookies(%q) = %q, want %q", tt.setCookies, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFilterHTTPBodyRedactsScalarJSONBodies(t *testing.T) {
+	t.Parallel()
+
+	const secret = "hunter2-super-secret"
+
+	tests := []struct {
+		name        string
+		body        []byte
+		contentType string
+	}{
+		{
+			name:        "top-level JSON string",
+			body:        []byte(`"Bearer ` + secret + `"`),
+			contentType: "application/json",
+		},
+		{
+			name:        "top-level JSON array of scalars",
+			body:        []byte(`["user@example.com","` + secret + `"]`),
+			contentType: "application/json",
+		},
+		{
+			name:        "scalars in nested arrays",
+			body:        []byte(`[["` + secret + `"]]`),
+			contentType: "application/json",
+		},
+		{
+			name:        "sniffed JSON array with non-JSON content type",
+			body:        []byte(`["` + secret + `"]`),
+			contentType: "text/plain",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dc := newClientDataCollection(t, nil)
+			got := dc.FilterHTTPBody(tt.body, tt.contentType)
+			if strings.Contains(got, secret) {
+				t.Errorf("FilterHTTPBody(%q, %q) leaked sensitive scalar value: got %q", tt.body, tt.contentType, got)
 			}
 		})
 	}

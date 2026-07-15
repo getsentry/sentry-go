@@ -25,13 +25,11 @@ func main() {
 
 	ctx := context.Background()
 	handler := sentryslog.Option{
-		EventLevel: []slog.Level{slog.LevelError, sentryslog.LevelFatal}, // Only Error and Fatal as events
-		LogLevel:   []slog.Level{slog.LevelWarn, slog.LevelInfo},         // Only Warn and Info as logs
+		LogLevel: []slog.Level{slog.LevelWarn, slog.LevelInfo, slog.LevelError, sentryslog.LevelFatal},
 	}.NewSentryHandler(ctx)
 	logger := slog.New(handler)
 	logger = logger.With("release", "v1.0.0")
 
-	// message level is Error and will be handled only as Event.
 	logger.
 		With(
 			slog.Group("user",
