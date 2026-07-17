@@ -17,8 +17,8 @@ import (
 
 const testDsn = "http://whatever@example.com/1337"
 
-func setupHubTest() (*Hub, *Client, *Scope) {
-	client, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
+func setupHubTest() (*Hub, *defaultClient, *Scope) {
+	client, _ := newClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
 	scope := NewScope()
 	hub := NewHub(client, scope)
 	return hub, client, scope
@@ -105,7 +105,7 @@ func TestPopScopeCannotLeaveStackEmpty(t *testing.T) {
 func TestBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 	hub.PushScope()
-	newClient, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
+	newClient, _ := newClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
 	hub.BindClient(newClient)
 
 	if (*hub.stack)[0].client == (*hub.stack)[1].client {
@@ -133,7 +133,7 @@ func TestWithScopeBindClient(t *testing.T) {
 	hub, client, _ := setupHubTest()
 
 	hub.WithScope(func(_ *Scope) {
-		newClient, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
+		newClient, _ := newClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
 		hub.BindClient(newClient)
 		if hub.stackTop().client != newClient {
 			t.Error("should use newly bound client")
@@ -507,23 +507,19 @@ func TestHub_Flush(t *testing.T) {
 	}
 }
 
-func TestHub_Flush_NoClient(t *testing.T) {
+func TestHub_Flush_NoOpClient(t *testing.T) {
 	hub := NewHub(nil, nil)
-	flushed := hub.Flush(20 * time.Millisecond)
-
-	if flushed != false {
-		t.Fatalf("expected flush to be false, got %v", flushed)
+	if !hub.Flush(20 * time.Millisecond) {
+		t.Fatal("expected no-op client to flush successfully")
 	}
 }
 
-func TestHub_FlushWithCtx_NoClient(t *testing.T) {
+func TestHub_FlushWithCtx_NoOpClient(t *testing.T) {
 	hub := NewHub(nil, nil)
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	flushed := hub.FlushWithContext(cancelCtx)
-
-	if flushed != false {
-		t.Fatalf("expected flush to be false, got %v", flushed)
+	if !hub.FlushWithContext(cancelCtx) {
+		t.Fatal("expected no-op client to flush successfully")
 	}
 }
 

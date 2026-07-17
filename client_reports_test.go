@@ -36,7 +36,7 @@ func TestClientReports_Integration(t *testing.T) {
 
 	dsn := strings.Replace(srv.URL, "//", "//test@", 1) + "/1"
 	hub := CurrentHub().Clone()
-	c, err := NewClient(ClientOptions{
+	c, err := newClient(ClientOptions{
 		Dsn:                  dsn,
 		DisableClientReports: false,
 		SampleRate:           1.0,
@@ -54,7 +54,7 @@ func TestClientReports_Integration(t *testing.T) {
 	defer hub.Flush(testutils.FlushTimeout())
 
 	// second client with disabled reports shouldn't affect the first
-	_, _ = NewClient(ClientOptions{
+	_, _ = newClient(ClientOptions{
 		Dsn:                  testDsn,
 		DisableClientReports: true,
 	})

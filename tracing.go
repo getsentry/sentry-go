@@ -480,17 +480,15 @@ func (s *Span) doFinish() {
 	}
 
 	if !s.Sampled.Bool() {
-		c := hub.Client()
-		if c != nil {
-			if !s.IsTransaction() {
-				// we count the sampled spans from the transaction root. it is guaranteed that the whole transaction
-				// would be sampled
-				return
-			}
-			children := s.recorder.children()
-			c.reportRecorder.RecordOne(report.ReasonSampleRate, ratelimit.CategoryTransaction)
-			c.reportRecorder.Record(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
+		if !s.IsTransaction() {
+			// we count the sampled spans from the transaction root. it is guaranteed that the whole transaction
+			// would be sampled
+			return
 		}
+		client := hub.Client()
+		children := s.recorder.children()
+		client.recordDiscard(report.ReasonSampleRate, ratelimit.CategoryTransaction, 1)
+		client.recordDiscard(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
 		return
 	}
 	event := s.toEvent()
@@ -550,11 +548,7 @@ func (s *Span) updateFromBaggage(header []byte) {
 }
 
 func (s *Span) clientOptions() *ClientOptions {
-	client := hubFromContext(s.ctx).Client()
-	if client != nil {
-		return &client.options
-	}
-	return &ClientOptions{}
+	return hubFromContext(s.ctx).Client().clientOptions()
 }
 
 func (s *Span) sample() Sampled {
@@ -1201,14 +1195,10 @@ func HTTPtoSpanStatus(code int) SpanStatus {
 	return SpanStatusUnknown
 }
 
-func shouldContinueTrace(client *Client, dsc DynamicSamplingContext) bool {
-	if client == nil {
-		return true
-	}
-
+func shouldContinueTrace(client Client, dsc DynamicSamplingContext) bool {
 	var sdkOrgID uint64
-	if client.dsn != nil {
-		sdkOrgID = client.dsn.GetOrgID()
+	if dsn := client.getDsn(); dsn != nil {
+		sdkOrgID = dsn.GetOrgID()
 	}
 
 	baggageOrgStr := dsc.Entries["org_id"]
@@ -1223,7 +1213,7 @@ func shouldContinueTrace(client *Client, dsc DynamicSamplingContext) bool {
 	}
 
 	// If strict mode is on, both must be present and match
-	if client.options.StrictTraceContinuation {
+	if client.clientOptions().StrictTraceContinuation {
 		if sdkOrgID == 0 && baggageOrgID == 0 {
 			return true
 		}

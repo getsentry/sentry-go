@@ -247,7 +247,7 @@ type Request struct {
 	Env         map[string]string `json:"env,omitempty"`
 }
 
-func newRequest(r *http.Request, client *Client) *Request {
+func newRequest(r *http.Request, client Client) *Request {
 	prot := protocol.SchemeHTTP
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
 		prot = protocol.SchemeHTTPS

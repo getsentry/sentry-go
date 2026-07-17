@@ -25,7 +25,7 @@ func (mi *modulesIntegration) Name() string {
 	return "Modules"
 }
 
-func (mi *modulesIntegration) SetupOnce(client *Client) {
+func (mi *modulesIntegration) SetupOnce(client Client) {
 	client.AddEventProcessor(mi.processor)
 }
 
@@ -68,7 +68,7 @@ func (ei *environmentIntegration) Name() string {
 	return "Environment"
 }
 
-func (ei *environmentIntegration) SetupOnce(client *Client) {
+func (ei *environmentIntegration) SetupOnce(client Client) {
 	client.AddEventProcessor(ei.processor)
 }
 
@@ -132,8 +132,8 @@ func (iei *ignoreErrorsIntegration) Name() string {
 	return "IgnoreErrors"
 }
 
-func (iei *ignoreErrorsIntegration) SetupOnce(client *Client) {
-	iei.ignoreErrors = transformStringsIntoRegexps(client.options.IgnoreErrors)
+func (iei *ignoreErrorsIntegration) SetupOnce(client Client) {
+	iei.ignoreErrors = transformStringsIntoRegexps(client.clientOptions().IgnoreErrors)
 	client.AddEventProcessor(iei.processor)
 }
 
@@ -192,8 +192,8 @@ func (iei *ignoreTransactionsIntegration) Name() string {
 	return "IgnoreTransactions"
 }
 
-func (iei *ignoreTransactionsIntegration) SetupOnce(client *Client) {
-	iei.ignoreTransactions = transformStringsIntoRegexps(client.options.IgnoreTransactions)
+func (iei *ignoreTransactionsIntegration) SetupOnce(client Client) {
+	iei.ignoreTransactions = transformStringsIntoRegexps(client.clientOptions().IgnoreTransactions)
 	client.AddEventProcessor(iei.processor)
 }
 
@@ -229,9 +229,10 @@ func (ti *globalTagsIntegration) Name() string {
 	return "GlobalTags"
 }
 
-func (ti *globalTagsIntegration) SetupOnce(client *Client) {
-	ti.tags = make(map[string]string, len(client.options.Tags))
-	for k, v := range client.options.Tags {
+func (ti *globalTagsIntegration) SetupOnce(client Client) {
+	tags := client.clientOptions().Tags
+	ti.tags = make(map[string]string, len(tags))
+	for k, v := range tags {
 		ti.tags[k] = v
 	}
 

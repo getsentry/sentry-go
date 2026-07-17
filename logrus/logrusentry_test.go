@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func setupClientTest() (*sentry.Client, *sentry.MockTransport) {
+func setupClientTest() (sentry.Client, *sentry.MockTransport) {
 	mockTransport := &sentry.MockTransport{}
 	mockClient, _ := sentry.NewClient(sentry.ClientOptions{
 		Dsn:       "http://whatever@example.com/1337",

@@ -62,9 +62,7 @@ func hubFromServerContext(ctx context.Context) *sentry.Hub {
 		hub = sentry.CurrentHub().Clone()
 	}
 
-	if client := hub.Client(); client != nil {
-		client.SetSDKIdentifier(sdkIdentifier)
-	}
+	hub.Client().SetSDKIdentifier(sdkIdentifier)
 
 	return hub
 }
@@ -185,7 +183,7 @@ func filterMetadataCookies(dc sentry.DataCollection, key string, values []string
 	return cookies, cookies != ""
 }
 
-func metadataToContext(client *sentry.Client, md metadata.MD) map[string]any {
+func metadataToContext(client sentry.Client, md metadata.MD) map[string]any {
 	if len(md) == 0 {
 		return nil
 	}

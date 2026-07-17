@@ -33,7 +33,7 @@ func flushFromContext(ctx context.Context, timeout time.Duration) {
 func setupMockTransport() (context.Context, *MockTransport) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
+	mockClient, _ := newClient(ClientOptions{
 		Dsn:           testDsn,
 		Transport:     mockTransport,
 		Release:       "v1.2.3",
@@ -42,7 +42,6 @@ func setupMockTransport() (context.Context, *MockTransport) {
 		EnableTracing: true,
 	})
 	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
 	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
@@ -57,7 +56,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		"sentry.environment":          attribute.StringValue("testing"),
 		"sentry.server.address":       attribute.StringValue("test-server"),
 		"sentry.sdk.name":             attribute.StringValue("sentry.go"),
-		"sentry.sdk.version":          attribute.StringValue("0.10.0"),
+		"sentry.sdk.version":          attribute.StringValue(SDKVersion),
 		"sentry.message.template":     attribute.StringValue("param matching: %v and %v"),
 		"sentry.message.parameters.0": attribute.StringValue("param1"),
 		"sentry.message.parameters.1": attribute.StringValue("param2"),
@@ -218,7 +217,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 		"sentry.environment":    attribute.StringValue("testing"),
 		"sentry.server.address": attribute.StringValue("test-server"),
 		"sentry.sdk.name":       attribute.StringValue("sentry.go"),
-		"sentry.sdk.version":    attribute.StringValue("0.10.0"),
+		"sentry.sdk.version":    attribute.StringValue(SDKVersion),
 	}
 
 	tests := []struct {
@@ -392,7 +391,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 		"sentry.environment":    attribute.StringValue("testing"),
 		"sentry.server.address": attribute.StringValue("test-server"),
 		"sentry.sdk.name":       attribute.StringValue("sentry.go"),
-		"sentry.sdk.version":    attribute.StringValue("0.10.0"),
+		"sentry.sdk.version":    attribute.StringValue(SDKVersion),
 	}
 	wantLogs := []Log{
 		{
@@ -682,7 +681,7 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 
 func Test_batchLogger_Shutdown(t *testing.T) {
 	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
+	mockClient, _ := newClient(ClientOptions{
 		Dsn:                    testDsn,
 		Transport:              mockTransport,
 		DisableTelemetryBuffer: true,
@@ -696,7 +695,7 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 	}
 
 	hub = GetHubFromContext(ctx)
-	hub.Client().batchLogger.Shutdown()
+	hub.Client().(*defaultClient).batchLogger.Shutdown()
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -709,8 +708,8 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 	mockTransport.events = nil
 
 	// Test that shutdown can be called multiple times safely
-	hub.Client().batchLogger.Shutdown()
-	hub.Client().batchLogger.Shutdown()
+	hub.Client().(*defaultClient).batchLogger.Shutdown()
+	hub.Client().(*defaultClient).batchLogger.Shutdown()
 
 	events = mockTransport.Events()
 	if len(events) != 0 {
@@ -727,7 +726,7 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
+	mockClient, _ := newClient(ClientOptions{
 		Dsn:           testDsn,
 		Transport:     mockTransport,
 		Release:       "v1.2.3",
@@ -739,7 +738,6 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 		},
 	})
 	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
 	hub := CurrentHub()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
@@ -828,7 +826,7 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 			var buf bytes.Buffer
 
 			ctx := context.Background()
-			mockClient, _ := NewClient(ClientOptions{
+			mockClient, _ := newClient(ClientOptions{
 				Transport:   &MockTransport{},
 				DisableLogs: tt.disableLogs,
 				Debug:       true,
@@ -857,7 +855,7 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 func Test_sentryLogger_UserAttributes(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
+	mockClient, _ := newClient(ClientOptions{
 		Dsn:           testDsn,
 		Transport:     mockTransport,
 		Release:       "v1.2.3",
@@ -866,7 +864,6 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 		EnableTracing: true,
 	})
 	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
 	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)

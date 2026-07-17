@@ -60,19 +60,20 @@ func NewLogger(ctx context.Context) Logger { // nolint: dupl
 	}
 
 	client := hub.Client()
-	if client != nil && !client.options.DisableLogs {
+	options := client.clientOptions()
+	if !options.DisableLogs {
 		// Build default attrs
-		serverAddr := client.options.ServerName
+		serverAddr := options.ServerName
 		if serverAddr == "" {
 			serverAddr, _ = os.Hostname()
 		}
 
 		defaults := map[string]string{
-			"sentry.release":        client.options.Release,
-			"sentry.environment":    client.options.Environment,
+			"sentry.release":        options.Release,
+			"sentry.environment":    options.Environment,
 			"sentry.server.address": serverAddr,
-			"sentry.sdk.name":       client.sdkIdentifier,
-			"sentry.sdk.version":    client.sdkVersion,
+			"sentry.sdk.name":       client.GetSDKIdentifier(),
+			"sentry.sdk.version":    client.GetSDKVersion(),
 		}
 
 		defaultAttrs := make(map[string]attribute.Value, len(defaults))
@@ -111,10 +112,6 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		hub = l.hub
 	}
 	client := hub.Client()
-	if client == nil {
-		return
-	}
-
 	scope := hub.Scope()
 	traceID, spanID := resolveTrace(scope, client, ctx, l.ctx)
 
@@ -162,7 +159,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	log.approximateSize = computeLogSize(log)
 
 	client.captureLog(log, scope)
-	if client.options.Debug {
+	if client.clientOptions().Debug {
 		debuglog.Print(body)
 	}
 }

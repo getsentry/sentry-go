@@ -9,7 +9,7 @@ type logBatchProcessor struct {
 	*batchProcessor[Log]
 }
 
-func newLogBatchProcessor(client *Client) *logBatchProcessor {
+func newLogBatchProcessor(client *defaultClient) *logBatchProcessor {
 	return &logBatchProcessor{
 		batchProcessor: newBatchProcessor(func(items []Log) {
 			if len(items) == 0 {

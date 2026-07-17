@@ -79,7 +79,7 @@ type Fixture struct {
 	Hub *sentry.Hub
 
 	// Client is the fixture's client, configured with the MockTransport.
-	Client *sentry.Client
+	Client sentry.Client
 
 	// Transport captures all events sent through the client.
 	Transport *sentry.MockTransport
@@ -243,7 +243,7 @@ func (f *Fixture) AssertHubIsolation(requestHub *sentry.Hub) {
 
 	// Apply the request scope to a probe event to read its tags.
 	probe := &sentry.Event{}
-	applied := requestHub.Scope().ApplyToEvent(probe, nil, nil)
+	applied := requestHub.Scope().ApplyToEvent(probe, nil, sentry.NewNoopClient())
 	if applied == nil {
 		f.T.Error("event dropped by event processor")
 		return

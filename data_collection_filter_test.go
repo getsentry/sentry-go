@@ -485,7 +485,7 @@ func newClientDataCollection(t *testing.T, dc *DataCollection) DataCollection {
 	if dc == nil {
 		dc = &DataCollection{}
 	}
-	client, err := NewClient(ClientOptions{
+	client, err := newClient(ClientOptions{
 		Dsn:            "https://key@sentry.io/1",
 		DataCollection: dc,
 	})

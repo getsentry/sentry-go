@@ -19,6 +19,6 @@ func (integration) Name() string {
 	return "OTel"
 }
 
-func (integration) SetupOnce(client *sentry.Client) {
+func (integration) SetupOnce(client sentry.Client) {
 	client.SetExternalContextTraceResolver(common.ResolveTraceContext)
 }

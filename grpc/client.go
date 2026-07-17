@@ -26,9 +26,7 @@ func hubFromClientContext(ctx context.Context) context.Context {
 		ctx = sentry.SetHubOnContext(ctx, hub)
 	}
 
-	if client := hub.Client(); client != nil {
-		client.SetSDKIdentifier(sdkIdentifier)
-	}
+	hub.Client().SetSDKIdentifier(sdkIdentifier)
 
 	return ctx
 }

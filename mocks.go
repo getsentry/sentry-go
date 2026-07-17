@@ -16,7 +16,7 @@ func (scope *MockScope) AddBreadcrumb(breadcrumb *Breadcrumb, _ int) {
 	scope.breadcrumb = breadcrumb
 }
 
-func (scope *MockScope) ApplyToEvent(event *Event, _ *EventHint, _ *Client) *Event {
+func (scope *MockScope) ApplyToEvent(event *Event, _ *EventHint, _ Client) *Event {
 	if scope.shouldDropEvent {
 		return nil
 	}

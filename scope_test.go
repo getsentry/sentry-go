@@ -451,15 +451,15 @@ func TestScopeCloneEventProcessorsIsolation(t *testing.T) {
 	clone2.AddEventProcessor(mark("y"))
 
 	ran = nil
-	clone1.ApplyToEvent(NewEvent(), nil, nil)
+	clone1.ApplyToEvent(NewEvent(), nil, noopClient{})
 	assertEqual(t, []string{"a", "b", "c", "x"}, ran)
 
 	ran = nil
-	clone2.ApplyToEvent(NewEvent(), nil, nil)
+	clone2.ApplyToEvent(NewEvent(), nil, noopClient{})
 	assertEqual(t, []string{"a", "b", "c", "y"}, ran)
 
 	ran = nil
-	scope.ApplyToEvent(NewEvent(), nil, nil)
+	scope.ApplyToEvent(NewEvent(), nil, noopClient{})
 	assertEqual(t, []string{"a", "b", "c"}, ran)
 }
 
@@ -603,7 +603,7 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := fillEventWithData(NewEvent())
 
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, noopClient{})
 
 	assertEqual(t, 2, len(processedEvent.Breadcrumbs), "should merge breadcrumbs")
 	assertEqual(t, 2, len(processedEvent.Attachments), "should merge attachments")
@@ -623,7 +623,7 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 	scope := NewScope()
 	event := fillEventWithData(NewEvent())
 
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, noopClient{})
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
 	assertEqual(t, len(processedEvent.Attachments), 1, "should use event attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
@@ -638,7 +638,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := NewEvent()
 
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, noopClient{})
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
 	assertEqual(t, len(processedEvent.Attachments), 1, "should use scope attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
@@ -651,7 +651,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 
 func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
 	previousClient := currentHub.Client()
-	currentClient, err := NewClient(ClientOptions{Dsn: "https://key@sentry.io/1", SendDefaultPII: true})
+	currentClient, err := newClient(ClientOptions{Dsn: "https://key@sentry.io/1", SendDefaultPII: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -665,7 +665,7 @@ func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
 	request.Header.Set("Some-Header", "some-header value")
 	scope.SetRequest(request)
 
-	requestClient, err := NewClient(ClientOptions{
+	requestClient, err := newClient(ClientOptions{
 		Dsn: "https://key@sentry.io/1",
 		DataCollection: &DataCollection{
 			UserInfo: Set(false),
@@ -699,7 +699,7 @@ func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
 }
 
 func TestApplyToEventUsesExplicitDataCollectionForRequest(t *testing.T) {
-	client, err := NewClient(ClientOptions{
+	client, err := newClient(ClientOptions{
 		Dsn: "https://key@sentry.io/1",
 		DataCollection: &DataCollection{
 			UserInfo: Set(false),
@@ -755,7 +755,7 @@ func TestApplyToEventHTTPBodyCollection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client, err := NewClient(ClientOptions{
+			client, err := newClient(ClientOptions{
 				Dsn:            "https://key@sentry.io/1",
 				DataCollection: &DataCollection{HTTPBodies: tt.bodies},
 			})
@@ -792,7 +792,7 @@ func TestEventProcessorsModifiesEvent(t *testing.T) {
 			return event
 		},
 	}
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, noopClient{})
 
 	if processedEvent == nil {
 		t.Fatal("event should not be dropped")
@@ -809,7 +809,7 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 			return nil
 		},
 	}
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, noopClient{})
 
 	if processedEvent != nil {
 		t.Error("event should be dropped")
@@ -819,7 +819,7 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 func TestEventProcessorsAddEventProcessor(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := scope.ApplyToEvent(event, nil, noopClient{})
 
 	if processedEvent == nil {
 		t.Error("event should not be dropped")
@@ -828,7 +828,7 @@ func TestEventProcessorsAddEventProcessor(t *testing.T) {
 	scope.AddEventProcessor(func(_ *Event, _ *EventHint) *Event {
 		return nil
 	})
-	processedEvent = scope.ApplyToEvent(event, nil, nil)
+	processedEvent = scope.ApplyToEvent(event, nil, noopClient{})
 
 	if processedEvent != nil {
 		t.Error("event should be dropped")

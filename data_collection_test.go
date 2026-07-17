@@ -91,7 +91,7 @@ func TestNewClientDataCollection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			client, err := NewClient(tt.options)
+			client, err := newClient(tt.options)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -111,7 +111,7 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 		Cookies:    &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}},
 		HTTPBodies: []BodyType{BodyIncomingRequest},
 	}
-	client, err := NewClient(ClientOptions{
+	client, err := newClient(ClientOptions{
 		Dsn:            "https://key@sentry.io/1",
 		DataCollection: input,
 	})
@@ -148,7 +148,7 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 func TestNewClientLegacyDataCollectionSensitiveTerms(t *testing.T) {
 	t.Parallel()
 
-	client, err := NewClient(ClientOptions{Dsn: "https://key@sentry.io/1"})
+	client, err := newClient(ClientOptions{Dsn: "https://key@sentry.io/1"})
 	if err != nil {
 		t.Fatal(err)
 	}

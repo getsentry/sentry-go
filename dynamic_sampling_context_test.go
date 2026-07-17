@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/testutils"
 )
 
@@ -182,7 +181,7 @@ func TestString(t *testing.T) {
 func TestDynamicSamplingContextFromScope(t *testing.T) {
 	tests := map[string]struct {
 		scope    *Scope
-		client   *Client
+		client   Client
 		expected DynamicSamplingContext
 	}{
 		"Valid input": {
@@ -192,16 +191,19 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
 				},
 			},
-			client: func() *Client {
-				dsn, _ := protocol.NewDsn("http://public@example.com/sentry/1")
-				return &Client{
-					options: ClientOptions{
-						Dsn:         dsn.String(),
-						Release:     "1.0.0",
-						Environment: "production",
-					},
-					dsn: dsn,
+			client: func() *defaultClient {
+				client, err := newClient(ClientOptions{
+					Dsn:            "http://public@example.com/sentry/1",
+					Release:        "1.0.0",
+					Environment:    "production",
+					Transport:      &MockTransport{},
+					DisableLogs:    true,
+					DisableMetrics: true,
+				})
+				if err != nil {
+					panic(err)
 				}
+				return client
 			}(),
 			expected: DynamicSamplingContext{
 				Entries: map[string]string{
@@ -213,14 +215,14 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				Frozen: true,
 			},
 		},
-		"Nil client": {
+		"No-op client": {
 			scope: &Scope{
 				propagationContext: PropagationContext{
 					TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
 					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
 				},
 			},
-			client: nil,
+			client: noopClient{},
 			expected: DynamicSamplingContext{
 				Entries: map[string]string{},
 				Frozen:  false,
@@ -228,7 +230,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 		},
 		"Nil scope": {
 			scope:  nil,
-			client: &Client{},
+			client: &defaultClient{},
 			expected: DynamicSamplingContext{
 				Entries: map[string]string{},
 				Frozen:  false,

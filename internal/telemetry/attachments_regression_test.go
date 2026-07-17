@@ -24,7 +24,7 @@ func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
 		Payload:     []byte("hello world"),
 	})
 
-	event = scope.ApplyToEvent(event, nil, nil)
+	event = scope.ApplyToEvent(event, nil, sentry.NewNoopClient())
 
 	transport := &testutils.MockTelemetryTransport{}
 	processor := telemetry.NewProcessor(

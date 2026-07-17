@@ -47,16 +47,11 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 	// Configure trace propagation targets
 	var tracePropagationTargets []string
 	var propagateTraceparent bool
-	if hub := sentry.CurrentHub(); hub != nil {
-		client := hub.Client()
-		if client != nil {
-			clientOptions := client.Options()
-			if clientOptions.TracePropagationTargets != nil {
-				tracePropagationTargets = clientOptions.TracePropagationTargets
-			}
-			propagateTraceparent = clientOptions.PropagateTraceparent
-		}
+	clientOptions := sentry.CurrentHub().Client().Options()
+	if clientOptions.TracePropagationTargets != nil {
+		tracePropagationTargets = clientOptions.TracePropagationTargets
 	}
+	propagateTraceparent = clientOptions.PropagateTraceparent
 
 	t := &SentryRoundTripper{
 		originalRoundTripper:    originalRoundTripper,
@@ -83,16 +78,9 @@ type SentryRoundTripper struct {
 
 func dataCollectionFromRequest(request *http.Request) sentry.DataCollection {
 	if hub := sentry.GetHubFromContext(request.Context()); hub != nil {
-		if client := hub.Client(); client != nil {
-			return client.GetDataCollection()
-		}
+		return hub.Client().GetDataCollection()
 	}
-	if hub := sentry.CurrentHub(); hub != nil {
-		if client := hub.Client(); client != nil {
-			return client.GetDataCollection()
-		}
-	}
-	return sentry.DataCollection{}
+	return sentry.CurrentHub().Client().GetDataCollection()
 }
 
 func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {

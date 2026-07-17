@@ -47,27 +47,28 @@ const (
 	UnitPercent = "percent"
 )
 
-// NewMeter returns a new Meter. If there is no Client bound to the current hub, or if metrics are disabled,
-// it returns a no-op Meter that discards all metrics.
+// NewMeter returns a new Meter. If the current Client is a no-op client or
+// metrics are disabled, it returns a no-op Meter that discards all metrics.
 func NewMeter(ctx context.Context) Meter {
 	hub := GetHubFromContext(ctx)
 	if hub == nil {
 		hub = CurrentHub()
 	}
 	client := hub.Client()
-	if client != nil && !client.options.DisableMetrics {
+	options := client.clientOptions()
+	if !options.DisableMetrics {
 		// build default attrs
-		serverAddr := client.options.ServerName
+		serverAddr := options.ServerName
 		if serverAddr == "" {
 			serverAddr, _ = os.Hostname()
 		}
 
 		defaults := map[string]string{
-			"sentry.release":        client.options.Release,
-			"sentry.environment":    client.options.Environment,
+			"sentry.release":        options.Release,
+			"sentry.environment":    options.Environment,
 			"sentry.server.address": serverAddr,
-			"sentry.sdk.name":       client.sdkIdentifier,
-			"sentry.sdk.version":    client.sdkVersion,
+			"sentry.sdk.name":       client.GetSDKIdentifier(),
+			"sentry.sdk.version":    client.GetSDKVersion(),
 		}
 
 		defaultAttrs := make(map[string]attribute.Value)
@@ -110,10 +111,6 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 	}
 
 	client := hub.Client()
-	if client == nil {
-		return
-	}
-
 	scope := hub.Scope()
 	if customScope != nil {
 		scope = customScope
@@ -151,7 +148,7 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		Attributes: attrs,
 	}
 
-	if client.captureMetric(metric, scope) && client.options.Debug {
+	if client.captureMetric(metric, scope) && client.clientOptions().Debug {
 		debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), unit)
 	}
 }

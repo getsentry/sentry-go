@@ -13,7 +13,7 @@ func (pi *pickleIntegration) Name() string {
 	return "PickleIntegration"
 }
 
-func (pi *pickleIntegration) SetupOnce(client *sentry.Client) {
+func (pi *pickleIntegration) SetupOnce(client sentry.Client) {
 	client.AddEventProcessor(pi.processor)
 }
 

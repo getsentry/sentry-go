@@ -12,13 +12,13 @@ import (
 func TestMetadataToContext(t *testing.T) {
 	tests := []struct {
 		name   string
-		client *sentry.Client
+		client sentry.Client
 		md     metadata.MD
 		want   map[string]any
 	}{
 		{
 			name: "default snapshot filters values and keeps keys",
-			client: func() *sentry.Client {
+			client: func() sentry.Client {
 				client, err := sentry.NewClient(sentry.ClientOptions{Dsn: "https://key@sentry.io/1"})
 				if err != nil {
 					t.Fatal(err)
@@ -36,7 +36,7 @@ func TestMetadataToContext(t *testing.T) {
 		},
 		{
 			name: "explicit data collection filters values and keeps keys",
-			client: func() *sentry.Client {
+			client: func() sentry.Client {
 				client, err := sentry.NewClient(sentry.ClientOptions{
 					Dsn: "https://key@sentry.io/1",
 					DataCollection: &sentry.DataCollection{
@@ -61,7 +61,7 @@ func TestMetadataToContext(t *testing.T) {
 		},
 		{
 			name: "cookie metadata is filtered by cookie name",
-			client: func() *sentry.Client {
+			client: func() sentry.Client {
 				client, err := sentry.NewClient(sentry.ClientOptions{
 					Dsn:            "https://key@sentry.io/1",
 					DataCollection: &sentry.DataCollection{},
@@ -84,7 +84,7 @@ func TestMetadataToContext(t *testing.T) {
 		},
 		{
 			name: "set-cookie metadata preserves attributes per cookie",
-			client: func() *sentry.Client {
+			client: func() sentry.Client {
 				client, err := sentry.NewClient(sentry.ClientOptions{
 					Dsn:            "https://key@sentry.io/1",
 					DataCollection: &sentry.DataCollection{},
@@ -106,7 +106,7 @@ func TestMetadataToContext(t *testing.T) {
 		},
 		{
 			name: "cookie metadata can be disabled separately",
-			client: func() *sentry.Client {
+			client: func() sentry.Client {
 				client, err := sentry.NewClient(sentry.ClientOptions{
 					Dsn: "https://key@sentry.io/1",
 					DataCollection: &sentry.DataCollection{

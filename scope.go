@@ -314,7 +314,9 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 }
 
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
-func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event { //nolint:gocyclo
+func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client Client) *Event { //nolint:gocyclo
+	client = normalizeClient(client)
+
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
@@ -375,7 +377,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		event.Contexts["trace"] = scope.propagationContext.Map()
 
 		dsc := scope.propagationContext.DynamicSamplingContext
-		if !dsc.HasEntries() && client != nil {
+		if !dsc.HasEntries() {
 			dsc = DynamicSamplingContextFromScope(scope, client)
 		}
 		event.sdkMetaData.dsc = dsc
@@ -383,19 +385,17 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 
 	// If an external trace resolver is registered (e.g. OTel), override
 	// trace/span IDs from the hint context or the scope's request context.
-	if client != nil {
-		var ctx context.Context
-		if hint != nil {
-			ctx = hint.Context
-		}
-		if ctx == nil && scope.request != nil {
-			ctx = scope.request.Context()
-		}
-		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); event.Type != transactionType && ok {
-			traceCtx := event.Contexts["trace"]
-			traceCtx["trace_id"] = traceID.String()
-			traceCtx["span_id"] = spanID.String()
-		}
+	var ctx context.Context
+	if hint != nil {
+		ctx = hint.Context
+	}
+	if ctx == nil && scope.request != nil {
+		ctx = scope.request.Context()
+	}
+	if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); event.Type != transactionType && ok {
+		traceCtx := event.Contexts["trace"]
+		traceCtx["trace_id"] = traceID.String()
+		traceCtx["span_id"] = spanID.String()
 	}
 
 	if event.User.IsEmpty() {
@@ -434,18 +434,14 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
-			if client != nil {
-				client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
-				if category == ratelimit.CategoryTransaction {
-					client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
-				}
+			client.recordDiscard(report.ReasonEventProcessor, category, 1)
+			if category == ratelimit.CategoryTransaction {
+				client.recordDiscard(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
 			}
 			return nil
 		}
 		if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
-			if client != nil {
-				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
-			}
+			client.recordDiscard(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
 		}
 	}
 
@@ -517,17 +513,16 @@ func hubFromContexts(ctxs ...context.Context) *Hub {
 // This ordering ensures we always use the most contextually relevant tracing information.
 // For example, if a specific span is active for an operation, we use that span's trace/span IDs
 // rather than accidentally using a different span that might be set on the hub's scope.
-func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
+func resolveTrace(scope *Scope, client Client, ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
+	client = normalizeClient(client)
 	var span *Span
 
 	for _, ctx := range ctxs {
 		if ctx == nil {
 			continue
 		}
-		if client != nil {
-			if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
-				return traceID, spanID
-			}
+		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
+			return traceID, spanID
 		}
 		if span = SpanFromContext(ctx); span != nil {
 			break

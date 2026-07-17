@@ -17,9 +17,11 @@ type spanRecorder struct {
 // record stores a span. The first stored span is assumed to be the root of a
 // span tree.
 func (r *spanRecorder) record(s *Span) {
-	maxSpans := defaultMaxSpans
-	if client := CurrentHub().Client(); client != nil {
-		maxSpans = client.options.MaxSpans
+	maxSpans := CurrentHub().Client().clientOptions().MaxSpans
+	if maxSpans == 0 {
+		// MaxSpans is only zero for the no-op client: NewClient defaults it
+		// to defaultMaxSpans.
+		maxSpans = defaultMaxSpans
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

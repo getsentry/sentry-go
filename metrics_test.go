@@ -15,7 +15,7 @@ import (
 func setupMetricsTest() (context.Context, *MockTransport) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
+	mockClient, _ := newClient(ClientOptions{
 		Dsn:           testDsn,
 		Transport:     mockTransport,
 		Release:       "v1.2.3",
@@ -24,7 +24,6 @@ func setupMetricsTest() (context.Context, *MockTransport) {
 		EnableTracing: true,
 	})
 	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
 	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
@@ -39,7 +38,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 		"sentry.environment":    attribute.StringValue("testing"),
 		"sentry.server.address": attribute.StringValue("test-server"),
 		"sentry.sdk.name":       attribute.StringValue("sentry.go"),
-		"sentry.sdk.version":    attribute.StringValue("0.10.0"),
+		"sentry.sdk.version":    attribute.StringValue(SDKVersion),
 	}
 
 	tests := []struct {
@@ -308,7 +307,7 @@ func Test_batchMeter_FlushWithContext(t *testing.T) {
 func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
+	mockClient, _ := newClient(ClientOptions{
 		Dsn:           testDsn,
 		Transport:     mockTransport,
 		Release:       "v1.2.3",
@@ -320,7 +319,6 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 		},
 	})
 	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
 	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
@@ -396,7 +394,7 @@ func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
 
 func Test_batchMeter_Shutdown(t *testing.T) {
 	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
+	mockClient, _ := newClient(ClientOptions{
 		Dsn:                    testDsn,
 		Transport:              mockTransport,
 		DisableTelemetryBuffer: true,
@@ -410,7 +408,7 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 	}
 
 	hub = GetHubFromContext(ctx)
-	hub.Client().batchMeter.Shutdown()
+	hub.Client().(*defaultClient).batchMeter.Shutdown()
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -423,8 +421,8 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 	mockTransport.events = nil
 
 	// Test that shutdown can be called multiple times safely
-	hub.Client().batchMeter.Shutdown()
-	hub.Client().batchMeter.Shutdown()
+	hub.Client().(*defaultClient).batchMeter.Shutdown()
+	hub.Client().(*defaultClient).batchMeter.Shutdown()
 
 	events = mockTransport.Events()
 	if len(events) != 0 {
@@ -475,7 +473,7 @@ func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
 func Test_sentryMeter_UserAttributes(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
+	mockClient, _ := newClient(ClientOptions{
 		Dsn:           testDsn,
 		Transport:     mockTransport,
 		Release:       "v1.2.3",
@@ -484,7 +482,6 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 		EnableTracing: true,
 	})
 	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
 	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
@@ -650,7 +647,7 @@ func Test_sentryMeter_AttributePrecedence(t *testing.T) {
 func TestNewMeter_DisabledMetrics(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
+	mockClient, _ := newClient(ClientOptions{
 		Dsn:            testDsn,
 		Transport:      mockTransport,
 		DisableMetrics: true,

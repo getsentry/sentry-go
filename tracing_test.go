@@ -396,7 +396,7 @@ func NewTestContext(options ClientOptions) context.Context {
 	if options.Transport == nil {
 		options.Transport = &MockTransport{}
 	}
-	client, err := NewClient(options)
+	client, err := newClient(options)
 	if err != nil {
 		panic(err)
 	}
@@ -1293,7 +1293,7 @@ func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
 func TestSpanScopeManagement(t *testing.T) {
 	// Initialize a test hub and client
 	transport := &MockTransport{}
-	client, err := NewClient(ClientOptions{
+	client, err := newClient(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Transport:        transport,

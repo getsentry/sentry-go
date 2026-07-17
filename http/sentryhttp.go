@@ -91,9 +91,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
 
-		if client := hub.Client(); client != nil {
-			client.SetSDKIdentifier(sdkIdentifier)
-		}
+		hub.Client().SetSDKIdentifier(sdkIdentifier)
 
 		options := []sentry.SpanOption{
 			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),

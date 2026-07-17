@@ -43,7 +43,7 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	scope := hub.Scope()
 	client := hub.Client()
 
-	if client == nil || scope == nil {
+	if !client.IsEnabled() || scope == nil {
 		return DynamicSamplingContext{
 			Entries: map[string]string{},
 			Frozen:  false,
@@ -59,7 +59,7 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 		entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
 	}
 
-	if dsn := client.dsn; dsn != nil {
+	if dsn := client.getDsn(); dsn != nil {
 		if publicKey := dsn.GetPublicKey(); publicKey != "" {
 			entries["public_key"] = publicKey
 		}
@@ -67,10 +67,11 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 			entries["org_id"] = strconv.FormatUint(orgID, 10)
 		}
 	}
-	if release := client.options.Release; release != "" {
+	options := client.clientOptions()
+	if release := options.Release; release != "" {
 		entries["release"] = release
 	}
-	if environment := client.options.Environment; environment != "" {
+	if environment := options.Environment; environment != "" {
 		entries["environment"] = environment
 	}
 
@@ -119,10 +120,11 @@ func (d DynamicSamplingContext) String() string {
 // DynamicSamplingContextFromScope Constructs a new DynamicSamplingContext using a scope and client. Accessing
 // fields on the scope are not thread safe, and this function should only be
 // called within scope methods.
-func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSamplingContext {
+func DynamicSamplingContextFromScope(scope *Scope, client Client) DynamicSamplingContext {
 	entries := map[string]string{}
+	client = normalizeClient(client)
 
-	if client == nil || scope == nil {
+	if scope == nil || !client.IsEnabled() {
 		return DynamicSamplingContext{
 			Entries: entries,
 			Frozen:  false,
@@ -134,11 +136,11 @@ func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSampli
 	if traceID := propagationContext.TraceID.String(); traceID != "" {
 		entries["trace_id"] = traceID
 	}
-	if sampleRate := client.options.TracesSampleRate; sampleRate != 0 {
+	if sampleRate := client.clientOptions().TracesSampleRate; sampleRate != 0 {
 		entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
 	}
 
-	if dsn := client.dsn; dsn != nil {
+	if dsn := client.getDsn(); dsn != nil {
 		if publicKey := dsn.GetPublicKey(); publicKey != "" {
 			entries["public_key"] = publicKey
 		}
@@ -146,10 +148,11 @@ func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSampli
 			entries["org_id"] = strconv.FormatUint(orgID, 10)
 		}
 	}
-	if release := client.options.Release; release != "" {
+	options := client.clientOptions()
+	if release := options.Release; release != "" {
 		entries["release"] = release
 	}
-	if environment := client.options.Environment; environment != "" {
+	if environment := options.Environment; environment != "" {
 		entries["environment"] = environment
 	}
 

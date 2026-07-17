@@ -9,7 +9,7 @@ type metricBatchProcessor struct {
 	*batchProcessor[Metric]
 }
 
-func newMetricBatchProcessor(client *Client) *metricBatchProcessor {
+func newMetricBatchProcessor(client *defaultClient) *metricBatchProcessor {
 	return &metricBatchProcessor{
 		batchProcessor: newBatchProcessor(func(items []Metric) {
 			if len(items) == 0 {

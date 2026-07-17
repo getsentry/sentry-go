@@ -107,7 +107,7 @@ type externalContextTraceResolver func(ctx context.Context) (traceID TraceID, sp
 // ApplyToEvent changes an event based on external data and/or
 // an event hint.
 type EventModifier interface {
-	ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event
+	ApplyToEvent(event *Event, hint *EventHint, client Client) *Event
 }
 
 var globalEventProcessors []EventProcessor
@@ -125,7 +125,7 @@ func AddGlobalEventProcessor(processor EventProcessor) {
 // Integration allows for registering a functions that modify or discard captured events.
 type Integration interface {
 	Name() string
-	SetupOnce(client *Client)
+	SetupOnce(client Client)
 }
 
 // ClientOptions that configures a SDK Client.
@@ -299,9 +299,8 @@ type ClientOptions struct {
 	DisableTelemetryBuffer bool
 }
 
-// Client is the underlying processor that is used by the main API and Hub
-// instances. It must be created with NewClient.
-type Client struct {
+// defaultClient is the standard Client implementation created by NewClient.
+type defaultClient struct {
 	mu                    sync.RWMutex
 	options               ClientOptions
 	dsn                   *protocol.Dsn
@@ -309,7 +308,6 @@ type Client struct {
 	integrations          []Integration
 	externalTraceResolver externalContextTraceResolver
 	sdkIdentifier         string
-	sdkVersion            string
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
 	Transport          Transport
@@ -320,14 +318,12 @@ type Client struct {
 	reportProvider     report.ClientReportProvider
 }
 
-// NewClient creates and returns an instance of Client configured using
-// ClientOptions.
-//
-// Most users will not create clients directly. Instead, initialize the SDK with
-// Init and use the package-level functions (for simple programs that run on a
-// single goroutine) or hub methods (for concurrent programs, for example web
-// servers).
-func NewClient(options ClientOptions) (*Client, error) {
+// NewClient creates and returns a Client configured using ClientOptions.
+func NewClient(options ClientOptions) (Client, error) {
+	return newClient(options)
+}
+
+func newClient(options ClientOptions) (*defaultClient, error) {
 	// The default error event sample rate for all SDKs is 1.0 (send all).
 	//
 	// In Go, the zero value (default) for float64 is 0.0, which means that
@@ -417,11 +413,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 		}
 	}
 
-	client := Client{
+	client := defaultClient{
 		options:        options,
 		dsn:            dsn,
 		sdkIdentifier:  sdkIdentifier,
-		sdkVersion:     SDKVersion,
 		reportRecorder: report.NoopRecorder(),
 		reportProvider: report.NoopProvider(),
 	}
@@ -459,7 +454,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 	return &client, nil
 }
 
-func (client *Client) setupTransport() {
+func (client *defaultClient) setupTransport() {
 	opts := client.options
 	transport := opts.Transport
 
@@ -491,7 +486,7 @@ func (client *Client) setupTransport() {
 	client.Transport = transport
 }
 
-func (client *Client) sdkInfo() *protocol.SdkInfo {
+func (client *defaultClient) sdkInfo() *protocol.SdkInfo {
 	return &protocol.SdkInfo{
 		Name:         client.GetSDKIdentifier(),
 		Version:      SDKVersion,
@@ -503,7 +498,7 @@ func (client *Client) sdkInfo() *protocol.SdkInfo {
 	}
 }
 
-func (client *Client) setupTelemetryProcessor() {
+func (client *defaultClient) setupTelemetryProcessor() {
 	transport := httpInternal.NewAsyncTransport(httpInternal.TransportOptions{
 		Dsn:           client.options.Dsn,
 		HTTPClient:    client.options.HTTPClient,
@@ -528,7 +523,7 @@ func (client *Client) setupTelemetryProcessor() {
 	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, client.dsn, client.sdkInfo, client.reportRecorder)
 }
 
-func (client *Client) setupIntegrations() {
+func (client *defaultClient) setupIntegrations() {
 	integrations := []Integration{
 		new(environmentIntegration),
 		new(modulesIntegration),
@@ -556,6 +551,9 @@ func (client *Client) setupIntegrations() {
 	})
 }
 
+// IsEnabled reports whether the client processes telemetry.
+func (client *defaultClient) IsEnabled() bool { return true }
+
 // AddEventProcessor adds an event processor to the client. It must not be
 // called from concurrent goroutines. Most users will prefer to use
 // ClientOptions.BeforeSend or Scope.AddEventProcessor instead.
@@ -563,7 +561,7 @@ func (client *Client) setupIntegrations() {
 // Note that typical programs have only a single client created by Init and the
 // client is shared among multiple hubs, one per goroutine, such that adding an
 // event processor to the client affects all hubs that share the client.
-func (client *Client) AddEventProcessor(processor EventProcessor) {
+func (client *defaultClient) AddEventProcessor(processor EventProcessor) {
 	client.eventProcessors = append(client.eventProcessors, processor)
 }
 
@@ -571,14 +569,14 @@ func (client *Client) AddEventProcessor(processor EventProcessor) {
 // from external context implementations.
 //
 // This is intended for integrations such as OpenTelemetry.
-func (client *Client) SetExternalContextTraceResolver(resolver func(ctx context.Context) (TraceID, SpanID, bool)) {
+func (client *defaultClient) SetExternalContextTraceResolver(resolver func(ctx context.Context) (TraceID, SpanID, bool)) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
 	client.externalTraceResolver = resolver
 }
 
-func (client *Client) externalTraceContextFromContext(ctx context.Context) (TraceID, SpanID, bool) {
+func (client *defaultClient) externalTraceContextFromContext(ctx context.Context) (TraceID, SpanID, bool) {
 	if ctx == nil {
 		return TraceID{}, SpanID{}, false
 	}
@@ -595,36 +593,39 @@ func (client *Client) externalTraceContextFromContext(ctx context.Context) (Trac
 }
 
 // Options return ClientOptions for the current Client.
-func (client *Client) Options() ClientOptions {
-	// Note: internally, consider using `client.options` instead of `client.Options()` to avoid copying the object each time.
+func (client *defaultClient) Options() ClientOptions {
 	opts := client.options
 	opts.DataCollection = cloneDataCollection(client.options.DataCollection)
 	return opts
 }
 
+func (client *defaultClient) clientOptions() *ClientOptions {
+	return &client.options
+}
+
 // GetDataCollection returns a copy of the resolved data collection
 // configuration used by the client.
-func (client *Client) GetDataCollection() DataCollection {
-	if client == nil || client.options.DataCollection == nil {
+func (client *defaultClient) GetDataCollection() DataCollection {
+	if client.options.DataCollection == nil {
 		return DataCollection{}
 	}
 	return *cloneDataCollection(client.options.DataCollection)
 }
 
 // CaptureMessage captures an arbitrary message.
-func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
+func (client *defaultClient) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
 	event := client.EventFromMessage(message, LevelInfo)
 	return client.CaptureEvent(event, hint, scope)
 }
 
 // CaptureException captures an error.
-func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
+func (client *defaultClient) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
 	event := client.EventFromException(exception, LevelError)
 	return client.CaptureEvent(event, hint, scope)
 }
 
 // CaptureCheckIn captures a check in.
-func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
+func (client *defaultClient) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
 	event := client.EventFromCheckIn(checkIn, monitorConfig)
 	if event != nil && event.CheckIn != nil {
 		client.CaptureEvent(event, nil, scope)
@@ -638,11 +639,11 @@ func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorCon
 // The event must already be assembled. Typically, code would instead use
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
-func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
+func (client *defaultClient) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
 	return client.processEvent(event, hint, scope)
 }
 
-func (client *Client) captureLog(log *Log, _ *Scope) bool {
+func (client *defaultClient) captureLog(log *Log, _ *Scope) bool {
 	if log == nil {
 		return false
 	}
@@ -676,7 +677,15 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 	return true
 }
 
-func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
+func (client *defaultClient) getDsn() *protocol.Dsn {
+	return client.dsn
+}
+
+func (client *defaultClient) recordDiscard(reason report.DiscardReason, category ratelimit.Category, count int64) {
+	client.reportRecorder.Record(reason, category, count)
+}
+
+func (client *defaultClient) captureMetric(metric *Metric, _ *Scope) bool {
 	if metric == nil {
 		return false
 	}
@@ -709,7 +718,7 @@ func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
 
 // Recover captures a panic.
 // Returns EventID if successfully, or nil if there's no error to recover from.
-func (client *Client) Recover(err any, hint *EventHint, scope EventModifier) *EventID {
+func (client *defaultClient) Recover(err any, hint *EventHint, scope EventModifier) *EventID {
 	if err == nil {
 		err = recover()
 	}
@@ -724,7 +733,7 @@ func (client *Client) Recover(err any, hint *EventHint, scope EventModifier) *Ev
 
 // RecoverWithContext captures a panic and passes relevant context object.
 // Returns EventID if successfully, or nil if there's no error to recover from.
-func (client *Client) RecoverWithContext(
+func (client *defaultClient) RecoverWithContext(
 	ctx context.Context,
 	err any,
 	hint *EventHint,
@@ -769,7 +778,7 @@ func (client *Client) RecoverWithContext(
 // CaptureException or CaptureMessage. Instead, to have the SDK send events over
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
-func (client *Client) Flush(timeout time.Duration) bool {
+func (client *defaultClient) Flush(timeout time.Duration) bool {
 	if client.batchLogger != nil || client.batchMeter != nil || client.telemetryProcessor != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
@@ -790,7 +799,7 @@ func (client *Client) Flush(timeout time.Duration) bool {
 // CaptureException, or CaptureMessage. To send events synchronously over the network,
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
 
-func (client *Client) FlushWithContext(ctx context.Context) bool {
+func (client *defaultClient) FlushWithContext(ctx context.Context) bool {
 	if client.batchLogger != nil {
 		client.batchLogger.Flush(ctx.Done())
 	}
@@ -807,7 +816,7 @@ func (client *Client) FlushWithContext(ctx context.Context) bool {
 //
 // Close should be called after Flush and before terminating the program
 // otherwise some events may be lost.
-func (client *Client) Close() {
+func (client *defaultClient) Close() {
 	if client.telemetryProcessor != nil {
 		client.telemetryProcessor.Close(5 * time.Second)
 	}
@@ -821,7 +830,7 @@ func (client *Client) Close() {
 }
 
 // EventFromMessage creates an event from the given message string.
-func (client *Client) EventFromMessage(message string, level Level) *Event {
+func (client *defaultClient) EventFromMessage(message string, level Level) *Event {
 	if message == "" {
 		err := usageError{fmt.Errorf("%s called with empty message", callerFunctionName())}
 		return client.EventFromException(err, level)
@@ -842,7 +851,7 @@ func (client *Client) EventFromMessage(message string, level Level) *Event {
 }
 
 // EventFromException creates a new Sentry event from the given `error` instance.
-func (client *Client) EventFromException(exception error, level Level) *Event {
+func (client *defaultClient) EventFromException(exception error, level Level) *Event {
 	event := NewEvent()
 	event.Level = level
 
@@ -857,7 +866,7 @@ func (client *Client) EventFromException(exception error, level Level) *Event {
 }
 
 // EventFromCheckIn creates a new Sentry event from the given `check_in` instance.
-func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
+func (client *defaultClient) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
 	if checkIn == nil {
 		return nil
 	}
@@ -883,21 +892,25 @@ func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorC
 	return event
 }
 
-func (client *Client) SetSDKIdentifier(identifier string) {
+func (client *defaultClient) SetSDKIdentifier(identifier string) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
 	client.sdkIdentifier = identifier
 }
 
-func (client *Client) GetSDKIdentifier() string {
+func (client *defaultClient) GetSDKIdentifier() string {
 	client.mu.RLock()
 	defer client.mu.RUnlock()
 
 	return client.sdkIdentifier
 }
 
-func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
+func (client *defaultClient) GetSDKVersion() string {
+	return SDKVersion
+}
+
+func (client *defaultClient) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
 	if event == nil {
 		err := usageError{fmt.Errorf("%s called with nil event", callerFunctionName())}
 		return client.CaptureException(err, hint, scope)
@@ -958,7 +971,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 	return &event.EventID
 }
 
-func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
+func (client *defaultClient) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
 	if event.EventID == "" {
 		// TODO set EventID when the event is created, same as in other SDKs. It's necessary for profileTransaction.ID.
 		event.EventID = EventID(uuid())
@@ -1055,7 +1068,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	return event
 }
 
-func (client *Client) listIntegrations() []string {
+func (client *defaultClient) listIntegrations() []string {
 	integrations := make([]string, len(client.integrations))
 	for i, integration := range client.integrations {
 		integrations[i] = integration.Name()
@@ -1063,7 +1076,7 @@ func (client *Client) listIntegrations() []string {
 	return integrations
 }
 
-func (client *Client) integrationAlreadyInstalled(name string) bool {
+func (client *defaultClient) integrationAlreadyInstalled(name string) bool {
 	for _, integration := range client.integrations {
 		if integration.Name() == name {
 			return true

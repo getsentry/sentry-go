@@ -49,7 +49,7 @@ func (ee ExtractExtra) Name() string {
 	return "ExtractExtra"
 }
 
-func (ee ExtractExtra) SetupOnce(client *sentry.Client) {
+func (ee ExtractExtra) SetupOnce(client sentry.Client) {
 	client.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 		if ex, ok := hint.OriginalException.(CustomComplexError); ok {
 			for key, val := range ex.GimmeMoreData() {

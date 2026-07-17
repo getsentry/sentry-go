@@ -63,9 +63,7 @@ func (h *handler) handle(c *gin.Context) {
 		hub = sentry.CurrentHub().Clone()
 	}
 
-	if client := hub.Client(); client != nil {
-		client.SetSDKIdentifier(sdkIdentifier)
-	}
+	hub.Client().SetSDKIdentifier(sdkIdentifier)
 
 	transactionName := c.Request.URL.Path
 	transactionSource := sentry.SourceURL

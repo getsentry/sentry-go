@@ -77,12 +77,12 @@ func TestUserMarshalJson(t *testing.T) {
 func TestNewRequest(t *testing.T) {
 	t.Parallel()
 
-	makeClient := func(t *testing.T, dc *DataCollection) *Client {
+	makeClient := func(t *testing.T, dc *DataCollection) *defaultClient {
 		t.Helper()
 		if dc == nil {
 			dc = &DataCollection{}
 		}
-		client, err := NewClient(ClientOptions{
+		client, err := newClient(ClientOptions{
 			Dsn:            "https://key@sentry.io/1",
 			DataCollection: dc,
 		})

@@ -43,7 +43,7 @@ func panicWithArbitraryValue() {
 }
 
 //go:noinline
-func recoverPanic(client *sentry.Client, panicFunc func()) {
+func recoverPanic(client sentry.Client, panicFunc func()) {
 	defer func() {
 		if err := recover(); err != nil {
 			client.Recover(err, nil, nil)
@@ -54,11 +54,11 @@ func recoverPanic(client *sentry.Client, panicFunc func()) {
 }
 
 //go:noinline
-func recoverHandledError(client *sentry.Client) {
+func recoverHandledError(client sentry.Client) {
 	client.Recover(errors.New("boom"), nil, nil)
 }
 
-func newRecoverTestClient(t *testing.T) (*sentry.Client, *sentry.MockTransport) {
+func newRecoverTestClient(t *testing.T) (sentry.Client, *sentry.MockTransport) {
 	t.Helper()
 
 	transport := &sentry.MockTransport{}

@@ -158,7 +158,7 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 
 	hub := sentry.GetHubFromContext(ctx)
 	if h.useCustomProvider {
-		if customHub := h.hubProvider(); customHub != nil && customHub.Client() != nil {
+		if customHub := h.hubProvider(); customHub != nil && customHub.Client().IsEnabled() {
 			hub = customHub
 		}
 	}
@@ -242,7 +242,7 @@ func NewLogHook(levels []logrus.Level, opts sentry.ClientOptions) (Hook, error) 
 
 // NewLogHookFromClient initializes a new Logrus hook which sends logs to the provided
 // sentry client.
-func NewLogHookFromClient(levels []logrus.Level, client *sentry.Client) Hook {
+func NewLogHookFromClient(levels []logrus.Level, client sentry.Client) Hook {
 	defaultHub := sentry.NewHub(client, sentry.NewScope())
 	ctx := sentry.SetHubOnContext(context.Background(), defaultHub)
 	logger := sentry.NewLogger(ctx)

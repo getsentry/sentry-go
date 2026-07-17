@@ -28,7 +28,7 @@ import (
 
 func TestNewClientAllowsEmptyDSN(t *testing.T) {
 	transport := &MockTransport{}
-	client, err := NewClient(ClientOptions{
+	client, err := newClient(ClientOptions{
 		Transport: transport,
 	})
 	if err != nil {
@@ -51,10 +51,10 @@ func (e customComplexError) AnswerToLife() string {
 	return "42"
 }
 
-func setupClientTest() (*Client, *MockScope, *MockTransport) {
+func setupClientTest() (*defaultClient, *MockScope, *MockTransport) {
 	scope := &MockScope{}
 	transport := &MockTransport{}
-	client, _ := NewClient(ClientOptions{
+	client, _ := newClient(ClientOptions{
 		Dsn:       "http://whatever@example.com/1337",
 		Transport: transport,
 		// keep default buffers enabled
@@ -646,7 +646,7 @@ func TestIgnoreErrors(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			scope := &MockScope{}
 			transport := &MockTransport{}
-			client, err := NewClient(ClientOptions{
+			client, err := newClient(ClientOptions{
 				Transport:    transport,
 				IgnoreErrors: tt.ignoreErrors,
 			})
@@ -906,7 +906,7 @@ func TestSampleRate(t *testing.T) {
 	}
 }
 func TestClient_ParseOrgID(t *testing.T) {
-	c, err := NewClient(ClientOptions{
+	c, err := newClient(ClientOptions{
 		Dsn: "https://example@o1.ingest.us.sentry.io/1337",
 	})
 	if err != nil {
@@ -916,7 +916,7 @@ func TestClient_ParseOrgID(t *testing.T) {
 }
 
 func TestClient_ParseOrgIDInvalid(t *testing.T) {
-	c, err := NewClient(ClientOptions{
+	c, err := newClient(ClientOptions{
 		// org id is MaxUint64 + 1, should be considered empty
 		Dsn: "https://example@o18446744073709551616.ingest.us.sentry.io/1337",
 	})
@@ -927,7 +927,7 @@ func TestClient_ParseOrgIDInvalid(t *testing.T) {
 }
 
 func TestClientOptions_OrgIDShouldOverrideParsed(t *testing.T) {
-	c, err := NewClient(ClientOptions{
+	c, err := newClient(ClientOptions{
 		Dsn:   "https://example@o1.ingest.us.sentry.io/1337",
 		OrgID: 2,
 	})
@@ -938,7 +938,7 @@ func TestClientOptions_OrgIDShouldOverrideParsed(t *testing.T) {
 }
 
 func BenchmarkProcessEvent(b *testing.B) {
-	c, err := NewClient(ClientOptions{
+	c, err := newClient(ClientOptions{
 		SampleRate: 0.25,
 		Transport:  &MockTransport{},
 	})
@@ -1039,7 +1039,7 @@ func TestCustomMaxSpansProperty(t *testing.T) {
 	client.options.MaxSpans = 2000
 	assertEqual(t, client.Options().MaxSpans, 2000)
 
-	properClient, _ := NewClient(ClientOptions{
+	properClient, _ := newClient(ClientOptions{
 		MaxSpans:  3000,
 		Transport: &MockTransport{},
 	})
@@ -1056,7 +1056,7 @@ func TestSDKIdentifier(t *testing.T) {
 }
 
 func TestClientSetsUpTransport(t *testing.T) {
-	client, _ := NewClient(ClientOptions{
+	client, _ := newClient(ClientOptions{
 		Dsn: testDsn,
 		HTTPClient: &http.Client{
 			Transport: &http.Transport{
@@ -1072,8 +1072,8 @@ func TestClientSetsUpTransport(t *testing.T) {
 
 type namedIntegration struct{ name string }
 
-func (n *namedIntegration) Name() string        { return n.name }
-func (n *namedIntegration) SetupOnce(_ *Client) {}
+func (n *namedIntegration) Name() string       { return n.name }
+func (n *namedIntegration) SetupOnce(_ Client) {}
 
 func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
 	var (
@@ -1096,7 +1096,7 @@ func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
 	defer srv.Close()
 
 	dsn := strings.Replace(srv.URL, "//", "//pubkey@", 1) + "/1"
-	client, err := NewClient(ClientOptions{
+	client, err := newClient(ClientOptions{
 		Dsn: dsn,
 		Integrations: func(defaults []Integration) []Integration {
 			return append(defaults, &namedIntegration{name: "CustomRegressionIntegration"})
@@ -1137,7 +1137,7 @@ func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
 	debuglog.SetOutput(&buf)
 	defer debuglog.SetOutput(&bytes.Buffer{})
 
-	client, err := NewClient(ClientOptions{})
+	client, err := newClient(ClientOptions{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1149,7 +1149,7 @@ func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
 }
 
 type multiClientEnv struct {
-	client1, client2       *Client
+	client1, client2       *defaultClient
 	transport1, transport2 *MockTransport
 	hub1, hub2             *Hub
 	ctx1, ctx2             context.Context
@@ -1158,9 +1158,9 @@ type multiClientEnv struct {
 
 func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 	t.Helper()
-	mkClient := func(dsn string) (*Client, *MockTransport) {
+	mkClient := func(dsn string) (*defaultClient, *MockTransport) {
 		tr := &MockTransport{}
-		c, err := NewClient(ClientOptions{
+		c, err := newClient(ClientOptions{
 			Dsn:       dsn,
 			Transport: tr,
 			Integrations: func(_ []Integration) []Integration {
