@@ -187,9 +187,11 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 	}{
 		"Valid input": {
 			scope: &Scope{
-				propagationContext: PropagationContext{
-					TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
-					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
+				scopeData: scopeData{
+					propagationContext: PropagationContext{
+						TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+						SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
+					},
 				},
 			},
 			client: func() *Client {
@@ -215,9 +217,11 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 		},
 		"Nil client": {
 			scope: &Scope{
-				propagationContext: PropagationContext{
-					TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
-					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
+				scopeData: scopeData{
+					propagationContext: PropagationContext{
+						TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
+						SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
+					},
 				},
 			},
 			client: nil,
