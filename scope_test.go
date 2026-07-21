@@ -539,6 +539,8 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 
 func TestClear(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
+	processor := func(event *Event, _ *EventHint) *Event { return event }
+	scope.AddEventProcessor(processor)
 	scope.Clear()
 
 	assertEqual(t, []*Breadcrumb{}, scope.breadcrumbs)
@@ -551,6 +553,7 @@ func TestClear(t *testing.T) {
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, (*http.Request)(nil), scope.request)
 	assertEqual(t, (*Span)(nil), scope.GetSpan())
+	assertEqual(t, 1, len(scope.eventProcessors))
 }
 
 func TestClearAndReconfigure(t *testing.T) {
