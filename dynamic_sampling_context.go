@@ -117,9 +117,8 @@ func (d DynamicSamplingContext) String() string {
 	return baggage.String()
 }
 
-// DynamicSamplingContextFromScope Constructs a new DynamicSamplingContext using a scope and client. Accessing
-// fields on the scope are not thread safe, and this function should only be
-// called within scope methods.
+// DynamicSamplingContextFromScope constructs a new DynamicSamplingContext
+// using a scope and client.
 func DynamicSamplingContextFromScope(scope *Scope, client Client) DynamicSamplingContext {
 	entries := map[string]string{}
 	client = normalizeClient(client)
@@ -131,7 +130,15 @@ func DynamicSamplingContextFromScope(scope *Scope, client Client) DynamicSamplin
 		}
 	}
 
-	propagationContext := scope.propagationContext
+	return dynamicSamplingContextFromPropagationContext(scope.propagationContextSnapshot(), client)
+}
+
+func dynamicSamplingContextFromPropagationContext(propagationContext PropagationContext, client Client) DynamicSamplingContext {
+	entries := map[string]string{}
+	client = normalizeClient(client)
+	if !client.IsEnabled() {
+		return DynamicSamplingContext{Entries: entries, Frozen: false}
+	}
 
 	if traceID := propagationContext.TraceID.String(); traceID != "" {
 		entries["trace_id"] = traceID

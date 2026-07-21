@@ -351,84 +351,148 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 	scope.eventProcessors = append(scope.eventProcessors, processor)
 }
 
+type scopeSnapshot struct {
+	scopeData
+	eventProcessors []EventProcessor
+}
+
+// snapshotScopes copies and merges scopes from least to most specific.
+func snapshotScopes(client Client, scopes ...*Scope) scopeSnapshot {
+	var snapshot scopeSnapshot
+	for _, scope := range scopes {
+		if scope == nil {
+			continue
+		}
+		scope.mu.RLock()
+		snapshot.mergeLocked(scope)
+		scope.mu.RUnlock()
+	}
+
+	limit := normalizeClient(client).clientOptions().MaxBreadcrumbs
+	switch {
+	case limit < 0:
+		snapshot.breadcrumbs = nil
+	case limit == 0:
+		limit = defaultMaxBreadcrumbs
+	}
+	if limit >= 0 && len(snapshot.breadcrumbs) > limit {
+		snapshot.breadcrumbs = snapshot.breadcrumbs[len(snapshot.breadcrumbs)-limit:]
+	}
+
+	return snapshot
+}
+
+// mergeLocked copies scope data into snapshot. The caller must hold scope.mu
+// for reading. It does not invoke user callbacks.
+func (snapshot *scopeSnapshot) mergeLocked(scope *Scope) {
+	snapshot.breadcrumbs = append(snapshot.breadcrumbs, scope.breadcrumbs...)
+	snapshot.attachments = append(snapshot.attachments, scope.attachments...)
+	snapshot.eventProcessors = append(snapshot.eventProcessors, scope.eventProcessors...)
+
+	if snapshot.attributes == nil {
+		snapshot.attributes = make(map[string]attribute.Value, len(scope.attributes))
+	}
+	for key, value := range scope.attributes {
+		snapshot.attributes[key] = value
+	}
+	if snapshot.tags == nil {
+		snapshot.tags = make(map[string]string, len(scope.tags))
+	}
+	for key, value := range scope.tags {
+		snapshot.tags[key] = value
+	}
+	if snapshot.contexts == nil {
+		snapshot.contexts = make(map[string]Context, len(scope.contexts))
+	}
+	for key, value := range scope.contexts {
+		snapshot.contexts[key] = value
+	}
+
+	if !scope.user.IsEmpty() {
+		snapshot.user = scope.user
+	}
+	if len(scope.fingerprint) > 0 {
+		snapshot.fingerprint = append(snapshot.fingerprint[:0], scope.fingerprint...)
+	}
+	if scope.level != "" {
+		snapshot.level = scope.level
+	}
+	if scope.request != nil {
+		snapshot.request = scope.request
+		snapshot.requestBody = scope.requestBody
+	}
+
+	snapshot.propagationContext = scope.propagationContext
+	if scope.span != nil {
+		snapshot.span = scope.span
+	}
+}
+
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
-func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client Client) *Event { //nolint:gocyclo
+func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client Client) *Event {
+	return snapshotScopes(client, scope).applyToEvent(event, hint, client)
+}
+
+func (snapshot scopeSnapshot) applyToEvent(event *Event, hint *EventHint, client Client) *Event { //nolint:gocyclo
 	client = normalizeClient(client)
 
-	scope.mu.RLock()
-	defer scope.mu.RUnlock()
-
-	if len(scope.breadcrumbs) > 0 {
-		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
+	if len(snapshot.breadcrumbs) > 0 {
+		event.Breadcrumbs = append(event.Breadcrumbs, snapshot.breadcrumbs...)
 	}
-
-	if len(scope.attachments) > 0 {
-		event.Attachments = append(event.Attachments, scope.attachments...)
+	if len(snapshot.attachments) > 0 {
+		event.Attachments = append(event.Attachments, snapshot.attachments...)
 	}
-
-	if len(scope.tags) > 0 {
+	if len(snapshot.tags) > 0 {
 		if event.Tags == nil {
-			event.Tags = make(map[string]string, len(scope.tags))
+			event.Tags = make(map[string]string, len(snapshot.tags))
 		}
-
-		for key, value := range scope.tags {
-			event.Tags[key] = value
+		for key, value := range snapshot.tags {
+			if _, ok := event.Tags[key]; !ok {
+				event.Tags[key] = value
+			}
 		}
 	}
-
-	if len(scope.contexts) > 0 {
+	if len(snapshot.contexts) > 0 {
 		if event.Contexts == nil {
 			event.Contexts = make(map[string]Context)
 		}
-
-		for key, value := range scope.contexts {
+		for key, value := range snapshot.contexts {
 			if key == "trace" && event.Type == transactionType {
-				// Do not override trace context of
-				// transactions, otherwise it breaks the
-				// transaction event representation.
-				// For error events, the trace context is used
-				// to link errors and traces/spans in Sentry.
 				continue
 			}
-
-			// Ensure we are not overwriting event fields
 			if _, ok := event.Contexts[key]; !ok {
 				event.Contexts[key] = cloneContext(value)
 			}
 		}
 	}
-
 	if event.Contexts == nil {
 		event.Contexts = make(map[string]Context)
 	}
 
-	if scope.span != nil {
+	if snapshot.span != nil {
 		if _, ok := event.Contexts["trace"]; !ok {
-			event.Contexts["trace"] = scope.span.traceContext().Map()
+			event.Contexts["trace"] = snapshot.span.traceContext().Map()
 		}
-
-		transaction := scope.span.GetTransaction()
-		if transaction != nil {
+		if transaction := snapshot.span.GetTransaction(); transaction != nil {
 			event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
 		}
 	} else {
-		event.Contexts["trace"] = scope.propagationContext.Map()
-
-		dsc := scope.propagationContext.DynamicSamplingContext
+		if _, ok := event.Contexts["trace"]; !ok {
+			event.Contexts["trace"] = snapshot.propagationContext.Map()
+		}
+		dsc := snapshot.propagationContext.DynamicSamplingContext
 		if !dsc.HasEntries() {
-			dsc = DynamicSamplingContextFromScope(scope, client)
+			dsc = dynamicSamplingContextFromPropagationContext(snapshot.propagationContext, client)
 		}
 		event.sdkMetaData.dsc = dsc
 	}
 
-	// If an external trace resolver is registered (e.g. OTel), override
-	// trace/span IDs from the hint context or the scope's request context.
 	var ctx context.Context
 	if hint != nil {
 		ctx = hint.Context
 	}
-	if ctx == nil && scope.request != nil {
-		ctx = scope.request.Context()
+	if ctx == nil && snapshot.request != nil {
+		ctx = snapshot.request.Context()
 	}
 	if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); event.Type != transactionType && ok {
 		traceCtx := event.Contexts["trace"]
@@ -437,19 +501,16 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client Client) *
 	}
 
 	if event.User.IsEmpty() {
-		event.User = scope.user
+		event.User = snapshot.user
 	}
-
 	if len(event.Fingerprint) == 0 {
-		event.Fingerprint = append(event.Fingerprint, scope.fingerprint...)
+		event.Fingerprint = append(event.Fingerprint, snapshot.fingerprint...)
 	}
-
-	if scope.level != "" {
-		event.Level = scope.level
+	if event.Level == "" {
+		event.Level = snapshot.level
 	}
-
-	if event.Request == nil && scope.request != nil {
-		event.Request = newRequest(scope.request, client)
+	if event.Request == nil && snapshot.request != nil {
+		event.Request = newRequest(snapshot.request, client)
 		// NOTE: The SDK does not attempt to send partial request body data.
 		//
 		// The reason being that Sentry's ingest pipeline and UI are optimized
@@ -460,12 +521,12 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client Client) *
 		// Users can still send more data along their events if they want to,
 		// for example using Event.Contexts.
 		dc := client.GetDataCollection()
-		if scope.requestBody != nil && !scope.requestBody.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
-			event.Request.Data = dc.FilterHTTPBody(scope.requestBody.Bytes(), scope.request.Header.Get("Content-Type"))
+		if snapshot.requestBody != nil && !snapshot.requestBody.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
+			event.Request.Data = dc.FilterHTTPBody(snapshot.requestBody.Bytes(), snapshot.request.Header.Get("Content-Type"))
 		}
 	}
 
-	for _, processor := range scope.eventProcessors {
+	for _, processor := range snapshot.eventProcessors {
 		id := event.EventID
 		category := event.toCategory()
 		spanCountBefore := event.GetSpanCount()

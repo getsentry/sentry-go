@@ -24,7 +24,10 @@ func fillScopeWithData(scope *Scope) *Scope {
 		},
 	}
 	scope.user = User{ID: "1337"}
-	scope.tags = map[string]string{"scopeTagKey": "scopeTagValue"}
+	scope.tags = map[string]string{
+		"scopeTagKey":  "scopeTagValue",
+		"sharedTagKey": "scopeTagValue",
+	}
 	scope.contexts = map[string]Context{
 		"scopeContextsKey": {"scopeContextKey": "scopeContextValue"},
 		sharedContextsKey:  {"scopeContextKey": "scopeContextValue"},
@@ -46,7 +49,10 @@ func fillEventWithData(event *Event) *Event {
 		},
 	}
 	event.User = User{ID: "42"}
-	event.Tags = map[string]string{"eventTagKey": "eventTagValue"}
+	event.Tags = map[string]string{
+		"eventTagKey":  "eventTagValue",
+		"sharedTagKey": "eventTagValue",
+	}
 	event.Contexts = map[string]Context{
 		"eventContextsKey": {"eventContextKey": "eventContextValue"},
 		sharedContextsKey:  {"eventContextKey": "eventContextKey"},
@@ -610,10 +616,11 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 
 	assertEqual(t, 2, len(processedEvent.Breadcrumbs), "should merge breadcrumbs")
 	assertEqual(t, 2, len(processedEvent.Attachments), "should merge attachments")
-	assertEqual(t, 2, len(processedEvent.Tags), "should merge tags")
+	assertEqual(t, 3, len(processedEvent.Tags), "should merge tags")
+	assertEqual(t, "eventTagValue", processedEvent.Tags["sharedTagKey"], "should not override event tags")
 	assertEqual(t, 4, len(processedEvent.Contexts), "should merge contexts")
 	assertEqual(t, event.Contexts[sharedContextsKey], processedEvent.Contexts[sharedContextsKey], "should not override event trace context")
-	assertEqual(t, LevelDebug, processedEvent.Level, "should use event level if set")
+	assertEqual(t, LevelInfo, processedEvent.Level, "should use event level if set")
 	assertEqual(t, event.User, processedEvent.User, "should use event user if one exists")
 	assertEqual(t, event.Request, processedEvent.Request, "should use event request if one exists")
 	assertEqual(t, event.Fingerprint, processedEvent.Fingerprint, "should use event fingerprints if they exist")
@@ -629,7 +636,7 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 	processedEvent := scope.ApplyToEvent(event, nil, noopClient{})
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
 	assertEqual(t, len(processedEvent.Attachments), 1, "should use event attachments")
-	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
+	assertEqual(t, len(processedEvent.Tags), 2, "should use event tags")
 	assertEqual(t, len(processedEvent.Contexts), 3, "should use event contexts")
 	assertEqual(t, processedEvent.User, event.User, "should use event user")
 	assertEqual(t, processedEvent.Fingerprint, event.Fingerprint, "should use event fingerprint")
@@ -644,7 +651,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	processedEvent := scope.ApplyToEvent(event, nil, noopClient{})
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
 	assertEqual(t, len(processedEvent.Attachments), 1, "should use scope attachments")
-	assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
+	assertEqual(t, len(processedEvent.Tags), 2, "should use scope tags")
 	assertEqual(t, len(processedEvent.Contexts), 3, "should use scope contexts")
 	assertEqual(t, processedEvent.User, scope.user, "should use scope user")
 	assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
