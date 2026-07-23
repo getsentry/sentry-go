@@ -221,7 +221,11 @@ func (hub *Hub) CaptureEventWithHint(event *Event, hint *EventHint) *EventID {
 	if scope == nil {
 		return nil
 	}
-	eventID := client.CaptureEvent(event, hint, scope)
+	ctx := contextFromScope(scope)
+	if hint != nil && hint.Context != nil {
+		ctx = hint.Context
+	}
+	eventID := client.CaptureEvent(ctx, event, WithEventHint(hint), withLegacyScope(scope))
 
 	if event.Type != transactionType && eventID != nil {
 		hub.mu.Lock()
@@ -239,7 +243,7 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 	if scope == nil {
 		return nil
 	}
-	eventID := client.CaptureMessage(message, nil, scope)
+	eventID := client.CaptureMessage(contextFromScope(scope), message, withLegacyScope(scope))
 
 	if eventID != nil {
 		hub.mu.Lock()
@@ -257,7 +261,7 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 	if scope == nil {
 		return nil
 	}
-	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
+	eventID := client.CaptureException(contextFromScope(scope), exception, WithEventHint(&EventHint{OriginalException: exception}), withLegacyScope(scope))
 
 	if eventID != nil {
 		hub.mu.Lock()
@@ -271,7 +275,8 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 // passing it a top-level Scope.
 // Returns CheckInID if the check-in was captured successfully, or nil otherwise.
 func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
-	return hub.Client().CaptureCheckIn(checkIn, monitorConfig, hub.Scope())
+	scope := hub.Scope()
+	return hub.Client().CaptureCheckIn(contextFromScope(scope), checkIn, monitorConfig, withLegacyScope(scope))
 }
 
 // AddBreadcrumb records a new breadcrumb.
@@ -314,7 +319,7 @@ func (hub *Hub) Recover(err interface{}) *EventID {
 	if scope == nil {
 		return nil
 	}
-	return client.Recover(err, &EventHint{RecoveredException: err}, scope)
+	return client.Recover(contextFromScope(scope), err, WithEventHint(&EventHint{RecoveredException: err}), withLegacyScope(scope))
 }
 
 // RecoverWithContext calls the method of a same name on currently bound Client instance
@@ -328,7 +333,28 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 	if scope == nil {
 		return nil
 	}
-	return client.RecoverWithContext(ctx, err, &EventHint{RecoveredException: err}, scope)
+	if ctx == nil {
+		ctx = contextFromScope(scope)
+	}
+	return client.Recover(ctx, err, WithEventHint(&EventHint{RecoveredException: err}), withLegacyScope(scope))
+}
+
+// contextFromScope returns the scope request's context when available.
+//
+// This is just a backwards compatibility layer for hub based captures. Should
+// be removed when we remove the hub.
+func contextFromScope(scope *Scope) context.Context {
+	if scope == nil {
+		return context.Background()
+	}
+
+	scope.mu.RLock()
+	request := scope.request
+	scope.mu.RUnlock()
+	if request != nil {
+		return request.Context()
+	}
+	return context.Background()
 }
 
 // Flush waits until the underlying Transport sends any buffered events to the

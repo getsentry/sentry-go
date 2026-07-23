@@ -30,6 +30,9 @@ type Scope struct {
 	boundClient Client
 	// eventProcessors are retained by Clear and inherited by Clone.
 	eventProcessors []EventProcessor
+	// lastEventID is the ID of the last non-transaction, non-dropped event
+	// captured through this scope.
+	lastEventID EventID
 
 	// scopeData keeps track of all scope specific data
 	scopeData
@@ -335,7 +338,24 @@ func (data scopeData) clone() scopeData {
 	return clone
 }
 
-// Clear removes data from the scope while retaining event processors.
+// LastEventID returns the ID of the last non-transaction event captured
+// through this scope. Returns an empty EventID when no event has been captured
+// or the last capture was dropped.
+func (scope *Scope) LastEventID() EventID {
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+	return scope.lastEventID
+}
+
+// setLastEventID updates the scope's last event ID.
+func (scope *Scope) setLastEventID(id EventID) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+	scope.lastEventID = id
+}
+
+// Clear removes data from the scope while retaining event processors, client
+// binding, and last event ID.
 func (scope *Scope) Clear() {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
@@ -431,6 +451,11 @@ func (snapshot *scopeSnapshot) mergeLocked(scope *Scope) {
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
 func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client Client) *Event {
 	return snapshotScopes(client, scope).applyToEvent(event, hint, client)
+}
+
+// ApplyToEvent implements [EventModifier] for a pre-built snapshot.
+func (snapshot scopeSnapshot) ApplyToEvent(event *Event, hint *EventHint, client Client) *Event {
+	return snapshot.applyToEvent(event, hint, client)
 }
 
 func (snapshot scopeSnapshot) applyToEvent(event *Event, hint *EventHint, client Client) *Event { //nolint:gocyclo

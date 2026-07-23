@@ -1,6 +1,7 @@
 package sentry_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -46,7 +47,7 @@ func panicWithArbitraryValue() {
 func recoverPanic(client sentry.Client, panicFunc func()) {
 	defer func() {
 		if err := recover(); err != nil {
-			client.Recover(err, nil, nil)
+			client.Recover(context.Background(), err)
 		}
 	}()
 
@@ -55,7 +56,7 @@ func recoverPanic(client sentry.Client, panicFunc func()) {
 
 //go:noinline
 func recoverHandledError(client sentry.Client) {
-	client.Recover(errors.New("boom"), nil, nil)
+	client.Recover(context.Background(), errors.New("boom"))
 }
 
 func newRecoverTestClient(t *testing.T) (sentry.Client, *sentry.MockTransport) {

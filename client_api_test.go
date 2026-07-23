@@ -33,22 +33,22 @@ func TestNoopClient(t *testing.T) {
 	})
 	client.SetSDKIdentifier("custom")
 
-	if got := client.CaptureMessage("message", nil, nil); got != nil {
+	if got := client.CaptureMessage(context.Background(), "message", withLegacyScope(nil)); got != nil {
 		t.Errorf("CaptureMessage returned %v, want nil", got)
 	}
-	if got := client.CaptureException(errors.New("boom"), nil, nil); got != nil {
+	if got := client.CaptureException(context.Background(), errors.New("boom"), withLegacyScope(nil)); got != nil {
 		t.Errorf("CaptureException returned %v, want nil", got)
 	}
-	if got := client.CaptureCheckIn(&CheckIn{}, nil, nil); got != nil {
+	if got := client.CaptureCheckIn(t.Context(), &CheckIn{}, nil); got != nil {
 		t.Errorf("CaptureCheckIn returned %v, want nil", got)
 	}
-	if got := client.CaptureEvent(NewEvent(), nil, nil); got != nil {
+	if got := client.CaptureEvent(context.Background(), NewEvent(), withLegacyScope(nil)); got != nil {
 		t.Errorf("CaptureEvent returned %v, want nil", got)
 	}
-	if got := client.Recover(errors.New("boom"), nil, nil); got != nil {
+	if got := client.Recover(t.Context(), errors.New("boom")); got != nil {
 		t.Errorf("Recover returned %v, want nil", got)
 	}
-	if got := client.RecoverWithContext(t.Context(), errors.New("boom"), nil, nil); got != nil {
+	if got := client.Recover(t.Context(), errors.New("boom")); got != nil {
 		t.Errorf("RecoverWithContext returned %v, want nil", got)
 	}
 

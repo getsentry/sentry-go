@@ -613,34 +613,36 @@ func (client *defaultClient) GetDataCollection() DataCollection {
 }
 
 // CaptureMessage captures an arbitrary message.
-func (client *defaultClient) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
-	event := client.EventFromMessage(message, LevelInfo)
-	return client.CaptureEvent(event, hint, scope)
+func (client *defaultClient) CaptureMessage(ctx context.Context, message string, options ...CaptureOption) *EventID {
+	return client.CaptureEvent(ctx, client.EventFromMessage(message, LevelInfo), options...)
 }
 
 // CaptureException captures an error.
-func (client *defaultClient) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
-	event := client.EventFromException(exception, LevelError)
-	return client.CaptureEvent(event, hint, scope)
+func (client *defaultClient) CaptureException(ctx context.Context, exception error, options ...CaptureOption) *EventID {
+	return client.CaptureEvent(ctx, client.EventFromException(exception, LevelError), append(options, withDefaultOriginalException(exception))...)
 }
 
 // CaptureCheckIn captures a check in.
-func (client *defaultClient) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
+func (client *defaultClient) CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig, options ...CaptureOption) *EventID {
 	event := client.EventFromCheckIn(checkIn, monitorConfig)
-	if event != nil && event.CheckIn != nil {
-		client.CaptureEvent(event, nil, scope)
-		return &event.CheckIn.ID
+	if event == nil || event.CheckIn == nil {
+		return nil
 	}
-	return nil
+	id := event.CheckIn.ID
+	if client.CaptureEvent(ctx, event, options...) == nil {
+		return nil
+	}
+	return &id
 }
 
-// CaptureEvent captures an event on the currently active client if any.
-//
-// The event must already be assembled. Typically, code would instead use
-// the utility methods like CaptureException. The return value is the
-// event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
-func (client *defaultClient) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
-	return client.processEvent(event, hint, scope)
+// CaptureEvent captures an event on this client.
+func (client *defaultClient) CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *EventID {
+	hint, scope, owner := resolveCaptureOptions(ctx, client, options)
+	id := client.processEvent(event, hint, scope)
+	if id != nil && event != nil && event.Type != transactionType && owner != nil {
+		owner.setLastEventID(*id)
+	}
+	return id
 }
 
 func (client *defaultClient) captureLog(log *Log, _ *Scope) bool {
@@ -716,45 +718,15 @@ func (client *defaultClient) captureMetric(metric *Metric, _ *Scope) bool {
 	return true
 }
 
-// Recover captures a panic.
-// Returns EventID if successfully, or nil if there's no error to recover from.
-func (client *defaultClient) Recover(err any, hint *EventHint, scope EventModifier) *EventID {
-	if err == nil {
-		err = recover()
-	}
-
-	// Normally we would not pass a nil Context, but RecoverWithContext doesn't
-	// use the Context for communicating deadline nor cancelation. All it does
-	// is store the Context in the EventHint and there nil means the Context is
-	// not available.
-	// nolint: staticcheck
-	return client.RecoverWithContext(nil, err, hint, scope)
-}
-
-// RecoverWithContext captures a panic and passes relevant context object.
-// Returns EventID if successfully, or nil if there's no error to recover from.
-func (client *defaultClient) RecoverWithContext(
-	ctx context.Context,
-	err any,
-	hint *EventHint,
-	scope EventModifier,
-) *EventID {
+// Recover captures a panic or an explicitly supplied recovered value.
+func (client *defaultClient) Recover(ctx context.Context, err any, options ...CaptureOption) *EventID {
 	if err == nil {
 		err = recover()
 	}
 	if err == nil {
 		return nil
 	}
-
-	if ctx != nil {
-		if hint == nil {
-			hint = &EventHint{}
-		}
-		if hint.Context == nil {
-			hint.Context = ctx
-		}
-	}
-
+	options = append(options, withDefaultRecoveredException(err))
 	var event *Event
 	switch err := err.(type) {
 	case error:
@@ -764,7 +736,7 @@ func (client *defaultClient) RecoverWithContext(
 	default:
 		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
 	}
-	return client.CaptureEvent(event, hint, scope)
+	return client.CaptureEvent(ctx, event, options...)
 }
 
 // Flush waits until the underlying Transport sends any buffered events to the
@@ -913,7 +885,7 @@ func (client *defaultClient) GetSDKVersion() string {
 func (client *defaultClient) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
 	if event == nil {
 		err := usageError{fmt.Errorf("%s called with nil event", callerFunctionName())}
-		return client.CaptureException(err, hint, scope)
+		return client.processEvent(client.EventFromException(err, LevelError), hint, scope)
 	}
 
 	// Transactions are sampled by options.TracesSampleRate or

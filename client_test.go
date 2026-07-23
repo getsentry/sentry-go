@@ -35,7 +35,7 @@ func TestNewClientAllowsEmptyDSN(t *testing.T) {
 		t.Fatalf("expected no error when creating client without a DNS but got %v", err)
 	}
 
-	client.CaptureException(errors.New("custom error"), nil, &MockScope{})
+	client.CaptureException(context.Background(), errors.New("custom error"), withLegacyScope(&MockScope{}))
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
 }
 
@@ -67,19 +67,19 @@ func setupClientTest() (*defaultClient, *MockScope, *MockTransport) {
 }
 func TestCaptureMessageShouldSendEventWithProvidedMessage(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	client.CaptureMessage("foo", nil, scope)
+	client.CaptureMessage(context.Background(), "foo", withLegacyScope(scope))
 	assertEqual(t, transport.lastEvent.Message, "foo")
 }
 
 func TestCaptureMessageShouldSucceedWithoutNilScope(t *testing.T) {
 	client, _, transport := setupClientTest()
-	client.CaptureMessage("foo", nil, nil)
+	client.CaptureMessage(context.Background(), "foo", withLegacyScope(nil))
 	assertEqual(t, transport.lastEvent.Message, "foo")
 }
 
 func TestCaptureMessageEmptyString(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	client.CaptureMessage("", nil, scope)
+	client.CaptureMessage(context.Background(), "", withLegacyScope(scope))
 	want := &Event{
 		Exception: []Exception{
 			{
@@ -287,7 +287,7 @@ func TestCaptureException(t *testing.T) {
 			tt := tt
 			t.Run(grp.name+"/"+tt.name, func(t *testing.T) {
 				client, _, transport := setupClientTest()
-				client.CaptureException(tt.err, nil, nil)
+				client.CaptureException(context.Background(), tt.err, withLegacyScope(nil))
 				if transport.lastEvent == nil {
 					t.Fatal("missing event")
 				}
@@ -307,11 +307,11 @@ func TestCaptureEvent(t *testing.T) {
 	timestamp := time.Now().UTC()
 	serverName := "testServer"
 
-	client.CaptureEvent(&Event{
+	client.CaptureEvent(context.Background(), &Event{
 		EventID:    eventID,
 		Timestamp:  timestamp,
 		ServerName: serverName,
-	}, nil, nil)
+	})
 
 	if transport.lastEvent == nil {
 		t.Fatal("missing event")
@@ -340,7 +340,7 @@ func TestCaptureEvent(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release"), cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe")}
+	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "Contexts"), cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe")}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
@@ -350,13 +350,13 @@ func TestCaptureEventShouldSendEventWithMessage(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	event := NewEvent()
 	event.Message = "event message"
-	client.CaptureEvent(event, nil, scope)
+	client.CaptureEvent(context.Background(), event, withLegacyScope(scope))
 	assertEqual(t, transport.lastEvent.Message, "event message")
 }
 
 func TestCaptureEventNil(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	client.CaptureEvent(nil, nil, scope)
+	client.CaptureEvent(context.Background(), nil, withLegacyScope(scope))
 	want := &Event{
 		Exception: []Exception{
 			{
@@ -443,7 +443,7 @@ func TestCaptureCheckIn(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			client, _, transport := setupClientTest()
-			client.CaptureCheckIn(tt.checkIn, tt.monitorConfig, nil)
+			client.CaptureCheckIn(context.Background(), tt.checkIn, tt.monitorConfig)
 			capturedEvent := transport.lastEvent
 
 			if tt.expectNilEvent && capturedEvent == nil {
@@ -480,18 +480,18 @@ func TestCaptureCheckInExistingID(t *testing.T) {
 		Timezone:      "UTC",
 	}
 
-	checkInID := client.CaptureCheckIn(&CheckIn{
+	checkInID := client.CaptureCheckIn(context.Background(), &CheckIn{
 		MonitorSlug: "cron",
 		Status:      CheckInStatusInProgress,
 		Duration:    time.Second,
-	}, monitorConfig, nil)
+	}, monitorConfig)
 
-	checkInID2 := client.CaptureCheckIn(&CheckIn{
+	checkInID2 := client.CaptureCheckIn(context.Background(), &CheckIn{
 		ID:          *checkInID,
 		MonitorSlug: "cron",
 		Status:      CheckInStatusOK,
 		Duration:    time.Minute,
-	}, monitorConfig, nil)
+	}, monitorConfig)
 
 	if *checkInID != *checkInID2 {
 		t.Errorf("Expecting equivalent CheckInID: %s and %s", *checkInID, *checkInID2)
@@ -502,7 +502,7 @@ func TestSampleRateCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.options.SampleRate = 0.000000000000001
 
-	client.CaptureMessage("Foo", nil, scope)
+	client.CaptureMessage(context.Background(), "Foo", withLegacyScope(scope))
 
 	if transport.lastEvent != nil {
 		t.Error("expected event to be dropped")
@@ -520,7 +520,7 @@ func TestApplyToScopeCanDropEvent(t *testing.T) {
 		return event
 	})
 
-	client.CaptureMessage("Foo", nil, scope)
+	client.CaptureMessage(context.Background(), "Foo", withLegacyScope(scope))
 
 	if transport.lastEvent != nil {
 		t.Error("expected event to be dropped")
@@ -533,7 +533,7 @@ func TestBeforeSendCanDropEvent(t *testing.T) {
 		return nil
 	}
 
-	client.CaptureMessage("Foo", nil, scope)
+	client.CaptureMessage(context.Background(), "Foo", withLegacyScope(scope))
 
 	if transport.lastEvent != nil {
 		t.Error("expected event to be dropped")
@@ -550,7 +550,7 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	}
 	ex := customComplexError{Message: "Foo"}
 
-	client.CaptureException(ex, &EventHint{OriginalException: ex}, scope)
+	client.CaptureException(context.Background(), ex, WithEventHint(&EventHint{OriginalException: ex}), withLegacyScope(scope))
 
 	assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
 }
@@ -654,7 +654,7 @@ func TestIgnoreErrors(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			client.CaptureMessage(tt.message, nil, scope)
+			client.CaptureMessage(context.Background(), tt.message, withLegacyScope(scope))
 
 			dropped := transport.lastEvent == nil
 			if tt.expectDrop != dropped {
@@ -1003,7 +1003,7 @@ func TestRecover(t *testing.T) {
 		t.Run(fmt.Sprintf("Recover/%v", tt.v), func(t *testing.T) {
 			client, scope, transport := setupClientTest()
 			func() {
-				defer client.Recover(nil, nil, scope)
+				defer func() { client.Recover(context.Background(), recover(), withLegacyScope(scope)) }()
 				panic(tt.v)
 			}()
 			tt.want.Level = LevelFatal
@@ -1020,7 +1020,7 @@ func TestRecover(t *testing.T) {
 				return event
 			})
 			func() {
-				defer client.RecoverWithContext(context.TODO(), nil, nil, scope)
+				defer func() { client.Recover(context.TODO(), recover(), withLegacyScope(scope)) }()
 				panic(tt.v)
 			}()
 			tt.want.Level = LevelFatal
@@ -1105,7 +1105,7 @@ func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { client.Close() })
 
-	client.CaptureMessage("ping", nil, &MockScope{})
+	client.CaptureMessage(context.Background(), "ping", withLegacyScope(&MockScope{}))
 	require.True(t, client.Flush(testutils.FlushTimeout()), "flush timed out")
 
 	select {

@@ -18,12 +18,11 @@ type Client interface {
 	Options() ClientOptions
 	clientOptions() *ClientOptions
 	GetDataCollection() DataCollection
-	CaptureMessage(string, *EventHint, EventModifier) *EventID
-	CaptureException(error, *EventHint, EventModifier) *EventID
-	CaptureCheckIn(*CheckIn, *MonitorConfig, EventModifier) *EventID
-	CaptureEvent(*Event, *EventHint, EventModifier) *EventID
-	Recover(any, *EventHint, EventModifier) *EventID
-	RecoverWithContext(context.Context, any, *EventHint, EventModifier) *EventID
+	CaptureMessage(context.Context, string, ...CaptureOption) *EventID
+	CaptureException(context.Context, error, ...CaptureOption) *EventID
+	CaptureCheckIn(context.Context, *CheckIn, *MonitorConfig, ...CaptureOption) *EventID
+	CaptureEvent(context.Context, *Event, ...CaptureOption) *EventID
+	Recover(context.Context, any, ...CaptureOption) *EventID
 	Flush(time.Duration) bool
 	FlushWithContext(context.Context) bool
 	Close()
@@ -70,28 +69,25 @@ func (noopClient) IsEnabled() bool                  { return false }
 func (noopClient) AddEventProcessor(EventProcessor) {}
 func (noopClient) SetExternalContextTraceResolver(func(context.Context) (TraceID, SpanID, bool)) {
 }
-func (noopClient) Options() ClientOptions                                     { return noopClientOptions }
-func (noopClient) clientOptions() *ClientOptions                              { return &noopClientOptions }
-func (noopClient) GetDataCollection() DataCollection                          { return DataCollection{} }
-func (noopClient) CaptureMessage(string, *EventHint, EventModifier) *EventID  { return nil }
-func (noopClient) CaptureException(error, *EventHint, EventModifier) *EventID { return nil }
-func (noopClient) CaptureCheckIn(*CheckIn, *MonitorConfig, EventModifier) *EventID {
+func (noopClient) Options() ClientOptions                                             { return noopClientOptions }
+func (noopClient) clientOptions() *ClientOptions                                      { return &noopClientOptions }
+func (noopClient) GetDataCollection() DataCollection                                  { return DataCollection{} }
+func (noopClient) CaptureMessage(context.Context, string, ...CaptureOption) *EventID  { return nil }
+func (noopClient) CaptureException(context.Context, error, ...CaptureOption) *EventID { return nil }
+func (noopClient) CaptureCheckIn(context.Context, *CheckIn, *MonitorConfig, ...CaptureOption) *EventID {
 	return nil
 }
-func (noopClient) CaptureEvent(*Event, *EventHint, EventModifier) *EventID { return nil }
-func (noopClient) Recover(any, *EventHint, EventModifier) *EventID         { return nil }
-func (noopClient) RecoverWithContext(context.Context, any, *EventHint, EventModifier) *EventID {
-	return nil
-}
-func (noopClient) Flush(time.Duration) bool                         { return true }
-func (noopClient) FlushWithContext(context.Context) bool            { return true }
-func (noopClient) Close()                                           {}
-func (noopClient) EventFromMessage(string, Level) *Event            { return nil }
-func (noopClient) EventFromException(error, Level) *Event           { return nil }
-func (noopClient) EventFromCheckIn(*CheckIn, *MonitorConfig) *Event { return nil }
-func (noopClient) SetSDKIdentifier(string)                          {}
-func (noopClient) GetSDKIdentifier() string                         { return sdkIdentifier }
-func (noopClient) GetSDKVersion() string                            { return SDKVersion }
+func (noopClient) CaptureEvent(context.Context, *Event, ...CaptureOption) *EventID { return nil }
+func (noopClient) Recover(context.Context, any, ...CaptureOption) *EventID         { return nil }
+func (noopClient) Flush(time.Duration) bool                                        { return true }
+func (noopClient) FlushWithContext(context.Context) bool                           { return true }
+func (noopClient) Close()                                                          {}
+func (noopClient) EventFromMessage(string, Level) *Event                           { return nil }
+func (noopClient) EventFromException(error, Level) *Event                          { return nil }
+func (noopClient) EventFromCheckIn(*CheckIn, *MonitorConfig) *Event                { return nil }
+func (noopClient) SetSDKIdentifier(string)                                         {}
+func (noopClient) GetSDKIdentifier() string                                        { return sdkIdentifier }
+func (noopClient) GetSDKVersion() string                                           { return SDKVersion }
 func (noopClient) externalTraceContextFromContext(context.Context) (TraceID, SpanID, bool) {
 	return TraceID{}, SpanID{}, false
 }
