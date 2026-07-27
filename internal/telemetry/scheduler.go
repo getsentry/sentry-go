@@ -3,13 +3,33 @@ package telemetry
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/getsentry/sentry-go/report"
 )
+
+// pendingFlushPollInterval is how often FlushWithContext polls the pending
+// counter while waiting for buffered items to be handed off for processing.
+const pendingFlushPollInterval = 5 * time.Millisecond
+
+// SpotlightSender forwards a copy of sent envelopes to a local Spotlight
+// sidecar (https://spotlightjs.com/) for local development debugging.
+// Send is called from the scheduler's processing loop and must not block -
+// slow or failing sends should be handled internally (e.g. a background
+// goroutine with its own backoff).
+type SpotlightSender interface {
+	Send(envelope *protocol.Envelope)
+
+	// FlushWithContext waits for in-flight sends to finish, or ctx to end.
+	FlushWithContext(ctx context.Context) bool
+
+	Close()
+}
 
 // Scheduler implements a weighted round-robin scheduler for processing buffered events.
 type Scheduler struct {
@@ -18,9 +38,17 @@ type Scheduler struct {
 	dsn       *protocol.Dsn
 	sdkInfo   func() *protocol.SdkInfo
 	recorder  report.ClientReportRecorder
+	spotlight SpotlightSender
 
 	currentCycle []ratelimit.Priority
 	cyclePos     int
+
+	// pending counts items sitting in a buffer, waiting to be picked up by
+	// run() and handed off to the transport (and spotlight, if configured).
+	// FlushWithContext waits for this to hit zero before trusting the
+	// transport/spotlight flush results, since run() can dispatch a buffered
+	// item at any moment, independent of when Flush was called.
+	pending atomic.Int64
 
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -38,6 +66,7 @@ func NewScheduler(
 	dsn *protocol.Dsn,
 	sdkInfo func() *protocol.SdkInfo,
 	recorder report.ClientReportRecorder,
+	spotlight SpotlightSender,
 ) *Scheduler {
 	if recorder == nil {
 		recorder = report.NoopRecorder()
@@ -76,11 +105,20 @@ func NewScheduler(
 		dsn:          dsn,
 		sdkInfo:      sdkInfo,
 		recorder:     recorder,
+		spotlight:    spotlight,
 		currentCycle: currentCycle,
 		ctx:          ctx,
 		cancel:       cancel,
 	}
 	s.cond = sync.NewCond(&s.mu)
+
+	// An overflowing buffer can evict an item without it ever reaching
+	// processItems, so pending needs to be decremented here too.
+	for _, buffer := range buffers {
+		buffer.SetDroppedCallback(func(protocol.TelemetryItem, string) {
+			s.pending.Add(-1)
+		})
+	}
 
 	return s
 }
@@ -94,8 +132,7 @@ func (s *Scheduler) resolveSdkInfo() *protocol.SdkInfo {
 
 func (s *Scheduler) Start() {
 	s.startOnce.Do(func() {
-		s.processingWg.Add(1)
-		go s.run()
+		s.processingWg.Go(s.run)
 	})
 }
 
@@ -117,6 +154,10 @@ func (s *Scheduler) Stop(timeout time.Duration) {
 		case <-time.After(timeout):
 			debuglog.Printf("scheduler stop timed out after %v", timeout)
 		}
+
+		if s.spotlight != nil {
+			s.spotlight.Close()
+		}
 	})
 }
 
@@ -133,6 +174,7 @@ func (s *Scheduler) Add(item protocol.TelemetryItem) bool {
 
 	accepted := buffer.Offer(item)
 	if accepted {
+		s.pending.Add(1)
 		s.Signal()
 	}
 	return accepted
@@ -146,12 +188,22 @@ func (s *Scheduler) Flush(timeout time.Duration) bool {
 
 func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
 	s.flushBuffers()
-	return s.transport.FlushWithContext(ctx)
+
+	pendingOK := util.WaitForZero(ctx, &s.pending, pendingFlushPollInterval)
+
+	transportOK := s.transport.FlushWithContext(ctx)
+
+	// Always call spotlight's flush, even if pendingOK/transportOK already
+	// failed - don't let a short-circuited && skip waiting on it.
+	spotlightOK := true
+	if s.spotlight != nil {
+		spotlightOK = s.spotlight.FlushWithContext(ctx)
+	}
+
+	return pendingOK && transportOK && spotlightOK
 }
 
 func (s *Scheduler) run() {
-	defer s.processingWg.Done()
-
 	go func() {
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
@@ -228,6 +280,8 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 		return
 	}
 
+	defer s.pending.Add(-int64(len(items)))
+
 	if s.isRateLimited(category) {
 		for _, item := range items {
 			s.recorder.RecordItem(report.ReasonRateLimitBackoff, item)
@@ -287,6 +341,10 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
 	}
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)
+	}
+	if s.spotlight != nil {
+		// Spotlight gets a copy even if the real send above failed.
+		s.spotlight.Send(envelope)
 	}
 }
 

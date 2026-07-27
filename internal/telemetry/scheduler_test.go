@@ -1,7 +1,9 @@
 package telemetry
 
 import (
+	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,6 +12,40 @@ import (
 	"github.com/getsentry/sentry-go/internal/testutils"
 	reportpkg "github.com/getsentry/sentry-go/report"
 )
+
+// fakeSpotlightSender is a test double for SpotlightSender.
+type fakeSpotlightSender struct {
+	mu         sync.Mutex
+	sends      []*protocol.Envelope
+	flushCalls int
+}
+
+func (f *fakeSpotlightSender) Send(envelope *protocol.Envelope) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sends = append(f.sends, envelope)
+}
+
+func (f *fakeSpotlightSender) FlushWithContext(context.Context) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.flushCalls++
+	return true
+}
+
+func (f *fakeSpotlightSender) Close() {}
+
+func (f *fakeSpotlightSender) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.sends)
+}
+
+func (f *fakeSpotlightSender) flushCallCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.flushCalls
+}
 
 type testTelemetryItem struct {
 	id       int
@@ -85,7 +121,7 @@ func TestNewTelemetryScheduler(t *testing.T) {
 		Version: "1.0.0",
 	}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	if scheduler == nil {
 		t.Fatal("Expected non-nil scheduler")
@@ -208,7 +244,7 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
 			buffers := tt.setupBuffers()
-			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 			tt.addItems(buffers)
 
@@ -238,7 +274,7 @@ func TestTelemetrySchedulerRateLimiting(t *testing.T) {
 	// no log buffer used in simplified scheduler tests
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	transport.SetRateLimited("error", true)
 
@@ -271,7 +307,7 @@ func TestTelemetrySchedulerStartStop(t *testing.T) {
 	// no log buffer used in simplified scheduler tests
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	scheduler.Start()
 	scheduler.Start()
@@ -298,7 +334,7 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	scheduler.Start()
 
@@ -332,7 +368,7 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 	}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, recorder)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, recorder, nil)
 
 	buffer.Offer(&failingTransactionTelemetryItem{
 		testTelemetryItem: testTelemetryItem{data: "tx", category: ratelimit.CategoryTransaction},
@@ -359,5 +395,97 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 	}
 	if outcomes[ratelimit.CategorySpan] != 3 {
 		t.Fatalf("expected discarded span count to be recorded, got %d", outcomes[ratelimit.CategorySpan])
+	}
+}
+
+func TestSchedulerForwardsToSpotlight(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	dsn := &protocol.Dsn{}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
+	spotlight := &fakeSpotlightSender{}
+
+	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
+		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
+	}
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, spotlight)
+
+	for i := 1; i <= 3; i++ {
+		scheduler.Add(&testTelemetryItem{id: i, data: "test"})
+	}
+
+	if !scheduler.Flush(time.Second) {
+		t.Fatalf("Expected Flush to succeed")
+	}
+
+	if got := spotlight.count(); got != 3 {
+		t.Errorf("Expected 3 envelopes forwarded to Spotlight, got %d", got)
+	}
+	if got := transport.GetSendCount(); got != 3 {
+		t.Errorf("Expected 3 envelopes sent to the real transport too, got %d", got)
+	}
+}
+
+// TestSchedulerFlushWaitsForPendingBeforeCheckingSpotlight is a regression
+// test: Add() can race with the background run() goroutine picking up and
+// dispatching the item concurrently with a subsequent FlushWithContext call.
+// FlushWithContext must still observe the resulting Spotlight send in every
+// iteration, not intermittently return true because the sender's internal
+// state was briefly (but not yet accurately) zero.
+func TestSchedulerFlushWaitsForPendingBeforeCheckingSpotlight(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	dsn := &protocol.Dsn{}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
+	spotlight := &fakeSpotlightSender{}
+
+	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
+		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
+	}
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, spotlight)
+	scheduler.Start()
+	defer scheduler.Stop(time.Second)
+
+	const iterations = 50
+	for i := 0; i < iterations; i++ {
+		scheduler.Add(&testTelemetryItem{id: i, data: "test"})
+		if !scheduler.FlushWithContext(context.Background()) {
+			t.Fatalf("Expected FlushWithContext to succeed on iteration %d", i)
+		}
+	}
+
+	if got := spotlight.count(); got != iterations {
+		t.Errorf("Expected all %d envelopes to have reached Spotlight by the time their Flush returned, got %d", iterations, got)
+	}
+}
+
+// TestSchedulerFlushAlwaysCallsSpotlightFlush is a regression test: the
+// return statement in FlushWithContext used to be
+// `pendingOK && s.spotlight.FlushWithContext(ctx) && transportOK`, which
+// short-circuits and skips calling spotlight.FlushWithContext entirely
+// whenever pendingOK is already false (e.g. the pending count didn't reach
+// zero before ctx timed out). That meant in-flight Spotlight sends were
+// never waited on in exactly the situation where waiting mattered most.
+func TestSchedulerFlushAlwaysCallsSpotlightFlush(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	dsn := &protocol.Dsn{}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
+	spotlight := &fakeSpotlightSender{}
+
+	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
+		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
+	}
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, spotlight)
+
+	// Force pendingOK to be false by inflating the counter without ever
+	// decrementing it, simulating a stuck/leaked pending item.
+	scheduler.pending.Add(1)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	if scheduler.FlushWithContext(ctx) {
+		t.Errorf("Expected FlushWithContext to report failure when pending never reaches zero")
+	}
+	if spotlight.flushCallCount() != 1 {
+		t.Errorf("Expected spotlight.FlushWithContext to be called even when pendingOK is false, got %d calls", spotlight.flushCallCount())
 	}
 }

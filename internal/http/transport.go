@@ -375,8 +375,7 @@ func (t *AsyncTransport) start() {
 		if t.provider == nil {
 			t.provider = report.NoopProvider()
 		}
-		t.wg.Add(1)
-		go t.worker()
+		t.wg.Go(t.worker)
 	})
 }
 
@@ -484,8 +483,6 @@ func (t *AsyncTransport) resolveSdkInfo() *protocol.SdkInfo {
 }
 
 func (t *AsyncTransport) worker() {
-	defer t.wg.Done()
-
 	crTicker := time.NewTicker(defaultClientReportsTick)
 	defer crTicker.Stop()
 

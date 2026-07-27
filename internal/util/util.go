@@ -1,9 +1,12 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"sync/atomic"
+	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
@@ -13,6 +16,32 @@ import (
 // MaxDrainResponseBytes is the maximum number of bytes that transport
 // implementations will read from response bodies when draining them.
 const MaxDrainResponseBytes = 16 << 10
+
+// WaitForZero blocks until counter reaches zero or ctx is done, polling at
+// the given interval. Returns false if ctx is done first.
+//
+// Use this instead of sync.WaitGroup when increments can race with the wait
+// from an unrelated goroutine - WaitGroup panics if Add races with Wait on a
+// zeroed counter, but polling has no such restriction.
+func WaitForZero(ctx context.Context, counter *atomic.Int64, pollInterval time.Duration) bool {
+	if counter.Load() == 0 {
+		return true
+	}
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if counter.Load() == 0 {
+				return true
+			}
+		case <-ctx.Done():
+			return false
+		}
+	}
+}
 
 // HandleHTTPResponse is a helper method that reads the HTTP response and handles debug output.
 func HandleHTTPResponse(response *http.Response, identifier string) bool {
