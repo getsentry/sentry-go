@@ -339,12 +339,15 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
 		s.recorder.RecordItem(report.ReasonInternalError, item)
 		return
 	}
+	if s.spotlight != nil {
+		// Must happen before transport.SendEnvelope below: Send clones the
+		// envelope synchronously, but the real transport can hand it to a
+		// background worker that mutates envelope.Items (e.g. attaching a
+		// client report). Cloning first avoids racing with that mutation.
+		s.spotlight.Send(envelope)
+	}
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)
-	}
-	if s.spotlight != nil {
-		// Spotlight gets a copy even if the real send above failed.
-		s.spotlight.Send(envelope)
 	}
 }
 

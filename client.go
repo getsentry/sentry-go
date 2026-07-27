@@ -463,6 +463,13 @@ func NewClient(options ClientOptions) (*Client, error) {
 			debuglog.Printf("Overriding TracesSampleRate from %.2f to 1.0 for Spotlight", options.TracesSampleRate)
 			options.TracesSampleRate = 1.0
 		}
+		if options.EnableTracing && options.TracesSampler != nil {
+			// TracesSampler takes precedence over TracesSampleRate, so the
+			// override above wouldn't help - a custom sampler could still
+			// drop transactions Spotlight is supposed to see.
+			debuglog.Println("Disabling TracesSampler for Spotlight so all traces reach it")
+			options.TracesSampler = nil
+		}
 		if !options.SendDefaultPII {
 			debuglog.Println("Enabling SendDefaultPII for Spotlight")
 			options.SendDefaultPII = true

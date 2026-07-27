@@ -480,6 +480,26 @@ func TestSpotlightTracesSampleRateNotOverriddenWithoutTracing(t *testing.T) {
 	}
 }
 
+// TestSpotlightClearsTracesSampler is a regression test: TracesSampler takes
+// precedence over TracesSampleRate, so overriding TracesSampleRate alone
+// doesn't guarantee 100% of traces reach Spotlight if a custom TracesSampler
+// is also configured - it must be cleared too.
+func TestSpotlightClearsTracesSampler(t *testing.T) {
+	sampler := func(_ SamplingContext) float64 { return 0.0 }
+
+	client, err := NewClient(ClientOptions{
+		Spotlight:     true,
+		EnableTracing: true,
+		TracesSampler: sampler,
+	})
+	if err != nil {
+		t.Fatalf("NewClient() error = %v", err)
+	}
+	if client.options.TracesSampler != nil {
+		t.Errorf("Expected TracesSampler to be cleared for Spotlight-only mode")
+	}
+}
+
 func TestSpotlightPIIOverride(t *testing.T) {
 	tests := []struct {
 		name            string

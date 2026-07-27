@@ -20,10 +20,19 @@ type fakeSpotlightSender struct {
 	flushCalls int
 }
 
+// Send snapshots envelope.Items at call time, mirroring the real
+// spotlightEnvelopeSender, which clones synchronously before returning. This
+// matters for tests that check Send is called before the envelope is later
+// mutated elsewhere - storing the raw pointer would silently observe later
+// mutations too and defeat the point of the test.
 func (f *fakeSpotlightSender) Send(envelope *protocol.Envelope) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.sends = append(f.sends, envelope)
+	snapshot := &protocol.Envelope{
+		Header: envelope.Header,
+		Items:  append([]*protocol.EnvelopeItem(nil), envelope.Items...),
+	}
+	f.sends = append(f.sends, snapshot)
 }
 
 func (f *fakeSpotlightSender) FlushWithContext(context.Context) bool {
@@ -487,5 +496,53 @@ func TestSchedulerFlushAlwaysCallsSpotlightFlush(t *testing.T) {
 	}
 	if spotlight.flushCallCount() != 1 {
 		t.Errorf("Expected spotlight.FlushWithContext to be called even when pendingOK is false, got %d calls", spotlight.flushCallCount())
+	}
+}
+
+// mutatingTransport simulates AsyncTransport handing an envelope to a
+// background worker that later mutates envelope.Items (e.g. AttachToEnvelope
+// appending a client report), but does it synchronously for test determinism.
+type mutatingTransport struct {
+	testutils.MockTelemetryTransport
+}
+
+func (m *mutatingTransport) SendEnvelope(envelope *protocol.Envelope) error {
+	envelope.AddItem(&protocol.EnvelopeItem{
+		Header:  &protocol.EnvelopeItemHeader{Type: protocol.EnvelopeItemTypeClientReport},
+		Payload: []byte(`{"discarded_events":[]}`),
+	})
+	return m.MockTelemetryTransport.SendEnvelope(envelope)
+}
+
+// TestSchedulerClonesForSpotlightBeforeSendingToTransport is a regression
+// test: sendItem used to call transport.SendEnvelope before spotlight.Send,
+// so the transport's background worker could start mutating envelope.Items
+// (e.g. attaching a client report) concurrently with spotlight.Send's
+// synchronous clone reading that same slice - a data race. spotlight.Send
+// must be called (and its clone taken) before the envelope is ever handed to
+// the transport.
+func TestSchedulerClonesForSpotlightBeforeSendingToTransport(t *testing.T) {
+	transport := &mutatingTransport{}
+	dsn := &protocol.Dsn{}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
+	spotlight := &fakeSpotlightSender{}
+
+	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
+		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
+	}
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, spotlight)
+
+	scheduler.Add(&testTelemetryItem{id: 1, data: "test"})
+	if !scheduler.Flush(time.Second) {
+		t.Fatalf("Expected Flush to succeed")
+	}
+
+	if spotlight.count() != 1 {
+		t.Fatalf("Expected 1 envelope forwarded to Spotlight, got %d", spotlight.count())
+	}
+	for _, item := range spotlight.sends[0].Items {
+		if item.Header.Type == protocol.EnvelopeItemTypeClientReport {
+			t.Errorf("Expected Spotlight to receive the envelope before the transport's mutation, but found a client_report item")
+		}
 	}
 }
