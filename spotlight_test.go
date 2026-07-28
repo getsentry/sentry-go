@@ -1216,3 +1216,49 @@ func TestSpotlightTransportConcurrentSendEventAndFlush(_ *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestSpotlightEnvelopeSenderConcurrentSendAndFlush is a regression test:
+// spotlightEnvelopeSender.Send is called from the telemetry scheduler's
+// background run() goroutine, which can happen concurrently with a
+// client.Flush()/Close() call from another goroutine (e.g. a new event
+// captured while a flush is in progress) - there is no ordering guarantee
+// between the two. A sync.WaitGroup requires any Add starting from zero to
+// happen-before the corresponding Wait, which this pattern can violate, up
+// to a runtime "WaitGroup misuse" panic under -race. spotlightEnvelopeSender
+// tracks in-flight sends with an atomic counter polled via util.WaitForZero
+// instead, which has no such requirement.
+func TestSpotlightEnvelopeSenderConcurrentSendAndFlush(_ *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	sender := newSpotlightEnvelopeSender(ClientOptions{SpotlightURL: server.URL + "/stream"})
+	defer sender.Close()
+
+	newEnvelope := func() *protocol.Envelope {
+		envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{EventID: "concurrent-test"})
+		envelope.AddItem(&protocol.EnvelopeItem{
+			Header:  &protocol.EnvelopeItemHeader{Type: protocol.EnvelopeItemTypeEvent},
+			Payload: []byte(`{"message":"concurrent test"}`),
+		})
+		return envelope
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sender.Send(newEnvelope())
+		}()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+			sender.FlushWithContext(ctx)
+		}()
+	}
+	wg.Wait()
+}

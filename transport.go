@@ -1232,10 +1232,15 @@ type spotlightEnvelopeSender struct {
 	spotlightURL string
 
 	// ctx is cancelled on Close to signal in-flight sends to stop.
-	// wg tracks in-flight sends so Close/FlushWithContext can wait on them.
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	// inFlight tracks in-flight sends so Close/FlushWithContext can wait on
+	// them. It's a plain counter, not a sync.WaitGroup: Send can be called
+	// from the scheduler's background run() goroutine while a concurrent
+	// client.Flush() call from a different goroutine is also happening
+	// (e.g. a new event captured while Flush is in progress), and WaitGroup
+	// panics if Add races with Wait on a zeroed counter.
+	ctx      context.Context
+	cancel   context.CancelFunc
+	inFlight atomic.Int64
 
 	backoff spotlightBackoff
 }
@@ -1274,9 +1279,11 @@ func (s *spotlightEnvelopeSender) Send(envelope *protocol.Envelope) {
 
 	cloned := cloneEnvelopeForSpotlight(envelope)
 
-	s.wg.Go(func() {
+	s.inFlight.Add(1)
+	go func() {
+		defer s.inFlight.Add(-1)
 		s.send(cloned)
-	})
+	}()
 }
 
 func (s *spotlightEnvelopeSender) send(envelope *protocol.Envelope) {
@@ -1318,35 +1325,23 @@ func (s *spotlightEnvelopeSender) send(envelope *protocol.Envelope) {
 
 // FlushWithContext implements telemetry.SpotlightSender.
 func (s *spotlightEnvelopeSender) FlushWithContext(ctx context.Context) bool {
-	done := make(chan struct{})
-	go func() {
-		s.wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
+	if util.WaitForZero(ctx, &s.inFlight, spotlightWaitPollInterval) {
 		return true
-	case <-ctx.Done():
-		debuglog.Printf("Timed out waiting for in-flight Spotlight sends to complete")
-		return false
 	}
+	debuglog.Printf("Timed out waiting for in-flight Spotlight sends to complete")
+	return false
 }
 
 // Close implements telemetry.SpotlightSender.
 func (s *spotlightEnvelopeSender) Close() {
 	s.cancel()
 
-	done := make(chan struct{})
-	go func() {
-		s.wg.Wait()
-		close(done)
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
-	select {
-	case <-done:
+	if util.WaitForZero(ctx, &s.inFlight, spotlightWaitPollInterval) {
 		debuglog.Printf("All Spotlight sends completed")
-	case <-time.After(2 * time.Second):
+	} else {
 		debuglog.Printf("Spotlight sends timed out during shutdown")
 	}
 }
