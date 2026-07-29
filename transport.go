@@ -1069,31 +1069,22 @@ func buildSpotlightHTTPClient(opts ClientOptions) *http.Client {
 	}
 }
 
+// SendEvent serializes event and builds the Spotlight envelope synchronously,
+// before returning, so nothing touches event's mutable fields (maps like
+// Contexts/Extra/Tags) after the caller regains control of it. Only the
+// network request itself runs in the background goroutine.
 func (st *SpotlightTransport) SendEvent(event *Event) {
 	st.underlying.SendEvent(event)
-	st.inFlight.Add(1)
-	go func() {
-		defer st.inFlight.Add(-1)
-		st.sendToSpotlight(event)
-	}()
-}
 
-func (st *SpotlightTransport) isShuttingDown() bool {
-	return st.ctx.Err() != nil
-}
-
-func (st *SpotlightTransport) sendToSpotlight(event *Event) {
 	if st.isShuttingDown() {
 		debuglog.Printf("Skipping Spotlight send: transport shutting down")
 		return
 	}
-
 	if !st.readyToSend() {
 		// Backing off after a recent connectivity failure; drop this event
 		// rather than hammering an unreachable Spotlight server.
 		return
 	}
-
 	if st.placeholderDsn == nil {
 		debuglog.Println("Skipping Spotlight send: no placeholder DSN available")
 		return
@@ -1111,6 +1102,18 @@ func (st *SpotlightTransport) sendToSpotlight(event *Event) {
 		return
 	}
 
+	st.inFlight.Add(1)
+	go func() {
+		defer st.inFlight.Add(-1)
+		st.postToSpotlight(envelope)
+	}()
+}
+
+func (st *SpotlightTransport) isShuttingDown() bool {
+	return st.ctx.Err() != nil
+}
+
+func (st *SpotlightTransport) postToSpotlight(envelope *bytes.Buffer) {
 	timeoutCtx, cancel := context.WithTimeout(st.ctx, st.client.Timeout)
 	defer cancel()
 

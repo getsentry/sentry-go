@@ -282,21 +282,28 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 
 	defer s.pending.Add(-int64(len(items)))
 
+	// Spotlight is a separate destination from the real Sentry transport, so
+	// rate-limiting/backpressure on the transport shouldn't stop it from
+	// getting a copy too - skipTransport below only gates transport.SendEnvelope.
+	var skipTransport bool
 	if s.isRateLimited(category) {
 		for _, item := range items {
 			s.recorder.RecordItem(report.ReasonRateLimitBackoff, item)
 		}
-		return
-	}
-	if !s.transport.HasCapacity() {
+		skipTransport = true
+	} else if !s.transport.HasCapacity() {
 		for _, item := range items {
 			s.recorder.RecordItem(report.ReasonQueueOverflow, item)
 		}
+		skipTransport = true
+	}
+
+	if skipTransport && s.spotlight == nil {
 		return
 	}
 
 	for _, item := range s.envelopeConvertibles(category, items) {
-		s.sendItem(item)
+		s.sendItem(item, skipTransport)
 	}
 }
 
@@ -318,7 +325,7 @@ func (s *Scheduler) envelopeConvertibles(category ratelimit.Category, items []pr
 	}
 }
 
-func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
+func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible, skipTransport bool) {
 	header := &protocol.EnvelopeHeader{
 		EventID: item.GetEventID(),
 		SentAt:  time.Now(),
@@ -345,6 +352,9 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
 		// background worker that mutates envelope.Items (e.g. attaching a
 		// client report). Cloning first avoids racing with that mutation.
 		s.spotlight.Send(envelope)
+	}
+	if skipTransport {
+		return
 	}
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)

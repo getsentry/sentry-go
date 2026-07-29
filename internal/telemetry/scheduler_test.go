@@ -546,3 +546,36 @@ func TestSchedulerClonesForSpotlightBeforeSendingToTransport(t *testing.T) {
 		}
 	}
 }
+
+// TestSchedulerForwardsToSpotlightEvenWhenTransportRateLimited is a
+// regression test: processItems used to return before ever reaching
+// sendItem when the transport was rate-limited or out of capacity, silently
+// skipping Spotlight too. Spotlight is a separate destination from the real
+// Sentry transport, so backpressure/rate-limiting on the transport shouldn't
+// stop it from getting a copy - local debugging would otherwise miss
+// exactly the events dropped on the way to Sentry.
+func TestSchedulerForwardsToSpotlightEvenWhenTransportRateLimited(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	dsn := &protocol.Dsn{}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
+	spotlight := &fakeSpotlightSender{}
+
+	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
+		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
+	}
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, spotlight)
+
+	transport.SetRateLimited("error", true)
+
+	scheduler.Add(&testTelemetryItem{id: 1, data: "test"})
+	if !scheduler.Flush(time.Second) {
+		t.Fatalf("Expected Flush to succeed")
+	}
+
+	if transport.GetSendCount() != 0 {
+		t.Errorf("Expected 0 items sent to the rate-limited transport, got %d", transport.GetSendCount())
+	}
+	if spotlight.count() != 1 {
+		t.Errorf("Expected 1 envelope forwarded to Spotlight despite the transport being rate-limited, got %d", spotlight.count())
+	}
+}

@@ -1118,18 +1118,17 @@ func TestSpotlightBuildHTTPClientWithTransport(t *testing.T) {
 }
 
 func TestSpotlightSendEventCancelledContext(_ *testing.T) {
-	// Test that sendToSpotlight skips when context is already cancelled
+	// Test that SendEvent skips the Spotlight send when context is already cancelled
 	mock := &MockTransport{}
 	st := NewSpotlightTransport(mock)
 	st.Configure(ClientOptions{SpotlightURL: "http://localhost:54321/stream"})
 
-	// Cancel context before calling sendToSpotlight directly
+	// Cancel context before sending
 	st.cancel()
 
 	event := NewEvent()
 	event.Message = "cancelled event"
-	// Call directly (bypassing the goroutine wrapper) to test the ctx.Done() check
-	st.sendToSpotlight(event)
+	st.SendEvent(event)
 }
 
 // TestSpotlightEnvelopeSenderClonesBeforeReturning is a regression test: the
