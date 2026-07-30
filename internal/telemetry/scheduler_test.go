@@ -613,3 +613,39 @@ func TestSchedulerPendingSurvivesRejectedOverflow(t *testing.T) {
 		t.Errorf("Expected Flush to succeed after the rejected overflow, got failure (pending likely went permanently negative)")
 	}
 }
+
+// TestSchedulerFlushDrainsItemsAddedDuringFlush is a regression test:
+// FlushWithContext used to force-drain buffers exactly once and then just
+// wait for pending to reach zero. An item accepted concurrently right after
+// that single drain (e.g. a log captured while Flush is running) would sit
+// until its own batch size/timeout was met - which can take several
+// seconds - instead of being included in this flush, so Flush would spin to
+// its own deadline and report failure. This isn't Spotlight-specific; it
+// regresses the plain telemetry flush path whenever anything is captured
+// concurrently with a Flush call. Fixed by repeatedly force-draining until
+// pending reaches zero (bounded by ctx), which picks up new arrivals
+// immediately instead of waiting on their natural batch timing.
+func TestSchedulerFlushDrainsItemsAddedDuringFlush(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	dsn := &protocol.Dsn{}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
+
+	// Batch size/timeout large enough that PollIfReady alone would never
+	// surface this item within the test's flush deadline - only a forced
+	// Drain (as flushBuffers does) can.
+	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
+		ratelimit.CategoryLog: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryLog, 10, OverflowPolicyDropOldest, 100, 10*time.Second, nil),
+	}
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
+	scheduler.Start()
+	defer scheduler.Stop(time.Second)
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		scheduler.Add(&testTelemetryItem{id: 1, data: "log", category: ratelimit.CategoryLog})
+	}()
+
+	if !scheduler.Flush(2 * time.Second) {
+		t.Errorf("Expected Flush to succeed even though an item was added mid-flush and its own batch timeout (10s) hadn't elapsed")
+	}
+}

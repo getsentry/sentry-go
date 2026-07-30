@@ -9,7 +9,6 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/getsentry/sentry-go/report"
 )
 
@@ -198,9 +197,7 @@ func (s *Scheduler) Flush(timeout time.Duration) bool {
 }
 
 func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
-	s.flushBuffers()
-
-	pendingOK := util.WaitForZero(ctx, &s.pending, pendingFlushPollInterval)
+	pendingOK := s.drainUntilPendingZero(ctx)
 
 	transportOK := s.transport.FlushWithContext(ctx)
 
@@ -376,6 +373,27 @@ func (s *Scheduler) flushBuffers() {
 	for category, buffer := range s.buffers {
 		if !buffer.IsEmpty() {
 			s.processItems(buffer, category, true)
+		}
+	}
+}
+
+// drainUntilPendingZero repeatedly force-drains the buffers until pending
+// reaches zero or ctx is done. A single flushBuffers call only catches items
+// already in a buffer at that instant; an item accepted concurrently right
+// after (e.g. a log captured while Flush is running) would otherwise sit
+// until its own batch size/timeout is met - which can take several seconds -
+// instead of being included in this flush. Looping re-drains each new
+// arrival immediately rather than waiting on its natural batch timing.
+func (s *Scheduler) drainUntilPendingZero(ctx context.Context) bool {
+	for {
+		s.flushBuffers()
+		if s.pending.Load() == 0 {
+			return true
+		}
+		select {
+		case <-time.After(pendingFlushPollInterval):
+		case <-ctx.Done():
+			return s.pending.Load() == 0
 		}
 	}
 }

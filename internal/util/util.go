@@ -38,7 +38,10 @@ func WaitForZero(ctx context.Context, counter *atomic.Int64, pollInterval time.D
 				return true
 			}
 		case <-ctx.Done():
-			return false
+			// select can pick this case even if ticker.C is also ready (e.g.
+			// the counter hit zero right as ctx was cancelled), so double
+			// check before reporting a timeout that didn't really happen.
+			return counter.Load() == 0
 		}
 	}
 }
