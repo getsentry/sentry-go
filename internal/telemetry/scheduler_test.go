@@ -579,3 +579,37 @@ func TestSchedulerForwardsToSpotlightEvenWhenTransportRateLimited(t *testing.T) 
 		t.Errorf("Expected 1 envelope forwarded to Spotlight despite the transport being rate-limited, got %d", spotlight.count())
 	}
 }
+
+// TestSchedulerPendingSurvivesRejectedOverflow is a regression test: the
+// dropped-item callback used to decrement pending unconditionally for every
+// overflow reason, including "buffer_full_drop_newest" and
+// "unknown_overflow_policy", which reject the *incoming* item itself -
+// something Add never incremented pending for, since Offer returns false in
+// those cases. Decrementing for them drove pending permanently negative, so
+// every subsequent Flush would spin to its deadline and report failure. Not
+// reachable with the buffer policies this SDK actually configures today
+// (all use OverflowPolicyDropOldest), but a real bug for any future policy
+// change, so it's tested directly against a DropNewest buffer here.
+func TestSchedulerPendingSurvivesRejectedOverflow(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	dsn := &protocol.Dsn{}
+	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
+
+	buffers := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
+		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 1, OverflowPolicyDropNewest, 1, 0, nil),
+	}
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
+
+	transport.SetRateLimited("error", true) // keep the first item stuck in the buffer
+
+	scheduler.Add(&testTelemetryItem{id: 1, data: "first"})
+	// Buffer capacity is 1 and already full, so this is rejected outright
+	// (DropNewest), exercising the "buffer_full_drop_newest" callback path.
+	scheduler.Add(&testTelemetryItem{id: 2, data: "second"})
+
+	transport.SetRateLimited("error", false)
+
+	if !scheduler.Flush(time.Second) {
+		t.Errorf("Expected Flush to succeed after the rejected overflow, got failure (pending likely went permanently negative)")
+	}
+}

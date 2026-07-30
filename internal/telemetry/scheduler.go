@@ -112,11 +112,17 @@ func NewScheduler(
 	}
 	s.cond = sync.NewCond(&s.mu)
 
-	// An overflowing buffer can evict an item without it ever reaching
-	// processItems, so pending needs to be decremented here too.
+	// An overflowing buffer can evict an already-accepted item (DropOldest)
+	// without it ever reaching processItems, so pending needs to be
+	// decremented here too. Other drop reasons ("drop_newest", "invalid_state",
+	// "unknown_overflow_policy") reject the incoming item itself, which Add
+	// never incremented pending for in the first place - decrementing for
+	// those would drive pending permanently negative.
 	for _, buffer := range buffers {
-		buffer.SetDroppedCallback(func(protocol.TelemetryItem, string) {
-			s.pending.Add(-1)
+		buffer.SetDroppedCallback(func(_ protocol.TelemetryItem, reason string) {
+			if reason == "buffer_full_drop_oldest" || reason == "buffer_full_drop_oldest_bucket" {
+				s.pending.Add(-1)
+			}
 		})
 	}
 
@@ -172,10 +178,15 @@ func (s *Scheduler) Add(item protocol.TelemetryItem) bool {
 		return false
 	}
 
+	// Increment before the item is visible in the buffer (not after Offer
+	// returns), so run() can never observe and drain it before pending
+	// reflects it. Roll back if it turns out not to be accepted.
+	s.pending.Add(1)
 	accepted := buffer.Offer(item)
 	if accepted {
-		s.pending.Add(1)
 		s.Signal()
+	} else {
+		s.pending.Add(-1)
 	}
 	return accepted
 }
