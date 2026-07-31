@@ -43,6 +43,13 @@ type TransportOptions struct {
 	Recorder      report.ClientReportRecorder
 	Provider      report.ClientReportProvider
 	SdkInfo       func() *protocol.SdkInfo
+
+	// Spotlight indicates a Spotlight sidecar is configured to receive a
+	// copy of every envelope independently of this transport. It only
+	// affects the wording of the "no DSN" debug log below, so an empty/
+	// invalid Dsn isn't reported as "no events will be delivered" when
+	// Spotlight is in fact still receiving them.
+	Spotlight bool
 }
 
 func getProxyConfig(options TransportOptions) func(*http.Request) (*url.URL, error) {
@@ -318,6 +325,10 @@ type AsyncTransport struct {
 func NewAsyncTransport(options TransportOptions) protocol.TelemetryTransport {
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil || dsn == nil {
+		if options.Spotlight {
+			debuglog.Printf("No Sentry DSN configured (%v); events will not be delivered to Sentry, but Spotlight is enabled and will still receive them.", err)
+			return &NoopTransport{}
+		}
 		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)
 		return NewNoopTransport()
 	}

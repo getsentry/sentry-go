@@ -615,6 +615,7 @@ func (client *Client) setupTelemetryProcessor() {
 		Recorder:      client.reportRecorder,
 		Provider:      client.reportProvider,
 		SdkInfo:       client.sdkInfo,
+		Spotlight:     client.options.Spotlight,
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
