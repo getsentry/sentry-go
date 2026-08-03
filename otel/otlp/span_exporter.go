@@ -52,6 +52,16 @@ func WithRetry(rc otlptracehttp.RetryConfig) Option {
 	}
 }
 
+// WithProxy configures the HTTP proxy function used for OTLP export requests.
+//
+// If not set, the exporter falls back to [http.ProxyFromEnvironment] (i.e. HTTP_PROXY/HTTPS_PROXY).
+// See [otlptracehttp.WithProxy] for details.
+func WithProxy(proxy otlptracehttp.HTTPTransportProxyFunc) Option {
+	return func(c *config) {
+		c.otlpOptions = append(c.otlpOptions, otlptracehttp.WithProxy(proxy))
+	}
+}
+
 type sentryOTLPExporter struct {
 	inner sdktrace.SpanExporter
 }
