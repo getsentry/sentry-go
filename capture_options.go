@@ -100,7 +100,12 @@ func resolveCaptureOptions(ctx context.Context, client Client, options []Capture
 	if owner == nil {
 		owner = global
 	}
-	modifiers := append([]EventModifier{snapshotScopes(client, global, isolation)}, resolved.modifiers...)
+	snapshot := snapshotScopes(client, global, isolation)
+	snapshot.propagationContext = PropagationContext{}
+	if propagation, ok := propagationContextFromContext(ctx); ok {
+		snapshot.propagationContext = propagation
+	}
+	modifiers := append([]EventModifier{snapshot}, resolved.modifiers...)
 	return hint, captureModifierChain(modifiers), owner
 }
 

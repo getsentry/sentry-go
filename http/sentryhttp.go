@@ -92,9 +92,11 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		}
 
 		hub.Client().SetSDKIdentifier(sdkIdentifier)
+		ctx, scope := sentry.ScopeFromContext(ctx)
+		scope.SetClient(hub.Client())
+		ctx = sentry.ContinueTrace(ctx, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader))
 
 		options := []sentry.SpanOption{
-			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),

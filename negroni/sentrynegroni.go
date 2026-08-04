@@ -54,15 +54,19 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 
 	hub.Client().SetSDKIdentifier(sdkIdentifier)
 
+	ctx := sentry.SetHubOnContext(r.Context(), hub)
+	ctx, scope := sentry.ScopeFromContext(ctx)
+	scope.SetClient(hub.Client())
+	ctx = sentry.ContinueTrace(ctx, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader))
+
 	options := []sentry.SpanOption{
-		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(sentry.SourceURL),
 		sentry.WithSpanOrigin(sentry.SpanOriginNegroni),
 	}
 
 	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(r.Context(), hub),
+		ctx,
 		traceutils.GetHTTPSpanName(r),
 		options...,
 	)

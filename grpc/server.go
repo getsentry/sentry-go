@@ -79,10 +79,14 @@ func startServerTransaction(ctx context.Context, fullMethod string) (context.Con
 
 	setScopeMetadata(hub, name, md)
 
+	ctx = sentry.SetHubOnContext(ctx, hub)
+	ctx, scope := sentry.ScopeFromContext(ctx)
+	scope.SetClient(hub.Client())
+	ctx = sentry.ContinueTrace(ctx, sentryTraceHeader, sentryBaggageHeader)
+
 	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(ctx, hub),
+		ctx,
 		name,
-		sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
 		sentry.WithOpName(defaultServerOperationName),
 		sentry.WithDescription(name),
 		sentry.WithTransactionSource(sentry.SourceRoute),

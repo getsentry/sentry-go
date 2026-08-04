@@ -150,43 +150,50 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		span.ParentSpanID = parent.SpanID
 		span.Origin = parent.Origin
 	} else {
-		// Only set the Source if this is a transaction
+		// Only set the Source if this is a transaction. Propagated roots retain
+		// the same local defaults while inheriting remote trace state.
 		span.Source = SourceCustom
 		span.Origin = SpanOriginManual
-
-		// Implementation note:
-		//
-		// While math/rand is ~2x faster than crypto/rand (exact
-		// difference depends on hardware / OS), crypto/rand is probably
-		// fast enough and a safer choice.
-		//
-		// For reference, OpenTelemetry [1] uses crypto/rand to seed
-		// math/rand. AFAICT this approach does not preserve the
-		// properties from crypto/rand that make it suitable for
-		// cryptography. While it might be debatable whether those
-		// properties are important for us here, again, we're taking the
-		// safer path.
-		//
-		// See [2a] & [2b] for a discussion of some of the properties we
-		// obtain by using crypto/rand and [3a] & [3b] for why we avoid
-		// math/rand.
-		//
-		// Because the math/rand seed has only 64 bits (int64), if the
-		// first thing we do after seeding an RNG is to read in a random
-		// TraceID, there are only 2^64 possible values. Compared to
-		// UUID v4 that have 122 random bits, there is a much greater
-		// chance of collision [4a] & [4b].
-		//
-		// [1]:  https://github.com/open-telemetry/opentelemetry-go/blob/958041ddf619a128/sdk/trace/trace.go#L25-L31
-		// [2a]: https://security.stackexchange.com/q/120352/246345
-		// [2b]: https://security.stackexchange.com/a/120365/246345
-		// [3a]: https://github.com/golang/go/issues/11871#issuecomment-126333686
-		// [3b]: https://github.com/golang/go/issues/11871#issuecomment-126357889
-		// [4a]: https://en.wikipedia.org/wiki/Universally_unique_identifier#Collisions
-		// [4b]: https://www.wolframalpha.com/input/?i=sqrt%282*2%5E64*ln%281%2F%281-0.5%29%29%29
-		_, err := rand.Read(span.TraceID[:])
-		if err != nil {
-			panic(err)
+		if propagation, ok := propagationContextFromContext(ctx); ok {
+			span.TraceID = propagation.TraceID
+			span.ParentSpanID = propagation.ParentSpanID
+			span.Sampled = propagation.Sampled
+			span.dynamicSamplingContext = propagation.DynamicSamplingContext
+		} else {
+			// Implementation note:
+			//
+			// While math/rand is ~2x faster than crypto/rand (exact
+			// difference depends on hardware / OS), crypto/rand is probably
+			// fast enough and a safer choice.
+			//
+			// For reference, OpenTelemetry [1] uses crypto/rand to seed
+			// math/rand. AFAICT this approach does not preserve the
+			// properties from crypto/rand that make it suitable for
+			// cryptography. While it might be debatable whether those
+			// properties are important for us here, again, we're taking the
+			// safer path.
+			//
+			// See [2a] & [2b] for a discussion of some of the properties we
+			// obtain by using crypto/rand and [3a] & [3b] for why we avoid
+			// math/rand.
+			//
+			// Because the math/rand seed has only 64 bits (int64), if the
+			// first thing we do after seeding an RNG is to read in a random
+			// TraceID, there are only 2^64 possible values. Compared to
+			// UUID v4 that have 122 random bits, there is a much greater
+			// chance of collision [4a] & [4b].
+			//
+			// [1]:  https://github.com/open-telemetry/opentelemetry-go/blob/958041ddf619a128/sdk/trace/trace.go#L25-L31
+			// [2a]: https://security.stackexchange.com/q/120352/246345
+			// [2b]: https://security.stackexchange.com/a/120365/246345
+			// [3a]: https://github.com/golang/go/issues/11871#issuecomment-126333686
+			// [3b]: https://github.com/golang/go/issues/11871#issuecomment-126357889
+			// [4a]: https://en.wikipedia.org/wiki/Universally_unique_identifier#Collisions
+			// [4b]: https://www.wolframalpha.com/input/?i=sqrt%282*2%5E64*ln%281%2F%281-0.5%29%29%29
+			_, err := rand.Read(span.TraceID[:])
+			if err != nil {
+				panic(err)
+			}
 		}
 	}
 
@@ -534,17 +541,6 @@ func (s *Span) updateFromSentryTrace(header []byte) (updated bool) {
 		}
 	}
 	return true
-}
-
-func (s *Span) updateFromBaggage(header []byte) {
-	if s.IsTransaction() {
-		dsc, err := DynamicSamplingContextFromHeader(header)
-		if err != nil {
-			return
-		}
-
-		s.dynamicSamplingContext = dsc
-	}
 }
 
 func (s *Span) clientOptions() *ClientOptions {
@@ -1036,87 +1032,70 @@ func WithSpanOrigin(origin SpanOrigin) SpanOption {
 	}
 }
 
-// ContinueTrace continues a trace based on traceparent and baggage values.
-// If the SDK is configured with tracing enabled,
-// this function returns populated SpanOption.
-// In any other cases, it populates the propagation context on the scope.
-func ContinueTrace(hub *Hub, traceparent, baggage string) SpanOption {
-	scope := hub.Scope()
-	propagationContext, _ := PropagationContextFromHeaders(traceparent, baggage)
-	client := hub.Client()
-
-	if !shouldContinueTrace(client, propagationContext.DynamicSamplingContext) {
-		propagationContext = NewPropagationContext()
-		traceparent = ""
-		baggage = ""
+// ContinueTrace returns a derived context carrying propagation state parsed
+// from traceparent and baggage. It does not read or mutate Scope or Hub state.
+func ContinueTrace(ctx context.Context, traceparent, baggage string) context.Context {
+	propagation, err := PropagationContextFromHeaders(traceparent, baggage)
+	if err != nil || !shouldContinueTrace(GetClient(ctx), propagation.DynamicSamplingContext) {
+		return StartNewTrace(ctx)
 	}
-
-	scope.SetPropagationContext(propagationContext)
-	return ContinueFromHeaders(traceparent, baggage)
+	return contextWithPropagationContext(ctx, propagation)
 }
 
-// ContinueFromRequest returns a span option that updates the span to continue
-// an existing trace. If it cannot detect an existing trace in the request, the
-// span will be left unchanged.
-//
-// ContinueFromRequest is an alias for:
-//
-// ContinueFromHeaders(r.Header.Get(SentryTraceHeader), r.Header.Get(SentryBaggageHeader)).
-func ContinueFromRequest(r *http.Request) SpanOption {
-	return ContinueFromHeaders(r.Header.Get(SentryTraceHeader), r.Header.Get(SentryBaggageHeader))
+// StartNewTrace returns a derived context carrying fresh propagation state.
+// It does not mutate the parent context or Scope.
+func StartNewTrace(ctx context.Context) context.Context {
+	return contextWithFreshPropagation(ctx)
 }
 
-// ContinueFromHeaders returns a span option that updates the span to continue
-// an existing TraceID and propagates the Dynamic Sampling context.
-func ContinueFromHeaders(trace, baggage string) SpanOption {
-	return func(s *Span) {
-		if trace == "" {
-			return
-		}
-
-		// Parse baggage first to get org_id for comparison
-		var dsc DynamicSamplingContext
-		if baggage != "" {
-			parsed, err := DynamicSamplingContextFromHeader([]byte(baggage))
-			if err == nil {
-				dsc = parsed
-			}
-		}
-
-		client := hubFromContext(s.ctx).Client()
-		if !shouldContinueTrace(client, dsc) {
-			return // leave span unchanged → behaves as head of trace
-		}
-
-		s.updateFromSentryTrace([]byte(trace))
-
-		if baggage != "" {
-			s.updateFromBaggage([]byte(baggage))
-		}
-
-		// In case a sentry-trace header is present but there are no sentry-related
-		// values in the baggage, create an empty, frozen DynamicSamplingContext.
-		if !s.dynamicSamplingContext.HasEntries() {
-			s.dynamicSamplingContext = DynamicSamplingContext{
-				Frozen: true,
-			}
-		}
+// GetTraceparent returns the current Sentry trace header from context-carried
+// propagation state. It does not fall back to Hub or Scope state.
+func GetTraceparent(ctx context.Context) string {
+	if span := SpanFromContext(ctx); span != nil {
+		return span.ToSentryTrace()
 	}
+	propagation, ok := propagationContextFromContext(ctx)
+	if !ok {
+		return ""
+	}
+	sampled := ""
+	switch propagation.Sampled {
+	case SampledTrue:
+		sampled = "-1"
+	case SampledFalse:
+		sampled = "-0"
+	}
+	return fmt.Sprintf("%s-%s%s", propagation.TraceID, propagation.SpanID, sampled)
 }
 
-// ContinueFromTrace returns a span option that updates the span to continue
-// an existing TraceID.
-func ContinueFromTrace(trace string) SpanOption {
-	return func(s *Span) {
-		if trace == "" {
-			return
-		}
-		client := hubFromContext(s.ctx).Client()
-		if !shouldContinueTrace(client, DynamicSamplingContext{}) {
-			return
-		}
-		s.updateFromSentryTrace([]byte(trace))
+// GetTraceparentW3C returns the current W3C trace header from context-carried
+// propagation state. It does not fall back to Hub or Scope state.
+func GetTraceparentW3C(ctx context.Context) string {
+	if span := SpanFromContext(ctx); span != nil {
+		return span.ToTraceparent()
 	}
+	propagation, ok := propagationContextFromContext(ctx)
+	if !ok {
+		return ""
+	}
+	flags := "00"
+	if propagation.Sampled == SampledTrue {
+		flags = "01"
+	}
+	return fmt.Sprintf("00-%s-%s-%s", propagation.TraceID, propagation.SpanID, flags)
+}
+
+// GetBaggage returns baggage from context-carried propagation state. It does
+// not fall back to Hub or Scope state.
+func GetBaggage(ctx context.Context) string {
+	if span := SpanFromContext(ctx); span != nil {
+		return span.ToBaggage()
+	}
+	propagation, ok := propagationContextFromContext(ctx)
+	if !ok {
+		return ""
+	}
+	return propagation.DynamicSamplingContext.String()
 }
 
 // spanContextKey is used to store span values in contexts.

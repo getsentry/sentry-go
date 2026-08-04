@@ -71,7 +71,6 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	transactionSource := sentry.SourceURL
 
 	options := []sentry.SpanOption{
-		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),
@@ -80,10 +79,14 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	savedCtx := ctx.UserContext()
 	requestCtx, cancel := context.WithCancel(savedCtx)
 	defer cancel()
+	requestCtx = sentry.SetHubOnContext(requestCtx, hub)
+	requestCtx, scope := sentry.ScopeFromContext(requestCtx)
+	scope.SetClient(hub.Client())
+	requestCtx = sentry.ContinueTrace(requestCtx, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader))
 	defer func() { ctx.SetUserContext(savedCtx) }()
 
 	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(requestCtx, hub),
+		requestCtx,
 		fmt.Sprintf("%s %s", r.Method, transactionName),
 		options...,
 	)
@@ -102,9 +105,9 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	transaction.SetData("http.request.method", r.Method)
 	r = r.WithContext(transaction.Context())
 
-	scope := hub.Scope()
-	scope.SetRequest(r)
-	scope.SetRequestBody(bytes.Clone(ctx.Request().Body()))
+	hubScope := hub.Scope()
+	hubScope.SetRequest(r)
+	hubScope.SetRequestBody(bytes.Clone(ctx.Request().Body()))
 	ctx.Locals(valuesKey, hub)
 	ctx.Locals(transactionKey, transaction)
 	defer h.recoverWithSentry(hub, ctx)

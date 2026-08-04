@@ -3,6 +3,23 @@ package sentry
 import "context"
 
 type scopeContextKey struct{}
+type propagationContextKey struct{}
+
+func propagationContextFromContext(ctx context.Context) (PropagationContext, bool) {
+	if ctx == nil {
+		return PropagationContext{}, false
+	}
+	propagation, ok := ctx.Value(propagationContextKey{}).(PropagationContext)
+	return propagation.clone(), ok
+}
+
+func contextWithPropagationContext(ctx context.Context, propagation PropagationContext) context.Context {
+	return context.WithValue(ctx, propagationContextKey{}, propagation.clone())
+}
+
+func contextWithFreshPropagation(ctx context.Context) context.Context {
+	return contextWithPropagationContext(ctx, NewPropagationContext())
+}
 
 // globalScope is the process-wide global scope.
 var globalScope = newScopeWithClient(NewNoopClient())
@@ -31,7 +48,11 @@ func ScopeFromContext(ctx context.Context) (context.Context, *Scope) {
 	}
 
 	scope := newIsolationScope()
-	return context.WithValue(ctx, scopeContextKey{}, scope), scope
+	ctx = context.WithValue(ctx, scopeContextKey{}, scope)
+	if _, ok := propagationContextFromContext(ctx); !ok {
+		ctx = contextWithFreshPropagation(ctx)
+	}
+	return ctx, scope
 }
 
 // WithIsolation returns an independent isolation context. It clones a scope already
@@ -43,7 +64,11 @@ func WithIsolation(ctx context.Context) context.Context {
 	} else {
 		scope = scope.Clone()
 	}
-	return context.WithValue(ctx, scopeContextKey{}, scope)
+	ctx = context.WithValue(ctx, scopeContextKey{}, scope)
+	if _, ok := propagationContextFromContext(ctx); !ok {
+		ctx = contextWithFreshPropagation(ctx)
+	}
+	return ctx
 }
 
 // newIsolationScope creates a new operation scope bound to the client currently

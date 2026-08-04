@@ -68,15 +68,19 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 
 		r := convert(ctx)
 
+		requestCtx := sentry.SetHubOnContext(ctx, hub)
+		requestCtx, scope := sentry.ScopeFromContext(requestCtx)
+		scope.SetClient(hub.Client())
+		requestCtx = sentry.ContinueTrace(requestCtx, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader))
+
 		options := []sentry.SpanOption{
-			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginFastHTTP),
 		}
 
 		transaction := sentry.StartTransaction(
-			sentry.SetHubOnContext(ctx, hub),
+			requestCtx,
 			fmt.Sprintf("%s %s", r.Method, string(ctx.Path())),
 			options...,
 		)
@@ -89,9 +93,9 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 
 		transaction.SetData("http.request.method", r.Method)
 
-		scope := hub.Scope()
-		scope.SetRequest(r)
-		scope.SetRequestBody(bytes.Clone(ctx.Request.Body()))
+		hubScope := hub.Scope()
+		hubScope.SetRequest(r)
+		hubScope.SetRequestBody(bytes.Clone(ctx.Request.Body()))
 		ctx.SetUserValue(valuesKey, hub)
 		ctx.SetUserValue(transactionKey, transaction)
 		defer h.recoverWithSentry(hub, ctx)
