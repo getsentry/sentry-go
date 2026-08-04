@@ -15,22 +15,20 @@ import (
 	"github.com/getsentry/sentry-go/report"
 )
 
-// Scope holds contextual data for the current scope.
+// Scope holds contextual data for an operation.
 //
-// The scope is an object that can cloned efficiently and stores data that is
-// locally relevant to an event. For instance the scope will hold recorded
-// breadcrumbs and similar information.
+// The scope is an object that can be cloned efficiently and stores data that is
+// locally relevant to an event. It also holds the client and event processor in
+// which the scope data should be applied to.
 //
-// The scope can be interacted with in two ways. First, the scope is routinely
-// updated with information by functions such as AddBreadcrumb which will modify
-// the current scope. Second, the current scope can be configured through the
-// ConfigureScope function or Hub method of the same name.
-//
-// The scope is meant to be modified but not inspected directly. When preparing
-// an event for reporting, the current client adds information from the current
-// scope into the event.
+// Clearing or cloning the scope only affects the underlying data. To set a new
+// client or event processor, SetClient or AddEventProcessor should be used.
 type Scope struct {
-	mu              sync.RWMutex
+	mu sync.RWMutex
+	// boundClient is the client reference bound to this Scope. Clone copies the
+	// client reference but not the client object. Clear keeps the binding.
+	boundClient Client
+	// eventProcessors are retained by Clear and inherited by Clone.
 	eventProcessors []EventProcessor
 
 	// scopeData keeps track of all scope specific data
@@ -58,12 +56,20 @@ type scopeData struct {
 	}
 
 	propagationContext PropagationContext
-	span               *Span
+	span               *Span // TODO: this should be removed when the span API is introduced. Currently kept for compatibility.
 }
 
-// NewScope creates a new Scope.
+// NewScope creates a new Scope bound to a no-op client.
 func NewScope() *Scope {
-	return &Scope{scopeData: newScopeData()}
+	return newScopeWithClient(NewNoopClient())
+}
+
+// newScopeWithClient creates a Scope with an explicit, normalized client.
+func newScopeWithClient(client Client) *Scope {
+	return &Scope{
+		boundClient: normalizeClient(client),
+		scopeData:   newScopeData(),
+	}
 }
 
 func newScopeData() scopeData {
@@ -92,6 +98,22 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	if len(scope.breadcrumbs) > limit {
 		scope.breadcrumbs = scope.breadcrumbs[1 : limit+1]
 	}
+}
+
+// SetClient explicitly binds a client to the scope.
+func (scope *Scope) SetClient(client Client) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
+	scope.boundClient = normalizeClient(client)
+}
+
+// client returns the non-nil client bound to this Scope under a lock.
+func (scope *Scope) client() Client {
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+
+	return scope.boundClient
 }
 
 // ClearBreadcrumbs clears all breadcrumbs from the current scope.
@@ -286,6 +308,7 @@ func (scope *Scope) SetSpan(span *Span) {
 }
 
 // Clone returns a copy of the current scope with all data copied over.
+// The client binding is inherited by reference without cloning the object.
 func (scope *Scope) Clone() *Scope {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
@@ -294,6 +317,7 @@ func (scope *Scope) Clone() *Scope {
 	return &Scope{
 		scopeData:       data.clone(),
 		eventProcessors: scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)],
+		boundClient:     scope.boundClient,
 	}
 }
 
@@ -527,6 +551,9 @@ func hubFromContexts(ctxs ...context.Context) *Hub {
 // This ordering ensures we always use the most contextually relevant tracing information.
 // For example, if a specific span is active for an operation, we use that span's trace/span IDs
 // rather than accidentally using a different span that might be set on the hub's scope.
+//
+// TODO: this should be removed when the span API is introduced. Currently kept for compatibility. The span
+// and trace should only be resolved through context.
 func resolveTrace(scope *Scope, client Client, ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
 	client = normalizeClient(client)
 	var span *Span
