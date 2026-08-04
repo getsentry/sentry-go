@@ -327,7 +327,7 @@ func NewAsyncTransport(options TransportOptions) protocol.TelemetryTransport {
 	if err != nil || dsn == nil {
 		if options.Spotlight {
 			debuglog.Printf("No Sentry DSN configured (%v); events will not be delivered to Sentry, but Spotlight is enabled and will still receive them.", err)
-			return &NoopTransport{}
+			return &NoopTransport{spotlight: true}
 		}
 		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)
 		return NewNoopTransport()
@@ -619,7 +619,12 @@ func (t *AsyncTransport) isRateLimited(category ratelimit.Category) bool {
 
 // NoopTransport is a transport implementation that drops all events.
 // Used internally when an empty or invalid DSN is provided.
-type NoopTransport struct{}
+type NoopTransport struct {
+	// spotlight, when set, means envelopes handed to this transport are
+	// still delivered to a Spotlight sidecar independently, so SendEnvelope
+	// shouldn't log them as dropped outright.
+	spotlight bool
+}
 
 func NewNoopTransport() *NoopTransport {
 	debuglog.Println("Transport initialized with invalid DSN. Using NoopTransport. No events will be delivered.")
@@ -627,6 +632,10 @@ func NewNoopTransport() *NoopTransport {
 }
 
 func (t *NoopTransport) SendEnvelope(_ *protocol.Envelope) error {
+	if t.spotlight {
+		debuglog.Println("Envelope not sent to Sentry (NoopTransport), but Spotlight will still receive it.")
+		return nil
+	}
 	debuglog.Println("Envelope dropped due to NoopTransport usage.")
 	return nil
 }

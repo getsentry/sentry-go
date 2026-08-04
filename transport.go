@@ -860,11 +860,17 @@ func (t *HTTPSyncTransport) disabled(c ratelimit.Category) bool {
 
 // noopTransport is an implementation of Transport interface which drops all the events.
 // Only used internally when an empty DSN is provided, which effectively disables the SDK.
-type noopTransport struct{}
+type noopTransport struct {
+	// spotlight, when set, means events handed to this transport are still
+	// delivered to a Spotlight sidecar independently, so SendEvent shouldn't
+	// log them as dropped outright.
+	spotlight bool
+}
 
-var _ Transport = noopTransport{}
+var _ Transport = &noopTransport{}
 
-func (noopTransport) Configure(options ClientOptions) {
+func (t *noopTransport) Configure(options ClientOptions) {
+	t.spotlight = options.Spotlight
 	if options.Spotlight {
 		debuglog.Println("Sentry client initialized with an empty DSN. No events will be delivered to Sentry, but Spotlight is enabled and will still receive them.")
 		return
@@ -872,19 +878,23 @@ func (noopTransport) Configure(options ClientOptions) {
 	debuglog.Println("Sentry client initialized with an empty DSN. Using noopTransport. No events will be delivered.")
 }
 
-func (noopTransport) SendEvent(*Event) {
+func (t *noopTransport) SendEvent(*Event) {
+	if t.spotlight {
+		debuglog.Println("Event not sent to Sentry (noopTransport), but Spotlight will still receive it.")
+		return
+	}
 	debuglog.Println("Event dropped due to noopTransport usage.")
 }
 
-func (noopTransport) Flush(time.Duration) bool {
+func (t *noopTransport) Flush(time.Duration) bool {
 	return true
 }
 
-func (noopTransport) FlushWithContext(context.Context) bool {
+func (t *noopTransport) FlushWithContext(context.Context) bool {
 	return true
 }
 
-func (noopTransport) Close() {}
+func (t *noopTransport) Close() {}
 
 // SpotlightTransport decorates Transport to also send events to Spotlight.
 type SpotlightTransport struct {
@@ -1058,7 +1068,12 @@ func buildSpotlightHTTPClient(opts ClientOptions) *http.Client {
 		transport = opts.HTTPTransport
 	} else {
 		transport = &http.Transport{
-			Proxy:           getProxyConfig(opts),
+			// Deliberately not getProxyConfig(opts): that honors the user's
+			// Sentry-specific HTTPProxy/HTTPSProxy, which would force even
+			// localhost Spotlight traffic through a proxy meant for Sentry's
+			// API. http.ProxyFromEnvironment respects standard NO_PROXY
+			// loopback exclusions instead.
+			Proxy:           http.ProxyFromEnvironment,
 			TLSClientConfig: getTLSConfig(opts),
 		}
 	}

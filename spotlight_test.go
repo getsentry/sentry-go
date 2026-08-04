@@ -77,7 +77,7 @@ func TestSpotlightTransportWithNoopUnderlying(t *testing.T) {
 	}))
 	defer server.Close()
 
-	st := NewSpotlightTransport(noopTransport{})
+	st := NewSpotlightTransport(&noopTransport{})
 	st.Configure(ClientOptions{SpotlightURL: server.URL + "/stream"})
 	defer st.Close()
 
@@ -711,8 +711,13 @@ func TestSpotlightClientOptionsLegacyTransportPath(t *testing.T) {
 	}
 }
 
+// TestSpotlightProxyConfiguration is a regression test: Spotlight's HTTP
+// client used to apply the user's Sentry-specific HTTPProxy/HTTPSProxy via
+// getProxyConfig, which (unlike http.ProxyFromEnvironment) has no loopback
+// exclusion, so a configured Sentry proxy would swallow localhost Spotlight
+// traffic too. Spotlight always targets a local sidecar, so its own client
+// must not route through a proxy meant for Sentry's API.
 func TestSpotlightProxyConfiguration(t *testing.T) {
-	// Test with HTTPProxy option
 	mock := &MockTransport{}
 	st := NewSpotlightTransport(mock)
 	st.Configure(ClientOptions{
@@ -728,9 +733,20 @@ func TestSpotlightProxyConfiguration(t *testing.T) {
 	if !ok {
 		t.Fatalf("Expected *http.Transport, got %T", st.client.Transport)
 	}
-
 	if transport.Proxy == nil {
-		t.Errorf("Expected Proxy to be configured")
+		t.Fatalf("Expected Proxy to be configured")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, "http://localhost:8969/stream", nil)
+	if err != nil {
+		t.Fatalf("failed to build request: %v", err)
+	}
+	proxyURL, err := transport.Proxy(req)
+	if err != nil {
+		t.Fatalf("Proxy() returned an error: %v", err)
+	}
+	if proxyURL != nil {
+		t.Errorf("Expected no proxy for localhost Spotlight traffic despite HTTPProxy being configured, got %s", proxyURL)
 	}
 }
 
@@ -1052,7 +1068,7 @@ func TestSpotlightFlushWaitsForInFlightSends(t *testing.T) {
 	defer server.Close()
 
 	// noopTransport simulates the empty-DSN, Spotlight-only configuration.
-	st := NewSpotlightTransport(noopTransport{})
+	st := NewSpotlightTransport(&noopTransport{})
 	st.Configure(ClientOptions{SpotlightURL: server.URL + "/stream"})
 
 	event := NewEvent()
@@ -1082,7 +1098,7 @@ func TestSpotlightFlushWithContextWaitsForInFlightSends(t *testing.T) {
 	}))
 	defer server.Close()
 
-	st := NewSpotlightTransport(noopTransport{})
+	st := NewSpotlightTransport(&noopTransport{})
 	st.Configure(ClientOptions{SpotlightURL: server.URL + "/stream"})
 
 	event := NewEvent()
@@ -1260,4 +1276,36 @@ func TestSpotlightEnvelopeSenderConcurrentSendAndFlush(_ *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// TestSpotlightLegacyNoopTransportLogMessage is a regression test: the
+// legacy SpotlightTransport-wrapped noopTransport used to log "Event
+// dropped due to noopTransport usage" for every send, even though Spotlight
+// was actually receiving it - misleading with Debug: true in Spotlight-only
+// (no DSN) setups. It should say Spotlight is still getting it instead.
+func TestSpotlightLegacyNoopTransportLogMessage(t *testing.T) {
+	var buf bytes.Buffer
+	debuglog.SetOutput(&buf)
+	defer debuglog.SetOutput(io.Discard)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	st := NewSpotlightTransport(&noopTransport{})
+	st.Configure(ClientOptions{Spotlight: true, SpotlightURL: server.URL + "/stream"})
+	defer st.Close()
+
+	st.SendEvent(NewEvent())
+	if !st.Flush(time.Second) {
+		t.Fatalf("Expected Flush to succeed")
+	}
+
+	if strings.Contains(buf.String(), "Event dropped due to noopTransport usage") {
+		t.Errorf("Expected no blanket 'dropped' message when Spotlight is enabled, got: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "Spotlight will still receive it") {
+		t.Errorf("Expected the log to mention Spotlight still receiving the event, got: %s", buf.String())
+	}
 }
