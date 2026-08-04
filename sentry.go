@@ -24,6 +24,7 @@ func Init(options ClientOptions) error {
 		return err
 	}
 	hub.BindClient(client)
+	GlobalScope().SetClient(client)
 	return nil
 }
 
