@@ -102,7 +102,7 @@ func resolveCaptureOptions(ctx context.Context, client Client, options []Capture
 	}
 	snapshot := snapshotScopes(client, global, isolation)
 	snapshot.propagationContext = PropagationContext{}
-	if propagation, ok := propagationContextFromContext(ctx); ok {
+	if propagation, ok := propagationContextFromStorage(ctx); ok {
 		snapshot.propagationContext = propagation
 	}
 	modifiers := append([]EventModifier{snapshot}, resolved.modifiers...)

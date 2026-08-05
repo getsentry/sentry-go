@@ -154,7 +154,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		// the same local defaults while inheriting remote trace state.
 		span.Source = SourceCustom
 		span.Origin = SpanOriginManual
-		if propagation, ok := propagationContextFromContext(ctx); ok {
+		if propagation, ok := propagationContextFromStorage(ctx); ok {
 			span.TraceID = propagation.TraceID
 			span.ParentSpanID = propagation.ParentSpanID
 			span.Sampled = propagation.Sampled
@@ -231,6 +231,27 @@ func (s *Span) Finish() {
 
 // Context returns the context containing the span.
 func (s *Span) Context() context.Context { return s.ctx }
+
+// propagationContextSnapshot returns a complete trace snapshot for resolution.
+// Mutable DSC entries are cloned before crossing the span boundary.
+func (s *Span) propagationContextSnapshot() PropagationContext {
+	s.mu.RLock()
+	propagation := PropagationContext{
+		TraceID:                s.TraceID,
+		SpanID:                 s.SpanID,
+		ParentSpanID:           s.ParentSpanID,
+		Sampled:                s.Sampled,
+		DynamicSamplingContext: s.dynamicSamplingContext,
+	}
+	s.mu.RUnlock()
+
+	if transaction := s.GetTransaction(); transaction != nil && transaction != s {
+		transaction.mu.RLock()
+		propagation.DynamicSamplingContext = transaction.dynamicSamplingContext
+		transaction.mu.RUnlock()
+	}
+	return propagation.clone()
+}
 
 // StartChild starts a new child span.
 //
@@ -1051,10 +1072,7 @@ func StartNewTrace(ctx context.Context) context.Context {
 // GetTraceparent returns the current Sentry trace header from context-carried
 // propagation state. It does not fall back to Hub or Scope state.
 func GetTraceparent(ctx context.Context) string {
-	if span := SpanFromContext(ctx); span != nil {
-		return span.ToSentryTrace()
-	}
-	propagation, ok := propagationContextFromContext(ctx)
+	propagation, ok := propagationContextFromContext(ctx, GetClient(ctx))
 	if !ok {
 		return ""
 	}
@@ -1071,10 +1089,7 @@ func GetTraceparent(ctx context.Context) string {
 // GetTraceparentW3C returns the current W3C trace header from context-carried
 // propagation state. It does not fall back to Hub or Scope state.
 func GetTraceparentW3C(ctx context.Context) string {
-	if span := SpanFromContext(ctx); span != nil {
-		return span.ToTraceparent()
-	}
-	propagation, ok := propagationContextFromContext(ctx)
+	propagation, ok := propagationContextFromContext(ctx, GetClient(ctx))
 	if !ok {
 		return ""
 	}
@@ -1088,10 +1103,7 @@ func GetTraceparentW3C(ctx context.Context) string {
 // GetBaggage returns baggage from context-carried propagation state. It does
 // not fall back to Hub or Scope state.
 func GetBaggage(ctx context.Context) string {
-	if span := SpanFromContext(ctx); span != nil {
-		return span.ToBaggage()
-	}
-	propagation, ok := propagationContextFromContext(ctx)
+	propagation, ok := propagationContextFromContext(ctx, GetClient(ctx))
 	if !ok {
 		return ""
 	}

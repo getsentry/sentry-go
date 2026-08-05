@@ -26,7 +26,7 @@ func TestContinueTraceCarriesPropagationOnDerivedContext(t *testing.T) {
 		t.Fatal("ContinueTrace did not preserve parent value")
 	}
 
-	propagation, ok := propagationContextFromContext(ctx)
+	propagation, ok := propagationContextFromStorage(ctx)
 	if !ok {
 		t.Fatal("continued context has no propagation state")
 	}
@@ -48,20 +48,20 @@ func TestPropagationDSCDoesNotAlias(t *testing.T) {
 		"d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09-1",
 		"sentry-release=parent",
 	)
-	first, ok := propagationContextFromContext(ctx)
+	first, ok := propagationContextFromStorage(ctx)
 	if !ok {
 		t.Fatal("missing propagation state")
 	}
 	first.DynamicSamplingContext.Entries["release"] = "mutated"
-	second, _ := propagationContextFromContext(ctx)
+	second, _ := propagationContextFromStorage(ctx)
 	if second.DynamicSamplingContext.Entries["release"] != "parent" {
 		t.Fatal("propagation reads alias DSC entries")
 	}
 
 	isolated := WithIsolation(ctx)
-	isolatedPropagation, _ := propagationContextFromContext(isolated)
+	isolatedPropagation, _ := propagationContextFromStorage(isolated)
 	isolatedPropagation.DynamicSamplingContext.Entries["release"] = "child"
-	again, _ := propagationContextFromContext(ctx)
+	again, _ := propagationContextFromStorage(ctx)
 	if again.DynamicSamplingContext.Entries["release"] != "parent" {
 		t.Fatal("WithIsolation propagation aliases DSC entries")
 	}
@@ -70,18 +70,18 @@ func TestPropagationDSCDoesNotAlias(t *testing.T) {
 func TestIsolationAndStartNewTraceCreateFreshPropagation(t *testing.T) {
 	first := WithIsolation(context.Background())
 	second := WithIsolation(context.Background())
-	firstPropagation, firstOK := propagationContextFromContext(first)
-	secondPropagation, secondOK := propagationContextFromContext(second)
+	firstPropagation, firstOK := propagationContextFromStorage(first)
+	secondPropagation, secondOK := propagationContextFromStorage(second)
 	if !firstOK || !secondOK || firstPropagation.TraceID == secondPropagation.TraceID {
 		t.Fatal("independent isolation boundaries must receive distinct propagation")
 	}
 
 	child := StartNewTrace(first)
-	childPropagation, ok := propagationContextFromContext(child)
+	childPropagation, ok := propagationContextFromStorage(child)
 	if !ok || childPropagation.TraceID == firstPropagation.TraceID {
 		t.Fatal("StartNewTrace did not derive distinct propagation")
 	}
-	parentAgain, _ := propagationContextFromContext(first)
+	parentAgain, _ := propagationContextFromStorage(first)
 	if parentAgain.TraceID != firstPropagation.TraceID {
 		t.Fatal("StartNewTrace mutated parent propagation")
 	}
@@ -92,7 +92,7 @@ func TestContextHeadersUsePropagationWithoutSpanOrHub(t *testing.T) {
 		"d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09-0",
 		"sentry-release=1.2.3",
 	)
-	propagation, ok := propagationContextFromContext(ctx)
+	propagation, ok := propagationContextFromStorage(ctx)
 	if !ok {
 		t.Fatal("missing propagation state")
 	}

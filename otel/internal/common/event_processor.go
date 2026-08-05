@@ -21,7 +21,7 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 		return event
 	}
 
-	traceID, spanID, ok := ResolveTraceContext(hint.Context)
+	propagation, ok := ResolveTraceContext(hint.Context)
 	if !ok {
 		return event
 	}
@@ -35,21 +35,32 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 		event.Contexts["trace"] = make(map[string]any)
 		traceContext = event.Contexts["trace"]
 	}
-	traceContext["trace_id"] = traceID.String()
-	traceContext["span_id"] = spanID.String()
+	traceContext["trace_id"] = propagation.TraceID.String()
+	traceContext["span_id"] = propagation.SpanID.String()
 	return event
 }
 
-// ResolveTraceContext returns Sentry trace/span IDs from the active OTel span in ctx.
-func ResolveTraceContext(ctx context.Context) (sentry.TraceID, sentry.SpanID, bool) {
+// ResolveTraceContext returns propagation state from the active OTel span in ctx.
+func ResolveTraceContext(ctx context.Context) (sentry.PropagationContext, bool) {
 	if ctx == nil {
-		return sentry.TraceID{}, sentry.SpanID{}, false
+		return sentry.PropagationContext{}, false
 	}
 
 	otelSpanContext := trace.SpanContextFromContext(ctx)
 	if !otelSpanContext.IsValid() {
-		return sentry.TraceID{}, sentry.SpanID{}, false
+		return sentry.PropagationContext{}, false
 	}
 
-	return sentry.TraceID(otelSpanContext.TraceID()), sentry.SpanID(otelSpanContext.SpanID()), true
+	sampled := sentry.SampledFalse
+	if otelSpanContext.IsSampled() {
+		sampled = sentry.SampledTrue
+	}
+	return sentry.PropagationContext{
+		TraceID: sentry.TraceID(otelSpanContext.TraceID()),
+		SpanID:  sentry.SpanID(otelSpanContext.SpanID()),
+		Sampled: sampled,
+		DynamicSamplingContext: sentry.DynamicSamplingContext{
+			Frozen: true,
+		},
+	}, true
 }

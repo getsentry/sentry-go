@@ -14,7 +14,7 @@ import (
 type Client interface {
 	IsEnabled() bool
 	AddEventProcessor(EventProcessor)
-	SetExternalContextTraceResolver(func(context.Context) (TraceID, SpanID, bool))
+	SetExternalContextTraceResolver(func(context.Context) (PropagationContext, bool))
 	Options() ClientOptions
 	clientOptions() *ClientOptions
 	GetDataCollection() DataCollection
@@ -32,7 +32,7 @@ type Client interface {
 	SetSDKIdentifier(string)
 	GetSDKIdentifier() string
 	GetSDKVersion() string
-	externalTraceContextFromContext(context.Context) (TraceID, SpanID, bool)
+	externalPropagationContextFromContext(context.Context) (PropagationContext, bool)
 	captureLog(*Log, *Scope) bool
 	captureMetric(*Metric, *Scope) bool
 	recordDiscard(report.DiscardReason, ratelimit.Category, int64)
@@ -67,7 +67,7 @@ func normalizeClient(value Client) Client {
 
 func (noopClient) IsEnabled() bool                  { return false }
 func (noopClient) AddEventProcessor(EventProcessor) {}
-func (noopClient) SetExternalContextTraceResolver(func(context.Context) (TraceID, SpanID, bool)) {
+func (noopClient) SetExternalContextTraceResolver(func(context.Context) (PropagationContext, bool)) {
 }
 func (noopClient) Options() ClientOptions                                             { return noopClientOptions }
 func (noopClient) clientOptions() *ClientOptions                                      { return &noopClientOptions }
@@ -88,8 +88,8 @@ func (noopClient) EventFromCheckIn(*CheckIn, *MonitorConfig) *Event             
 func (noopClient) SetSDKIdentifier(string)                                         {}
 func (noopClient) GetSDKIdentifier() string                                        { return sdkIdentifier }
 func (noopClient) GetSDKVersion() string                                           { return SDKVersion }
-func (noopClient) externalTraceContextFromContext(context.Context) (TraceID, SpanID, bool) {
-	return TraceID{}, SpanID{}, false
+func (noopClient) externalPropagationContextFromContext(context.Context) (PropagationContext, bool) {
+	return PropagationContext{}, false
 }
 func (noopClient) captureLog(*Log, *Scope) bool                                  { return false }
 func (noopClient) captureMetric(*Metric, *Scope) bool                            { return false }

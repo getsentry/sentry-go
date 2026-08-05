@@ -96,11 +96,11 @@ var DebugLogger = debuglog.GetLogger()
 // Event processors are used to change an event before it is sent to Sentry.
 type EventProcessor func(event *Event, hint *EventHint) *Event
 
-// externalContextTraceResolver extracts trace and span IDs from an external context source.
+// externalContextTraceResolver extracts propagation information from an external context source.
 //
 // This is currently a workaround for extractring trace information from OTel SpanContext without
 // needing the otel dependency on the root package.
-type externalContextTraceResolver func(ctx context.Context) (traceID TraceID, spanID SpanID, ok bool)
+type externalContextTraceResolver func(ctx context.Context) (PropagationContext, bool)
 
 // EventModifier is the interface that wraps the ApplyToEvent method.
 //
@@ -565,20 +565,20 @@ func (client *defaultClient) AddEventProcessor(processor EventProcessor) {
 	client.eventProcessors = append(client.eventProcessors, processor)
 }
 
-// SetExternalContextTraceResolver installs a resolver used to extract trace/span IDs
+// SetExternalContextTraceResolver installs a resolver used to extract propagation information
 // from external context implementations.
 //
 // This is intended for integrations such as OpenTelemetry.
-func (client *defaultClient) SetExternalContextTraceResolver(resolver func(ctx context.Context) (TraceID, SpanID, bool)) {
+func (client *defaultClient) SetExternalContextTraceResolver(resolver func(ctx context.Context) (PropagationContext, bool)) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
 	client.externalTraceResolver = resolver
 }
 
-func (client *defaultClient) externalTraceContextFromContext(ctx context.Context) (TraceID, SpanID, bool) {
+func (client *defaultClient) externalPropagationContextFromContext(ctx context.Context) (PropagationContext, bool) {
 	if ctx == nil {
-		return TraceID{}, SpanID{}, false
+		return PropagationContext{}, false
 	}
 
 	client.mu.RLock()
@@ -586,10 +586,17 @@ func (client *defaultClient) externalTraceContextFromContext(ctx context.Context
 	client.mu.RUnlock()
 
 	if resolver == nil {
-		return TraceID{}, SpanID{}, false
+		return PropagationContext{}, false
 	}
 
-	return resolver(ctx)
+	propagation, ok := resolver(ctx)
+	if !ok || !propagation.isValid() {
+		return PropagationContext{}, false
+	}
+	// External sources own the complete selected trace. An empty DSC is valid
+	// and must not trigger fallback to unrelated carried Sentry propagation.
+	propagation.DynamicSamplingContext.Frozen = true
+	return propagation.clone(), true
 }
 
 // Options return ClientOptions for the current Client.

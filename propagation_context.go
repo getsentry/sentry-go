@@ -18,6 +18,10 @@ func (p PropagationContext) clone() PropagationContext {
 	return p
 }
 
+func (p PropagationContext) isValid() bool {
+	return p.TraceID != zeroTraceID && p.SpanID != zeroSpanID
+}
+
 func (p PropagationContext) Map() map[string]interface{} {
 	m := map[string]interface{}{
 		"trace_id": p.TraceID,

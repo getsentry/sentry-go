@@ -284,14 +284,14 @@ func (scope *Scope) SetPropagationContext(propagationContext PropagationContext)
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	scope.propagationContext = propagationContext
+	scope.propagationContext = propagationContext.clone()
 }
 
 func (scope *Scope) propagationContextSnapshot() PropagationContext {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
-	return scope.propagationContext
+	return scope.propagationContext.clone()
 }
 
 // GetSpan returns the span from the current scope.
@@ -374,6 +374,7 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 type scopeSnapshot struct {
 	scopeData
 	eventProcessors []EventProcessor
+	legacy          bool
 }
 
 // snapshotScopes copies and merges scopes from least to most specific.
@@ -442,15 +443,15 @@ func (snapshot *scopeSnapshot) mergeLocked(scope *Scope) {
 		snapshot.requestBody = scope.requestBody
 	}
 
-	snapshot.propagationContext = scope.propagationContext
-	if scope.span != nil {
-		snapshot.span = scope.span
-	}
+	snapshot.propagationContext = scope.propagationContext.clone()
 }
 
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
 func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client Client) *Event {
-	return snapshotScopes(client, scope).applyToEvent(event, hint, client)
+	snapshot := snapshotScopes(client, scope)
+	snapshot.legacy = true
+	snapshot.span = scope.GetSpan()
+	return snapshot.applyToEvent(event, hint, client)
 }
 
 // ApplyToEvent implements [EventModifier] for a pre-built snapshot.
@@ -494,24 +495,6 @@ func (snapshot scopeSnapshot) applyToEvent(event *Event, hint *EventHint, client
 		event.Contexts = make(map[string]Context)
 	}
 
-	if snapshot.span != nil {
-		if _, ok := event.Contexts["trace"]; !ok {
-			event.Contexts["trace"] = snapshot.span.traceContext().Map()
-		}
-		if transaction := snapshot.span.GetTransaction(); transaction != nil {
-			event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
-		}
-	} else {
-		if _, ok := event.Contexts["trace"]; !ok {
-			event.Contexts["trace"] = snapshot.propagationContext.Map()
-		}
-		dsc := snapshot.propagationContext.DynamicSamplingContext
-		if !dsc.HasEntries() {
-			dsc = dynamicSamplingContextFromPropagationContext(snapshot.propagationContext, client)
-		}
-		event.sdkMetaData.dsc = dsc
-	}
-
 	var ctx context.Context
 	if hint != nil {
 		ctx = hint.Context
@@ -519,11 +502,30 @@ func (snapshot scopeSnapshot) applyToEvent(event *Event, hint *EventHint, client
 	if ctx == nil && snapshot.request != nil {
 		ctx = snapshot.request.Context()
 	}
-	if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); event.Type != transactionType && ok {
-		traceCtx := event.Contexts["trace"]
-		traceCtx["trace_id"] = traceID.String()
-		traceCtx["span_id"] = spanID.String()
+
+	propagation := snapshot.propagationContext.clone()
+	if snapshot.legacy {
+		if snapshot.span != nil {
+			propagation = snapshot.span.propagationContextSnapshot()
+		}
+		// Preserve legacy external linking without consulting context-carried
+		// Sentry propagation or active-span state.
+		if event.Type != transactionType {
+			if external, ok := client.externalPropagationContextFromContext(ctx); ok {
+				propagation = external
+			}
+		}
+	} else if selected, ok := propagationContextFromContext(ctx, client); ok {
+		propagation = selected
 	}
+	if _, ok := event.Contexts["trace"]; !ok {
+		event.Contexts["trace"] = propagation.Map()
+	}
+	dsc := propagation.DynamicSamplingContext
+	if !dsc.IsFrozen() {
+		dsc = dynamicSamplingContextFromPropagationContext(propagation, client)
+	}
+	event.sdkMetaData.dsc = dsc
 
 	if event.User.IsEmpty() {
 		event.User = snapshot.user
@@ -624,51 +626,31 @@ func hubFromContexts(ctxs ...context.Context) *Hub {
 	return nil
 }
 
-// resolveTrace resolves trace ID and span ID from the given scope and contexts.
-//
-// The resolution order follows a most-specific-to-least-specific pattern:
-//  1. If an external trace resolver was registered (eg. OTel), we prioritise trace context
-//     information from that
-//  2. Check for span directly in contexts (SpanFromContext) - this is the most specific
-//     source as it represents a span explicitly attached to the current operation's context
-//  3. Check scope's span - provides access to span set on the hub's scope
-//  4. Fall back to scope's propagation context trace ID
-//
-// This ordering ensures we always use the most contextually relevant tracing information.
-// For example, if a specific span is active for an operation, we use that span's trace/span IDs
-// rather than accidentally using a different span that might be set on the hub's scope.
-//
-// TODO: this should be removed when the span API is introduced. Currently kept for compatibility. The span
-// and trace should only be resolved through context.
-func resolveTrace(scope *Scope, client Client, ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
-	client = normalizeClient(client)
-	var span *Span
+// propagationContextFromContext resolves native span, external provider, then
+// carried Sentry continuation state in deterministic order.
+func propagationContextFromContext(ctx context.Context, client Client) (PropagationContext, bool) {
+	if ctx == nil {
+		return PropagationContext{}, false
+	}
+	if span := SpanFromContext(ctx); span != nil {
+		return span.propagationContextSnapshot(), true
+	}
+	if propagation, ok := normalizeClient(client).externalPropagationContextFromContext(ctx); ok {
+		return propagation, true
+	}
+	return propagationContextFromStorage(ctx)
+}
 
+// resolveTrace remains for pre-context-signals logger and meter callers.
+func resolveTrace(scope *Scope, client Client, ctxs ...context.Context) (TraceID, SpanID) {
 	for _, ctx := range ctxs {
-		if ctx == nil {
-			continue
-		}
-		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
-			return traceID, spanID
-		}
-		if span = SpanFromContext(ctx); span != nil {
-			break
+		if propagation, ok := propagationContextFromContext(ctx, client); ok {
+			return propagation.TraceID, propagation.SpanID
 		}
 	}
-
 	if scope != nil {
-		scope.mu.RLock()
-		if span == nil {
-			span = scope.span
-		}
-		if span != nil {
-			traceID = span.TraceID
-			spanID = span.SpanID
-		} else {
-			traceID = scope.propagationContext.TraceID
-		}
-		scope.mu.RUnlock()
+		propagation := scope.propagationContextSnapshot()
+		return propagation.TraceID, SpanID{}
 	}
-
-	return traceID, spanID
+	return TraceID{}, SpanID{}
 }

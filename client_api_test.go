@@ -28,8 +28,8 @@ func TestNoopClient(t *testing.T) {
 	}
 
 	client.AddEventProcessor(func(event *Event, _ *EventHint) *Event { return event })
-	client.SetExternalContextTraceResolver(func(context.Context) (TraceID, SpanID, bool) {
-		return TraceID{}, SpanID{}, true
+	client.SetExternalContextTraceResolver(func(context.Context) (PropagationContext, bool) {
+		return PropagationContext{}, true
 	})
 	client.SetSDKIdentifier("custom")
 
@@ -82,8 +82,8 @@ func TestNoopClient(t *testing.T) {
 	if dsn := client.getDsn(); dsn != nil {
 		t.Errorf("getDsn returned %#v, want nil", dsn)
 	}
-	if traceID, spanID, ok := client.externalTraceContextFromContext(t.Context()); ok || traceID != (TraceID{}) || spanID != (SpanID{}) {
-		t.Errorf("external trace resolver returned (%v, %v, %v), want zero values", traceID, spanID, ok)
+	if propagation, ok := client.externalPropagationContextFromContext(t.Context()); ok || propagation.TraceID != (TraceID{}) || propagation.SpanID != (SpanID{}) {
+		t.Errorf("external trace resolver returned (%v, %v), want zero values", propagation, ok)
 	}
 	if client.captureLog(&Log{}, NewScope()) {
 		t.Error("no-op client must discard logs")

@@ -1205,6 +1205,187 @@ func TestSpanScopeManagement(t *testing.T) {
 	}
 }
 
+func TestTraceResolutionPrecedence(t *testing.T) {
+	client, err := newClient(ClientOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	carried := PropagationContext{
+		TraceID:      TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+		SpanID:       SpanIDFromHex("bbbbbbbbbbbbbbbb"),
+		ParentSpanID: SpanIDFromHex("1111111111111111"),
+		Sampled:      SampledFalse,
+		DynamicSamplingContext: DynamicSamplingContext{
+			Entries: map[string]string{"source": "carried"},
+			Frozen:  true,
+		},
+	}
+	ctx := contextWithPropagationContext(context.Background(), carried)
+
+	external := PropagationContext{
+		TraceID:      TraceIDFromHex("cccccccccccccccccccccccccccccccc"),
+		SpanID:       SpanIDFromHex("dddddddddddddddd"),
+		ParentSpanID: SpanIDFromHex("2222222222222222"),
+		Sampled:      SampledTrue,
+		DynamicSamplingContext: DynamicSamplingContext{
+			Entries: map[string]string{"source": "external"},
+			Frozen:  true,
+		},
+	}
+	client.SetExternalContextTraceResolver(func(context.Context) (PropagationContext, bool) {
+		return external, true
+	})
+
+	got, ok := propagationContextFromContext(ctx, client)
+	assert.True(t, ok)
+	assert.Equal(t, external, got)
+
+	native := &Span{
+		TraceID:      TraceIDFromHex("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"),
+		SpanID:       SpanIDFromHex("ffffffffffffffff"),
+		ParentSpanID: SpanIDFromHex("3333333333333333"),
+		Sampled:      SampledTrue,
+		recorder:     &spanRecorder{},
+	}
+	native.recorder.record(native)
+	nativeCtx := context.WithValue(ctx, spanContextKey{}, native)
+	got, ok = propagationContextFromContext(nativeCtx, client)
+	assert.True(t, ok)
+	assert.Equal(t, native.TraceID, got.TraceID)
+	assert.Equal(t, native.SpanID, got.SpanID)
+	assert.Equal(t, native.ParentSpanID, got.ParentSpanID)
+
+	client.SetExternalContextTraceResolver(func(context.Context) (PropagationContext, bool) {
+		return PropagationContext{}, true
+	})
+	got, ok = propagationContextFromContext(ctx, client)
+	assert.True(t, ok)
+	assert.Equal(t, carried, got)
+}
+
+func TestExternalResolverDoesNotBorrowCarriedDSC(t *testing.T) {
+	transport := &MockTransport{}
+	client, err := newClient(ClientOptions{
+		Dsn:       "https://key@example.com/1",
+		Transport: transport,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	carried := PropagationContext{
+		TraceID: TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+		SpanID:  SpanIDFromHex("bbbbbbbbbbbbbbbb"),
+		DynamicSamplingContext: DynamicSamplingContext{
+			Entries: map[string]string{"release": "carried"},
+			Frozen:  true,
+		},
+	}
+	external := PropagationContext{
+		TraceID: TraceIDFromHex("cccccccccccccccccccccccccccccccc"),
+		SpanID:  SpanIDFromHex("dddddddddddddddd"),
+		DynamicSamplingContext: DynamicSamplingContext{
+			Frozen: true,
+		},
+	}
+	client.SetExternalContextTraceResolver(func(context.Context) (PropagationContext, bool) {
+		return external, true
+	})
+	ctx := contextWithPropagationContext(context.Background(), carried)
+	ctx, scope := ScopeFromContext(ctx)
+	scope.SetClient(client)
+
+	client.CaptureMessage(ctx, "external")
+	events := transport.Events()
+	if len(events) != 1 {
+		t.Fatalf("expected one event, got %d", len(events))
+	}
+	trace := events[0].Contexts["trace"]
+	assert.Equal(t, external.TraceID, trace["trace_id"])
+	assert.Equal(t, external.SpanID, trace["span_id"])
+	assert.Empty(t, events[0].sdkMetaData.dsc.Entries)
+	assert.True(t, events[0].sdkMetaData.dsc.Frozen)
+}
+
+func TestHeaderResolution(t *testing.T) {
+	t.Run("external source without native span", func(t *testing.T) {
+		client, err := newClient(ClientOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		external := PropagationContext{
+			TraceID: TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+			SpanID:  SpanIDFromHex("bbbbbbbbbbbbbbbb"),
+			Sampled: SampledTrue,
+			DynamicSamplingContext: DynamicSamplingContext{
+				Entries: map[string]string{"release": "external"},
+				Frozen:  true,
+			},
+		}
+		client.SetExternalContextTraceResolver(func(context.Context) (PropagationContext, bool) {
+			return external, true
+		})
+		ctx, scope := ScopeFromContext(context.Background())
+		scope.SetClient(client)
+
+		assert.Equal(t, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-1", GetTraceparent(ctx))
+		assert.Equal(t, "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01", GetTraceparentW3C(ctx))
+		assertBaggageStringsEqual(t, "sentry-release=external", GetBaggage(ctx))
+	})
+
+	t.Run("native span wins over external source", func(t *testing.T) {
+		client, err := newClient(ClientOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		client.SetExternalContextTraceResolver(func(context.Context) (PropagationContext, bool) {
+			return PropagationContext{
+				TraceID: TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+				SpanID:  SpanIDFromHex("bbbbbbbbbbbbbbbb"),
+			}, true
+		})
+		ctx, scope := ScopeFromContext(context.Background())
+		scope.SetClient(client)
+		native := &Span{
+			TraceID:  TraceIDFromHex("cccccccccccccccccccccccccccccccc"),
+			SpanID:   SpanIDFromHex("dddddddddddddddd"),
+			Sampled:  SampledFalse,
+			recorder: &spanRecorder{},
+		}
+		native.recorder.record(native)
+		ctx = context.WithValue(ctx, spanContextKey{}, native)
+
+		assert.Equal(t, "cccccccccccccccccccccccccccccccc-dddddddddddddddd-0", GetTraceparent(ctx))
+		assert.Equal(t, "00-cccccccccccccccccccccccccccccccc-dddddddddddddddd-00", GetTraceparentW3C(ctx))
+	})
+}
+
+func TestExternalResolverSnapshotDoesNotAliasDSC(t *testing.T) {
+	client, err := newClient(ClientOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	external := PropagationContext{
+		TraceID: TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+		SpanID:  SpanIDFromHex("bbbbbbbbbbbbbbbb"),
+		DynamicSamplingContext: DynamicSamplingContext{
+			Entries: map[string]string{"release": "original"},
+			Frozen:  true,
+		},
+	}
+	client.SetExternalContextTraceResolver(func(context.Context) (PropagationContext, bool) {
+		return external, true
+	})
+
+	first, ok := client.externalPropagationContextFromContext(context.Background())
+	assert.True(t, ok)
+	first.DynamicSamplingContext.Entries["release"] = "mutated"
+	second, ok := client.externalPropagationContextFromContext(context.Background())
+	assert.True(t, ok)
+	assert.Equal(t, "original", second.DynamicSamplingContext.Entries["release"])
+}
+
 func TestStrictTraceContinuation(t *testing.T) {
 	incomingTraceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
 	sentryTrace := "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1"

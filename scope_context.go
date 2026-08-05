@@ -5,7 +5,7 @@ import "context"
 type scopeContextKey struct{}
 type propagationContextKey struct{}
 
-func propagationContextFromContext(ctx context.Context) (PropagationContext, bool) {
+func propagationContextFromStorage(ctx context.Context) (PropagationContext, bool) {
 	if ctx == nil {
 		return PropagationContext{}, false
 	}
@@ -49,7 +49,7 @@ func ScopeFromContext(ctx context.Context) (context.Context, *Scope) {
 
 	scope := newIsolationScope()
 	ctx = context.WithValue(ctx, scopeContextKey{}, scope)
-	if _, ok := propagationContextFromContext(ctx); !ok {
+	if _, ok := propagationContextFromStorage(ctx); !ok {
 		ctx = contextWithFreshPropagation(ctx)
 	}
 	return ctx, scope
@@ -65,7 +65,7 @@ func WithIsolation(ctx context.Context) context.Context {
 		scope = scope.Clone()
 	}
 	ctx = context.WithValue(ctx, scopeContextKey{}, scope)
-	if _, ok := propagationContextFromContext(ctx); !ok {
+	if _, ok := propagationContextFromStorage(ctx); !ok {
 		ctx = contextWithFreshPropagation(ctx)
 	}
 	return ctx
