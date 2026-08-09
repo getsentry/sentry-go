@@ -116,6 +116,8 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		hub.Scope().SetRequest(r)
 		ctx.Set(valuesKey, hub)
 		ctx.Set(transactionKey, transaction)
+		r = r.WithContext(transaction.Context())
+		ctx.SetRequest(r)
 		defer h.recoverWithSentry(hub, r)
 
 		err := next(ctx)
