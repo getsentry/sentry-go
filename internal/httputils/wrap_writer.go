@@ -48,6 +48,12 @@ func NewWrapResponseWriter(w http.ResponseWriter, protoMajor int) WrapResponseWr
 		if fl && hj && rf {
 			return &httpFancyWriter{bw}
 		}
+		if fl && hj {
+			return &flushHijackWriter{bw}
+		}
+		if hj {
+			return &hijackWriter{bw}
+		}
 	}
 	if fl {
 		return &flushWriter{bw}
@@ -142,6 +148,36 @@ func (f *flushWriter) Flush() {
 }
 
 var _ http.Flusher = &flushWriter{}
+
+// flushHijackWriter is a HTTP writer that additionally satisfies http.Flusher
+// and http.Hijacker, for writers that do not implement io.ReaderFrom.
+type flushHijackWriter struct {
+	basicWriter
+}
+
+func (f *flushHijackWriter) Flush() {
+	f.wroteHeader = true
+	f.ResponseWriter.(http.Flusher).Flush()
+}
+
+func (f *flushHijackWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return f.ResponseWriter.(http.Hijacker).Hijack()
+}
+
+var _ http.Flusher = &flushHijackWriter{}
+var _ http.Hijacker = &flushHijackWriter{}
+
+// hijackWriter is a HTTP writer that additionally satisfies http.Hijacker, for
+// writers that implement neither http.Flusher nor io.ReaderFrom.
+type hijackWriter struct {
+	basicWriter
+}
+
+func (f *hijackWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return f.ResponseWriter.(http.Hijacker).Hijack()
+}
+
+var _ http.Hijacker = &hijackWriter{}
 
 // httpFancyWriter is a HTTP writer that additionally satisfies
 // http.Flusher, http.Hijacker, and io.ReaderFrom. It exists for the common case
