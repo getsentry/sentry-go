@@ -68,6 +68,35 @@ func TestLimitedBuffer(t *testing.T) {
 		}
 	})
 
+	t.Run("reads while being written", func(t *testing.T) {
+		buf := NewLimitedBuffer(64)
+
+		start := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			<-start
+			for range 1000 {
+				_ = buf.Overflow()
+				_ = buf.Len()
+				_ = buf.Bytes()
+			}
+		}()
+		close(start)
+		for range 1000 {
+			_, _ = buf.Write([]byte("chunk"))
+		}
+
+		<-done
+
+		if got := buf.Len(); got != 64 {
+			t.Fatalf("Len = %d, want 64", got)
+		}
+		if !buf.Overflow() {
+			t.Fatal("Overflow = false, want true")
+		}
+	})
+
 	t.Run("initial bytes mark overflow", func(t *testing.T) {
 		buf := NewLimitedBufferFromBytes(5, []byte("hello world"))
 		if got := buf.String(); got != "hello" {
