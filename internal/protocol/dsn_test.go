@@ -56,6 +56,30 @@ var dsnTests = map[string]DsnTest{
 		url:    "http://domain/api/42/store/",
 		envURL: "http://domain/api/42/envelope/",
 	},
+	"IPv6WithPort": {
+		in: "https://public@[2001:db8::1]:8888/42",
+		dsn: &Dsn{
+			scheme:    SchemeHTTPS,
+			publicKey: "public",
+			host:      "2001:db8::1",
+			port:      8888,
+			projectID: "42",
+		},
+		url:    "https://[2001:db8::1]:8888/api/42/store/",
+		envURL: "https://[2001:db8::1]:8888/api/42/envelope/",
+	},
+	"IPv6DefaultPort": {
+		in: "https://public@[::1]/42",
+		dsn: &Dsn{
+			scheme:    SchemeHTTPS,
+			publicKey: "public",
+			host:      "::1",
+			port:      443,
+			projectID: "42",
+		},
+		url:    "https://[::1]/api/42/store/",
+		envURL: "https://[::1]/api/42/envelope/",
+	},
 }
 
 func TestNewDsn(t *testing.T) {
@@ -72,6 +96,54 @@ func TestNewDsn(t *testing.T) {
 			url := dsn.GetAPIURL().String()
 			if diff := cmp.Diff(tt.envURL, url); diff != "" {
 				t.Errorf("dsn.EnvelopeAPIURL() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetAPIURLIsNeverNil(t *testing.T) {
+	tests := map[string]string{
+		"IPv6ZoneID":     "http://public@[fe80::1%25eth0]:9000/42",
+		"EncodedNewline": "http://public@domain/42%0A",
+		"EncodedNull":    "http://public@domain/42%00",
+		"EncodedHash":    "http://public@domain/pre%23fix/42",
+	}
+
+	for name, in := range tests {
+		t.Run(name, func(t *testing.T) {
+			dsn, err := NewDsn(in)
+			if err != nil {
+				t.Skipf("NewDsn() rejects %q: %v", in, err)
+			}
+			// Callers dereference the result from a background goroutine, where
+			// a nil URL takes the whole process down.
+			apiURL := dsn.GetAPIURL()
+			if apiURL == nil {
+				t.Fatalf("GetAPIURL() = nil for %q, which NewDsn() accepted", in)
+			}
+			if !strings.HasSuffix(apiURL.Path, "/envelope/") {
+				t.Errorf("GetAPIURL().Path = %q, want it to end in /envelope/", apiURL.Path)
+			}
+			if apiURL.RawQuery != "" || apiURL.Fragment != "" {
+				t.Errorf("GetAPIURL() = %q, want no query (%q) and no fragment (%q)", apiURL, apiURL.RawQuery, apiURL.Fragment)
+			}
+		})
+	}
+}
+
+func TestDsnStringRoundTrip(t *testing.T) {
+	for name, tt := range dsnTests {
+		t.Run(name, func(t *testing.T) {
+			dsn, err := NewDsn(tt.in)
+			if err != nil {
+				t.Fatalf("NewDsn() error: %q", err)
+			}
+			reparsed, err := NewDsn(dsn.String())
+			if err != nil {
+				t.Fatalf("NewDsn(%q) error: %q", dsn.String(), err)
+			}
+			if diff := cmp.Diff(dsn, reparsed, cmp.AllowUnexported(Dsn{})); diff != "" {
+				t.Errorf("re-parsing String() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
