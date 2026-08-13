@@ -15,23 +15,22 @@ import (
 	"github.com/getsentry/sentry-go/report"
 )
 
-// Scope holds contextual data for the current scope.
+// Scope holds contextual data for an operation.
 //
-// The scope is an object that can cloned efficiently and stores data that is
-// locally relevant to an event. For instance the scope will hold recorded
-// breadcrumbs and similar information.
+// The scope is an object that can be cloned efficiently and stores data that is
+// locally relevant to an event. It also holds the client and event processor in
+// which the scope data should be applied to.
 //
-// The scope can be interacted with in two ways. First, the scope is routinely
-// updated with information by functions such as AddBreadcrumb which will modify
-// the current scope. Second, the current scope can be configured through the
-// ConfigureScope function or Hub method of the same name.
-//
-// The scope is meant to be modified but not inspected directly. When preparing
-// an event for reporting, the current client adds information from the current
-// scope into the event.
+// Clearing or cloning the scope only affects the underlying data. To set a new
+// client or event processor, SetClient or AddEventProcessor should be used.
 type Scope struct {
-	mu              sync.RWMutex
+	mu sync.RWMutex
+	// clientOverride is an explicit client binding set with SetClient. Having
+	// no override defaults to the global scope client.
+	clientOverride *Client
+	// eventProcessors are retained by Clear and inherited by Clone.
 	eventProcessors []EventProcessor
+	lastEventID     EventID
 
 	// scopeData keeps track of all scope specific data
 	scopeData
@@ -58,12 +57,19 @@ type scopeData struct {
 	}
 
 	propagationContext PropagationContext
-	span               *Span
+	span               *Span // TODO: this should be removed when the span API is introduced. Currently kept for compatibility.
 }
 
 // NewScope creates a new Scope.
 func NewScope() *Scope {
 	return &Scope{scopeData: newScopeData()}
+}
+
+// newScopeWithClient creates a Scope with an explicit client override.
+func newScopeWithClient(client *Client) *Scope {
+	scope := NewScope()
+	scope.SetClient(client)
+	return scope
 }
 
 func newScopeData() scopeData {
@@ -92,6 +98,54 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	if len(scope.breadcrumbs) > limit {
 		scope.breadcrumbs = scope.breadcrumbs[1 : limit+1]
 	}
+}
+
+// SetClient sets an explicit client override on the scope. Passing nil clears
+// the override so client resolution falls back to GlobalScope.
+func (scope *Scope) SetClient(client *Client) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
+	scope.clientOverride = normalizeClient(client)
+}
+
+func (scope *Scope) clientOverrideSnapshot() *Client {
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+
+	return scope.clientOverride
+}
+
+// Client returns the first enabled client in the scope chain.
+func (scope *Scope) Client() *Client {
+	if scope != nil {
+		if client := normalizeClient(scope.clientOverrideSnapshot()); client.IsEnabled() {
+			return client
+		}
+	}
+
+	global := GlobalScope()
+	if scope != global {
+		if client := normalizeClient(global.clientOverrideSnapshot()); client.IsEnabled() {
+			return client
+		}
+	}
+	return NewNoopClient()
+}
+
+func (scope *Scope) setLastEventID(id EventID) {
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
+	scope.lastEventID = id
+}
+
+// LastEventID returns the last event ID associated with this scope.
+func (scope *Scope) LastEventID() EventID {
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+
+	return scope.lastEventID
 }
 
 // ClearBreadcrumbs clears all breadcrumbs from the current scope.
@@ -259,14 +313,14 @@ func (scope *Scope) SetPropagationContext(propagationContext PropagationContext)
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	scope.propagationContext = propagationContext
+	scope.propagationContext = propagationContext.clone()
 }
 
 func (scope *Scope) propagationContextSnapshot() PropagationContext {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
-	return scope.propagationContext
+	return scope.propagationContext.clone()
 }
 
 // GetSpan returns the span from the current scope.
@@ -294,6 +348,8 @@ func (scope *Scope) Clone() *Scope {
 	return &Scope{
 		scopeData:       data.clone(),
 		eventProcessors: scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)],
+		clientOverride:  scope.clientOverride,
+		lastEventID:     scope.lastEventID,
 	}
 }
 
@@ -308,6 +364,7 @@ func (data scopeData) clone() scopeData {
 	clone.tags = maps.Clone(data.tags)
 	clone.fingerprint = make([]string, len(data.fingerprint))
 	copy(clone.fingerprint, data.fingerprint)
+	clone.propagationContext = data.propagationContext.clone()
 	return clone
 }
 
