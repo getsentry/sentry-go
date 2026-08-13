@@ -105,7 +105,7 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.SetPropagationContext(sentry.NewPropagationContext())
 	scope.SetSpan(&sentry.Span{TraceID: sentry.TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")})
 
-	sentry.CaptureException(fmt.Errorf("error %d", x))
+	sentry.CaptureException(context.Background(), fmt.Errorf("error %d", x))
 
 	scope.ClearBreadcrumbs()
 	scope.Clone()
@@ -123,7 +123,7 @@ func TestConcurrentCaptureAndMutate(_ *testing.T) {
 			for j := 0; j < 50; j++ {
 				event := sentry.NewEvent()
 				event.Message = fmt.Sprintf("capture-%d-%d", x, j)
-				sentry.NewNoopClient().CaptureEvent(event, nil, leaf)
+				sentry.NewNoopClient().CaptureEvent(context.Background(), event)
 			}
 		}(i)
 		go func(x int) {

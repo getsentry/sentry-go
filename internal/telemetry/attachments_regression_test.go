@@ -1,6 +1,7 @@
 package telemetry_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -13,7 +14,7 @@ import (
 )
 
 func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
-	scope := sentry.NewScope()
+	ctx, scope := sentry.WithIsolationScope(context.Background())
 	scope.AddAttachment(&sentry.Attachment{
 		Filename:    "test.txt",
 		ContentType: "text/plain",
@@ -29,7 +30,7 @@ func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
 	event := sentry.NewEvent()
 	event.Message = "test with attachment"
 	event.Level = sentry.LevelInfo
-	require.NotNil(t, client.CaptureEvent(event, nil, scope))
+	require.NotNil(t, client.CaptureEvent(ctx, event))
 	require.True(t, client.Flush(testutils.FlushTimeout()), "flush timed out")
 	client.Close()
 

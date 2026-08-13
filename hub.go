@@ -221,7 +221,8 @@ func (hub *Hub) CaptureEventWithHint(event *Event, hint *EventHint) *EventID {
 	if scope == nil {
 		return nil
 	}
-	eventID := client.CaptureEvent(event, hint, scope)
+	ctx := captureHintContext(scope, hint)
+	eventID := client.captureEvent(ctx, event, scope, resolveCaptureOptions(ctx, []CaptureOption{WithEventHint(hint)}))
 
 	if event.Type != transactionType && eventID != nil {
 		hub.mu.Lock()
@@ -239,7 +240,9 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 	if scope == nil {
 		return nil
 	}
-	eventID := client.CaptureMessage(message, nil, scope)
+	ctx := captureHintContext(scope, nil)
+	event := client.EventFromMessage(message, LevelInfo)
+	eventID := client.captureEvent(ctx, event, scope, resolveCaptureOptions(ctx, nil))
 
 	if eventID != nil {
 		hub.mu.Lock()
@@ -257,7 +260,10 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 	if scope == nil {
 		return nil
 	}
-	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
+	ctx := captureHintContext(scope, nil)
+	opts := resolveCaptureOptions(ctx, []CaptureOption{WithEventHint(&EventHint{OriginalException: exception})})
+	event := client.EventFromException(exception, LevelError)
+	eventID := client.captureEvent(ctx, event, scope, opts)
 
 	if eventID != nil {
 		hub.mu.Lock()
@@ -272,7 +278,23 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 // Returns CheckInID if the check-in was captured successfully, or nil otherwise.
 func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 	client, scope := hub.Client(), hub.Scope()
-	return client.CaptureCheckIn(checkIn, monitorConfig, scope)
+	ctx := captureHintContext(scope, nil)
+	return client.CaptureCheckIn(ctx, checkIn, monitorConfig)
+}
+
+func captureHintContext(scope *Scope, hint *EventHint) context.Context {
+	if hint != nil && hint.Context != nil {
+		return hint.Context
+	}
+	if scope != nil {
+		scope.mu.RLock()
+		request := scope.request
+		scope.mu.RUnlock()
+		if request != nil {
+			return request.Context()
+		}
+	}
+	return context.Background()
 }
 
 // AddBreadcrumb records a new breadcrumb.
@@ -314,7 +336,9 @@ func (hub *Hub) Recover(err interface{}) *EventID {
 	if scope == nil {
 		return nil
 	}
-	return client.Recover(err, &EventHint{RecoveredException: err}, scope)
+	ctx := captureHintContext(scope, nil)
+	opts := resolveCaptureOptions(ctx, []CaptureOption{WithEventHint(&EventHint{RecoveredException: err})})
+	return client.recoverValue(ctx, err, scope, opts)
 }
 
 // RecoverWithContext calls the method of a same name on currently bound Client instance
@@ -328,7 +352,8 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 	if scope == nil {
 		return nil
 	}
-	return client.RecoverWithContext(ctx, err, &EventHint{RecoveredException: err}, scope)
+	opts := resolveCaptureOptions(ctx, []CaptureOption{WithEventHint(&EventHint{RecoveredException: err})})
+	return client.recoverValue(ctx, err, scope, opts)
 }
 
 // Flush waits until the underlying Transport sends any buffered events to the

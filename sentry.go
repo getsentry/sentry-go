@@ -38,21 +38,18 @@ func AddBreadcrumb(breadcrumb *Breadcrumb) {
 }
 
 // CaptureMessage captures an arbitrary message.
-func CaptureMessage(message string) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureMessage(message)
+func CaptureMessage(ctx context.Context, message string, options ...CaptureOption) *EventID {
+	return GetClient(ctx).CaptureMessage(ctx, message, options...)
 }
 
 // CaptureException captures an error.
-func CaptureException(exception error) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureException(exception)
+func CaptureException(ctx context.Context, err error, options ...CaptureOption) *EventID {
+	return GetClient(ctx).CaptureException(ctx, err, options...)
 }
 
 // CaptureCheckIn captures a (cron) monitor check-in.
-func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureCheckIn(checkIn, monitorConfig)
+func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig, options ...CaptureOption) *EventID {
+	return GetClient(ctx).CaptureCheckIn(ctx, checkIn, monitorConfig, options...)
 }
 
 // CaptureEvent captures an event on the currently active client if any.
@@ -60,33 +57,13 @@ func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 // The event must already be assembled. Typically code would instead use
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
-func CaptureEvent(event *Event) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureEvent(event)
+func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *EventID {
+	return GetClient(ctx).CaptureEvent(ctx, event, options...)
 }
 
-// Recover captures a panic.
-func Recover() *EventID {
-	if err := recover(); err != nil {
-		hub := CurrentHub()
-		return hub.Recover(err)
-	}
-	return nil
-}
-
-// RecoverWithContext captures a panic and passes relevant context object.
-func RecoverWithContext(ctx context.Context) *EventID {
-	err := recover()
-	if err == nil {
-		return nil
-	}
-
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub()
-	}
-
-	return hub.RecoverWithContext(ctx, err)
+// Recover captures a panic from the current goroutine. It must be deferred.
+func Recover(ctx context.Context, options ...CaptureOption) *EventID {
+	return GetClient(ctx).recoverValue(ctx, recover(), ScopeFromContext(ctx), resolveCaptureOptions(ctx, options))
 }
 
 // WithScope is a shorthand for CurrentHub().WithScope.
