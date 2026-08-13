@@ -175,7 +175,7 @@ func TestScopeClientResolution(t *testing.T) {
 }
 
 func TestWithScopeContextLastEventIDIsLocal(t *testing.T) {
-	ctx, operation := WithIsolation(context.Background())
+	ctx, operation := WithIsolationScope(context.Background())
 	id := EventID("0123456789abcdef0123456789abcdef")
 
 	WithScopeContext(ctx, func(_ context.Context, fork *Scope) {
@@ -191,7 +191,7 @@ func TestWithScopeContextLastEventIDIsLocal(t *testing.T) {
 }
 
 func TestLastEventIDIsIndependentPerScope(t *testing.T) {
-	ctx, operation := WithIsolation(context.Background())
+	ctx, operation := WithIsolationScope(context.Background())
 	id := EventID("0123456789abcdef0123456789abcdef")
 
 	clone := operation.Clone()
@@ -200,7 +200,7 @@ func TestLastEventIDIsIndependentPerScope(t *testing.T) {
 		t.Fatalf("clone update leaked to operation scope: %q", got)
 	}
 
-	_, child := WithIsolation(ctx)
+	_, child := WithIsolationScope(ctx)
 	child.setLastEventID(id)
 	if got := operation.LastEventID(); got != "" {
 		t.Fatalf("isolation update leaked to operation scope: %q", got)

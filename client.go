@@ -1023,7 +1023,7 @@ func applyScopeChain(event *Event, client *Client, scope *Scope, opts captureOpt
 	}
 	applyTraceToEvent(event, resolveTrace(scope, client, ctx))
 
-	return state.applyToEvent(event, opts.hint, opts, client)
+	return state.applyToEvent(event, opts.hint, client, opts)
 }
 
 func (client *Client) prepareEvent(event *Event, scope *Scope, opts captureOptions) *Event {

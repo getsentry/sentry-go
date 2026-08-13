@@ -523,7 +523,7 @@ func mergeScopeAttributes(attrs map[string]attribute.Value, scope *Scope) map[st
 
 // applyToEvent handles capture work that must run after Scope locks are
 // released, including callbacks and request conversion.
-func (state captureState) applyToEvent(event *Event, hint *EventHint, opts captureOptions, client *Client) *Event {
+func (state captureState) applyToEvent(event *Event, hint *EventHint, client *Client, opts captureOptions) *Event {
 	event.Attachments = append(event.Attachments, state.attachments...)
 
 	if event.Request == nil && state.request != nil {
@@ -545,7 +545,7 @@ func (state captureState) applyToEvent(event *Event, hint *EventHint, opts captu
 	}
 
 	event.Breadcrumbs = mergeBreadcrumbs(client.options.MaxBreadcrumbs, event.Breadcrumbs, [][]*Breadcrumb{state.breadcrumbs})
-	event.Level = resolveLevel(event, opts, state.level)
+	event.Level = resolveLevel(event, state.level, opts)
 
 	for _, processor := range state.processors {
 		id := event.EventID
@@ -568,7 +568,7 @@ func (state captureState) applyToEvent(event *Event, hint *EventHint, opts captu
 	return event
 }
 
-func resolveLevel(event *Event, opts captureOptions, scopeLevel Level) Level {
+func resolveLevel(event *Event, scopeLevel Level, opts captureOptions) Level {
 	switch {
 	case event.Level != "":
 		return event.Level
