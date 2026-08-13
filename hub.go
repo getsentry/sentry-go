@@ -21,7 +21,7 @@ const (
 )
 
 // currentHub is the initial Hub with no Client bound and an empty Scope.
-var currentHub = NewHub(nil, NewScope())
+var currentHub = NewHub(NewNoopClient(), NewScope())
 
 // Hub is the central object that manages scopes and clients.
 //
@@ -51,14 +51,14 @@ type layer struct {
 func (l *layer) Client() *Client {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	return l.client
+	return normalizeClient(l.client)
 }
 
 // SetClient sets the layer's client. Safe for concurrent use.
 func (l *layer) SetClient(c *Client) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.client = c
+	l.client = normalizeClient(c)
 }
 
 type stack []*layer
@@ -67,7 +67,7 @@ type stack []*layer
 func NewHub(client *Client, scope *Scope) *Hub {
 	hub := Hub{
 		stack: &stack{{
-			client: client,
+			client: normalizeClient(client),
 			scope:  scope,
 		}},
 	}
@@ -218,7 +218,7 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 // CaptureEventWithHint is like CaptureEvent but additionally accepts an EventHint.
 func (hub *Hub) CaptureEventWithHint(event *Event, hint *EventHint) *EventID {
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil || scope == nil {
+	if scope == nil {
 		return nil
 	}
 	eventID := client.CaptureEvent(event, hint, scope)
@@ -236,7 +236,7 @@ func (hub *Hub) CaptureEventWithHint(event *Event, hint *EventHint) *EventID {
 // Returns EventID if successfully, or nil if there's no Scope or Client available.
 func (hub *Hub) CaptureMessage(message string) *EventID {
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil || scope == nil {
+	if scope == nil {
 		return nil
 	}
 	eventID := client.CaptureMessage(message, nil, scope)
@@ -254,7 +254,7 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 // Returns EventID if successfully, or nil if there's no Scope or Client available.
 func (hub *Hub) CaptureException(exception error) *EventID {
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil || scope == nil {
+	if scope == nil {
 		return nil
 	}
 	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
@@ -272,10 +272,6 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 // Returns CheckInID if the check-in was captured successfully, or nil otherwise.
 func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil {
-		return nil
-	}
-
 	return client.CaptureCheckIn(checkIn, monitorConfig, scope)
 }
 
@@ -285,12 +281,6 @@ func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *
 // configuration on the client.
 func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 	client := hub.Client()
-
-	// If there's no client, just store it on the scope straight away
-	if client == nil {
-		hub.Scope().AddBreadcrumb(breadcrumb, defaultMaxBreadcrumbs)
-		return
-	}
 
 	limit := client.options.MaxBreadcrumbs
 	switch {
@@ -321,7 +311,7 @@ func (hub *Hub) Recover(err interface{}) *EventID {
 		err = recover()
 	}
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil || scope == nil {
+	if scope == nil {
 		return nil
 	}
 	return client.Recover(err, &EventHint{RecoveredException: err}, scope)
@@ -335,7 +325,7 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 		err = recover()
 	}
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil || scope == nil {
+	if scope == nil {
 		return nil
 	}
 	return client.RecoverWithContext(ctx, err, &EventHint{RecoveredException: err}, scope)
@@ -353,13 +343,7 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (hub *Hub) Flush(timeout time.Duration) bool {
-	client := hub.Client()
-
-	if client == nil {
-		return false
-	}
-
-	return client.Flush(timeout)
+	return hub.Client().Flush(timeout)
 }
 
 // FlushWithContext waits until the underlying Transport sends any buffered events
@@ -375,13 +359,7 @@ func (hub *Hub) Flush(timeout time.Duration) bool {
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
 
 func (hub *Hub) FlushWithContext(ctx context.Context) bool {
-	client := hub.Client()
-
-	if client == nil {
-		return false
-	}
-
-	return client.FlushWithContext(ctx)
+	return hub.Client().FlushWithContext(ctx)
 }
 
 // GetTraceparent returns the current Sentry traceparent string, to be used as a HTTP header value

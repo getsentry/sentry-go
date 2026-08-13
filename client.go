@@ -298,6 +298,7 @@ type ClientOptions struct {
 // instances. It must be created with NewClient.
 type Client struct {
 	mu                    sync.RWMutex
+	disabled              bool
 	options               ClientOptions
 	dsn                   *protocol.Dsn
 	eventProcessors       []EventProcessor
@@ -408,7 +409,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		var err error
 		dsn, err = protocol.NewDsn(options.Dsn)
 		if err != nil {
-			return nil, err
+			return NewNoopClient(), err
 		}
 	}
 
@@ -448,6 +449,37 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	return &client, nil
+}
+
+// NewNoopClient returns a non-nil client that safely discards telemetry.
+func NewNoopClient() *Client {
+	return &Client{
+		disabled: true,
+		options: ClientOptions{
+			DisableTelemetryBuffer: true,
+			MaxErrorDepth:          maxErrorDepth,
+			MaxSpans:               defaultMaxSpans,
+			TraceIgnoreStatusCodes: [][]int{{404}},
+		},
+		sdkIdentifier:  sdkIdentifier,
+		sdkVersion:     SDKVersion,
+		Transport:      new(noopTransport),
+		reportRecorder: report.NoopRecorder(),
+		reportProvider: report.NoopProvider(),
+	}
+}
+
+// IsEnabled reports whether the client processes telemetry.
+func (client *Client) IsEnabled() bool {
+	return client != nil && !client.disabled
+}
+
+// normalizeClient guarantees a non-nil client for internal and Hub callers.
+func normalizeClient(client *Client) *Client {
+	if client == nil {
+		return NewNoopClient()
+	}
+	return client
 }
 
 func (client *Client) setupTransport() {
@@ -596,7 +628,7 @@ func (client *Client) Options() ClientOptions {
 // GetDataCollection returns a copy of the resolved data collection
 // configuration used by the client.
 func (client *Client) GetDataCollection() DataCollection {
-	if client == nil || client.options.DataCollection == nil {
+	if !client.IsEnabled() || client.options.DataCollection == nil {
 		return DataCollection{}
 	}
 	return *cloneDataCollection(client.options.DataCollection)
@@ -618,8 +650,9 @@ func (client *Client) CaptureException(exception error, hint *EventHint, scope E
 func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
 	event := client.EventFromCheckIn(checkIn, monitorConfig)
 	if event != nil && event.CheckIn != nil {
-		client.CaptureEvent(event, nil, scope)
-		return &event.CheckIn.ID
+		if client.CaptureEvent(event, nil, scope) != nil {
+			return &event.CheckIn.ID
+		}
 	}
 	return nil
 }
@@ -630,6 +663,9 @@ func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorCon
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
 func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
+	if !client.IsEnabled() {
+		return nil
+	}
 	return client.processEvent(event, hint, scope)
 }
 

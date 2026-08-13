@@ -509,10 +509,8 @@ func TestHub_Flush(t *testing.T) {
 
 func TestHub_Flush_NoClient(t *testing.T) {
 	hub := NewHub(nil, nil)
-	flushed := hub.Flush(20 * time.Millisecond)
-
-	if flushed != false {
-		t.Fatalf("expected flush to be false, got %v", flushed)
+	if !hub.Flush(20 * time.Millisecond) {
+		t.Fatal("noop client flush should succeed")
 	}
 }
 
@@ -520,10 +518,8 @@ func TestHub_FlushWithCtx_NoClient(t *testing.T) {
 	hub := NewHub(nil, nil)
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	flushed := hub.FlushWithContext(cancelCtx)
-
-	if flushed != false {
-		t.Fatalf("expected flush to be false, got %v", flushed)
+	if !hub.FlushWithContext(cancelCtx) {
+		t.Fatal("noop client flush should succeed")
 	}
 }
 

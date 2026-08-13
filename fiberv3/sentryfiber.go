@@ -63,7 +63,7 @@ func (h *handler) handle(ctx fiber.Ctx) error {
 		hub = sentry.CurrentHub().Clone()
 	}
 
-	if client := hub.Client(); client != nil {
+	if client := hub.Client(); client.IsEnabled() {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 

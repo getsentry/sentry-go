@@ -470,6 +470,18 @@ func TestCaptureCheckIn(t *testing.T) {
 	}
 }
 
+func TestNoopClientCaptureCheckIn(t *testing.T) {
+	client := NewNoopClient()
+	checkInID := client.CaptureCheckIn(&CheckIn{
+		MonitorSlug: "cron",
+		Status:      CheckInStatusOK,
+	}, nil, nil)
+
+	if checkInID != nil {
+		t.Errorf("expected nil check-in ID, got %s", *checkInID)
+	}
+}
+
 func TestCaptureCheckInExistingID(t *testing.T) {
 	client, _, _ := setupClientTest()
 
@@ -1030,6 +1042,20 @@ func TestRecover(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNoopClientRecover(t *testing.T) {
+	client := NewNoopClient()
+
+	func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				t.Fatalf("noop client did not recover panic: %v", recovered)
+			}
+		}()
+		defer client.Recover(nil, nil, nil)
+		panic("panic handled by noop client")
+	}()
 }
 
 func TestCustomMaxSpansProperty(t *testing.T) {
