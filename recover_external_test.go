@@ -1,6 +1,7 @@
 package sentry_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -44,18 +45,8 @@ func panicWithArbitraryValue() {
 
 //go:noinline
 func recoverPanic(client *sentry.Client, panicFunc func()) {
-	defer func() {
-		if err := recover(); err != nil {
-			client.Recover(err, nil, nil)
-		}
-	}()
-
+	defer client.Recover(context.Background())
 	panicFunc()
-}
-
-//go:noinline
-func recoverHandledError(client *sentry.Client) {
-	client.Recover(errors.New("boom"), nil, nil)
 }
 
 func newRecoverTestClient(t *testing.T) (*sentry.Client, *sentry.MockTransport) {
@@ -163,16 +154,4 @@ func TestRecoverValueAlwaysUsesPanicOriginStacktrace(t *testing.T) {
 			requireTopFrame(t, events[0].Threads[0].Stacktrace, test.topFrame)
 		})
 	}
-}
-
-func TestRecoverOutsidePanicKeepsCallerStacktrace(t *testing.T) {
-	t.Parallel()
-
-	client, transport := newRecoverTestClient(t)
-	recoverHandledError(client)
-
-	events := transport.Events()
-	require.Len(t, events, 1)
-	require.Len(t, events[0].Exception, 1)
-	requireTopFrame(t, events[0].Exception[0].Stacktrace, "recoverHandledError")
 }

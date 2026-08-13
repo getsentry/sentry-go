@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"regexp"
@@ -400,7 +401,7 @@ func TestGlobalTagsIntegration(t *testing.T) {
 
 	event := NewEvent()
 	event.Message = "event message"
-	client.CaptureEvent(event, nil, scope)
+	client.CaptureEvent(contextWithScope(context.Background(), scope), event)
 
 	assertEqual(t,
 		transport.lastEvent.Tags["foo"],

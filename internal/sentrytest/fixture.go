@@ -248,7 +248,7 @@ func (f *Fixture) AssertHubIsolation(requestHub *sentry.Hub) {
 		f.T.Errorf("probe client: %v", err)
 		return
 	}
-	if eventID := probeClient.CaptureException(errIsolationProbe, nil, requestHub.Scope()); eventID == nil {
+	if eventID := sentry.NewHub(probeClient, requestHub.Scope()).CaptureException(errIsolationProbe); eventID == nil {
 		f.T.Error("event dropped by event processor")
 		return
 	}
