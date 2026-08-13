@@ -52,7 +52,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 		hub = sentry.CurrentHub().Clone()
 	}
 
-	if client := hub.Client(); client != nil {
+	if client := hub.Client(); client.IsEnabled() {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 

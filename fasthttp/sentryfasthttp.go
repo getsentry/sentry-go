@@ -64,7 +64,7 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			hub = sentry.CurrentHub().Clone()
 		}
 
-		if client := hub.Client(); client != nil {
+		if client := hub.Client(); client.IsEnabled() {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
