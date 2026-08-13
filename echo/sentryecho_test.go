@@ -569,6 +569,9 @@ func TestGetSpanFromContext(t *testing.T) {
 		if span == nil {
 			t.Error("expecting span to not be nil")
 		}
+		if requestSpan := sentry.SpanFromContext(c.Request().Context()); requestSpan != span {
+			t.Error("expecting request context to contain the middleware span")
+		}
 		return c.NoContent(http.StatusOK)
 	}, sentryecho.New(sentryecho.Options{}))
 
