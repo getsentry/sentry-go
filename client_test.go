@@ -32,11 +32,59 @@ func TestNewClientAllowsEmptyDSN(t *testing.T) {
 		Transport: transport,
 	})
 	if err != nil {
-		t.Fatalf("expected no error when creating client without a DNS but got %v", err)
+		t.Fatalf("expected no error when creating client without a DSN but got %v", err)
+	}
+	defer client.Close()
+
+	if !client.IsEnabled() {
+		t.Fatal("client with an empty DSN should remain enabled")
 	}
 
 	client.CaptureException(errors.New("custom error"), nil, &MockScope{})
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
+}
+
+func TestNewClientRejectsMalformedDSN(t *testing.T) {
+	client, err := NewClient(ClientOptions{Dsn: "not-a-dsn"})
+
+	require.Error(t, err)
+	assert.Nil(t, client)
+}
+
+func TestNoopClient(t *testing.T) {
+	first := NewNoopClient()
+	second := NewNoopClient()
+	var nilClient *Client
+
+	assert.False(t, first.IsEnabled())
+	assert.False(t, second.IsEnabled())
+	assert.False(t, nilClient.IsEnabled())
+	assert.Same(t, first, second)
+
+	first.SetSDKIdentifier("custom")
+	assert.Equal(t, sdkIdentifier, first.GetSDKIdentifier())
+
+	captures := []struct {
+		name    string
+		capture func() *EventID
+	}{
+		{"message", func() *EventID { return first.CaptureMessage("message", nil, nil) }},
+		{"exception", func() *EventID { return first.CaptureException(errors.New("exception"), nil, nil) }},
+		{"event", func() *EventID { return first.CaptureEvent(&Event{Message: "event"}, nil, nil) }},
+		{"check-in", func() *EventID {
+			return first.CaptureCheckIn(&CheckIn{MonitorSlug: "cron", Status: CheckInStatusOK}, nil, nil)
+		}},
+		{"recovered value", func() *EventID { return first.Recover("panic", nil, nil) }},
+	}
+	for _, tt := range captures {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Nil(t, tt.capture())
+		})
+	}
+
+	assert.False(t, first.Flush(time.Second))
+	assert.False(t, first.FlushWithContext(context.Background()))
+	assert.NotPanics(t, first.Close)
 }
 
 type customComplexError struct {
@@ -1030,6 +1078,20 @@ func TestRecover(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNoopClientRecover(t *testing.T) {
+	client := NewNoopClient()
+
+	func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				t.Fatalf("noop client did not recover panic: %v", recovered)
+			}
+		}()
+		defer client.Recover(nil, nil, nil)
+		panic("panic handled by noop client")
+	}()
 }
 
 func TestCustomMaxSpansProperty(t *testing.T) {
