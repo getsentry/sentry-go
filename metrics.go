@@ -55,19 +55,20 @@ func NewMeter(ctx context.Context) Meter {
 		hub = CurrentHub()
 	}
 	client := hub.Client()
+	options := client.options
 	if client.IsEnabled() {
 		// build default attrs
-		serverAddr := client.options.ServerName
+		serverAddr := options.ServerName
 		if serverAddr == "" {
 			serverAddr, _ = os.Hostname()
 		}
 
 		defaults := map[string]string{
-			"sentry.release":        client.options.Release,
-			"sentry.environment":    client.options.Environment,
+			"sentry.release":        options.Release,
+			"sentry.environment":    options.Environment,
 			"sentry.server.address": serverAddr,
-			"sentry.sdk.name":       client.sdkIdentifier,
-			"sentry.sdk.version":    client.sdkVersion,
+			"sentry.sdk.name":       client.GetSDKIdentifier(),
+			"sentry.sdk.version":    client.GetSDKVersion(),
 		}
 
 		defaultAttrs := make(map[string]attribute.Value)
@@ -98,7 +99,7 @@ type sentryMeter struct {
 	mu                sync.RWMutex
 }
 
-func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name string, value MetricValue, unit string, attributes map[string]attribute.Value, customScope *Scope) {
+func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name string, value MetricValue, unit string, attributes []attribute.Builder, customScope *Scope) {
 	if name == "" {
 		debuglog.Println("empty name provided, dropping metric")
 		return
@@ -110,40 +111,16 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 	}
 
 	client := hub.Client()
-	if !client.IsEnabled() {
-		return
-	}
-
 	scope := hub.Scope()
 	if customScope != nil {
 		scope = customScope
 	}
-	traceID, spanID := resolveTrace(scope, client, ctx, m.ctx)
-
-	// Pre-allocate with capacity hint to avoid map growth reallocations
-	estimatedCap := len(m.defaultAttributes) + len(attributes) + 8 // scope ~3 + call-specific ~5
-	attrs := make(map[string]attribute.Value, estimatedCap)
-
-	// attribute precedence: default -> scope -> instance (from SetAttrs) -> entry-specific
-	for k, v := range m.defaultAttributes {
-		attrs[k] = v
-	}
-	scope.populateAttrs(attrs)
-
 	m.mu.RLock()
-	for k, v := range m.attributes {
-		attrs[k] = v
-	}
+	attrs := buildMetricAttributes(attributes, m.attributes, m.defaultAttributes)
 	m.mu.RUnlock()
-
-	for k, v := range attributes {
-		attrs[k] = v
-	}
 
 	metric := &Metric{
 		Timestamp:  time.Now(),
-		TraceID:    traceID,
-		SpanID:     spanID,
 		Type:       metricType,
 		Name:       name,
 		Value:      value,
@@ -151,9 +128,16 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		Attributes: attrs,
 	}
 
-	if client.captureMetric(metric, scope) && client.options.Debug {
+	if client.captureMetric(metric, signalCaptureContext{scope: scope, ctx: ctx, fallback: m.ctx}) && client.options.Debug {
 		debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), unit)
 	}
+}
+
+func prepareMetric(metric *Metric, client *Client, capture signalCaptureContext) {
+	trace := resolveTrace(capture.scope, client, capture.ctx, capture.fallback)
+	metric.TraceID = trace.traceID
+	metric.SpanID = trace.telemetrySpanID
+	metric.Attributes = mergeScopeAttributes(metric.Attributes, capture.scope)
 }
 
 // WithCtx returns a new Meter that uses the given context for trace/span association.

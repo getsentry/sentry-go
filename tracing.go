@@ -723,7 +723,7 @@ func (s *Span) toEvent() *Event {
 // traceContext returns a TraceContext snapshot for an active span.
 //
 // It needs to clone span Data to avoid holding any user mutable state.
-func (s *Span) traceContext() *TraceContext {
+func (s *Span) traceContext() *TraceContext { // nolint: unused
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return &TraceContext{

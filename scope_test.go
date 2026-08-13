@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -165,13 +166,74 @@ func TestScopeRemoveAttributeNotInPopulateAttrs(t *testing.T) {
 	)
 	scope.RemoveAttribute("key.two")
 
-	attrs := make(map[string]attribute.Value)
-	scope.populateAttrs(attrs)
+	attrs := mergeScopeAttributes(nil, scope)
 
 	if _, ok := attrs["key.two"]; ok {
 		t.Error("removed attribute should not appear in populateAttrs output")
 	}
 	assertEqual(t, attribute.StringValue("val1"), attrs["key.one"])
+}
+
+func TestResolveCaptureStatePrecedence(t *testing.T) {
+	global := GlobalScope()
+	global.mu.Lock()
+	savedTags := global.tags
+	savedUser := global.user
+	global.tags = maps.Clone(savedTags)
+	global.mu.Unlock()
+	defer func() {
+		global.mu.Lock()
+		global.tags = savedTags
+		global.user = savedUser
+		global.mu.Unlock()
+	}()
+
+	global.SetTag("key", "global")
+	global.SetTag("global-only", "g")
+	global.SetUser(User{ID: "global-user"})
+
+	scope := NewScope()
+	scope.SetTag("key", "operation")
+	scope.SetTag("op-only", "o")
+
+	event := NewEvent()
+	resolveCaptureState(event, scope)
+	assertEqual(t, "operation", event.Tags["key"])
+	assertEqual(t, "g", event.Tags["global-only"])
+	assertEqual(t, "o", event.Tags["op-only"])
+	assertEqual(t, "global-user", event.User.ID)
+
+	scope.SetTag("key", "changed")
+	global.SetTag("global-only", "changed")
+	assertEqual(t, "operation", event.Tags["key"])
+	assertEqual(t, "g", event.Tags["global-only"])
+}
+
+func TestApplyScopeChainProcessorOrder(t *testing.T) {
+	global := GlobalScope()
+	global.mu.Lock()
+	saved := global.eventProcessors
+	global.eventProcessors = saved[:len(saved):len(saved)]
+	global.mu.Unlock()
+	defer func() {
+		global.mu.Lock()
+		global.eventProcessors = saved
+		global.mu.Unlock()
+	}()
+
+	var order []string
+	global.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
+		order = append(order, "global")
+		return event
+	})
+	scope := NewScope()
+	scope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
+		order = append(order, "operation")
+		return event
+	})
+
+	applyScopeChain(NewEvent(), NewNoopClient(), scope, captureOptions{})
+	assertEqual(t, []string{"global", "operation"}, order)
 }
 
 func TestScopeRemoveTag(t *testing.T) {
@@ -451,15 +513,15 @@ func TestScopeCloneEventProcessorsIsolation(t *testing.T) {
 	clone2.AddEventProcessor(mark("y"))
 
 	ran = nil
-	clone1.ApplyToEvent(NewEvent(), nil, nil)
+	applyScopeChain(NewEvent(), NewNoopClient(), clone1, captureOptions{})
 	assertEqual(t, []string{"a", "b", "c", "x"}, ran)
 
 	ran = nil
-	clone2.ApplyToEvent(NewEvent(), nil, nil)
+	applyScopeChain(NewEvent(), NewNoopClient(), clone2, captureOptions{})
 	assertEqual(t, []string{"a", "b", "c", "y"}, ran)
 
 	ran = nil
-	scope.ApplyToEvent(NewEvent(), nil, nil)
+	applyScopeChain(NewEvent(), NewNoopClient(), scope, captureOptions{})
 	assertEqual(t, []string{"a", "b", "c"}, ran)
 }
 
@@ -541,6 +603,12 @@ func TestClear(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	processor := func(event *Event, _ *EventHint) *Event { return event }
 	scope.AddEventProcessor(processor)
+	client := NewNoopClient()
+	scope.SetClient(client)
+	span := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
+	scope.SetSpan(span)
+	propagation := scope.propagationContextSnapshot()
+	scope.setLastEventID(EventID("0123456789abcdef0123456789abcdef"))
 	scope.Clear()
 
 	assertEqual(t, []*Breadcrumb{}, scope.breadcrumbs)
@@ -552,8 +620,11 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, (*http.Request)(nil), scope.request)
-	assertEqual(t, (*Span)(nil), scope.GetSpan())
 	assertEqual(t, 1, len(scope.eventProcessors))
+	assertEqual(t, client, scope.clientOverrideSnapshot())
+	assertEqual(t, EventID("0123456789abcdef0123456789abcdef"), scope.LastEventID())
+	assertEqual(t, propagation, scope.propagationContextSnapshot())
+	assertEqual(t, span, scope.GetSpan())
 }
 
 func TestClearAndReconfigure(t *testing.T) {
@@ -606,14 +677,14 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := fillEventWithData(NewEvent())
 
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := applyScopeChain(event, NewNoopClient(), scope, captureOptions{})
 
 	assertEqual(t, 2, len(processedEvent.Breadcrumbs), "should merge breadcrumbs")
 	assertEqual(t, 2, len(processedEvent.Attachments), "should merge attachments")
 	assertEqual(t, 2, len(processedEvent.Tags), "should merge tags")
 	assertEqual(t, 4, len(processedEvent.Contexts), "should merge contexts")
 	assertEqual(t, event.Contexts[sharedContextsKey], processedEvent.Contexts[sharedContextsKey], "should not override event trace context")
-	assertEqual(t, LevelDebug, processedEvent.Level, "should use event level if set")
+	assertEqual(t, LevelInfo, processedEvent.Level, "should use event level if set")
 	assertEqual(t, event.User, processedEvent.User, "should use event user if one exists")
 	assertEqual(t, event.Request, processedEvent.Request, "should use event request if one exists")
 	assertEqual(t, event.Fingerprint, processedEvent.Fingerprint, "should use event fingerprints if they exist")
@@ -626,7 +697,7 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 	scope := NewScope()
 	event := fillEventWithData(NewEvent())
 
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := applyScopeChain(event, NewNoopClient(), scope, captureOptions{})
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
 	assertEqual(t, len(processedEvent.Attachments), 1, "should use event attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
@@ -641,7 +712,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	event := NewEvent()
 
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := applyScopeChain(event, NewNoopClient(), scope, captureOptions{})
 	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use scope breadcrumbs")
 	assertEqual(t, len(processedEvent.Attachments), 1, "should use scope attachments")
 	assertEqual(t, len(processedEvent.Tags), 1, "should use scope tags")
@@ -678,7 +749,7 @@ func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	event := scope.ApplyToEvent(NewEvent(), nil, requestClient)
+	event := applyScopeChain(NewEvent(), requestClient, scope, captureOptions{})
 
 	if event.Request == nil {
 		t.Fatal("expected request to be attached")
@@ -719,7 +790,7 @@ func TestApplyToEventUsesExplicitDataCollectionForRequest(t *testing.T) {
 	request.Header.Set("Some-Header", "some-header value")
 	scope.SetRequest(request)
 
-	event := scope.ApplyToEvent(NewEvent(), nil, client)
+	event := applyScopeChain(NewEvent(), client, scope, captureOptions{})
 	if event.Request == nil {
 		t.Fatal("expected request to be attached")
 	}
@@ -771,7 +842,7 @@ func TestApplyToEventHTTPBodyCollection(t *testing.T) {
 			scope.SetRequest(request)
 			scope.SetRequestBody(tt.body)
 
-			event := scope.ApplyToEvent(NewEvent(), nil, client)
+			event := applyScopeChain(NewEvent(), client, scope, captureOptions{})
 			if event.Request == nil {
 				t.Fatal("expected request to be attached")
 			}
@@ -795,7 +866,7 @@ func TestEventProcessorsModifiesEvent(t *testing.T) {
 			return event
 		},
 	}
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := applyScopeChain(event, NewNoopClient(), scope, captureOptions{})
 
 	if processedEvent == nil {
 		t.Fatal("event should not be dropped")
@@ -812,7 +883,7 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 			return nil
 		},
 	}
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := applyScopeChain(event, NewNoopClient(), scope, captureOptions{})
 
 	if processedEvent != nil {
 		t.Error("event should be dropped")
@@ -822,7 +893,7 @@ func TestEventProcessorsCanDropEvent(t *testing.T) {
 func TestEventProcessorsAddEventProcessor(t *testing.T) {
 	scope := NewScope()
 	event := NewEvent()
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
+	processedEvent := applyScopeChain(event, NewNoopClient(), scope, captureOptions{})
 
 	if processedEvent == nil {
 		t.Error("event should not be dropped")
@@ -831,7 +902,7 @@ func TestEventProcessorsAddEventProcessor(t *testing.T) {
 	scope.AddEventProcessor(func(_ *Event, _ *EventHint) *Event {
 		return nil
 	})
-	processedEvent = scope.ApplyToEvent(event, nil, nil)
+	processedEvent = applyScopeChain(event, NewNoopClient(), scope, captureOptions{})
 
 	if processedEvent != nil {
 		t.Error("event should be dropped")

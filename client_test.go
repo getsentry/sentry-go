@@ -35,7 +35,7 @@ func TestNewClientAllowsEmptyDSN(t *testing.T) {
 		t.Fatalf("expected no error when creating client without a DNS but got %v", err)
 	}
 
-	client.CaptureException(errors.New("custom error"), nil, &MockScope{})
+	client.CaptureException(errors.New("custom error"), nil, NewScope())
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
 }
 
@@ -51,8 +51,8 @@ func (e customComplexError) AnswerToLife() string {
 	return "42"
 }
 
-func setupClientTest() (*Client, *MockScope, *MockTransport) {
-	scope := &MockScope{}
+func setupClientTest() (*Client, *Scope, *MockTransport) {
+	scope := NewScope()
 	transport := &MockTransport{}
 	client, _ := NewClient(ClientOptions{
 		Dsn:       "http://whatever@example.com/1337",
@@ -523,7 +523,9 @@ func TestSampleRateCanDropEvent(t *testing.T) {
 
 func TestApplyToScopeCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	scope.shouldDropEvent = true
+	scope.AddEventProcessor(func(_ *Event, _ *EventHint) *Event {
+		return nil
+	})
 
 	client.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		if event == nil {
@@ -656,7 +658,7 @@ func TestIgnoreErrors(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			scope := &MockScope{}
+			scope := NewScope()
 			transport := &MockTransport{}
 			client, err := NewClient(ClientOptions{
 				Transport:    transport,
@@ -958,7 +960,7 @@ func BenchmarkProcessEvent(b *testing.B) {
 		b.Fatal(err)
 	}
 	for i := 0; i < b.N; i++ {
-		c.processEvent(&Event{}, nil, nil)
+		c.processEvent(&Event{}, nil, captureOptions{})
 	}
 }
 
@@ -1131,7 +1133,7 @@ func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { client.Close() })
 
-	client.CaptureMessage("ping", nil, &MockScope{})
+	client.CaptureMessage("ping", nil, NewScope())
 	require.True(t, client.Flush(testutils.FlushTimeout()), "flush timed out")
 
 	select {

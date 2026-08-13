@@ -10,6 +10,7 @@ package sentrytest
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"testing/synctest"
 
@@ -241,14 +242,25 @@ func (f *Fixture) AssertHubIsolation(requestHub *sentry.Hub) {
 	f.Hub.Scope().SetTag(sentinel, "leaked")
 	defer f.Hub.Scope().RemoveTag(sentinel)
 
-	// Apply the request scope to a probe event to read its tags.
-	probe := &sentry.Event{}
-	applied := requestHub.Scope().ApplyToEvent(probe, nil, nil)
-	if applied == nil {
+	transport := &sentry.MockTransport{}
+	probeClient, err := sentry.NewClient(sentry.ClientOptions{Dsn: testDsn, Transport: transport})
+	if err != nil {
+		f.T.Errorf("probe client: %v", err)
+		return
+	}
+	if eventID := probeClient.CaptureException(errIsolationProbe, nil, requestHub.Scope()); eventID == nil {
 		f.T.Error("event dropped by event processor")
 		return
 	}
-	if _, ok := applied.Tags[sentinel]; ok {
+
+	events := transport.Events()
+	if len(events) == 0 {
+		f.T.Error("probe event was not delivered")
+		return
+	}
+	if _, ok := events[len(events)-1].Tags[sentinel]; ok {
 		f.T.Error("scope mutation leaked into request hub; scopes are not independent")
 	}
 }
+
+var errIsolationProbe = errors.New("sentrytest isolation probe")

@@ -156,7 +156,7 @@ type MeterOption func(*meterOptions)
 type meterOptions struct {
 	unit       string
 	scope      *Scope
-	attributes map[string]attribute.Value
+	attributes []attribute.Builder
 }
 
 // WithUnit sets the unit for the metric (e.g., "millisecond", "byte").
@@ -176,15 +176,12 @@ func WithScopeOverride(scope *Scope) MeterOption {
 // WithAttributes sets attributes for the metric.
 func WithAttributes(attrs ...attribute.Builder) MeterOption {
 	return func(o *meterOptions) {
-		if o.attributes == nil {
-			o.attributes = make(map[string]attribute.Value, len(attrs))
-		}
 		for _, a := range attrs {
 			if a.Value.Type() == attribute.INVALID {
 				debuglog.Printf("invalid attribute: %v", a)
 				continue
 			}
-			o.attributes[a.Key] = a.Value
+			o.attributes = append(o.attributes, a)
 		}
 	}
 }

@@ -110,3 +110,38 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.ClearBreadcrumbs()
 	scope.Clone()
 }
+
+func TestConcurrentCaptureAndMutate(_ *testing.T) {
+	global := sentry.GlobalScope()
+	leaf := sentry.NewScope()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(2)
+		go func(x int) {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				event := sentry.NewEvent()
+				event.Message = fmt.Sprintf("capture-%d-%d", x, j)
+				sentry.NewNoopClient().CaptureEvent(event, nil, leaf)
+			}
+		}(i)
+		go func(x int) {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				leaf.SetTag(fmt.Sprintf("tag-%d", x), fmt.Sprint(j))
+				leaf.AddBreadcrumb(&sentry.Breadcrumb{Message: fmt.Sprint(j)}, 100)
+				leaf.SetContext(fmt.Sprintf("ctx-%d", x), sentry.Context{"v": j})
+				leaf.SetAttributes(attribute.Int("v", j))
+				global.SetTag(fmt.Sprintf("gtag-%d", x), fmt.Sprint(j))
+				global.AddBreadcrumb(&sentry.Breadcrumb{Message: fmt.Sprint(j)}, 100)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	global.RemoveTag("gtag-0") // best-effort cleanup of keys set above
+	for i := 0; i < 8; i++ {
+		global.RemoveTag(fmt.Sprintf("gtag-%d", i))
+	}
+}

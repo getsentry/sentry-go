@@ -174,6 +174,39 @@ func TestScopeClientResolution(t *testing.T) {
 	}
 }
 
+func TestWithScopeContextLastEventIDIsLocal(t *testing.T) {
+	ctx, operation := WithIsolation(context.Background())
+	id := EventID("0123456789abcdef0123456789abcdef")
+
+	WithScopeContext(ctx, func(_ context.Context, fork *Scope) {
+		fork.setLastEventID(id)
+		if got := fork.LastEventID(); got != id {
+			t.Fatalf("fork LastEventID = %q, want %q", got, id)
+		}
+	})
+
+	if got := operation.LastEventID(); got != "" {
+		t.Fatalf("temporary fork update leaked to operation scope: %q", got)
+	}
+}
+
+func TestLastEventIDIsIndependentPerScope(t *testing.T) {
+	ctx, operation := WithIsolation(context.Background())
+	id := EventID("0123456789abcdef0123456789abcdef")
+
+	clone := operation.Clone()
+	clone.setLastEventID(id)
+	if got := operation.LastEventID(); got != "" {
+		t.Fatalf("clone update leaked to operation scope: %q", got)
+	}
+
+	_, child := WithIsolation(ctx)
+	child.setLastEventID(id)
+	if got := operation.LastEventID(); got != "" {
+		t.Fatalf("isolation update leaked to operation scope: %q", got)
+	}
+}
+
 func TestScopeLastEventIDSurvivesCloneAndClear(t *testing.T) {
 	scope := NewScope()
 	id := EventID("0123456789abcdef0123456789abcdef")

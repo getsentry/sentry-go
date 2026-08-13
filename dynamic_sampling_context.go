@@ -116,6 +116,15 @@ func (d DynamicSamplingContext) String() string {
 	return baggage.String()
 }
 
+func dynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSamplingContext {
+	if scope == nil {
+		return DynamicSamplingContextFromScope(nil, client)
+	}
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+	return DynamicSamplingContextFromScope(scope, client)
+}
+
 // DynamicSamplingContextFromScope Constructs a new DynamicSamplingContext using a scope and client. Accessing
 // fields on the scope are not thread safe, and this function should only be
 // called within scope methods.

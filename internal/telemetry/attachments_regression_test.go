@@ -13,10 +13,6 @@ import (
 )
 
 func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
-	event := sentry.NewEvent()
-	event.Message = "test with attachment"
-	event.Level = sentry.LevelInfo
-
 	scope := sentry.NewScope()
 	scope.AddAttachment(&sentry.Attachment{
 		Filename:    "test.txt",
@@ -24,7 +20,22 @@ func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
 		Payload:     []byte("hello world"),
 	})
 
-	event = scope.ApplyToEvent(event, nil, nil)
+	mockTransport := &sentry.MockTransport{}
+	client, err := sentry.NewClient(sentry.ClientOptions{
+		Dsn:       "https://whatever@sentry.io/1337",
+		Transport: mockTransport,
+	})
+	require.NoError(t, err)
+	event := sentry.NewEvent()
+	event.Message = "test with attachment"
+	event.Level = sentry.LevelInfo
+	require.NotNil(t, client.CaptureEvent(event, nil, scope))
+	require.True(t, client.Flush(testutils.FlushTimeout()), "flush timed out")
+	client.Close()
+
+	events := mockTransport.Events()
+	require.Len(t, events, 1, "expected a single captured event")
+	event = events[0]
 
 	transport := &testutils.MockTelemetryTransport{}
 	processor := telemetry.NewProcessor(

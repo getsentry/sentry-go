@@ -12,6 +12,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/httputils"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/getsentry/sentry-go/report"
 )
 
@@ -106,7 +107,7 @@ func (scope *Scope) SetClient(client *Client) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	scope.clientOverride = normalizeClient(client)
+	scope.clientOverride = client
 }
 
 func (scope *Scope) clientOverrideSnapshot() *Client {
@@ -134,6 +135,9 @@ func (scope *Scope) Client() *Client {
 }
 
 func (scope *Scope) setLastEventID(id EventID) {
+	if scope == nil {
+		return
+	}
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
@@ -373,7 +377,11 @@ func (scope *Scope) Clear() {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
+	propagationContext := scope.propagationContext
+	span := scope.span
 	scope.scopeData = newScopeData()
+	scope.propagationContext = propagationContext
+	scope.span = span
 }
 
 // AddEventProcessor adds an event processor to the current scope.
@@ -384,105 +392,142 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 	scope.eventProcessors = append(scope.eventProcessors, processor)
 }
 
-// ApplyToEvent takes the data from the current scope and attaches it to the event.
-func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event { //nolint:gocyclo
+// captureState retains only data that must be used after Scope locks are
+// released. Maps and replacement fields are applied directly to the event.
+type captureState struct {
+	level       Level
+	request     *http.Request
+	requestBody interface {
+		Bytes() []byte
+		Overflow() bool
+	}
+	breadcrumbs []*Breadcrumb
+	attachments []*Attachment
+	processors  []EventProcessor
+}
+
+// resolveCaptureState applies the operation Scope first so it wins, then fills
+// gaps from GlobalScope. Each Scope is read under one short lock.
+func resolveCaptureState(event *Event, scope *Scope) captureState {
+	var state captureState
+	global := GlobalScope()
+	if scope != nil && scope != global {
+		state.mergeScope(event, scope, false)
+	}
+	state.mergeScope(event, global, true)
+	return state
+}
+
+func (state *captureState) mergeScope(event *Event, scope *Scope, prepend bool) {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
-	if len(scope.breadcrumbs) > 0 {
-		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
-	}
-
-	if len(scope.attachments) > 0 {
-		event.Attachments = append(event.Attachments, scope.attachments...)
-	}
-
-	if len(scope.tags) > 0 {
-		if event.Tags == nil {
-			event.Tags = make(map[string]string, len(scope.tags))
-		}
-
-		for key, value := range scope.tags {
-			event.Tags[key] = value
-		}
-	}
-
-	if len(scope.contexts) > 0 {
-		if event.Contexts == nil {
-			event.Contexts = make(map[string]Context)
-		}
-
-		for key, value := range scope.contexts {
-			if key == "trace" && event.Type == transactionType {
-				// Do not override trace context of
-				// transactions, otherwise it breaks the
-				// transaction event representation.
-				// For error events, the trace context is used
-				// to link errors and traces/spans in Sentry.
-				continue
-			}
-
-			// Ensure we are not overwriting event fields
-			if _, ok := event.Contexts[key]; !ok {
-				event.Contexts[key] = cloneContext(value)
-			}
-		}
-	}
-
-	if event.Contexts == nil {
-		event.Contexts = make(map[string]Context)
-	}
-
-	if scope.span != nil {
-		if _, ok := event.Contexts["trace"]; !ok {
-			event.Contexts["trace"] = scope.span.traceContext().Map()
-		}
-
-		transaction := scope.span.GetTransaction()
-		if transaction != nil {
-			event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
-		}
-	} else {
-		event.Contexts["trace"] = scope.propagationContext.Map()
-
-		dsc := scope.propagationContext.DynamicSamplingContext
-		if !dsc.HasEntries() && client.IsEnabled() {
-			dsc = DynamicSamplingContextFromScope(scope, client)
-		}
-		event.sdkMetaData.dsc = dsc
-	}
-
-	// If an external trace resolver is registered (e.g. OTel), override
-	// trace/span IDs from the hint context or the scope's request context.
-	if client.IsEnabled() {
-		var ctx context.Context
-		if hint != nil {
-			ctx = hint.Context
-		}
-		if ctx == nil && scope.request != nil {
-			ctx = scope.request.Context()
-		}
-		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); event.Type != transactionType && ok {
-			traceCtx := event.Contexts["trace"]
-			traceCtx["trace_id"] = traceID.String()
-			traceCtx["span_id"] = spanID.String()
-		}
-	}
-
-	if event.User.IsEmpty() {
+	if event.User.IsEmpty() && !scope.user.IsEmpty() {
 		event.User = scope.user
 	}
-
-	if len(event.Fingerprint) == 0 {
+	event.Tags = util.FillMap(event.Tags, scope.tags)
+	for key, value := range scope.contexts {
+		if key == "trace" {
+			continue
+		}
+		if event.Contexts == nil {
+			event.Contexts = make(map[string]Context, len(scope.contexts))
+		}
+		if _, ok := event.Contexts[key]; !ok {
+			event.Contexts[key] = cloneContext(value)
+		}
+	}
+	if len(event.Fingerprint) == 0 && len(scope.fingerprint) > 0 {
 		event.Fingerprint = append(event.Fingerprint, scope.fingerprint...)
 	}
-
-	if scope.level != "" {
-		event.Level = scope.level
+	if state.level == "" {
+		state.level = scope.level
+	}
+	if state.request == nil && scope.request != nil {
+		state.request = scope.request
+		state.requestBody = scope.requestBody
 	}
 
-	if event.Request == nil && scope.request != nil {
-		event.Request = newRequest(scope.request, client)
+	if len(scope.breadcrumbs) > 0 {
+		if len(state.breadcrumbs) == 0 {
+			state.breadcrumbs = append([]*Breadcrumb(nil), scope.breadcrumbs...)
+		} else {
+			state.breadcrumbs = mergeTwoBreadcrumbLayers(scope.breadcrumbs, state.breadcrumbs)
+		}
+	}
+	if prepend {
+		state.attachments = prependSlice(scope.attachments, state.attachments)
+		state.processors = prependSlice(scope.eventProcessors, state.processors)
+	} else {
+		state.attachments = append(state.attachments, scope.attachments...)
+		state.processors = append(state.processors, scope.eventProcessors...)
+	}
+}
+
+func prependSlice[T any](prefix, values []T) []T {
+	if len(prefix) == 0 {
+		return values
+	}
+	result := make([]T, 0, len(prefix)+len(values))
+	result = append(result, prefix...)
+	return append(result, values...)
+}
+
+func setAttributeIfAbsent(attrs map[string]attribute.Value, key, value string) {
+	if value == "" {
+		return
+	}
+	if _, ok := attrs[key]; !ok {
+		attrs[key] = attribute.StringValue(value)
+	}
+}
+
+func copySignalAttributes(specific, instance, defaults map[string]attribute.Value) map[string]attribute.Value {
+	attrs := make(map[string]attribute.Value, len(specific)+len(instance)+len(defaults)+8)
+	attrs = util.FillMap(attrs, specific)
+	attrs = util.FillMap(attrs, instance)
+	return util.FillMap(attrs, defaults)
+}
+
+func buildMetricAttributes(specific []attribute.Builder, instance, defaults map[string]attribute.Value) map[string]attribute.Value {
+	attrs := make(map[string]attribute.Value, len(specific)+len(instance)+len(defaults)+8)
+	for _, attr := range specific {
+		attrs[attr.Key] = attr.Value
+	}
+	attrs = util.FillMap(attrs, instance)
+	return util.FillMap(attrs, defaults)
+}
+
+func mergeScopeAttributes(attrs map[string]attribute.Value, scope *Scope) map[string]attribute.Value {
+	global := GlobalScope()
+	var user User
+	if scope != nil && scope != global {
+		scope.mu.RLock()
+		attrs = util.FillMap(attrs, scope.attributes)
+		user = scope.user
+		scope.mu.RUnlock()
+	}
+
+	global.mu.RLock()
+	attrs = util.FillMap(attrs, global.attributes)
+	if user.IsEmpty() {
+		user = global.user
+	}
+	global.mu.RUnlock()
+
+	setAttributeIfAbsent(attrs, "user.id", user.ID)
+	setAttributeIfAbsent(attrs, "user.name", user.Name)
+	setAttributeIfAbsent(attrs, "user.email", user.Email)
+	return attrs
+}
+
+// applyToEvent handles capture work that must run after Scope locks are
+// released, including callbacks and request conversion.
+func (state captureState) applyToEvent(event *Event, hint *EventHint, opts captureOptions, client *Client) *Event {
+	event.Attachments = append(event.Attachments, state.attachments...)
+
+	if event.Request == nil && state.request != nil {
+		event.Request = newRequest(state.request, client)
 		// NOTE: The SDK does not attempt to send partial request body data.
 		//
 		// The reason being that Sentry's ingest pipeline and UI are optimized
@@ -493,34 +538,88 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		// Users can still send more data along their events if they want to,
 		// for example using Event.Contexts.
 		dc := client.GetDataCollection()
-		if scope.requestBody != nil && !scope.requestBody.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
-			event.Request.Data = dc.FilterHTTPBody(scope.requestBody.Bytes(), scope.request.Header.Get("Content-Type"))
+		body := state.requestBody
+		if body != nil && !body.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
+			event.Request.Data = dc.FilterHTTPBody(body.Bytes(), state.request.Header.Get("Content-Type"))
 		}
 	}
 
-	for _, processor := range scope.eventProcessors {
+	event.Breadcrumbs = mergeBreadcrumbs(client.options.MaxBreadcrumbs, event.Breadcrumbs, [][]*Breadcrumb{state.breadcrumbs})
+	event.Level = resolveLevel(event, opts, state.level)
+
+	for _, processor := range state.processors {
 		id := event.EventID
 		category := event.toCategory()
 		spanCountBefore := event.GetSpanCount()
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
-			if client.IsEnabled() {
-				client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
-				if category == ratelimit.CategoryTransaction {
-					client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
-				}
+			client.recordDiscard(report.ReasonEventProcessor, category, 1)
+			if category == ratelimit.CategoryTransaction {
+				client.recordDiscard(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
 			}
 			return nil
 		}
 		if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
-			if client.IsEnabled() {
-				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
-			}
+			client.recordDiscard(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
 		}
 	}
 
 	return event
+}
+
+func resolveLevel(event *Event, opts captureOptions, scopeLevel Level) Level {
+	switch {
+	case event.Level != "":
+		return event.Level
+	case opts.level != "":
+		return opts.level
+	case scopeLevel != "" && event.Type != transactionType:
+		return scopeLevel
+	default:
+		return LevelInfo
+	}
+}
+
+func mergeBreadcrumbs(limit int, own []*Breadcrumb, layers [][]*Breadcrumb) []*Breadcrumb {
+	if limit < 0 {
+		return nil
+	}
+	if limit == 0 {
+		limit = defaultMaxBreadcrumbs
+	}
+
+	merged := own
+	for _, layer := range layers {
+		merged = mergeTwoBreadcrumbLayers(merged, layer)
+	}
+	if len(merged) > limit {
+		merged = merged[len(merged)-limit:]
+	}
+	return merged
+}
+
+func mergeTwoBreadcrumbLayers(a, b []*Breadcrumb) []*Breadcrumb {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	out := make([]*Breadcrumb, 0, len(a)+len(b))
+	i, j := 0, 0
+	for i < len(a) && j < len(b) {
+		if b[j].Timestamp.Before(a[i].Timestamp) {
+			out = append(out, b[j])
+			j++
+		} else {
+			out = append(out, a[i])
+			i++
+		}
+	}
+	out = append(out, a[i:]...)
+	out = append(out, b[j:]...)
+	return out
 }
 
 // cloneContext returns a new context with keys and values copied from the passed one.
@@ -536,30 +635,10 @@ func cloneContext(c Context) Context {
 	return res
 }
 
-func (scope *Scope) populateAttrs(attrs map[string]attribute.Value) {
-	if scope == nil {
-		return
-	}
-
-	scope.mu.RLock()
-	defer scope.mu.RUnlock()
-
-	// Add user-related attributes
-	if !scope.user.IsEmpty() {
-		if scope.user.ID != "" {
-			attrs["user.id"] = attribute.StringValue(scope.user.ID)
-		}
-		if scope.user.Name != "" {
-			attrs["user.name"] = attribute.StringValue(scope.user.Name)
-		}
-		if scope.user.Email != "" {
-			attrs["user.email"] = attribute.StringValue(scope.user.Email)
-		}
-	}
-
-	for k, v := range scope.attributes {
-		attrs[k] = v
-	}
+type signalCaptureContext struct {
+	scope    *Scope
+	ctx      context.Context
+	fallback context.Context
 }
 
 // hubFromContexts is a helper to return the first hub found in the given contexts.
@@ -575,49 +654,105 @@ func hubFromContexts(ctxs ...context.Context) *Hub {
 	return nil
 }
 
-// resolveTrace resolves trace ID and span ID from the given scope and contexts.
+// resolveTrace resolves trace IDs and dynamic sampling context from the given
+// contexts and scope. It is the single trace-policy function used by every
+// signal. The precedence is external resolver, span in a supplied context,
+// scope span, then scope propagation context.
 //
-// The resolution order follows a most-specific-to-least-specific pattern:
-//  1. If an external trace resolver was registered (eg. OTel), we prioritise trace context
-//     information from that
-//  2. Check for span directly in contexts (SpanFromContext) - this is the most specific
-//     source as it represents a span explicitly attached to the current operation's context
-//  3. Check scope's span - provides access to span set on the hub's scope
-//  4. Fall back to scope's propagation context trace ID
-//
-// This ordering ensures we always use the most contextually relevant tracing information.
-// For example, if a specific span is active for an operation, we use that span's trace/span IDs
-// rather than accidentally using a different span that might be set on the hub's scope.
-func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
-	var span *Span
+// TODO: this should be removed when the span API is introduced. Currently kept for compatibility. The span
+// and trace should only be resolved through context.
+func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) traceResolution {
+	client = normalizeClient(client)
+	var (
+		resolved traceResolution
+		span     *Span
+		external bool
+	)
 
 	for _, ctx := range ctxs {
 		if ctx == nil {
 			continue
 		}
-		if client.IsEnabled() {
-			if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
-				return traceID, spanID
-			}
+		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
+			resolved.traceID, resolved.spanID, resolved.telemetrySpanID = traceID, spanID, spanID
+			resolved.valid, resolved.external, external = true, true, true
+			break
 		}
 		if span = SpanFromContext(ctx); span != nil {
 			break
 		}
 	}
 
-	if scope != nil {
-		scope.mu.RLock()
-		if span == nil {
-			span = scope.span
-		}
-		if span != nil {
-			traceID = span.TraceID
-			spanID = span.SpanID
-		} else {
-			traceID = scope.propagationContext.TraceID
-		}
-		scope.mu.RUnlock()
+	if scope == nil {
+		return resolved
 	}
 
-	return traceID, spanID
+	scope.mu.RLock()
+	scopeSpan := scope.span
+	propagation := scope.propagationContext
+	request := scope.request
+	scope.mu.RUnlock()
+
+	// The request context is a fallback caller context.
+	if !external && span == nil && request != nil {
+		if traceID, spanID, ok := client.externalTraceContextFromContext(request.Context()); ok {
+			resolved.traceID, resolved.spanID, resolved.telemetrySpanID = traceID, spanID, spanID
+			resolved.valid, resolved.external, external = true, true, true
+		}
+	}
+	if span == nil && !external {
+		span = scopeSpan
+	}
+
+	if !external {
+		if span != nil {
+			resolved.traceID, resolved.spanID, resolved.telemetrySpanID = span.TraceID, span.SpanID, span.SpanID
+			resolved.valid = true
+		} else {
+			resolved.traceID, resolved.spanID = propagation.TraceID, propagation.SpanID
+			resolved.valid = propagation.TraceID != (TraceID{})
+		}
+	}
+
+	if span != nil {
+		if transaction := span.GetTransaction(); transaction != nil {
+			resolved.dsc = DynamicSamplingContextFromTransaction(transaction)
+			return resolved
+		}
+	}
+	resolved.dsc = propagation.DynamicSamplingContext
+	if !resolved.dsc.HasEntries() {
+		// DynamicSamplingContextFromScope only reads propagationContext. Re-read
+		// under its documented locking contract rather than duplicating its
+		// client-option/DSN logic here.
+		resolved.dsc = dynamicSamplingContextFromScope(scope, client)
+	}
+
+	return resolved
+}
+
+type traceResolution struct {
+	traceID         TraceID
+	spanID          SpanID // event projection, including propagation SpanID
+	telemetrySpanID SpanID // only an active/external span belongs on logs/metrics
+	dsc             DynamicSamplingContext
+	valid           bool
+	external        bool
+}
+
+func applyTraceToEvent(event *Event, trace traceResolution) {
+	if event.Type == transactionType || !trace.valid {
+		return
+	}
+	if event.Contexts == nil {
+		event.Contexts = make(map[string]Context)
+	}
+	if _, ok := event.Contexts["trace"]; !ok {
+		traceID, spanID := any(trace.traceID), any(trace.spanID)
+		if trace.external {
+			traceID, spanID = trace.traceID.String(), trace.spanID.String()
+		}
+		event.Contexts["trace"] = Context{"trace_id": traceID, "span_id": spanID}
+	}
+	event.sdkMetaData.dsc = trace.dsc
 }

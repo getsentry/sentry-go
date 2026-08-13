@@ -60,19 +60,20 @@ func NewLogger(ctx context.Context) Logger { // nolint: dupl
 	}
 
 	client := hub.Client()
+	options := client.options
 	if client.IsEnabled() {
 		// Build default attrs
-		serverAddr := client.options.ServerName
+		serverAddr := options.ServerName
 		if serverAddr == "" {
 			serverAddr, _ = os.Hostname()
 		}
 
 		defaults := map[string]string{
-			"sentry.release":        client.options.Release,
-			"sentry.environment":    client.options.Environment,
+			"sentry.release":        options.Release,
+			"sentry.environment":    options.Environment,
 			"sentry.server.address": serverAddr,
-			"sentry.sdk.name":       client.sdkIdentifier,
-			"sentry.sdk.version":    client.sdkVersion,
+			"sentry.sdk.name":       client.GetSDKIdentifier(),
+			"sentry.sdk.version":    client.GetSDKVersion(),
 		}
 
 		defaultAttrs := make(map[string]attribute.Value, len(defaults))
@@ -111,32 +112,10 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		hub = l.hub
 	}
 	client := hub.Client()
-	if !client.IsEnabled() {
-		return
-	}
-
 	scope := hub.Scope()
-	traceID, spanID := resolveTrace(scope, client, ctx, l.ctx)
-
-	// Pre-allocate with capacity hint to avoid map growth reallocations
-	estimatedCap := len(l.defaultAttributes) + len(entryAttrs) + len(args) + 8 // scope ~3 + instance ~5
-	attrs := make(map[string]attribute.Value, estimatedCap)
-
-	// attribute precedence: default -> scope -> instance (from SetAttrs) -> entry-specific
-	for k, v := range l.defaultAttributes {
-		attrs[k] = v
-	}
-	scope.populateAttrs(attrs)
-
 	l.mu.RLock()
-	for k, v := range l.attributes {
-		attrs[k] = v
-	}
+	attrs := copySignalAttributes(entryAttrs, l.attributes, l.defaultAttributes)
 	l.mu.RUnlock()
-
-	for k, v := range entryAttrs {
-		attrs[k] = v
-	}
 
 	body := message
 	if format {
@@ -152,19 +131,23 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 
 	log := &Log{
 		Timestamp:  time.Now(),
-		TraceID:    traceID,
-		SpanID:     spanID,
 		Level:      level,
 		Severity:   severity,
 		Body:       body,
 		Attributes: attrs,
 	}
-	log.approximateSize = computeLogSize(log)
-
-	client.captureLog(log, scope)
+	client.captureLog(log, signalCaptureContext{scope: scope, ctx: ctx, fallback: l.ctx})
 	if client.options.Debug {
 		debuglog.Print(body)
 	}
+}
+
+func prepareLog(log *Log, client *Client, capture signalCaptureContext) {
+	trace := resolveTrace(capture.scope, client, capture.ctx, capture.fallback)
+	log.TraceID = trace.traceID
+	log.SpanID = trace.telemetrySpanID
+	log.Attributes = mergeScopeAttributes(log.Attributes, capture.scope)
+	log.approximateSize = computeLogSize(log)
 }
 
 func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {

@@ -2,6 +2,23 @@ package util
 
 import "sync"
 
+// FillMap copies keys from src that are absent in dst. It allocates dst when
+// needed and never aliases src.
+func FillMap[M ~map[K]V, K comparable, V any](dst M, src M) M {
+	if len(src) == 0 {
+		return dst
+	}
+	if dst == nil {
+		dst = make(M, len(src))
+	}
+	for k, v := range src {
+		if _, ok := dst[k]; !ok {
+			dst[k] = v
+		}
+	}
+	return dst
+}
+
 type SyncMap[K comparable, V any] struct {
 	m sync.Map
 }
