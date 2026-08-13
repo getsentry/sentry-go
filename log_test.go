@@ -807,14 +807,12 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 
 func TestSentryLogger_DebugLogging(t *testing.T) {
 	tests := []struct {
-		name        string
-		disableLogs bool
-		message     string
+		name    string
+		message string
 	}{
 		{
-			name:        "Logs enabled (default)",
-			disableLogs: false,
-			message:     "disk usage at 95% capacity",
+			name:    "Logs enabled (default)",
+			message: "disk usage at 95% capacity",
 		},
 	}
 
