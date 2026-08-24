@@ -658,6 +658,13 @@ func (client *Client) CaptureException(ctx context.Context, exception error, opt
 	return client.captureEvent(ctx, event, ScopeFromContext(ctx), opts)
 }
 
+// CapturePanic captures a panic value returned by recover.
+//
+// It always attaches the stacktrace of the active panic.
+func (client *Client) CapturePanic(ctx context.Context, recovered any, options ...CaptureOption) *EventID {
+	return client.capturePanic(ctx, recovered, ScopeFromContext(ctx), resolveCaptureOptions(ctx, options))
+}
+
 // CaptureCheckIn captures a check in.
 func (client *Client) CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig, options ...CaptureOption) *EventID {
 	event := client.EventFromCheckIn(checkIn, monitorConfig)
@@ -774,10 +781,10 @@ func (client *Client) captureMetric(metric *Metric, capture signalCaptureContext
 
 // Recover captures a panic from the current goroutine. It must be deferred.
 func (client *Client) Recover(ctx context.Context, options ...CaptureOption) *EventID {
-	return client.recoverValue(ctx, recover(), ScopeFromContext(ctx), resolveCaptureOptions(ctx, options))
+	return client.CapturePanic(ctx, recover(), options...)
 }
 
-func (client *Client) recoverValue(ctx context.Context, value any, scope *Scope, opts captureOptions) *EventID {
+func (client *Client) capturePanic(ctx context.Context, value any, scope *Scope, opts captureOptions) *EventID {
 	if value == nil {
 		return nil
 	}
@@ -785,14 +792,19 @@ func (client *Client) recoverValue(ctx context.Context, value any, scope *Scope,
 		opts.hint.RecoveredException = value
 	}
 
+	stacktrace := NewStacktrace()
 	var event *Event
 	switch value := value.(type) {
 	case error:
 		event = client.eventFromException(value)
+		event.Exception[len(event.Exception)-1].Stacktrace = stacktrace
 	case string:
 		event = client.eventFromMessage(value)
 	default:
 		event = client.eventFromMessage(fmt.Sprintf("%#v", value))
+	}
+	if len(event.Exception) == 0 {
+		event.Threads = []Thread{{Stacktrace: stacktrace, Current: true}}
 	}
 	opts.defaultLevel = LevelFatal
 	return client.captureEvent(ctx, event, scope, opts)

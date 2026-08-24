@@ -97,7 +97,7 @@ func TestHelperCaptureLevelsRespectScope(t *testing.T) {
 		{
 			name: "recover",
 			capture: func(ctx context.Context, client *Client, scope *Scope) {
-				client.recoverValue(ctx, "panic", scope, resolveCaptureOptions(ctx, nil))
+				client.capturePanic(ctx, "panic", scope, resolveCaptureOptions(ctx, nil))
 			},
 		},
 	}
