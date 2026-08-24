@@ -82,15 +82,9 @@ type SentryRoundTripper struct {
 }
 
 func dataCollectionFromRequest(request *http.Request) sentry.DataCollection {
-	if hub := sentry.GetHubFromContext(request.Context()); hub != nil {
-		if client := hub.Client(); client.IsEnabled() {
-			return client.GetDataCollection()
-		}
-	}
-	if hub := sentry.CurrentHub(); hub != nil {
-		if client := hub.Client(); client.IsEnabled() {
-			return client.GetDataCollection()
-		}
+	client := sentry.GetClient(request.Context())
+	if client.IsEnabled() {
+		return client.GetDataCollection()
 	}
 	return sentry.DataCollection{}
 }

@@ -38,10 +38,7 @@ func TestNewSentryFixture_WithClientOptions_Tracing(t *testing.T) {
 		TracesSampleRate: 1.0,
 	}))
 
-	span := sentry.StartTransaction(
-		sentry.SetHubOnContext(t.Context(), f.Hub),
-		"test-transaction",
-	)
+	span := sentry.StartTransaction(f.NewContext(t.Context()), "test-transaction")
 	span.Finish()
 	f.Flush()
 
@@ -76,7 +73,8 @@ func TestFixture_NewContext(t *testing.T) {
 	ctx := f.NewContext(parent)
 
 	assert.Equal(t, "value", ctx.Value(contextKey{}), "context value")
-	assert.Same(t, f.Hub, sentry.GetHubFromContext(ctx), "context hub")
+	assert.NotNil(t, sentry.ScopeFromContext(ctx), "context scope")
+	assert.Same(t, f.Client, sentry.GetClient(ctx), "context client")
 }
 
 func TestNewContext(t *testing.T) {
@@ -86,7 +84,7 @@ func TestNewContext(t *testing.T) {
 	ctx := NewContext(parent, t)
 
 	assert.Equal(t, "value", ctx.Value(contextKey{}), "context value")
-	assert.NotNil(t, sentry.GetHubFromContext(ctx), "context hub")
+	assert.NotNil(t, sentry.ScopeFromContext(ctx), "context scope")
 }
 
 func TestNewContext_NilParent(t *testing.T) {
@@ -94,7 +92,7 @@ func TestNewContext_NilParent(t *testing.T) {
 
 	ctx := NewContext(nil, t) // nolint: staticcheck // SA1012: passing nil context for the test
 
-	assert.NotNil(t, sentry.GetHubFromContext(ctx), "context hub")
+	assert.NotNil(t, sentry.ScopeFromContext(ctx), "context scope")
 	assert.Nil(t, ctx.Value(contextKey{}), "context value")
 }
 
@@ -105,8 +103,8 @@ func TestSentryFixture_Events_IncludesTransactions(t *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 	}))
-	ctx := sentry.SetHubOnContext(t.Context(), f.Hub)
-	f.Hub.CaptureMessage("error event")
+	ctx := f.NewContext(t.Context())
+	sentry.CaptureMessage(ctx, "error event")
 	span := sentry.StartTransaction(ctx, "test-tx")
 	span.Finish()
 

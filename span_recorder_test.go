@@ -36,7 +36,7 @@ func Test_spanRecorder_record(t *testing.T) {
 			logBuffer := bytes.Buffer{}
 			debuglog.SetOutput(&logBuffer)
 			defer debuglog.SetOutput(io.Discard)
-			spanRecorder := spanRecorder{}
+			spanRecorder := spanRecorder{maxSpans: tt.maxSpans}
 
 			currentHub.BindClient(&Client{
 				options: ClientOptions{

@@ -179,13 +179,15 @@ func (f *Fixture) Flush() {
 	}
 }
 
-// NewContext returns parent with the fixture's hub attached. If parent is nil,
-// [context.Background] is used.
+// NewContext returns a derived context with an isolated scope using the
+// fixture's client. If parent is nil, [context.Background] is used.
 func (f *Fixture) NewContext(parent context.Context) context.Context {
 	if parent == nil {
 		parent = context.Background()
 	}
-	return sentry.SetHubOnContext(parent, f.Hub)
+	ctx, scope := sentry.WithIsolationScope(parent)
+	scope.SetClient(f.Client)
+	return ctx
 }
 
 // Events returns all captured events, including transactions.

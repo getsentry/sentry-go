@@ -84,7 +84,7 @@ func startServerTransaction(ctx context.Context, fullMethod string) (context.Con
 	transaction := sentry.StartTransaction(
 		sentry.SetHubOnContext(ctx, hub),
 		name,
-		sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
+		sentry.ContinueTrace(sentryTraceHeader, sentryBaggageHeader),
 		sentry.WithOpName(defaultServerOperationName),
 		sentry.WithDescription(name),
 		sentry.WithTransactionSource(sentry.SourceRoute),
