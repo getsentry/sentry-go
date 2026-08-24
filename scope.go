@@ -618,21 +618,7 @@ func cloneContext(c Context) Context {
 type signalCaptureContext struct {
 	scope             *Scope
 	ctx               context.Context
-	fallback          context.Context
 	defaultAttributes map[string]attribute.Value
-}
-
-// hubFromContexts is a helper to return the first hub found in the given contexts.
-func hubFromContexts(ctxs ...context.Context) *Hub {
-	for _, ctx := range ctxs {
-		if ctx == nil {
-			continue
-		}
-		if hub := GetHubFromContext(ctx); hub != nil {
-			return hub
-		}
-	}
-	return nil
 }
 
 // resolveTrace resolves trace IDs and dynamic sampling context from the given

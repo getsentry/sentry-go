@@ -35,7 +35,6 @@ const (
 
 type sentryLogger struct {
 	ctx               context.Context
-	hub               *Hub
 	attributes        map[string]attribute.Value
 	defaultAttributes map[string]attribute.Value
 	mu                sync.RWMutex
@@ -53,13 +52,7 @@ type logEntry struct {
 
 // NewLogger returns a Logger that emits logs to Sentry.
 func NewLogger(ctx context.Context) Logger { // nolint: dupl
-	var hub *Hub
-	hub = GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub()
-	}
-
-	client := hub.Client()
+	client := GetClient(ctx)
 	options := client.options
 	if client.IsEnabled() {
 		// Build default attrs
@@ -85,7 +78,6 @@ func NewLogger(ctx context.Context) Logger { // nolint: dupl
 
 		return &sentryLogger{
 			ctx:               ctx,
-			hub:               hub,
 			attributes:        make(map[string]attribute.Value),
 			defaultAttributes: defaultAttrs,
 			mu:                sync.RWMutex{},
@@ -107,12 +99,8 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		return
 	}
 
-	hub := hubFromContexts(ctx, l.ctx)
-	if hub == nil {
-		hub = l.hub
-	}
-	client := hub.Client()
-	scope := hub.Scope()
+	client := GetClient(ctx)
+	scope := ScopeFromContext(ctx)
 	l.mu.RLock()
 	attrs := copySignalAttributes(entryAttrs, l.attributes)
 	l.mu.RUnlock()
@@ -139,7 +127,6 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	client.captureLog(log, signalCaptureContext{
 		scope:             scope,
 		ctx:               ctx,
-		fallback:          l.ctx,
 		defaultAttributes: l.defaultAttributes,
 	})
 	if client.options.Debug {
@@ -148,7 +135,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 }
 
 func prepareLog(log *Log, client *Client, capture signalCaptureContext) {
-	trace := resolveTrace(capture.scope, client, capture.ctx, capture.fallback)
+	trace := resolveTrace(capture.scope, client, capture.ctx)
 	log.TraceID = trace.traceID
 	log.SpanID = trace.telemetrySpanID
 	log.Attributes = mergeScopeAttributes(log.Attributes, capture.defaultAttributes, capture.scope)

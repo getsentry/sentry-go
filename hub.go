@@ -178,6 +178,12 @@ func (hub *Hub) PopScope() {
 func (hub *Hub) BindClient(client *Client) {
 	top := hub.stackTop()
 	top.SetClient(client)
+	// compatibility fallback. The new scope API should use GetClient to resolve the client chain.
+	// Integrations that currently use the hub should also set top.scope.client to continue resolving
+	// a non nil client.
+	if top.scope != nil {
+		top.scope.SetClient(client)
+	}
 }
 
 // WithScope runs f in an isolated temporary scope.
@@ -451,7 +457,9 @@ func hubFromContext(ctx context.Context) *Hub { // nolint: unused
 func SetHubOnContext(ctx context.Context, hub *Hub) context.Context {
 	ctx = context.WithValue(ctx, HubContextKey, hub)
 	if hub != nil && hub.Scope() != nil {
-		ctx = contextWithScope(ctx, hub.Scope())
+		scope := hub.Scope()
+		scope.SetClient(hub.Client())
+		ctx = contextWithScope(ctx, scope)
 	}
 	return ctx
 }
