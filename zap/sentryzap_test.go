@@ -22,6 +22,7 @@ func newMockTransport() (context.Context, *sentry.MockTransport) {
 	})
 	hub := sentry.CurrentHub()
 	hub.BindClient(mockClient)
+	sentry.GlobalScope().SetClient(mockClient)
 	ctx = sentry.SetHubOnContext(ctx, hub)
 	return ctx, mockTransport
 }

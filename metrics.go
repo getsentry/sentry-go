@@ -47,14 +47,10 @@ const (
 	UnitPercent = "percent"
 )
 
-// NewMeter returns a new Meter. If there is no Client bound to the current hub,
+// NewMeter returns a new Meter. If there is no enabled Client available from the current context,
 // it returns a no-op Meter that discards all metrics.
 func NewMeter(ctx context.Context) Meter {
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub()
-	}
-	client := hub.Client()
+	client := GetClient(ctx)
 	options := client.options
 	if client.IsEnabled() {
 		// build default attrs
@@ -80,7 +76,6 @@ func NewMeter(ctx context.Context) Meter {
 
 		return &sentryMeter{
 			ctx:               ctx,
-			hub:               hub,
 			attributes:        make(map[string]attribute.Value),
 			defaultAttributes: defaultAttrs,
 			mu:                sync.RWMutex{},
@@ -93,7 +88,6 @@ func NewMeter(ctx context.Context) Meter {
 
 type sentryMeter struct {
 	ctx               context.Context
-	hub               *Hub
 	attributes        map[string]attribute.Value
 	defaultAttributes map[string]attribute.Value
 	mu                sync.RWMutex
@@ -105,13 +99,8 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		return
 	}
 
-	hub := hubFromContexts(ctx, m.ctx)
-	if hub == nil {
-		hub = m.hub
-	}
-
-	client := hub.Client()
-	scope := hub.Scope()
+	client := GetClient(ctx)
+	scope := ScopeFromContext(ctx)
 	if customScope != nil {
 		scope = customScope
 	}
@@ -131,7 +120,6 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 	if client.captureMetric(metric, signalCaptureContext{
 		scope:             scope,
 		ctx:               ctx,
-		fallback:          m.ctx,
 		defaultAttributes: m.defaultAttributes,
 	}) && client.options.Debug {
 		debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), unit)
@@ -139,7 +127,7 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 }
 
 func prepareMetric(metric *Metric, client *Client, capture signalCaptureContext) {
-	trace := resolveTrace(capture.scope, client, capture.ctx, capture.fallback)
+	trace := resolveTrace(capture.scope, client, capture.ctx)
 	metric.TraceID = trace.traceID
 	metric.SpanID = trace.telemetrySpanID
 	metric.Attributes = mergeScopeAttributes(metric.Attributes, capture.defaultAttributes, capture.scope)
@@ -153,7 +141,6 @@ func (m *sentryMeter) WithCtx(ctx context.Context) Meter {
 
 	return &sentryMeter{
 		ctx:               ctx,
-		hub:               m.hub,
 		attributes:        attrsCopy,
 		defaultAttributes: m.defaultAttributes,
 		mu:                sync.RWMutex{},

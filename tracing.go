@@ -1097,6 +1097,57 @@ func ContinueFromTrace(trace string) SpanOption {
 	return ContinueTrace(trace, "")
 }
 
+// GetTraceparent returns the Sentry trace header value for the active span or
+// propagation context carried by ctx. It does not fall back to Hub state.
+func GetTraceparent(ctx context.Context) string {
+	if span := SpanFromContext(ctx); span != nil {
+		return span.ToSentryTrace()
+	}
+
+	scope := ScopeFromContext(ctx)
+	if scope == nil {
+		return ""
+	}
+	propagation := scope.propagationContextSnapshot()
+	if propagation.TraceID == zeroTraceID || propagation.SpanID == zeroSpanID {
+		return ""
+	}
+	return fmt.Sprintf("%s-%s", propagation.TraceID, propagation.SpanID)
+}
+
+// GetTraceparentW3C returns the W3C traceparent header value for the active
+// span or propagation context carried by ctx. It does not fall back to Hub
+// state.
+func GetTraceparentW3C(ctx context.Context) string {
+	if span := SpanFromContext(ctx); span != nil {
+		return span.ToTraceparent()
+	}
+
+	scope := ScopeFromContext(ctx)
+	if scope == nil {
+		return ""
+	}
+	propagation := scope.propagationContextSnapshot()
+	if propagation.TraceID == zeroTraceID || propagation.SpanID == zeroSpanID {
+		return ""
+	}
+	return fmt.Sprintf("00-%s-%s-00", propagation.TraceID, propagation.SpanID)
+}
+
+// GetBaggage returns the Sentry baggage header value for the active span or
+// propagation context carried by ctx. It does not fall back to Hub state.
+func GetBaggage(ctx context.Context) string {
+	if span := SpanFromContext(ctx); span != nil {
+		return span.ToBaggage()
+	}
+
+	scope := ScopeFromContext(ctx)
+	if scope == nil {
+		return ""
+	}
+	return scope.propagationContextSnapshot().DynamicSamplingContext.String()
+}
+
 // spanContextKey is used to store span values in contexts.
 type spanContextKey struct{}
 

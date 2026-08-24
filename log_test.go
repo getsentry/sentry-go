@@ -20,14 +20,9 @@ const (
 	LogTraceID = "d49d9bf66f13450b81f65bc51cf49c03"
 )
 
-// flushFromContext flushes the hub from the given context.
-// This is needed for tests that use a cloned hub for isolation.
+// flushFromContext flushes the client from the given context.
 func flushFromContext(ctx context.Context, timeout time.Duration) {
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub()
-	}
-	hub.Flush(timeout)
+	GetClient(ctx).Flush(timeout)
 }
 
 func setupMockTransport() (context.Context, *MockTransport) {
@@ -43,11 +38,9 @@ func setupMockTransport() (context.Context, *MockTransport) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub().Clone()
-	hub.BindClient(mockClient)
-	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-
-	ctx = SetHubOnContext(ctx, hub)
+	ctx, scope := WithIsolationScope(ctx)
+	scope.SetClient(mockClient)
+	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 	return ctx, mockTransport
 }
 
@@ -551,10 +544,9 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 
 func Test_sentryLogger_AttributePrecedence(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
-	hub := GetHubFromContext(ctx)
-
-	hub.Scope().SetUser(User{ID: "user456", Name: "TestUser"})
-	hub.Scope().SetAttributes(
+	scope := ScopeFromContext(ctx)
+	scope.SetUser(User{ID: "user456", Name: "TestUser"})
+	scope.SetAttributes(
 		attribute.String("key", "scope-value"),
 		attribute.String("sentry.sdk.name", "scope-sdk"),
 	)
@@ -631,8 +623,7 @@ func Test_batchLogger_FlushWithContext(t *testing.T) {
 
 	cancelCtx, cancel := context.WithTimeout(context.Background(), testutils.FlushTimeout())
 	defer cancel()
-	hub := GetHubFromContext(ctx)
-	hub.FlushWithContext(cancelCtx)
+	GetClient(ctx).FlushWithContext(cancelCtx)
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -693,16 +684,14 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 		Transport:              mockTransport,
 		DisableTelemetryBuffer: true,
 	})
-	hub := CurrentHub()
-	hub.BindClient(mockClient)
-	ctx := SetHubOnContext(context.Background(), hub)
+	ctx, scope := WithIsolationScope(context.Background())
+	scope.SetClient(mockClient)
 	l := NewLogger(ctx)
 	for i := 0; i < 3; i++ {
 		l.Info().WithCtx(ctx).Emit("test")
 	}
 
-	hub = GetHubFromContext(ctx)
-	hub.Client().batchLogger.Shutdown()
+	mockClient.batchLogger.Shutdown()
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -715,8 +704,8 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 	mockTransport.events = nil
 
 	// Test that shutdown can be called multiple times safely
-	hub.Client().batchLogger.Shutdown()
-	hub.Client().batchLogger.Shutdown()
+	mockClient.batchLogger.Shutdown()
+	mockClient.batchLogger.Shutdown()
 
 	events = mockTransport.Events()
 	if len(events) != 0 {
@@ -746,11 +735,9 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub()
-	hub.BindClient(mockClient)
-	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-
-	ctx = SetHubOnContext(ctx, hub)
+	ctx, scope := WithIsolationScope(ctx)
+	scope.SetClient(mockClient)
+	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 
 	l := NewLogger(ctx)
 	l.Info().WithCtx(ctx).Emit("context done log")
@@ -826,13 +813,12 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
 
-			ctx := context.Background()
 			mockClient, _ := NewClient(ClientOptions{
 				Transport: &MockTransport{},
 				Debug:     true,
 			})
-			hub := CurrentHub()
-			hub.BindClient(mockClient)
+			ctx, scope := WithIsolationScope(context.Background())
+			scope.SetClient(mockClient)
 
 			// set the debug logger output after NewClient, so that it doesn't change.
 			debuglog.SetOutput(&buf)
@@ -861,17 +847,14 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub().Clone()
-	hub.BindClient(mockClient)
-	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-
-	hub.Scope().SetUser(User{
+	ctx, scope := WithIsolationScope(ctx)
+	scope.SetClient(mockClient)
+	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+	scope.SetUser(User{
 		ID:    "user123",
 		Name:  "Test User",
 		Email: "test@example.com",
 	})
-
-	ctx = SetHubOnContext(ctx, hub)
 
 	l := NewLogger(ctx)
 	l.Info().Emit("test message with PII")
@@ -912,12 +895,11 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 
-	clonedHub := GetHubFromContext(ctx).Clone()
-	clonedHub.Scope().SetAttributes(
+	scopedCtx, clonedScope := WithIsolationScope(ctx)
+	clonedScope.SetAttributes(
 		attribute.String("key.string", "str"),
 		attribute.Bool("key.bool", true),
 	)
-	scopedCtx := SetHubOnContext(ctx, clonedHub)
 	txn := StartTransaction(scopedCtx, "test-transaction")
 	defer txn.Finish()
 
