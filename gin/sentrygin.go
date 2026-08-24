@@ -76,7 +76,7 @@ func (h *handler) handle(c *gin.Context) {
 	}
 
 	options := []sentry.SpanOption{
-		sentry.ContinueTrace(hub, c.GetHeader(sentry.SentryTraceHeader), c.GetHeader(sentry.SentryBaggageHeader)),
+		sentry.ContinueTrace(c.GetHeader(sentry.SentryTraceHeader), c.GetHeader(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginGin),

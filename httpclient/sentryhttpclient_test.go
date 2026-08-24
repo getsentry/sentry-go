@@ -66,6 +66,12 @@ func (c *captureRoundTripper) RoundTrip(request *http.Request) (*http.Response, 
 	}, nil
 }
 
+func contextWithClient(client *sentry.Client) context.Context {
+	ctx, scope := sentry.WithIsolationScope(context.Background())
+	scope.SetClient(client)
+	return ctx
+}
+
 func TestIntegration(t *testing.T) {
 	tests := []struct {
 		RequestMethod      string
@@ -255,8 +261,7 @@ func TestIntegration(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		hub := sentry.NewHub(sentryClient, sentry.NewScope())
-		ctx := sentry.SetHubOnContext(context.Background(), hub)
+		ctx := contextWithClient(sentryClient)
 		span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 		ctx = span.Context()
 
@@ -431,8 +436,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			hub := sentry.NewHub(sentryClient, sentry.NewScope())
-			ctx := sentry.SetHubOnContext(context.Background(), hub)
+			ctx := contextWithClient(sentryClient)
 			span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 			ctx = span.Context()
 
@@ -531,8 +535,7 @@ func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hub := sentry.NewHub(sentryClient, sentry.NewScope())
-	ctx := sentry.SetHubOnContext(context.Background(), hub)
+	ctx := contextWithClient(sentryClient)
 	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 	ctx = span.Context()
 
@@ -592,7 +595,7 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := sentry.SetHubOnContext(context.Background(), sentry.CurrentHub())
+	ctx := context.Background()
 	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 	ctx = span.Context()
 
@@ -789,8 +792,7 @@ func TestRoundTripDoesNotMutateCallerRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hub := sentry.NewHub(sentryClient, sentry.NewScope())
-	ctx := sentry.SetHubOnContext(context.Background(), hub)
+	ctx := contextWithClient(sentryClient)
 	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 	t.Cleanup(span.Finish)
 
@@ -926,8 +928,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			hub := sentry.NewHub(sentryClient, sentry.NewScope())
-			ctx := sentry.SetHubOnContext(context.Background(), hub)
+			ctx := contextWithClient(sentryClient)
 			span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 			ctx = span.Context()
 
