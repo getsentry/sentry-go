@@ -47,6 +47,12 @@ func CaptureException(ctx context.Context, err error, options ...CaptureOption) 
 	return GetClient(ctx).CaptureException(ctx, err, options...)
 }
 
+// CapturePanic captures a panic value returned by recover.
+// It always attaches the stacktrace of the active panic.
+func CapturePanic(ctx context.Context, recovered any, options ...CaptureOption) *EventID {
+	return GetClient(ctx).CapturePanic(ctx, recovered, options...)
+}
+
 // CaptureCheckIn captures a (cron) monitor check-in.
 func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig, options ...CaptureOption) *EventID {
 	return GetClient(ctx).CaptureCheckIn(ctx, checkIn, monitorConfig, options...)
@@ -63,7 +69,7 @@ func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *
 
 // Recover captures a panic from the current goroutine. It must be deferred.
 func Recover(ctx context.Context, options ...CaptureOption) *EventID {
-	return GetClient(ctx).recoverValue(ctx, recover(), ScopeFromContext(ctx), resolveCaptureOptions(ctx, options))
+	return CapturePanic(ctx, recover(), options...)
 }
 
 // WithScope is a shorthand for CurrentHub().WithScope.

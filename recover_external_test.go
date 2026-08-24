@@ -45,99 +45,44 @@ func panicWithArbitraryValue() {
 
 //go:noinline
 func recoverPanic(client *sentry.Client, panicFunc func()) {
-	defer client.Recover(context.Background())
+	ctx := sentry.SetHubOnContext(context.Background(), sentry.NewHub(client, sentry.NewScope()))
+	defer sentry.Recover(ctx)
 	panicFunc()
 }
 
-func newRecoverTestClient(t *testing.T) (*sentry.Client, *sentry.MockTransport) {
-	t.Helper()
-
-	transport := &sentry.MockTransport{}
-	client, err := sentry.NewClient(sentry.ClientOptions{
-		Transport:        transport,
-		AttachStacktrace: true,
-		Integrations: func([]sentry.Integration) []sentry.Integration {
-			return nil
-		},
-	})
-	require.NoError(t, err)
-
-	return client, transport
+//go:noinline
+func capturePanic(client *sentry.Client, panicFunc func()) {
+	ctx := sentry.SetHubOnContext(context.Background(), sentry.NewHub(client, sentry.NewScope()))
+	defer func() {
+		sentry.CapturePanic(ctx, recover())
+	}()
+	panicFunc()
 }
 
-func requireTopFrame(t *testing.T, stacktrace *sentry.Stacktrace, function string) {
+func requirePanicStacktrace(t *testing.T, stacktrace *sentry.Stacktrace, topFrame string) {
 	t.Helper()
 	require.NotNil(t, stacktrace)
 	require.NotEmpty(t, stacktrace.Frames)
-	assert.Equal(t, function, stacktrace.Frames[len(stacktrace.Frames)-1].Function)
-}
-
-func TestRecoverUsesPanicOriginStacktrace(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name           string
-		panicFunc      func()
-		topFrame       string
-		preservesStack bool
-	}{
-		{
-			name:      "error",
-			panicFunc: panicWithError,
-			topFrame:  "panicWithError",
-		},
-		{
-			name:      "runtime error",
-			panicFunc: panicWithNilPointer,
-			topFrame:  "panicWithNilPointer",
-		},
-		{
-			name:           "error with stacktrace",
-			panicFunc:      panicWithErrorStacktrace,
-			topFrame:       "newErrorWithStacktrace",
-			preservesStack: true,
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			client, transport := newRecoverTestClient(t)
-			recoverPanic(client, test.panicFunc)
-
-			events := transport.Events()
-			require.Len(t, events, 1)
-			require.NotEmpty(t, events[0].Exception)
-			exception := events[0].Exception[len(events[0].Exception)-1]
-			requireTopFrame(t, exception.Stacktrace, test.topFrame)
-
-			if test.preservesStack {
-				assert.NotEqual(t, "panicWithErrorStacktrace", exception.Stacktrace.Frames[len(exception.Stacktrace.Frames)-1].Function)
-			}
-		})
+	assert.Equal(t, topFrame, stacktrace.Frames[len(stacktrace.Frames)-1].Function)
+	for _, frame := range stacktrace.Frames {
+		assert.NotEqual(t, "github.com/getsentry/sentry-go", frame.Module)
 	}
 }
 
-func TestRecoverValueAlwaysUsesPanicOriginStacktrace(t *testing.T) {
-	t.Parallel()
+func testPanicCapture(t *testing.T, capture func(*sentry.Client, func())) {
+	t.Helper()
 
 	tests := []struct {
 		name      string
 		panicFunc func()
 		topFrame  string
+		exception bool
 	}{
-		{
-			name:      "string",
-			panicFunc: panicWithString,
-			topFrame:  "panicWithString",
-		},
-		{
-			name:      "arbitrary value",
-			panicFunc: panicWithArbitraryValue,
-			topFrame:  "panicWithArbitraryValue",
-		},
+		{name: "error", panicFunc: panicWithError, topFrame: "panicWithError", exception: true},
+		{name: "runtime error", panicFunc: panicWithNilPointer, topFrame: "panicWithNilPointer", exception: true},
+		{name: "error with stacktrace", panicFunc: panicWithErrorStacktrace, topFrame: "panicWithErrorStacktrace", exception: true},
+		{name: "string", panicFunc: panicWithString, topFrame: "panicWithString"},
+		{name: "arbitrary value", panicFunc: panicWithArbitraryValue, topFrame: "panicWithArbitraryValue"},
 	}
 
 	for _, test := range tests {
@@ -145,13 +90,38 @@ func TestRecoverValueAlwaysUsesPanicOriginStacktrace(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			client, transport := newRecoverTestClient(t)
-			recoverPanic(client, test.panicFunc)
+			transport := &sentry.MockTransport{}
+			client, err := sentry.NewClient(sentry.ClientOptions{
+				Transport: transport,
+				Integrations: func([]sentry.Integration) []sentry.Integration {
+					return nil
+				},
+			})
+			require.NoError(t, err)
+			capture(client, test.panicFunc)
 
 			events := transport.Events()
 			require.Len(t, events, 1)
-			require.Len(t, events[0].Threads, 1)
-			requireTopFrame(t, events[0].Threads[0].Stacktrace, test.topFrame)
+
+			var stacktrace *sentry.Stacktrace
+			if test.exception {
+				require.NotEmpty(t, events[0].Exception)
+				stacktrace = events[0].Exception[len(events[0].Exception)-1].Stacktrace
+			} else {
+				require.Len(t, events[0].Threads, 1)
+				stacktrace = events[0].Threads[0].Stacktrace
+			}
+			requirePanicStacktrace(t, stacktrace, test.topFrame)
 		})
 	}
+}
+
+func TestRecoverUsesPanicOriginStacktrace(t *testing.T) {
+	t.Parallel()
+	testPanicCapture(t, recoverPanic)
+}
+
+func TestCapturePanicUsesPanicOriginStacktrace(t *testing.T) {
+	t.Parallel()
+	testPanicCapture(t, capturePanic)
 }

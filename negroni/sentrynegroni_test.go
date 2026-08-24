@@ -41,6 +41,10 @@ func TestIntegration(t *testing.T) {
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
 				Message: "test",
+				Threads: []sentry.Thread{{
+					Stacktrace: &sentry.Stacktrace{},
+					Current:    true,
+				}},
 				Request: &sentry.Request{
 					URL:    "/panic",
 					Method: "GET",
@@ -376,6 +380,7 @@ func TestIntegration(t *testing.T) {
 			"serializedContexts", "serializedBreadcrumbs",
 			"serializedException", "serializedUser", "serializationSafe",
 		),
+		cmpopts.IgnoreFields(sentry.Stacktrace{}, "Frames"),
 		cmpopts.IgnoreFields(
 			sentry.Request{},
 			"Env",

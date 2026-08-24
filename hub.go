@@ -344,7 +344,7 @@ func (hub *Hub) Recover(err interface{}) *EventID {
 	}
 	ctx := captureHintContext(scope, nil)
 	opts := resolveCaptureOptions(ctx, []CaptureOption{WithEventHint(&EventHint{RecoveredException: err})})
-	return client.recoverValue(ctx, err, scope, opts)
+	return client.capturePanic(ctx, err, scope, opts)
 }
 
 // RecoverWithContext calls the method of a same name on currently bound Client instance
@@ -359,7 +359,7 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 		return nil
 	}
 	opts := resolveCaptureOptions(ctx, []CaptureOption{WithEventHint(&EventHint{RecoveredException: err})})
-	return client.recoverValue(ctx, err, scope, opts)
+	return client.capturePanic(ctx, err, scope, opts)
 }
 
 // Flush waits until the underlying Transport sends any buffered events to the
