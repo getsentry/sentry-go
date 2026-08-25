@@ -85,12 +85,11 @@ func TestIntegration(t *testing.T) {
 			Body:        `{"safe":"value"}`,
 			ContentType: "application/json",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage("post: " + string(body))
+				sentry.CaptureMessage(r.Context(), "post: "+string(body))
 			}),
 
 			WantStatus: http.StatusOK,
@@ -139,8 +138,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path: "/get",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
-				hub.CaptureMessage("get")
+				sentry.CaptureMessage(r.Context(), "get")
 			}),
 
 			WantStatus: http.StatusOK,
@@ -185,12 +183,11 @@ func TestIntegration(t *testing.T) {
 			Method: "POST",
 			Body:   largePayload,
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(body)/1024))
+				sentry.CaptureMessage(r.Context(), fmt.Sprintf("post: %d KB", len(body)/1024))
 			}),
 
 			WantStatus: http.StatusOK,
@@ -241,8 +238,7 @@ func TestIntegration(t *testing.T) {
 			Method: "POST",
 			Body:   "client sends, server ignores, SDK doesn't read",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
-				hub.CaptureMessage("body ignored")
+				sentry.CaptureMessage(r.Context(), "body ignored")
 			}),
 
 			WantStatus: http.StatusOK,

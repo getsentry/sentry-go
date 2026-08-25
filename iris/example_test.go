@@ -19,12 +19,13 @@ func ExampleGetSpanFromContext() {
 			// do resource intensive thing
 		}
 
-		// Acquire transaction on current hub that's created by the SDK.
-		// Be careful, it might be a nil value if you didn't set up sentryiris middleware.
-		sentrySpan := sentryiris.GetSpanFromContext(ctx)
-		// Pass in the `.Context()` method from `*sentry.Span` struct.
-		// The `context.Context` instance inherits the context from `iris.Context`.
-		expensiveThing(sentrySpan.Context())
+		// Acquire the transaction from the request context. It may be nil if
+		// you did not set up the sentryiris middleware.
+		spanContext := ctx.Request().Context()
+		if sentrySpan := sentryiris.GetSpanFromContext(ctx); sentrySpan != nil {
+			spanContext = sentrySpan.Context()
+		}
+		expensiveThing(spanContext)
 
 		ctx.StatusCode(http.StatusOK)
 	})

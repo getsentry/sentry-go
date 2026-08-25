@@ -20,6 +20,7 @@ go get github.com/getsentry/sentry-go/echo
 ```go
 import (
     "fmt"
+	"log"
     "net/http"
 
     "github.com/getsentry/sentry-go"
@@ -38,7 +39,7 @@ if err := sentry.Init(sentry.ClientOptions{
 // Then create your app
 app := echo.New()
 
-app.Use(middleware.Logger())
+app.Use(middleware.RequestLogger())
 app.Use(middleware.Recover())
 
 // Once it's done, you can attach the handler as one of your middleware
@@ -50,7 +51,7 @@ app.GET("/", func(ctx *echo.Context) error {
 })
 
 // And run it
-app.Logger.Fatal(app.Start(":3000"))
+log.Fatal(app.Start(":3000"))
 ```
 
 ## Configuration
@@ -73,16 +74,15 @@ Timeout time.Duration
 
 ## Usage
 
-`sentryecho` attaches an instance of `*sentry.Hub` (https://pkg.go.dev/github.com/getsentry/sentry-go#Hub) to the `echo.Context`, which makes it available throughout the rest of the request's lifetime.
-You can access it by using the `sentryecho.GetHubFromContext()` method on the context itself in any of your proceeding middleware and routes.
-And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
+`sentryecho` attaches a request-specific `*sentry.Scope` and transaction to the request context. Pass `ctx.Request().Context()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event.
+Use `sentryecho.GetScopeFromContext()` when you need to add data that should be available to captures made during the request.
 
-**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentryecho`!**
+**Keep in mind that the request scope won't be available in middleware attached before `sentryecho`!**
 
 ```go
 app := echo.New()
 
-app.Use(middleware.Logger())
+app.Use(middleware.RequestLogger())
 app.Use(middleware.Recover())
 
 app.Use(sentryecho.New(sentryecho.Options{
@@ -91,20 +91,15 @@ app.Use(sentryecho.New(sentryecho.Options{
 
 app.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx *echo.Context) error {
-		if hub := sentryecho.GetHubFromContext(ctx); hub != nil {
-			hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-		}
+		sentryecho.GetScopeFromContext(ctx).SetTag("someRandomTag", "maybeYouNeedIt")
 		return next(ctx)
 	}
 })
 
 app.GET("/", func(ctx *echo.Context) error {
-	if hub := sentryecho.GetHubFromContext(ctx); hub != nil {
-		hub.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-		})
-	}
+	scope := sentryecho.GetScopeFromContext(ctx)
+	scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+	sentry.CaptureMessage(ctx.Request().Context(), "User provided unwanted query string, but we recovered just fine")
 	return ctx.String(http.StatusOK, "Hello, World!")
 })
 
@@ -114,7 +109,7 @@ app.GET("/foo", func(ctx *echo.Context) error {
 	panic("y tho")
 })
 
-app.Logger.Fatal(app.Start(":3000"))
+log.Fatal(app.Start(":3000"))
 ```
 
 ### Accessing Request in `BeforeSend` callback

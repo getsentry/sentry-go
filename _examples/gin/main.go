@@ -33,19 +33,14 @@ func main() {
 	}))
 
 	app.Use(func(ctx *gin.Context) {
-		if hub := sentrygin.GetHubFromContext(ctx); hub != nil {
-			hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-		}
+		sentrygin.GetScopeFromContext(ctx).SetTag("someRandomTag", "maybeYouNeedIt")
 		ctx.Next()
 	})
 
 	app.GET("/", func(ctx *gin.Context) {
-		if hub := sentrygin.GetHubFromContext(ctx); hub != nil {
-			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-			})
-		}
+		scope := sentrygin.GetScopeFromContext(ctx)
+		scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+		sentry.CaptureMessage(ctx.Request.Context(), "User provided unwanted query string, but we recovered just fine")
 		ctx.Status(http.StatusOK)
 	})
 

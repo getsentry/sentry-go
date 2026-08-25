@@ -73,11 +73,10 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentrynegroni` attaches an instance of `*sentry.Hub` (https://pkg.go.dev/github.com/getsentry/sentry-go#Hub) to the request's context, which makes it available throughout the rest of the request's lifetime.
-You can access it by using the `sentry.GetHubFromContext()` method on the request itself in any of your proceeding middleware and routes.
-And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
+`sentrynegroni` attaches a request-specific `*sentry.Scope` and transaction to the request context. Pass `r.Context()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event.
+Use `sentry.ScopeFromContext()` when you need to add data that should be available to captures made during the request.
 
-**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentrynegroni`!**
+**Keep in mind that the request scope won't be available in middleware attached before `sentrynegroni`!**
 
 ```go
 app := negroni.Classic()
@@ -87,19 +86,16 @@ app.Use(sentrynegroni.New(sentrynegroni.Options{
 }))
 
 app.Use(negroni.HandlerFunc(func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-    hub := sentry.GetHubFromContext(r.Context())
-    hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
+    sentry.ScopeFromContext(r.Context()).SetTag("someRandomTag", "maybeYouNeedIt")
     next(rw, r)
 }))
 
 mux := http.NewServeMux()
 
 mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
-    hub := sentry.GetHubFromContext(r.Context())
-    hub.WithScope(func(scope *sentry.Scope) {
-        scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-        hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-    })
+    scope := sentry.ScopeFromContext(r.Context())
+    scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+    sentry.CaptureMessage(r.Context(), "User provided unwanted query string, but we recovered just fine")
     rw.WriteHeader(http.StatusOK)
 })
 

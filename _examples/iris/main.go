@@ -34,19 +34,14 @@ func main() {
 	}))
 
 	app.Use(func(ctx iris.Context) {
-		if hub := sentryiris.GetHubFromContext(ctx); hub != nil {
-			hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-		}
+		sentryiris.GetScopeFromContext(ctx).SetTag("someRandomTag", "maybeYouNeedIt")
 		ctx.Next()
 	})
 
 	app.Get("/", func(ctx iris.Context) {
-		if hub := sentryiris.GetHubFromContext(ctx); hub != nil {
-			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-			})
-		}
+		scope := sentryiris.GetScopeFromContext(ctx)
+		scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+		sentry.CaptureMessage(ctx.Request().Context(), "User provided unwanted query string, but we recovered just fine")
 
 		expensiveThing := func(ctx context.Context) {
 			span := sentry.StartSpan(ctx, "expensive_thing")
@@ -55,12 +50,13 @@ func main() {
 			// do resource intensive thing
 		}
 
-		// Acquire transaction on current hub that's created by the SDK.
-		// Be careful, it might be a nil value if you didn't set up sentryiris middleware.
-		sentrySpan := sentryiris.GetSpanFromContext(ctx)
-		// Pass in the `.Context()` method from `*sentry.Span` struct.
-		// The `context.Context` instance inherits the context from `iris.Context`.
-		expensiveThing(sentrySpan.Context())
+		// Acquire the transaction from the request context. It may be nil if
+		// you did not set up the sentryiris middleware.
+		spanContext := ctx.Request().Context()
+		if sentrySpan := sentryiris.GetSpanFromContext(ctx); sentrySpan != nil {
+			spanContext = sentrySpan.Context()
+		}
+		expensiveThing(spanContext)
 
 		ctx.StatusCode(http.StatusOK)
 	})

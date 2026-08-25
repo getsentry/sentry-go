@@ -68,11 +68,10 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentryiris` attaches an instance of `*sentry.Hub` (https://pkg.go.dev/github.com/getsentry/sentry-go#Hub) to the `iris.Context`, which makes it available throughout the rest of the request's lifetime.
-You can access it by using the `sentryiris.GetHubFromContext()` method on the context itself in any of your proceeding middleware and routes.
-And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
+`sentryiris` attaches a request-specific `*sentry.Scope` and transaction to the request context. Pass `ctx.Request().Context()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event.
+Use `sentryiris.GetScopeFromContext()` when you need to add data that should be available to captures made during the request.
 
-**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentryiris`!**
+**Keep in mind that the request scope won't be available in middleware attached before `sentryiris`!**
 
 ```go
 app := iris.Default()
@@ -82,19 +81,14 @@ app.Use(sentryiris.New(sentryiris.Options{
 }))
 
 app.Use(func(ctx iris.Context) {
-    if hub := sentryiris.GetHubFromContext(ctx); hub != nil {
-        hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-    }
+    sentryiris.GetScopeFromContext(ctx).SetTag("someRandomTag", "maybeYouNeedIt")
     ctx.Next()
 })
 
 app.Get("/", func(ctx iris.Context) {
-    if hub := sentryiris.GetHubFromContext(ctx); hub != nil {
-        hub.WithScope(func(scope *sentry.Scope) {
-            scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-            hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-        })
-    }
+    scope := sentryiris.GetScopeFromContext(ctx)
+    scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+    sentry.CaptureMessage(ctx.Request().Context(), "User provided unwanted query string, but we recovered just fine")
 })
 
 app.Get("/foo", func(ctx iris.Context) {

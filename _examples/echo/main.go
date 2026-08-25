@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/getsentry/sentry-go"
 	sentryecho "github.com/getsentry/sentry-go/echo"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 )
 
 func main() {
@@ -30,7 +31,7 @@ func main() {
 
 	app := echo.New()
 
-	app.Use(middleware.Logger())
+	app.Use(middleware.RequestLogger())
 	app.Use(middleware.Recover())
 
 	app.Use(sentryecho.New(sentryecho.Options{
@@ -38,21 +39,16 @@ func main() {
 	}))
 
 	app.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(ctx echo.Context) error {
-			if hub := sentryecho.GetHubFromContext(ctx); hub != nil {
-				hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-			}
+		return func(ctx *echo.Context) error {
+			sentryecho.GetScopeFromContext(ctx).SetTag("someRandomTag", "maybeYouNeedIt")
 			return next(ctx)
 		}
 	})
 
-	app.GET("/", func(ctx echo.Context) error {
-		if hub := sentryecho.GetHubFromContext(ctx); hub != nil {
-			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-			})
-		}
+	app.GET("/", func(ctx *echo.Context) error {
+		scope := sentryecho.GetScopeFromContext(ctx)
+		scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+		sentry.CaptureMessage(ctx.Request().Context(), "User provided unwanted query string, but we recovered just fine")
 
 		expensiveThing := func(ctx context.Context) error {
 			span := sentry.StartTransaction(ctx, "expensive_thing")
@@ -61,12 +57,13 @@ func main() {
 			return nil
 		}
 
-		// Acquire transaction on current hub that's created by the SDK.
-		// Be careful, it might be a nil value if you didn't set up sentryecho middleware.
-		sentrySpan := sentryecho.GetSpanFromContext(ctx)
-		// Pass in the `.Context()` method from `*sentry.Span` struct.
-		// The `context.Context` instance inherits the context from `echo.Context`.
-		err := expensiveThing(sentrySpan.Context())
+		// Acquire the transaction from the request context. It may be nil if
+		// you did not set up the sentryecho middleware.
+		spanContext := ctx.Request().Context()
+		if sentrySpan := sentryecho.GetSpanFromContext(ctx); sentrySpan != nil {
+			spanContext = sentrySpan.Context()
+		}
+		err := expensiveThing(spanContext)
 		if err != nil {
 			return err
 		}
@@ -74,11 +71,11 @@ func main() {
 		return ctx.String(http.StatusOK, "Hello, World!")
 	})
 
-	app.GET("/foo", func(ctx echo.Context) error {
+	app.GET("/foo", func(ctx *echo.Context) error {
 		// sentryecho handler will catch it just fine, and because we attached "someRandomTag"
 		// in the middleware before, it will be sent through as well
 		panic("y tho")
 	})
 
-	app.Logger.Fatal(app.Start(":3000"))
+	log.Fatal(app.Start(":3000"))
 }
