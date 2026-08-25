@@ -18,13 +18,9 @@ import (
 const (
 	// sdkIdentifier is the identifier of the FastHTTP SDK.
 	sdkIdentifier = "sentry.go.fiber"
-
-	// valuesKey is used as a key to store the Sentry Hub instance on the fasthttp.RequestCtx.
-	valuesKey = "sentry"
-
-	// transactionKey is used as a key to store the Sentry transaction on the fasthttp.RequestCtx.
-	transactionKey = "sentry_transaction"
 )
+
+type contextKey struct{}
 
 type handler struct {
 	repanic         bool
@@ -58,12 +54,14 @@ func New(options Options) fiber.Handler {
 }
 
 func (h *handler) handle(ctx *fiber.Ctx) error {
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub().Clone()
-	}
+	savedCtx := ctx.UserContext()
+	requestCtx, cancel := context.WithCancel(savedCtx)
+	defer cancel()
+	defer func() { ctx.SetUserContext(savedCtx) }()
 
-	if client := hub.Client(); client.IsEnabled() {
+	requestCtx, scope := sentry.WithIsolationScope(requestCtx)
+
+	if client := sentry.GetClient(requestCtx); client.IsEnabled() {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 
@@ -79,17 +77,14 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),
 	}
 
-	savedCtx := ctx.UserContext()
-	requestCtx, cancel := context.WithCancel(savedCtx)
-	defer cancel()
-	defer func() { ctx.SetUserContext(savedCtx) }()
-
 	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(requestCtx, hub),
+		requestCtx,
 		fmt.Sprintf("%s %s", r.Method, transactionName),
 		options...,
 	)
-	ctx.SetUserContext(transaction.Context())
+	requestCtx = transaction.Context()
+	ctx.SetUserContext(requestCtx)
+	ctx.Locals(contextKey{}, requestCtx)
 
 	defer func() {
 		// Fiber v2 does not expose whether ctx.Route() originates from a middleware. We keep the
@@ -104,24 +99,19 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	transaction.SetData("http.request.method", r.Method)
 	r = r.WithContext(transaction.Context())
 
-	scope := hub.Scope()
 	scope.SetRequest(r)
 	scope.SetRequestBody(bytes.Clone(ctx.Request().Body()))
-	ctx.Locals(valuesKey, hub)
-	ctx.Locals(transactionKey, transaction)
-	defer h.recoverWithSentry(hub, ctx)
+	defer h.recoverWithSentry(ctx)
 
 	return ctx.Next()
 }
 
-func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
+func (h *handler) recoverWithSentry(ctx *fiber.Ctx) {
 	if err := recover(); err != nil {
-		eventID := hub.RecoverWithContext(
-			context.WithValue(ctx.UserContext(), sentry.RequestContextKey, ctx),
-			err,
-		)
+		requestCtx := context.WithValue(GetContext(ctx), sentry.RequestContextKey, ctx)
+		eventID := sentry.CapturePanic(requestCtx, err)
 		if eventID != nil && h.waitForDelivery {
-			hub.Flush(h.timeout)
+			sentry.GetClient(requestCtx).Flush(h.timeout)
 		}
 		if h.repanic {
 			panic(err)
@@ -129,25 +119,22 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx *fiber.Ctx) {
 	}
 }
 
-// GetHubFromContext retrieves the Hub instance from the *fiber.Ctx.
-func GetHubFromContext(ctx *fiber.Ctx) *sentry.Hub {
-	if hub, ok := ctx.Locals(valuesKey).(*sentry.Hub); ok {
-		return hub
+// GetContext retrieves the request context from the *fiber.Ctx.
+func GetContext(ctx *fiber.Ctx) context.Context {
+	if requestCtx, ok := ctx.Locals(contextKey{}).(context.Context); ok {
+		return requestCtx
 	}
-	return nil
+	return ctx.UserContext()
 }
 
-// SetHubOnContext sets the Hub instance on the *fiber.Ctx.
-func SetHubOnContext(ctx *fiber.Ctx, hub *sentry.Hub) {
-	ctx.Locals(valuesKey, hub)
+// GetScopeFromContext retrieves the isolation scope from the *fiber.Ctx.
+func GetScopeFromContext(ctx *fiber.Ctx) *sentry.Scope {
+	return sentry.ScopeFromContext(GetContext(ctx))
 }
 
-// GetSpanFromContext retrieves the Span instance from the *fiber.Ctx.
+// GetSpanFromContext retrieves the active span from the *fiber.Ctx.
 func GetSpanFromContext(ctx *fiber.Ctx) *sentry.Span {
-	if span, ok := ctx.Locals(transactionKey).(*sentry.Span); ok {
-		return span
-	}
-	return nil
+	return sentry.SpanFromContext(GetContext(ctx))
 }
 
 func convert(ctx *fiber.Ctx) *http.Request {

@@ -69,18 +69,15 @@ Timeout time.Duration
 
 ## Usage
 
-`sentryfasthttp` attaches an instance of `*sentry.Hub` (https://pkg.go.dev/github.com/getsentry/sentry-go#Hub) to the request's context, which makes it available throughout the rest of the request's lifetime.
-You can access it by using the `sentryfasthttp.GetHubFromContext()` method on the context itself in any of your proceeding middleware and routes.
-And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
+`sentryfasthttp` stores a request-specific standard Go context containing a `*sentry.Scope` and transaction on `fasthttp.RequestCtx`. Pass `sentryfasthttp.GetContext(ctx)` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event.
+Use `sentryfasthttp.GetScopeFromContext()` when you need to add data that should be available to captures made during the request.
 
-**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentryfasthttp`!**
+**Keep in mind that the request scope won't be available in middleware attached before `sentryfasthttp`!**
 
 ```go
 func enhanceSentryEvent(handler fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		if hub := sentryfasthttp.GetHubFromContext(ctx); hub != nil {
-			hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-		}
+		sentryfasthttp.GetScopeFromContext(ctx).SetTag("someRandomTag", "maybeYouNeedIt")
 		handler(ctx)
 	}
 }
@@ -92,12 +89,9 @@ sentryHandler := sentryfasthttp.New(sentryfasthttp.Options{
 })
 
 defaultHandler := func(ctx *fasthttp.RequestCtx) {
-	if hub := sentryfasthttp.GetHubFromContext(ctx); hub != nil {
-		hub.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-		})
-	}
+	scope := sentryfasthttp.GetScopeFromContext(ctx)
+	scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+	sentry.CaptureMessage(sentryfasthttp.GetContext(ctx), "User provided unwanted query string, but we recovered just fine")
 	ctx.SetStatusCode(fasthttp.StatusOK)
 }
 

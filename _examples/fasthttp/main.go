@@ -11,9 +11,7 @@ import (
 
 func enhanceSentryEvent(handler fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		if hub := sentryfasthttp.GetHubFromContext(ctx); hub != nil {
-			hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-		}
+		sentryfasthttp.GetScopeFromContext(ctx).SetTag("someRandomTag", "maybeYouNeedIt")
 
 		expensiveThing := func(ctx context.Context) error {
 			span := sentry.StartTransaction(ctx, "expensive_thing")
@@ -22,14 +20,14 @@ func enhanceSentryEvent(handler fasthttp.RequestHandler) fasthttp.RequestHandler
 			return nil
 		}
 
-		// Acquire transaction on current hub that's created by the SDK.
-		// Be careful, it might be a nil value if you didn't set up sentryecho middleware.
+		// Acquire the transaction from the stored request context. It may be nil
+		// if you did not set up the sentryfasthttp middleware.
 		sentrySpan := sentryfasthttp.GetSpanFromContext(ctx)
 		// Pass in the `.Context()` method from `*sentry.Span` struct.
 		// The `context.Context` instance inherits the context from `echo.Context`.
 		err := expensiveThing(sentrySpan.Context())
 		if err != nil {
-			sentry.CaptureException(err)
+			sentry.CaptureException(sentryfasthttp.GetContext(ctx), err)
 		}
 
 		handler(ctx)
@@ -56,12 +54,9 @@ func main() {
 	sentryHandler := sentryfasthttp.New(sentryfasthttp.Options{})
 
 	defaultHandler := func(ctx *fasthttp.RequestCtx) {
-		if hub := sentryfasthttp.GetHubFromContext(ctx); hub != nil {
-			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-			})
-		}
+		scope := sentryfasthttp.GetScopeFromContext(ctx)
+		scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+		sentry.CaptureMessage(sentryfasthttp.GetContext(ctx), "User provided unwanted query string, but we recovered just fine")
 		ctx.SetStatusCode(fasthttp.StatusOK)
 	}
 

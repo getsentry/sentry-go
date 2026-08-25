@@ -33,9 +33,7 @@ func main() {
 	})
 
 	enhanceSentryEvent := func(ctx *fiber.Ctx) error {
-		if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
-			hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-		}
+		sentryfiber.GetScopeFromContext(ctx).SetTag("someRandomTag", "maybeYouNeedIt")
 		return ctx.Next()
 	}
 
@@ -48,12 +46,9 @@ func main() {
 	})
 
 	app.All("/", func(ctx *fiber.Ctx) error {
-		if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
-			hub.WithScope(func(scope *sentry.Scope) {
-				scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-				hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-			})
-		}
+		scope := sentryfiber.GetScopeFromContext(ctx)
+		scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+		sentry.CaptureMessage(ctx.UserContext(), "User provided unwanted query string, but we recovered just fine")
 		return ctx.SendStatus(fiber.StatusOK)
 	})
 

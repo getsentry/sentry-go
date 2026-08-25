@@ -13,16 +13,11 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-const (
-	// sdkIdentifier is the identifier of the FastHTTP SDK.
-	sdkIdentifier = "sentry.go.fasthttp"
+// sdkIdentifier is the identifier of the FastHTTP SDK.
+const sdkIdentifier = "sentry.go.fasthttp"
 
-	// valuesKey is used as a key to store the Sentry Hub instance on the  fasthttp.RequestCtx.
-	valuesKey = "sentry"
-
-	// transactionKey is used as a key to store the Sentry transaction on the fasthttp.RequestCtx.
-	transactionKey = "sentry_transaction"
-)
+type contextKey struct{}
+type isolationContextKey struct{}
 
 type Handler struct {
 	repanic         bool
@@ -59,12 +54,13 @@ func New(options Options) *Handler {
 // Handle wraps fasthttp.RequestHandler and recovers from caught panics.
 func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandler {
 	return func(ctx *fasthttp.RequestCtx) {
-		hub := GetHubFromContext(ctx)
-		if hub == nil {
-			hub = sentry.CurrentHub().Clone()
+		parentCtx := GetContext(ctx)
+		if parentCtx.Value(isolationContextKey{}) == ctx {
+			parentCtx = context.Background()
 		}
+		requestCtx, scope := sentry.WithIsolationScope(parentCtx)
 
-		if client := hub.Client(); client.IsEnabled() {
+		if client := sentry.GetClient(requestCtx); client.IsEnabled() {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
@@ -78,10 +74,12 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 		}
 
 		transaction := sentry.StartTransaction(
-			sentry.SetHubOnContext(ctx, hub),
+			requestCtx,
 			fmt.Sprintf("%s %s", r.Method, string(ctx.Path())),
 			options...,
 		)
+		requestCtx = context.WithValue(transaction.Context(), isolationContextKey{}, ctx)
+		ctx.SetUserValue(contextKey{}, requestCtx)
 		defer func() {
 			status := ctx.Response.StatusCode()
 			transaction.Status = sentry.HTTPtoSpanStatus(status)
@@ -90,26 +88,22 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 		}()
 
 		transaction.SetData("http.request.method", r.Method)
+		r = r.WithContext(requestCtx)
 
-		scope := hub.Scope()
 		scope.SetRequest(r)
 		scope.SetRequestBody(bytes.Clone(ctx.Request.Body()))
-		ctx.SetUserValue(valuesKey, hub)
-		ctx.SetUserValue(transactionKey, transaction)
-		defer h.recoverWithSentry(hub, ctx)
+		defer h.recoverWithSentry(ctx)
 
 		handler(ctx)
 	}
 }
 
-func (h *Handler) recoverWithSentry(hub *sentry.Hub, ctx *fasthttp.RequestCtx) {
+func (h *Handler) recoverWithSentry(ctx *fasthttp.RequestCtx) {
 	if err := recover(); err != nil {
-		eventID := hub.RecoverWithContext(
-			context.WithValue(context.Background(), sentry.RequestContextKey, ctx),
-			err,
-		)
+		requestCtx := context.WithValue(GetContext(ctx), sentry.RequestContextKey, ctx)
+		eventID := sentry.CapturePanic(requestCtx, err)
 		if eventID != nil && h.waitForDelivery {
-			hub.Flush(h.timeout)
+			sentry.GetClient(requestCtx).Flush(h.timeout)
 		}
 		if h.repanic {
 			panic(err)
@@ -117,27 +111,27 @@ func (h *Handler) recoverWithSentry(hub *sentry.Hub, ctx *fasthttp.RequestCtx) {
 	}
 }
 
-// GetHubFromContext retrieves attached *sentry.Hub instance from fasthttp.RequestCtx.
-func GetHubFromContext(ctx *fasthttp.RequestCtx) *sentry.Hub {
-	hub := ctx.UserValue(valuesKey)
-	if hub, ok := hub.(*sentry.Hub); ok {
-		return hub
+// GetContext retrieves the request context from fasthttp.RequestCtx.
+func GetContext(ctx *fasthttp.RequestCtx) context.Context {
+	if requestCtx, ok := ctx.UserValue(contextKey{}).(context.Context); ok {
+		return requestCtx
 	}
-	return nil
+	return context.Background()
 }
 
-// SetHubOnContext attaches the *sentry.Hub instance to the fasthttp.RequestCtx.
-func SetHubOnContext(ctx *fasthttp.RequestCtx, hub *sentry.Hub) {
-	ctx.SetUserValue(valuesKey, hub)
+// SetContext attaches a request context to fasthttp.RequestCtx.
+func SetContext(requestCtx context.Context, ctx *fasthttp.RequestCtx) {
+	ctx.SetUserValue(contextKey{}, requestCtx)
 }
 
-// GetSpanFromContext retrieves attached *sentry.Span instance from *fasthttp.RequestCtx.
-// If there is no transaction on *fasthttp.RequestCtx, it will return nil.
+// GetScopeFromContext retrieves the isolation scope from fasthttp.RequestCtx.
+func GetScopeFromContext(ctx *fasthttp.RequestCtx) *sentry.Scope {
+	return sentry.ScopeFromContext(GetContext(ctx))
+}
+
+// GetSpanFromContext retrieves the active span from fasthttp.RequestCtx.
 func GetSpanFromContext(ctx *fasthttp.RequestCtx) *sentry.Span {
-	if span, ok := ctx.UserValue(transactionKey).(*sentry.Span); ok {
-		return span
-	}
-	return nil
+	return sentry.SpanFromContext(GetContext(ctx))
 }
 
 func convert(ctx *fasthttp.RequestCtx) *http.Request {
