@@ -35,7 +35,7 @@ require (
 	github.com/gofiber/fiber/v3 v3.3.0
 	github.com/google/go-cmp v0.7.0
 	github.com/kataras/iris/v12 v12.2.0
-	github.com/labstack/echo/v5 v5.0.3
+	github.com/labstack/echo/v5 v5.2.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/negroni/v3 v3.1.1
 	github.com/valyala/fasthttp v1.71.0
