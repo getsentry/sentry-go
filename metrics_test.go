@@ -647,31 +647,6 @@ func Test_sentryMeter_AttributePrecedence(t *testing.T) {
 	}
 }
 
-func TestNewMeter_DisabledMetrics(t *testing.T) {
-	ctx := context.Background()
-	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
-		Dsn:            testDsn,
-		Transport:      mockTransport,
-		DisableMetrics: true,
-	})
-	hub := CurrentHub()
-	hub.BindClient(mockClient)
-	ctx = SetHubOnContext(ctx, hub)
-
-	meter := NewMeter(ctx)
-	meter.Count("test.count", 1)
-	meter.Gauge("test.gauge", 2.5)
-	meter.Distribution("test.dist", 3.14)
-
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := mockTransport.Events()
-	if len(events) != 0 {
-		t.Fatalf("expected no events with disabled metrics, got %d", len(events))
-	}
-}
-
 func Test_sentryMeter_EmptyName(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 	meter := NewMeter(ctx)

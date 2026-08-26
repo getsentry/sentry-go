@@ -12,7 +12,6 @@ import (
 func main() {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn: "",
-		// Logs are enabled by default. Set DisableLogs: true to disable.
 	})
 	if err != nil {
 		panic(err)

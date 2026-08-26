@@ -807,19 +807,12 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 
 func TestSentryLogger_DebugLogging(t *testing.T) {
 	tests := []struct {
-		name        string
-		disableLogs bool
-		message     string
+		name    string
+		message string
 	}{
 		{
-			name:        "Logs enabled (default)",
-			disableLogs: false,
-			message:     "disk usage at 95% capacity",
-		},
-		{
-			name:        "Logs disabled",
-			disableLogs: true,
-			message:     "test message",
+			name:    "Logs enabled (default)",
+			message: "disk usage at 95% capacity",
 		},
 	}
 
@@ -829,9 +822,8 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 
 			ctx := context.Background()
 			mockClient, _ := NewClient(ClientOptions{
-				Transport:   &MockTransport{},
-				DisableLogs: tt.disableLogs,
-				Debug:       true,
+				Transport: &MockTransport{},
+				Debug:     true,
 			})
 			hub := CurrentHub()
 			hub.BindClient(mockClient)
@@ -844,12 +836,8 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 			logger.Info().WithCtx(ctx).Emit(tt.message)
 
 			got := buf.String()
-			if !tt.disableLogs {
-				assertEqual(t, strings.Contains(got, tt.message), true)
-				assertEqual(t, strings.Contains(got, "%!"), false)
-			} else {
-				assertEqual(t, strings.Contains(got, tt.message), false)
-			}
+			assertEqual(t, strings.Contains(got, tt.message), true)
+			assertEqual(t, strings.Contains(got, "%!"), false)
 		})
 	}
 }
