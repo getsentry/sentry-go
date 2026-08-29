@@ -78,7 +78,7 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 
 	// XXX(aldy505): Do we guard the `interval` when it's below or over a certain threshold?
 	// Javascript SDK defaults to 30 seconds.
-	if config.Interval == 0 {
+	if config.Interval <= 0 {
 		config.Interval = time.Second * 30
 	}
 
