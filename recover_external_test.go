@@ -45,14 +45,16 @@ func panicWithArbitraryValue() {
 
 //go:noinline
 func recoverPanic(client *sentry.Client, panicFunc func()) {
-	ctx := sentry.SetHubOnContext(context.Background(), sentry.NewHub(client, sentry.NewScope()))
+	ctx, scope := sentry.WithIsolationScope(context.Background())
+	scope.SetClient(client)
 	defer sentry.Recover(ctx)
 	panicFunc()
 }
 
 //go:noinline
 func capturePanic(client *sentry.Client, panicFunc func()) {
-	ctx := sentry.SetHubOnContext(context.Background(), sentry.NewHub(client, sentry.NewScope()))
+	ctx, scope := sentry.WithIsolationScope(context.Background())
+	scope.SetClient(client)
 	defer func() {
 		sentry.CapturePanic(ctx, recover())
 	}()

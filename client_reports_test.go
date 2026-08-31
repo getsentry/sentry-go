@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -35,7 +36,6 @@ func TestClientReports_Integration(t *testing.T) {
 	defer srv.Close()
 
 	dsn := strings.Replace(srv.URL, "//", "//test@", 1) + "/1"
-	hub := CurrentHub().Clone()
 	c, err := NewClient(ClientOptions{
 		Dsn:                  dsn,
 		DisableClientReports: false,
@@ -50,8 +50,9 @@ func TestClientReports_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
-	hub.BindClient(c)
-	defer hub.Flush(testutils.FlushTimeout())
+	ctx, scope := WithIsolationScope(context.Background())
+	scope.SetClient(c)
+	defer c.Flush(testutils.FlushTimeout())
 
 	// second client with disabled reports shouldn't affect the first
 	_, _ = NewClient(ClientOptions{
@@ -60,21 +61,19 @@ func TestClientReports_Integration(t *testing.T) {
 	})
 
 	// simulate dropped events for report outcomes
-	hub.CaptureMessage("drop-me")
-	scope := NewScope()
-	scope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
-		if event.Message == "processor-drop" {
-			return nil
-		}
-		return event
-	})
-	hub.WithScope(func(s *Scope) {
-		s.eventProcessors = scope.eventProcessors
-		hub.CaptureMessage("processor-drop")
+	c.CaptureMessage(ctx, "drop-me")
+	WithScopeContext(ctx, func(ctx context.Context, scope *Scope) {
+		scope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
+			if event.Message == "processor-drop" {
+				return nil
+			}
+			return event
+		})
+		c.CaptureMessage(ctx, "processor-drop")
 	})
 
-	hub.CaptureMessage("hi") // send an event to capture the report along with it
-	if !hub.Flush(testutils.FlushTimeout()) {
+	c.CaptureMessage(ctx, "hi") // send an event to capture the report along with it
+	if !c.Flush(testutils.FlushTimeout()) {
 		t.Fatal("Flush timed out")
 	}
 

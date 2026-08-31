@@ -21,10 +21,13 @@ func setupClientTest() (*sentry.Client, *sentry.MockTransport) {
 		Dsn:       "http://whatever@example.com/1337",
 		Transport: mockTransport,
 	})
-	hub := sentry.CurrentHub()
-	hub.BindClient(mockClient)
-
 	return mockClient, mockTransport
+}
+
+func contextWithClient(client *sentry.Client) context.Context {
+	ctx, scope := sentry.WithIsolationScope(context.Background())
+	scope.SetClient(client)
+	return ctx
 }
 
 func TestNewLogHook(t *testing.T) {
@@ -60,18 +63,18 @@ func TestNewLogHookFromClient(t *testing.T) {
 	assert.Equal(t, levels, hook.Levels())
 }
 
-func TestLogHookSetHubProvider(t *testing.T) {
+func TestLogHookSetContextProvider(t *testing.T) {
 	client, _ := setupClientTest()
-	customHub := sentry.NewHub(client, sentry.NewScope())
+	customCtx := contextWithClient(client)
 
 	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
-	hook.SetHubProvider(func() *sentry.Hub { return customHub })
+	hook.SetContextProvider(func() context.Context { return customCtx })
 
-	assert.Equal(t, customHub, hook.(*logHook).hubProvider())
+	assert.Equal(t, customCtx, hook.(*logHook).contextProvider())
 	assert.True(t, hook.(*logHook).useCustomProvider)
 }
 
-func TestLogHookSetHubProviderUsesProviderForLogs(t *testing.T) {
+func TestLogHookSetContextProviderUsesProviderForLogs(t *testing.T) {
 	originalTransport := &sentry.MockTransport{}
 	originalClient, err := sentry.NewClient(sentry.ClientOptions{
 		Dsn:         "http://whatever@example.com/1337",
@@ -87,11 +90,11 @@ func TestLogHookSetHubProviderUsesProviderForLogs(t *testing.T) {
 		Transport:   providerTransport,
 	})
 	assert.NoError(t, err)
-	providerHub := sentry.NewHub(providerClient, sentry.NewScope())
+	providerCtx := contextWithClient(providerClient)
 
 	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, originalClient)
-	hook.SetHubProvider(func() *sentry.Hub { return providerHub })
-	ctx := sentry.SetHubOnContext(context.Background(), sentry.NewHub(originalClient, sentry.NewScope()))
+	hook.SetContextProvider(func() context.Context { return providerCtx })
+	ctx := contextWithClient(originalClient)
 
 	err = hook.Fire(&logrus.Entry{
 		Context: ctx,
@@ -109,7 +112,7 @@ func TestLogHookSetHubProviderUsesProviderForLogs(t *testing.T) {
 	assert.Equal(t, "provider", got[0].Logs[0].Attributes["sentry.environment"].String())
 }
 
-func TestLogHookUsesContextHubWithoutCustomProvider(t *testing.T) {
+func TestLogHookUsesContextClientWithoutCustomProvider(t *testing.T) {
 	defaultTransport := &sentry.MockTransport{}
 	defaultClient, err := sentry.NewClient(sentry.ClientOptions{
 		Dsn:         "http://whatever@example.com/1337",
@@ -125,8 +128,7 @@ func TestLogHookUsesContextHubWithoutCustomProvider(t *testing.T) {
 		Transport:   contextTransport,
 	})
 	assert.NoError(t, err)
-	contextHub := sentry.NewHub(contextClient, sentry.NewScope())
-	ctx := sentry.SetHubOnContext(context.Background(), contextHub)
+	ctx := contextWithClient(contextClient)
 
 	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, defaultClient)
 	err = hook.Fire(&logrus.Entry{
@@ -135,7 +137,7 @@ func TestLogHookUsesContextHubWithoutCustomProvider(t *testing.T) {
 		Message: "context log",
 	})
 	assert.NoError(t, err)
-	assert.True(t, contextHub.Flush(testutils.FlushTimeout()))
+	assert.True(t, contextClient.Flush(testutils.FlushTimeout()))
 
 	assert.Empty(t, defaultTransport.Events())
 	got := contextTransport.Events()

@@ -135,9 +135,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 }
 
 func prepareLog(log *Log, client *Client, capture signalCaptureContext) {
-	trace := resolveTrace(capture.scope, client, capture.ctx)
-	log.TraceID = trace.traceID
-	log.SpanID = trace.telemetrySpanID
+	log.TraceID, log.SpanID = traceIDsFromContext(capture.ctx, capture.scope, client)
 	log.Attributes = mergeScopeAttributes(log.Attributes, capture.defaultAttributes, capture.scope)
 	log.approximateSize = computeLogSize(log)
 }

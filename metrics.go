@@ -127,9 +127,7 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 }
 
 func prepareMetric(metric *Metric, client *Client, capture signalCaptureContext) {
-	trace := resolveTrace(capture.scope, client, capture.ctx)
-	metric.TraceID = trace.traceID
-	metric.SpanID = trace.telemetrySpanID
+	metric.TraceID, metric.SpanID = traceIDsFromContext(capture.ctx, capture.scope, client)
 	metric.Attributes = mergeScopeAttributes(metric.Attributes, capture.defaultAttributes, capture.scope)
 }
 

@@ -125,9 +125,10 @@ func (h *logHandler) Enabled(_ context.Context, level slog.Level) bool {
 }
 
 func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
-	// when logging without context, slog passes `context.Background`. Check for span existence to not overwrite the root context.
-	if sentry.GetHubFromContext(ctx) == nil {
-		ctx = h.logger.GetCtx()
+	// When logging without context, slog passes context.Background. Preserve the
+	// handler context so its client and scope defaults remain effective.
+	if sentry.ScopeFromContext(ctx) == nil {
+		ctx = sentry.ContextWithScope(ctx, sentry.ScopeFromContext(h.logger.GetCtx()))
 	}
 	// aggregate all attributes
 	attrs := append([]slog.Attr{}, h.attrs...)

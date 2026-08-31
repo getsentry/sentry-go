@@ -137,6 +137,6 @@ type ServerOptions struct {
 
 ## Notes
 
-- The interceptors automatically create and manage a Sentry *Hub for each gRPC request or stream.
+- The interceptors create an isolated Sentry scope for each gRPC request or stream.
 - Use the Sentry SDK’s context-based APIs to capture exceptions and add additional context.
 - Ensure you handle the context correctly to propagate tracing information across requests.

@@ -82,8 +82,8 @@ func testConcurrentLoggerSetAttributes(t *testing.T) {
 		Dsn:       testDsn,
 		Transport: &MockTransport{},
 	})
-	hub := NewHub(client, NewScope())
-	ctx := SetHubOnContext(context.Background(), hub)
+	ctx, scope := WithIsolationScope(context.Background())
+	scope.SetClient(client)
 
 	logger := NewLogger(ctx)
 	if _, ok := logger.(*noopLogger); ok {
@@ -131,8 +131,8 @@ func testConcurrentLogEmission(_ *testing.T) {
 		Dsn:       testDsn,
 		Transport: &MockTransport{},
 	})
-	hub := NewHub(client, NewScope())
-	ctx := SetHubOnContext(context.Background(), hub)
+	ctx, scope := WithIsolationScope(context.Background())
+	scope.SetClient(client)
 
 	var wg sync.WaitGroup
 
@@ -209,8 +209,8 @@ func testConcurrentLogEntryOperations(t *testing.T) {
 		Dsn:       testDsn,
 		Transport: &MockTransport{},
 	})
-	hub := NewHub(client, NewScope())
-	ctx := SetHubOnContext(context.Background(), hub)
+	ctx, scope := WithIsolationScope(context.Background())
+	scope.SetClient(client)
 
 	logger := NewLogger(ctx)
 	if _, ok := logger.(*noopLogger); ok {
@@ -264,7 +264,8 @@ func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 		Dsn:       testDsn,
 		Transport: &MockTransport{},
 	})
-	hub := NewHub(client, NewScope())
+	baseCtx, scope := WithIsolationScope(context.Background())
+	scope.SetClient(client)
 
 	var wg sync.WaitGroup
 
@@ -273,8 +274,7 @@ func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < loggingIterations/20; j++ {
-				ctx := context.WithValue(context.Background(), CtxKey(1), id)
-				ctx = SetHubOnContext(ctx, hub)
+				ctx := context.WithValue(baseCtx, CtxKey(1), id)
 
 				logger := NewLogger(ctx)
 				if _, ok := logger.(*noopLogger); ok {
@@ -316,8 +316,8 @@ func testConcurrentLogWithSpanOperations(_ *testing.T) {
 		TracesSampleRate: 1.0,
 		Transport:        &MockTransport{},
 	})
-	hub := NewHub(client, NewScope())
-	ctx := SetHubOnContext(context.Background(), hub)
+	ctx, scope := WithIsolationScope(context.Background())
+	scope.SetClient(client)
 
 	var wg sync.WaitGroup
 

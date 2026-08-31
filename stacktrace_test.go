@@ -40,9 +40,9 @@ func TestSplitQualifiedFunctionName(t *testing.T) {
 			"Init",
 		},
 		{
-			"github.com/getsentry/sentry-go.(*Hub).Flush",
+			"github.com/getsentry/sentry-go.(*Client).Flush",
 			"github.com/getsentry/sentry-go",
-			"(*Hub).Flush",
+			"(*Client).Flush",
 		},
 		{
 			"github.com/getsentry/sentry-go.Test.func2.1.1",

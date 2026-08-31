@@ -163,9 +163,8 @@ func newMockTransport() (context.Context, *sentry.MockTransport) {
 		Dsn:       "https://public@example.com/1",
 		Transport: mockTransport,
 	})
-	hub := sentry.CurrentHub()
-	hub.BindClient(mockClient)
-	ctx = sentry.SetHubOnContext(ctx, hub)
+	ctx, scope := sentry.WithIsolationScope(ctx)
+	scope.SetClient(mockClient)
 	return ctx, mockTransport
 }
 
@@ -202,7 +201,7 @@ func TestSentryHandlerAttrToSentryAttr(t *testing.T) {
 			}.NewSentryHandler(ctx)
 			logger := slog.New(handler)
 			logger.InfoContext(ctx, "test message", tt.attr...)
-			sentry.Flush(20 * time.Millisecond)
+			sentry.GetClient(ctx).Flush(20 * time.Millisecond)
 
 			gotEvents := mockTransport.Events()
 			assert.Equal(t, 1, len(gotEvents))
@@ -232,7 +231,7 @@ func TestSentryHandlerAttrFromContext(t *testing.T) {
 	logger := slog.New(handler)
 
 	logger.InfoContext(ctx, "test message")
-	sentry.Flush(20 * time.Millisecond)
+	sentry.GetClient(ctx).Flush(20 * time.Millisecond)
 
 	gotEvents := mockTransport.Events()
 	assert.Equal(t, 1, len(gotEvents))
@@ -262,7 +261,7 @@ func TestSentryHandlerWithAttrsAndGroup(t *testing.T) {
 	nestedLogger.InfoContext(ctx, "test with nested groups and attrs", "direct_attr", "direct_value")
 	baseLogger.InfoContext(ctx, "should not have attrs and groups")
 
-	sentry.Flush(20 * time.Millisecond)
+	sentry.GetClient(ctx).Flush(20 * time.Millisecond)
 
 	gotEvents := mockTransport.Events()
 	assert.Equal(t, 1, len(gotEvents))
@@ -311,7 +310,7 @@ func TestSentryHandlerLogLevels(t *testing.T) {
 			logger := slog.New(handler)
 
 			tt.logFunc(ctx, logger, tt.message)
-			sentry.Flush(20 * time.Millisecond)
+			sentry.GetClient(ctx).Flush(20 * time.Millisecond)
 
 			gotEvents := mockTransport.Events()
 			assert.Equal(t, 1, len(gotEvents))
@@ -337,7 +336,7 @@ func TestSentryHandlerReplaceAttr(t *testing.T) {
 
 	logger := slog.New(handler)
 	logger.InfoContext(ctx, "replace test", "foo", "bar", "num", 123)
-	sentry.Flush(20 * time.Millisecond)
+	sentry.GetClient(ctx).Flush(20 * time.Millisecond)
 
 	gotEvents := mockTransport.Events()
 	assert.Equal(t, 1, len(gotEvents))
@@ -360,7 +359,7 @@ func TestSentryHandlerAddSource(t *testing.T) {
 
 	logger := slog.New(handler)
 	logger.InfoContext(ctx, "test with source")
-	sentry.Flush(20 * time.Millisecond)
+	sentry.GetClient(ctx).Flush(20 * time.Millisecond)
 
 	gotEvents := mockTransport.Events()
 	assert.Equal(t, 1, len(gotEvents))
@@ -395,7 +394,7 @@ func TestSentryHandlerCustomLogLevels(t *testing.T) {
 			logger := slog.New(handler)
 
 			logger.LogAttrs(ctx, tt.customLevel, "test message with custom level", slog.String("level_name", tt.name))
-			sentry.Flush(20 * time.Millisecond)
+			sentry.GetClient(ctx).Flush(20 * time.Millisecond)
 
 			gotEvents := mockTransport.Events()
 			assert.Equal(t, 1, len(gotEvents))

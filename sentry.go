@@ -3,6 +3,8 @@ package sentry
 import (
 	"context"
 	"time"
+
+	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 // The version of the SDK.
@@ -18,12 +20,10 @@ const DefaultFlushTimeout = 2 * time.Second
 // Init initializes the SDK with options. The returned error is non-nil if
 // options is invalid, for instance if a malformed DSN is provided.
 func Init(options ClientOptions) error {
-	hub := CurrentHub()
 	client, err := NewClient(options)
 	if err != nil {
 		return err
 	}
-	hub.BindClient(client)
 	GlobalScope().SetClient(client)
 	return nil
 }
@@ -32,9 +32,26 @@ func Init(options ClientOptions) error {
 //
 // The total number of breadcrumbs that can be recorded are limited by the
 // configuration on the client.
-func AddBreadcrumb(breadcrumb *Breadcrumb) {
-	hub := CurrentHub()
-	hub.AddBreadcrumb(breadcrumb, nil)
+func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb) {
+	client := GetClient(ctx)
+	limit := client.options.MaxBreadcrumbs
+	switch {
+	case limit < 0:
+		return
+	case limit == 0:
+		limit = defaultMaxBreadcrumbs
+	}
+	if client.options.BeforeBreadcrumb != nil {
+		if breadcrumb = client.options.BeforeBreadcrumb(breadcrumb, &BreadcrumbHint{}); breadcrumb == nil {
+			debuglog.Println("breadcrumb dropped due to BeforeBreadcrumb callback.")
+			return
+		}
+	}
+	scope := ScopeFromContext(ctx)
+	if scope == nil {
+		scope = GlobalScope()
+	}
+	scope.AddBreadcrumb(breadcrumb, limit)
 }
 
 // CaptureMessage captures an arbitrary message.
@@ -72,28 +89,11 @@ func Recover(ctx context.Context, options ...CaptureOption) *EventID {
 	return CapturePanic(ctx, recover(), options...)
 }
 
-// WithScope is a shorthand for CurrentHub().WithScope.
-func WithScope(f func(scope *Scope)) {
-	hub := CurrentHub()
-	hub.WithScope(f)
-}
-
-// ConfigureScope is a shorthand for CurrentHub().ConfigureScope.
+// ConfigureScope updates the process-wide global scope.
 func ConfigureScope(f func(scope *Scope)) {
-	hub := CurrentHub()
-	hub.ConfigureScope(f)
-}
-
-// PushScope is a shorthand for CurrentHub().PushScope.
-func PushScope() *Scope {
-	hub := CurrentHub()
-	return hub.PushScope()
-}
-
-// PopScope is a shorthand for CurrentHub().PopScope.
-func PopScope() {
-	hub := CurrentHub()
-	hub.PopScope()
+	if f != nil {
+		f(GlobalScope())
+	}
 }
 
 // Flush waits until the underlying Transport sends any buffered events to the
@@ -108,8 +108,7 @@ func PopScope() {
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func Flush(timeout time.Duration) bool {
-	hub := CurrentHub()
-	return hub.Flush(timeout)
+	return GetClient(context.Background()).Flush(timeout)
 }
 
 // FlushWithContext waits until the underlying Transport sends any buffered events
@@ -125,12 +124,10 @@ func Flush(timeout time.Duration) bool {
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
 
 func FlushWithContext(ctx context.Context) bool {
-	hub := CurrentHub()
-	return hub.FlushWithContext(ctx)
+	return GetClient(ctx).FlushWithContext(ctx)
 }
 
 // LastEventID returns an ID of last captured event.
 func LastEventID() EventID {
-	hub := CurrentHub()
-	return hub.LastEventID()
+	return GlobalScope().LastEventID()
 }

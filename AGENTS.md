@@ -70,7 +70,7 @@ The `internalAsyncTransportAdapter` in `transport.go` bridges old `Transport` to
 Test tier preference (use the highest tier that covers what you need):
 
 1. **Integration tests** (default) — Prefer `internal/sentrytest` with `sentrytest.Run` or `sentrytest.NewFixture`, plus real routers / `httptest` requests where needed. Prefer tests that use the public API.
-2. **Context-level tests** — Prefer `sentrytest.NewContext` or `fixture.NewContext(parent)` for tracing / context propagation tests. Prefer `sentrytest.NewFixture` for isolated client + hub setup when no HTTP server is needed.
+2. **Context-level tests** — Prefer `sentrytest.NewContext` or `fixture.NewContext(parent)` for tracing / context propagation tests. Prefer `sentrytest.NewFixture` for isolated client + scope setup when no HTTP server is needed.
 3. **Unit tests** (sparingly) — Direct `NewClient` + `MockScope` only for self-contained logic where `sentrytest` would add unnecessary indirection.
 
 Conventions:
@@ -86,18 +86,17 @@ Conventions:
 What to test:
 
 - Behavior users observe: Does middleware capture panics? Does `Flush` deliver events? Do trace headers propagate?
-- Edge cases at system boundaries: malformed DSN, nil `Hub`, concurrent captures, context cancellation
+- Edge cases at system boundaries: malformed DSN, missing scope, concurrent captures, context cancellation
 - Regressions: reproduce the failure before applying the fix
 
 Thread safety:
 
-- The SDK is used concurrently. Any test touching shared state (`Hub`, `Scope`, `CurrentHub`) must either use `t.Parallel()` with isolated instances, or explicitly verify safety with goroutines and `sync.WaitGroup`.
+- The SDK is used concurrently. Any test touching shared state (`Scope`, `GlobalScope`) must either use `t.Parallel()` with isolated instances, or explicitly verify safety with goroutines and `sync.WaitGroup`.
 
 ## Reference
 
 - [SDK Development Guide](https://develop.sentry.dev/sdk/)
 - [Commit Guidelines](https://develop.sentry.dev/engineering-practices/commit-messages/)
-- [Hubs & Scopes](https://develop.sentry.dev/sdk/unified-api/#hub)
 
 ## Skills
 

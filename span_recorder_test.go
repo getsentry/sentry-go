@@ -38,14 +38,6 @@ func Test_spanRecorder_record(t *testing.T) {
 			defer debuglog.SetOutput(io.Discard)
 			spanRecorder := spanRecorder{maxSpans: tt.maxSpans}
 
-			currentHub.BindClient(&Client{
-				options: ClientOptions{
-					MaxSpans: tt.maxSpans,
-				},
-			})
-			// Unbind the client afterwards, to not affect other tests
-			defer currentHub.stackTop().SetClient(nil)
-
 			for i := 0; i < tt.toRecordSpans; i++ {
 				child := testRootSpan.StartChild(fmt.Sprintf("test %d", i))
 				spanRecorder.record(child)

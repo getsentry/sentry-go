@@ -16,6 +16,28 @@ func TestScopeFromContext(t *testing.T) {
 	}
 }
 
+func TestContextWithScope(t *testing.T) {
+	type contextKey struct{}
+
+	parent := context.WithValue(context.Background(), contextKey{}, "value")
+	scope := NewScope()
+	ctx := ContextWithScope(parent, scope)
+
+	if got := ScopeFromContext(ctx); got != scope {
+		t.Fatalf("ScopeFromContext returned %p, want %p", got, scope)
+	}
+	if got := ctx.Value(contextKey{}); got != "value" {
+		t.Fatalf("parent context value = %v, want value", got)
+	}
+}
+
+func TestContextWithScopeNilScopeReturnsOriginalContext(t *testing.T) {
+	ctx := context.Background()
+	if got := ContextWithScope(ctx, nil); got != ctx {
+		t.Fatal("nil scope did not return the original context")
+	}
+}
+
 func TestIsolationScopeSharesDownstreamMutations(t *testing.T) {
 	type contextKey struct{}
 

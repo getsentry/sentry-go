@@ -58,7 +58,6 @@ type scopeData struct {
 	}
 
 	propagationContext PropagationContext
-	span               *Span // TODO: this should be removed when the span API is introduced. Currently kept for compatibility.
 }
 
 // NewScope creates a new Scope.
@@ -120,18 +119,18 @@ func (scope *Scope) clientOverrideSnapshot() *Client {
 // Client returns the first enabled client in the scope chain.
 func (scope *Scope) Client() *Client {
 	if scope != nil {
-		if client := normalizeClient(scope.clientOverrideSnapshot()); client.IsEnabled() {
+		if client := scope.clientOverrideSnapshot(); client != nil && client.IsEnabled() {
 			return client
 		}
 	}
 
 	global := GlobalScope()
 	if scope != global {
-		if client := normalizeClient(global.clientOverrideSnapshot()); client.IsEnabled() {
+		if client := global.clientOverrideSnapshot(); client != nil && client.IsEnabled() {
 			return client
 		}
 	}
-	return NewNoopClient()
+	return defaultNoopClient
 }
 
 func (scope *Scope) setLastEventID(id EventID) {
@@ -327,22 +326,6 @@ func (scope *Scope) propagationContextSnapshot() PropagationContext {
 	return scope.propagationContext.clone()
 }
 
-// GetSpan returns the span from the current scope.
-func (scope *Scope) GetSpan() *Span {
-	scope.mu.RLock()
-	defer scope.mu.RUnlock()
-
-	return scope.span
-}
-
-// SetSpan sets a span for the current scope.
-func (scope *Scope) SetSpan(span *Span) {
-	scope.mu.Lock()
-	defer scope.mu.Unlock()
-
-	scope.span = span
-}
-
 // Clone returns a copy of the current scope with all data copied over.
 func (scope *Scope) Clone() *Scope {
 	scope.mu.RLock()
@@ -378,10 +361,8 @@ func (scope *Scope) Clear() {
 	defer scope.mu.Unlock()
 
 	propagationContext := scope.propagationContext
-	span := scope.span
 	scope.scopeData = newScopeData()
 	scope.propagationContext = propagationContext
-	scope.span = span
 }
 
 // AddEventProcessor adds an event processor to the current scope.
@@ -621,111 +602,131 @@ type signalCaptureContext struct {
 	defaultAttributes map[string]attribute.Value
 }
 
-// resolveTrace resolves trace IDs and dynamic sampling context from the given
-// contexts and scope. It is the single trace-policy function used by every
-// signal. The precedence is external resolver, span in a supplied context,
-// scope span, then scope propagation context.
-//
-// TODO: this should be removed when the span API is introduced. Currently kept for compatibility. The span
-// and trace should only be resolved through context.
-func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) traceResolution {
+// traceContextSource identifies trace state without materializing an event
+// context or dynamic sampling context. Those projections are created only by
+// consumers that need them.
+type traceContextSource struct {
+	traceID     TraceID
+	spanID      SpanID
+	span           *Span
+	propagation    PropagationContext
+	hasPropagation bool
+	external       bool
+	valid          bool
+}
+
+func traceContextSourceFromContext(ctx context.Context, scope *Scope, client *Client) traceContextSource {
 	client = normalizeClient(client)
-	var (
-		resolved traceResolution
-		span     *Span
-		external bool
-	)
-
-	for _, ctx := range ctxs {
-		if ctx == nil {
-			continue
+	if source := traceContextSourceFromSingleContext(ctx, client); source.valid {
+		if source.external && scope != nil {
+			source.propagation, _ = scope.traceContextSnapshot()
+			source.hasPropagation = true
 		}
-		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
-			resolved.traceID, resolved.spanID, resolved.telemetrySpanID = traceID, spanID, spanID
-			resolved.valid, resolved.external, external = true, true, true
-			break
-		}
-		if span = SpanFromContext(ctx); span != nil {
-			break
-		}
+		return source
 	}
-
 	if scope == nil {
-		return resolved
+		return traceContextSource{}
 	}
 
+	propagation, request := scope.traceContextSnapshot()
+	if request != nil {
+		if source := traceContextSourceFromSingleContext(request.Context(), client); source.valid {
+			source.propagation = propagation
+			source.hasPropagation = true
+			return source
+		}
+	}
+	if propagation.TraceID == (TraceID{}) {
+		return traceContextSource{}
+	}
+	return traceContextSource{
+		traceID:        propagation.TraceID,
+		spanID:         propagation.SpanID,
+		propagation:    propagation,
+		hasPropagation: true,
+		valid:          true,
+	}
+}
+
+func traceContextSourceFromSingleContext(ctx context.Context, client *Client) traceContextSource {
+	if ctx == nil {
+		return traceContextSource{}
+	}
+	if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
+		return traceContextSource{
+			traceID:  traceID,
+			spanID:   spanID,
+			external: true,
+			valid:    true,
+		}
+	}
+	if span := SpanFromContext(ctx); span != nil {
+		return traceContextSource{
+			traceID: span.TraceID,
+			spanID:  span.SpanID,
+			span:    span,
+			valid:   true,
+		}
+	}
+	return traceContextSource{}
+}
+
+func (scope *Scope) traceContextSnapshot() (PropagationContext, *http.Request) {
 	scope.mu.RLock()
-	scopeSpan := scope.span
-	propagation := scope.propagationContext
-	request := scope.request
-	scope.mu.RUnlock()
-
-	// The request context is a fallback caller context.
-	if !external && span == nil && request != nil {
-		if traceID, spanID, ok := client.externalTraceContextFromContext(request.Context()); ok {
-			resolved.traceID, resolved.spanID, resolved.telemetrySpanID = traceID, spanID, spanID
-			resolved.valid, resolved.external, external = true, true, true
-		}
-	}
-	if span == nil && !external {
-		span = scopeSpan
-	}
-
-	if !external {
-		if span != nil {
-			resolved.traceID, resolved.spanID, resolved.telemetrySpanID = span.TraceID, span.SpanID, span.SpanID
-			resolved.eventContext = span.traceContext().Map()
-			resolved.valid = true
-		} else {
-			resolved.traceID, resolved.spanID = propagation.TraceID, propagation.SpanID
-			resolved.valid = propagation.TraceID != (TraceID{})
-		}
-	}
-
-	if span != nil {
-		if transaction := span.GetTransaction(); transaction != nil {
-			resolved.dsc = DynamicSamplingContextFromTransaction(transaction)
-			return resolved
-		}
-	}
-	resolved.dsc = propagation.DynamicSamplingContext
-	if !resolved.dsc.HasEntries() {
-		// DynamicSamplingContextFromScope only reads propagationContext. Re-read
-		// under its documented locking contract rather than duplicating its
-		// client-option/DSN logic here.
-		resolved.dsc = dynamicSamplingContextFromScope(scope, client)
-	}
-
-	return resolved
+	defer scope.mu.RUnlock()
+	return scope.propagationContext, scope.request
 }
 
-type traceResolution struct {
-	traceID         TraceID
-	spanID          SpanID  // event projection, including propagation SpanID
-	telemetrySpanID SpanID  // only an active/external span belongs on logs/metrics
-	eventContext    Context // full local span context for error event compatibility
-	dsc             DynamicSamplingContext
-	valid           bool
-	external        bool
+func traceIDsFromContext(ctx context.Context, scope *Scope, client *Client) (TraceID, SpanID) {
+	source := traceContextSourceFromContext(ctx, scope, client)
+	if !source.valid {
+		return TraceID{}, SpanID{}
+	}
+	if source.external || source.span != nil {
+		return source.traceID, source.spanID
+	}
+	return source.traceID, SpanID{}
 }
 
-func applyTraceToEvent(event *Event, trace traceResolution) {
-	if event.Type == transactionType || !trace.valid {
+func applyTraceContextToEvent(event *Event, ctx context.Context, scope *Scope, client *Client) {
+	if event.Type == transactionType {
 		return
 	}
+	source := traceContextSourceFromContext(ctx, scope, client)
+	if !source.valid {
+		return
+	}
+
 	if event.Contexts == nil {
 		event.Contexts = make(map[string]Context)
 	}
 	if _, ok := event.Contexts["trace"]; !ok {
-		if trace.eventContext != nil {
-			event.Contexts["trace"] = trace.eventContext
-		} else {
-			traceID, spanID := any(trace.traceID), any(trace.spanID)
-			if trace.external {
-				traceID, spanID = trace.traceID.String(), trace.spanID.String()
+		switch {
+		case source.external:
+			event.Contexts["trace"] = Context{
+				"trace_id": source.traceID.String(),
+				"span_id":  source.spanID.String(),
 			}
-			event.Contexts["trace"] = Context{"trace_id": traceID, "span_id": spanID}
+		case source.span != nil:
+			event.Contexts["trace"] = source.span.traceContext().Map()
+		default:
+			event.Contexts["trace"] = Context{
+				"trace_id": source.traceID,
+				"span_id":  source.spanID,
+			}
 		}
 	}
-	event.sdkMetaData.dsc = trace.dsc
+
+	if source.span != nil {
+		if transaction := source.span.GetTransaction(); transaction != nil {
+			event.sdkMetaData.dsc = dynamicSamplingContextFromTransaction(transaction, client)
+			return
+		}
+	}
+	if source.hasPropagation {
+		event.sdkMetaData.dsc = source.propagation.DynamicSamplingContext
+		if !event.sdkMetaData.dsc.HasEntries() {
+			event.sdkMetaData.dsc = dynamicSamplingContextFromPropagationContext(source.propagation, client)
+		}
+	}
 }

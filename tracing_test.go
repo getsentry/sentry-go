@@ -1384,9 +1384,6 @@ func TestSpanScopeIsNotActiveSpanStack(t *testing.T) {
 	childSpan.Finish()
 	siblingSpan.Finish()
 	subChildSpan.Finish()
-	if got := scope.GetSpan(); got != nil {
-		t.Fatalf("scope active span = %p, want nil", got)
-	}
 
 	CaptureMessage(childSpan.Context(), "Test event")
 

@@ -286,8 +286,8 @@ type ClientOptions struct {
 	DisableTelemetryBuffer bool
 }
 
-// Client is the underlying processor that is used by the main API and Hub
-// instances. It must be created with NewClient.
+// Client is the underlying processor used by the main API. It must be created
+// with NewClient.
 type Client struct {
 	mu                    sync.RWMutex
 	disabled              bool
@@ -312,9 +312,8 @@ type Client struct {
 // ClientOptions.
 //
 // Most users will not create clients directly. Instead, initialize the SDK with
-// Init and use the package-level functions (for simple programs that run on a
-// single goroutine) or hub methods (for concurrent programs, for example web
-// servers).
+// Init and use the context-based package functions. Create isolated scope
+// contexts for concurrent operations such as web requests.
 func NewClient(options ClientOptions) (*Client, error) {
 	// The default error event sample rate for all SDKs is 1.0 (send all).
 	//
@@ -443,8 +442,14 @@ func NewClient(options ClientOptions) (*Client, error) {
 	return &client, nil
 }
 
+var defaultNoopClient = newNoopClient()
+
 // NewNoopClient returns a non-nil client that safely discards telemetry.
 func NewNoopClient() *Client {
+	return newNoopClient()
+}
+
+func newNoopClient() *Client {
 	return &Client{
 		disabled: true,
 		options: ClientOptions{
@@ -466,10 +471,10 @@ func (client *Client) IsEnabled() bool {
 	return client != nil && !client.disabled
 }
 
-// normalizeClient guarantees a non-nil client for internal and Hub callers.
+// normalizeClient guarantees a non-nil client for internal callers.
 func normalizeClient(client *Client) *Client {
 	if client == nil {
-		return NewNoopClient()
+		return defaultNoopClient
 	}
 	return client
 }
@@ -1021,8 +1026,9 @@ func (client *Client) processEvent(event *Event, scope *Scope, opts captureOptio
 	return &event.EventID, event.Type != transactionType && event.Type != checkInType
 }
 
-// applyScopeChain merges the passed scope and global scope into event, resolves the trace
-// context, and runs the scope event processors. It returns nil when a processor drops the event.
+// applyScopeChain merges the passed scope and global scope into event, applies
+// trace context, and runs the scope event processors. It returns nil when a
+// processor drops the event.
 func applyScopeChain(event *Event, client *Client, scope *Scope, opts captureOptions) *Event {
 	client = normalizeClient(client)
 	state := resolveCaptureState(event, scope)
@@ -1031,7 +1037,7 @@ func applyScopeChain(event *Event, client *Client, scope *Scope, opts captureOpt
 	if opts.hint != nil {
 		ctx = opts.hint.Context
 	}
-	applyTraceToEvent(event, resolveTrace(scope, client, ctx))
+	applyTraceContextToEvent(event, ctx, scope, client)
 
 	return state.applyToEvent(event, opts.hint, client, opts)
 }
