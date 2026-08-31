@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +21,7 @@ type devNullTransport struct{}
 func (t *devNullTransport) Configure(options sentry.ClientOptions) {
 	dsn, _ := sentry.NewDsn(options.Dsn)
 	fmt.Println()
-	fmt.Println("Store Endpoint:", dsn.StoreAPIURL())
+	fmt.Println("Envelope Endpoint:", dsn.GetAPIURL())
 	fmt.Println("Headers:", dsn.RequestHeaders())
 	fmt.Println()
 }
@@ -32,17 +33,23 @@ func (t *devNullTransport) Flush(timeout time.Duration) bool {
 	return true
 }
 
+func (t *devNullTransport) FlushWithContext(ctx context.Context) bool {
+	return true
+}
+
+func (t *devNullTransport) Close() {}
+
 func recoverHandler() {
-	defer sentry.Recover()
+	defer sentry.Recover(context.Background())
 	panic("ups")
 }
 
 func beforeSend() {
-	sentry.CaptureMessage("Drop me!")
+	sentry.CaptureMessage(context.Background(), "Drop me!")
 }
 
 func captureMessage() {
-	sentry.CaptureMessage("say what again. SAY WHAT again")
+	sentry.CaptureMessage(context.Background(), "say what again. SAY WHAT again")
 }
 
 func configureScope() {
@@ -57,42 +64,40 @@ func configureScope() {
 }
 
 func withScope() {
-	sentry.WithScope(func(scope *sentry.Scope) {
+	sentry.WithScopeContext(context.Background(), func(ctx context.Context, scope *sentry.Scope) {
 		scope.SetLevel(sentry.LevelFatal)
-		sentry.CaptureException(errors.New("say what again. SAY WHAT again"))
+		sentry.CaptureException(ctx, errors.New("say what again. SAY WHAT again"))
 	})
 }
 
 func addBreadcrumbs() {
-	sentry.AddBreadcrumb(&sentry.Breadcrumb{
+	sentry.AddBreadcrumb(context.Background(), &sentry.Breadcrumb{
 		Message: "Random breadcrumb 1",
 	})
 
-	sentry.AddBreadcrumb(&sentry.Breadcrumb{
+	sentry.AddBreadcrumb(context.Background(), &sentry.Breadcrumb{
 		Message: "Random breadcrumb 2",
 	})
 
-	sentry.AddBreadcrumb(&sentry.Breadcrumb{
+	sentry.AddBreadcrumb(context.Background(), &sentry.Breadcrumb{
 		Message: "Random breadcrumb 3",
 	})
 }
 
 func withScopeAndConfigureScope() {
-	sentry.WithScope(func(scope *sentry.Scope) {
-		sentry.ConfigureScope(func(scope *sentry.Scope) {
-			scope.SetTags(map[string]string{
-				"istillcant": "42",
-				"believe":    "that",
-			})
-			scope.SetTags(map[string]string{
-				"italready": "works",
-				"just":      "likethat",
-			})
+	sentry.WithScopeContext(context.Background(), func(ctx context.Context, scope *sentry.Scope) {
+		scope.SetTags(map[string]string{
+			"istillcant": "42",
+			"believe":    "that",
+		})
+		scope.SetTags(map[string]string{
+			"italready": "works",
+			"just":      "likethat",
 		})
 
 		event := sentry.NewEvent()
 		event.Message = "say what again. SAY WHAT again"
-		sentry.CaptureEvent(event)
+		sentry.CaptureEvent(ctx, event)
 	})
 }
 
@@ -110,7 +115,7 @@ func (e CustomComplexError) GimmeMoreData() string {
 }
 
 func eventHint() {
-	sentry.CaptureException(CustomComplexError{Message: "Captured", AnswerToLife: 42})
+	sentry.CaptureException(context.Background(), CustomComplexError{Message: "Captured", AnswerToLife: 42})
 }
 
 func main() {

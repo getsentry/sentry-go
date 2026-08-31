@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -18,7 +19,7 @@ type devNullTransport struct{}
 func (t *devNullTransport) Configure(options sentry.ClientOptions) {
 	dsn, _ := sentry.NewDsn(options.Dsn)
 	fmt.Println()
-	fmt.Println("Store Endpoint:", dsn.StoreAPIURL())
+	fmt.Println("Envelope Endpoint:", dsn.GetAPIURL())
 	fmt.Println("Headers:", dsn.RequestHeaders())
 	fmt.Println()
 }
@@ -29,6 +30,12 @@ func (t *devNullTransport) SendEvent(event *sentry.Event) {
 func (t *devNullTransport) Flush(timeout time.Duration) bool {
 	return true
 }
+
+func (t *devNullTransport) FlushWithContext(ctx context.Context) bool {
+	return true
+}
+
+func (t *devNullTransport) Close() {}
 
 type CustomComplexError struct {
 	Message  string
@@ -43,6 +50,17 @@ func (e CustomComplexError) GimmeMoreData() map[string]string {
 	return e.MoreData
 }
 
+func addErrorContext(event *sentry.Event, values map[string]string) {
+	data := event.Contexts["custom_error"]
+	if data == nil {
+		data = sentry.Context{}
+	}
+	for key, value := range values {
+		data[key] = value
+	}
+	event.Contexts["custom_error"] = data
+}
+
 type ExtractExtra struct{}
 
 func (ee ExtractExtra) Name() string {
@@ -52,9 +70,7 @@ func (ee ExtractExtra) Name() string {
 func (ee ExtractExtra) SetupOnce(client *sentry.Client) {
 	client.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 		if ex, ok := hint.OriginalException.(CustomComplexError); ok {
-			for key, val := range ex.GimmeMoreData() {
-				event.Extra[key] = val
-			}
+			addErrorContext(event, ex.GimmeMoreData())
 		}
 
 		return event
@@ -69,12 +85,10 @@ func main() {
 			// Solution 1 (use beforeSend, which will be applied to
 			// error events and is usually application specific):
 			if ex, ok := hint.OriginalException.(CustomComplexError); ok {
-				for key, val := range ex.GimmeMoreData() {
-					event.Extra[key] = val
-				}
+				addErrorContext(event, ex.GimmeMoreData())
 			}
 
-			fmt.Printf("%s\n\n", prettyPrint(event.Extra))
+			fmt.Printf("%s\n\n", prettyPrint(event.Contexts["custom_error"]))
 
 			return event
 		},
@@ -96,9 +110,7 @@ func main() {
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			if ex, ok := hint.OriginalException.(CustomComplexError); ok {
-				for key, val := range ex.GimmeMoreData() {
-					event.Extra[key] = val
-				}
+				addErrorContext(event, ex.GimmeMoreData())
 			}
 
 			return event
@@ -112,5 +124,5 @@ func main() {
 		},
 	}
 
-	sentry.CaptureException(errWithExtra)
+	sentry.CaptureException(context.Background(), errWithExtra)
 }

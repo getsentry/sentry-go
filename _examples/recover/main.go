@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -59,12 +60,12 @@ func main() {
 	})
 
 	func() {
-		defer sentry.Recover()
+		defer sentry.Recover(context.Background())
 		fooErr()
 	}()
 
 	func() {
-		defer sentry.Recover()
+		defer sentry.Recover(context.Background())
 		fooMsg()
 	}()
 
