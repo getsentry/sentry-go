@@ -154,7 +154,7 @@ func testConcurrentLogEmission(_ *testing.T) {
 					logger.Trace().
 						String("operation", "trace").
 						Int("worker", id).
-						Emit("Trace message from worker %d", id)
+						Emitf("Trace message from worker %d", id)
 				}()
 
 				localWg.Add(1)
@@ -163,7 +163,7 @@ func testConcurrentLogEmission(_ *testing.T) {
 					logger.Debug().
 						String("operation", "debug").
 						Int("worker", id).
-						Emit("Debug message from worker %d", id)
+						Emitf("Debug message from worker %d", id)
 				}()
 
 				localWg.Add(1)
@@ -172,7 +172,7 @@ func testConcurrentLogEmission(_ *testing.T) {
 					logger.Info().
 						String("operation", "info").
 						Int("worker", id).
-						Emit("Info message from worker %d", id)
+						Emitf("Info message from worker %d", id)
 				}()
 
 				localWg.Add(1)
@@ -181,7 +181,7 @@ func testConcurrentLogEmission(_ *testing.T) {
 					logger.Warn().
 						String("operation", "warn").
 						Int("worker", id).
-						Emit("Warning message from worker %d", id)
+						Emitf("Warning message from worker %d", id)
 				}()
 
 				localWg.Add(1)
@@ -190,7 +190,7 @@ func testConcurrentLogEmission(_ *testing.T) {
 					logger.Error().
 						String("operation", "error").
 						Int("worker", id).
-						Emit("Error message from worker %d", id)
+						Emitf("Error message from worker %d", id)
 				}()
 
 				localWg.Wait()
@@ -250,7 +250,7 @@ func testConcurrentLogEntryOperations(t *testing.T) {
 				}()
 
 				localWg.Wait()
-				entry.Emit("Concurrent entry operations test %d-%d", id, j)
+				entry.Emitf("Concurrent entry operations test %d-%d", id, j)
 				runtime.Gosched()
 			}
 		}(i)
@@ -297,7 +297,7 @@ func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 					defer localWg.Done()
 					logger.Info().
 						String("immediate_usage", "true").
-						Emit("Logger created and used immediately by worker %d", id)
+						Emitf("Logger created and used immediately by worker %d", id)
 				}()
 
 				localWg.Wait()
@@ -361,7 +361,7 @@ func testConcurrentLogWithSpanOperations(_ *testing.T) {
 					logger.Info().
 						String("span_context", "active").
 						String("span_id", span.SpanID.String()).
-						Emit("Log within span from worker %d", id)
+						Emitf("Log within span from worker %d", id)
 				}()
 
 				localWg.Wait()
