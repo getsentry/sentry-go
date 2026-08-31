@@ -9,6 +9,7 @@ replace (
 	github.com/getsentry/sentry-go/fiber => ../fiber
 	github.com/getsentry/sentry-go/fiberv3 => ../fiberv3
 	github.com/getsentry/sentry-go/gin => ../gin
+	github.com/getsentry/sentry-go/grpc => ../grpc
 	github.com/getsentry/sentry-go/iris => ../iris
 	github.com/getsentry/sentry-go/logrus => ../logrus
 	github.com/getsentry/sentry-go/negroni => ../negroni
@@ -24,6 +25,7 @@ require (
 	github.com/getsentry/sentry-go/fiber v0.49.0
 	github.com/getsentry/sentry-go/fiberv3 v0.49.0
 	github.com/getsentry/sentry-go/gin v0.49.0
+	github.com/getsentry/sentry-go/grpc v0.49.0
 	github.com/getsentry/sentry-go/iris v0.49.0
 	github.com/getsentry/sentry-go/logrus v0.49.0
 	github.com/getsentry/sentry-go/negroni v0.49.0
@@ -41,6 +43,7 @@ require (
 	github.com/valyala/fasthttp v1.71.0
 	go.opentelemetry.io/otel/trace v1.43.0
 	go.uber.org/zap v1.27.1
+	google.golang.org/grpc v1.82.1
 )
 
 require (
@@ -110,6 +113,7 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
