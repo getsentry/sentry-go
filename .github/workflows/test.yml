@@ -24,7 +24,7 @@ jobs:
       # pull requests, only run this step for a single job in the matrix. For
       # all other workflow triggers (e.g., pushes to a release branch) run
       # this step for the whole matrix.
-      RUN_RACE_TESTS: ${{ github.event_name != 'pull_request' || (matrix.go == '1.26' && matrix.os == 'ubuntu') }}
+      RUN_RACE_TESTS: ${{ github.event_name != 'pull_request' || (matrix.go == '1.27' && matrix.os == 'ubuntu') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -33,7 +33,7 @@ jobs:
           cache-dependency-path: "**/go.sum"
       - name: Tidy
         run: make mod-tidy
-        if: ${{ matrix.go == '1.26' }}
+        if: ${{ matrix.go == '1.27' }}
       - name: Build
         run: make build
       - name: Vet
@@ -43,6 +43,6 @@ jobs:
     timeout-minutes: 15
     strategy:
       matrix:
-        go: ["1.26", "1.25"]
+        go: ["1.27", "1.26"]
         os: [ubuntu, windows, macos]
       fail-fast: false
