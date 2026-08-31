@@ -18,7 +18,6 @@ import (
 
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/testutils"
-	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/google/go-cmp/cmp"
 	"go.uber.org/goleak"
 )
@@ -568,12 +567,16 @@ func testKeepAlive(t *testing.T, tr Transport) {
 	// unexpectedly large response from Relay -- the SDK should not try to
 	// consume arbitrarily large responses.
 	largeResponse := false
+	// After go 1.27, the runtime reuses http connections when the response body is less than 256 KiB automatically.
+	// To test keepalive we need a response body larger than this limit.
+	maxDrainResponseBytes := 256 << 11
+	largeResponseBody := strings.Repeat(" ", maxDrainResponseBytes)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Simulates a response from Relay. The event_id is arbitrary,
 		// it doesn't matter for this test.
 		fmt.Fprintln(w, `{"id":"ec71d87189164e79ab1e61030c183af0"}`)
 		if largeResponse {
-			fmt.Fprintln(w, strings.Repeat(" ", util.MaxDrainResponseBytes))
+			fmt.Fprintln(w, largeResponseBody)
 		}
 	}))
 	defer srv.Close()
