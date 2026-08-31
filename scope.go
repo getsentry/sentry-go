@@ -674,6 +674,7 @@ func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) traceRe
 	if !external {
 		if span != nil {
 			resolved.traceID, resolved.spanID, resolved.telemetrySpanID = span.TraceID, span.SpanID, span.SpanID
+			resolved.eventContext = span.traceContext().Map()
 			resolved.valid = true
 		} else {
 			resolved.traceID, resolved.spanID = propagation.TraceID, propagation.SpanID
@@ -700,8 +701,9 @@ func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) traceRe
 
 type traceResolution struct {
 	traceID         TraceID
-	spanID          SpanID // event projection, including propagation SpanID
-	telemetrySpanID SpanID // only an active/external span belongs on logs/metrics
+	spanID          SpanID  // event projection, including propagation SpanID
+	telemetrySpanID SpanID  // only an active/external span belongs on logs/metrics
+	eventContext    Context // full local span context for error event compatibility
 	dsc             DynamicSamplingContext
 	valid           bool
 	external        bool
@@ -715,11 +717,15 @@ func applyTraceToEvent(event *Event, trace traceResolution) {
 		event.Contexts = make(map[string]Context)
 	}
 	if _, ok := event.Contexts["trace"]; !ok {
-		traceID, spanID := any(trace.traceID), any(trace.spanID)
-		if trace.external {
-			traceID, spanID = trace.traceID.String(), trace.spanID.String()
+		if trace.eventContext != nil {
+			event.Contexts["trace"] = trace.eventContext
+		} else {
+			traceID, spanID := any(trace.traceID), any(trace.spanID)
+			if trace.external {
+				traceID, spanID = trace.traceID.String(), trace.spanID.String()
+			}
+			event.Contexts["trace"] = Context{"trace_id": traceID, "span_id": spanID}
 		}
-		event.Contexts["trace"] = Context{"trace_id": traceID, "span_id": spanID}
 	}
 	event.sdkMetaData.dsc = trace.dsc
 }

@@ -71,6 +71,22 @@ func TestCaptureMessageShouldSendEventWithProvidedMessage(t *testing.T) {
 	assertEqual(t, transport.lastEvent.Message, "foo")
 }
 
+func TestCaptureMessagePreservesActiveSpanTraceContext(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	scope.SetClient(client)
+	ctx := contextWithScope(context.Background(), scope)
+	transaction := StartTransaction(ctx, "request", WithOpName("http.server"))
+	transaction.SetData("http.request.method", http.MethodGet)
+
+	client.CaptureMessage(transaction.Context(), "foo")
+
+	trace := transport.lastEvent.Contexts["trace"]
+	assertEqual(t, trace["trace_id"], transaction.TraceID)
+	assertEqual(t, trace["span_id"], transaction.SpanID)
+	assertEqual(t, trace["op"], "http.server")
+	assertEqual(t, trace["data"], map[string]any{"http.request.method": http.MethodGet})
+}
+
 func TestCaptureMessageShouldSucceedWithoutNilScope(t *testing.T) {
 	client, _, transport := setupClientTest()
 	client.CaptureMessage(context.Background(), "foo")

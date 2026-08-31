@@ -12,6 +12,7 @@
 package sentryhttpclient
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -29,7 +30,7 @@ type SentryRoundTripTracerOption func(*SentryRoundTripper)
 func WithTracePropagationTargets(targets []string) SentryRoundTripTracerOption {
 	return func(t *SentryRoundTripper) {
 		if t.tracePropagationTargets == nil {
-			t.tracePropagationTargets = targets
+			t.tracePropagationTargets = append([]string(nil), targets...)
 		} else {
 			t.tracePropagationTargets = append(t.tracePropagationTargets, targets...)
 		}
@@ -44,24 +45,8 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 		originalRoundTripper = http.DefaultTransport
 	}
 
-	// Configure trace propagation targets
-	var tracePropagationTargets []string
-	var propagateTraceparent bool
-	if hub := sentry.CurrentHub(); hub != nil {
-		client := hub.Client()
-		if client.IsEnabled() {
-			clientOptions := client.Options()
-			if clientOptions.TracePropagationTargets != nil {
-				tracePropagationTargets = clientOptions.TracePropagationTargets
-			}
-			propagateTraceparent = clientOptions.PropagateTraceparent
-		}
-	}
-
 	t := &SentryRoundTripper{
-		originalRoundTripper:    originalRoundTripper,
-		tracePropagationTargets: tracePropagationTargets,
-		propagateTraceparent:    propagateTraceparent,
+		originalRoundTripper: originalRoundTripper,
 	}
 
 	for _, opt := range opts {
@@ -77,7 +62,6 @@ func NewSentryRoundTripper(originalRoundTripper http.RoundTripper, opts ...Sentr
 type SentryRoundTripper struct {
 	originalRoundTripper http.RoundTripper
 
-	propagateTraceparent    bool
 	tracePropagationTargets []string
 }
 
@@ -90,32 +74,16 @@ func dataCollectionFromRequest(request *http.Request) sentry.DataCollection {
 }
 
 func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
-	// Respect trace propagation targets
-	if len(s.tracePropagationTargets) > 0 {
-		requestURL := request.URL.String()
-		foundMatch := false
-		for _, target := range s.tracePropagationTargets {
-			if strings.Contains(requestURL, target) {
-				foundMatch = true
-				break
-			}
-		}
-
-		if !foundMatch {
-			return s.originalRoundTripper.RoundTrip(request)
-		}
-	}
+	ctx := request.Context()
+	client := sentry.GetClient(ctx)
+	clientOptions := client.Options()
+	propagate := s.shouldPropagate(request.URL.String(), clientOptions.TracePropagationTargets)
 
 	// Only create the `http.client` span only if there is a parent span.
-	parentSpan := sentry.SpanFromContext(request.Context())
+	parentSpan := sentry.SpanFromContext(ctx)
 	if parentSpan == nil {
-		if hub := sentry.GetHubFromContext(request.Context()); hub != nil {
-			request = request.Clone(request.Context())
-			request.Header.Add(sentry.SentryBaggageHeader, hub.GetBaggage())
-			request.Header.Add(sentry.SentryTraceHeader, hub.GetTraceparent())
-			if s.propagateTraceparent {
-				request.Header.Add(sentry.TraceparentHeader, hub.GetTraceparentW3C())
-			}
+		if propagate {
+			request = addTraceHeaders(ctx, request, clientOptions.PropagateTraceparent)
 		}
 
 		return s.originalRoundTripper.RoundTrip(request)
@@ -137,12 +105,8 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	for key, value := range filterOutgoingRequestHeaders(dc, request.Header) {
 		span.SetData("http.request.header."+strings.ToLower(key), value)
 	}
-	// Always add `Baggage` and `Sentry-Trace` headers.
-	request = request.Clone(request.Context())
-	request.Header.Add(sentry.SentryBaggageHeader, span.ToBaggage())
-	request.Header.Add(sentry.SentryTraceHeader, span.ToSentryTrace())
-	if s.propagateTraceparent {
-		request.Header.Add(sentry.TraceparentHeader, span.ToTraceparent())
+	if propagate {
+		request = addTraceHeaders(span.Context(), request, clientOptions.PropagateTraceparent)
 	}
 
 	var requestBody *httputils.LimitedBuffer
@@ -174,6 +138,48 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	}
 
 	return response, err
+}
+
+func (s *SentryRoundTripper) shouldPropagate(requestURL string, clientTargets []string) bool {
+	targets := make([]string, 0, len(clientTargets)+len(s.tracePropagationTargets))
+	targets = append(targets, clientTargets...)
+	targets = append(targets, s.tracePropagationTargets...)
+	if len(targets) == 0 {
+		return true
+	}
+	for _, target := range targets {
+		if strings.Contains(requestURL, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func addTraceHeaders(ctx context.Context, request *http.Request, propagateTraceparent bool) *http.Request {
+	trace := sentry.GetTraceparent(ctx)
+	baggage := sentry.GetBaggage(ctx)
+	traceparent := ""
+	if propagateTraceparent {
+		traceparent = sentry.GetTraceparentW3C(ctx)
+	}
+	if trace == "" && baggage == "" && traceparent == "" {
+		return request
+	}
+
+	request = request.Clone(request.Context())
+	if trace != "" {
+		request.Header.Set(sentry.SentryTraceHeader, trace)
+	}
+	if baggage != "" {
+		existing := strings.Join(request.Header.Values(sentry.SentryBaggageHeader), ",")
+		if merged, err := sentry.MergeBaggage(existing, baggage); err == nil {
+			request.Header.Set(sentry.SentryBaggageHeader, merged)
+		}
+	}
+	if traceparent != "" {
+		request.Header.Set(sentry.TraceparentHeader, traceparent)
+	}
+	return request
 }
 
 func filterOutgoingRequestHeaders(dc sentry.DataCollection, headers http.Header) map[string]string {

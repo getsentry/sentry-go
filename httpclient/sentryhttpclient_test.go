@@ -242,7 +242,22 @@ func TestIntegration(t *testing.T) {
 			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{sentryhttpclient.WithTracePropagationTargets([]string{"example.com"})},
 			WantStatus:         200,
 			WantResponseLength: 0,
-			WantSpan:           nil,
+			WantSpan: &sentry.Span{
+				Data: map[string]interface{}{
+					"http.fragment":                string("readme"),
+					"http.query":                   string("baz=123"),
+					"http.request.method":          string("GET"),
+					"http.response.status_code":    int(200),
+					"http.response_content_length": int64(0),
+					"server.address":               string("example.net"),
+					"server.port":                  string(""),
+				},
+				Description: "GET https://example.net/foo/bar?baz=123#readme",
+				Op:          "http.client",
+				Origin:      "manual",
+				Sampled:     sentry.SampledTrue,
+				Status:      sentry.SpanStatusOK,
+			},
 		},
 	}
 
@@ -682,8 +697,7 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hub := sentry.NewHub(sentryClient, sentry.NewScope())
-	ctx := sentry.SetHubOnContext(context.Background(), hub)
+	ctx := contextWithClient(sentryClient)
 
 	request, err := http.NewRequestWithContext(ctx, "GET", "https://example.com", nil)
 	if err != nil {
@@ -731,6 +745,111 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 	}
 }
 
+func TestIntegration_ResolvesPropagationOptionsFromRequestContext(t *testing.T) {
+	matchingClient, err := sentry.NewClient(sentry.ClientOptions{
+		TracePropagationTargets: []string{"example.com"},
+		PropagateTraceparent:    true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonmatchingClient, err := sentry.NewClient(sentry.ClientOptions{
+		TracePropagationTargets: []string{"example.org"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	capture := &captureRoundTripper{}
+	wrapper := sentryhttpclient.NewSentryRoundTripper(capture)
+	clients := []*sentry.Client{matchingClient, nonmatchingClient}
+	for _, sentryClient := range clients {
+		ctx, scope := sentry.WithIsolationScope(context.Background())
+		scope.SetClient(sentryClient)
+		propagation := sentry.NewPropagationContext()
+		propagation.DynamicSamplingContext = sentry.DynamicSamplingContext{
+			Entries: map[string]string{"release": "new"},
+			Frozen:  true,
+		}
+		scope.SetPropagationContext(propagation)
+		request, requestErr := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		request.Header.Set(sentry.SentryBaggageHeader, "othervendor=value,sentry-release=old")
+		response, requestErr := wrapper.RoundTrip(request)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		response.Body.Close()
+	}
+
+	requireHeaders := capture.requests[0].Header
+	if requireHeaders.Get(sentry.SentryTraceHeader) == "" || requireHeaders.Get(sentry.TraceparentHeader) == "" {
+		t.Fatal("matching request did not receive Sentry and W3C trace headers")
+	}
+	baggage := requireHeaders.Get(sentry.SentryBaggageHeader)
+	if !strings.Contains(baggage, "othervendor=value") || !strings.Contains(baggage, "sentry-release=new") {
+		t.Fatalf("matching request got unexpected baggage %q", baggage)
+	}
+	if strings.Contains(baggage, "sentry-release=old") || strings.Count(baggage, "sentry-release=") != 1 {
+		t.Fatalf("matching request did not replace Sentry baggage members: %q", baggage)
+	}
+
+	nonmatchingHeaders := capture.requests[1].Header
+	for _, header := range []string{sentry.SentryTraceHeader, sentry.TraceparentHeader} {
+		if value := nonmatchingHeaders.Get(header); value != "" {
+			t.Fatalf("nonmatching request got %s header %q", header, value)
+		}
+	}
+	if got := nonmatchingHeaders.Get(sentry.SentryBaggageHeader); got != "othervendor=value,sentry-release=old" {
+		t.Fatalf("nonmatching request baggage was mutated: %q", got)
+	}
+}
+
+func TestIntegration_PropagationTargetsDoNotDisableInstrumentation(t *testing.T) {
+	spansCh := make(chan []*sentry.Span, 1)
+	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
+		EnableTracing:           true,
+		TracesSampleRate:        1.0,
+		TracePropagationTargets: []string{"example.org"},
+		BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			spansCh <- event.Spans
+			return event
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := contextWithClient(sentryClient)
+	transaction := sentry.StartTransaction(ctx, "test")
+	capture := &captureRoundTripper{}
+	request, err := http.NewRequestWithContext(transaction.Context(), http.MethodGet, "https://example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := sentryhttpclient.NewSentryRoundTripper(capture).RoundTrip(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	transaction.Finish()
+	if !sentryClient.Flush(testutils.FlushTimeout()) {
+		t.Fatal("sentry.Flush timed out")
+	}
+
+	for _, header := range []string{sentry.SentryTraceHeader, sentry.SentryBaggageHeader, sentry.TraceparentHeader} {
+		if value := capture.requests[0].Header.Get(header); value != "" {
+			t.Fatalf("nonmatching request got %s header %q", header, value)
+		}
+	}
+	spans := <-spansCh
+	if len(spans) != 1 || spans[0].Op != "http.client" {
+		t.Fatalf("got spans %+v, want one http.client span", spans)
+	}
+}
+
 func TestPropagateTraceparentHeader(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:         true,
@@ -742,8 +861,10 @@ func TestPropagateTraceparentHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	span := sentry.StartSpan(context.Background(), "fake_parent", sentry.WithTransactionName("Fake Parent"))
-	ctx := span.Context()
+	ctx, scope := sentry.WithIsolationScope(context.Background())
+	scope.SetClient(sentry.GetClient(context.Background()))
+	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+	ctx = span.Context()
 
 	request, err := http.NewRequestWithContext(ctx, "GET", "https://example.com/foo", nil)
 	if err != nil {

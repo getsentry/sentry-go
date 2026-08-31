@@ -19,46 +19,49 @@ import (
 
 const defaultClientOperationName = "rpc.client"
 
-func hubFromClientContext(ctx context.Context) context.Context {
-	hub := sentry.GetHubFromContext(ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub().Clone()
-		ctx = sentry.SetHubOnContext(ctx, hub)
-	}
-
-	if client := hub.Client(); client.IsEnabled() {
+func configureClient(ctx context.Context) {
+	if client := sentry.GetClient(ctx); client.IsEnabled() {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
-
-	return ctx
 }
 
-func createOrUpdateMetadata(ctx context.Context, span *sentry.Span) context.Context {
+func createOrUpdateMetadata(ctx context.Context) context.Context {
 	md, _ := metadata.FromOutgoingContext(ctx)
 	md = md.Copy()
-	md.Set(sentry.SentryTraceHeader, span.ToSentryTrace())
+	if trace := sentry.GetTraceparent(ctx); trace != "" {
+		md.Set(sentry.SentryTraceHeader, trace)
+	}
 
-	existingBaggage := strings.Join(md.Get(sentry.SentryBaggageHeader), ",")
-	mergedBaggage, err := sentry.MergeBaggage(existingBaggage, span.ToBaggage())
-	if err == nil {
-		md.Set(sentry.SentryBaggageHeader, mergedBaggage)
+	if baggage := sentry.GetBaggage(ctx); baggage != "" {
+		existingBaggage := strings.Join(md.Get(sentry.SentryBaggageHeader), ",")
+		mergedBaggage, err := sentry.MergeBaggage(existingBaggage, baggage)
+		if err == nil {
+			md.Set(sentry.SentryBaggageHeader, mergedBaggage)
+		}
 	}
 
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
 func finishSpan(span *sentry.Span, err error) {
+	if span == nil {
+		return
+	}
 	setRPCStatus(span, err)
 	span.Finish()
 }
 
 func startClientSpan(ctx context.Context, method string) (context.Context, *sentry.Span) {
-	ctx = hubFromClientContext(ctx)
+	configureClient(ctx)
+	parentSpan := sentry.SpanFromContext(ctx)
+	if parentSpan == nil {
+		return createOrUpdateMetadata(ctx), nil
+	}
+
 	name, service, rpcMethod := parseGRPCMethod(method)
 	span := sentry.StartSpan(
 		ctx,
 		defaultClientOperationName,
-		sentry.WithTransactionName(name),
 		sentry.WithDescription(name),
 		sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 	)
@@ -70,7 +73,7 @@ func startClientSpan(ctx context.Context, method string) (context.Context, *sent
 	}
 	span.SetData("rpc.system", "grpc")
 
-	ctx = createOrUpdateMetadata(span.Context(), span)
+	ctx = createOrUpdateMetadata(span.Context())
 	return ctx, span
 }
 
@@ -109,6 +112,9 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 			nilErr := status.Error(codes.Internal, "streamer returned nil stream without error")
 			finishSpan(span, nilErr)
 			return nil, nilErr
+		}
+		if span == nil {
+			return stream, nil
 		}
 
 		wrappedStream := &sentryClientStream{
