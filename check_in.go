@@ -76,7 +76,7 @@ func IntervalSchedule(value int64, unit MonitorScheduleUnit) MonitorSchedule {
 	}
 }
 
-type MonitorConfig struct { //nolint: maligned // prefer readability over optimal memory layout
+type MonitorConfig struct {
 	Schedule MonitorSchedule `json:"schedule,omitempty"`
 	// The allowed margin of minutes after the expected check-in time that
 	// the monitor will not be considered missed for.
@@ -93,7 +93,7 @@ type MonitorConfig struct { //nolint: maligned // prefer readability over optima
 	RecoveryThreshold int64 `json:"recovery_threshold,omitempty"`
 }
 
-type CheckIn struct { //nolint: maligned // prefer readability over optimal memory layout
+type CheckIn struct {
 	// Check-In ID (unique and client generated)
 	ID EventID `json:"check_in_id"`
 	// The distinct slug of the monitor.
@@ -106,7 +106,7 @@ type CheckIn struct { //nolint: maligned // prefer readability over optimal memo
 
 // serializedCheckIn is used by checkInMarshalJSON method on Event struct.
 // See https://develop.sentry.dev/sdk/check-ins/
-type serializedCheckIn struct { //nolint: maligned
+type serializedCheckIn struct {
 	// Check-In ID (unique and client generated).
 	CheckInID string `json:"check_in_id"`
 	// The distinct slug of the monitor.

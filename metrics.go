@@ -116,7 +116,7 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		scope = customScope
 	}
 	m.mu.RLock()
-	attrs := buildMetricAttributes(attributes, m.attributes, m.defaultAttributes)
+	attrs := buildMetricAttributes(attributes, m.attributes)
 	m.mu.RUnlock()
 
 	metric := &Metric{
@@ -128,7 +128,12 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 		Attributes: attrs,
 	}
 
-	if client.captureMetric(metric, signalCaptureContext{scope: scope, ctx: ctx, fallback: m.ctx}) && client.options.Debug {
+	if client.captureMetric(metric, signalCaptureContext{
+		scope:             scope,
+		ctx:               ctx,
+		fallback:          m.ctx,
+		defaultAttributes: m.defaultAttributes,
+	}) && client.options.Debug {
 		debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), unit)
 	}
 }
@@ -137,7 +142,7 @@ func prepareMetric(metric *Metric, client *Client, capture signalCaptureContext)
 	trace := resolveTrace(capture.scope, client, capture.ctx, capture.fallback)
 	metric.TraceID = trace.traceID
 	metric.SpanID = trace.telemetrySpanID
-	metric.Attributes = mergeScopeAttributes(metric.Attributes, capture.scope)
+	metric.Attributes = mergeScopeAttributes(metric.Attributes, capture.defaultAttributes, capture.scope)
 }
 
 // WithCtx returns a new Meter that uses the given context for trace/span association.

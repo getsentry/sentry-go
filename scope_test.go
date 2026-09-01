@@ -166,7 +166,7 @@ func TestScopeRemoveAttributeNotInPopulateAttrs(t *testing.T) {
 	)
 	scope.RemoveAttribute("key.two")
 
-	attrs := mergeScopeAttributes(nil, scope)
+	attrs := mergeScopeAttributes(nil, nil, scope)
 
 	if _, ok := attrs["key.two"]; ok {
 		t.Error("removed attribute should not appear in populateAttrs output")
@@ -234,6 +234,33 @@ func TestApplyScopeChainProcessorOrder(t *testing.T) {
 
 	applyScopeChain(NewEvent(), NewNoopClient(), scope, captureOptions{})
 	assertEqual(t, []string{"global", "operation"}, order)
+}
+
+func TestApplyScopeChainPreservesBreadcrumbLayerOrder(t *testing.T) {
+	global := GlobalScope()
+	global.mu.Lock()
+	saved := global.breadcrumbs
+	global.breadcrumbs = nil
+	global.mu.Unlock()
+	defer func() {
+		global.mu.Lock()
+		global.breadcrumbs = saved
+		global.mu.Unlock()
+	}()
+
+	global.AddBreadcrumb(&Breadcrumb{Timestamp: testNow.Add(time.Hour), Message: "global"}, defaultMaxBreadcrumbs)
+	scope := NewScope()
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow.Add(-time.Hour), Message: "operation"}, defaultMaxBreadcrumbs)
+	event := NewEvent()
+	event.Breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "event"}}
+
+	processed := applyScopeChain(event, NewNoopClient(), scope, captureOptions{})
+
+	messages := make([]string, len(processed.Breadcrumbs))
+	for i, breadcrumb := range processed.Breadcrumbs {
+		messages[i] = breadcrumb.Message
+	}
+	assertEqual(t, []string{"event", "global", "operation"}, messages)
 }
 
 func TestScopeRemoveTag(t *testing.T) {
@@ -706,6 +733,20 @@ func TestApplyToEventUsingEmptyScope(t *testing.T) {
 	assertEqual(t, processedEvent.Fingerprint, event.Fingerprint, "should use event fingerprint")
 	assertEqual(t, processedEvent.Level, event.Level, "should use event level")
 	assertEqual(t, processedEvent.Request, event.Request, "should use event request")
+}
+
+func TestApplyToEventUsesManuallyConfiguredTraceContext(t *testing.T) {
+	manualTrace := Context{
+		"trace_id": "d49d9bf66f13450b81f65bc51cf49c03",
+		"span_id":  "2fa730c8b757c9a3",
+		"op":       "manual",
+	}
+	scope := NewScope()
+	scope.SetContext("trace", manualTrace)
+
+	processed := applyScopeChain(NewEvent(), NewNoopClient(), scope, captureOptions{})
+
+	assertEqual(t, manualTrace, processed.Contexts["trace"])
 }
 
 func TestApplyToEventUsingEmptyEvent(t *testing.T) {

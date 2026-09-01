@@ -427,7 +427,7 @@ func (state *captureState) mergeScope(event *Event, scope *Scope, prepend bool) 
 	}
 	event.Tags = util.FillMap(event.Tags, scope.tags)
 	for key, value := range scope.contexts {
-		if key == "trace" {
+		if key == "trace" && event.Type == transactionType {
 			continue
 		}
 		if event.Contexts == nil {
@@ -448,17 +448,12 @@ func (state *captureState) mergeScope(event *Event, scope *Scope, prepend bool) 
 		state.requestBody = scope.requestBody
 	}
 
-	if len(scope.breadcrumbs) > 0 {
-		if len(state.breadcrumbs) == 0 {
-			state.breadcrumbs = append([]*Breadcrumb(nil), scope.breadcrumbs...)
-		} else {
-			state.breadcrumbs = mergeTwoBreadcrumbLayers(scope.breadcrumbs, state.breadcrumbs)
-		}
-	}
 	if prepend {
+		state.breadcrumbs = prependSlice(scope.breadcrumbs, state.breadcrumbs)
 		state.attachments = prependSlice(scope.attachments, state.attachments)
 		state.processors = prependSlice(scope.eventProcessors, state.processors)
 	} else {
+		state.breadcrumbs = append(state.breadcrumbs, scope.breadcrumbs...)
 		state.attachments = append(state.attachments, scope.attachments...)
 		state.processors = append(state.processors, scope.eventProcessors...)
 	}
@@ -482,23 +477,21 @@ func setAttributeIfAbsent(attrs map[string]attribute.Value, key, value string) {
 	}
 }
 
-func copySignalAttributes(specific, instance, defaults map[string]attribute.Value) map[string]attribute.Value {
-	attrs := make(map[string]attribute.Value, len(specific)+len(instance)+len(defaults)+8)
+func copySignalAttributes(specific, instance map[string]attribute.Value) map[string]attribute.Value {
+	attrs := make(map[string]attribute.Value, len(specific)+len(instance)+8)
 	attrs = util.FillMap(attrs, specific)
-	attrs = util.FillMap(attrs, instance)
-	return util.FillMap(attrs, defaults)
+	return util.FillMap(attrs, instance)
 }
 
-func buildMetricAttributes(specific []attribute.Builder, instance, defaults map[string]attribute.Value) map[string]attribute.Value {
-	attrs := make(map[string]attribute.Value, len(specific)+len(instance)+len(defaults)+8)
+func buildMetricAttributes(specific []attribute.Builder, instance map[string]attribute.Value) map[string]attribute.Value {
+	attrs := make(map[string]attribute.Value, len(specific)+len(instance)+8)
 	for _, attr := range specific {
 		attrs[attr.Key] = attr.Value
 	}
-	attrs = util.FillMap(attrs, instance)
-	return util.FillMap(attrs, defaults)
+	return util.FillMap(attrs, instance)
 }
 
-func mergeScopeAttributes(attrs map[string]attribute.Value, scope *Scope) map[string]attribute.Value {
+func mergeScopeAttributes(attrs, defaults map[string]attribute.Value, scope *Scope) map[string]attribute.Value {
 	global := GlobalScope()
 	var user User
 	if scope != nil && scope != global {
@@ -518,7 +511,7 @@ func mergeScopeAttributes(attrs map[string]attribute.Value, scope *Scope) map[st
 	setAttributeIfAbsent(attrs, "user.id", user.ID)
 	setAttributeIfAbsent(attrs, "user.name", user.Name)
 	setAttributeIfAbsent(attrs, "user.email", user.Email)
-	return attrs
+	return util.FillMap(attrs, defaults)
 }
 
 // applyToEvent handles capture work that must run after Scope locks are
@@ -576,6 +569,8 @@ func resolveLevel(event *Event, scopeLevel Level, opts captureOptions) Level {
 		return opts.level
 	case scopeLevel != "" && event.Type != transactionType:
 		return scopeLevel
+	case opts.defaultLevel != "":
+		return opts.defaultLevel
 	default:
 		return LevelInfo
 	}
@@ -589,37 +584,22 @@ func mergeBreadcrumbs(limit int, own []*Breadcrumb, layers [][]*Breadcrumb) []*B
 		limit = defaultMaxBreadcrumbs
 	}
 
-	merged := own
+	total := len(own)
 	for _, layer := range layers {
-		merged = mergeTwoBreadcrumbLayers(merged, layer)
+		total += len(layer)
+	}
+	if total == 0 {
+		return own
+	}
+	merged := make([]*Breadcrumb, 0, total)
+	merged = append(merged, own...)
+	for _, layer := range layers {
+		merged = append(merged, layer...)
 	}
 	if len(merged) > limit {
 		merged = merged[len(merged)-limit:]
 	}
 	return merged
-}
-
-func mergeTwoBreadcrumbLayers(a, b []*Breadcrumb) []*Breadcrumb {
-	if len(a) == 0 {
-		return b
-	}
-	if len(b) == 0 {
-		return a
-	}
-	out := make([]*Breadcrumb, 0, len(a)+len(b))
-	i, j := 0, 0
-	for i < len(a) && j < len(b) {
-		if b[j].Timestamp.Before(a[i].Timestamp) {
-			out = append(out, b[j])
-			j++
-		} else {
-			out = append(out, a[i])
-			i++
-		}
-	}
-	out = append(out, a[i:]...)
-	out = append(out, b[j:]...)
-	return out
 }
 
 // cloneContext returns a new context with keys and values copied from the passed one.
@@ -636,9 +616,10 @@ func cloneContext(c Context) Context {
 }
 
 type signalCaptureContext struct {
-	scope    *Scope
-	ctx      context.Context
-	fallback context.Context
+	scope             *Scope
+	ctx               context.Context
+	fallback          context.Context
+	defaultAttributes map[string]attribute.Value
 }
 
 // hubFromContexts is a helper to return the first hub found in the given contexts.
@@ -752,7 +733,7 @@ func applyTraceToEvent(event *Event, trace traceResolution) {
 		if trace.external {
 			traceID, spanID = trace.traceID.String(), trace.spanID.String()
 		}
-		event.Contexts["trace"] = Context{"trace_id": traceID, "span_id": spanID}
+		event.Contexts["trace"] = Context{traceIDContextKey: traceID, spanIDContextKey: spanID}
 	}
 	event.sdkMetaData.dsc = trace.dsc
 }

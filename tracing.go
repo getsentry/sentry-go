@@ -45,7 +45,7 @@ const (
 // that is sent to Sentry when the root span is finished.
 //
 // Spans must be started with either StartSpan or Span.StartChild.
-type Span struct { //nolint: maligned // prefer readability over optimal memory layout (see note below *)
+type Span struct {
 	TraceID      TraceID                `json:"trace_id"`
 	SpanID       SpanID                 `json:"span_id"`
 	ParentSpanID SpanID                 `json:"parent_span_id,omitzero"`
@@ -933,8 +933,8 @@ type TraceContext struct {
 
 func (tc TraceContext) Map() map[string]interface{} {
 	m := map[string]interface{}{
-		"trace_id": tc.TraceID,
-		"span_id":  tc.SpanID,
+		traceIDContextKey: tc.TraceID,
+		spanIDContextKey:  tc.SpanID,
 	}
 
 	if tc.ParentSpanID != [8]byte{} {

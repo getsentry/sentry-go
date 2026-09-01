@@ -634,20 +634,21 @@ type captureOptions struct {
 	hint *EventHint
 	// level is an explicit level from the capture call.
 	level Level
+	// defaultLevel is the helper's fallback when neither the event, capture
+	// options, nor scope provides a level.
+	defaultLevel Level
 }
 
 // CaptureMessage captures an arbitrary message.
 func (client *Client) CaptureMessage(message string, hint *EventHint, scope *Scope) *EventID {
 	event := client.eventFromMessage(message)
-	event.Level = LevelInfo
-	return client.CaptureEvent(event, hint, scope)
+	return client.captureEvent(event, scope, captureOptions{hint: hint, defaultLevel: LevelInfo})
 }
 
 // CaptureException captures an error.
 func (client *Client) CaptureException(exception error, hint *EventHint, scope *Scope) *EventID {
 	event := client.eventFromException(exception)
-	event.Level = LevelError
-	return client.CaptureEvent(event, hint, scope)
+	return client.captureEvent(event, scope, captureOptions{hint: hint, defaultLevel: LevelError})
 }
 
 // CaptureCheckIn captures a check in.
@@ -667,10 +668,18 @@ func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorCon
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
 func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope *Scope) *EventID {
+	return client.captureEvent(event, scope, captureOptions{hint: hint})
+}
+
+func (client *Client) captureEvent(event *Event, scope *Scope, opts captureOptions) *EventID {
 	if !client.IsEnabled() {
 		return nil
 	}
-	return client.processEvent(event, scope, captureOptions{hint: hint})
+	if event == nil {
+		event = client.eventFromException(usageError{fmt.Errorf("CaptureEvent called with nil event")})
+		event.Level = LevelError
+	}
+	return client.processEvent(event, scope, opts)
 }
 
 func (client *Client) captureLog(log *Log, capture signalCaptureContext) bool {
@@ -792,8 +801,7 @@ func (client *Client) RecoverWithContext(
 	default:
 		event = client.eventFromMessage(fmt.Sprintf("%#v", err))
 	}
-	event.Level = LevelFatal
-	return client.CaptureEvent(event, hint, scope)
+	return client.captureEvent(event, scope, captureOptions{hint: hint, defaultLevel: LevelFatal})
 }
 
 // Flush waits until the underlying Transport sends any buffered events to the

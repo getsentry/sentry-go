@@ -554,6 +554,10 @@ func Test_sentryLogger_AttributePrecedence(t *testing.T) {
 	hub := GetHubFromContext(ctx)
 
 	hub.Scope().SetUser(User{ID: "user456", Name: "TestUser"})
+	hub.Scope().SetAttributes(
+		attribute.String("key", "scope-value"),
+		attribute.String("sentry.sdk.name", "scope-sdk"),
+	)
 
 	logger := NewLogger(ctx)
 	logger.SetAttributes(attribute.String("key", "instance-value"))
@@ -601,8 +605,10 @@ func Test_sentryLogger_AttributePrecedence(t *testing.T) {
 		t.Errorf("expected user.id=user456, got %v", val.AsString())
 	}
 
-	if _, ok := attrs["sentry.sdk.name"]; !ok {
-		t.Error("missing sentry.sdk.name default attribute")
+	if val, ok := attrs["sentry.sdk.name"]; !ok {
+		t.Error("missing sentry.sdk.name attribute")
+	} else if val.AsString() != "scope-sdk" {
+		t.Errorf("expected scope to override SDK default, got %v", val.AsString())
 	}
 }
 

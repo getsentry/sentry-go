@@ -172,7 +172,7 @@ func convert(ctx *fasthttp.RequestCtx) *http.Request {
 
 	// Cookies
 	for key, value := range ctx.Request.Header.Cookies() {
-		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
+		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)}) //nolint:gosec // G124: mirrors an inbound request cookie.
 	}
 
 	r.RemoteAddr = ctx.RemoteAddr().String()

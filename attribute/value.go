@@ -305,6 +305,8 @@ func (t Type) String() string {
 	return "invalid"
 }
 
+const arrayType = "array"
+
 // mapTypesToStr is a map from attribute.Type to the primitive types the server understands.
 // https://develop.sentry.dev/sdk/foundations/data-model/attributes/#primitive-types
 var mapTypesToStr = map[Type]string{
@@ -313,9 +315,9 @@ var mapTypesToStr = map[Type]string{
 	INT64:        "integer",
 	FLOAT64:      "double",
 	STRING:       "string",
-	BOOLSLICE:    "array",
-	INT64SLICE:   "array",
-	FLOAT64SLICE: "array",
-	STRINGSLICE:  "array",
+	BOOLSLICE:    arrayType,
+	INT64SLICE:   arrayType,
+	FLOAT64SLICE: arrayType,
+	STRINGSLICE:  arrayType,
 	UINT64:       "integer", // wire format: same "integer" type
 }
