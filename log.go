@@ -114,7 +114,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 	client := hub.Client()
 	scope := hub.Scope()
 	l.mu.RLock()
-	attrs := copySignalAttributes(entryAttrs, l.attributes, l.defaultAttributes)
+	attrs := copySignalAttributes(entryAttrs, l.attributes)
 	l.mu.RUnlock()
 
 	body := message
@@ -136,7 +136,12 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		Body:       body,
 		Attributes: attrs,
 	}
-	client.captureLog(log, signalCaptureContext{scope: scope, ctx: ctx, fallback: l.ctx})
+	client.captureLog(log, signalCaptureContext{
+		scope:             scope,
+		ctx:               ctx,
+		fallback:          l.ctx,
+		defaultAttributes: l.defaultAttributes,
+	})
 	if client.options.Debug {
 		debuglog.Print(body)
 	}
@@ -146,7 +151,7 @@ func prepareLog(log *Log, client *Client, capture signalCaptureContext) {
 	trace := resolveTrace(capture.scope, client, capture.ctx, capture.fallback)
 	log.TraceID = trace.traceID
 	log.SpanID = trace.telemetrySpanID
-	log.Attributes = mergeScopeAttributes(log.Attributes, capture.scope)
+	log.Attributes = mergeScopeAttributes(log.Attributes, capture.defaultAttributes, capture.scope)
 	log.approximateSize = computeLogSize(log)
 }
 

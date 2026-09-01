@@ -77,6 +77,43 @@ func TestCaptureMessageShouldSucceedWithoutNilScope(t *testing.T) {
 	assertEqual(t, transport.lastEvent.Message, "foo")
 }
 
+func TestHelperCaptureLevelsRespectScope(t *testing.T) {
+	tests := []struct {
+		name    string
+		capture func(*Client, *Scope)
+	}{
+		{
+			name: "message",
+			capture: func(client *Client, scope *Scope) {
+				client.CaptureMessage("message", nil, scope)
+			},
+		},
+		{
+			name: "exception",
+			capture: func(client *Client, scope *Scope) {
+				client.CaptureException(errors.New("error"), nil, scope)
+			},
+		},
+		{
+			name: "recover",
+			capture: func(client *Client, scope *Scope) {
+				client.Recover("panic", nil, scope)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, scope, transport := setupClientTest()
+			scope.SetLevel(LevelWarning)
+
+			tt.capture(client, scope)
+
+			assertEqual(t, LevelWarning, transport.lastEvent.Level)
+		})
+	}
+}
+
 func TestCaptureMessageEmptyString(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.CaptureMessage("", nil, scope)
