@@ -606,8 +606,8 @@ type signalCaptureContext struct {
 // context or dynamic sampling context. Those projections are created only by
 // consumers that need them.
 type traceContextSource struct {
-	traceID     TraceID
-	spanID      SpanID
+	traceID        TraceID
+	spanID         SpanID
 	span           *Span
 	propagation    PropagationContext
 	hasPropagation bool
@@ -688,7 +688,7 @@ func traceIDsFromContext(ctx context.Context, scope *Scope, client *Client) (Tra
 	return source.traceID, SpanID{}
 }
 
-func applyTraceContextToEvent(event *Event, ctx context.Context, scope *Scope, client *Client) {
+func applyTraceContextToEvent(ctx context.Context, event *Event, scope *Scope, client *Client) {
 	if event.Type == transactionType {
 		return
 	}

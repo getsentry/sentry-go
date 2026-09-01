@@ -1037,7 +1037,7 @@ func applyScopeChain(event *Event, client *Client, scope *Scope, opts captureOpt
 	if opts.hint != nil {
 		ctx = opts.hint.Context
 	}
-	applyTraceContextToEvent(event, ctx, scope, client)
+	applyTraceContextToEvent(ctx, event, scope, client)
 
 	return state.applyToEvent(event, opts.hint, client, opts)
 }
