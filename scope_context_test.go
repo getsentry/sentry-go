@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -193,6 +194,73 @@ func TestScopeClientResolution(t *testing.T) {
 	child.SetClient(nil)
 	if GetClient(childCtx) != otherGlobalClient || GetClient(ctx) != operationClient {
 		t.Fatal("clearing the child override did not fall back to global independently")
+	}
+}
+
+func TestPackageCapturesWithoutScopeUpdateGlobalLastEventID(t *testing.T) {
+	transport := &MockTransport{}
+	client, err := NewClient(ClientOptions{
+		Dsn:       testDsn,
+		Transport: transport,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	global := GlobalScope()
+	previousClient := global.clientOverrideSnapshot()
+	previousID := global.LastEventID()
+	global.SetClient(client)
+	t.Cleanup(func() {
+		global.SetClient(previousClient)
+		global.setLastEventID(previousID)
+	})
+
+	captures := []struct {
+		name    string
+		capture func() *EventID
+	}{
+		{name: "message", capture: func() *EventID { return CaptureMessage(context.Background(), "message") }},
+		{name: "exception", capture: func() *EventID { return CaptureException(context.Background(), errors.New("error")) }},
+		{name: "panic", capture: func() *EventID { return CapturePanic(context.Background(), "panic") }},
+		{name: "event", capture: func() *EventID { return CaptureEvent(context.Background(), NewEvent()) }},
+	}
+
+	for _, tt := range captures {
+		t.Run(tt.name, func(t *testing.T) {
+			global.setLastEventID("")
+			id := tt.capture()
+			if id == nil {
+				t.Fatal("capture returned nil event ID")
+			}
+			if got := LastEventID(); got != *id {
+				t.Fatalf("LastEventID = %q, want %q", got, *id)
+			}
+		})
+	}
+}
+
+func TestDisabledClientCaptureReturnsNilEventID(t *testing.T) {
+	client := NewNoopClient()
+	if id := client.CaptureMessage(context.Background(), "message"); id != nil {
+		t.Fatalf("disabled client returned event ID %q", *id)
+	}
+
+	global := GlobalScope()
+	previousClient := global.clientOverrideSnapshot()
+	previousID := global.LastEventID()
+	global.SetClient(client)
+	global.setLastEventID(previousID)
+	t.Cleanup(func() {
+		global.SetClient(previousClient)
+		global.setLastEventID(previousID)
+	})
+
+	if id := CaptureMessage(context.Background(), "message"); id != nil {
+		t.Fatalf("package capture with disabled client returned event ID %q", *id)
+	}
+	if got := LastEventID(); got != previousID {
+		t.Fatalf("disabled capture changed LastEventID from %q to %q", previousID, got)
 	}
 }
 

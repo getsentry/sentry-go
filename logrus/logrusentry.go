@@ -159,7 +159,11 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 
 	if h.useCustomProvider {
 		if customCtx := h.contextProvider(); customCtx != nil && sentry.GetClient(customCtx).IsEnabled() {
-			ctx = sentry.ContextWithScope(ctx, sentry.ScopeFromContext(customCtx))
+			if sentry.SpanFromContext(customCtx) != nil {
+				ctx = customCtx
+			} else {
+				ctx = sentry.ContextWithScope(ctx, sentry.ScopeFromContext(customCtx))
+			}
 		}
 	} else if sentry.ScopeFromContext(ctx) == nil {
 		ctx = sentry.ContextWithScope(ctx, sentry.ScopeFromContext(h.defaultCtx))

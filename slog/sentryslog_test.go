@@ -241,6 +241,23 @@ func TestSentryHandlerAttrFromContext(t *testing.T) {
 	assert.Equal(t, "1234", value.AsInterface())
 }
 
+func TestSentryHandlerPreservesConfiguredActiveSpan(t *testing.T) {
+	ctx, mockTransport := newMockTransport()
+	span := sentry.StartSpan(ctx, "configured-operation")
+	defer span.Finish()
+
+	handler := Option{LogLevel: []slog.Level{slog.LevelInfo}}.NewSentryHandler(span.Context())
+	logger := slog.New(handler)
+	logger.Info("configured span log")
+	sentry.GetClient(ctx).Flush(20 * time.Millisecond)
+
+	events := mockTransport.Events()
+	assert.Len(t, events, 1)
+	assert.Len(t, events[0].Logs, 1)
+	assert.Equal(t, span.TraceID, events[0].Logs[0].TraceID)
+	assert.Equal(t, span.SpanID, events[0].Logs[0].SpanID)
+}
+
 func TestSentryHandlerWithAttrsAndGroup(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 	baseHandler := Option{

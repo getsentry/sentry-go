@@ -54,24 +54,38 @@ func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb) {
 	scope.AddBreadcrumb(breadcrumb, limit)
 }
 
+func contextWithCaptureScope(ctx context.Context) context.Context {
+	if ScopeFromContext(ctx) != nil {
+		return ctx
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return contextWithScope(ctx, GlobalScope())
+}
+
 // CaptureMessage captures an arbitrary message.
 func CaptureMessage(ctx context.Context, message string, options ...CaptureOption) *EventID {
+	ctx = contextWithCaptureScope(ctx)
 	return GetClient(ctx).CaptureMessage(ctx, message, options...)
 }
 
 // CaptureException captures an error.
 func CaptureException(ctx context.Context, err error, options ...CaptureOption) *EventID {
+	ctx = contextWithCaptureScope(ctx)
 	return GetClient(ctx).CaptureException(ctx, err, options...)
 }
 
 // CapturePanic captures a panic value returned by recover.
 // It always attaches the stacktrace of the active panic.
 func CapturePanic(ctx context.Context, recovered any, options ...CaptureOption) *EventID {
+	ctx = contextWithCaptureScope(ctx)
 	return GetClient(ctx).CapturePanic(ctx, recovered, options...)
 }
 
 // CaptureCheckIn captures a (cron) monitor check-in.
 func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig, options ...CaptureOption) *EventID {
+	ctx = contextWithCaptureScope(ctx)
 	return GetClient(ctx).CaptureCheckIn(ctx, checkIn, monitorConfig, options...)
 }
 
@@ -81,6 +95,7 @@ func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *Monito
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
 func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *EventID {
+	ctx = contextWithCaptureScope(ctx)
 	return GetClient(ctx).CaptureEvent(ctx, event, options...)
 }
 

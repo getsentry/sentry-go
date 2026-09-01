@@ -112,6 +112,31 @@ func TestLogHookSetContextProviderUsesProviderForLogs(t *testing.T) {
 	assert.Equal(t, "provider", got[0].Logs[0].Attributes["sentry.environment"].String())
 }
 
+func TestLogHookContextProviderPreservesActiveSpan(t *testing.T) {
+	providerClient, providerTransport := setupClientTest()
+	providerCtx := contextWithClient(providerClient)
+	span := sentry.StartSpan(providerCtx, "provider-operation")
+	defer span.Finish()
+	providerCtx = span.Context()
+
+	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, providerClient)
+	hook.SetContextProvider(func() context.Context { return providerCtx })
+
+	err := hook.Fire(&logrus.Entry{
+		Context: context.Background(),
+		Level:   logrus.InfoLevel,
+		Message: "provider span log",
+	})
+	assert.NoError(t, err)
+	assert.True(t, hook.Flush(testutils.FlushTimeout()))
+
+	events := providerTransport.Events()
+	assert.Len(t, events, 1)
+	assert.Len(t, events[0].Logs, 1)
+	assert.Equal(t, span.TraceID, events[0].Logs[0].TraceID)
+	assert.Equal(t, span.SpanID, events[0].Logs[0].SpanID)
+}
+
 func TestLogHookUsesContextClientWithoutCustomProvider(t *testing.T) {
 	defaultTransport := &sentry.MockTransport{}
 	defaultClient, err := sentry.NewClient(sentry.ClientOptions{
