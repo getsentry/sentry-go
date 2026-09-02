@@ -53,7 +53,7 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	entries := make(map[string]string)
 
 	if traceID := span.TraceID.String(); traceID != "" {
-		entries["trace_id"] = traceID
+		entries[traceIDContextKey] = traceID
 	}
 	if sampleRate := span.sampleRate; sampleRate != 0 {
 		entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
@@ -132,7 +132,7 @@ func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSampli
 	propagationContext := scope.propagationContext
 
 	if traceID := propagationContext.TraceID.String(); traceID != "" {
-		entries["trace_id"] = traceID
+		entries[traceIDContextKey] = traceID
 	}
 	if sampleRate := client.options.TracesSampleRate; sampleRate != 0 {
 		entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
