@@ -183,7 +183,7 @@ func convert(ctx *fiber.Ctx) *http.Request {
 
 	// Cookies
 	ctx.Request().Header.VisitAllCookie(func(key, value []byte) { // nolint: staticcheck // this is intentional to support older versions of fasthttp for fiber v2
-		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)})
+		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)}) //nolint:gosec // G124: mirrors an inbound request cookie.
 	})
 
 	r.RemoteAddr = ctx.Context().RemoteAddr().String()

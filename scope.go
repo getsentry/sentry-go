@@ -393,8 +393,8 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		}
 		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); event.Type != transactionType && ok {
 			traceCtx := event.Contexts["trace"]
-			traceCtx["trace_id"] = traceID.String()
-			traceCtx["span_id"] = spanID.String()
+			traceCtx[traceIDContextKey] = traceID.String()
+			traceCtx[spanIDContextKey] = spanID.String()
 		}
 	}
 
