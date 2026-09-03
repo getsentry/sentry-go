@@ -102,14 +102,6 @@ type EventProcessor func(event *Event, hint *EventHint) *Event
 // needing the otel dependency on the root package.
 type externalContextTraceResolver func(ctx context.Context) (traceID TraceID, spanID SpanID, ok bool)
 
-// EventModifier is the interface that wraps the ApplyToEvent method.
-//
-// ApplyToEvent changes an event based on external data and/or
-// an event hint.
-type EventModifier interface {
-	ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event
-}
-
 var globalEventProcessors []EventProcessor
 
 // AddGlobalEventProcessor adds processor to the global list of event
@@ -648,48 +640,56 @@ func (client *Client) GetDataCollection() DataCollection {
 	return *cloneDataCollection(client.options.DataCollection)
 }
 
-// CaptureMessage captures an arbitrary message.
-func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
+func (client *Client) captureMessage(ctx context.Context, message string, options ...CaptureOption) *EventID {
 	if !client.IsEnabled() {
 		return nil
 	}
-	event := client.EventFromMessage(message, LevelInfo)
-	return client.CaptureEvent(event, hint, scope)
+	opts := resolveCaptureOptions(ctx, options...)
+	opts.defaultLevel = LevelInfo
+	return client.capture(ctx, client.eventFromMessage(message), opts)
 }
 
-// CaptureException captures an error.
-func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
+func (client *Client) captureException(
+	ctx context.Context,
+	exception error,
+	options ...CaptureOption,
+) *EventID {
 	if !client.IsEnabled() {
 		return nil
 	}
-	event := client.EventFromException(exception, LevelError)
-	return client.CaptureEvent(event, hint, scope)
+	opts := resolveCaptureOptions(ctx, options...)
+	if opts.hint.OriginalException == nil {
+		opts.hint.OriginalException = exception
+	}
+	opts.defaultLevel = LevelError
+	return client.capture(ctx, client.eventFromException(exception), opts)
 }
 
-// CaptureCheckIn captures a check in.
-func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
+func (client *Client) captureCheckIn(
+	ctx context.Context,
+	checkIn *CheckIn,
+	monitorConfig *MonitorConfig,
+	options ...CaptureOption,
+) *EventID {
 	if !client.IsEnabled() {
 		return nil
 	}
-	event := client.EventFromCheckIn(checkIn, monitorConfig)
-	if event != nil && event.CheckIn != nil {
-		if client.CaptureEvent(event, nil, scope) != nil {
-			return &event.CheckIn.ID
-		}
+	event := client.eventFromCheckIn(checkIn, monitorConfig)
+	if event == nil || event.CheckIn == nil {
+		return nil
 	}
-	return nil
+	id := event.CheckIn.ID
+	if client.capture(ctx, event, resolveCaptureOptions(ctx, options...)) == nil {
+		return nil
+	}
+	return &id
 }
 
-// CaptureEvent captures an event on the currently active client if any.
-//
-// The event must already be assembled. Typically, code would instead use
-// the utility methods like CaptureException. The return value is the
-// event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
-func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
+func (client *Client) captureEvent(ctx context.Context, event *Event, options ...CaptureOption) *EventID {
 	if !client.IsEnabled() {
 		return nil
 	}
-	return client.processEvent(event, hint, scope)
+	return client.capture(ctx, event, resolveCaptureOptions(ctx, options...))
 }
 
 func (client *Client) captureLog(log *Log, _ *Scope) bool {
@@ -757,58 +757,30 @@ func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
 	return true
 }
 
-// Recover captures a panic.
-// Returns EventID if successfully, or nil if there's no error to recover from.
-func (client *Client) Recover(err any, hint *EventHint, scope EventModifier) *EventID {
-	if err == nil {
-		err = recover()
+func (client *Client) capturePanic(ctx context.Context, recovered any, options ...CaptureOption) *EventID {
+	if recovered == nil {
+		recovered = recover()
 	}
-
-	// Normally we would not pass a nil Context, but RecoverWithContext doesn't
-	// use the Context for communicating deadline nor cancelation. All it does
-	// is store the Context in the EventHint and there nil means the Context is
-	// not available.
-	// nolint: staticcheck
-	return client.RecoverWithContext(nil, err, hint, scope)
-}
-
-// RecoverWithContext captures a panic and passes relevant context object.
-// Returns EventID if successfully, or nil if there's no error to recover from.
-func (client *Client) RecoverWithContext(
-	ctx context.Context,
-	err any,
-	hint *EventHint,
-	scope EventModifier,
-) *EventID {
-	if err == nil {
-		err = recover()
-	}
-	if err == nil {
-		return nil
-	}
-	if !client.IsEnabled() {
+	if recovered == nil || !client.IsEnabled() {
 		return nil
 	}
 
-	if ctx != nil {
-		if hint == nil {
-			hint = &EventHint{}
-		}
-		if hint.Context == nil {
-			hint.Context = ctx
-		}
+	opts := resolveCaptureOptions(ctx, options...)
+	if opts.hint.RecoveredException == nil {
+		opts.hint.RecoveredException = recovered
 	}
 
 	var event *Event
-	switch err := err.(type) {
+	switch recovered := recovered.(type) {
 	case error:
-		event = client.EventFromException(err, LevelFatal)
+		event = client.eventFromException(recovered)
 	case string:
-		event = client.EventFromMessage(err, LevelFatal)
+		event = client.eventFromMessage(recovered)
 	default:
-		event = client.EventFromMessage(fmt.Sprintf("%#v", err), LevelFatal)
+		event = client.eventFromMessage(fmt.Sprintf("%#v", recovered))
 	}
-	return client.CaptureEvent(event, hint, scope)
+	opts.defaultLevel = LevelFatal
+	return client.capture(ctx, event, opts)
 }
 
 // Flush waits until the underlying Transport sends any buffered events to the
@@ -884,14 +856,12 @@ func (client *Client) Close() {
 	client.Transport.Close()
 }
 
-// EventFromMessage creates an event from the given message string.
-func (client *Client) EventFromMessage(message string, level Level) *Event {
+func (client *Client) eventFromMessage(message string) *Event {
 	if message == "" {
-		err := usageError{fmt.Errorf("%s called with empty message", callerFunctionName())}
-		return client.EventFromException(err, level)
+		err := usageError{fmt.Errorf("CaptureMessage called with empty message")}
+		return client.eventFromException(err)
 	}
 	event := NewEvent()
-	event.Level = level
 	event.Message = message
 
 	if client.options.AttachStacktrace {
@@ -905,14 +875,12 @@ func (client *Client) EventFromMessage(message string, level Level) *Event {
 	return event
 }
 
-// EventFromException creates a new Sentry event from the given `error` instance.
-func (client *Client) EventFromException(exception error, level Level) *Event {
+func (client *Client) eventFromException(exception error) *Event {
 	event := NewEvent()
-	event.Level = level
 
 	err := exception
 	if err == nil {
-		err = usageError{fmt.Errorf("%s called with nil error", callerFunctionName())}
+		err = usageError{fmt.Errorf("CaptureException called with nil error")}
 	}
 
 	event.SetException(err, client.options.MaxErrorDepth)
@@ -920,8 +888,7 @@ func (client *Client) EventFromException(exception error, level Level) *Event {
 	return event
 }
 
-// EventFromCheckIn creates a new Sentry event from the given `check_in` instance.
-func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
+func (client *Client) eventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
 	if checkIn == nil {
 		return nil
 	}
@@ -964,12 +931,17 @@ func (client *Client) GetSDKIdentifier() string {
 	return client.sdkIdentifier
 }
 
-func (client *Client) processEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
-	if event == nil {
-		err := usageError{fmt.Errorf("%s called with nil event", callerFunctionName())}
-		return client.CaptureException(err, hint, scope)
+func (client *Client) capture(ctx context.Context, event *Event, opts captureOptions) *EventID {
+	scope := ScopeFromContext(ctx)
+	if !client.IsEnabled() {
+		return nil
 	}
-
+	if event == nil {
+		event = client.eventFromException(usageError{fmt.Errorf("CaptureEvent called with nil event")})
+		if opts.defaultLevel == "" {
+			opts.defaultLevel = LevelError
+		}
+	}
 	// Transactions are sampled by options.TracesSampleRate or
 	// options.TracesSampler when they are started. Other events
 	// (errors, messages) are sampled here. Does not apply to check-ins.
@@ -979,14 +951,12 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		return nil
 	}
 
-	if event = client.prepareEvent(event, hint, scope); event == nil {
+	if event = client.prepareEvent(event, scope, opts); event == nil {
 		return nil
 	}
 
 	// Apply beforeSend* processors
-	if hint == nil {
-		hint = &EventHint{}
-	}
+	hint := opts.hint
 	switch event.Type {
 	case transactionType:
 		if client.options.BeforeSendTransaction != nil {
@@ -1022,10 +992,13 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 		client.Transport.SendEvent(event)
 	}
 
+	if event.Type != transactionType && event.Type != checkInType {
+		scope.setLastEventID(event.EventID)
+	}
 	return &event.EventID
 }
 
-func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventModifier) *Event {
+func (client *Client) prepareEvent(event *Event, scope *Scope, opts captureOptions) *Event {
 	if event.EventID == "" {
 		// TODO set EventID when the event is created, same as in other SDKs. It's necessary for profileTransaction.ID.
 		event.EventID = EventID(uuid())
@@ -1033,10 +1006,6 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
-	}
-
-	if event.Level == "" {
-		event.Level = LevelInfo
 	}
 
 	if event.ServerName == "" {
@@ -1071,17 +1040,26 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 	}
 
 	if scope != nil {
-		event = scope.ApplyToEvent(event, hint, client)
+		event = scope.ApplyToEvent(event, opts.hint, client)
 		if event == nil {
 			return nil
 		}
+	}
+	if event.Level == "" {
+		event.Level = opts.defaultLevel
+	}
+	if event.Level == "" {
+		event.Level = LevelInfo
+	}
+	if opts.level != "" {
+		event.Level = opts.level
 	}
 
 	for _, processor := range client.eventProcessors {
 		id := event.EventID
 		category := event.toCategory()
 		spanCountBefore := event.GetSpanCount()
-		event = processor(event, hint)
+		event = processor(event, opts.hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
 			client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
@@ -1102,7 +1080,7 @@ func (client *Client) prepareEvent(event *Event, hint *EventHint, scope EventMod
 		id := event.EventID
 		category := event.toCategory()
 		spanCountBefore := event.GetSpanCount()
-		event = processor(event, hint)
+		event = processor(event, opts.hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
 			client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
