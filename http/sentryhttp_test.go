@@ -1,6 +1,7 @@
 package sentryhttp_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,10 +12,62 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryhttp "github.com/getsentry/sentry-go/http"
+	"github.com/getsentry/sentry-go/internal/sentrytest"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/require"
 )
+
+type contextKey struct{}
+
+func TestNestedMiddlewarePreservesActiveTransaction(t *testing.T) {
+	t.Parallel()
+
+	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
+		EnableTracing: true, TracesSampleRate: 1,
+	}))
+	outer := sentry.StartTransaction(fixture.NewContext(context.Background()), "outer")
+	child := sentry.StartSpan(outer.Context(), "child")
+	key := contextKey{}
+	request := httptest.NewRequest(http.MethodGet, "http://example.test/nested", nil)
+	request = request.WithContext(context.WithValue(child.Context(), key, "preserved"))
+
+	handler := sentryhttp.New(sentryhttp.Options{}).Handle(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "preserved", r.Context().Value(key))
+		require.Same(t, child, sentry.SpanFromContext(r.Context()))
+		require.Same(t, outer, sentry.TransactionFromContext(r.Context()))
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	require.Equal(t, "outer", outer.Name)
+	require.True(t, outer.EndTime.IsZero(), "nested middleware finished the outer transaction")
+	child.Finish()
+	outer.Finish()
+	fixture.Flush()
+	require.Len(t, fixture.Events(), 1)
+	require.Equal(t, "transaction", fixture.Events()[0].Type)
+}
+
+func TestIncomingBaggageUsesAllHeaderLines(t *testing.T) {
+	t.Parallel()
+
+	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
+		EnableTracing: true, TracesSampleRate: 1,
+	}))
+	request := httptest.NewRequest(http.MethodGet, "http://example.test/baggage", nil)
+	request.Header.Set(sentry.SentryTraceHeader, "11111111111111111111111111111111-2222222222222222-1")
+	request.Header.Add(sentry.SentryBaggageHeader, "sentry-release=from-first-line")
+	request.Header.Add(sentry.SentryBaggageHeader, "sentry-trace_id=11111111111111111111111111111111")
+	request = request.WithContext(fixture.NewContext(request.Context()))
+
+	handler := sentryhttp.New(sentryhttp.Options{}).Handle(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		baggage := sentry.TransactionFromContext(r.Context()).ToBaggage()
+		require.Contains(t, baggage, "sentry-release=from-first-line")
+		require.Contains(t, baggage, "sentry-trace_id=11111111111111111111111111111111")
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+}
 
 func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
@@ -80,12 +133,11 @@ func TestIntegration(t *testing.T) {
 			Body:        `{"safe":"value"}`,
 			ContentType: "application/json",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage("post: " + string(body))
+				sentry.CaptureMessage(r.Context(), "post: "+string(body))
 			}),
 
 			WantStatus: http.StatusOK,
@@ -135,8 +187,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path: "/get",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
-				hub.CaptureMessage("get")
+				sentry.CaptureMessage(r.Context(), "get")
 			}),
 
 			WantStatus: http.StatusOK,
@@ -182,12 +233,11 @@ func TestIntegration(t *testing.T) {
 			Method: "POST",
 			Body:   largePayload,
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(body)/1024))
+				sentry.CaptureMessage(r.Context(), fmt.Sprintf("post: %d KB", len(body)/1024))
 			}),
 
 			WantStatus: http.StatusOK,
@@ -239,8 +289,7 @@ func TestIntegration(t *testing.T) {
 			Method: "POST",
 			Body:   "client sends, server ignores, SDK doesn't read",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
-				hub.CaptureMessage("body ignored")
+				sentry.CaptureMessage(r.Context(), "body ignored")
 			}),
 
 			WantStatus: http.StatusOK,
@@ -309,6 +358,12 @@ func TestIntegration(t *testing.T) {
 
 	sentryHandler := sentryhttp.New(sentryhttp.Options{})
 	handler := func(w http.ResponseWriter, r *http.Request) {
+		if sentry.ScopeFromContext(r.Context()) == nil {
+			t.Error("request context does not carry an isolation scope")
+		}
+		if sentry.TransactionFromContext(r.Context()) == nil {
+			t.Error("request context does not carry a transaction")
+		}
 		for _, tt := range tests {
 			if r.URL.Path == tt.Path {
 				tt.Handler.ServeHTTP(w, r)
