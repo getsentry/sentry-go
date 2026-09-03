@@ -1,12 +1,14 @@
 package sentryfasthttp_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,7 +38,8 @@ func TestIntegration(t *testing.T) {
 	}{
 		{
 			Path: "/panic",
-			Handler: func(*fasthttp.RequestCtx) {
+			Handler: func(ctx *fasthttp.RequestCtx) {
+				sentryfasthttp.SetContext(context.Background(), ctx)
 				panic("test")
 			},
 			WantStatus: 200,
@@ -84,8 +87,7 @@ func TestIntegration(t *testing.T) {
 			Body:        `{"safe":"value"}`,
 			ContentType: "application/json",
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureMessage("post: " + string(ctx.Request.Body()))
+				sentry.CaptureMessage(sentryfasthttp.GetContext(ctx), "post: "+string(ctx.Request.Body()))
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -131,8 +133,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path: "/get",
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureMessage(http.MethodGet)
+				sentry.CaptureMessage(sentryfasthttp.GetContext(ctx), http.MethodGet)
 			},
 			WantStatus: 200,
 			WantEvent: &sentry.Event{
@@ -178,8 +179,7 @@ func TestIntegration(t *testing.T) {
 			Body:       largePayload,
 			WantStatus: 200,
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(ctx.Request.Body())/1024))
+				sentry.CaptureMessage(sentryfasthttp.GetContext(ctx), fmt.Sprintf("post: %d KB", len(ctx.Request.Body())/1024))
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -228,8 +228,7 @@ func TestIntegration(t *testing.T) {
 			ContentType: "application/json",
 			WantStatus:  200,
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureMessage("body ignored")
+				sentry.CaptureMessage(sentryfasthttp.GetContext(ctx), "body ignored")
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -278,8 +277,7 @@ func TestIntegration(t *testing.T) {
 			Path:   "/post/error-handler",
 			Method: "POST",
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureException(exception)
+				sentry.CaptureException(sentryfasthttp.GetContext(ctx), exception)
 			},
 			WantStatus: 200,
 			WantEvent: &sentry.Event{
@@ -517,7 +515,11 @@ func TestGetTransactionFromContext(t *testing.T) {
 			defer ln.Close()
 
 			handler := func(ctx *fasthttp.RequestCtx) {
-				span := sentryfasthttp.GetSpanFromContext(ctx)
+				scope := sentry.ScopeFromContext(sentryfasthttp.GetContext(ctx))
+				if tc.useSentry && scope == nil {
+					t.Error("expecting scope not to be nil")
+				}
+				span := sentry.SpanFromContext(sentryfasthttp.GetContext(ctx))
 				if tc.useSentry && span == nil {
 					t.Error("expecting span not to be nil")
 				}
@@ -573,19 +575,83 @@ func TestGetTransactionFromContext(t *testing.T) {
 	}
 }
 
-func TestSetHubOnContext(t *testing.T) {
-	hub := sentry.NewHub(sentry.CurrentHub().Client(), sentry.NewScope())
-	ctx := &fasthttp.RequestCtx{}
-
-	sentryfasthttp.SetHubOnContext(ctx, hub)
-
-	retrievedHub := sentryfasthttp.GetHubFromContext(ctx)
-	if retrievedHub == nil {
-		t.Fatal("expected hub to be set on context, but got nil")
+func TestRequestIsolation(t *testing.T) {
+	if err := sentry.Init(sentry.ClientOptions{}); err != nil {
+		t.Fatal(err)
 	}
 
-	if !reflect.DeepEqual(hub, retrievedHub) {
-		t.Fatalf("expected hub to be %v, but got %v", hub, retrievedHub)
+	const concurrentRequests = 32
+	scopes := make(chan *sentry.Scope, concurrentRequests+2)
+	contexts := make(chan context.Context, concurrentRequests+2)
+	errCh := make(chan string, concurrentRequests+2)
+	handler := sentryfasthttp.New(sentryfasthttp.Options{}).Handle(func(ctx *fasthttp.RequestCtx) {
+		requestCtx := sentryfasthttp.GetContext(ctx)
+		scope := sentry.ScopeFromContext(requestCtx)
+		if scope == nil {
+			errCh <- "request scope is nil"
+			return
+		}
+		scopes <- scope
+		contexts <- requestCtx
+	})
+
+	prepare := func(ctx *fasthttp.RequestCtx) {
+		ctx.Request.SetRequestURI("http://example.com/test")
+		ctx.Request.Header.SetMethod(http.MethodGet)
+	}
+
+	// Directly reuse one RequestCtx to verify that the context stored by a
+	// previous invocation is never used as the next request's parent.
+	reused := &fasthttp.RequestCtx{}
+	prepare(reused)
+	handler(reused)
+	firstCtx := <-contexts
+	handler(reused)
+	secondCtx := <-contexts
+	if err := firstCtx.Err(); err != context.Canceled {
+		t.Errorf("reused request context error = %v, want %v", err, context.Canceled)
+	}
+	if err := secondCtx.Err(); err != nil {
+		t.Errorf("current request context error = %v, want nil", err)
+	}
+	reused.ResetUserValues()
+	if err := secondCtx.Err(); err != context.Canceled {
+		t.Errorf("released request context error = %v, want %v", err, context.Canceled)
+	}
+
+	var wg sync.WaitGroup
+	for range concurrentRequests {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx := &fasthttp.RequestCtx{}
+			prepare(ctx)
+			handler(ctx)
+			ctx.ResetUserValues()
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	close(scopes)
+	close(contexts)
+	for err := range errCh {
+		t.Error(err)
+	}
+
+	seen := make(map[*sentry.Scope]struct{}, concurrentRequests+2)
+	for scope := range scopes {
+		if _, exists := seen[scope]; exists {
+			t.Error("request reused an isolation scope")
+		}
+		seen[scope] = struct{}{}
+	}
+	if len(seen) != concurrentRequests+2 {
+		t.Errorf("isolated scope count = %d, want %d", len(seen), concurrentRequests+2)
+	}
+	for requestCtx := range contexts {
+		if err := requestCtx.Err(); err != context.Canceled {
+			t.Errorf("request context error = %v, want %v", err, context.Canceled)
+		}
 	}
 }
 
