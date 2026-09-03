@@ -66,7 +66,7 @@ func New(options Options) *Handler {
 
 // Handle works as a middleware that wraps an existing http.Handler. A wrapped
 // handler will recover from and report panics to Sentry, and provide access to
-// a request-specific hub to report messages and errors.
+// a request-specific scope through the request context.
 func (h *Handler) Handle(handler http.Handler) http.Handler {
 	return h.handle(handler)
 }
@@ -84,14 +84,9 @@ func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		hub := sentry.GetHubFromContext(r.Context())
-		if hub == nil {
-			hub = sentry.CurrentHub().Clone()
-			ctx = sentry.SetHubOnContext(ctx, hub)
-		}
+		ctx, scope := sentry.WithIsolationScope(r.Context())
 
-		if client := hub.Client(); client.IsEnabled() {
+		if client := sentry.ClientFromContext(ctx); client.IsEnabled() {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
@@ -123,22 +118,20 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			transaction.Finish()
 		}()
 
-		hub.Scope().SetRequest(r)
 		r = r.WithContext(transaction.Context())
-		defer h.recoverWithSentry(hub, r)
+		scope.SetRequest(r)
+		defer h.recoverWithSentry(r)
 
 		handler.ServeHTTP(rw, r)
 	}
 }
 
-func (h *Handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
+func (h *Handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
-		eventID := hub.RecoverWithContext(
-			context.WithValue(r.Context(), sentry.RequestContextKey, r),
-			err,
-		)
+		ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
+		eventID := sentry.Recover(ctx, err)
 		if eventID != nil && h.waitForDelivery {
-			hub.Flush(h.timeout)
+			sentry.ClientFromContext(ctx).Flush(h.timeout)
 		}
 		if h.repanic {
 			panic(err)
