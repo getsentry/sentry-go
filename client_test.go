@@ -26,6 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testDsn = "https://whatever@sentry.io/1337"
+
 func TestNewClientAllowsEmptyDSN(t *testing.T) {
 	transport := &MockTransport{}
 	client, err := NewClient(ClientOptions{
@@ -71,6 +73,7 @@ func TestNoopClient(t *testing.T) {
 		{"message", func() *EventID { return first.CaptureMessage(context.Background(), "message") }},
 		{"exception", func() *EventID { return first.CaptureException(context.Background(), errors.New("exception")) }},
 		{"event", func() *EventID { return first.CaptureEvent(context.Background(), &Event{Message: "event"}) }},
+		{"nil event", func() *EventID { return CaptureEvent(ContextWithClient(context.Background(), first), nil) }},
 		{"check-in", func() *EventID {
 			return first.CaptureCheckIn(context.Background(), &CheckIn{MonitorSlug: "cron", Status: CheckInStatusOK}, nil)
 		}},
@@ -1327,8 +1330,7 @@ func TestSampleRate(t *testing.T) {
 				total   uint64
 				sampled uint64
 			)
-			// Call sample from multiple goroutines just like multiple hubs
-			// sharing a client would. This should help uncover data races.
+			// Call sample from multiple goroutines sharing a client to uncover data races.
 			var wg sync.WaitGroup
 			for i := 0; i < 4; i++ {
 				wg.Add(1)
@@ -1831,10 +1833,9 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		require.Equal(t, want, creatorTransport.Events()[0].sdkMetaData.dsc)
 	})
 	t.Run("unbound transaction follows later Init with frozen DSC", func(t *testing.T) {
-		previousClient, previousHubClient := globalClientSnapshot(), CurrentHub().Client()
+		previousClient := globalClientSnapshot()
 		t.Cleanup(func() {
 			setGlobalClient(previousClient)
-			CurrentHub().BindClient(previousHubClient)
 		})
 		initClient := func(release string, transport *MockTransport) {
 			require.NoError(t, Init(ClientOptions{
