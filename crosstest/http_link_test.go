@@ -71,13 +71,13 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "gin"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			gin.SetMode(gin.ReleaseMode)
 			router := gin.New()
 			router.Use(func(c *gin.Context) {
-				c.Request = c.Request.WithContext(sentry.SetHubOnContext(otelCtx, f.Hub))
+				c.Request = c.Request.WithContext(f.NewContext(otelCtx))
 				c.Next()
 			})
 			router.Use(sentrygin.New(sentrygin.Options{WaitForDelivery: true}))
@@ -97,14 +97,13 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "echo"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			e := echo.New()
 			e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 				return func(c *echo.Context) error {
-					sentryecho.SetHubOnContext(c, f.Hub)
-					c.SetRequest(c.Request().WithContext(sentry.SetHubOnContext(otelCtx, f.Hub)))
+					c.SetRequest(c.Request().WithContext(f.NewContext(otelCtx)))
 					return next(c)
 				}
 			})
@@ -126,12 +125,12 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "negroni"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			n := negroni.New()
 			n.Use(negroni.HandlerFunc(func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-				next(w, r.WithContext(sentry.SetHubOnContext(otelCtx, f.Hub)))
+				next(w, r.WithContext(f.NewContext(otelCtx)))
 			}))
 			n.Use(sentrynegroni.New(sentrynegroni.Options{WaitForDelivery: true}))
 			n.UseHandler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -150,12 +149,12 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "iris"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			app := iris.New()
 			app.Use(func(ctx iris.Context) {
-				ctx.ResetRequest(ctx.Request().WithContext(sentry.SetHubOnContext(otelCtx, f.Hub)))
+				ctx.ResetRequest(ctx.Request().WithContext(f.NewContext(otelCtx)))
 				ctx.Next()
 			})
 			app.Use(sentryiris.New(sentryiris.Options{WaitForDelivery: true}))

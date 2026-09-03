@@ -69,11 +69,10 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentrygin` attaches an instance of `*sentry.Hub` (https://pkg.go.dev/github.com/getsentry/sentry-go#Hub) to the `*gin.Context`, which makes it available throughout the rest of the request's lifetime.
-You can access it by using the `sentrygin.GetHubFromContext()` method on the context itself in any of your proceeding middleware and routes.
-And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
+`sentrygin` attaches a request-specific `*sentry.Scope` and transaction to the request context. Pass `ctx.Request.Context()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event.
+Use `sentry.ScopeFromContext(ctx.Request.Context())` when you need to add data that should be available to captures made during the request.
 
-**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentrygin`!**
+**Keep in mind that the request scope won't be available in middleware attached before `sentrygin`!**
 
 ```go
 app := gin.Default()
@@ -83,19 +82,14 @@ app.Use(sentrygin.New(sentrygin.Options{
 }))
 
 app.Use(func(ctx *gin.Context) {
-    if hub := sentrygin.GetHubFromContext(ctx); hub != nil {
-        hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-    }
+    sentry.ScopeFromContext(ctx.Request.Context()).SetTag("someRandomTag", "maybeYouNeedIt")
     ctx.Next()
 })
 
 app.GET("/", func(ctx *gin.Context) {
-    if hub := sentrygin.GetHubFromContext(ctx); hub != nil {
-        hub.WithScope(func(scope *sentry.Scope) {
-            scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-            hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-        })
-    }
+    scope := sentry.ScopeFromContext(ctx.Request.Context())
+    scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+    sentry.CaptureMessage(ctx.Request.Context(), "User provided unwanted query string, but we recovered just fine")
     ctx.Status(http.StatusOK)
 })
 
