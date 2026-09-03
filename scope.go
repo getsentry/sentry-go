@@ -379,7 +379,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		}
 
 		for key, value := range scope.contexts {
-			if key == "trace" && event.Type == transactionType {
+			if key == traceContextKey && event.Type == transactionType {
 				// Do not override trace context of
 				// transactions, otherwise it breaks the
 				// transaction event representation.
@@ -400,8 +400,8 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 	}
 
 	if scope.span != nil {
-		if _, ok := event.Contexts["trace"]; !ok {
-			event.Contexts["trace"] = scope.span.traceContext().Map()
+		if _, ok := event.Contexts[traceContextKey]; !ok {
+			event.Contexts[traceContextKey] = scope.span.traceContext().Map()
 		}
 
 		transaction := scope.span.GetTransaction()
@@ -409,7 +409,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 			event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
 		}
 	} else if scope.propagationContext.TraceID != zeroTraceID {
-		event.Contexts["trace"] = scope.propagationContext.Map()
+		event.Contexts[traceContextKey] = scope.propagationContext.Map()
 
 		dsc := scope.propagationContext.DynamicSamplingContext
 		if !dsc.HasEntries() && client.IsEnabled() {
@@ -429,7 +429,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 			ctx = scope.request.Context()
 		}
 		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); event.Type != transactionType && ok {
-			traceCtx := event.Contexts["trace"]
+			traceCtx := event.Contexts[traceContextKey]
 			traceCtx[traceIDContextKey] = traceID.String()
 			traceCtx[spanIDContextKey] = spanID.String()
 		}

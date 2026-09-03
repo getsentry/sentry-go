@@ -932,7 +932,7 @@ func (client *Client) GetSDKIdentifier() string {
 }
 
 func (client *Client) capture(ctx context.Context, event *Event, opts captureOptions) *EventID {
-	scope := ScopeFromContext(ctx)
+	scope := scopeFromContextOrGlobal(ctx)
 	if !client.IsEnabled() {
 		return nil
 	}
@@ -999,6 +999,16 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 }
 
 func (client *Client) prepareEvent(event *Event, scope *Scope, opts captureOptions) *Event {
+	scopeProcessors := applyScopeToEvent(event, scope, client, opts.hint, client.options.MaxBreadcrumbs)
+	if event.Level == "" {
+		event.Level = opts.defaultLevel
+	}
+	if event.Level == "" {
+		event.Level = LevelInfo
+	}
+	if opts.level != "" {
+		event.Level = opts.level
+	}
 	if event.EventID == "" {
 		// TODO set EventID when the event is created, same as in other SDKs. It's necessary for profileTransaction.ID.
 		event.EventID = EventID(uuid())
@@ -1039,50 +1049,25 @@ func (client *Client) prepareEvent(event *Event, scope *Scope, opts captureOptio
 		}},
 	}
 
-	if scope != nil {
-		event = scope.ApplyToEvent(event, opts.hint, client)
-		if event == nil {
-			return nil
-		}
+	event = client.runEventProcessors(event, opts.hint, scopeProcessors)
+	if event == nil {
+		return nil
 	}
-	if event.Level == "" {
-		event.Level = opts.defaultLevel
+	event = client.runEventProcessors(event, opts.hint, client.eventProcessors)
+	if event == nil {
+		return nil
 	}
-	if event.Level == "" {
-		event.Level = LevelInfo
-	}
-	if opts.level != "" {
-		event.Level = opts.level
-	}
+	return client.runEventProcessors(event, opts.hint, globalEventProcessors)
+}
 
-	for _, processor := range client.eventProcessors {
+func (client *Client) runEventProcessors(event *Event, hint *EventHint, processors []EventProcessor) *Event {
+	for _, processor := range processors {
 		id := event.EventID
 		category := event.toCategory()
 		spanCountBefore := event.GetSpanCount()
-		event = processor(event, opts.hint)
+		event = processor(event, hint)
 		if event == nil {
-			debuglog.Printf("Event dropped by one of the Client EventProcessors: %s\n", id)
-			client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
-			if category == ratelimit.CategoryTransaction {
-				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
-			}
-			return nil
-		}
-		// Track spans removed by the processor
-		if category == ratelimit.CategoryTransaction {
-			if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
-				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
-			}
-		}
-	}
-
-	for _, processor := range globalEventProcessors {
-		id := event.EventID
-		category := event.toCategory()
-		spanCountBefore := event.GetSpanCount()
-		event = processor(event, opts.hint)
-		if event == nil {
-			debuglog.Printf("Event dropped by one of the Global EventProcessors: %s\n", id)
+			debuglog.Printf("Event dropped by an EventProcessor: %s\n", id)
 			client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
 			if category == ratelimit.CategoryTransaction {
 				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))

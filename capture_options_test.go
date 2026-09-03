@@ -69,7 +69,7 @@ func TestCaptureOptions(t *testing.T) {
 		want    Level
 	}{
 		{name: "helper default below scope", capture: func() { client.captureException(ctx, errors.New("boom")) }, want: LevelWarning},
-		{name: "scope above event", capture: func() { client.captureEvent(ctx, &Event{Level: LevelDebug}) }, want: LevelWarning},
+		{name: "event above scope", capture: func() { client.captureEvent(ctx, &Event{Level: LevelDebug}) }, want: LevelDebug},
 		{name: "option above event", capture: func() { client.captureEvent(ctx, &Event{Level: LevelDebug}, WithLevel(LevelFatal)) }, want: LevelFatal},
 	}
 	for _, test := range tests {
