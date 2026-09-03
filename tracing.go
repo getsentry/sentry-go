@@ -1035,10 +1035,8 @@ func WithSpanOrigin(origin SpanOrigin) SpanOption {
 	}
 }
 
-// ContinueTrace continues a trace based on traceparent and baggage values.
-// If the SDK is configured with tracing enabled,
-// this function returns populated SpanOption.
-// In any other cases, it populates the propagation context on the scope.
+// ContinueTrace returns a span option that continues a trace from sentry-trace
+// and baggage header values.
 func ContinueTrace(traceparent, baggage string) SpanOption {
 	return continueFromHeaders(traceparent, baggage)
 }
@@ -1104,6 +1102,7 @@ func ContinueFromTrace(trace string) SpanOption {
 	return continueFromHeaders(trace, "")
 }
 
+// GetTraceparent returns the Sentry trace header value carried by ctx.
 func GetTraceparent(ctx context.Context) string {
 	trace, propagation := traceForPropagation(ctx)
 	if trace.span != nil {
@@ -1121,6 +1120,7 @@ func GetTraceparent(ctx context.Context) string {
 	return fmt.Sprintf("%s-%s", propagation.TraceID, propagation.SpanID)
 }
 
+// GetTraceparentW3C returns the W3C traceparent header value carried by ctx.
 func GetTraceparentW3C(ctx context.Context) string {
 	trace, propagation := traceForPropagation(ctx)
 	if trace.span != nil {
@@ -1138,6 +1138,7 @@ func GetTraceparentW3C(ctx context.Context) string {
 	return fmt.Sprintf("00-%s-%s-00", propagation.TraceID, propagation.SpanID)
 }
 
+// GetBaggage returns the Sentry baggage header value carried by ctx.
 func GetBaggage(ctx context.Context) string {
 	trace, propagation := traceForPropagation(ctx)
 	if trace.span != nil {

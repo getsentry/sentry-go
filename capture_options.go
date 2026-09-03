@@ -2,6 +2,7 @@ package sentry
 
 import "context"
 
+// CaptureOption configures a single event capture.
 type CaptureOption func(*captureOptions)
 
 type captureOptions struct {
@@ -10,12 +11,14 @@ type captureOptions struct {
 	defaultLevel Level
 }
 
+// WithEventHint supplies metadata to event processors and before-send hooks.
 func WithEventHint(hint *EventHint) CaptureOption {
 	return func(options *captureOptions) {
 		options.hint = hint
 	}
 }
 
+// WithLevel sets the event level for a single capture.
 func WithLevel(level Level) CaptureOption {
 	return func(options *captureOptions) {
 		options.level = level

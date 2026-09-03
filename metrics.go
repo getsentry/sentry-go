@@ -46,8 +46,7 @@ const (
 	UnitPercent = "percent"
 )
 
-// NewMeter returns a new Meter. If there is no Client bound to the current hub,
-// it returns a no-op Meter that discards all metrics.
+// NewMeter returns a new Meter.
 func NewMeter(ctx context.Context) Meter {
 	return &sentryMeter{ctx: ctx}
 }

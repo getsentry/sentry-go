@@ -130,6 +130,7 @@ func (h *Handler) recoverWithSentry(requestCtx context.Context, ctx *fasthttp.Re
 	}
 }
 
+// GetContext retrieves the request context from fasthttp.RequestCtx.
 func GetContext(ctx *fasthttp.RequestCtx) context.Context {
 	if storedCtx, ok := ctx.UserValue(contextKey{}).(*storedContext); ok {
 		return storedCtx.ctx
@@ -140,6 +141,7 @@ func GetContext(ctx *fasthttp.RequestCtx) context.Context {
 	return context.Background()
 }
 
+// SetContext attaches a request context to fasthttp.RequestCtx.
 func SetContext(requestCtx context.Context, ctx *fasthttp.RequestCtx) {
 	if storedCtx, ok := ctx.UserValue(contextKey{}).(*storedContext); ok {
 		storedCtx.ctx = requestCtx

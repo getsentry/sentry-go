@@ -137,6 +137,9 @@ func (h *handler) recoverWithSentry(requestCtx context.Context, ctx fiber.Ctx, c
 	}
 }
 
+// GetContext returns the request's Sentry context. Unlike Ctx.Context, it
+// remains available to outer middleware and custom error handlers after the
+// Sentry middleware restores Fiber's original context.
 func GetContext(ctx fiber.Ctx) context.Context {
 	if storedCtx, ok := ctx.Locals(contextKey{}).(*storedContext); ok {
 		return storedCtx.ctx

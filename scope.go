@@ -14,20 +14,12 @@ import (
 	"github.com/getsentry/sentry-go/internal/httputils"
 )
 
-// Scope holds contextual data for the current scope.
+// Scope holds contextual data for an operation.
 //
-// The scope is an object that can cloned efficiently and stores data that is
-// locally relevant to an event. For instance the scope will hold recorded
-// breadcrumbs and similar information.
+// The scope is an object that can be cloned efficiently and stores data that is
+// locally relevant to an event.
 //
-// The scope can be interacted with in two ways. First, the scope is routinely
-// updated with information by functions such as AddBreadcrumb which will modify
-// the current scope. Second, the current scope can be configured through the
-// ConfigureScope function or Hub method of the same name.
-//
-// The scope is meant to be modified but not inspected directly. When preparing
-// an event for reporting, the current client adds information from the current
-// scope into the event.
+// Clearing a scope retains its event processors and propagation context.
 type Scope struct {
 	mu sync.RWMutex
 	// eventProcessors are retained by Clear and inherited by Clone.
@@ -333,7 +325,7 @@ func (data scopeData) clone() scopeData {
 	return clone
 }
 
-// Clear removes the data from the current scope. Not safe for concurrent use.
+// Clear removes data from the scope while retaining event processors.
 func (scope *Scope) Clear() {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()

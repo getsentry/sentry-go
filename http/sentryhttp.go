@@ -66,7 +66,7 @@ func New(options Options) *Handler {
 
 // Handle works as a middleware that wraps an existing http.Handler. A wrapped
 // handler will recover from and report panics to Sentry, and provide access to
-// a request-specific hub to report messages and errors.
+// a request-specific scope through the request context.
 func (h *Handler) Handle(handler http.Handler) http.Handler {
 	return h.handle(handler)
 }
