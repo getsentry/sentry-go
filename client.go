@@ -290,8 +290,41 @@ type ClientOptions struct {
 	// IMPORTANT: to not ignore any status codes, the option should be an empty slice and not nil. The nil option is
 	// used for defaulting to 404 ignores.
 	TraceIgnoreStatusCodes [][]int
+	// Enable Spotlight for local development debugging.
+	// When enabled, events are sent to the local Spotlight sidecar.
+	// Default Spotlight URL is http://localhost:8969/stream
+	Spotlight bool
+	// SpotlightURL is the URL to send events to when Spotlight is enabled.
+	// Defaults to http://localhost:8969/stream
+	SpotlightURL string
 	// DisableTelemetryBuffer disables the telemetry buffer layer for prioritizing events and uses the old transport layer.
 	DisableTelemetryBuffer bool
+}
+
+// spotlightConfigValue represents the parsed result of SENTRY_SPOTLIGHT env var or config.
+type spotlightConfigValue struct {
+	enabled bool
+	url     string
+}
+
+// parseSpotlightEnvVar parses the SENTRY_SPOTLIGHT environment variable.
+// Truthy values ("true", "t", "y", "yes", "on", "1") enable Spotlight with the default URL.
+// Falsy values ("false", "f", "n", "no", "off", "0") disable it.
+// Any other non-empty string is treated as a custom Spotlight URL.
+func parseSpotlightEnvVar(value string) spotlightConfigValue {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return spotlightConfigValue{enabled: false}
+	}
+
+	switch strings.ToLower(trimmed) {
+	case "true", "t", "y", "yes", "on", "1":
+		return spotlightConfigValue{enabled: true}
+	case "false", "f", "n", "no", "off", "0":
+		return spotlightConfigValue{enabled: false}
+	}
+
+	return spotlightConfigValue{enabled: true, url: trimmed}
 }
 
 // Client is the underlying processor that is used by the main API and Hub
@@ -377,6 +410,67 @@ func NewClient(options ClientOptions) (*Client, error) {
 		options.TraceIgnoreStatusCodes = [][]int{{404}}
 	}
 
+	// A URL always implies Spotlight is enabled, per the Spotlight spec's
+	// two-attribute configuration approach.
+	if options.SpotlightURL != "" {
+		options.Spotlight = true
+	}
+
+	// Handle Spotlight configuration with environment variable precedence
+	spotlightEnvVar := os.Getenv("SENTRY_SPOTLIGHT")
+	if spotlightEnvVar != "" {
+		envConfig := parseSpotlightEnvVar(spotlightEnvVar)
+
+		switch {
+		case options.SpotlightURL != "":
+			// Config URL explicitly set: it already implies Spotlight is
+			// enabled (above) and takes precedence over the env var.
+			debuglog.Printf("Both SpotlightURL config and SENTRY_SPOTLIGHT env var are set. Using config URL: %s", options.SpotlightURL)
+		case options.Spotlight && envConfig.url != "":
+			// Config enables Spotlight but no URL, env var has URL: use env var URL
+			options.SpotlightURL = envConfig.url
+			debuglog.Printf("Spotlight enabled via config but using URL from SENTRY_SPOTLIGHT: %s", envConfig.url)
+		case !options.Spotlight:
+			// Config doesn't set Spotlight: use env var setting
+			options.Spotlight = envConfig.enabled
+			if envConfig.url != "" {
+				options.SpotlightURL = envConfig.url
+			}
+			if envConfig.enabled {
+				debuglog.Println("Spotlight enabled via SENTRY_SPOTLIGHT env var")
+			} else {
+				debuglog.Println("Spotlight disabled via SENTRY_SPOTLIGHT env var")
+			}
+		}
+	}
+
+	// Spotlight-only setups (no DSN) should show everything, so deliver
+	// 100% of events with full PII. Skip this if a DSN is also set, so
+	// Spotlight never changes what's sent to real Sentry.
+	//
+	// Must run before snapshotDataCollection below, which reads SendDefaultPII.
+	if options.Spotlight && options.Dsn == "" {
+		if options.SampleRate != 1.0 {
+			debuglog.Printf("Overriding SampleRate from %.2f to 1.0 for Spotlight", options.SampleRate)
+			options.SampleRate = 1.0
+		}
+		if options.EnableTracing && options.TracesSampleRate != 1.0 {
+			debuglog.Printf("Overriding TracesSampleRate from %.2f to 1.0 for Spotlight", options.TracesSampleRate)
+			options.TracesSampleRate = 1.0
+		}
+		if options.EnableTracing && options.TracesSampler != nil {
+			// TracesSampler takes precedence over TracesSampleRate, so the
+			// override above wouldn't help - a custom sampler could still
+			// drop transactions Spotlight is supposed to see.
+			debuglog.Println("Disabling TracesSampler for Spotlight so all traces reach it")
+			options.TracesSampler = nil
+		}
+		if !options.SendDefaultPII {
+			debuglog.Println("Enabling SendDefaultPII for Spotlight")
+			options.SendDefaultPII = true
+		}
+	}
+
 	resolvedDataCollection := snapshotDataCollection(options.DataCollection, options.SendDefaultPII)
 	options.DataCollection = cloneDataCollection(&resolvedDataCollection)
 
@@ -429,10 +523,13 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	// We currently disallow using custom Transport with the new Telemetry Processor, due to the difference in transport signatures.
 	// The option should be enabled when the new Transport interface signature changes.
+	// Spotlight uses this same path (its scheduler forwards a copy of every
+	// envelope to Spotlight too), falling back to the legacy
+	// SpotlightTransport-wrapped path below only for a custom Transport.
 	if !options.DisableTelemetryBuffer && client.options.Transport == nil {
 		client.setupTelemetryProcessor()
 	} else {
-		if client.options.Transport != nil {
+		if client.options.Transport != nil && !options.DisableTelemetryBuffer && !options.Spotlight {
 			debuglog.Println("Cannot enable Telemetry Processor with custom Transport: fallback to old transport")
 		}
 		client.setupTransport()
@@ -478,6 +575,10 @@ func (client *Client) setupTransport() {
 		}
 	}
 
+	if opts.Spotlight {
+		transport = NewSpotlightTransport(transport)
+	}
+
 	transport.Configure(opts)
 	client.Transport = transport
 }
@@ -505,6 +606,7 @@ func (client *Client) setupTelemetryProcessor() {
 		Recorder:      client.reportRecorder,
 		Provider:      client.reportProvider,
 		SdkInfo:       client.sdkInfo,
+		Spotlight:     client.options.Spotlight,
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
@@ -516,7 +618,12 @@ func (client *Client) setupTelemetryProcessor() {
 		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
 	}
 
-	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, client.dsn, client.sdkInfo, client.reportRecorder)
+	var spotlight telemetry.SpotlightSender
+	if client.options.Spotlight {
+		spotlight = newSpotlightEnvelopeSender(client.options)
+	}
+
+	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, client.dsn, client.sdkInfo, client.reportRecorder, spotlight)
 }
 
 func (client *Client) setupIntegrations() {
@@ -526,6 +633,10 @@ func (client *Client) setupIntegrations() {
 		new(ignoreErrorsIntegration),
 		new(ignoreTransactionsIntegration),
 		new(globalTagsIntegration),
+	}
+
+	if client.options.Spotlight {
+		integrations = append(integrations, new(spotlightIntegration))
 	}
 
 	if client.options.Integrations != nil {
@@ -943,6 +1054,8 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 			debuglog.Println("Event dropped: telemetry buffer full or unavailable")
 		}
 	} else {
+		// If Spotlight is enabled, client.Transport is a *SpotlightTransport
+		// and already forwards to both Sentry and Spotlight.
 		client.Transport.SendEvent(event)
 	}
 
