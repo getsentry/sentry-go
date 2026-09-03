@@ -52,15 +52,19 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "http"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			handler := sentryhttp.New(sentryhttp.Options{WaitForDelivery: true}).HandleFunc(func(_ http.ResponseWriter, r *http.Request) {
-				sendSignals(r.Context(), identifier, logger, meter)
+				ctx := r.Context()
+				sentry.CaptureException(ctx, errors.New(identifier+" manual error"))
+				logger.Info().WithCtx(ctx).Emit(identifier + " linked log")
+				meter.WithCtx(ctx).Count(identifier+".linked.metric", 1)
+				panic(identifier + " panic")
 			})
 
 			req := httptest.NewRequest(http.MethodGet, "http://example.com/test", nil)
-			req = req.WithContext(sentry.SetHubOnContext(otelCtx, f.Hub))
+			req = req.WithContext(f.NewContext(otelCtx))
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 
 			f.Flush()
