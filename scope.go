@@ -498,8 +498,11 @@ func (scope *Scope) applyTraceToEvent(ctx context.Context, event *Event, client 
 		traceID = id
 	}
 	event.sdkMetaData.dsc = matchingDSC(traceID, propagation, SpanFromContext(ctx), root)
-	if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() && !propagation.DynamicSamplingContext.IsFrozen() && client.IsEnabled() && propagation.TraceID != zeroTraceID && strings.EqualFold(traceID, propagation.TraceID.String()) {
-		event.sdkMetaData.dsc = dynamicSamplingContextFromPropagationContext(propagation, client)
+	if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() && propagation.TraceID != zeroTraceID && strings.EqualFold(traceID, propagation.TraceID.String()) {
+		// Initialize the selected scope trace's DSC just as for propagation.
+		// Recheck the trace in case the scope changed since the snapshot.
+		propagation = scope.propagationContextForPropagation(client)
+		event.sdkMetaData.dsc = matchingDSC(traceID, propagation)
 	}
 }
 
@@ -515,6 +518,9 @@ func matchingDSC(traceID string, propagation PropagationContext, roots ...*Span)
 	}
 	dsc := propagation.DynamicSamplingContext
 	if traceID != "" && strings.EqualFold(traceID, dsc.Entries[traceIDContextKey]) {
+		return dsc
+	}
+	if traceID != "" && dsc.IsFrozen() && dsc.Entries[traceIDContextKey] == "" && strings.EqualFold(traceID, propagation.TraceID.String()) {
 		return dsc
 	}
 	return DynamicSamplingContext{}
