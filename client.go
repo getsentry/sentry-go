@@ -286,8 +286,8 @@ type ClientOptions struct {
 	DisableTelemetryBuffer bool
 }
 
-// Client is the underlying processor that is used by the main API and Hub
-// instances. It must be created with NewClient.
+// Client is the underlying processor used by the main API. It must be created
+// with NewClient.
 type Client struct {
 	mu                    sync.RWMutex
 	disabled              bool
@@ -312,9 +312,8 @@ type Client struct {
 // ClientOptions.
 //
 // Most users will not create clients directly. Instead, initialize the SDK with
-// Init and use the package-level functions (for simple programs that run on a
-// single goroutine) or hub methods (for concurrent programs, for example web
-// servers).
+// Init and use the context-based package functions. Create isolated scope
+// contexts for concurrent operations such as web requests.
 func NewClient(options ClientOptions) (*Client, error) {
 	// The default error event sample rate for all SDKs is 1.0 (send all).
 	//
@@ -583,9 +582,8 @@ func (client *Client) setupIntegrations() {
 // called from concurrent goroutines. Most users will prefer to use
 // ClientOptions.BeforeSend or Scope.AddEventProcessor instead.
 //
-// Note that typical programs have only a single client created by Init and the
-// client is shared among multiple hubs, one per goroutine, such that adding an
-// event processor to the client affects all hubs that share the client.
+// Note that typical programs have only a single client created by Init, so
+// adding an event processor to it affects all contexts that resolve that client.
 func (client *Client) AddEventProcessor(processor EventProcessor) {
 	if !client.IsEnabled() {
 		return

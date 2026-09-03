@@ -291,7 +291,7 @@ func newRequest(r *http.Request, client *Client) *Request {
 // NewRequest avoids operations that depend on network access. In particular, it
 // does not read r.Body.
 func NewRequest(r *http.Request) *Request {
-	return newRequest(r, CurrentHub().Client())
+	return newRequest(r, ClientFromContext(r.Context()))
 }
 
 // Mechanism is the mechanism by which an exception was generated and handled.

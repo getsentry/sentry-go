@@ -348,8 +348,7 @@ func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
 		"name": "test",
 	}
 	scope.contexts["custom"] = Context{"key": "value"}
-	hub := NewHub(client, scope)
-	hub.CaptureMessage("test event")
+	client.captureMessage(ContextWithScope(context.Background(), scope), "test event")
 
 	events := transport.Events()
 	if len(events) != 1 {

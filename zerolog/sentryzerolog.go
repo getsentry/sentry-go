@@ -143,14 +143,6 @@ func NewWithContext(ctx context.Context, opts Options) (*Writer, error) {
 	}, nil
 }
 
-// NewWithHub creates a writer using an existing Sentry Hub and options.
-func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
-	if hub == nil {
-		return nil, errors.New("hub cannot be nil")
-	}
-	return NewWithContext(sentry.SetHubOnContext(context.Background(), hub), opts)
-}
-
 // Writer is a sentry events writer with std io.Writer interface.
 type Writer struct {
 	ctx             context.Context

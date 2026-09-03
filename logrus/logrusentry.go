@@ -30,8 +30,6 @@ const (
 // It is not safe to configure the hook while logging is happening. Please
 // perform all configuration before using it.
 type Hook interface {
-	// SetHubProvider sets a function to provide a hub for each log entry.
-	SetHubProvider(provider func() *sentry.Hub)
 	// SetContextProvider sets a function to provide a Sentry scope context for each log entry.
 	SetContextProvider(provider func() context.Context)
 	// AddTags adds tags to the hook's scope.
@@ -71,20 +69,6 @@ var _ logrus.Hook = &logHook{} // logHook also needs to be a logrus.Hook
 
 func (h *logHook) SetContextProvider(provider func() context.Context) {
 	h.contextProvider = provider
-}
-
-func (h *logHook) SetHubProvider(provider func() *sentry.Hub) {
-	if provider == nil {
-		h.SetContextProvider(nil)
-		return
-	}
-	h.SetContextProvider(func() context.Context {
-		hub := provider()
-		if hub == nil {
-			return nil
-		}
-		return sentry.SetHubOnContext(context.Background(), hub)
-	})
 }
 
 func (h *logHook) AddTags(tags map[string]string) {
