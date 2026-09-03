@@ -40,7 +40,7 @@ func TestNewClientAllowsEmptyDSN(t *testing.T) {
 		t.Fatal("client with an empty DSN should remain enabled")
 	}
 
-	client.CaptureException(errors.New("custom error"), nil, &MockScope{})
+	client.CaptureException(context.Background(), errors.New("custom error"))
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
 }
 
@@ -68,13 +68,15 @@ func TestNoopClient(t *testing.T) {
 		name    string
 		capture func() *EventID
 	}{
-		{"message", func() *EventID { return first.CaptureMessage("message", nil, nil) }},
-		{"exception", func() *EventID { return first.CaptureException(errors.New("exception"), nil, nil) }},
-		{"event", func() *EventID { return first.CaptureEvent(&Event{Message: "event"}, nil, nil) }},
+		{"message", func() *EventID { return first.CaptureMessage(context.Background(), "message") }},
+		{"exception", func() *EventID { return first.CaptureException(context.Background(), errors.New("exception")) }},
+		{"event", func() *EventID { return first.CaptureEvent(context.Background(), &Event{Message: "event"}) }},
 		{"check-in", func() *EventID {
-			return first.CaptureCheckIn(&CheckIn{MonitorSlug: "cron", Status: CheckInStatusOK}, nil, nil)
+			return first.CaptureCheckIn(context.Background(), &CheckIn{MonitorSlug: "cron", Status: CheckInStatusOK}, nil)
 		}},
-		{"recovered value", func() *EventID { return first.Recover("panic", nil, nil) }},
+		{"recovered value", func() *EventID {
+			return Recover(ContextWithClient(context.Background(), first), "panic")
+		}},
 	}
 	for _, tt := range captures {
 		t.Run(tt.name, func(t *testing.T) {
@@ -99,8 +101,8 @@ func (e customComplexError) AnswerToLife() string {
 	return "42"
 }
 
-func setupClientTest() (*Client, *MockScope, *MockTransport) {
-	scope := &MockScope{}
+func setupClientTest() (*Client, *Scope, *MockTransport) {
+	scope := NewScope()
 	transport := &MockTransport{}
 	client, _ := NewClient(ClientOptions{
 		Dsn:       "http://whatever@example.com/1337",
@@ -113,21 +115,103 @@ func setupClientTest() (*Client, *MockScope, *MockTransport) {
 
 	return client, scope, transport
 }
+
+func newCaptureTestClient(t *testing.T, options ClientOptions) (*Client, *MockTransport) {
+	t.Helper()
+	transport := new(MockTransport)
+	options.Transport = transport
+	options.Integrations = func([]Integration) []Integration { return nil }
+	client, err := NewClient(options)
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+	return client, transport
+}
+
+func TestCaptureMessageUsesContextClientAndScope(t *testing.T) {
+	globalClient, globalTransport := newCaptureTestClient(t, ClientOptions{})
+	localClient, localTransport := newCaptureTestClient(t, ClientOptions{})
+
+	previousClient := globalClientSnapshot()
+	setGlobalClient(globalClient)
+	t.Cleanup(func() { setGlobalClient(previousClient) })
+
+	ctx, scope := WithIsolationScope(context.Background())
+	ctx = ContextWithClient(ctx, localClient)
+	scope.SetTag("source", "context")
+
+	id := CaptureMessage(ctx, "package")
+	require.NotNil(t, id)
+	require.Len(t, localTransport.Events(), 1)
+	assert.Equal(t, "context", localTransport.Events()[0].Tags["source"])
+	assert.Empty(t, globalTransport.Events())
+
+	bound := ScopeFromContext(ctx)
+	otherCtx := ContextWithClient(ctx, globalClient)
+	require.NotNil(t, CaptureMessage(ctx, "scope"))
+	require.NotNil(t, CaptureMessage(ContextWithClient(ctx, globalClient), "other client"))
+	require.NotNil(t, localClient.CaptureMessage(ContextWithScope(ctx, bound.Clone()), "clone"))
+	require.NotNil(t, localClient.CaptureMessage(otherCtx, "client"))
+	require.Len(t, localTransport.Events(), 4)
+	require.Len(t, globalTransport.Events(), 1)
+	assert.Equal(t, "other client", globalTransport.Events()[0].Message)
+	assert.Equal(t, "context", globalTransport.Events()[0].Tags["source"])
+
+	disabledCtx := ContextWithClient(ctx, NewNoopClient())
+	assert.Nil(t, CaptureMessage(disabledCtx, "suppressed"))
+	require.Len(t, localTransport.Events(), 4)
+}
+
+func TestCaptureMessageWithoutIsolationScopeDoesNotReuseGlobalTrace(t *testing.T) {
+	client, transport := newCaptureTestClient(t, ClientOptions{})
+	previousClient := globalClientSnapshot()
+	setGlobalClient(client)
+	t.Cleanup(func() { setGlobalClient(previousClient) })
+
+	require.NotNil(t, CaptureMessage(context.Background(), "background"))
+	require.Len(t, transport.Events(), 1)
+	assert.NotContains(t, transport.Events()[0].Contexts, "trace")
+}
+
+func TestCaptureMessageCopiesHintAndUsesContext(t *testing.T) {
+	type key struct{}
+	providedCtx := context.WithValue(context.Background(), key{}, "provided")
+	captureCtx := context.WithValue(context.Background(), key{}, "capture")
+	provided := &EventHint{Context: providedCtx, Data: "data"}
+
+	var received *EventHint
+	client, _ := newCaptureTestClient(t, ClientOptions{
+		BeforeSend: func(event *Event, hint *EventHint) *Event {
+			received = hint
+			return event
+		},
+	})
+	captureCtx = ContextWithClient(captureCtx, client)
+	captureCtx = ContextWithScope(captureCtx, NewScope())
+	require.NotNil(t, CaptureMessage(captureCtx, "message", WithEventHint(provided)))
+
+	require.NotNil(t, received)
+	assert.NotSame(t, provided, received)
+	assert.Equal(t, "data", received.Data)
+	assert.Equal(t, "capture", received.Context.Value(key{}))
+	assert.Same(t, providedCtx, provided.Context)
+}
+
 func TestCaptureMessageShouldSendEventWithProvidedMessage(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	client.CaptureMessage("foo", nil, scope)
+	client.CaptureMessage(ContextWithScope(context.Background(), scope), "foo")
 	assertEqual(t, transport.lastEvent.Message, "foo")
 }
 
 func TestCaptureMessageShouldSucceedWithoutNilScope(t *testing.T) {
 	client, _, transport := setupClientTest()
-	client.CaptureMessage("foo", nil, nil)
+	client.CaptureMessage(context.Background(), "foo")
 	assertEqual(t, transport.lastEvent.Message, "foo")
 }
 
 func TestCaptureMessageEmptyString(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	client.CaptureMessage("", nil, scope)
+	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
+	CaptureMessage(ctx, "")
 	want := &Event{
 		Exception: []Exception{
 			{
@@ -335,7 +419,7 @@ func TestCaptureException(t *testing.T) {
 			tt := tt
 			t.Run(grp.name+"/"+tt.name, func(t *testing.T) {
 				client, _, transport := setupClientTest()
-				client.CaptureException(tt.err, nil, nil)
+				CaptureException(ContextWithClient(context.Background(), client), tt.err)
 				if transport.lastEvent == nil {
 					t.Fatal("missing event")
 				}
@@ -355,11 +439,11 @@ func TestCaptureEvent(t *testing.T) {
 	timestamp := time.Now().UTC()
 	serverName := "testServer"
 
-	client.CaptureEvent(&Event{
+	client.CaptureEvent(context.Background(), &Event{
 		EventID:    eventID,
 		Timestamp:  timestamp,
 		ServerName: serverName,
-	}, nil, nil)
+	})
 
 	if transport.lastEvent == nil {
 		t.Fatal("missing event")
@@ -388,7 +472,7 @@ func TestCaptureEvent(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
-	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release"), cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe")}
+	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "Contexts"), cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe")}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
@@ -398,13 +482,14 @@ func TestCaptureEventShouldSendEventWithMessage(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	event := NewEvent()
 	event.Message = "event message"
-	client.CaptureEvent(event, nil, scope)
+	client.CaptureEvent(ContextWithScope(context.Background(), scope), event)
 	assertEqual(t, transport.lastEvent.Message, "event message")
 }
 
 func TestCaptureEventNil(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	client.CaptureEvent(nil, nil, scope)
+	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
+	CaptureEvent(ctx, nil)
 	want := &Event{
 		Exception: []Exception{
 			{
@@ -415,6 +500,7 @@ func TestCaptureEventNil(t *testing.T) {
 		},
 	}
 	got := transport.lastEvent
+	assert.Equal(t, LevelError, got.Level)
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
@@ -426,6 +512,126 @@ func TestCaptureEventNil(t *testing.T) {
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("(-want +got):\n%s", diff)
 	}
+}
+
+func TestCaptureLevelPrecedence(t *testing.T) {
+	tests := []struct {
+		name    string
+		capture func(ctx context.Context, client *Client)
+		want    Level
+	}{
+		{
+			name: "capture helper default below scope",
+			capture: func(ctx context.Context, client *Client) {
+				client.CaptureException(ctx, errors.New("boom"))
+			},
+			want: LevelWarning,
+		},
+		{
+			name: "event above scope",
+			capture: func(ctx context.Context, client *Client) {
+				client.CaptureEvent(ctx, &Event{Level: LevelDebug})
+			},
+			want: LevelDebug,
+		},
+		{
+			name: "capture option above event",
+			capture: func(ctx context.Context, _ *Client) {
+				CaptureEvent(ctx, &Event{Level: LevelDebug}, WithLevel(LevelFatal))
+			},
+			want: LevelFatal,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client, transport := newCaptureTestClient(t, ClientOptions{})
+			scope := NewScope()
+			scope.SetLevel(LevelWarning)
+			ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
+			test.capture(ctx, client)
+			require.Len(t, transport.Events(), 1)
+			assert.Equal(t, test.want, transport.Events()[0].Level)
+		})
+	}
+}
+
+func TestCaptureUpdatesLastEventID(t *testing.T) {
+	tests := []struct {
+		name       string
+		capture    func(context.Context, *Client) *EventID
+		wantChange bool
+	}{
+		{
+			name: "message",
+			capture: func(ctx context.Context, client *Client) *EventID {
+				return client.CaptureMessage(ctx, "next")
+			},
+			wantChange: true,
+		},
+		{
+			name: "exception",
+			capture: func(ctx context.Context, client *Client) *EventID {
+				return client.CaptureException(ctx, errors.New("next"))
+			},
+			wantChange: true,
+		},
+		{
+			name: "event",
+			capture: func(ctx context.Context, client *Client) *EventID {
+				return client.CaptureEvent(ctx, NewEvent())
+			},
+			wantChange: true,
+		},
+		{
+			name: "check-in",
+			capture: func(ctx context.Context, client *Client) *EventID {
+				return client.CaptureCheckIn(ctx, &CheckIn{MonitorSlug: "cron", Status: CheckInStatusOK}, nil)
+			},
+		},
+		{
+			name: "transaction",
+			capture: func(ctx context.Context, client *Client) *EventID {
+				return client.CaptureEvent(ctx, &Event{Type: transactionType})
+			},
+		},
+		{
+			name: "dropped event",
+			capture: func(ctx context.Context, client *Client) *EventID {
+				client.AddEventProcessor(func(*Event, *EventHint) *Event { return nil })
+				return client.CaptureMessage(ctx, "dropped")
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client, _ := newCaptureTestClient(t, ClientOptions{})
+			ctx := ContextWithScope(context.Background(), NewScope())
+			previousID := client.CaptureMessage(ctx, "previous")
+			require.NotNil(t, previousID)
+
+			capturedID := test.capture(ctx, client)
+			if test.wantChange {
+				require.NotNil(t, capturedID)
+				assert.Equal(t, *capturedID, LastEventID(ctx))
+			} else {
+				assert.Equal(t, *previousID, LastEventID(ctx))
+			}
+		})
+	}
+
+	client, _ := newCaptureTestClient(t, ClientOptions{})
+	global := GlobalScope()
+	previousClient := globalClientSnapshot()
+	previousID := global.lastEventIDSnapshot()
+	setGlobalClient(client)
+	t.Cleanup(func() {
+		setGlobalClient(previousClient)
+		global.setLastEventID(previousID)
+	})
+	globalID := CaptureMessage(context.Background(), "global")
+	require.NotNil(t, globalID)
+	assert.Equal(t, *globalID, LastEventID(context.Background()))
 }
 
 func TestCaptureCheckIn(t *testing.T) {
@@ -491,7 +697,7 @@ func TestCaptureCheckIn(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			client, _, transport := setupClientTest()
-			client.CaptureCheckIn(tt.checkIn, tt.monitorConfig, nil)
+			client.CaptureCheckIn(context.Background(), tt.checkIn, tt.monitorConfig)
 			capturedEvent := transport.lastEvent
 
 			if tt.expectNilEvent && capturedEvent == nil {
@@ -528,18 +734,18 @@ func TestCaptureCheckInExistingID(t *testing.T) {
 		Timezone:      "UTC",
 	}
 
-	checkInID := client.CaptureCheckIn(&CheckIn{
+	checkInID := client.CaptureCheckIn(context.Background(), &CheckIn{
 		MonitorSlug: "cron",
 		Status:      CheckInStatusInProgress,
 		Duration:    time.Second,
-	}, monitorConfig, nil)
+	}, monitorConfig)
 
-	checkInID2 := client.CaptureCheckIn(&CheckIn{
+	checkInID2 := client.CaptureCheckIn(context.Background(), &CheckIn{
 		ID:          *checkInID,
 		MonitorSlug: "cron",
 		Status:      CheckInStatusOK,
 		Duration:    time.Minute,
-	}, monitorConfig, nil)
+	}, monitorConfig)
 
 	if *checkInID != *checkInID2 {
 		t.Errorf("Expecting equivalent CheckInID: %s and %s", *checkInID, *checkInID2)
@@ -550,7 +756,7 @@ func TestSampleRateCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.options.SampleRate = 0.000000000000001
 
-	client.CaptureMessage("Foo", nil, scope)
+	client.CaptureMessage(ContextWithScope(context.Background(), scope), "Foo")
 
 	if transport.lastEvent != nil {
 		t.Error("expected event to be dropped")
@@ -559,7 +765,7 @@ func TestSampleRateCanDropEvent(t *testing.T) {
 
 func TestApplyToScopeCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	scope.shouldDropEvent = true
+	scope.AddEventProcessor(func(*Event, *EventHint) *Event { return nil })
 
 	client.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		if event == nil {
@@ -568,7 +774,7 @@ func TestApplyToScopeCanDropEvent(t *testing.T) {
 		return event
 	})
 
-	client.CaptureMessage("Foo", nil, scope)
+	client.CaptureMessage(ContextWithScope(context.Background(), scope), "Foo")
 
 	if transport.lastEvent != nil {
 		t.Error("expected event to be dropped")
@@ -581,7 +787,7 @@ func TestBeforeSendCanDropEvent(t *testing.T) {
 		return nil
 	}
 
-	client.CaptureMessage("Foo", nil, scope)
+	client.CaptureMessage(ContextWithScope(context.Background(), scope), "Foo")
 
 	if transport.lastEvent != nil {
 		t.Error("expected event to be dropped")
@@ -598,7 +804,8 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	}
 	ex := customComplexError{Message: "Foo"}
 
-	client.CaptureException(ex, &EventHint{OriginalException: ex}, scope)
+	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
+	CaptureException(ctx, ex, WithEventHint(&EventHint{OriginalException: ex}))
 
 	assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
 }
@@ -692,7 +899,6 @@ func TestIgnoreErrors(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			scope := &MockScope{}
 			transport := &MockTransport{}
 			client, err := NewClient(ClientOptions{
 				Transport:    transport,
@@ -702,7 +908,7 @@ func TestIgnoreErrors(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			client.CaptureMessage(tt.message, nil, scope)
+			client.CaptureMessage(context.Background(), tt.message)
 
 			dropped := transport.lastEvent == nil
 			if tt.expectDrop != dropped {
@@ -994,7 +1200,7 @@ func BenchmarkProcessEvent(b *testing.B) {
 		b.Fatal(err)
 	}
 	for i := 0; i < b.N; i++ {
-		c.processEvent(&Event{}, nil, nil)
+		c.CaptureEvent(context.Background(), &Event{})
 	}
 }
 
@@ -1051,7 +1257,7 @@ func TestRecover(t *testing.T) {
 		t.Run(fmt.Sprintf("Recover/%v", tt.v), func(t *testing.T) {
 			client, scope, transport := setupClientTest()
 			func() {
-				defer client.Recover(nil, nil, scope)
+				defer Recover(ContextWithClient(ContextWithScope(context.Background(), scope), client), nil)
 				panic(tt.v)
 			}()
 			tt.want.Level = LevelFatal
@@ -1059,16 +1265,17 @@ func TestRecover(t *testing.T) {
 		})
 		t.Run(fmt.Sprintf("RecoverWithContext/%v", tt.v), func(t *testing.T) {
 			client, scope, transport := setupClientTest()
+			captureCtx := ContextWithClient(ContextWithScope(context.TODO(), scope), client)
 			var called bool
 			client.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
 				called = true
-				if hint.Context != context.TODO() {
+				if hint.Context != captureCtx {
 					t.Fatal("unexpected context value")
 				}
 				return event
 			})
 			func() {
-				defer client.RecoverWithContext(context.TODO(), nil, nil, scope)
+				defer Recover(captureCtx, nil)
 				panic(tt.v)
 			}()
 			tt.want.Level = LevelFatal
@@ -1089,7 +1296,7 @@ func TestNoopClientRecover(t *testing.T) {
 				t.Fatalf("noop client did not recover panic: %v", recovered)
 			}
 		}()
-		defer client.Recover(nil, nil, nil)
+		defer Recover(ContextWithClient(context.Background(), client), nil)
 		panic("panic handled by noop client")
 	}()
 }
@@ -1167,7 +1374,7 @@ func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { client.Close() })
 
-	client.CaptureMessage("ping", nil, &MockScope{})
+	client.CaptureMessage(context.Background(), "ping")
 	require.True(t, client.Flush(testutils.FlushTimeout()), "flush timed out")
 
 	select {

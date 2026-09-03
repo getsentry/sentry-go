@@ -1,6 +1,7 @@
 package sentry_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
@@ -59,5 +60,5 @@ func Example_transportWithHooks() {
 	}
 	defer sentry.Flush(2 * time.Second)
 
-	sentry.CaptureMessage("test")
+	sentry.CaptureMessage(context.Background(), "test")
 }

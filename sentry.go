@@ -3,6 +3,8 @@ package sentry
 import (
 	"context"
 	"time"
+
+	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
 // The version of the SDK.
@@ -24,6 +26,7 @@ func Init(options ClientOptions) error {
 		return err
 	}
 	hub.BindClient(client)
+	setGlobalClient(client)
 	return nil
 }
 
@@ -31,27 +34,42 @@ func Init(options ClientOptions) error {
 //
 // The total number of breadcrumbs that can be recorded are limited by the
 // configuration on the client.
-func AddBreadcrumb(breadcrumb *Breadcrumb) {
-	hub := CurrentHub()
-	hub.AddBreadcrumb(breadcrumb, nil)
+func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb) {
+	client := ClientFromContext(ctx)
+	limit := client.options.MaxBreadcrumbs
+	switch {
+	case limit < 0:
+		return
+	case limit == 0:
+		limit = defaultMaxBreadcrumbs
+	}
+	if client.options.BeforeBreadcrumb != nil {
+		if breadcrumb = client.options.BeforeBreadcrumb(breadcrumb, &BreadcrumbHint{}); breadcrumb == nil {
+			debuglog.Println("breadcrumb dropped due to BeforeBreadcrumb callback.")
+			return
+		}
+	}
+	scopeFromContextOrGlobal(ctx).AddBreadcrumb(breadcrumb, limit)
 }
 
 // CaptureMessage captures an arbitrary message.
-func CaptureMessage(message string) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureMessage(message)
+func CaptureMessage(ctx context.Context, message string, options ...CaptureOption) *EventID {
+	return ClientFromContext(ctx).CaptureMessage(ctx, message, options...)
 }
 
 // CaptureException captures an error.
-func CaptureException(exception error) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureException(exception)
+func CaptureException(ctx context.Context, exception error, options ...CaptureOption) *EventID {
+	return ClientFromContext(ctx).CaptureException(ctx, exception, options...)
 }
 
 // CaptureCheckIn captures a (cron) monitor check-in.
-func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureCheckIn(checkIn, monitorConfig)
+func CaptureCheckIn(
+	ctx context.Context,
+	checkIn *CheckIn,
+	monitorConfig *MonitorConfig,
+	options ...CaptureOption,
+) *EventID {
+	return ClientFromContext(ctx).CaptureCheckIn(ctx, checkIn, monitorConfig, options...)
 }
 
 // CaptureEvent captures an event on the currently active client if any.
@@ -59,33 +77,19 @@ func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 // The event must already be assembled. Typically code would instead use
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
-func CaptureEvent(event *Event) *EventID {
-	hub := CurrentHub()
-	return hub.CaptureEvent(event)
+func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *EventID {
+	return ClientFromContext(ctx).CaptureEvent(ctx, event, options...)
 }
 
 // Recover captures a panic.
-func Recover() *EventID {
-	if err := recover(); err != nil {
-		hub := CurrentHub()
-		return hub.Recover(err)
+func Recover(ctx context.Context, recovered any, options ...CaptureOption) *EventID {
+	if recovered == nil {
+		recovered = recover()
 	}
-	return nil
-}
-
-// RecoverWithContext captures a panic and passes relevant context object.
-func RecoverWithContext(ctx context.Context) *EventID {
-	err := recover()
-	if err == nil {
+	if recovered == nil {
 		return nil
 	}
-
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub()
-	}
-
-	return hub.RecoverWithContext(ctx, err)
+	return ClientFromContext(ctx).capturePanic(ctx, recovered, options...)
 }
 
 // WithScope is a shorthand for CurrentHub().WithScope.
@@ -147,7 +151,6 @@ func FlushWithContext(ctx context.Context) bool {
 }
 
 // LastEventID returns an ID of last captured event.
-func LastEventID() EventID {
-	hub := CurrentHub()
-	return hub.LastEventID()
+func LastEventID(ctx context.Context) EventID {
+	return scopeFromContextOrGlobal(ctx).lastEventIDSnapshot()
 }
