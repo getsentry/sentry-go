@@ -451,7 +451,7 @@ func GetHubFromContext(ctx context.Context) *Hub {
 
 // hubFromContext returns either a hub stored in the context or the current hub.
 // The return value is guaranteed to be non-nil, unlike GetHubFromContext.
-func hubFromContext(ctx context.Context) *Hub {
+func hubFromContext(ctx context.Context) *Hub { // nolint: unused
 	if hub, ok := ctx.Value(HubContextKey).(*Hub); ok {
 		return hub
 	}

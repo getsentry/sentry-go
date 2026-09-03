@@ -11,18 +11,27 @@ import (
 type spanRecorder struct {
 	mu           sync.Mutex
 	spans        []*Span
+	maxSpans     int
 	overflowOnce sync.Once
+}
+
+func newSpanRecorder(client *Client) *spanRecorder {
+	maxSpans := defaultMaxSpans
+	if client != nil && client.IsEnabled() {
+		maxSpans = client.options.MaxSpans
+	}
+	return &spanRecorder{maxSpans: maxSpans}
 }
 
 // record stores a span. The first stored span is assumed to be the root of a
 // span tree.
 func (r *spanRecorder) record(s *Span) {
-	maxSpans := defaultMaxSpans
-	if client := CurrentHub().Client(); client.IsEnabled() {
-		maxSpans = client.options.MaxSpans
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	maxSpans := r.maxSpans
+	if maxSpans == 0 {
+		maxSpans = defaultMaxSpans
+	}
 	if len(r.spans) >= maxSpans {
 		r.overflowOnce.Do(func() {
 			root := r.spans[0]

@@ -73,7 +73,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	transactionSource := sentry.SourceURL
 
 	options := []sentry.SpanOption{
-		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+		sentry.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),

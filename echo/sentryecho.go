@@ -79,7 +79,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		options := []sentry.SpanOption{
-			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+			sentry.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(transactionSource),
 			sentry.WithSpanOrigin(sentry.SpanOriginEcho),
