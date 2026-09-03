@@ -120,7 +120,6 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	}
 	storedCtx.ctx = requestCtx
 	ctx.SetUserContext(requestCtx)
-	r = r.WithContext(requestCtx)
 
 	scope.SetRequest(r)
 	scope.SetRequestBody(bytes.Clone(ctx.Request().Body()))
