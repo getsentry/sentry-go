@@ -278,6 +278,34 @@ func TestNewRequest(t *testing.T) {
 	}
 }
 
+func TestNewRequestUsesContextClient(t *testing.T) {
+	global, err := NewClient(ClientOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	contextual, err := NewClient(ClientOptions{
+		DataCollection: &DataCollection{UserInfo: Set(false)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	previous := globalClient.Load()
+	setGlobalClient(global)
+	t.Cleanup(func() {
+		setGlobalClient(previous)
+		global.Close()
+		contextual.Close()
+	})
+
+	r := httptest.NewRequest("GET", "http://example.com/test", nil)
+	r = r.WithContext(ContextWithClient(r.Context(), contextual))
+
+	if got := NewRequest(r).Env; got != nil {
+		t.Fatalf("expected request context client's data collection settings, got %v", got)
+	}
+}
+
 func TestEventMarshalJSON(t *testing.T) {
 	event := NewEvent()
 	event.Spans = []*Span{{
