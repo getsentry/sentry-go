@@ -2,6 +2,7 @@
 package sentrycron
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -25,7 +26,7 @@ import (
 func AddFunc(c *cron.Cron, spec, slug string, fn func() error, config *sentry.MonitorConfig) (cron.EntryID, error) {
 	monitorConfig := newMonitorConfig(spec, c.Location(), config)
 	return c.AddFunc(spec, func() {
-		_ = sentry.WithMonitor(slug, monitorConfig, fn)
+		_ = sentry.WithMonitor(context.Background(), slug, monitorConfig, fn)
 	})
 }
 

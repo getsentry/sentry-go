@@ -162,7 +162,8 @@ func WithUnit(unit string) MeterOption {
 	}
 }
 
-// WithScopeOverride sets a custom scope for the metric, overriding the default scope from the hub.
+// WithScopeOverride sets a custom scope for the metric, overriding the context
+// scope and preventing fallback to the meter's creation trace.
 func WithScopeOverride(scope *Scope) MeterOption {
 	return func(o *meterOptions) {
 		o.scope = scope
@@ -291,7 +292,7 @@ func newRequest(r *http.Request, client *Client) *Request {
 // NewRequest avoids operations that depend on network access. In particular, it
 // does not read r.Body.
 func NewRequest(r *http.Request) *Request {
-	return newRequest(r, CurrentHub().Client())
+	return newRequest(r, ClientFromContext(r.Context()))
 }
 
 // Mechanism is the mechanism by which an exception was generated and handled.
