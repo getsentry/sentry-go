@@ -38,16 +38,16 @@ func (o *ServerOptions) setDefaults() {
 	}
 }
 
-func recoverWithSentry(ctx context.Context, hub *sentry.Hub, o ServerOptions, onRecover func()) {
+func recoverWithSentry(ctx context.Context, o ServerOptions, onRecover func()) {
 	if r := recover(); r != nil {
-		eventID := hub.RecoverWithContext(ctx, r)
+		eventID := sentry.Recover(ctx, r)
 
 		if onRecover != nil {
 			onRecover()
 		}
 
 		if eventID != nil && o.WaitForDelivery {
-			hub.Flush(o.Timeout)
+			sentry.ClientFromContext(ctx).Flush(o.Timeout)
 		}
 
 		if o.Repanic {
@@ -56,31 +56,21 @@ func recoverWithSentry(ctx context.Context, hub *sentry.Hub, o ServerOptions, on
 	}
 }
 
-func hubFromServerContext(ctx context.Context) *sentry.Hub {
-	hub := sentry.GetHubFromContext(ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub().Clone()
-	}
-
-	if client := hub.Client(); client != nil {
-		client.SetSDKIdentifier(sdkIdentifier)
-	}
-
-	return hub
-}
-
 func traceHeadersFromContext(ctx context.Context) (metadata.MD, string, string) {
 	md, _ := metadata.FromIncomingContext(ctx)
-	return md, getFirstHeader(md, sentry.SentryTraceHeader), getFirstHeader(md, sentry.SentryBaggageHeader)
+	return md, getFirstHeader(md, sentry.SentryTraceHeader), strings.Join(md.Get(sentry.SentryBaggageHeader), ",")
 }
 
-func startServerTransaction(ctx context.Context, fullMethod string) (context.Context, *sentry.Hub, *sentry.Span) {
-	hub := hubFromServerContext(ctx)
+func startServerTransaction(ctx context.Context, fullMethod string) (context.Context, *sentry.Span, bool) {
+	owned := sentry.SpanFromContext(ctx) == nil
+	ctx, scope := sentry.WithIsolationScope(ctx)
+	client := sentry.ClientFromContext(ctx)
+	client.SetSDKIdentifier(sdkIdentifier)
+
 	md, sentryTraceHeader, sentryBaggageHeader := traceHeadersFromContext(ctx)
 	name, service, method := parseGRPCMethod(fullMethod)
 
-	setScopeMetadata(hub, name, md)
-	ctx = sentry.SetHubOnContext(ctx, hub)
+	setScopeMetadata(scope, client, name, md)
 
 	transaction := sentry.StartTransaction(
 		ctx,
@@ -91,15 +81,18 @@ func startServerTransaction(ctx context.Context, fullMethod string) (context.Con
 		sentry.WithTransactionSource(sentry.SourceRoute),
 		sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 	)
-	if service != "" {
-		transaction.SetData("rpc.service", service)
+	if owned {
+		ctx = transaction.Context()
+		if service != "" {
+			transaction.SetData("rpc.service", service)
+		}
+		if method != "" {
+			transaction.SetData("rpc.method", method)
+		}
+		transaction.SetData("rpc.system", "grpc")
 	}
-	if method != "" {
-		transaction.SetData("rpc.method", method)
-	}
-	transaction.SetData("rpc.system", "grpc")
 
-	return transaction.Context(), hub, transaction
+	return ctx, transaction, owned
 }
 
 func setRPCStatus(span *sentry.Span, err error) {
@@ -124,16 +117,19 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 	opts.setDefaults()
 
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
-		ctx, hub, transaction := startServerTransaction(ctx, info.FullMethod)
-		defer transaction.Finish()
+		ctx, transaction, owned := startServerTransaction(ctx, info.FullMethod)
+		if owned {
+			defer func() {
+				setRPCStatus(transaction, err)
+				transaction.Finish()
+			}()
+		}
 
-		defer recoverWithSentry(ctx, hub, opts, func() {
+		defer recoverWithSentry(ctx, opts, func() {
 			err = status.Error(codes.Internal, internalServerErrorMessage)
-			setRPCStatus(transaction, err)
 		})
 
 		resp, err = handler(ctx, req)
-		setRPCStatus(transaction, err)
 
 		return resp, err
 	}
@@ -143,18 +139,21 @@ func UnaryServerInterceptor(opts ServerOptions) grpc.UnaryServerInterceptor {
 func StreamServerInterceptor(opts ServerOptions) grpc.StreamServerInterceptor {
 	opts.setDefaults()
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) (err error) {
-		ctx, hub, transaction := startServerTransaction(ss.Context(), info.FullMethod)
-		defer transaction.Finish()
+		ctx, transaction, owned := startServerTransaction(ss.Context(), info.FullMethod)
+		if owned {
+			defer func() {
+				setRPCStatus(transaction, err)
+				transaction.Finish()
+			}()
+		}
 
 		stream := wrapServerStream(ctx, ss)
 
-		defer recoverWithSentry(ctx, hub, opts, func() {
+		defer recoverWithSentry(ctx, opts, func() {
 			err = status.Error(codes.Internal, internalServerErrorMessage)
-			setRPCStatus(transaction, err)
 		})
 
 		err = handler(srv, stream)
-		setRPCStatus(transaction, err)
 
 		return err
 	}
@@ -167,12 +166,10 @@ func getFirstHeader(md metadata.MD, key string) string {
 	return ""
 }
 
-func setScopeMetadata(hub *sentry.Hub, method string, md metadata.MD) {
-	hub.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetContext("grpc", sentry.Context{
-			"method":   method,
-			"metadata": metadataToContext(hub.Client(), md),
-		})
+func setScopeMetadata(scope *sentry.Scope, client *sentry.Client, method string, md metadata.MD) {
+	scope.SetContext("grpc", sentry.Context{
+		"method":   method,
+		"metadata": metadataToContext(client, md),
 	})
 }
 
