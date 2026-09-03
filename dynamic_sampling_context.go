@@ -128,9 +128,14 @@ func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSampli
 			Frozen:  false,
 		}
 	}
+	return dynamicSamplingContextFromPropagationContext(scope.propagationContext, client)
+}
 
-	propagationContext := scope.propagationContext
-
+func dynamicSamplingContextFromPropagationContext(
+	propagationContext PropagationContext,
+	client *Client,
+) DynamicSamplingContext {
+	entries := map[string]string{}
 	if traceID := propagationContext.TraceID.String(); traceID != "" {
 		entries[traceIDContextKey] = traceID
 	}
