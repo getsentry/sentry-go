@@ -26,9 +26,8 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-func sendSignals(ctx context.Context, identifier string, logger sentry.Logger, meter sentry.Meter) {
-	hub := sentry.GetHubFromContext(ctx)
-	hub.CaptureException(errors.New(identifier + " manual error"))
+func sendContextSignals(ctx context.Context, identifier string, logger sentry.Logger, meter sentry.Meter) {
+	sentry.CaptureException(ctx, errors.New(identifier+" manual error"))
 	logger.Info().WithCtx(ctx).Emit(identifier + " linked log")
 	meter.WithCtx(ctx).Count(identifier+".linked.metric", 1)
 	panic(identifier + " panic")
@@ -52,15 +51,15 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "http"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			handler := sentryhttp.New(sentryhttp.Options{WaitForDelivery: true}).HandleFunc(func(_ http.ResponseWriter, r *http.Request) {
-				sendSignals(r.Context(), identifier, logger, meter)
+				sendContextSignals(r.Context(), identifier, logger, meter)
 			})
 
 			req := httptest.NewRequest(http.MethodGet, "http://example.com/test", nil)
-			req = req.WithContext(sentry.SetHubOnContext(otelCtx, f.Hub))
+			req = req.WithContext(f.NewContext(otelCtx))
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 
 			f.Flush()
@@ -83,7 +82,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			})
 			router.Use(sentrygin.New(sentrygin.Options{WaitForDelivery: true}))
 			router.GET("/test", func(c *gin.Context) {
-				sendSignals(c.Request.Context(), identifier, logger, meter)
+				sendContextSignals(c.Request.Context(), identifier, logger, meter)
 			})
 
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -111,7 +110,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			})
 			e.Use(sentryecho.New(sentryecho.Options{WaitForDelivery: true}))
 			e.GET("/test", func(c *echo.Context) error {
-				sendSignals(c.Request().Context(), identifier, logger, meter)
+				sendContextSignals(c.Request().Context(), identifier, logger, meter)
 				return nil
 			})
 
@@ -136,7 +135,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			}))
 			n.Use(sentrynegroni.New(sentrynegroni.Options{WaitForDelivery: true}))
 			n.UseHandler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				sendSignals(r.Context(), identifier, logger, meter)
+				sendContextSignals(r.Context(), identifier, logger, meter)
 			}))
 
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -161,7 +160,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			})
 			app.Use(sentryiris.New(sentryiris.Options{WaitForDelivery: true}))
 			app.Get("/test", func(ctx iris.Context) {
-				sendSignals(ctx.Request().Context(), identifier, logger, meter)
+				sendContextSignals(ctx.Request().Context(), identifier, logger, meter)
 			})
 
 			if err := app.Build(); err != nil {
@@ -193,7 +192,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		})
 		app.Use(sentryfiber.New(sentryfiber.Options{WaitForDelivery: true}))
 		app.Get("/test", func(c *fiber.Ctx) error {
-			sendSignals(c.UserContext(), identifier, logger, meter)
+			sendContextSignals(c.UserContext(), identifier, logger, meter)
 			return nil
 		})
 
@@ -224,7 +223,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		})
 		app.Use(sentryfiberv3.New(sentryfiberv3.Options{WaitForDelivery: true}))
 		app.Get("/test", func(c fiberv3.Ctx) error {
-			sendSignals(c.Context(), identifier, logger, meter)
+			sendContextSignals(c.Context(), identifier, logger, meter)
 			return nil
 		})
 
