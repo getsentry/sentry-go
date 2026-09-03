@@ -514,6 +514,9 @@ func matchingDSC(traceID string, propagation PropagationContext, roots ...*Span)
 	if traceID != "" && strings.EqualFold(traceID, dsc.Entries[traceIDContextKey]) {
 		return dsc
 	}
+	if traceID != "" && dsc.IsFrozen() && dsc.Entries[traceIDContextKey] == "" && strings.EqualFold(traceID, propagation.TraceID.String()) {
+		return dsc
+	}
 	return DynamicSamplingContext{}
 }
 
