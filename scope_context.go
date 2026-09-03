@@ -68,7 +68,16 @@ func WithIsolationScope(ctx context.Context) (context.Context, *Scope) {
 
 // ClientFromContext returns the client attached to ctx, or the global client.
 func ClientFromContext(ctx context.Context) *Client {
-	if ctx != nil {
+	return clientFromContexts(ctx)
+}
+
+// clientFromContexts returns the first explicitly bound client, falling back
+// to the global client when none of the contexts carries one.
+func clientFromContexts(ctxs ...context.Context) *Client {
+	for _, ctx := range ctxs {
+		if ctx == nil {
+			continue
+		}
 		if client, ok := ctx.Value(clientContextKey{}).(*Client); ok {
 			return client
 		}

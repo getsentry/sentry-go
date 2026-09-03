@@ -1346,6 +1346,117 @@ func TestSpanScopeIsNotActiveSpanStack(t *testing.T) {
 	}
 }
 
+func TestContextPropagationHeaders(t *testing.T) {
+	type externalTraceKey struct{}
+
+	t.Run("no propagation context", func(t *testing.T) {
+		ctx := context.Background()
+		if got := GetTraceparent(ctx); got != "" {
+			t.Fatalf("GetTraceparent = %q, want empty", got)
+		}
+		if got := GetTraceparentW3C(ctx); got != "" {
+			t.Fatalf("GetTraceparentW3C = %q, want empty", got)
+		}
+		if got := GetBaggage(ctx); got != "" {
+			t.Fatalf("GetBaggage = %q, want empty", got)
+		}
+	})
+
+	t.Run("scope propagation context", func(t *testing.T) {
+		ctx, scope := WithIsolationScope(context.Background())
+		propagation := PropagationContext{
+			TraceID: TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+			SpanID:  SpanIDFromHex("bbbbbbbbbbbbbbbb"),
+			DynamicSamplingContext: DynamicSamplingContext{
+				Entries: map[string]string{"release": "scope-release"},
+				Frozen:  true,
+			},
+		}
+		scope.SetPropagationContext(propagation)
+
+		if got, want := GetTraceparent(ctx), "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb"; got != want {
+			t.Fatalf("GetTraceparent = %q, want %q", got, want)
+		}
+		if got, want := GetTraceparentW3C(ctx), "00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-00"; got != want {
+			t.Fatalf("GetTraceparentW3C = %q, want %q", got, want)
+		}
+		assertBaggageStringsEqual(t, GetBaggage(ctx), "sentry-release=scope-release")
+	})
+
+	t.Run("external trace takes precedence", func(t *testing.T) {
+		client, err := NewClient(ClientOptions{Transport: &MockTransport{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(client.Close)
+		externalTraceID := TraceIDFromHex("11111111111111111111111111111111")
+		externalSpanID := SpanIDFromHex("2222222222222222")
+		client.SetExternalContextTraceResolver(func(ctx context.Context) (TraceID, SpanID, bool) {
+			if active, _ := ctx.Value(externalTraceKey{}).(bool); active {
+				return externalTraceID, externalSpanID, true
+			}
+			return TraceID{}, SpanID{}, false
+		})
+
+		ctx := ContextWithClient(context.Background(), client)
+		ctx = context.WithValue(ctx, externalTraceKey{}, true)
+		if got, want := GetTraceparent(ctx), "11111111111111111111111111111111-2222222222222222"; got != want {
+			t.Fatalf("GetTraceparent = %q, want %q", got, want)
+		}
+		if got, want := GetTraceparentW3C(ctx), "00-11111111111111111111111111111111-2222222222222222-00"; got != want {
+			t.Fatalf("GetTraceparentW3C = %q, want %q", got, want)
+		}
+
+		transaction := StartTransaction(ContextWithClient(context.Background(), client), "transaction")
+		defer transaction.Finish()
+		ctx = context.WithValue(transaction.Context(), externalTraceKey{}, true)
+		if got, want := GetTraceparent(ctx), "11111111111111111111111111111111-2222222222222222"; got != want {
+			t.Fatalf("GetTraceparent with native span = %q, want external trace %q", got, want)
+		}
+	})
+
+	for _, test := range []struct {
+		name          string
+		release       string
+		enableTracing bool
+		wantSampled   Sampled
+		wantSuffix    string
+	}{
+		{name: "disabled tracing", release: "disabled-tracing", enableTracing: false, wantSampled: SampledFalse, wantSuffix: "-0"},
+		{name: "custom client", release: "custom-client", enableTracing: true, wantSampled: SampledTrue, wantSuffix: "-1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, err := NewClient(ClientOptions{
+				Dsn:              testDsn,
+				EnableTracing:    test.enableTracing,
+				TracesSampleRate: 1,
+				Release:          test.release,
+				Transport:        &MockTransport{},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, _ := WithIsolationScope(context.Background())
+			ctx = ContextWithClient(ctx, client)
+			transaction := StartTransaction(ctx, "transaction")
+
+			if transaction.Sampled != test.wantSampled {
+				t.Fatalf("transaction sampled = %s, want %s", transaction.Sampled, test.wantSampled)
+			}
+			if got := GetTraceparent(transaction.Context()); got != transaction.ToSentryTrace() || !strings.HasSuffix(got, test.wantSuffix) {
+				t.Fatalf("GetTraceparent = %q, want %q with suffix %q", got, transaction.ToSentryTrace(), test.wantSuffix)
+			}
+			if got, want := GetTraceparentW3C(transaction.Context()), transaction.ToTraceparent(); got != want {
+				t.Fatalf("GetTraceparentW3C = %q, want %q", got, want)
+			}
+			baggage := GetBaggage(transaction.Context())
+			if !strings.Contains(baggage, "sentry-release="+test.release) {
+				t.Fatalf("GetBaggage = %q, want custom client release", baggage)
+			}
+		})
+	}
+}
+
 func TestStrictTraceContinuation(t *testing.T) {
 	incomingTraceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
 	sentryTrace := "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1"

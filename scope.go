@@ -502,43 +502,40 @@ func cloneContext(c Context) Context {
 	return res
 }
 
-func (scope *Scope) populateAttrs(attrs map[string]attribute.Value) {
+func mergeScopeAttributes(
+	client *Client,
+	scope *Scope,
+	extraCapacity int,
+) (map[string]attribute.Value, PropagationContext) {
+	client = normalizeClient(client)
+	serverAddress := client.options.ServerName
+	if serverAddress == "" {
+		serverAddress = hostname
+	}
+	sdkName := client.GetSDKIdentifier()
 	if scope == nil {
-		return
+		scope = GlobalScope()
 	}
 
 	scope.mu.RLock()
-	defer scope.mu.RUnlock()
-
-	// Add user-related attributes
-	if !scope.user.IsEmpty() {
-		if scope.user.ID != "" {
-			attrs["user.id"] = attribute.StringValue(scope.user.ID)
-		}
-		if scope.user.Name != "" {
-			attrs["user.name"] = attribute.StringValue(scope.user.Name)
-		}
-		if scope.user.Email != "" {
-			attrs["user.email"] = attribute.StringValue(scope.user.Email)
+	attrs := make(map[string]attribute.Value, len(scope.attributes)+extraCapacity+8)
+	setString := func(key, value string) {
+		if value != "" {
+			attrs[key] = attribute.StringValue(value)
 		}
 	}
-
-	for k, v := range scope.attributes {
-		attrs[k] = v
-	}
-}
-
-// hubFromContexts is a helper to return the first hub found in the given contexts.
-func hubFromContexts(ctxs ...context.Context) *Hub {
-	for _, ctx := range ctxs {
-		if ctx == nil {
-			continue
-		}
-		if hub := GetHubFromContext(ctx); hub != nil {
-			return hub
-		}
-	}
-	return nil
+	setString("sentry.release", client.options.Release)
+	setString("sentry.environment", client.options.Environment)
+	setString("sentry.server.address", serverAddress)
+	setString("sentry.sdk.name", sdkName)
+	setString("sentry.sdk.version", client.sdkVersion)
+	setString("user.id", scope.user.ID)
+	setString("user.name", scope.user.Name)
+	setString("user.email", scope.user.Email)
+	maps.Copy(attrs, scope.attributes)
+	propagationContext := scope.propagationContext
+	scope.mu.RUnlock()
+	return attrs, propagationContext
 }
 
 type activeTrace struct {
@@ -560,18 +557,4 @@ func activeTraceFromContexts(client *Client, ctxs ...context.Context) activeTrac
 		}
 	}
 	return activeTrace{}
-}
-
-func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) (TraceID, SpanID) {
-	trace := activeTraceFromContexts(client, ctxs...)
-	if trace.traceID != zeroTraceID || trace.span != nil {
-		return trace.traceID, trace.spanID
-	}
-	if scope == nil {
-		scope = GlobalScope()
-	}
-	scope.mu.RLock()
-	trace.traceID = scope.propagationContext.TraceID
-	scope.mu.RUnlock()
-	return trace.traceID, trace.spanID
 }

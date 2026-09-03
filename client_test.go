@@ -1238,10 +1238,11 @@ type multiClientEnv struct {
 
 func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 	t.Helper()
-	mkClient := func(dsn string) (*Client, *MockTransport) {
+	mkClient := func(dsn, release string) (*Client, *MockTransport) {
 		tr := &MockTransport{}
 		c, err := NewClient(ClientOptions{
 			Dsn:       dsn,
+			Release:   release,
 			Transport: tr,
 			Integrations: func(_ []Integration) []Integration {
 				return []Integration{}
@@ -1252,8 +1253,8 @@ func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 	}
 
 	e := &multiClientEnv{}
-	e.client1, e.transport1 = mkClient("https://public@example.com/sentry/1")
-	e.client2, e.transport2 = mkClient("https://public@example.com/sentry/2")
+	e.client1, e.transport1 = mkClient("https://public@example.com/sentry/1", "release-1")
+	e.client2, e.transport2 = mkClient("https://public@example.com/sentry/2", "release-2")
 	e.traceID1 = TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
 	e.traceID2 = TraceIDFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2")
 
@@ -1360,9 +1361,40 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		assert.Equal(t, "cross-context-count", e.transport2.Events()[1].Metrics[0].Name)
 		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
 			"trace ID should come from the emit context's hub, not the creation context")
+		assert.Equal(t, "release-2", e.transport2.Events()[0].Logs[0].Attributes["sentry.release"].AsString())
+		assert.Equal(t, "release-2", e.transport2.Events()[1].Metrics[0].Attributes["sentry.release"].AsString())
 	})
 
-	t.Run("signals_follow_bind_client", func(t *testing.T) {
+	t.Run("signals_created_without_client_can_use_emit_context", func(t *testing.T) {
+		e := setupMultiClientEnv(t)
+		disabledCtx := ContextWithClient(context.Background(), NewNoopClient())
+		logger := NewLogger(disabledCtx)
+		meter := NewMeter(disabledCtx)
+
+		logger.Info().WithCtx(e.ctx2).Emit("enabled-context-log")
+		meter.WithCtx(e.ctx2).Count("enabled-context-count", 1)
+		e.flushAll()
+
+		assert.Empty(t, e.transport1.Events())
+		require.Len(t, e.transport2.Events(), 2)
+	})
+
+	t.Run("signals_use_creation_context_as_fallback", func(t *testing.T) {
+		e := setupMultiClientEnv(t)
+		logger := NewLogger(e.ctx1)
+		meter := NewMeter(e.ctx1)
+
+		logger.Info().WithCtx(context.TODO()).Emit("fallback-context-log")
+		meter.WithCtx(context.TODO()).Count("fallback-context-count", 1)
+		e.flushAll()
+
+		require.Len(t, e.transport1.Events(), 2)
+		assert.Empty(t, e.transport2.Events())
+		assert.Equal(t, e.traceID1, e.transport1.Events()[0].Logs[0].TraceID)
+		assert.Equal(t, e.traceID1, e.transport1.Events()[1].Metrics[0].TraceID)
+	})
+
+	t.Run("signals_follow_updated_context_client", func(t *testing.T) {
 		e := setupMultiClientEnv(t)
 
 		traceID := TraceIDFromHex("cccccccccccccccccccccccccccccccc")
@@ -1374,6 +1406,7 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		meter := NewMeter(ctx)
 
 		hub.BindClient(e.client2)
+		ctx = ContextWithClient(ctx, hub.Client())
 
 		hub.CaptureMessage("event-after-rebind")
 		logger.Info().WithCtx(ctx).Emit("log-after-rebind")

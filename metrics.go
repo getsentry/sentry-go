@@ -3,7 +3,6 @@ package sentry
 import (
 	"context"
 	"maps"
-	"os"
 	"sync"
 	"time"
 
@@ -47,112 +46,71 @@ const (
 	UnitPercent = "percent"
 )
 
-// NewMeter returns a new Meter. If there is no Client bound to the current hub,
-// it returns a no-op Meter that discards all metrics.
+// NewMeter returns a new Meter.
 func NewMeter(ctx context.Context) Meter {
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub()
-	}
-	client := hub.Client()
-	if client.IsEnabled() {
-		// build default attrs
-		serverAddr := client.options.ServerName
-		if serverAddr == "" {
-			serverAddr, _ = os.Hostname()
-		}
-
-		defaults := map[string]string{
-			"sentry.release":        client.options.Release,
-			"sentry.environment":    client.options.Environment,
-			"sentry.server.address": serverAddr,
-			"sentry.sdk.name":       client.sdkIdentifier,
-			"sentry.sdk.version":    client.sdkVersion,
-		}
-
-		defaultAttrs := make(map[string]attribute.Value)
-		for k, v := range defaults {
-			if v != "" {
-				defaultAttrs[k] = attribute.StringValue(v)
-			}
-		}
-
-		return &sentryMeter{
-			ctx:               ctx,
-			hub:               hub,
-			attributes:        make(map[string]attribute.Value),
-			defaultAttributes: defaultAttrs,
-			mu:                sync.RWMutex{},
-		}
-	}
-
-	debuglog.Printf("fallback to noopMeter: SDK not initialized")
-	return &noopMeter{}
+	return &sentryMeter{ctx: ctx}
 }
 
 type sentryMeter struct {
-	ctx               context.Context
-	hub               *Hub
-	attributes        map[string]attribute.Value
-	defaultAttributes map[string]attribute.Value
-	mu                sync.RWMutex
+	ctx         context.Context
+	fallbackCtx context.Context
+	attributes  map[string]attribute.Value
+	mu          sync.RWMutex
 }
 
-func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name string, value MetricValue, unit string, attributes map[string]attribute.Value, customScope *Scope) {
+func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name string, value MetricValue, opts []MeterOption) {
 	if name == "" {
 		debuglog.Println("empty name provided, dropping metric")
 		return
 	}
 
-	hub := hubFromContexts(ctx, m.ctx)
-	if hub == nil {
-		hub = m.hub
-	}
-
-	client := hub.Client()
+	client := clientFromContexts(ctx, m.fallbackCtx)
 	if !client.IsEnabled() {
 		return
 	}
-
-	scope := hub.Scope()
-	if customScope != nil {
-		scope = customScope
+	var options meterOptions
+	for _, option := range opts {
+		option(&options)
 	}
-	traceID, spanID := resolveTrace(scope, client, ctx, m.ctx)
-
-	// Pre-allocate with capacity hint to avoid map growth reallocations
-	estimatedCap := len(m.defaultAttributes) + len(attributes) + 8 // scope ~3 + call-specific ~5
-	attrs := make(map[string]attribute.Value, estimatedCap)
-
-	// attribute precedence: default -> scope -> instance (from SetAttrs) -> entry-specific
-	for k, v := range m.defaultAttributes {
-		attrs[k] = v
+	fallbackCtx := m.fallbackCtx
+	scope := ScopeFromContext(ctx)
+	if scope == nil {
+		scope = ScopeFromContext(fallbackCtx)
+	} else {
+		fallbackCtx = nil
 	}
-	scope.populateAttrs(attrs)
+	if options.scope != nil {
+		scope = options.scope
+	}
 
 	m.mu.RLock()
+	attrs, propagation := mergeScopeAttributes(client, scope, len(m.attributes)+len(options.attributes))
 	for k, v := range m.attributes {
 		attrs[k] = v
 	}
 	m.mu.RUnlock()
 
-	for k, v := range attributes {
+	for k, v := range options.attributes {
 		attrs[k] = v
 	}
 
 	metric := &Metric{
 		Timestamp:  time.Now(),
-		TraceID:    traceID,
-		SpanID:     spanID,
 		Type:       metricType,
 		Name:       name,
 		Value:      value,
-		Unit:       unit,
+		Unit:       options.unit,
 		Attributes: attrs,
 	}
+	trace := activeTraceFromContexts(client, ctx, fallbackCtx)
+	if trace.traceID != zeroTraceID {
+		metric.TraceID, metric.SpanID = trace.traceID, trace.spanID
+	} else {
+		metric.TraceID = propagation.TraceID
+	}
 
-	if client.captureMetric(metric, scope) && client.options.Debug {
-		debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), unit)
+	if client.captureMetric(metric) && client.options.Debug {
+		debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), options.unit)
 	}
 }
 
@@ -161,40 +119,31 @@ func (m *sentryMeter) WithCtx(ctx context.Context) Meter {
 	m.mu.RLock()
 	attrsCopy := maps.Clone(m.attributes)
 	m.mu.RUnlock()
+	fallbackCtx := m.fallbackCtx
+	if fallbackCtx == nil {
+		fallbackCtx = m.ctx
+	}
 
 	return &sentryMeter{
-		ctx:               ctx,
-		hub:               m.hub,
-		attributes:        attrsCopy,
-		defaultAttributes: m.defaultAttributes,
-		mu:                sync.RWMutex{},
+		ctx:         ctx,
+		fallbackCtx: fallbackCtx,
+		attributes:  attrsCopy,
 	}
-}
-
-func (m *sentryMeter) applyOptions(opts []MeterOption) *meterOptions {
-	o := &meterOptions{}
-	for _, opt := range opts {
-		opt(o)
-	}
-	return o
 }
 
 // Count implements Meter.
 func (m *sentryMeter) Count(name string, count int64, opts ...MeterOption) {
-	o := m.applyOptions(opts)
-	m.emit(m.ctx, MetricTypeCounter, name, Int64MetricValue(count), o.unit, o.attributes, o.scope)
+	m.emit(m.ctx, MetricTypeCounter, name, Int64MetricValue(count), opts)
 }
 
 // Distribution implements Meter.
 func (m *sentryMeter) Distribution(name string, sample float64, opts ...MeterOption) {
-	o := m.applyOptions(opts)
-	m.emit(m.ctx, MetricTypeDistribution, name, Float64MetricValue(sample), o.unit, o.attributes, o.scope)
+	m.emit(m.ctx, MetricTypeDistribution, name, Float64MetricValue(sample), opts)
 }
 
 // Gauge implements Meter.
 func (m *sentryMeter) Gauge(name string, value float64, opts ...MeterOption) {
-	o := m.applyOptions(opts)
-	m.emit(m.ctx, MetricTypeGauge, name, Float64MetricValue(value), o.unit, o.attributes, o.scope)
+	m.emit(m.ctx, MetricTypeGauge, name, Float64MetricValue(value), opts)
 }
 
 // SetAttributes implements Meter.
@@ -207,35 +156,9 @@ func (m *sentryMeter) SetAttributes(attrs ...attribute.Builder) {
 			debuglog.Printf("invalid attribute: %v", a)
 			continue
 		}
+		if m.attributes == nil {
+			m.attributes = make(map[string]attribute.Value, len(attrs))
+		}
 		m.attributes[a.Key] = a.Value
 	}
-}
-
-// noopMeter is a no-operation implementation of Meter.
-// This is used when there is no client available in the context or when metrics are disabled.
-type noopMeter struct{}
-
-// WithCtx implements Meter.
-func (n *noopMeter) WithCtx(_ context.Context) Meter {
-	return n
-}
-
-// Count implements Meter.
-func (n *noopMeter) Count(name string, _ int64, _ ...MeterOption) {
-	debuglog.Printf("Metric %q is being dropped. Ensure the SDK is initialized", name)
-}
-
-// Distribution implements Meter.
-func (n *noopMeter) Distribution(name string, _ float64, _ ...MeterOption) {
-	debuglog.Printf("Metric %q is being dropped. Ensure the SDK is initialized", name)
-}
-
-// Gauge implements Meter.
-func (n *noopMeter) Gauge(name string, _ float64, _ ...MeterOption) {
-	debuglog.Printf("Metric %q is being dropped. Ensure the SDK is initialized", name)
-}
-
-// SetAttributes implements Meter.
-func (n *noopMeter) SetAttributes(_ ...attribute.Builder) {
-	debuglog.Printf("No attributes attached")
 }
