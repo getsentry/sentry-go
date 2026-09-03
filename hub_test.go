@@ -265,6 +265,24 @@ func TestLastEventIDDoesNotReset(t *testing.T) {
 	assertEqual(t, hub.LastEventID(), *id1) // last event ID must not have changed
 }
 
+func TestRecoverWithContextAcceptsNilContext(t *testing.T) {
+	transport := new(MockTransport)
+	client, err := NewClient(ClientOptions{Transport: transport})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(client.Close)
+	hub := NewHub(client, NewScope())
+
+	eventID := hub.RecoverWithContext(nil, "panic") //nolint:staticcheck // Legacy callers may recover without a context.
+	if eventID == nil {
+		t.Fatal("expected panic to be captured")
+	}
+	if events := transport.Events(); len(events) != 1 || events[0].Message != "panic" {
+		t.Fatalf("unexpected captured events: %#v", events)
+	}
+}
+
 func TestAddBreadcrumbRespectMaxBreadcrumbsOption(t *testing.T) {
 	hub, client, scope := setupHubTest()
 	client.options.MaxBreadcrumbs = 2
