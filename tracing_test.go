@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"sync"
@@ -1704,5 +1705,43 @@ func TestRootSpansContinuingScopeShareSampling(t *testing.T) {
 		require.Equal(t, first.Sampled, root.Sampled)
 		require.Equal(t, "0.5", root.dynamicSamplingContextForPropagation().Entries["sample_rate"])
 		root.Finish()
+	}
+}
+
+func TestContinueFromRequestHeaders(t *testing.T) {
+	traceID, parentID := TraceID{1}, SpanID{2}
+	for _, test := range []struct {
+		name   string
+		parent bool
+	}{
+		{name: "multiple baggage values"},
+		{name: "active parent wins", parent: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.Header.Set(SentryTraceHeader, traceID.String()+"-"+parentID.String()+"-1")
+			r.Header.Add(SentryBaggageHeader, "othervendor=value")
+			r.Header.Add(SentryBaggageHeader, "sentry-trace_id="+traceID.String())
+			r.Header.Add(SentryBaggageHeader, "sentry-public_key=upstream")
+			ctx, _ := WithScope(ContextWithClient(context.Background(), NewNoopClient()))
+			var parent *Span
+			if test.parent {
+				parent = StartTransaction(ctx, "parent")
+				defer parent.Finish()
+				ctx = parent.Context()
+			}
+			span := StartSpan(ctx, "request", ContinueFromRequest(r))
+			defer span.Finish()
+			if test.parent {
+				require.Equal(t, parent.TraceID, span.TraceID)
+				require.Equal(t, parent.SpanID, span.ParentSpanID)
+				return
+			}
+			require.Equal(t, traceID, span.TraceID)
+			require.Equal(t, parentID, span.ParentSpanID)
+			baggage := GetBaggage(span.Context())
+			require.Contains(t, baggage, "sentry-trace_id="+traceID.String())
+			require.Contains(t, baggage, "sentry-public_key=upstream")
+		})
 	}
 }
