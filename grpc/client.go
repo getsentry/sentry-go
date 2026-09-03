@@ -19,46 +19,61 @@ import (
 
 const defaultClientOperationName = "rpc.client"
 
-func hubFromClientContext(ctx context.Context) context.Context {
-	hub := sentry.GetHubFromContext(ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub().Clone()
-		ctx = sentry.SetHubOnContext(ctx, hub)
+func configureClient(ctx context.Context) bool {
+	client := sentry.ClientFromContext(ctx)
+	if !client.IsEnabled() {
+		return false
 	}
-
-	if client := hub.Client(); client.IsEnabled() {
-		client.SetSDKIdentifier(sdkIdentifier)
-	}
-
-	return ctx
+	client.SetSDKIdentifier(sdkIdentifier)
+	return true
 }
 
-func createOrUpdateMetadata(ctx context.Context, span *sentry.Span) context.Context {
+func createOrUpdateMetadata(ctx context.Context) context.Context {
+	trace := sentry.GetTraceparent(ctx)
+	baggage := sentry.GetBaggage(ctx)
+	if trace == "" && baggage == "" {
+		return ctx
+	}
+
 	md, _ := metadata.FromOutgoingContext(ctx)
 	md = md.Copy()
-	md.Set(sentry.SentryTraceHeader, span.ToSentryTrace())
+	if trace != "" {
+		md.Set(sentry.SentryTraceHeader, trace)
+	}
 
-	existingBaggage := strings.Join(md.Get(sentry.SentryBaggageHeader), ",")
-	mergedBaggage, err := sentry.MergeBaggage(existingBaggage, span.ToBaggage())
-	if err == nil {
-		md.Set(sentry.SentryBaggageHeader, mergedBaggage)
+	if baggage != "" {
+		existingBaggage := strings.Join(md.Get(sentry.SentryBaggageHeader), ",")
+		if existingBaggage == "" {
+			md.Set(sentry.SentryBaggageHeader, baggage)
+		} else if mergedBaggage, err := sentry.MergeBaggage(existingBaggage, baggage); err == nil {
+			md.Set(sentry.SentryBaggageHeader, mergedBaggage)
+		}
 	}
 
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
 func finishSpan(span *sentry.Span, err error) {
+	if span == nil {
+		return
+	}
 	setRPCStatus(span, err)
 	span.Finish()
 }
 
 func startClientSpan(ctx context.Context, method string) (context.Context, *sentry.Span) {
-	ctx = hubFromClientContext(ctx)
+	if !configureClient(ctx) {
+		return ctx, nil
+	}
+	parentSpan := sentry.SpanFromContext(ctx)
+	if parentSpan == nil {
+		return createOrUpdateMetadata(ctx), nil
+	}
+
 	name, service, rpcMethod := parseGRPCMethod(method)
 	span := sentry.StartSpan(
 		ctx,
 		defaultClientOperationName,
-		sentry.WithTransactionName(name),
 		sentry.WithDescription(name),
 		sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 	)
@@ -70,7 +85,7 @@ func startClientSpan(ctx context.Context, method string) (context.Context, *sent
 	}
 	span.SetData("rpc.system", "grpc")
 
-	ctx = createOrUpdateMetadata(span.Context(), span)
+	ctx = createOrUpdateMetadata(span.Context())
 	return ctx, span
 }
 
@@ -109,6 +124,9 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 			nilErr := status.Error(codes.Internal, "streamer returned nil stream without error")
 			finishSpan(span, nilErr)
 			return nil, nilErr
+		}
+		if span == nil {
+			return stream, nil
 		}
 
 		wrappedStream := &sentryClientStream{
