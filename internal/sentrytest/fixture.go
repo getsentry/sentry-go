@@ -184,7 +184,8 @@ func (f *Fixture) NewContext(parent context.Context) context.Context {
 	if parent == nil {
 		parent = context.Background()
 	}
-	return sentry.SetHubOnContext(parent, f.Hub)
+	ctx, _ := sentry.WithIsolationScope(parent)
+	return sentry.ContextWithClient(ctx, f.Client)
 }
 
 // Events returns all captured events, including transactions.
