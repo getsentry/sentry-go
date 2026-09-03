@@ -69,6 +69,11 @@ func (c *captureRoundTripper) RoundTrip(request *http.Request) (*http.Response, 
 	}, nil
 }
 
+func contextWithClient(client *sentry.Client) context.Context {
+	ctx, _ := sentry.WithIsolationScope(context.Background())
+	return sentry.ContextWithClient(ctx, client)
+}
+
 func TestIntegration(t *testing.T) {
 	tests := []struct {
 		RequestMethod      string
@@ -273,8 +278,7 @@ func TestIntegration(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		hub := sentry.NewHub(sentryClient, sentry.NewScope())
-		ctx := sentry.SetHubOnContext(context.Background(), hub)
+		ctx := contextWithClient(sentryClient)
 		span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 		ctx = span.Context()
 
@@ -449,8 +453,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			hub := sentry.NewHub(sentryClient, sentry.NewScope())
-			ctx := sentry.SetHubOnContext(context.Background(), hub)
+			ctx := contextWithClient(sentryClient)
 			span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 			ctx = span.Context()
 
@@ -549,8 +552,7 @@ func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hub := sentry.NewHub(sentryClient, sentry.NewScope())
-	ctx := sentry.SetHubOnContext(context.Background(), hub)
+	ctx := contextWithClient(sentryClient)
 	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 	ctx = span.Context()
 
@@ -600,6 +602,7 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:           true,
 		TracePropagationTargets: []string{"example.com"},
+		PropagateTraceparent:    true,
 		TracesSampleRate:        1.0,
 		BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			spansCh <- event.Spans
@@ -610,7 +613,7 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx := sentry.SetHubOnContext(context.Background(), sentry.CurrentHub())
+	ctx := context.Background()
 	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 	ctx = span.Context()
 
@@ -637,6 +640,10 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 	if response != nil && response.Body != nil {
 		response.Body.Close()
 	}
+	sentryTrace := response.Request.Header.Get(sentry.SentryTraceHeader)
+	require.NotEmpty(t, sentryTrace)
+	require.Equal(t, traceparentFromSentryTraceHeader(t, sentryTrace), response.Request.Header.Get(sentry.TraceparentHeader))
+	require.Contains(t, response.Request.Header.Get(sentry.SentryBaggageHeader), "sentry-trace_id=")
 	span.Finish()
 
 	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
@@ -697,8 +704,7 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hub := sentry.NewHub(sentryClient, sentry.NewScope())
-	ctx := sentry.SetHubOnContext(context.Background(), hub)
+	ctx := contextWithClient(sentryClient)
 
 	request, err := http.NewRequestWithContext(ctx, "GET", "https://example.com", nil)
 	if err != nil {
@@ -746,6 +752,46 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 	}
 }
 
+func TestIntegration_ResolvesPropagationOptionsFromRequestContext(t *testing.T) {
+	t.Parallel()
+	capture := &captureRoundTripper{}
+	wrapper := sentryhttpclient.NewSentryRoundTripper(capture)
+	for _, test := range []struct {
+		name, target string
+		propagate    bool
+	}{
+		{name: "matching", target: "example.com", propagate: true},
+		{name: "nonmatching", target: "example.org"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
+				TracePropagationTargets: []string{test.target}, PropagateTraceparent: true, Release: "new",
+			}))
+			span := sentry.StartSpan(f.NewContext(context.Background()), "test")
+			defer span.Finish()
+			request, err := http.NewRequestWithContext(span.Context(), http.MethodGet, "https://example.com", nil)
+			require.NoError(t, err)
+			const existing = "othervendor=value,sentry-release=old"
+			request.Header.Set(sentry.SentryBaggageHeader, existing)
+			response, err := wrapper.RoundTrip(request)
+			require.NoError(t, err)
+			require.NoError(t, response.Body.Close())
+			headers := capture.requests[len(capture.requests)-1].Header
+			assert.Equal(t, test.propagate, headers.Get(sentry.SentryTraceHeader) != "")
+			assert.Equal(t, test.propagate, headers.Get(sentry.TraceparentHeader) != "")
+			baggage := headers.Get(sentry.SentryBaggageHeader)
+			if test.propagate {
+				assert.Contains(t, baggage, "othervendor=value")
+				assert.Contains(t, baggage, "sentry-release=new")
+				assert.NotContains(t, baggage, "sentry-release=old")
+				assert.Equal(t, 1, strings.Count(baggage, "sentry-release="))
+			} else {
+				assert.Equal(t, existing, baggage)
+			}
+		})
+	}
+}
+
 func TestPropagateTraceparentHeader(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:         true,
@@ -757,8 +803,9 @@ func TestPropagateTraceparentHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	span := sentry.StartSpan(context.Background(), "fake_parent", sentry.WithTransactionName("Fake Parent"))
-	ctx := span.Context()
+	ctx, _ := sentry.WithIsolationScope(context.Background())
+	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+	ctx = span.Context()
 
 	request, err := http.NewRequestWithContext(ctx, "GET", "https://example.com/foo", nil)
 	if err != nil {
@@ -799,58 +846,82 @@ func TestPropagateTraceparentHeader(t *testing.T) {
 }
 
 func TestRoundTripDoesNotMutateCallerRequest(t *testing.T) {
-	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Parallel()
 
-	hub := sentry.NewHub(sentryClient, sentry.NewScope())
-	ctx := sentry.SetHubOnContext(context.Background(), hub)
-	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
-	t.Cleanup(span.Finish)
+	for _, test := range []struct {
+		name            string
+		target          string
+		nilHeader       bool
+		wantHeaderCount int
+	}{
+		{name: "matching target", target: "example.com", wantHeaderCount: 1},
+		{name: "matching target with nil header", target: "example.com", nilHeader: true, wantHeaderCount: 1},
+		{name: "nonmatching target", target: "example.org"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			sentrytest.Run(t, func(t *testing.T, fixture *sentrytest.Fixture) {
+				transaction := sentry.StartTransaction(fixture.NewContext(context.Background()), "test")
+				type requestContextKey struct{}
+				requestCtx, cancel := context.WithCancel(context.WithValue(transaction.Context(), requestContextKey{}, "request value"))
+				defer cancel()
+				request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, "https://example.com/foo", strings.NewReader(`{"key":"value"}`))
+				require.NoError(t, err)
+				if test.nilHeader {
+					request.Header = nil
+				}
+				originalBody := request.Body
+				originalHeader := request.Header.Clone()
+				capture := &captureRoundTripper{}
+				wrapped := sentryhttpclient.NewSentryRoundTripper(capture)
 
-	request, err := http.NewRequestWithContext(span.Context(), http.MethodGet, "https://example.com/foo", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+				for i := 0; i < 3; i++ {
+					response, err := wrapped.RoundTrip(request)
+					require.NoError(t, err)
+					response.Body.Close()
+				}
 
-	roundTripper := &captureRoundTripper{}
-	wrapped := sentryhttpclient.NewSentryRoundTripper(roundTripper)
-
-	for i := 0; i < 3; i++ {
-		response, err := wrapped.RoundTrip(request)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if response.Body != nil {
-			response.Body.Close()
-		}
-	}
-
-	if got := request.Header.Values(sentry.SentryTraceHeader); len(got) != 0 {
-		t.Fatalf("caller request mutated, got %d sentry-trace headers", len(got))
-	}
-	if got := request.Header.Values(sentry.SentryBaggageHeader); len(got) != 0 {
-		t.Fatalf("caller request mutated, got %d baggage headers", len(got))
-	}
-
-	if len(roundTripper.requests) != 3 {
-		t.Fatalf("got %d requests, want 3", len(roundTripper.requests))
-	}
-
-	for i, roundTripRequest := range roundTripper.requests {
-		if roundTripRequest == request {
-			t.Fatalf("round trip %d reused the caller request", i)
-		}
-		if got := len(roundTripRequest.Header.Values(sentry.SentryTraceHeader)); got != 1 {
-			t.Fatalf("round trip %d got %d sentry-trace headers, want 1", i, got)
-		}
-		if got := len(roundTripRequest.Header.Values(sentry.SentryBaggageHeader)); got != 1 {
-			t.Fatalf("round trip %d got %d baggage headers, want 1", i, got)
-		}
+				assert.Same(t, requestCtx, request.Context(), "caller request context was replaced")
+				if request.Body != originalBody {
+					t.Fatal("caller request body was replaced")
+				}
+				assert.Equal(t, originalHeader, request.Header, "caller request headers changed")
+				require.Len(t, capture.requests, 3)
+				for i, roundTripRequest := range capture.requests {
+					assert.NotSame(t, request, roundTripRequest, "round trip %d reused the caller request", i)
+					for _, header := range []string{sentry.SentryTraceHeader, sentry.SentryBaggageHeader, sentry.TraceparentHeader} {
+						assert.Len(t, roundTripRequest.Header.Values(header), test.wantHeaderCount, "round trip %d header %s", i, header)
+					}
+					child := sentry.SpanFromContext(roundTripRequest.Context())
+					require.NotNil(t, child)
+					assert.Equal(t, "http.client", child.Op)
+					assert.Equal(t, transaction.SpanID, child.ParentSpanID)
+					assert.Equal(t, "request value", roundTripRequest.Context().Value(requestContextKey{}))
+				}
+				cancel()
+				for i, roundTripRequest := range capture.requests {
+					select {
+					case <-roundTripRequest.Context().Done():
+					default:
+						t.Fatalf("round trip %d context did not preserve cancellation", i)
+					}
+				}
+				transaction.Finish()
+				fixture.Flush()
+				events := fixture.Events()
+				require.Len(t, events, 1)
+				assert.Equal(t, "transaction", events[0].Type)
+				require.Len(t, events[0].Spans, 3)
+				for _, span := range events[0].Spans {
+					assert.Equal(t, "http.client", span.Op)
+				}
+			}, sentrytest.WithClientOptions(sentry.ClientOptions{
+				EnableTracing:           true,
+				TracesSampleRate:        1.0,
+				TracePropagationTargets: []string{test.target},
+				PropagateTraceparent:    true,
+			}))
+		})
 	}
 }
 
@@ -944,8 +1015,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			hub := sentry.NewHub(sentryClient, sentry.NewScope())
-			ctx := sentry.SetHubOnContext(context.Background(), hub)
+			ctx := contextWithClient(sentryClient)
 			span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 			ctx = span.Context()
 
@@ -988,36 +1058,124 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 	}
 }
 
-func TestTracePropagationTargets(t *testing.T) {
-	previousClient := sentry.CurrentHub().Client()
-	t.Cleanup(func() { sentry.CurrentHub().BindClient(previousClient) })
+func TestFrozenEmptyBaggageReplacesPreviousTrace(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		existing []string
+		want     string
+	}{
+		{name: "third-party members", existing: []string{"othervendor=value", "sentry-release=old,sentry-trace_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,sentry-extra=stale"}, want: "othervendor=value"},
+		{name: "malformed baggage", existing: []string{"not-valid"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			f := sentrytest.NewFixture(t)
+			ctx := f.NewContext(context.Background())
+			sentry.StartTransaction(ctx, "incoming", sentry.ContinueTrace("11111111111111111111111111111111-2222222222222222-1", "")).Finish()
+			request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
+			require.NoError(t, err)
+			for _, value := range test.existing {
+				request.Header.Add(sentry.SentryBaggageHeader, value)
+			}
+			original := request.Header.Clone()
+			capture := &captureRoundTripper{}
+			response, err := sentryhttpclient.NewSentryRoundTripper(capture).RoundTrip(request)
+			require.NoError(t, err)
+			require.NoError(t, response.Body.Close())
+			require.Len(t, capture.requests, 1)
+			forwarded := capture.requests[0]
+			require.Nil(t, sentry.SpanFromContext(forwarded.Context()))
+			require.Equal(t, sentry.GetTraceparent(ctx), forwarded.Header.Get(sentry.SentryTraceHeader))
+			require.Equal(t, test.want, forwarded.Header.Get(sentry.SentryBaggageHeader))
+			require.Equal(t, original, request.Header)
+		})
+	}
+}
 
-	for _, globalTargets := range []bool{false, true} {
+type alternatingTraceIntegration struct {
+	lookups                   int
+	selectedTrace, otherTrace sentry.TraceID
+	selectedSpan, otherSpan   sentry.SpanID
+}
+
+func (*alternatingTraceIntegration) Name() string             { return "alternating-trace" }
+func (*alternatingTraceIntegration) SetupOnce(*sentry.Client) {}
+func (integration *alternatingTraceIntegration) ResolveTraceContext(context.Context) (sentry.TraceID, sentry.SpanID, sentry.Sampled, bool) {
+	integration.lookups++
+	if integration.lookups == 1 {
+		return integration.selectedTrace, integration.selectedSpan, sentry.SampledTrue, true
+	}
+	return integration.otherTrace, integration.otherSpan, sentry.SampledFalse, true
+}
+
+func TestPropagationHeadersUseTheSameTraceDecision(t *testing.T) {
+	t.Parallel()
+	selectedTrace, selectedSpan := sentry.TraceID{1}, sentry.SpanID{2}
+	otherTrace, otherSpan := sentry.TraceID{3}, sentry.SpanID{4}
+	resolver := &alternatingTraceIntegration{selectedTrace: selectedTrace, selectedSpan: selectedSpan, otherTrace: otherTrace, otherSpan: otherSpan}
+	f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
+		PropagateTraceparent: true,
+		Integrations:         func(in []sentry.Integration) []sentry.Integration { return append(in, resolver) },
+	}))
+	ctx := f.NewContext(context.Background())
+	root := sentry.StartTransaction(ctx, "native")
+	defer root.Finish()
+	resolver.lookups = 0
+	sentry.ScopeFromContext(ctx).SetPropagationContext(sentry.PropagationContext{
+		TraceID: otherTrace, SpanID: otherSpan,
+		DynamicSamplingContext: sentry.DynamicSamplingContext{Frozen: true, Entries: map[string]string{"trace_id": otherTrace.String(), "release": "foreign"}},
+	})
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
+	require.NoError(t, err)
+	request.Header.Set(sentry.SentryBaggageHeader, "othervendor=value,sentry-release=stale")
+	capture := &captureRoundTripper{}
+	response, err := sentryhttpclient.NewSentryRoundTripper(capture).RoundTrip(request)
+	require.NoError(t, err)
+	require.NoError(t, response.Body.Close())
+	forwarded := capture.requests[0].Header
+	require.Equal(t, fmt.Sprintf("%s-%s-1", selectedTrace, selectedSpan), forwarded.Get(sentry.SentryTraceHeader))
+	require.Equal(t, fmt.Sprintf("00-%s-%s-01", selectedTrace, selectedSpan), forwarded.Get(sentry.TraceparentHeader))
+	require.Equal(t, "othervendor=value", forwarded.Get(sentry.SentryBaggageHeader))
+}
+
+func TestTracePropagationTargets(t *testing.T) {
+	t.Parallel()
+
+	for _, clientTargets := range []bool{false, true} {
 		for _, parentSpan := range []bool{false, true} {
 			for _, propagateTraceparent := range []bool{false, true} {
 				for _, tt := range []struct {
 					name            string
 					targets         []string
+					otherTargets    []string
 					wantPropagation bool
 				}{
 					{name: "default", wantPropagation: true},
-					{name: "empty", targets: []string{}, wantPropagation: true},
+					{name: "empty", targets: []string{}},
 					{name: "matching", targets: []string{"other.example", "example.com"}, wantPropagation: true},
 					{name: "nonmatching", targets: []string{"internal.service.local"}},
+					{name: "empty with matching other", targets: []string{}, otherTargets: []string{"example.com"}, wantPropagation: true},
+					{name: "nonmatching with matching other", targets: []string{"internal.service.local"}, otherTargets: []string{"example.com"}, wantPropagation: true},
+					{name: "matching with empty other", targets: []string{"example.com"}, otherTargets: []string{}, wantPropagation: true},
 				} {
-					t.Run(fmt.Sprintf("%s/global=%t/parent=%t/traceparent=%t", tt.name, globalTargets, parentSpan, propagateTraceparent), func(t *testing.T) {
+					t.Run(fmt.Sprintf("%s/client=%t/parent=%t/traceparent=%t", tt.name, clientTargets, parentSpan, propagateTraceparent), func(t *testing.T) {
 						opts := sentry.ClientOptions{
 							EnableTracing:        true,
 							TracesSampleRate:     1,
 							PropagateTraceparent: propagateTraceparent,
 						}
 						var tracerOptions []sentryhttpclient.SentryRoundTripTracerOption
-						if globalTargets {
+						if clientTargets {
 							opts.TracePropagationTargets = tt.targets
+							if tt.otherTargets != nil {
+								tracerOptions = append(tracerOptions, sentryhttpclient.WithTracePropagationTargets(tt.otherTargets))
+							}
 						} else {
 							tracerOptions = append(tracerOptions, sentryhttpclient.WithTracePropagationTargets(tt.targets))
+							opts.TracePropagationTargets = tt.otherTargets
 						}
-						fixture := sentrytest.NewFixture(t, sentrytest.WithGlobal(), sentrytest.WithClientOptions(opts))
+						fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(opts))
 						ctx := fixture.NewContext(context.Background())
 						var transaction *sentry.Span
 						if parentSpan {
