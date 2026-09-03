@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/traceutils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -19,46 +20,45 @@ import (
 
 const defaultClientOperationName = "rpc.client"
 
-func hubFromClientContext(ctx context.Context) context.Context {
-	hub := sentry.GetHubFromContext(ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub().Clone()
-		ctx = sentry.SetHubOnContext(ctx, hub)
-	}
-
-	if client := hub.Client(); client != nil {
-		client.SetSDKIdentifier(sdkIdentifier)
-	}
-
-	return ctx
-}
-
-func createOrUpdateMetadata(ctx context.Context, span *sentry.Span) context.Context {
+func createOrUpdateMetadata(ctx context.Context) context.Context {
 	md, _ := metadata.FromOutgoingContext(ctx)
-	md = md.Copy()
-	md.Set(sentry.SentryTraceHeader, span.ToSentryTrace())
-
-	existingBaggage := strings.Join(md.Get(sentry.SentryBaggageHeader), ",")
-	mergedBaggage, err := sentry.MergeBaggage(existingBaggage, span.ToBaggage())
-	if err == nil {
-		md.Set(sentry.SentryBaggageHeader, mergedBaggage)
+	trace, baggage, _ := traceutils.OutgoingHeaders(ctx, strings.Join(md.Get(sentry.SentryBaggageHeader), ","), false)
+	if trace == "" {
+		return ctx
 	}
-
+	md = md.Copy()
+	md.Set(sentry.SentryTraceHeader, trace)
+	if baggage == "" {
+		md.Delete(sentry.SentryBaggageHeader)
+	} else {
+		md.Set(sentry.SentryBaggageHeader, baggage)
+	}
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
 func finishSpan(span *sentry.Span, err error) {
+	if span == nil {
+		return
+	}
 	setRPCStatus(span, err)
 	span.Finish()
 }
 
 func startClientSpan(ctx context.Context, method string) (context.Context, *sentry.Span) {
-	ctx = hubFromClientContext(ctx)
+	client := sentry.ClientFromContext(ctx)
+	if !client.IsEnabled() {
+		return ctx, nil
+	}
+	client.SetSDKIdentifier(sdkIdentifier)
+	parentSpan := sentry.SpanFromContext(ctx)
+	if parentSpan == nil {
+		return createOrUpdateMetadata(ctx), nil
+	}
+
 	name, service, rpcMethod := parseGRPCMethod(method)
 	span := sentry.StartSpan(
 		ctx,
 		defaultClientOperationName,
-		sentry.WithTransactionName(name),
 		sentry.WithDescription(name),
 		sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 	)
@@ -70,7 +70,7 @@ func startClientSpan(ctx context.Context, method string) (context.Context, *sent
 	}
 	span.SetData("rpc.system", "grpc")
 
-	ctx = createOrUpdateMetadata(span.Context(), span)
+	ctx = createOrUpdateMetadata(span.Context())
 	return ctx, span
 }
 
@@ -109,6 +109,9 @@ func StreamClientInterceptor() grpc.StreamClientInterceptor {
 			nilErr := status.Error(codes.Internal, "streamer returned nil stream without error")
 			finishSpan(span, nilErr)
 			return nil, nilErr
+		}
+		if span == nil {
+			return stream, nil
 		}
 
 		wrappedStream := &sentryClientStream{
