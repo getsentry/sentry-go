@@ -1,6 +1,7 @@
 package sentry_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func checkInEvents(t *testing.T, f *sentrytest.Fixture) []*sentry.Event {
 	return events
 }
 
-func TestHubWithMonitor(t *testing.T) {
+func TestWithMonitorContext(t *testing.T) {
 	t.Parallel()
 
 	errJob := errors.New("job failed")
@@ -62,7 +63,7 @@ func TestHubWithMonitor(t *testing.T) {
 			t.Parallel()
 			sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 				calls := 0
-				err := f.Hub.WithMonitor("my-job", tt.monitorConfig, func() error {
+				err := sentry.WithMonitor(f.Context, "my-job", tt.monitorConfig, func() error {
 					calls++
 					time.Sleep(3 * time.Second)
 					return tt.fnErr
@@ -89,11 +90,11 @@ func TestHubWithMonitor(t *testing.T) {
 	}
 }
 
-func TestHubWithMonitorPanic(t *testing.T) {
+func TestWithMonitorPanic(t *testing.T) {
 	t.Parallel()
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		assert.PanicsWithValue(t, "boom", func() {
-			_ = f.Hub.WithMonitor("my-job", nil, func() error {
+			_ = sentry.WithMonitor(f.Context, "my-job", nil, func() error {
 				time.Sleep(time.Second)
 				panic("boom")
 			})
@@ -112,7 +113,7 @@ func TestWithMonitor(t *testing.T) {
 	f := sentrytest.NewFixture(t, sentrytest.WithGlobal())
 
 	monitorConfig := &sentry.MonitorConfig{Schedule: sentry.IntervalSchedule(1, sentry.MonitorScheduleUnitHour)}
-	err := sentry.WithMonitor("my-job", monitorConfig, func() error { return nil })
+	err := sentry.WithMonitor(context.Background(), "my-job", monitorConfig, func() error { return nil })
 	require.NoError(t, err)
 
 	events := checkInEvents(t, f)

@@ -20,17 +20,16 @@ const DefaultFlushTimeout = 2 * time.Second
 // Init initializes the SDK with options. The returned error is non-nil if
 // options is invalid, for instance if a malformed DSN is provided.
 func Init(options ClientOptions) error {
-	hub := CurrentHub()
 	client, err := NewClient(options)
 	if err != nil {
 		return err
 	}
-	hub.BindClient(client)
 	setGlobalClient(client)
 	return nil
 }
 
-// AddBreadcrumb records a new breadcrumb.
+// AddBreadcrumb records a new breadcrumb using the scope and client carried
+// by ctx.
 //
 // The total number of breadcrumbs that can be recorded are limited by the
 // configuration on the client.
@@ -52,17 +51,20 @@ func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb) {
 	scopeFromContextOrGlobal(ctx).AddBreadcrumb(breadcrumb, limit)
 }
 
-// CaptureMessage captures an arbitrary message.
+// CaptureMessage captures an arbitrary message using the scope and client
+// carried by ctx.
 func CaptureMessage(ctx context.Context, message string, options ...CaptureOption) *EventID {
 	return ClientFromContext(ctx).CaptureMessage(ctx, message, options...)
 }
 
-// CaptureException captures an error.
+// CaptureException captures an error using the scope and client carried by
+// ctx.
 func CaptureException(ctx context.Context, exception error, options ...CaptureOption) *EventID {
 	return ClientFromContext(ctx).CaptureException(ctx, exception, options...)
 }
 
-// CaptureCheckIn captures a (cron) monitor check-in.
+// CaptureCheckIn captures a (cron) monitor check-in using the scope and client
+// carried by ctx.
 func CaptureCheckIn(
 	ctx context.Context,
 	checkIn *CheckIn,
@@ -73,26 +75,43 @@ func CaptureCheckIn(
 }
 
 // WithMonitor runs fn and reports its outcome as check-ins for the cron
-// monitor identified by monitorSlug, creating or updating the monitor with
-// monitorConfig when it is not nil. It is a shorthand for
-// CurrentHub().WithMonitor.
+// monitor identified by monitorSlug, using the scope and client carried by ctx.
 //
-// Example:
+// An in_progress check-in carrying monitorConfig is sent before fn runs. When
+// monitorConfig is not nil, Sentry creates the monitor if it does not exist,
+// or updates its configuration. After fn returns, an ok check-in is sent if
+// it returned nil, or an error check-in otherwise, along with the measured
+// duration. If fn panics, an error check-in is sent and the panic continues.
 //
-//	err := sentry.WithMonitor("nightly-cleanup", &sentry.MonitorConfig{
-//		Schedule:      sentry.CrontabSchedule("0 3 * * *"),
-//		CheckInMargin: 5,
-//		MaxRuntime:    30,
-//		Timezone:      "UTC",
-//	}, func() error {
-//		return cleanup()
-//	})
-func WithMonitor(monitorSlug string, monitorConfig *MonitorConfig, fn func() error) error {
-	hub := CurrentHub()
-	return hub.WithMonitor(monitorSlug, monitorConfig, fn)
+// The error returned by fn is returned unchanged.
+func WithMonitor(ctx context.Context, monitorSlug string, monitorConfig *MonitorConfig, fn func() error) error {
+	checkInID := CaptureCheckIn(ctx, &CheckIn{
+		MonitorSlug: monitorSlug,
+		Status:      CheckInStatusInProgress,
+	}, monitorConfig)
+	start := time.Now()
+
+	status := CheckInStatusError
+	defer func() {
+		checkIn := &CheckIn{
+			MonitorSlug: monitorSlug,
+			Status:      status,
+			Duration:    time.Since(start),
+		}
+		if checkInID != nil {
+			checkIn.ID = *checkInID
+		}
+		CaptureCheckIn(ctx, checkIn, nil)
+	}()
+
+	err := fn()
+	if err == nil {
+		status = CheckInStatusOK
+	}
+	return err
 }
 
-// CaptureEvent captures an event on the currently active client if any.
+// CaptureEvent captures an event using the scope and client carried by ctx.
 //
 // The event must already be assembled. Typically code would instead use
 // the utility methods like CaptureException. The return value is the
@@ -101,7 +120,9 @@ func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *
 	return ClientFromContext(ctx).CaptureEvent(ctx, event, options...)
 }
 
-// Recover captures a panic.
+// Recover captures a recovered panic value using the scope and client carried
+// by ctx. When recovered is nil, Recover invokes Go's built-in recover and must
+// itself be deferred.
 func Recover(ctx context.Context, recovered any, options ...CaptureOption) *EventID {
 	if recovered == nil {
 		recovered = recover()
@@ -112,36 +133,10 @@ func Recover(ctx context.Context, recovered any, options ...CaptureOption) *Even
 	return ClientFromContext(ctx).capturePanic(ctx, recovered, options...)
 }
 
-// WithScope is a shorthand for CurrentHub().WithScope.
-// It affects legacy Hub captures. For context-based capture, use WithIsolationScope.
-func WithScope(f func(scope *Scope)) {
-	hub := CurrentHub()
-	hub.WithScope(f)
-}
-
-// ConfigureScope is a shorthand for CurrentHub().ConfigureScope.
-// It affects legacy Hub captures. For context-based capture, configure GlobalScope
-// or the scope carried by the capture context.
-func ConfigureScope(f func(scope *Scope)) {
-	hub := CurrentHub()
-	hub.ConfigureScope(f)
-}
-
-// PushScope is a shorthand for CurrentHub().PushScope.
-func PushScope() *Scope {
-	hub := CurrentHub()
-	return hub.PushScope()
-}
-
-// PopScope is a shorthand for CurrentHub().PopScope.
-func PopScope() {
-	hub := CurrentHub()
-	hub.PopScope()
-}
-
 // Flush waits until the underlying Transport sends any buffered events to the
 // Sentry server, blocking for at most the given timeout. It returns false if
-// the timeout was reached. In that case, some events may not have been sent.
+// capture is disabled or the timeout was reached. In the latter case, some
+// events may not have been sent.
 //
 // Flush should be called before terminating the program to avoid
 // unintentionally dropping events.
@@ -151,8 +146,7 @@ func PopScope() {
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func Flush(timeout time.Duration) bool {
-	hub := CurrentHub()
-	return hub.Flush(timeout)
+	return ClientFromContext(context.Background()).Flush(timeout)
 }
 
 // FlushWithContext waits until the underlying Transport sends any buffered events
@@ -169,11 +163,11 @@ func Flush(timeout time.Duration) bool {
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
 
 func FlushWithContext(ctx context.Context) bool {
-	hub := CurrentHub()
-	return hub.FlushWithContext(ctx)
+	return ClientFromContext(ctx).FlushWithContext(ctx)
 }
 
-// LastEventID returns an ID of last captured event.
+// LastEventID returns the last event ID captured in ctx's scope, or in the
+// global scope when ctx does not carry one.
 func LastEventID(ctx context.Context) EventID {
 	return scopeFromContextOrGlobal(ctx).lastEventIDSnapshot()
 }
