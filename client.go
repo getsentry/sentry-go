@@ -919,8 +919,9 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 
 	// Transactions are sampled by options.TracesSampleRate or
 	// options.TracesSampler when they are started. Other events
-	// (errors, messages) are sampled here. Does not apply to check-ins.
-	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
+	// (errors, messages) are sampled here. Does not apply to check-ins or
+	// user-submitted feedback.
+	if event.Type != transactionType && event.Type != checkInType && event.Type != feedbackType && !sample(client.options.SampleRate) {
 		debuglog.Println("Event dropped due to SampleRate hit.")
 		client.reportRecorder.RecordOne(report.ReasonSampleRate, event.toCategory())
 		return nil
@@ -950,7 +951,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 				client.reportRecorder.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, int64(droppedSpans))
 			}
 		}
-	case checkInType: // not a default case, since we shouldn't apply BeforeSend on check-in events
+	case checkInType, feedbackType: // don't apply the error BeforeSend hook to check-ins or feedback
 	default:
 		if client.options.BeforeSend != nil {
 			if event = client.options.BeforeSend(event, hint); event == nil {

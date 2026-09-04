@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/getsentry/sentry-go/internal/protocol"
@@ -53,6 +54,13 @@ func TestCaptureFeedback(t *testing.T) {
 	if item.Header.Type != protocol.EnvelopeItemTypeFeedback {
 		t.Errorf("Envelope item type = %q, want %q", item.Header.Type, protocol.EnvelopeItemTypeFeedback)
 	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(item.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if got := payload["type"]; got != feedbackType {
+		t.Errorf("Payload type = %q, want %q", got, feedbackType)
+	}
 }
 
 func TestCaptureFeedbackOptionalFieldsAreOmitted(t *testing.T) {
@@ -74,6 +82,45 @@ func TestCaptureFeedbackNil(t *testing.T) {
 	}
 	if transport.lastEvent != nil {
 		t.Error("CaptureFeedback(nil) sent an event")
+	}
+}
+
+func TestCaptureFeedbackIgnoresErrorSamplingAndBeforeSend(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	client.options.SampleRate = 0
+	beforeSendCalled := false
+	client.options.BeforeSend = func(_ *Event, _ *EventHint) *Event {
+		beforeSendCalled = true
+		return nil
+	}
+
+	eventID := client.CaptureFeedback(&Feedback{Message: "Feedback"}, nil, scope)
+
+	if eventID == nil {
+		t.Fatal("CaptureFeedback returned a nil event ID")
+	}
+	if beforeSendCalled {
+		t.Error("CaptureFeedback called the error BeforeSend hook")
+	}
+	if transport.lastEvent == nil {
+		t.Error("CaptureFeedback did not send an event")
+	}
+}
+
+func TestEventFromFeedbackMarshalJSONIncludesType(t *testing.T) {
+	client, _, _ := setupClientTest()
+	event := client.EventFromFeedback(&Feedback{Message: "Feedback"})
+
+	payload, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["type"] != feedbackType {
+		t.Errorf("Payload type = %q, want %q", got["type"], feedbackType)
 	}
 }
 
