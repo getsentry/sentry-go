@@ -1099,6 +1099,65 @@ func ContinueFromTrace(trace string) SpanOption {
 	return continueFromHeaders(trace, "")
 }
 
+// GetTraceparent returns the Sentry trace header value carried by ctx.
+func GetTraceparent(ctx context.Context) string {
+	trace, propagation := traceForPropagation(ctx)
+	if trace.span != nil {
+		return trace.span.ToSentryTrace()
+	}
+	if trace.traceID != zeroTraceID {
+		if trace.spanID == zeroSpanID {
+			return ""
+		}
+		return fmt.Sprintf("%s-%s", trace.traceID, trace.spanID)
+	}
+	if propagation.TraceID == zeroTraceID || propagation.SpanID == zeroSpanID {
+		return ""
+	}
+	return fmt.Sprintf("%s-%s", propagation.TraceID, propagation.SpanID)
+}
+
+// GetTraceparentW3C returns the W3C traceparent header value carried by ctx.
+func GetTraceparentW3C(ctx context.Context) string {
+	trace, propagation := traceForPropagation(ctx)
+	if trace.span != nil {
+		return trace.span.ToTraceparent()
+	}
+	if trace.traceID != zeroTraceID {
+		if trace.spanID == zeroSpanID {
+			return ""
+		}
+		return fmt.Sprintf("00-%s-%s-00", trace.traceID, trace.spanID)
+	}
+	if propagation.TraceID == zeroTraceID || propagation.SpanID == zeroSpanID {
+		return ""
+	}
+	return fmt.Sprintf("00-%s-%s-00", propagation.TraceID, propagation.SpanID)
+}
+
+// GetBaggage returns the Sentry baggage header value carried by ctx.
+func GetBaggage(ctx context.Context) string {
+	trace, propagation := traceForPropagation(ctx)
+	if trace.span != nil {
+		return trace.span.ToBaggage()
+	}
+	if trace.traceID != zeroTraceID {
+		return ""
+	}
+	return propagation.DynamicSamplingContext.String()
+}
+
+func traceForPropagation(ctx context.Context) (activeTrace, PropagationContext) {
+	trace := activeTraceFromContexts(ClientFromContext(ctx), ctx)
+	var propagation PropagationContext
+	if scope := ScopeFromContext(ctx); scope != nil {
+		scope.mu.RLock()
+		propagation = scope.propagationContext
+		scope.mu.RUnlock()
+	}
+	return trace, propagation
+}
+
 // spanContextKey is used to store span values in contexts.
 type spanContextKey struct{}
 
@@ -1114,6 +1173,9 @@ func TransactionFromContext(ctx context.Context) *Span {
 // SpanFromContext returns the last span stored in the context, or nil if no span
 // is set on the context.
 func SpanFromContext(ctx context.Context) *Span {
+	if ctx == nil {
+		return nil
+	}
 	if span, ok := ctx.Value(spanContextKey{}).(*Span); ok {
 		return span
 	}

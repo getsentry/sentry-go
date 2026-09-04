@@ -692,7 +692,7 @@ func (client *Client) captureEvent(ctx context.Context, event *Event, options ..
 	return client.capture(ctx, event, resolveCaptureOptions(ctx, options...))
 }
 
-func (client *Client) captureLog(log *Log, _ *Scope) bool {
+func (client *Client) captureLog(log *Log) bool {
 	if log == nil {
 		return false
 	}
@@ -726,7 +726,7 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 	return true
 }
 
-func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
+func (client *Client) captureMetric(metric *Metric) bool {
 	if metric == nil {
 		return false
 	}
