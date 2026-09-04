@@ -1,14 +1,14 @@
 package sentry_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
+	"github.com/getsentry/sentry-go"
 	pkgErrors "github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/getsentry/sentry-go"
 )
 
 //go:noinline
@@ -43,10 +43,10 @@ func panicWithArbitraryValue() {
 }
 
 //go:noinline
-func recoverPanic(client *sentry.Client, panicFunc func()) {
+func recoverPanic(ctx context.Context, panicFunc func()) {
 	defer func() {
-		if err := recover(); err != nil {
-			client.Recover(err, nil, nil)
+		if recovered := recover(); recovered != nil {
+			sentry.Recover(ctx, recovered)
 		}
 	}()
 
@@ -54,11 +54,11 @@ func recoverPanic(client *sentry.Client, panicFunc func()) {
 }
 
 //go:noinline
-func recoverHandledError(client *sentry.Client) {
-	client.Recover(errors.New("boom"), nil, nil)
+func recoverHandledError(ctx context.Context) {
+	sentry.Recover(ctx, errors.New("boom"))
 }
 
-func newRecoverTestClient(t *testing.T) (*sentry.Client, *sentry.MockTransport) {
+func newRecoverTestContext(t *testing.T) (context.Context, *sentry.MockTransport) {
 	t.Helper()
 
 	transport := &sentry.MockTransport{}
@@ -70,8 +70,13 @@ func newRecoverTestClient(t *testing.T) (*sentry.Client, *sentry.MockTransport) 
 		},
 	})
 	require.NoError(t, err)
+	t.Cleanup(client.Close)
 
-	return client, transport
+	ctx := sentry.ContextWithClient(
+		sentry.ContextWithScope(context.Background(), sentry.NewScope()),
+		client,
+	)
+	return ctx, transport
 }
 
 func requireTopFrame(t *testing.T, stacktrace *sentry.Stacktrace, function string) {
@@ -113,8 +118,8 @@ func TestRecoverUsesPanicOriginStacktrace(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			client, transport := newRecoverTestClient(t)
-			recoverPanic(client, test.panicFunc)
+			ctx, transport := newRecoverTestContext(t)
+			recoverPanic(ctx, test.panicFunc)
 
 			events := transport.Events()
 			require.Len(t, events, 1)
@@ -129,7 +134,7 @@ func TestRecoverUsesPanicOriginStacktrace(t *testing.T) {
 	}
 }
 
-func TestRecoverValueAlwaysUsesPanicOriginStacktrace(t *testing.T) {
+func TestRecoverValueUsesPanicOriginStacktraceWhenConfigured(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -154,8 +159,8 @@ func TestRecoverValueAlwaysUsesPanicOriginStacktrace(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			client, transport := newRecoverTestClient(t)
-			recoverPanic(client, test.panicFunc)
+			ctx, transport := newRecoverTestContext(t)
+			recoverPanic(ctx, test.panicFunc)
 
 			events := transport.Events()
 			require.Len(t, events, 1)
@@ -168,8 +173,8 @@ func TestRecoverValueAlwaysUsesPanicOriginStacktrace(t *testing.T) {
 func TestRecoverOutsidePanicKeepsCallerStacktrace(t *testing.T) {
 	t.Parallel()
 
-	client, transport := newRecoverTestClient(t)
-	recoverHandledError(client)
+	ctx, transport := newRecoverTestContext(t)
+	recoverHandledError(ctx)
 
 	events := transport.Events()
 	require.Len(t, events, 1)

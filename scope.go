@@ -15,23 +15,19 @@ import (
 	"github.com/getsentry/sentry-go/report"
 )
 
-// Scope holds contextual data for the current scope.
+// Scope holds contextual data for an operation.
 //
-// The scope is an object that can cloned efficiently and stores data that is
-// locally relevant to an event. For instance the scope will hold recorded
-// breadcrumbs and similar information.
+// The scope is an object that can be cloned efficiently and stores data that is
+// locally relevant to an event.
 //
-// The scope can be interacted with in two ways. First, the scope is routinely
-// updated with information by functions such as AddBreadcrumb which will modify
-// the current scope. Second, the current scope can be configured through the
-// ConfigureScope function or Hub method of the same name.
-//
-// The scope is meant to be modified but not inspected directly. When preparing
-// an event for reporting, the current client adds information from the current
-// scope into the event.
+// Clearing a scope retains its event processors and propagation context.
 type Scope struct {
-	mu              sync.RWMutex
+	mu sync.RWMutex
+	// eventProcessors are retained by Clear and inherited by Clone.
 	eventProcessors []EventProcessor
+
+	lastEventMu sync.Mutex
+	lastEventID EventID
 
 	// scopeData keeps track of all scope specific data
 	scopeData
@@ -58,7 +54,7 @@ type scopeData struct {
 	}
 
 	propagationContext PropagationContext
-	span               *Span
+	span               *Span // TODO: this should be removed when the span API is introduced. Currently kept for compatibility.
 }
 
 // NewScope creates a new Scope.
@@ -67,6 +63,10 @@ func NewScope() *Scope {
 }
 
 func newScopeData() scopeData {
+	return newScopeDataWithPropagation(NewPropagationContext())
+}
+
+func newScopeDataWithPropagation(propagationContext PropagationContext) scopeData {
 	return scopeData{
 		attributes:         make(map[string]attribute.Value),
 		breadcrumbs:        make([]*Breadcrumb, 0),
@@ -74,7 +74,7 @@ func newScopeData() scopeData {
 		tags:               make(map[string]string),
 		contexts:           make(map[string]Context),
 		fingerprint:        make([]string, 0),
-		propagationContext: NewPropagationContext(),
+		propagationContext: propagationContext,
 	}
 }
 
@@ -92,6 +92,28 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	if len(scope.breadcrumbs) > limit {
 		scope.breadcrumbs = scope.breadcrumbs[1 : limit+1]
 	}
+}
+
+func (scope *Scope) setLastEventID(id EventID) {
+	if scope == nil {
+		scope = GlobalScope()
+	}
+
+	scope.lastEventMu.Lock()
+	defer scope.lastEventMu.Unlock()
+
+	scope.lastEventID = id
+}
+
+func (scope *Scope) lastEventIDSnapshot() EventID {
+	if scope == nil {
+		scope = GlobalScope()
+	}
+
+	scope.lastEventMu.Lock()
+	defer scope.lastEventMu.Unlock()
+
+	return scope.lastEventID
 }
 
 // ClearBreadcrumbs clears all breadcrumbs from the current scope.
@@ -259,14 +281,14 @@ func (scope *Scope) SetPropagationContext(propagationContext PropagationContext)
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	scope.propagationContext = propagationContext
+	scope.propagationContext = propagationContext.clone()
 }
 
 func (scope *Scope) propagationContextSnapshot() PropagationContext {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
-	return scope.propagationContext
+	return scope.propagationContext.clone()
 }
 
 // GetSpan returns the span from the current scope.
@@ -308,6 +330,7 @@ func (data scopeData) clone() scopeData {
 	clone.tags = maps.Clone(data.tags)
 	clone.fingerprint = make([]string, len(data.fingerprint))
 	copy(clone.fingerprint, data.fingerprint)
+	clone.propagationContext = data.propagationContext.clone()
 	return clone
 }
 
@@ -316,7 +339,7 @@ func (scope *Scope) Clear() {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	scope.scopeData = newScopeData()
+	scope.scopeData = newScopeDataWithPropagation(scope.propagationContext)
 }
 
 // AddEventProcessor adds an event processor to the current scope.
@@ -385,7 +408,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		if transaction != nil {
 			event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
 		}
-	} else {
+	} else if scope.propagationContext.TraceID != zeroTraceID {
 		event.Contexts["trace"] = scope.propagationContext.Map()
 
 		dsc := scope.propagationContext.DynamicSamplingContext

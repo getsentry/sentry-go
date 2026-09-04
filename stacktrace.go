@@ -355,14 +355,6 @@ func setInAppFrame(frame *Frame) {
 	}
 }
 
-func callerFunctionName() string {
-	pcs := make([]uintptr, 1)
-	runtime.Callers(3, pcs)
-	callersFrames := runtime.CallersFrames(pcs)
-	callerFrame, _ := callersFrames.Next()
-	return baseName(callerFrame.Function)
-}
-
 // packageName returns the package part of the symbol name, or the empty string
 // if there is none.
 // It replicates https://golang.org/pkg/debug/gosym/#Sym.PackageName, avoiding a
@@ -381,16 +373,6 @@ func packageName(name string) string {
 		return name[:pathend+i]
 	}
 	return ""
-}
-
-// baseName returns the symbol name without the package or receiver name.
-// It replicates https://golang.org/pkg/debug/gosym/#Sym.BaseName, avoiding a
-// dependency on debug/gosym.
-func baseName(name string) string {
-	if i := strings.LastIndex(name, "."); i != -1 {
-		return name[i+1:]
-	}
-	return name
 }
 
 func isCompilerGeneratedSymbol(name string) bool {
