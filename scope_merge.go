@@ -2,17 +2,16 @@ package sentry
 
 import (
 	"context"
-	"net/http"
 	"slices"
 )
 
 // applyScopeToEvent applies the effective scope to event and returns the scope
 // processors so they can run after the scope lock is released.
 func applyScopeToEvent(
+	ctx context.Context,
 	event *Event,
 	scope *Scope,
 	client *Client,
-	hint *EventHint,
 	maxBreadcrumbs int,
 ) []EventProcessor {
 	_, explicitTrace := event.Contexts[traceContextKey]
@@ -71,7 +70,6 @@ func applyScopeToEvent(
 	request := scope.request
 	requestBody := scope.requestBody
 	propagationContext := scope.propagationContext
-	span := scope.span
 	processors := scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
 	scope.mu.RUnlock()
 
@@ -90,16 +88,14 @@ func applyScopeToEvent(
 		}
 	}
 
-	applyTraceToEvent(event, hint, client, request, span, propagationContext, explicitTrace)
+	applyTraceToEvent(ctx, event, client, propagationContext, explicitTrace)
 	return processors
 }
 
 func applyTraceToEvent(
+	ctx context.Context,
 	event *Event,
-	hint *EventHint,
 	client *Client,
-	request *http.Request,
-	span *Span,
 	propagationContext PropagationContext,
 	explicit bool,
 ) {
@@ -107,34 +103,22 @@ func applyTraceToEvent(
 		return
 	}
 
-	var ctx context.Context
-	if hint != nil {
-		ctx = hint.Context
-	}
-	if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
-		setEventTrace(event, Context{
-			traceIDContextKey: traceID.String(),
-			spanIDContextKey:  spanID.String(),
-		})
-		return
-	}
-	if span != nil {
-		setEventTrace(event, span.traceContext().Map())
+	trace := activeTraceFromContexts(client, ctx)
+	if trace.span != nil {
+		setEventTrace(event, trace.span.traceContext().Map())
 		if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() {
-			if transaction := span.GetTransaction(); transaction != nil {
-				event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
+			if transaction := trace.span.GetTransaction(); transaction != nil {
+				event.sdkMetaData.dsc = dynamicSamplingContextFromTransaction(transaction, client)
 			}
 		}
 		return
 	}
-	if request != nil {
-		if traceID, spanID, ok := client.externalTraceContextFromContext(request.Context()); ok {
-			setEventTrace(event, Context{
-				traceIDContextKey: traceID.String(),
-				spanIDContextKey:  spanID.String(),
-			})
-			return
-		}
+	if trace.traceID != zeroTraceID {
+		setEventTrace(event, Context{
+			traceIDContextKey: trace.traceID.String(),
+			spanIDContextKey:  trace.spanID.String(),
+		})
+		return
 	}
 	if propagationContext.TraceID == zeroTraceID {
 		return

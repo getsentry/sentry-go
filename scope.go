@@ -541,49 +541,37 @@ func hubFromContexts(ctxs ...context.Context) *Hub {
 	return nil
 }
 
-// resolveTrace resolves trace ID and span ID from the given scope and contexts.
-//
-// The resolution order follows a most-specific-to-least-specific pattern:
-//  1. If an external trace resolver was registered (eg. OTel), we prioritise trace context
-//     information from that
-//  2. Check for span directly in contexts (SpanFromContext) - this is the most specific
-//     source as it represents a span explicitly attached to the current operation's context
-//  3. Check scope's span - provides access to span set on the hub's scope
-//  4. Fall back to scope's propagation context trace ID
-//
-// This ordering ensures we always use the most contextually relevant tracing information.
-// For example, if a specific span is active for an operation, we use that span's trace/span IDs
-// rather than accidentally using a different span that might be set on the hub's scope.
-func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
-	var span *Span
+type activeTrace struct {
+	traceID TraceID
+	spanID  SpanID
+	span    *Span
+}
 
+func activeTraceFromContexts(client *Client, ctxs ...context.Context) activeTrace {
 	for _, ctx := range ctxs {
 		if ctx == nil {
 			continue
 		}
-		if client.IsEnabled() {
-			if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
-				return traceID, spanID
-			}
+		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
+			return activeTrace{traceID: traceID, spanID: spanID}
 		}
-		if span = SpanFromContext(ctx); span != nil {
-			break
+		if span := SpanFromContext(ctx); span != nil {
+			return activeTrace{traceID: span.TraceID, spanID: span.SpanID, span: span}
 		}
 	}
+	return activeTrace{}
+}
 
-	if scope != nil {
-		scope.mu.RLock()
-		if span == nil {
-			span = scope.span
-		}
-		if span != nil {
-			traceID = span.TraceID
-			spanID = span.SpanID
-		} else {
-			traceID = scope.propagationContext.TraceID
-		}
-		scope.mu.RUnlock()
+func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) (TraceID, SpanID) {
+	trace := activeTraceFromContexts(client, ctxs...)
+	if trace.traceID != zeroTraceID || trace.span != nil {
+		return trace.traceID, trace.spanID
 	}
-
-	return traceID, spanID
+	if scope == nil {
+		scope = GlobalScope()
+	}
+	scope.mu.RLock()
+	trace.traceID = scope.propagationContext.TraceID
+	scope.mu.RUnlock()
+	return trace.traceID, trace.spanID
 }

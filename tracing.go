@@ -195,19 +195,24 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		option(&span)
 	}
 
-	span.Sampled = span.sample()
+	client := ClientFromContext(ctx)
+	span.Sampled = span.sample(client)
 
-	span.recorder = &spanRecorder{}
 	if hasParent {
 		span.recorder = parent.spanRecorder()
+	} else {
+		span.recorder = newSpanRecorder(client)
 	}
 
 	span.recorder.record(&span)
 
-	clientOptions := span.clientOptions()
-	if clientOptions.EnableTracing {
-		hub := hubFromContext(ctx)
-		hub.Scope().SetSpan(&span)
+	if scope := ScopeFromContext(ctx); !hasParent && scope != nil {
+		scope.SetPropagationContext(PropagationContext{
+			TraceID:                span.TraceID,
+			SpanID:                 span.SpanID,
+			ParentSpanID:           span.ParentSpanID,
+			DynamicSamplingContext: span.dynamicSamplingContext,
+		})
 	}
 
 	return &span
@@ -392,7 +397,7 @@ func (s *Span) ToBaggage() string {
 
 	// In case there is currently no frozen DynamicSamplingContext attached to the transaction,
 	// create one from the properties of the transaction.
-	if !s.dynamicSamplingContext.IsFrozen() {
+	if !t.dynamicSamplingContext.IsFrozen() {
 		// This will return a frozen DynamicSamplingContext.
 		if dsc := DynamicSamplingContextFromTransaction(t); dsc.HasEntries() {
 			t.dynamicSamplingContext = dsc
@@ -411,12 +416,12 @@ func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
 }
 
 // shouldIgnoreStatusCode checks if the transaction should be ignored based on HTTP status code.
-func (s *Span) shouldIgnoreStatusCode() bool {
+func (s *Span) shouldIgnoreStatusCode(client *Client) bool {
 	if !s.IsTransaction() {
 		return false
 	}
 
-	ignoreStatusCodes := s.clientOptions().TraceIgnoreStatusCodes
+	ignoreStatusCodes := s.clientOptions(client).TraceIgnoreStatusCodes
 	if len(ignoreStatusCodes) == 0 {
 		return false
 	}
@@ -467,41 +472,27 @@ func (s *Span) doFinish() {
 	if s.EndTime.IsZero() {
 		s.EndTime = monotonicTimeSince(s.StartTime)
 	}
-
-	hub := hubFromContext(s.ctx)
 	if !s.IsTransaction() {
-		if s.parent != nil {
-			hub.Scope().SetSpan(s.parent)
-		}
+		return
 	}
 
-	if s.shouldIgnoreStatusCode() {
+	client := ClientFromContext(s.ctx)
+	if s.shouldIgnoreStatusCode(client) {
 		return
 	}
 
 	if !s.Sampled.Bool() {
-		c := hub.Client()
-		if c != nil {
-			if !s.IsTransaction() {
-				// we count the sampled spans from the transaction root. it is guaranteed that the whole transaction
-				// would be sampled
-				return
-			}
-			children := s.recorder.children()
-			c.reportRecorder.RecordOne(report.ReasonSampleRate, ratelimit.CategoryTransaction)
-			c.reportRecorder.Record(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
-		}
+		children := s.recorder.children()
+		client.reportRecorder.RecordOne(report.ReasonSampleRate, ratelimit.CategoryTransaction)
+		client.reportRecorder.Record(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
 		return
 	}
-	event := s.toEvent()
-	if event == nil {
-		return
-	}
+	event := s.toEvent(client)
 
 	// TODO(tracing): add breadcrumbs
 	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
 
-	hub.CaptureEvent(event)
+	client.captureEvent(s.ctx, event)
 }
 
 // sentryTracePattern matches either
@@ -549,16 +540,15 @@ func (s *Span) updateFromBaggage(header []byte) {
 	}
 }
 
-func (s *Span) clientOptions() *ClientOptions {
-	client := hubFromContext(s.ctx).Client()
+func (s *Span) clientOptions(client *Client) *ClientOptions {
 	if client.IsEnabled() {
 		return &client.options
 	}
 	return &ClientOptions{}
 }
 
-func (s *Span) sample() Sampled {
-	clientOptions := s.clientOptions()
+func (s *Span) sample(client *Client) Sampled {
+	clientOptions := s.clientOptions(client)
 	// https://develop.sentry.dev/sdk/performance/#sampling
 	// #1 tracing is not enabled.
 	if !clientOptions.EnableTracing {
@@ -667,7 +657,7 @@ func (s *Span) sample() Sampled {
 	return SampledFalse
 }
 
-func (s *Span) toEvent() *Event {
+func (s *Span) toEvent(client *Client) *Event {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -688,7 +678,7 @@ func (s *Span) toEvent() *Event {
 	// Create and attach a DynamicSamplingContext to the transaction.
 	// If the DynamicSamplingContext is not frozen at this point, we can assume being head of trace.
 	if !s.dynamicSamplingContext.IsFrozen() {
-		s.dynamicSamplingContext = DynamicSamplingContextFromTransaction(s)
+		s.dynamicSamplingContext = dynamicSamplingContextFromTransaction(s, client)
 	}
 
 	contexts := make(map[string]Context, len(s.contexts)+1)
@@ -1042,23 +1032,10 @@ func WithSpanOrigin(origin SpanOrigin) SpanOption {
 	}
 }
 
-// ContinueTrace continues a trace based on traceparent and baggage values.
-// If the SDK is configured with tracing enabled,
-// this function returns populated SpanOption.
-// In any other cases, it populates the propagation context on the scope.
-func ContinueTrace(hub *Hub, traceparent, baggage string) SpanOption {
-	scope := hub.Scope()
-	propagationContext, _ := PropagationContextFromHeaders(traceparent, baggage)
-	client := hub.Client()
-
-	if !shouldContinueTrace(client, propagationContext.DynamicSamplingContext) {
-		propagationContext = NewPropagationContext()
-		traceparent = ""
-		baggage = ""
-	}
-
-	scope.SetPropagationContext(propagationContext)
-	return ContinueFromHeaders(traceparent, baggage)
+// ContinueTrace returns a span option that continues a trace from sentry-trace
+// and baggage header values.
+func ContinueTrace(traceparent, baggage string) SpanOption {
+	return continueFromHeaders(traceparent, baggage)
 }
 
 // ContinueFromRequest returns a span option that updates the span to continue
@@ -1075,8 +1052,12 @@ func ContinueFromRequest(r *http.Request) SpanOption {
 // ContinueFromHeaders returns a span option that updates the span to continue
 // an existing TraceID and propagates the Dynamic Sampling context.
 func ContinueFromHeaders(trace, baggage string) SpanOption {
+	return continueFromHeaders(trace, baggage)
+}
+
+func continueFromHeaders(trace, baggage string) SpanOption {
 	return func(s *Span) {
-		if trace == "" {
+		if s.parent != nil || trace == "" {
 			return
 		}
 
@@ -1089,12 +1070,14 @@ func ContinueFromHeaders(trace, baggage string) SpanOption {
 			}
 		}
 
-		client := hubFromContext(s.ctx).Client()
+		client := ClientFromContext(s.ctx)
 		if !shouldContinueTrace(client, dsc) {
 			return // leave span unchanged → behaves as head of trace
 		}
 
-		s.updateFromSentryTrace([]byte(trace))
+		if !s.updateFromSentryTrace([]byte(trace)) {
+			return
+		}
 
 		if baggage != "" {
 			s.updateFromBaggage([]byte(baggage))
@@ -1113,16 +1096,7 @@ func ContinueFromHeaders(trace, baggage string) SpanOption {
 // ContinueFromTrace returns a span option that updates the span to continue
 // an existing TraceID.
 func ContinueFromTrace(trace string) SpanOption {
-	return func(s *Span) {
-		if trace == "" {
-			return
-		}
-		client := hubFromContext(s.ctx).Client()
-		if !shouldContinueTrace(client, DynamicSamplingContext{}) {
-			return
-		}
-		s.updateFromSentryTrace([]byte(trace))
-	}
+	return continueFromHeaders(trace, "")
 }
 
 // spanContextKey is used to store span values in contexts.
