@@ -114,7 +114,8 @@ func PopScope() {
 
 // Flush waits until the underlying Transport sends any buffered events to the
 // Sentry server, blocking for at most the given timeout. It returns false if
-// the timeout was reached. In that case, some events may not have been sent.
+// capture is disabled or the timeout was reached. In the latter case, some
+// events may not have been sent.
 //
 // Flush should be called before terminating the program to avoid
 // unintentionally dropping events.
@@ -129,9 +130,10 @@ func Flush(timeout time.Duration) bool {
 }
 
 // FlushWithContext waits until the underlying Transport sends any buffered events
-// to the Sentry server, blocking for at most the duration specified by the context.
-// It returns false if the context is canceled before the events are sent. In such a case,
-// some events may not be delivered.
+// to the Sentry server, blocking for at most the duration specified by the
+// context. It returns false if capture is disabled or the context is canceled
+// before the events are sent. In the latter case, some events may not be
+// delivered.
 //
 // FlushWithContext should be called before terminating the program to ensure no
 // events are unintentionally dropped.

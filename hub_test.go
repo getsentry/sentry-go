@@ -34,6 +34,33 @@ func TestNewHubLayerStoresClientAndScope(t *testing.T) {
 	assertEqual(t, &layer{client: client, scope: scope}, (*hub.stack)[0])
 }
 
+func TestNewHubAliasesNoopClientForNil(t *testing.T) {
+	firstHub := NewHub(nil, NewScope())
+	secondHub := NewHub(nil, NewScope())
+	firstClient := firstHub.Client()
+
+	if firstClient == nil || firstClient.IsEnabled() {
+		t.Fatal("nil should be normalized to a disabled, non-nil client")
+	}
+	if firstClient != firstHub.Client() {
+		t.Fatal("client reads should return the client stored on the Hub")
+	}
+	if firstClient != secondHub.Client() {
+		t.Fatal("nil Hub bindings should share the no-op client")
+	}
+
+	firstHub.BindClient(nil)
+	if reboundClient := firstHub.Client(); reboundClient != firstClient || reboundClient.IsEnabled() {
+		t.Fatal("binding nil should reuse the disabled client")
+	}
+
+	explicitClient := NewNoopClient()
+	firstHub.BindClient(explicitClient)
+	if firstHub.Client() != explicitClient {
+		t.Fatal("an explicit no-op client should be preserved")
+	}
+}
+
 func TestCloneHubInheritsClientAndScope(t *testing.T) {
 	hub, client, scope := setupHubTest()
 	clone := hub.Clone()
@@ -509,10 +536,8 @@ func TestHub_Flush(t *testing.T) {
 
 func TestHub_Flush_NoClient(t *testing.T) {
 	hub := NewHub(nil, nil)
-	flushed := hub.Flush(20 * time.Millisecond)
-
-	if flushed != false {
-		t.Fatalf("expected flush to be false, got %v", flushed)
+	if hub.Flush(20 * time.Millisecond) {
+		t.Fatal("disabled client flush should return false")
 	}
 }
 
@@ -520,10 +545,8 @@ func TestHub_FlushWithCtx_NoClient(t *testing.T) {
 	hub := NewHub(nil, nil)
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	flushed := hub.FlushWithContext(cancelCtx)
-
-	if flushed != false {
-		t.Fatalf("expected flush to be false, got %v", flushed)
+	if hub.FlushWithContext(cancelCtx) {
+		t.Fatal("disabled client flush should return false")
 	}
 }
 

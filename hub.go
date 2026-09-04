@@ -20,7 +20,7 @@ const (
 	RequestContextKey = contextKey(2)
 )
 
-// currentHub is the initial Hub with no Client bound and an empty Scope.
+// currentHub is the initial Hub with a no-op Client and an empty Scope.
 var currentHub = NewHub(nil, NewScope())
 
 // Hub is the central object that manages scopes and clients.
@@ -58,16 +58,17 @@ func (l *layer) Client() *Client {
 func (l *layer) SetClient(c *Client) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.client = c
+	l.client = normalizeClient(c)
 }
 
 type stack []*layer
 
-// NewHub returns an instance of a Hub with provided Client and Scope bound.
+// NewHub returns an instance of a Hub with the provided Client and Scope bound.
+// If client is nil, the Hub binds an independent no-op Client.
 func NewHub(client *Client, scope *Scope) *Hub {
 	hub := Hub{
 		stack: &stack{{
-			client: client,
+			client: normalizeClient(client),
 			scope:  scope,
 		}},
 	}
@@ -126,7 +127,8 @@ func (hub *Hub) Scope() *Scope {
 	return top.scope
 }
 
-// Client returns top-level Client of the current Hub or nil if no Client is bound.
+// Client returns the top-level Client of the current Hub. It always returns a
+// non-nil client; a Hub created or bound with nil uses a no-op client.
 func (hub *Hub) Client() *Client {
 	top := hub.stackTop()
 	return top.Client()
@@ -174,7 +176,8 @@ func (hub *Hub) PopScope() {
 	}
 }
 
-// BindClient binds a new Client for the current Hub.
+// BindClient binds a new Client for the current Hub. Passing nil binds a no-op
+// client.
 func (hub *Hub) BindClient(client *Client) {
 	top := hub.stackTop()
 	top.SetClient(client)
@@ -210,7 +213,8 @@ func (hub *Hub) ConfigureScope(f func(scope *Scope)) {
 
 // CaptureEvent calls the method of a same name on currently bound Client instance
 // passing it a top-level Scope.
-// Returns EventID if successfully, or nil if there's no Scope or Client available.
+// Returns EventID if successful, or nil if there is no Scope, capture is
+// disabled, or the event is dropped.
 func (hub *Hub) CaptureEvent(event *Event) *EventID {
 	return hub.CaptureEventWithHint(event, nil)
 }
@@ -218,7 +222,7 @@ func (hub *Hub) CaptureEvent(event *Event) *EventID {
 // CaptureEventWithHint is like CaptureEvent but additionally accepts an EventHint.
 func (hub *Hub) CaptureEventWithHint(event *Event, hint *EventHint) *EventID {
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil || scope == nil {
+	if scope == nil {
 		return nil
 	}
 	eventID := client.CaptureEvent(event, hint, scope)
@@ -233,10 +237,11 @@ func (hub *Hub) CaptureEventWithHint(event *Event, hint *EventHint) *EventID {
 
 // CaptureMessage calls the method of a same name on currently bound Client instance
 // passing it a top-level Scope.
-// Returns EventID if successfully, or nil if there's no Scope or Client available.
+// Returns EventID if successful, or nil if there is no Scope, capture is
+// disabled, or the event is dropped.
 func (hub *Hub) CaptureMessage(message string) *EventID {
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil || scope == nil {
+	if scope == nil {
 		return nil
 	}
 	eventID := client.CaptureMessage(message, nil, scope)
@@ -251,10 +256,11 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 
 // CaptureException calls the method of a same name on currently bound Client instance
 // passing it a top-level Scope.
-// Returns EventID if successfully, or nil if there's no Scope or Client available.
+// Returns EventID if successful, or nil if there is no Scope, capture is
+// disabled, or the event is dropped.
 func (hub *Hub) CaptureException(exception error) *EventID {
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil || scope == nil {
+	if scope == nil {
 		return nil
 	}
 	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
@@ -272,10 +278,6 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 // Returns CheckInID if the check-in was captured successfully, or nil otherwise.
 func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil {
-		return nil
-	}
-
 	return client.CaptureCheckIn(checkIn, monitorConfig, scope)
 }
 
@@ -285,12 +287,6 @@ func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *
 // configuration on the client.
 func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 	client := hub.Client()
-
-	// If there's no client, just store it on the scope straight away
-	if client == nil {
-		hub.Scope().AddBreadcrumb(breadcrumb, defaultMaxBreadcrumbs)
-		return
-	}
 
 	limit := client.options.MaxBreadcrumbs
 	switch {
@@ -315,13 +311,14 @@ func (hub *Hub) AddBreadcrumb(breadcrumb *Breadcrumb, hint *BreadcrumbHint) {
 
 // Recover calls the method of a same name on currently bound Client instance
 // passing it a top-level Scope.
-// Returns EventID if successfully, or nil if there's no Scope or Client available.
+// Returns EventID if successful, or nil if there is no Scope, capture is
+// disabled, or the event is dropped.
 func (hub *Hub) Recover(err interface{}) *EventID {
 	if err == nil {
 		err = recover()
 	}
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil || scope == nil {
+	if scope == nil {
 		return nil
 	}
 	return client.Recover(err, &EventHint{RecoveredException: err}, scope)
@@ -329,13 +326,14 @@ func (hub *Hub) Recover(err interface{}) *EventID {
 
 // RecoverWithContext calls the method of a same name on currently bound Client instance
 // passing it a top-level Scope.
-// Returns EventID if successfully, or nil if there's no Scope or Client available.
+// Returns EventID if successful, or nil if there is no Scope, capture is
+// disabled, or the event is dropped.
 func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventID {
 	if err == nil {
 		err = recover()
 	}
 	client, scope := hub.Client(), hub.Scope()
-	if client == nil || scope == nil {
+	if scope == nil {
 		return nil
 	}
 	return client.RecoverWithContext(ctx, err, &EventHint{RecoveredException: err}, scope)
@@ -343,7 +341,8 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 
 // Flush waits until the underlying Transport sends any buffered events to the
 // Sentry server, blocking for at most the given timeout. It returns false if
-// the timeout was reached. In that case, some events may not have been sent.
+// capture is disabled or the timeout was reached. In the latter case, some
+// events may not have been sent.
 //
 // Flush should be called before terminating the program to avoid
 // unintentionally dropping events.
@@ -353,19 +352,14 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (hub *Hub) Flush(timeout time.Duration) bool {
-	client := hub.Client()
-
-	if client == nil {
-		return false
-	}
-
-	return client.Flush(timeout)
+	return hub.Client().Flush(timeout)
 }
 
 // FlushWithContext waits until the underlying Transport sends any buffered events
-// to the Sentry server, blocking for at most the duration specified by the context.
-// It returns false if the context is canceled before the events are sent. In such a case,
-// some events may not be delivered.
+// to the Sentry server, blocking for at most the duration specified by the
+// context. It returns false if capture is disabled or the context is canceled
+// before the events are sent. In the latter case, some events may not be
+// delivered.
 //
 // FlushWithContext should be called before terminating the program to ensure no
 // events are unintentionally dropped.
@@ -375,13 +369,7 @@ func (hub *Hub) Flush(timeout time.Duration) bool {
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
 
 func (hub *Hub) FlushWithContext(ctx context.Context) bool {
-	client := hub.Client()
-
-	if client == nil {
-		return false
-	}
-
-	return client.FlushWithContext(ctx)
+	return hub.Client().FlushWithContext(ctx)
 }
 
 // GetTraceparent returns the current Sentry traceparent string, to be used as a HTTP header value

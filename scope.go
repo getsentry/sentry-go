@@ -375,7 +375,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		event.Contexts["trace"] = scope.propagationContext.Map()
 
 		dsc := scope.propagationContext.DynamicSamplingContext
-		if !dsc.HasEntries() && client != nil {
+		if !dsc.HasEntries() && client.IsEnabled() {
 			dsc = DynamicSamplingContextFromScope(scope, client)
 		}
 		event.sdkMetaData.dsc = dsc
@@ -383,7 +383,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 
 	// If an external trace resolver is registered (e.g. OTel), override
 	// trace/span IDs from the hint context or the scope's request context.
-	if client != nil {
+	if client.IsEnabled() {
 		var ctx context.Context
 		if hint != nil {
 			ctx = hint.Context
@@ -434,7 +434,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
-			if client != nil {
+			if client.IsEnabled() {
 				client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
 				if category == ratelimit.CategoryTransaction {
 					client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
@@ -443,7 +443,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 			return nil
 		}
 		if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
-			if client != nil {
+			if client.IsEnabled() {
 				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
 			}
 		}
@@ -524,7 +524,7 @@ func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) (traceI
 		if ctx == nil {
 			continue
 		}
-		if client != nil {
+		if client.IsEnabled() {
 			if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
 				return traceID, spanID
 			}
