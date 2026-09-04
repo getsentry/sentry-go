@@ -26,6 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testDsn = "https://whatever@sentry.io/1337"
+
 func TestNewClientAllowsEmptyDSN(t *testing.T) {
 	transport := &MockTransport{}
 	client, err := NewClient(ClientOptions{
@@ -950,7 +952,7 @@ func TestSampleRate(t *testing.T) {
 				total   uint64
 				sampled uint64
 			)
-			// Call sample from multiple goroutines just like multiple hubs
+			// Call sample from multiple goroutines sharing a client.
 			// sharing a client would. This should help uncover data races.
 			var wg sync.WaitGroup
 			for i := 0; i < 4; i++ {
@@ -1246,7 +1248,6 @@ func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
 type multiClientEnv struct {
 	client1, client2       *Client
 	transport1, transport2 *MockTransport
-	hub1, hub2             *Hub
 	ctx1, ctx2             context.Context
 	traceID1, traceID2     TraceID
 }
@@ -1273,15 +1274,14 @@ func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 	e.traceID1 = TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
 	e.traceID2 = TraceIDFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2")
 
-	scope1 := NewScope()
+	var scope1 *Scope
+	e.ctx1, scope1 = WithIsolationScope(context.Background())
+	e.ctx1 = ContextWithClient(e.ctx1, e.client1)
 	scope1.SetPropagationContext(PropagationContext{TraceID: e.traceID1})
-	scope2 := NewScope()
+	var scope2 *Scope
+	e.ctx2, scope2 = WithIsolationScope(context.Background())
+	e.ctx2 = ContextWithClient(e.ctx2, e.client2)
 	scope2.SetPropagationContext(PropagationContext{TraceID: e.traceID2})
-
-	e.hub1 = NewHub(e.client1, scope1)
-	e.hub2 = NewHub(e.client2, scope2)
-	e.ctx1 = SetHubOnContext(context.Background(), e.hub1)
-	e.ctx2 = SetHubOnContext(context.Background(), e.hub2)
 
 	t.Cleanup(func() {
 		e.client1.Close()
@@ -1317,17 +1317,17 @@ func TestClient_MultiClientSetup(t *testing.T) {
 	t.Run("signals_route_to_correct_client", func(t *testing.T) {
 		e := setupMultiClientEnv(t)
 
-		e.hub1.CaptureMessage("msg-from-client1")
-		e.hub2.CaptureMessage("msg-from-client2")
+		e.client1.captureMessage(e.ctx1, "msg-from-client1")
+		e.client2.captureMessage(e.ctx2, "msg-from-client2")
 
 		require.Len(t, e.transport1.Events(), 1)
 		require.Len(t, e.transport2.Events(), 1)
 		assert.Equal(t, "msg-from-client1", e.transport1.Events()[0].Message)
 		assert.Equal(t, "msg-from-client2", e.transport2.Events()[0].Message)
 		assert.Equal(t, e.traceID1, eventTraceID(t, e.transport1.Events()[0]),
-			"event on client1 should carry hub1's trace ID")
+			"event on client1 should carry scope1's trace ID")
 		assert.Equal(t, e.traceID2, eventTraceID(t, e.transport2.Events()[0]),
-			"event on client2 should carry hub2's trace ID")
+			"event on client2 should carry scope2's trace ID")
 		e.resetTransports()
 
 		NewLogger(e.ctx1).Info().WithCtx(e.ctx1).Emit("log-from-client1")
@@ -1341,9 +1341,9 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		assert.Equal(t, "log-from-client1", e.transport1.Events()[0].Logs[0].Body)
 		assert.Equal(t, "log-from-client2", e.transport2.Events()[0].Logs[0].Body)
 		assert.Equal(t, e.traceID1, e.transport1.Events()[0].Logs[0].TraceID,
-			"log on client1 should carry hub1's trace ID")
+			"log on client1 should carry scope1's trace ID")
 		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
-			"log on client2 should carry hub2's trace ID")
+			"log on client2 should carry scope2's trace ID")
 		e.resetTransports()
 
 		NewMeter(e.ctx1).Count("counter-from-client1", 1)
@@ -1375,7 +1375,7 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		assert.Equal(t, "cross-context-log", e.transport2.Events()[0].Logs[0].Body)
 		assert.Equal(t, "cross-context-count", e.transport2.Events()[1].Metrics[0].Name)
 		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
-			"trace ID should come from the emit context's hub, not the creation context")
+			"trace ID should come from the emit context's scope, not the creation context")
 		assert.Equal(t, "release-2", e.transport2.Events()[0].Logs[0].Attributes["sentry.release"].AsString())
 		assert.Equal(t, "release-2", e.transport2.Events()[1].Metrics[0].Attributes["sentry.release"].AsString())
 	})
@@ -1413,23 +1413,21 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		e := setupMultiClientEnv(t)
 
 		traceID := TraceIDFromHex("cccccccccccccccccccccccccccccccc")
-		scope := NewScope()
+		ctx, scope := WithIsolationScope(context.Background())
+		ctx = ContextWithClient(ctx, e.client1)
 		scope.SetPropagationContext(PropagationContext{TraceID: traceID})
-		hub := NewHub(e.client1, scope)
-		ctx := SetHubOnContext(context.Background(), hub)
 		logger := NewLogger(ctx)
 		meter := NewMeter(ctx)
 
-		hub.BindClient(e.client2)
-		ctx = ContextWithClient(ctx, hub.Client())
+		ctx = ContextWithClient(ctx, e.client2)
 
-		hub.CaptureMessage("event-after-rebind")
+		e.client2.captureMessage(ctx, "event-after-rebind")
 		logger.Info().WithCtx(ctx).Emit("log-after-rebind")
 		meter.WithCtx(ctx).Count("count-after-rebind", 1)
 		e.flushAll()
 
 		assert.Empty(t, e.transport1.Events(),
-			"old client should not receive any signals after BindClient")
+			"old client should not receive any signals after ContextWithClient")
 		require.Len(t, e.transport2.Events(), 3,
 			"new client should receive all signals")
 
@@ -1438,17 +1436,17 @@ func TestClient_MultiClientSetup(t *testing.T) {
 			if ev.Message == "event-after-rebind" {
 				gotEvent = true
 				assert.Equal(t, traceID, eventTraceID(t, ev),
-					"event should carry the hub's trace ID")
+					"event should carry the scope's trace ID")
 			}
 			if len(ev.Logs) == 1 && ev.Logs[0].Body == "log-after-rebind" {
 				gotLog = true
 				assert.Equal(t, traceID, ev.Logs[0].TraceID,
-					"log should carry the hub's trace ID")
+					"log should carry the scope's trace ID")
 			}
 			if len(ev.Metrics) == 1 && ev.Metrics[0].Name == "count-after-rebind" {
 				gotMetric = true
 				assert.Equal(t, traceID, ev.Metrics[0].TraceID,
-					"count should carry the hub's trace ID")
+					"count should carry the scope's trace ID")
 			}
 		}
 		assert.True(t, gotEvent, "event should arrive at new client")

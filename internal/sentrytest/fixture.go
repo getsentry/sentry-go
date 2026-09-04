@@ -1,11 +1,11 @@
 // Package sentrytest provides test fixtures for the Sentry Go SDK.
 //
-// Fixture bundles a Hub, Client, and MockTransport with assertion helpers,
+// Fixture bundles a Scope, Client, and MockTransport with assertion helpers,
 // eliminating boilerplate across integration and unit tests.
 //
-// Isolated mode (default) creates a cloned hub safe for parallel tests.
-// Global mode (WithGlobal) calls sentry.Init for middleware tests that read
-// from sentry.CurrentHub.
+// Isolated mode (default) creates an independent scope safe for parallel tests.
+// Global mode (WithGlobal) calls sentry.Init for middleware tests that resolve
+// the global client.
 package sentrytest
 
 import (
@@ -48,9 +48,8 @@ type config struct {
 	global bool
 }
 
-// WithGlobal makes the fixture call [sentry.Init] to set the global hub
-// instead of creating an isolated hub. Use this for middleware tests where
-// the middleware reads from [sentry.CurrentHub].
+// WithGlobal makes the fixture call [sentry.Init] to set the global client.
+// Use this for middleware tests that begin from a background context.
 //
 // Tests using global mode must not run in parallel.
 func WithGlobal() Option {
@@ -69,14 +68,16 @@ func WithClientOptions(opts sentry.ClientOptions) Option {
 }
 
 // Fixture provides an isolated Sentry environment for testing.
-// It bundles a Hub, Client, and MockTransport with assertion helpers.
+// It bundles a Scope, Client, and MockTransport with assertion helpers.
 type Fixture struct {
 	// T is the test context.
 	T testing.TB
 
-	// Hub is the fixture's hub. In global mode this is [sentry.CurrentHub].
-	// In isolated mode this is a clone with its own client.
-	Hub *sentry.Hub
+	// Context carries the fixture's isolated scope and client.
+	Context context.Context
+
+	// Scope is the fixture's isolated scope.
+	Scope *sentry.Scope
 
 	// Client is the fixture's client, configured with the MockTransport.
 	Client *sentry.Client
@@ -142,18 +143,16 @@ func newFixture(t testing.TB, useSynctest bool, opts ...Option) *Fixture {
 		if err := sentry.Init(cfg.opts); err != nil {
 			t.Fatal(err)
 		}
-		f.Hub = sentry.CurrentHub()
-		f.Client = f.Hub.Client()
+		f.Client = sentry.ClientFromContext(context.Background())
 	} else {
 		client, err := sentry.NewClient(cfg.opts)
 		if err != nil {
 			t.Fatal(err)
 		}
-		hub := sentry.CurrentHub().Clone()
-		hub.BindClient(client)
-		f.Hub = hub
 		f.Client = client
 	}
+	f.Context, f.Scope = sentry.WithIsolationScope(context.Background())
+	f.Context = sentry.ContextWithClient(f.Context, f.Client)
 
 	// Ensure background goroutines (batch processors) are stopped when the test finishes.
 	// This is required for synctest bubbles which will panic if blocked goroutines remain
@@ -224,32 +223,46 @@ func (f *Fixture) DiffEvents(want []*sentry.Event, opts ...cmp.Option) string {
 	return cmp.Diff(want, f.Events(), combined...)
 }
 
-// AssertHubIsolation verifies that requestHub is a distinct clone from the
-// fixture's hub, confirming the middleware properly cloned the hub per request.
-func (f *Fixture) AssertHubIsolation(requestHub *sentry.Hub) {
+// AssertScopeIsolation verifies that requestScope is independent from the
+// fixture's scope.
+func (f *Fixture) AssertScopeIsolation(requestScope *sentry.Scope) {
 	f.T.Helper()
 
-	if requestHub == nil {
-		f.T.Error("request hub is nil")
+	if requestScope == nil {
+		f.T.Error("request scope is nil")
 		return
 	}
-	if requestHub == f.Hub {
-		f.T.Error("request hub is the same instance as the fixture hub")
+	if requestScope == f.Scope {
+		f.T.Error("request scope is the same instance as the fixture scope")
 		return
 	}
 
 	const sentinel = "_sentrytest_isolation_probe"
-	f.Hub.Scope().SetTag(sentinel, "leaked")
-	defer f.Hub.Scope().RemoveTag(sentinel)
+	f.Scope.SetTag(sentinel, "leaked")
+	defer f.Scope.RemoveTag(sentinel)
 
-	// Apply the request scope to a probe event to read its tags.
-	probe := &sentry.Event{}
-	applied := requestHub.Scope().ApplyToEvent(probe, nil, nil)
-	if applied == nil {
-		f.T.Error("event dropped by event processor")
+	transport := &sentry.MockTransport{}
+	probeClient, err := sentry.NewClient(sentry.ClientOptions{Transport: transport})
+	if err != nil {
+		f.T.Errorf("create probe client: %v", err)
 		return
 	}
-	if _, ok := applied.Tags[sentinel]; ok {
-		f.T.Error("scope mutation leaked into request hub; scopes are not independent")
+	defer probeClient.Close()
+	ctx := sentry.ContextWithClient(
+		sentry.ContextWithScope(context.Background(), requestScope),
+		probeClient,
+	)
+	if eventID := sentry.CaptureMessage(ctx, "scope isolation probe"); eventID == nil {
+		f.T.Error("scope isolation probe was dropped")
+		return
+	}
+
+	events := transport.Events()
+	if len(events) == 0 {
+		f.T.Error("probe event was not delivered")
+		return
+	}
+	if _, ok := events[len(events)-1].Tags[sentinel]; ok {
+		f.T.Error("scope mutation leaked into request scope; scopes are not independent")
 	}
 }

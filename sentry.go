@@ -20,12 +20,10 @@ const DefaultFlushTimeout = 2 * time.Second
 // Init initializes the SDK with options. The returned error is non-nil if
 // options is invalid, for instance if a malformed DSN is provided.
 func Init(options ClientOptions) error {
-	hub := CurrentHub()
 	client, err := NewClient(options)
 	if err != nil {
 		return err
 	}
-	hub.BindClient(client)
 	setGlobalClient(client)
 	return nil
 }
@@ -98,30 +96,6 @@ func Recover(ctx context.Context, recovered any, options ...CaptureOption) *Even
 	return ClientFromContext(ctx).capturePanic(ctx, recovered, options...)
 }
 
-// WithScope is a shorthand for CurrentHub().WithScope.
-func WithScope(f func(scope *Scope)) {
-	hub := CurrentHub()
-	hub.WithScope(f)
-}
-
-// ConfigureScope is a shorthand for CurrentHub().ConfigureScope.
-func ConfigureScope(f func(scope *Scope)) {
-	hub := CurrentHub()
-	hub.ConfigureScope(f)
-}
-
-// PushScope is a shorthand for CurrentHub().PushScope.
-func PushScope() *Scope {
-	hub := CurrentHub()
-	return hub.PushScope()
-}
-
-// PopScope is a shorthand for CurrentHub().PopScope.
-func PopScope() {
-	hub := CurrentHub()
-	hub.PopScope()
-}
-
 // Flush waits until the underlying Transport sends any buffered events to the
 // Sentry server, blocking for at most the given timeout. It returns false if
 // capture is disabled or the timeout was reached. In the latter case, some
@@ -135,8 +109,7 @@ func PopScope() {
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func Flush(timeout time.Duration) bool {
-	hub := CurrentHub()
-	return hub.Flush(timeout)
+	return ClientFromContext(context.Background()).Flush(timeout)
 }
 
 // FlushWithContext waits until the underlying Transport sends any buffered events
@@ -153,8 +126,7 @@ func Flush(timeout time.Duration) bool {
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
 
 func FlushWithContext(ctx context.Context) bool {
-	hub := CurrentHub()
-	return hub.FlushWithContext(ctx)
+	return ClientFromContext(ctx).FlushWithContext(ctx)
 }
 
 // LastEventID returns the last event ID captured in ctx's scope, or in the

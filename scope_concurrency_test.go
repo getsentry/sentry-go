@@ -12,40 +12,21 @@ import (
 )
 
 func TestConcurrentScopeUsage(_ *testing.T) {
+	scope := sentry.NewScope()
 	var wg sync.WaitGroup
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go func(x int) {
 			defer wg.Done()
-			sentry.WithScope(func(scope *sentry.Scope) {
-				touchScope(scope, x)
-			})
-		}(i)
-		wg.Add(1)
-		go func(x int) {
-			defer wg.Done()
-			sentry.ConfigureScope(func(scope *sentry.Scope) {
-				touchScope(scope, x)
-			})
+			touchScope(scope, x)
 		}(i)
 	}
 
-	for i := 0; i < 10; i++ {
-		func(x int) {
-			sentry.WithScope(func(scope *sentry.Scope) {
-				touchScope(scope, x)
-			})
-		}(i)
-
-		func(x int) {
-			sentry.ConfigureScope(func(scope *sentry.Scope) {
-				touchScope(scope, x)
-			})
-		}(i)
+	for i := 0; i < 20; i++ {
+		touchScope(scope, i)
 	}
 
-	// wait for goroutines to finish
 	wg.Wait()
 }
 

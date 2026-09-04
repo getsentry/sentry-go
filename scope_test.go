@@ -651,13 +651,16 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 }
 
 func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
-	previousClient := currentHub.Client()
 	currentClient, err := NewClient(ClientOptions{Dsn: "https://key@sentry.io/1", SendDefaultPII: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	currentHub.BindClient(currentClient)
-	defer currentHub.BindClient(previousClient)
+	previousClient := globalClient.Load()
+	setGlobalClient(currentClient)
+	t.Cleanup(func() {
+		setGlobalClient(previousClient)
+		currentClient.Close()
+	})
 
 	scope := NewScope()
 	request := httptest.NewRequest("POST", "http://example.com/test", nil)
