@@ -73,7 +73,7 @@ func NewSentryCore(ctx context.Context, opts Option) *SentryCore {
 
 // Context returns a zapcore.Field that can be used with logger.With() to link
 // traces with the provided context. This allows propagating Sentry trace information
-// from the context to logs without needing to pass a Hub.
+// from the context to logs.
 //
 // Example:
 //
@@ -168,12 +168,9 @@ func (c *SentryCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
 
 // Sync flushes any buffered log entries to Sentry.
 func (c *SentryCore) Sync() error {
-	hub := sentry.GetHubFromContext(c.ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub()
-	}
-	if ok := hub.Flush(c.option.FlushTimeout); !ok {
-		return fmt.Errorf("failed to flush client: %v", hub.Client())
+	client := sentry.ClientFromContext(c.ctx)
+	if ok := client.Flush(c.option.FlushTimeout); !ok {
+		return fmt.Errorf("failed to flush client: %v", client)
 	}
 	return nil
 }
