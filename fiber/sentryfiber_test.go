@@ -1,12 +1,14 @@
 package sentryfiber_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -63,43 +65,42 @@ func TestIntegration(t *testing.T) {
 
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, e error) error {
-			hub := sentryfiber.GetHubFromContext(c)
-			hub.CaptureException(e)
+			requestCtx := sentryfiber.GetContext(c)
+			if err := requestCtx.Err(); err != nil {
+				t.Errorf("request context in error handler: %v", err)
+			}
+			sentry.CaptureException(requestCtx, e)
 			return nil
 		},
 	})
 
 	app.Use(sentryHandler)
 
-	app.Get("/panic", func(_ *fiber.Ctx) error {
+	app.Get("/panic", func(c *fiber.Ctx) error {
+		c.SetUserContext(context.Background())
 		panic("test")
 	})
 	app.Post("/post", func(c *fiber.Ctx) error {
-		hub := sentryfiber.GetHubFromContext(c)
-		hub.CaptureMessage("post: " + string(c.Body()))
+		sentry.CaptureMessage(c.UserContext(), "post: "+string(c.Body()))
 		return nil
 	})
 
 	app.Get("/get", func(c *fiber.Ctx) error {
-		hub := sentryfiber.GetHubFromContext(c)
-		hub.CaptureMessage("get")
+		sentry.CaptureMessage(c.UserContext(), "get")
 		return nil
 	})
 
 	app.Get("/get/:id", func(c *fiber.Ctx) error {
-		hub := sentryfiber.GetHubFromContext(c)
-		hub.CaptureMessage(fmt.Sprintf("get: %s", c.Params("id")))
+		sentry.CaptureMessage(c.UserContext(), fmt.Sprintf("get: %s", c.Params("id")))
 		return nil
 	})
 
 	app.Post("/post/large", func(c *fiber.Ctx) error {
-		hub := sentryfiber.GetHubFromContext(c)
-		hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(c.Body())/1024))
+		sentry.CaptureMessage(c.UserContext(), fmt.Sprintf("post: %d KB", len(c.Body())/1024))
 		return nil
 	})
 	app.Post("/post/body-ignored", func(c *fiber.Ctx) error {
-		hub := sentryfiber.GetHubFromContext(c)
-		hub.CaptureMessage("body ignored")
+		sentry.CaptureMessage(c.UserContext(), "body ignored")
 		return nil
 	})
 	app.Post("/post/error-handler", func(_ *fiber.Ctx) error {
@@ -577,7 +578,11 @@ func TestHandlers(t *testing.T) {
 			}
 
 			handler := func(ctx *fiber.Ctx) error {
-				span := sentryfiber.GetSpanFromContext(ctx)
+				scope := sentry.ScopeFromContext(ctx.UserContext())
+				if tc.useSentry && scope == nil {
+					t.Error("expecting scope not to be nil")
+				}
+				span := sentry.SpanFromContext(ctx.UserContext())
 				if tc.useSentry && span == nil {
 					t.Error("expecting span not to be nil")
 				}
@@ -607,36 +612,94 @@ func TestHandlers(t *testing.T) {
 	}
 }
 
-func TestSetHubOnContext(t *testing.T) {
-	app := fiber.New()
-	hub := sentry.NewHub(sentry.CurrentHub().Client(), sentry.NewScope())
+func TestRequestIsolation(t *testing.T) {
+	if err := sentry.Init(sentry.ClientOptions{}); err != nil {
+		t.Fatal(err)
+	}
 
-	app.Get("/test", func(c *fiber.Ctx) error {
-		sentryfiber.SetHubOnContext(c, hub)
-		retrievedHub := sentryfiber.GetHubFromContext(c)
-		if retrievedHub == nil {
-			t.Fatal("expected hub to be set on context, but got nil")
+	const concurrentRequests = 32
+	const requestCount = concurrentRequests + 2
+	scopes := make(chan *sentry.Scope, requestCount)
+	contexts := make(chan context.Context, requestCount)
+	restorationErrors := make(chan struct{}, requestCount)
+	app := fiber.New()
+	app.Use(func(ctx *fiber.Ctx) error {
+		type restoreKey struct{}
+		original := context.WithValue(ctx.UserContext(), restoreKey{}, true)
+		ctx.SetUserContext(original)
+		err := ctx.Next()
+		if ctx.UserContext() != original {
+			restorationErrors <- struct{}{}
 		}
-		if !reflect.DeepEqual(hub, retrievedHub) {
-			t.Fatalf("expected hub to be %v, but got %v", hub, retrievedHub)
+		return err
+	})
+	app.Use(sentryfiber.New(sentryfiber.Options{}))
+	app.Get("/test", func(ctx *fiber.Ctx) error {
+		scope := sentry.ScopeFromContext(ctx.UserContext())
+		if scope == nil {
+			return errors.New("request scope is nil")
 		}
+		scopes <- scope
+		contexts <- ctx.UserContext()
 		return nil
 	})
 
-	req, err := http.NewRequest(http.MethodGet, "http://example.com/test", nil)
-	if err != nil {
-		t.Fatal(err)
+	doRequest := func() error {
+		req, err := http.NewRequest(http.MethodGet, "http://example.com/test", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := app.Test(req)
+		if err != nil {
+			return err
+		}
+		return resp.Body.Close()
 	}
-	req.Header.Set("User-Agent", "fiber")
 
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("Request failed: %s", err)
+	// Sequential requests exercise Fiber's pooled context reuse.
+	for range 2 {
+		if err := doRequest(); err != nil {
+			t.Error(err)
+		}
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+	errCh := make(chan error, requestCount)
+	var wg sync.WaitGroup
+	for range concurrentRequests {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := doRequest(); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	close(scopes)
+	close(contexts)
+	close(restorationErrors)
+	for err := range errCh {
+		t.Error(err)
+	}
+	for range restorationErrors {
+		t.Error("Sentry middleware did not restore Fiber's user context")
+	}
+
+	seen := make(map[*sentry.Scope]struct{}, requestCount)
+	for scope := range scopes {
+		if _, exists := seen[scope]; exists {
+			t.Error("request reused an isolation scope")
+		}
+		seen[scope] = struct{}{}
+	}
+	if len(seen) != requestCount {
+		t.Errorf("isolated scope count = %d, want %d", len(seen), requestCount)
+	}
+	for requestCtx := range contexts {
+		if err := requestCtx.Err(); err != context.Canceled {
+			t.Errorf("request context error = %v, want %v", err, context.Canceled)
+		}
 	}
 }
 
