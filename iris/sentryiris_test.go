@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -110,12 +109,11 @@ func TestIntegration(t *testing.T) {
 			Body:        `{"safe":"value"}`,
 			ContentType: "application/json",
 			Handler: func(ctx iris.Context) {
-				hub := sentryiris.GetHubFromContext(ctx)
 				body, err := io.ReadAll(ctx.Request().Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage("post: " + string(body))
+				sentry.CaptureMessage(ctx.Request().Context(), "post: "+string(body))
 				ctx.StatusCode(http.StatusOK)
 				_ = ctx.JSON(map[string]any{"status": "ok"})
 			},
@@ -168,8 +166,7 @@ func TestIntegration(t *testing.T) {
 			Method:      "GET",
 			WantStatus:  200,
 			Handler: func(ctx iris.Context) {
-				hub := sentryiris.GetHubFromContext(ctx)
-				hub.CaptureMessage("get")
+				sentry.CaptureMessage(ctx.Request().Context(), "get")
 				ctx.StatusCode(http.StatusOK)
 				_ = ctx.JSON(map[string]any{"status": "get"})
 			},
@@ -217,12 +214,11 @@ func TestIntegration(t *testing.T) {
 			WantStatus:  200,
 			Body:        largePayload,
 			Handler: func(ctx iris.Context) {
-				hub := sentryiris.GetHubFromContext(ctx)
 				body, err := io.ReadAll(ctx.Request().Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(body)/1024))
+				sentry.CaptureMessage(ctx.Request().Context(), fmt.Sprintf("post: %d KB", len(body)/1024))
 			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
@@ -272,8 +268,7 @@ func TestIntegration(t *testing.T) {
 			WantStatus:  200,
 			Body:        "client sends, server ignores, SDK doesn't read",
 			Handler: func(ctx iris.Context) {
-				hub := sentryiris.GetHubFromContext(ctx)
-				hub.CaptureMessage("body ignored")
+				sentry.CaptureMessage(ctx.Request().Context(), "body ignored")
 			},
 			WantTransaction: &sentry.Event{
 				Level:       sentry.LevelInfo,
@@ -492,7 +487,7 @@ func TestIntegration(t *testing.T) {
 	}
 }
 
-func TestGetSpanFromContext(t *testing.T) {
+func TestRequestContextState(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
@@ -503,7 +498,7 @@ func TestGetSpanFromContext(t *testing.T) {
 
 	router := iris.New()
 	router.Get("/no-span", func(ctx iris.Context) {
-		span := sentryiris.GetSpanFromContext(ctx)
+		span := sentry.SpanFromContext(ctx.Request().Context())
 		if span != nil {
 			t.Error("expecting span to be nil")
 		}
@@ -512,7 +507,11 @@ func TestGetSpanFromContext(t *testing.T) {
 	})
 	router.Use(sentryiris.New(sentryiris.Options{}))
 	router.Get("/with-span", func(ctx iris.Context) {
-		span := sentryiris.GetSpanFromContext(ctx)
+		scope := sentry.ScopeFromContext(ctx.Request().Context())
+		if scope == nil {
+			t.Error("expecting scope to be not nil")
+		}
+		span := sentry.SpanFromContext(ctx.Request().Context())
 		if span == nil {
 			t.Error("expecting span to be not nil")
 		}
@@ -536,30 +535,4 @@ func TestGetSpanFromContext(t *testing.T) {
 			t.Fatal("sentry.Flush timed out")
 		}
 	}
-}
-
-func TestSetHubOnContext(t *testing.T) {
-	app := iris.New()
-
-	app.Get("/with-hub", func(ctx iris.Context) {
-		hub := sentry.CurrentHub().Clone()
-		sentryiris.SetHubOnContext(ctx, hub)
-
-		newHub := sentryiris.GetHubFromContext(ctx)
-		if newHub == nil {
-			t.Error("expecting hub to be not nil")
-		}
-
-		if !reflect.DeepEqual(hub, newHub) {
-			t.Error("expecting hub to be the same")
-		}
-
-		ctx.StatusCode(http.StatusOK)
-	})
-
-	srv := httptest.New(t, app)
-
-	res := srv.Request(http.MethodGet, "/with-hub").Expect()
-
-	res.Status(http.StatusOK)
 }
