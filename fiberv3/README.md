@@ -58,10 +58,10 @@ Timeout time.Duration
 
 ## Usage
 
-`sentryfiber` attaches an instance of `*sentry.Hub` to the request context, which makes it available throughout the rest of the request's lifetime.
-You can access it by using `sentryfiber.GetHubFromContext()` in any subsequent middleware and routes.
+`sentryfiber` attaches a request-specific `*sentry.Scope` and transaction to Fiber's standard Go context. Pass `ctx.Context()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event. In outer middleware or a custom error handler, use `sentryfiber.GetContext(ctx)` after the Sentry middleware has returned.
+Use `sentry.ScopeFromContext(ctx.Context())` when you need to add data that should be available to captures made during the request.
 
-**Keep in mind that `*sentry.Hub` won't be available in middleware attached before `sentryfiber`.**
+**Keep in mind that the request scope won't be available in middleware attached before `sentryfiber`.**
 
 ```go
 sentryHandler := sentryfiber.New(sentryfiber.Options{
@@ -70,9 +70,7 @@ sentryHandler := sentryfiber.New(sentryfiber.Options{
 })
 
 enhanceSentryEvent := func(ctx fiber.Ctx) error {
-	if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
-		hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-	}
+	sentry.ScopeFromContext(ctx.Context()).SetTag("someRandomTag", "maybeYouNeedIt")
 	return ctx.Next()
 }
 
@@ -84,12 +82,9 @@ app.All("/foo", enhanceSentryEvent, func(ctx fiber.Ctx) error {
 })
 
 app.All("/", func(ctx fiber.Ctx) error {
-	if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
-		hub.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-		})
-	}
+	scope := sentry.ScopeFromContext(ctx.Context())
+	scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+	sentry.CaptureMessage(ctx.Context(), "User provided unwanted query string, but we recovered just fine")
 	return ctx.SendStatus(fiber.StatusOK)
 })
 

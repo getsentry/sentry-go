@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -23,7 +24,6 @@ func (pi *pickleIntegration) processor(event *sentry.Event, hint *sentry.EventHi
 }
 
 func main() {
-	scope1 := sentry.NewScope()
 	client1, _ := sentry.NewClient(sentry.ClientOptions{
 		Dsn: "https://hello@example.com/1",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
@@ -34,9 +34,9 @@ func main() {
 			return append(integrations, &pickleIntegration{})
 		},
 	})
-	hub1 := sentry.NewHub(client1, scope1)
+	ctx1, _ := sentry.WithIsolationScope(context.Background())
+	ctx1 = sentry.ContextWithClient(ctx1, client1)
 
-	scope2 := sentry.NewScope()
 	client2, _ := sentry.NewClient(sentry.ClientOptions{
 		Dsn: "https://hello@example.com/2",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
@@ -44,11 +44,9 @@ func main() {
 			return nil
 		},
 	})
-	hub2 := sentry.NewHub(client2, scope2)
+	ctx2, _ := sentry.WithIsolationScope(context.Background())
+	ctx2 = sentry.ContextWithClient(ctx2, client2)
 
-	hub1.CaptureMessage("Hub: altered message by pickleIntegration")
-	hub2.CaptureMessage("Hub: _NOT_ altered message by pickleIntegration")
-
-	client1.CaptureMessage("Client: altered message by pickleIntegration", &sentry.EventHint{}, scope1)
-	client2.CaptureMessage("Client: _NOT_ altered message by pickleIntegration", &sentry.EventHint{}, scope2)
+	sentry.CaptureMessage(ctx1, "Client 1: altered message by pickleIntegration")
+	sentry.CaptureMessage(ctx2, "Client 2: _NOT_ altered message by pickleIntegration")
 }

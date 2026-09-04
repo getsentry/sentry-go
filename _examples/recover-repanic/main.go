@@ -1,5 +1,5 @@
 // This is an example program that demonstrates an advanced use of the Sentry
-// SDK using Hub, Scope and EventProcessor to recover from runtime panics,
+// SDK using context, Scope and EventProcessor to recover from runtime panics,
 // report to Sentry filtering specific frames from the stack trace and then
 // letting the program crash as usual.
 //
@@ -13,6 +13,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
@@ -78,9 +79,7 @@ func main() {
 // for other goroutines to finish their work. That means that most likely only
 // the first panic will be successfully reported to Sentry.
 func RecoverRepanic(f func()) {
-	// Clone the current hub so that modifications of the scope are visible only
-	// within this function.
-	hub := sentry.CurrentHub().Clone()
+	ctx, scope := sentry.WithIsolationScope(context.Background())
 
 	// filterFrames removes frames from outgoing events that reference the
 	// RecoverRepanic function and its subfunctions.
@@ -104,11 +103,9 @@ func RecoverRepanic(f func()) {
 	// that can change events before they are sent to Sentry.
 	// Alternatively, see also ClientOptions.BeforeSend, which is a special
 	// event processor applied to error events.
-	hub.ConfigureScope(func(scope *sentry.Scope) {
-		scope.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			filterFrames(event)
-			return event
-		})
+	scope.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		filterFrames(event)
+		return event
 	})
 
 	// See https://golang.org/ref/spec#Handling_panics.
@@ -117,13 +114,13 @@ func RecoverRepanic(f func()) {
 	defer func() {
 		if x := recover(); x != nil {
 			// Create an event and enqueue it for reporting.
-			hub.Recover(x)
+			sentry.Recover(ctx, x)
 			// Because the goroutine running this code is going to crash the
 			// program, call Flush to send the event to Sentry before it is too
 			// late. Set the timeout to an appropriate value depending on your
 			// program. The value is the maximum time to wait before giving up
 			// and dropping the event.
-			hub.Flush(2 * time.Second)
+			sentry.ClientFromContext(ctx).Flush(2 * time.Second)
 			// Note that if multiple goroutines panic, possibly only the first
 			// one to call Flush will succeed in sending the event. If you want
 			// to capture multiple panics and still crash the program

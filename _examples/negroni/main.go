@@ -34,19 +34,16 @@ func main() {
 	}))
 
 	app.Use(negroni.HandlerFunc(func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-		hub := sentry.GetHubFromContext(r.Context())
-		hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
+		sentry.ScopeFromContext(r.Context()).SetTag("someRandomTag", "maybeYouNeedIt")
 		next(rw, r)
 	}))
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
-		hub := sentry.GetHubFromContext(r.Context())
-		hub.WithScope(func(scope *sentry.Scope) {
-			scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-			hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-		})
+		scope := sentry.ScopeFromContext(r.Context())
+		scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+		sentry.CaptureMessage(r.Context(), "User provided unwanted query string, but we recovered just fine")
 		rw.WriteHeader(http.StatusOK)
 	})
 

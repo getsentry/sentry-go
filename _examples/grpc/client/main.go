@@ -7,9 +7,8 @@ import (
 	"log"
 	"time"
 
-	"grpcdemo/cmd/server/examplepb"
-
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/_examples/grpc/server/examplepb"
 	sentrygrpc "github.com/getsentry/sentry-go/grpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -68,7 +67,7 @@ func unaryExample(client examplepb.ExampleServiceClient) {
 	res, err := client.UnaryExample(ctx, req)
 	if err != nil {
 		fmt.Printf("Unary Call Error: %v\n", err)
-		sentry.CaptureException(err)
+		sentry.CaptureException(ctx, err)
 		return
 	}
 
@@ -86,7 +85,7 @@ func streamExample(client examplepb.ExampleServiceClient) {
 	stream, err := client.StreamExample(ctx)
 	if err != nil {
 		fmt.Printf("Failed to establish stream: %v\n", err)
-		sentry.CaptureException(err)
+		sentry.CaptureException(ctx, err)
 		return
 	}
 
@@ -96,7 +95,7 @@ func streamExample(client examplepb.ExampleServiceClient) {
 		err := stream.Send(&examplepb.ExampleRequest{Message: msg})
 		if err != nil {
 			fmt.Printf("Stream Send Error: %v\n", err)
-			sentry.CaptureException(err)
+			sentry.CaptureException(ctx, err)
 			return
 		}
 	}
@@ -110,7 +109,7 @@ func streamExample(client examplepb.ExampleServiceClient) {
 		if err != nil {
 			if err != io.EOF {
 				fmt.Printf("Stream Recv Error: %v\n", err)
-				sentry.CaptureException(err)
+				sentry.CaptureException(ctx, err)
 			}
 			break
 		}
