@@ -30,7 +30,14 @@ import (
 // an event for reporting, the current client adds information from the current
 // scope into the event.
 type Scope struct {
-	mu          sync.RWMutex
+	mu              sync.RWMutex
+	eventProcessors []EventProcessor
+
+	// scopeData keeps track of all scope specific data
+	scopeData
+}
+
+type scopeData struct {
 	attributes  map[string]attribute.Value
 	breadcrumbs []*Breadcrumb
 	attachments []*Attachment
@@ -49,7 +56,6 @@ type Scope struct {
 		// size.
 		Overflow() bool
 	}
-	eventProcessors []EventProcessor
 
 	propagationContext PropagationContext
 	span               *Span
@@ -57,7 +63,11 @@ type Scope struct {
 
 // NewScope creates a new Scope.
 func NewScope() *Scope {
-	return &Scope{
+	return &Scope{scopeData: newScopeData()}
+}
+
+func newScopeData() scopeData {
+	return scopeData{
 		attributes:         make(map[string]attribute.Value),
 		breadcrumbs:        make([]*Breadcrumb, 0),
 		attachments:        make([]*Attachment, 0),
@@ -280,29 +290,33 @@ func (scope *Scope) Clone() *Scope {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
-	clone := NewScope()
-	clone.user = scope.user
-	clone.breadcrumbs = make([]*Breadcrumb, len(scope.breadcrumbs))
-	copy(clone.breadcrumbs, scope.breadcrumbs)
-	clone.attachments = make([]*Attachment, len(scope.attachments))
-	copy(clone.attachments, scope.attachments)
-	clone.attributes = maps.Clone(scope.attributes)
-	clone.contexts = maps.Clone(scope.contexts)
-	clone.tags = maps.Clone(scope.tags)
-	clone.fingerprint = make([]string, len(scope.fingerprint))
-	copy(clone.fingerprint, scope.fingerprint)
-	clone.level = scope.level
-	clone.request = scope.request
-	clone.requestBody = scope.requestBody
-	clone.eventProcessors = scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
-	clone.propagationContext = scope.propagationContext
-	clone.span = scope.span
+	data := scope.scopeData
+	return &Scope{
+		scopeData:       data.clone(),
+		eventProcessors: scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)],
+	}
+}
+
+func (data scopeData) clone() scopeData {
+	clone := data
+	clone.breadcrumbs = make([]*Breadcrumb, len(data.breadcrumbs))
+	copy(clone.breadcrumbs, data.breadcrumbs)
+	clone.attachments = make([]*Attachment, len(data.attachments))
+	copy(clone.attachments, data.attachments)
+	clone.attributes = maps.Clone(data.attributes)
+	clone.contexts = maps.Clone(data.contexts)
+	clone.tags = maps.Clone(data.tags)
+	clone.fingerprint = make([]string, len(data.fingerprint))
+	copy(clone.fingerprint, data.fingerprint)
 	return clone
 }
 
-// Clear removes the data from the current scope. Not safe for concurrent use.
+// Clear removes data from the scope while retaining event processors.
 func (scope *Scope) Clear() {
-	*scope = *NewScope()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
+	scope.scopeData = newScopeData()
 }
 
 // AddEventProcessor adds an event processor to the current scope.
