@@ -933,8 +933,8 @@ type TraceContext struct {
 
 func (tc TraceContext) Map() map[string]interface{} {
 	m := map[string]interface{}{
-		"trace_id": tc.TraceID,
-		"span_id":  tc.SpanID,
+		traceIDContextKey: tc.TraceID,
+		spanIDContextKey:  tc.SpanID,
 	}
 
 	if tc.ParentSpanID != [8]byte{} {
