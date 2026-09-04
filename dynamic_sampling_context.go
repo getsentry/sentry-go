@@ -120,17 +120,20 @@ func (d DynamicSamplingContext) String() string {
 // fields on the scope are not thread safe, and this function should only be
 // called within scope methods.
 func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSamplingContext {
-	entries := map[string]string{}
-
 	if !client.IsEnabled() || scope == nil {
 		return DynamicSamplingContext{
-			Entries: entries,
+			Entries: map[string]string{},
 			Frozen:  false,
 		}
 	}
+	return dynamicSamplingContextFromPropagationContext(scope.propagationContext, client)
+}
 
-	propagationContext := scope.propagationContext
-
+func dynamicSamplingContextFromPropagationContext(
+	propagationContext PropagationContext,
+	client *Client,
+) DynamicSamplingContext {
+	entries := map[string]string{}
 	if traceID := propagationContext.TraceID.String(); traceID != "" {
 		entries[traceIDContextKey] = traceID
 	}

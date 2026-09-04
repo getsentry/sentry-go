@@ -49,8 +49,17 @@ func TestConcurrentScopeUsage(_ *testing.T) {
 	wg.Wait()
 }
 
-func TestConcurrentSharedIsolation(_ *testing.T) {
+func TestConcurrentSharedIsolation(t *testing.T) {
 	ctx, scope := sentry.WithIsolationScope(context.Background())
+	transport := &sentry.MockTransport{}
+	client, err := sentry.NewClient(sentry.ClientOptions{
+		Dsn:       "https://key@sentry.io/1",
+		Transport: transport,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx = sentry.ContextWithClient(ctx, client)
 	var wg sync.WaitGroup
 
 	for i := 0; i < 20; i++ {
@@ -63,11 +72,15 @@ func TestConcurrentSharedIsolation(_ *testing.T) {
 			scope.SetAttributes(attribute.Int("value", x))
 			scope.AddBreadcrumb(&sentry.Breadcrumb{Message: fmt.Sprint(x)}, 100)
 			shared := sentry.ScopeFromContext(ctx)
+			sentry.CaptureMessage(ctx, fmt.Sprint(x))
 			shared.Clone()
 		}(i)
 	}
 
 	wg.Wait()
+	if got := len(transport.Events()); got != 20 {
+		t.Fatalf("captured %d events, want 20", got)
+	}
 }
 
 func TestConcurrentSharedIsolationClearAndClone(_ *testing.T) {
