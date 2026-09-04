@@ -614,6 +614,15 @@ func (client *Client) CaptureException(exception error, hint *EventHint, scope E
 	return client.CaptureEvent(event, hint, scope)
 }
 
+// CaptureFeedback captures user-provided feedback.
+func (client *Client) CaptureFeedback(feedback *Feedback, hint *EventHint, scope EventModifier) *EventID {
+	event := client.EventFromFeedback(feedback)
+	if event == nil {
+		return nil
+	}
+	return client.CaptureEvent(event, hint, scope)
+}
+
 // CaptureCheckIn captures a check in.
 func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
 	event := client.EventFromCheckIn(checkIn, monitorConfig)
@@ -843,6 +852,20 @@ func (client *Client) EventFromException(exception error, level Level) *Event {
 	}
 
 	event.SetException(err, client.options.MaxErrorDepth)
+
+	return event
+}
+
+// EventFromFeedback creates a new Sentry event from the given feedback.
+func (client *Client) EventFromFeedback(feedback *Feedback) *Event {
+	if feedback == nil {
+		return nil
+	}
+
+	event := NewEvent()
+	event.Type = feedbackType
+	event.Level = LevelInfo
+	event.Contexts[feedbackType] = feedback.context()
 
 	return event
 }

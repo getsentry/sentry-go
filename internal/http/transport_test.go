@@ -41,6 +41,13 @@ func testEnvelope(itemType protocol.EnvelopeItemType) *protocol.Envelope {
 	}
 }
 
+func TestCategoryFromEnvelopeFeedback(t *testing.T) {
+	got := categoryFromEnvelope(testEnvelope(protocol.EnvelopeItemTypeFeedback))
+	if got != ratelimit.CategoryFeedback {
+		t.Errorf("categoryFromEnvelope(feedback) = %q, want %q", got, ratelimit.CategoryFeedback)
+	}
+}
+
 // nolint:gocyclo
 func TestAsyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("invalid DSN", func(t *testing.T) {
@@ -78,6 +85,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			{"event", protocol.EnvelopeItemTypeEvent},
 			{"transaction", protocol.EnvelopeItemTypeTransaction},
 			{"check-in", protocol.EnvelopeItemTypeCheckIn},
+			{"feedback", protocol.EnvelopeItemTypeFeedback},
 			{"log", protocol.EnvelopeItemTypeLog},
 			{"attachment", protocol.EnvelopeItemTypeAttachment},
 		}
@@ -381,6 +389,7 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 			{"event", protocol.EnvelopeItemTypeEvent},
 			{"transaction", protocol.EnvelopeItemTypeTransaction},
 			{"check-in", protocol.EnvelopeItemTypeCheckIn},
+			{"feedback", protocol.EnvelopeItemTypeFeedback},
 			{"log", protocol.EnvelopeItemTypeLog},
 			{"attachment", protocol.EnvelopeItemTypeAttachment},
 		}

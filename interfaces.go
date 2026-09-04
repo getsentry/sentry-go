@@ -19,6 +19,7 @@ const errorType = ""
 const eventType = "event"
 const transactionType = "transaction"
 const checkInType = "check_in"
+const feedbackType = "feedback"
 
 var logEvent = struct {
 	Type        string
@@ -472,6 +473,8 @@ func (e *Event) ToEnvelopeItem() (item *protocol.EnvelopeItem, err error) {
 		item = protocol.NewTransactionItem(e.GetSpanCount(), eventBody)
 	case checkInType:
 		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
+	case feedbackType:
+		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeFeedback, eventBody)
 	case logEvent.Type:
 		item = protocol.NewLogItem(len(e.Logs), eventBody)
 	case traceMetricEvent.Type:
@@ -698,6 +701,8 @@ func (e *Event) toCategory() ratelimit.Category {
 		return ratelimit.CategoryLog
 	case checkInType:
 		return ratelimit.CategoryMonitor
+	case feedbackType:
+		return ratelimit.CategoryFeedback
 	case traceMetricEvent.Type:
 		return ratelimit.CategoryTraceMetric
 	default:

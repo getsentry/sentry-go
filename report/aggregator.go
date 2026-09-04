@@ -118,6 +118,8 @@ func (a *Aggregator) RecordForEnvelope(reason DiscardReason, envelope *protocol.
 			a.RecordOne(reason, ratelimit.CategoryTraceMetric)
 		case protocol.EnvelopeItemTypeCheckIn:
 			a.RecordOne(reason, ratelimit.CategoryMonitor)
+		case protocol.EnvelopeItemTypeFeedback:
+			a.RecordOne(reason, ratelimit.CategoryFeedback)
 		case protocol.EnvelopeItemTypeAttachment, protocol.EnvelopeItemTypeClientReport:
 			// Skip — not reportable categories
 		}
