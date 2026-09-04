@@ -24,6 +24,7 @@ const (
 	CategoryLog         Category = "log_item"
 	CategoryLogByte     Category = "log_byte"
 	CategoryMonitor     Category = "monitor"
+	CategoryFeedback    Category = "feedback"
 	CategoryTraceMetric Category = "trace_metric"
 )
 
@@ -35,6 +36,7 @@ var knownCategories = map[Category]struct{}{
 	CategoryTransaction: {},
 	CategoryLog:         {},
 	CategoryMonitor:     {},
+	CategoryFeedback:    {},
 	CategoryTraceMetric: {},
 }
 
@@ -55,6 +57,8 @@ func (c Category) String() string {
 		return "CategoryLogByte"
 	case CategoryMonitor:
 		return "CategoryMonitor"
+	case CategoryFeedback:
+		return "CategoryFeedback"
 	case CategoryTraceMetric:
 		return "CategoryTraceMetric"
 	default:
@@ -102,6 +106,8 @@ func (c Category) GetPriority() Priority {
 	case CategoryError:
 		return PriorityCritical
 	case CategoryMonitor:
+		return PriorityHigh
+	case CategoryFeedback:
 		return PriorityHigh
 	case CategoryLog:
 		return PriorityLow

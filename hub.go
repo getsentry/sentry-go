@@ -223,7 +223,7 @@ func (hub *Hub) CaptureEventWithHint(event *Event, hint *EventHint) *EventID {
 	}
 	eventID := client.CaptureEvent(event, hint, scope)
 
-	if event.Type != transactionType && eventID != nil {
+	if event.Type != transactionType && event.Type != feedbackType && eventID != nil {
 		hub.mu.Lock()
 		hub.lastEventID = *eventID
 		hub.mu.Unlock()
@@ -265,6 +265,17 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 		hub.mu.Unlock()
 	}
 	return eventID
+}
+
+// CaptureFeedback calls the method of the same name on the currently bound
+// Client instance, passing it the top-level Scope.
+// Returns EventID if successful, or nil if there's no Scope or Client available.
+func (hub *Hub) CaptureFeedback(feedback *Feedback) *EventID {
+	client, scope := hub.Client(), hub.Scope()
+	if client == nil || scope == nil {
+		return nil
+	}
+	return client.CaptureFeedback(feedback, nil, scope)
 }
 
 // CaptureCheckIn calls the method of the same name on currently bound Client instance

@@ -60,6 +60,8 @@ func EnvelopeIdentifier(envelope *protocol.Envelope) string {
 		description = "transaction"
 	case protocol.EnvelopeItemTypeCheckIn:
 		description = "check-in"
+	case protocol.EnvelopeItemTypeFeedback:
+		description = "feedback"
 	case protocol.EnvelopeItemTypeLog:
 		logCount := 0
 		for _, item := range envelope.Items {

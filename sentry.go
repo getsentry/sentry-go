@@ -48,6 +48,12 @@ func CaptureException(exception error) *EventID {
 	return hub.CaptureException(exception)
 }
 
+// CaptureFeedback captures user-provided feedback.
+func CaptureFeedback(feedback *Feedback) *EventID {
+	hub := CurrentHub()
+	return hub.CaptureFeedback(feedback)
+}
+
 // CaptureCheckIn captures a (cron) monitor check-in.
 func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 	hub := CurrentHub()
