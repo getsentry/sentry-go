@@ -137,3 +137,30 @@ func TestHubCaptureFeedbackDoesNotChangeLastEventID(t *testing.T) {
 		t.Errorf("LastEventID() = %q, want %q", got, *messageID)
 	}
 }
+
+func TestHubCaptureFeedbackEventDoesNotChangeLastEventID(t *testing.T) {
+	for name, withHint := range map[string]bool{"CaptureEvent": false, "CaptureEventWithHint": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			hub, _, _ := setupHubTest()
+			messageID := hub.CaptureMessage("before feedback")
+			if messageID == nil {
+				t.Fatal("CaptureMessage returned a nil event ID")
+			}
+			event := NewEvent()
+			event.Type = feedbackType
+			var feedbackID *EventID
+			if withHint {
+				feedbackID = hub.CaptureEventWithHint(event, &EventHint{})
+			} else {
+				feedbackID = hub.CaptureEvent(event)
+			}
+			if feedbackID == nil {
+				t.Fatal("capturing feedback returned a nil event ID")
+			}
+			if got := hub.LastEventID(); got != *messageID {
+				t.Errorf("LastEventID() = %q, want %q", got, *messageID)
+			}
+		})
+	}
+}

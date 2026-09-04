@@ -223,7 +223,7 @@ func (hub *Hub) CaptureEventWithHint(event *Event, hint *EventHint) *EventID {
 	}
 	eventID := client.CaptureEvent(event, hint, scope)
 
-	if event.Type != transactionType && eventID != nil {
+	if event.Type != transactionType && event.Type != feedbackType && eventID != nil {
 		hub.mu.Lock()
 		hub.lastEventID = *eventID
 		hub.mu.Unlock()
