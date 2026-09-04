@@ -20,9 +20,8 @@ func newMockTransport() (context.Context, *sentry.MockTransport) {
 		Dsn:       "https://public@example.com/1",
 		Transport: mockTransport,
 	})
-	hub := sentry.CurrentHub()
-	hub.BindClient(mockClient)
-	ctx = sentry.SetHubOnContext(ctx, hub)
+	ctx, _ = sentry.WithIsolationScope(ctx)
+	ctx = sentry.ContextWithClient(ctx, mockClient)
 	return ctx, mockTransport
 }
 
@@ -154,7 +153,7 @@ func TestSentryCore_Write(t *testing.T) {
 	err := core.Write(entry, fields)
 	assert.NoError(t, err)
 
-	sentry.Flush(testutils.FlushTimeout())
+	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	require.Equal(t, 1, len(events))
@@ -196,7 +195,7 @@ func TestSentryCore_WriteWithAccumulatedFields(t *testing.T) {
 	err := coreWithFields.Write(entry, additionalFields)
 	assert.NoError(t, err)
 
-	sentry.Flush(testutils.FlushTimeout())
+	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	require.Equal(t, 1, len(events))
@@ -235,7 +234,7 @@ func TestSentryCore_WriteWithCaller(t *testing.T) {
 	err := core.Write(entry, nil)
 	assert.NoError(t, err)
 
-	sentry.Flush(testutils.FlushTimeout())
+	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	require.Equal(t, 1, len(events))
@@ -272,7 +271,7 @@ func TestSentryCore_WriteWithLoggerName(t *testing.T) {
 	err := core.Write(entry, nil)
 	assert.NoError(t, err)
 
-	sentry.Flush(testutils.FlushTimeout())
+	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	require.Equal(t, 1, len(events))
@@ -301,7 +300,7 @@ func TestSentryCore_WriteWithStack(t *testing.T) {
 	err := core.Write(entry, nil)
 	assert.NoError(t, err)
 
-	sentry.Flush(testutils.FlushTimeout())
+	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	require.Equal(t, 1, len(events))
@@ -363,7 +362,7 @@ func TestSentryCore_LogLevels(t *testing.T) {
 			err := core.Write(entry, nil)
 			assert.NoError(t, err)
 
-			sentry.Flush(testutils.FlushTimeout())
+			sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 			events := mockTransport.Events()
 			require.Equal(t, 1, len(events))
@@ -389,7 +388,7 @@ func TestSentryCore_Origin(t *testing.T) {
 	err := core.Write(entry, nil)
 	assert.NoError(t, err)
 
-	sentry.Flush(testutils.FlushTimeout())
+	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	require.Equal(t, 1, len(events))
@@ -411,7 +410,7 @@ func TestSentryCore_Integration(t *testing.T) {
 	logger.Info("user logged in", zap.String("user_id", "123"), zap.String("ip", "192.168.1.1"))
 	logger.Warn("high memory usage", zap.Float64("usage_percent", 85.5))
 
-	sentry.Flush(testutils.FlushTimeout())
+	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	require.Equal(t, 1, len(events))
@@ -454,7 +453,7 @@ func TestSentryCore_IntegrationWithTee(t *testing.T) {
 	logger.Warn("warning message")
 	logger.Error("error message")
 
-	sentry.Flush(testutils.FlushTimeout())
+	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	require.Equal(t, 1, len(events))
@@ -477,7 +476,7 @@ func TestSentryCore_IntegrationWithSugaredLogger(t *testing.T) {
 		"status", 200,
 	)
 
-	sentry.Flush(testutils.FlushTimeout())
+	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	require.Equal(t, 1, len(events))
@@ -559,7 +558,7 @@ func TestSentryCore_ContextFieldInLogger(t *testing.T) {
 	}))
 	logger = logger.With(Context(txnCtx))
 	logger.Info("test message with trace context", zap.String("key", "value"))
-	sentry.Flush(testutils.FlushTimeout())
+	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
 	events := mockTransport.Events()
 	require.Equal(t, 1, len(events))
