@@ -180,5 +180,4 @@ scopedLogger.Info("Processing completed")
 ## Notes
 
 - This integration only sends logs to Sentry (not events/errors). For error reporting, use the main `sentry-go` package.
-- Logs are enabled by default. If you have `DisableLogs: true`, remove it to enable log emission.
 - Call `sentry.Flush()` before your application exits to ensure all logs are sent.

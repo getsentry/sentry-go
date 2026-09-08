@@ -41,13 +41,6 @@ func TestNewLogHook(t *testing.T) {
 		}
 	})
 
-	t.Run("DisableLogs", func(t *testing.T) {
-		t.Parallel()
-
-		_, err := NewLogHook(levels, sentry.ClientOptions{DisableLogs: true})
-		assert.EqualError(t, err, "cannot create log hook, DisableLogs is set to true")
-	})
-
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 

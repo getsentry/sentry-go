@@ -2,6 +2,8 @@ package sentryotlp
 
 import (
 	"context"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -131,12 +133,13 @@ func TestBuildOTLPOptions_WithAdditionalClientOptions(t *testing.T) {
 	cfg := &config{}
 	WithTimeout(3 * time.Second)(cfg)
 	WithCompression(otlptracehttp.GzipCompression)(cfg)
+	WithProxy(func(*http.Request) (*url.URL, error) { return nil, nil })(cfg)
 
 	opts, err := buildOTLPOptions("https://testkey@o123.ingest.sentry.io/789", cfg.otlpOptions...)
 	if err != nil {
 		t.Fatalf("buildOTLPOptions() error = %v", err)
 	}
-	if len(opts) < 4 {
+	if len(opts) < 6 {
 		t.Fatalf("expected defaults plus custom options, got %d", len(opts))
 	}
 }
