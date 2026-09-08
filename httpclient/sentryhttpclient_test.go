@@ -15,9 +15,12 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryhttpclient "github.com/getsentry/sentry-go/httpclient"
+	"github.com/getsentry/sentry-go/internal/sentrytest"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type noopRoundTripper struct {
@@ -236,7 +239,22 @@ func TestIntegration(t *testing.T) {
 			TracerOptions:      []sentryhttpclient.SentryRoundTripTracerOption{sentryhttpclient.WithTracePropagationTargets([]string{"example.com"})},
 			WantStatus:         200,
 			WantResponseLength: 0,
-			WantSpan:           nil,
+			WantSpan: &sentry.Span{
+				Data: map[string]interface{}{
+					"http.fragment":                "readme",
+					"http.query":                   "baz=123",
+					"http.request.method":          "GET",
+					"http.response.status_code":    200,
+					"http.response_content_length": int64(0),
+					"server.address":               "example.net",
+					"server.port":                  "",
+				},
+				Description: "GET https://example.net/foo/bar?baz=123#readme",
+				Op:          "http.client",
+				Origin:      "manual",
+				Sampled:     sentry.SampledTrue,
+				Status:      sentry.SpanStatusOK,
+			},
 		},
 	}
 
@@ -967,5 +985,81 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 				t.Fatalf("span description mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestTracePropagationTargets(t *testing.T) {
+	previousClient := sentry.CurrentHub().Client()
+	t.Cleanup(func() { sentry.CurrentHub().BindClient(previousClient) })
+
+	for _, globalTargets := range []bool{false, true} {
+		for _, parentSpan := range []bool{false, true} {
+			for _, propagateTraceparent := range []bool{false, true} {
+				for _, tt := range []struct {
+					name            string
+					targets         []string
+					wantPropagation bool
+				}{
+					{name: "default", wantPropagation: true},
+					{name: "empty", targets: []string{}, wantPropagation: true},
+					{name: "matching", targets: []string{"other.example", "example.com"}, wantPropagation: true},
+					{name: "nonmatching", targets: []string{"internal.service.local"}},
+				} {
+					t.Run(fmt.Sprintf("%s/global=%t/parent=%t/traceparent=%t", tt.name, globalTargets, parentSpan, propagateTraceparent), func(t *testing.T) {
+						opts := sentry.ClientOptions{
+							EnableTracing:        true,
+							TracesSampleRate:     1,
+							PropagateTraceparent: propagateTraceparent,
+						}
+						var tracerOptions []sentryhttpclient.SentryRoundTripTracerOption
+						if globalTargets {
+							opts.TracePropagationTargets = tt.targets
+						} else {
+							tracerOptions = append(tracerOptions, sentryhttpclient.WithTracePropagationTargets(tt.targets))
+						}
+						fixture := sentrytest.NewFixture(t, sentrytest.WithGlobal(), sentrytest.WithClientOptions(opts))
+						ctx := fixture.NewContext(context.Background())
+						var transaction *sentry.Span
+						if parentSpan {
+							transaction = sentry.StartTransaction(ctx, "outgoing request")
+							ctx = transaction.Context()
+						}
+						request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com/foo", nil)
+						require.NoError(t, err)
+						transport := &captureRoundTripper{}
+						client := &http.Client{Transport: sentryhttpclient.NewSentryRoundTripper(transport, tracerOptions...)}
+						response, err := client.Do(request)
+						require.NoError(t, err)
+						require.NoError(t, response.Body.Close())
+						require.Len(t, transport.requests, 1)
+						headers := transport.requests[0].Header
+						assert.Equal(t, tt.wantPropagation, headers.Get(sentry.SentryTraceHeader) != "")
+						assert.Equal(t, tt.wantPropagation, len(headers.Values(sentry.SentryBaggageHeader)) != 0)
+						assert.Equal(t, tt.wantPropagation && propagateTraceparent, headers.Get(sentry.TraceparentHeader) != "")
+						assert.Empty(t, request.Header)
+
+						if transaction != nil {
+							transaction.Finish()
+						}
+						fixture.Flush()
+						events := fixture.Events()
+						if !parentSpan {
+							assert.Empty(t, events)
+							return
+						}
+						require.Len(t, events, 1)
+						assert.Equal(t, "transaction", events[0].Type)
+						require.Len(t, events[0].Spans, 1)
+						span := events[0].Spans[0]
+						assert.Equal(t, "http.client", span.Op)
+						assert.Equal(t, "GET https://example.com/foo", span.Description)
+						assert.Equal(t, transaction.SpanID, span.ParentSpanID)
+						assert.Equal(t, sentry.SpanStatusOK, span.Status)
+						assert.Equal(t, http.StatusOK, span.Data["http.response.status_code"])
+						assert.False(t, span.EndTime.IsZero())
+					})
+				}
+			}
+		}
 	}
 }
