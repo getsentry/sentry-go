@@ -25,11 +25,9 @@ func setupMetricsTest() (context.Context, *MockTransport) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub().Clone()
-	hub.BindClient(mockClient)
-	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-
-	ctx = SetHubOnContext(ctx, hub)
+	ctx, scope := WithIsolationScope(ctx)
+	ctx = ContextWithClient(ctx, mockClient)
+	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 	return ctx, mockTransport
 }
 
@@ -296,8 +294,7 @@ func Test_batchMeter_FlushWithContext(t *testing.T) {
 
 	cancelCtx, cancel := context.WithTimeout(context.Background(), testutils.FlushTimeout())
 	defer cancel()
-	hub := GetHubFromContext(ctx)
-	hub.FlushWithContext(cancelCtx)
+	ClientFromContext(ctx).FlushWithContext(cancelCtx)
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -321,11 +318,9 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub().Clone()
-	hub.BindClient(mockClient)
-	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-
-	ctx = SetHubOnContext(ctx, hub)
+	ctx, scope := WithIsolationScope(ctx)
+	ctx = ContextWithClient(ctx, mockClient)
+	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 
 	meter := NewMeter(ctx)
 	meter.Count("test.count", 1)
@@ -401,16 +396,14 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 		Transport:              mockTransport,
 		DisableTelemetryBuffer: true,
 	})
-	hub := CurrentHub()
-	hub.BindClient(mockClient)
-	ctx := SetHubOnContext(context.Background(), hub)
+	ctx, _ := WithIsolationScope(context.Background())
+	ctx = ContextWithClient(ctx, mockClient)
 	meter := NewMeter(ctx)
 	for i := 0; i < 3; i++ {
 		meter.Count("test.count", 1)
 	}
 
-	hub = GetHubFromContext(ctx)
-	hub.Client().batchMeter.Shutdown()
+	mockClient.batchMeter.Shutdown()
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -423,8 +416,8 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 	mockTransport.events = nil
 
 	// Test that shutdown can be called multiple times safely
-	hub.Client().batchMeter.Shutdown()
-	hub.Client().batchMeter.Shutdown()
+	mockClient.batchMeter.Shutdown()
+	mockClient.batchMeter.Shutdown()
 
 	events = mockTransport.Events()
 	if len(events) != 0 {
@@ -472,6 +465,25 @@ func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
 	}
 }
 
+func TestSentryMeter_ExplicitScopePrecedesFallbackTrace(t *testing.T) {
+	ctx, transport := setupMetricsTest()
+	fallback := StartTransaction(ctx, "fallback")
+	defer fallback.Finish()
+	meter := NewMeter(fallback.Context())
+
+	emitCtx, scope := WithIsolationScope(ctx)
+	wantTraceID := TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	scope.SetPropagationContext(PropagationContext{TraceID: wantTraceID})
+	meter.WithCtx(emitCtx).Count("explicit.scope", 1)
+	flushFromContext(ctx, testutils.FlushTimeout())
+
+	events := transport.Events()
+	if len(events) != 1 || len(events[0].Metrics) != 1 {
+		t.Fatalf("captured events = %d, metrics = %d, want 1 event with 1 metric", len(events), len(events[0].Metrics))
+	}
+	assert.Equal(t, wantTraceID, events[0].Metrics[0].TraceID)
+}
+
 func Test_sentryMeter_UserAttributes(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
@@ -485,17 +497,14 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	hub := CurrentHub().Clone()
-	hub.BindClient(mockClient)
-	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-
-	hub.Scope().SetUser(User{
+	ctx, scope := WithIsolationScope(ctx)
+	ctx = ContextWithClient(ctx, mockClient)
+	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+	scope.SetUser(User{
 		ID:    "user123",
 		Name:  "Test User",
 		Email: "test@example.com",
 	})
-
-	ctx = SetHubOnContext(ctx, hub)
 
 	meter := NewMeter(ctx)
 	meter.Count("test.count", 1)
@@ -589,9 +598,12 @@ func Test_sentryMeter_SetAttributes_Persistence(t *testing.T) {
 
 func Test_sentryMeter_AttributePrecedence(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
-	hub := GetHubFromContext(ctx)
-
-	hub.Scope().SetUser(User{ID: "user123", Name: "TestUser"})
+	scope := ScopeFromContext(ctx)
+	scope.SetUser(User{ID: "user123", Name: "TestUser"})
+	scope.SetAttributes(
+		attribute.String("key", "scope-value"),
+		attribute.String("sentry.sdk.name", "scope-sdk"),
+	)
 
 	meter := NewMeter(ctx)
 	meter.SetAttributes(attribute.String("key", "instance-value"))
@@ -663,33 +675,17 @@ func Test_sentryMeter_EmptyName(t *testing.T) {
 	}
 }
 
-func Test_noopMeter_Methods(t *testing.T) {
-	hub := NewHub(nil, NewScope())
-	ctx := SetHubOnContext(context.Background(), hub)
-	meter := NewMeter(ctx)
-
-	meter = meter.WithCtx(ctx)
-	meter.Count("test.count", 1)
-	meter.Gauge("test.gauge", 2.5)
-	meter.Distribution("test.dist", 3.14)
-	meter.SetAttributes(attribute.String("key", "value"))
-
-	if _, ok := meter.(*noopMeter); !ok {
-		t.Errorf("expected *noopMeter, got %T", meter)
-	}
-}
-
-func Test_sentryMeter_WithScopeOverride(t *testing.T) {
+func Test_sentryMeter_WithContextScope(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 	meter := NewMeter(ctx)
 
-	customScope := NewScope()
+	customCtx, customScope := WithIsolationScope(ctx)
 	customScope.SetUser(User{
 		ID:    "custom-user-123",
 		Email: "custom@example.com",
 	})
 
-	meter.Count("test.count.with.scope", 42, WithScopeOverride(customScope))
+	meter.WithCtx(customCtx).Count("test.count.with.scope", 42)
 	flushFromContext(ctx, testutils.FlushTimeout())
 
 	events := mockTransport.Events()
@@ -721,12 +717,11 @@ func Test_sentryMeter_WithScopeOverride(t *testing.T) {
 func TestSentryMeter_ScopeSetAttributesNoLeak(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 
-	clonedHub := GetHubFromContext(ctx).Clone()
-	clonedHub.Scope().SetAttributes(
+	scopedCtx, clonedScope := WithIsolationScope(ctx)
+	clonedScope.SetAttributes(
 		attribute.String("key.string", "str"),
 		attribute.Bool("key.bool", true),
 	)
-	scopedCtx := SetHubOnContext(ctx, clonedHub)
 	txn := StartTransaction(scopedCtx, "test-transaction")
 	defer txn.Finish()
 

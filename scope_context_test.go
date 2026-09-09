@@ -96,6 +96,8 @@ func TestClientFromContext(t *testing.T) {
 	assert.Same(t, globalClient, ClientFromContext(childCtx))
 	assert.Equal(t, parentCtx, ContextWithClient(parentCtx, nil))
 	assert.Same(t, localClient, ClientFromContext(ContextWithClient(parentCtx, nil)))
+	assert.Same(t, localClient, clientFromContexts(context.Background(), parentCtx))
+	assert.Same(t, localClient, clientFromContexts(ContextWithClient(context.Background(), nil), parentCtx))
 	setGlobalClient(nil)
 	assert.False(t, ClientFromContext(context.Background()).IsEnabled())
 }
