@@ -80,12 +80,11 @@ func TestIntegration(t *testing.T) {
 			Body:        `{"safe":"value"}`,
 			ContentType: "application/json",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage("post: " + string(body))
+				sentry.CaptureMessage(r.Context(), "post: "+string(body))
 			}),
 
 			WantStatus: http.StatusOK,
@@ -135,8 +134,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path: "/get",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
-				hub.CaptureMessage("get")
+				sentry.CaptureMessage(r.Context(), "get")
 			}),
 
 			WantStatus: http.StatusOK,
@@ -182,12 +180,11 @@ func TestIntegration(t *testing.T) {
 			Method: "POST",
 			Body:   largePayload,
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(body)/1024))
+				sentry.CaptureMessage(r.Context(), fmt.Sprintf("post: %d KB", len(body)/1024))
 			}),
 
 			WantStatus: http.StatusOK,
@@ -239,8 +236,7 @@ func TestIntegration(t *testing.T) {
 			Method: "POST",
 			Body:   "client sends, server ignores, SDK doesn't read",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
-				hub.CaptureMessage("body ignored")
+				sentry.CaptureMessage(r.Context(), "body ignored")
 			}),
 
 			WantStatus: http.StatusOK,
@@ -309,6 +305,12 @@ func TestIntegration(t *testing.T) {
 
 	sentryHandler := sentryhttp.New(sentryhttp.Options{})
 	handler := func(w http.ResponseWriter, r *http.Request) {
+		if sentry.ScopeFromContext(r.Context()) == nil {
+			t.Error("request context does not carry an isolation scope")
+		}
+		if sentry.TransactionFromContext(r.Context()) == nil {
+			t.Error("request context does not carry a transaction")
+		}
 		for _, tt := range tests {
 			if r.URL.Path == tt.Path {
 				tt.Handler.ServeHTTP(w, r)
