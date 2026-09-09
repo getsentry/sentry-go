@@ -49,22 +49,22 @@ func main() {
 		},
 	})
 
-	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetTag("oristhis", "justfantasy")
-		scope.SetTag("isthis", "reallife")
-		scope.SetLevel(sentry.LevelFatal)
-		scope.SetUser(sentry.User{
-			ID: "1337",
-		})
+	scope := sentry.GlobalScope()
+	scope.SetTag("oristhis", "justfantasy")
+	scope.SetTag("isthis", "reallife")
+	scope.SetLevel(sentry.LevelFatal)
+	scope.SetUser(sentry.User{
+		ID: "1337",
 	})
+	ctx := sentry.ContextWithScope(context.Background(), scope)
 
 	func() {
-		defer sentry.Recover()
+		defer sentry.Recover(ctx, nil)
 		fooErr()
 	}()
 
 	func() {
-		defer sentry.Recover()
+		defer sentry.Recover(ctx, nil)
 		fooMsg()
 	}()
 

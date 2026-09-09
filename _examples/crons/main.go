@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 
 func runTask(monitorSlug string, duration time.Duration, shouldFail bool) {
 	checkinId := sentry.CaptureCheckIn(
+		context.Background(),
 		&sentry.CheckIn{
 			MonitorSlug: monitorSlug,
 			Status:      sentry.CheckInStatusInProgress,
@@ -32,6 +34,7 @@ func runTask(monitorSlug string, duration time.Duration, shouldFail bool) {
 	}
 
 	sentry.CaptureCheckIn(
+		context.Background(),
 		&sentry.CheckIn{
 			ID:          *checkinId,
 			MonitorSlug: monitorSlug,

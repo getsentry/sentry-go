@@ -122,6 +122,7 @@ func New(cfg Config) (*Writer, error) {
 	}, nil
 }
 
+// NewWithContext creates a writer using a Sentry scope context and options.
 func NewWithContext(ctx context.Context, opts Options) (*Writer, error) {
 	if ctx == nil {
 		return nil, errors.New("context cannot be nil")

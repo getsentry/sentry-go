@@ -27,7 +27,7 @@ func main() {
 	})
 
 	// With custom HTTP client
-	ctx := sentry.SetHubOnContext(context.Background(), sentry.CurrentHub().Clone())
+	ctx, _ := sentry.WithIsolationScope(context.Background())
 	httpClient := &http.Client{
 		Transport: sentryhttpclient.NewSentryRoundTripper(nil),
 	}

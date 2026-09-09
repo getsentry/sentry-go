@@ -1,11 +1,11 @@
 // Package sentrytest provides test fixtures for the Sentry Go SDK.
 //
-// Fixture bundles a Hub, Client, and MockTransport with assertion helpers,
+// Fixture bundles a Scope, Client, and MockTransport with assertion helpers,
 // eliminating boilerplate across integration and unit tests.
 //
-// Isolated mode (default) creates a cloned hub safe for parallel tests.
-// Global mode (WithGlobal) calls sentry.Init for middleware tests that read
-// from sentry.CurrentHub.
+// Isolated mode (default) creates an independent scope safe for parallel tests.
+// Global mode (WithGlobal) calls sentry.Init for middleware tests that resolve
+// the global client.
 package sentrytest
 
 import (
@@ -48,9 +48,8 @@ type config struct {
 	global bool
 }
 
-// WithGlobal makes the fixture call [sentry.Init] to set the global hub
-// instead of creating an isolated hub. Use this for middleware tests where
-// the middleware reads from [sentry.CurrentHub].
+// WithGlobal makes the fixture call [sentry.Init] to set the global client.
+// Use this for middleware tests that begin from a background context.
 //
 // Tests using global mode must not run in parallel.
 func WithGlobal() Option {
@@ -69,13 +68,15 @@ func WithClientOptions(opts sentry.ClientOptions) Option {
 }
 
 // Fixture provides an isolated Sentry environment for testing.
-// It bundles a Hub, Client, and MockTransport with assertion helpers.
+// It bundles a Scope, Client, and MockTransport with assertion helpers.
 type Fixture struct {
 	// T is the test context.
 	T testing.TB
 
+	// Context carries the fixture's isolated scope and client.
 	Context context.Context
 
+	// Scope is the fixture's isolated scope.
 	Scope *sentry.Scope
 
 	// Client is the fixture's client, configured with the MockTransport.
@@ -177,8 +178,8 @@ func (f *Fixture) Flush() {
 	}
 }
 
-// NewContext returns parent with the fixture's hub attached. If parent is nil,
-// [context.Background] is used.
+// NewContext returns a derived context with an isolated scope using the
+// fixture's client. If parent is nil, [context.Background] is used.
 func (f *Fixture) NewContext(parent context.Context) context.Context {
 	if parent == nil {
 		parent = context.Background()

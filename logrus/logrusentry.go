@@ -30,6 +30,7 @@ const (
 // It is not safe to configure the hook while logging is happening. Please
 // perform all configuration before using it.
 type Hook interface {
+	// SetContextProvider sets a function to provide a Sentry scope context for each log entry.
 	SetContextProvider(provider func() context.Context)
 	// AddTags adds tags to the hook's scope.
 	AddTags(tags map[string]string)

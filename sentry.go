@@ -28,7 +28,8 @@ func Init(options ClientOptions) error {
 	return nil
 }
 
-// AddBreadcrumb records a new breadcrumb.
+// AddBreadcrumb records a new breadcrumb using the scope and client carried
+// by ctx.
 //
 // The total number of breadcrumbs that can be recorded are limited by the
 // configuration on the client.
@@ -50,17 +51,20 @@ func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb) {
 	scopeFromContextOrGlobal(ctx).AddBreadcrumb(breadcrumb, limit)
 }
 
-// CaptureMessage captures an arbitrary message.
+// CaptureMessage captures an arbitrary message using the scope and client
+// carried by ctx.
 func CaptureMessage(ctx context.Context, message string, options ...CaptureOption) *EventID {
 	return ClientFromContext(ctx).CaptureMessage(ctx, message, options...)
 }
 
-// CaptureException captures an error.
+// CaptureException captures an error using the scope and client carried by
+// ctx.
 func CaptureException(ctx context.Context, exception error, options ...CaptureOption) *EventID {
 	return ClientFromContext(ctx).CaptureException(ctx, exception, options...)
 }
 
-// CaptureCheckIn captures a (cron) monitor check-in.
+// CaptureCheckIn captures a (cron) monitor check-in using the scope and client
+// carried by ctx.
 func CaptureCheckIn(
 	ctx context.Context,
 	checkIn *CheckIn,
@@ -70,7 +74,7 @@ func CaptureCheckIn(
 	return ClientFromContext(ctx).CaptureCheckIn(ctx, checkIn, monitorConfig, options...)
 }
 
-// CaptureEvent captures an event on the currently active client if any.
+// CaptureEvent captures an event using the scope and client carried by ctx.
 //
 // The event must already be assembled. Typically code would instead use
 // the utility methods like CaptureException. The return value is the
@@ -79,7 +83,9 @@ func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *
 	return ClientFromContext(ctx).CaptureEvent(ctx, event, options...)
 }
 
-// Recover captures a panic.
+// Recover captures a recovered panic value using the scope and client carried
+// by ctx. When recovered is nil, Recover invokes Go's built-in recover and must
+// itself be deferred.
 func Recover(ctx context.Context, recovered any, options ...CaptureOption) *EventID {
 	if recovered == nil {
 		recovered = recover()
@@ -92,7 +98,8 @@ func Recover(ctx context.Context, recovered any, options ...CaptureOption) *Even
 
 // Flush waits until the underlying Transport sends any buffered events to the
 // Sentry server, blocking for at most the given timeout. It returns false if
-// the timeout was reached. In that case, some events may not have been sent.
+// capture is disabled or the timeout was reached. In the latter case, some
+// events may not have been sent.
 //
 // Flush should be called before terminating the program to avoid
 // unintentionally dropping events.
@@ -122,7 +129,8 @@ func FlushWithContext(ctx context.Context) bool {
 	return ClientFromContext(ctx).FlushWithContext(ctx)
 }
 
-// LastEventID returns an ID of last captured event.
+// LastEventID returns the last event ID captured in ctx's scope, or in the
+// global scope when ctx does not carry one.
 func LastEventID(ctx context.Context) EventID {
 	return scopeFromContextOrGlobal(ctx).lastEventIDSnapshot()
 }

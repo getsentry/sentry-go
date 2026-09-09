@@ -64,15 +64,7 @@ func main() {
 		ctx, span := otel.Tracer("example-service").Start(r.Context(), "GET /demo")
 		defer span.End()
 
-		hub := sentry.GetHubFromContext(ctx)
-		if hub == nil {
-			hub = sentry.CurrentHub()
-		}
-		hub.Client().CaptureException(
-			errors.New("demo handler failure"),
-			&sentry.EventHint{Context: ctx},
-			hub.Scope(),
-		)
+		sentry.CaptureException(ctx, errors.New("demo handler failure"))
 
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("captured an error and linked it to the active trace\n"))

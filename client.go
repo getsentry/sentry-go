@@ -286,8 +286,8 @@ type ClientOptions struct {
 	DisableTelemetryBuffer bool
 }
 
-// Client is the underlying processor that is used by the main API and Hub
-// instances. It must be created with NewClient.
+// Client is the underlying processor used by the main API. It must be created
+// with NewClient.
 type Client struct {
 	mu                    sync.RWMutex
 	disabled              bool
@@ -312,9 +312,8 @@ type Client struct {
 // ClientOptions.
 //
 // Most users will not create clients directly. Instead, initialize the SDK with
-// Init and use the package-level functions (for simple programs that run on a
-// single goroutine) or hub methods (for concurrent programs, for example web
-// servers).
+// Init and use the context-based package functions. Create isolated scope
+// contexts for concurrent operations such as web requests.
 func NewClient(options ClientOptions) (*Client, error) {
 	// The default error event sample rate for all SDKs is 1.0 (send all).
 	//
@@ -458,10 +457,17 @@ var noopClient = &Client{
 	reportProvider: report.NoopProvider(),
 }
 
+// NewNoopClient returns the shared client that safely discards telemetry.
+// Its mutating methods have no effect.
 func NewNoopClient() *Client {
 	return noopClient
 }
 
+// IsEnabled reports whether the client processes captured telemetry.
+//
+// It returns false for a nil receiver and for clients returned by
+// NewNoopClient. A client can be enabled while using a transport that discards
+// telemetry, such as a client configured with an empty DSN.
 func (client *Client) IsEnabled() bool {
 	return client != nil && !client.disabled
 }
@@ -576,9 +582,8 @@ func (client *Client) setupIntegrations() {
 // called from concurrent goroutines. Most users will prefer to use
 // ClientOptions.BeforeSend or Scope.AddEventProcessor instead.
 //
-// Note that typical programs have only a single client created by Init and the
-// client is shared among multiple hubs, one per goroutine, such that adding an
-// event processor to the client affects all hubs that share the client.
+// Note that typical programs have only a single client created by Init, so
+// adding an event processor to it affects all contexts that resolve that client.
 func (client *Client) AddEventProcessor(processor EventProcessor) {
 	if !client.IsEnabled() {
 		return
@@ -787,7 +792,8 @@ func (client *Client) capturePanic(ctx context.Context, recovered any, options .
 
 // Flush waits until the underlying Transport sends any buffered events to the
 // Sentry server, blocking for at most the given timeout. It returns false if
-// the timeout was reached. In that case, some events may not have been sent.
+// the client is disabled or the timeout was reached. In the latter case, some
+// events may not have been sent.
 //
 // Flush should be called before terminating the program to avoid
 // unintentionally dropping events.

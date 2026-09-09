@@ -73,7 +73,7 @@ func NewSentryCore(ctx context.Context, opts Option) *SentryCore {
 
 // Context returns a zapcore.Field that can be used with logger.With() to link
 // traces with the provided context. This allows propagating Sentry trace information
-// from the context to logs without needing to pass a Hub.
+// from the context to logs.
 //
 // Example:
 //
