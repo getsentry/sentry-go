@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -142,6 +143,18 @@ func NewDsn(rawURL string) (*Dsn, error) {
 	}, nil
 }
 
+// hostPort returns the host of the DSN, enclosed in brackets when it is an IPv6
+// address, followed by the port when it is not the default one for the scheme.
+func (dsn Dsn) hostPort() string {
+	if dsn.port == dsn.scheme.defaultPort() {
+		if strings.Contains(dsn.host, ":") {
+			return "[" + dsn.host + "]"
+		}
+		return dsn.host
+	}
+	return net.JoinHostPort(dsn.host, strconv.Itoa(dsn.port))
+}
+
 // String formats Dsn struct into a valid string url.
 func (dsn Dsn) String() string {
 	var url string
@@ -149,10 +162,7 @@ func (dsn Dsn) String() string {
 	if dsn.secretKey != "" {
 		url += fmt.Sprintf(":%s", dsn.secretKey)
 	}
-	url += fmt.Sprintf("@%s", dsn.host)
-	if dsn.port != dsn.scheme.defaultPort() {
-		url += fmt.Sprintf(":%d", dsn.port)
-	}
+	url += fmt.Sprintf("@%s", dsn.hostPort())
 	if dsn.path != "" {
 		url += dsn.path
 	}
@@ -210,17 +220,11 @@ func (dsn *Dsn) SetOrgID(orgID uint64) {
 // GetAPIURL returns the URL of the envelope endpoint of the project
 // associated with the DSN.
 func (dsn Dsn) GetAPIURL() *url.URL {
-	var rawURL string
-	rawURL += fmt.Sprintf("%s://%s", dsn.scheme, dsn.host)
-	if dsn.port != dsn.scheme.defaultPort() {
-		rawURL += fmt.Sprintf(":%d", dsn.port)
+	return &url.URL{
+		Scheme: string(dsn.scheme),
+		Host:   dsn.hostPort(),
+		Path:   fmt.Sprintf("%s/api/%s/%s/", dsn.path, dsn.projectID, "envelope"),
 	}
-	if dsn.path != "" {
-		rawURL += dsn.path
-	}
-	rawURL += fmt.Sprintf("/api/%s/%s/", dsn.projectID, "envelope")
-	parsedURL, _ := url.Parse(rawURL)
-	return parsedURL
 }
 
 // RequestHeaders returns all the necessary headers that have to be used in the transport when sending events
