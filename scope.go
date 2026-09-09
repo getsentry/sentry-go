@@ -352,16 +352,20 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
 func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event {
 	client = normalizeClient(client)
-	processors := scope.applyToEvent(event, client, hint, client.options.MaxBreadcrumbs)
+	var ctx context.Context
+	if hint != nil {
+		ctx = hint.Context
+	}
+	processors := scope.applyToEvent(ctx, event, client, client.options.MaxBreadcrumbs)
 	return client.runEventProcessors(event, hint, processors)
 }
 
 // applyToEvent applies the effective scope to event and returns the scope
 // processors so they can run after the scope lock is released.
 func (scope *Scope) applyToEvent(
+	ctx context.Context,
 	event *Event,
 	client *Client,
-	hint *EventHint,
 	maxBreadcrumbs int,
 ) []EventProcessor {
 	_, explicitTrace := event.Contexts[traceContextKey]
@@ -416,7 +420,6 @@ func (scope *Scope) applyToEvent(
 	request := scope.request
 	requestBody := scope.requestBody
 	propagationContext := scope.propagationContext
-	span := scope.span
 	processors := scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
 	scope.mu.RUnlock()
 
@@ -431,16 +434,14 @@ func (scope *Scope) applyToEvent(
 		}
 	}
 
-	applyTraceToEvent(event, hint, client, request, span, propagationContext, explicitTrace)
+	applyTraceToEvent(ctx, event, client, propagationContext, explicitTrace)
 	return processors
 }
 
 func applyTraceToEvent(
+	ctx context.Context,
 	event *Event,
-	hint *EventHint,
 	client *Client,
-	request *http.Request,
-	span *Span,
 	propagationContext PropagationContext,
 	explicit bool,
 ) {
@@ -448,34 +449,22 @@ func applyTraceToEvent(
 		return
 	}
 
-	var ctx context.Context
-	if hint != nil {
-		ctx = hint.Context
-	}
-	if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
-		setEventTrace(event, Context{
-			traceIDContextKey: traceID.String(),
-			spanIDContextKey:  spanID.String(),
-		})
-		return
-	}
-	if span != nil {
-		setEventTrace(event, span.traceContext().Map())
+	trace := activeTraceFromContexts(client, ctx)
+	if trace.span != nil {
+		setEventTrace(event, trace.span.traceContext().Map())
 		if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() {
-			if transaction := span.GetTransaction(); transaction != nil {
-				event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
+			if transaction := trace.span.GetTransaction(); transaction != nil {
+				event.sdkMetaData.dsc = dynamicSamplingContextFromTransaction(transaction, client)
 			}
 		}
 		return
 	}
-	if request != nil {
-		if traceID, spanID, ok := client.externalTraceContextFromContext(request.Context()); ok {
-			setEventTrace(event, Context{
-				traceIDContextKey: traceID.String(),
-				spanIDContextKey:  spanID.String(),
-			})
-			return
-		}
+	if trace.traceID != zeroTraceID {
+		setEventTrace(event, Context{
+			traceIDContextKey: trace.traceID.String(),
+			spanIDContextKey:  trace.spanID.String(),
+		})
+		return
 	}
 	if propagationContext.TraceID == zeroTraceID {
 		return
@@ -573,49 +562,37 @@ func hubFromContexts(ctxs ...context.Context) *Hub {
 	return nil
 }
 
-// resolveTrace resolves trace ID and span ID from the given scope and contexts.
-//
-// The resolution order follows a most-specific-to-least-specific pattern:
-//  1. If an external trace resolver was registered (eg. OTel), we prioritise trace context
-//     information from that
-//  2. Check for span directly in contexts (SpanFromContext) - this is the most specific
-//     source as it represents a span explicitly attached to the current operation's context
-//  3. Check scope's span - provides access to span set on the hub's scope
-//  4. Fall back to scope's propagation context trace ID
-//
-// This ordering ensures we always use the most contextually relevant tracing information.
-// For example, if a specific span is active for an operation, we use that span's trace/span IDs
-// rather than accidentally using a different span that might be set on the hub's scope.
-func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) (traceID TraceID, spanID SpanID) {
-	var span *Span
+type activeTrace struct {
+	traceID TraceID
+	spanID  SpanID
+	span    *Span
+}
 
+func activeTraceFromContexts(client *Client, ctxs ...context.Context) activeTrace {
 	for _, ctx := range ctxs {
 		if ctx == nil {
 			continue
 		}
-		if client.IsEnabled() {
-			if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
-				return traceID, spanID
-			}
+		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
+			return activeTrace{traceID: traceID, spanID: spanID}
 		}
-		if span = SpanFromContext(ctx); span != nil {
-			break
+		if span := SpanFromContext(ctx); span != nil {
+			return activeTrace{traceID: span.TraceID, spanID: span.SpanID, span: span}
 		}
 	}
+	return activeTrace{}
+}
 
-	if scope != nil {
-		scope.mu.RLock()
-		if span == nil {
-			span = scope.span
-		}
-		if span != nil {
-			traceID = span.TraceID
-			spanID = span.SpanID
-		} else {
-			traceID = scope.propagationContext.TraceID
-		}
-		scope.mu.RUnlock()
+func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) (TraceID, SpanID) {
+	trace := activeTraceFromContexts(client, ctxs...)
+	if trace.traceID != zeroTraceID || trace.span != nil {
+		return trace.traceID, trace.spanID
 	}
-
-	return traceID, spanID
+	if scope == nil {
+		scope = GlobalScope()
+	}
+	scope.mu.RLock()
+	trace.traceID = scope.propagationContext.TraceID
+	scope.mu.RUnlock()
+	return trace.traceID, trace.spanID
 }
