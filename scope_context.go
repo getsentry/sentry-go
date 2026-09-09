@@ -7,6 +7,9 @@ import (
 
 type scopeContextKey struct{}
 type clientContextKey struct{}
+type requestContextKey struct{}
+
+var RequestContextKey requestContextKey
 
 // globalScope is the process-wide global scope.
 // It intentionally has no propagation context: trace state belongs to an
