@@ -126,6 +126,8 @@ func categoryFromEnvelope(envelope *protocol.Envelope) ratelimit.Category {
 			return ratelimit.CategoryTransaction
 		case protocol.EnvelopeItemTypeCheckIn:
 			return ratelimit.CategoryMonitor
+		case protocol.EnvelopeItemTypeFeedback:
+			return ratelimit.CategoryFeedback
 		case protocol.EnvelopeItemTypeLog:
 			return ratelimit.CategoryLog
 		case protocol.EnvelopeItemTypeAttachment:
