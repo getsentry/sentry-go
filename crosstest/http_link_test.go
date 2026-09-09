@@ -26,14 +26,6 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-func sendSignals(ctx context.Context, identifier string, logger sentry.Logger, meter sentry.Meter) {
-	hub := sentry.GetHubFromContext(ctx)
-	hub.CaptureException(errors.New(identifier + " manual error"))
-	logger.Info().WithCtx(ctx).Emit(identifier + " linked log")
-	meter.WithCtx(ctx).Count(identifier+".linked.metric", 1)
-	panic(identifier + " panic")
-}
-
 func sendContextSignals(ctx context.Context, identifier string, logger sentry.Logger, meter sentry.Meter) {
 	sentry.CaptureException(ctx, errors.New(identifier+" manual error"))
 	logger.Info().WithCtx(ctx).Emit(identifier + " linked log")
@@ -192,18 +184,17 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		f := sentrytest.NewFixture(t, otelOpts()...)
 		const identifier = "fiber"
-		baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+		baseCtx := f.NewContext(context.Background())
 		logger := sentry.NewLogger(baseCtx)
 		meter := sentry.NewMeter(baseCtx)
 		app := fiber.New()
 		app.Use(func(c *fiber.Ctx) error {
-			c.SetUserContext(sentry.SetHubOnContext(otelCtx, f.Hub))
-			sentryfiber.SetHubOnContext(c, f.Hub)
+			c.SetUserContext(f.NewContext(otelCtx))
 			return c.Next()
 		})
 		app.Use(sentryfiber.New(sentryfiber.Options{WaitForDelivery: true}))
 		app.Get("/test", func(c *fiber.Ctx) error {
-			sendSignals(c.UserContext(), identifier, logger, meter)
+			sendContextSignals(c.UserContext(), identifier, logger, meter)
 			return nil
 		})
 
@@ -223,18 +214,17 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		f := sentrytest.NewFixture(t, otelOpts()...)
 		const identifier = "fiberv3"
-		baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+		baseCtx := f.NewContext(context.Background())
 		logger := sentry.NewLogger(baseCtx)
 		meter := sentry.NewMeter(baseCtx)
 		app := fiberv3.New()
 		app.Use(func(c fiberv3.Ctx) error {
-			c.SetContext(sentry.SetHubOnContext(otelCtx, f.Hub))
-			sentryfiberv3.SetHubOnContext(c, f.Hub)
+			c.SetContext(f.NewContext(otelCtx))
 			return c.Next()
 		})
 		app.Use(sentryfiberv3.New(sentryfiberv3.Options{WaitForDelivery: true}))
 		app.Get("/test", func(c fiberv3.Ctx) error {
-			sendSignals(c.Context(), identifier, logger, meter)
+			sendContextSignals(c.Context(), identifier, logger, meter)
 			return nil
 		})
 
@@ -249,10 +239,26 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		f.Flush()
 		requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
 	})
-}
 
-func TestFastHTTPOTelValidationGap(t *testing.T) {
-	_ = sentryfasthttp.New
-	_ = fasthttp.RequestCtx{}
-	t.Skip("fasthttp does not preserve a standard request context that the OTel integration can resolve automatically today")
+	t.Run("fasthttp", func(t *testing.T) {
+		t.Parallel()
+		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+			const identifier = "fasthttp"
+			baseCtx := f.NewContext(context.Background())
+			logger := sentry.NewLogger(baseCtx)
+			meter := sentry.NewMeter(baseCtx)
+			handler := sentryfasthttp.New(sentryfasthttp.Options{WaitForDelivery: true}).Handle(func(ctx *fasthttp.RequestCtx) {
+				sendContextSignals(sentryfasthttp.GetContext(ctx), identifier, logger, meter)
+			})
+
+			ctx := &fasthttp.RequestCtx{}
+			ctx.Request.SetRequestURI("http://example.com/test")
+			ctx.Request.Header.SetMethod(http.MethodGet)
+			sentryfasthttp.SetContext(f.NewContext(otelCtx), ctx)
+			handler(ctx)
+
+			f.Flush()
+			requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+		}, otelOpts()...)
+	})
 }
