@@ -15,7 +15,6 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/debug"
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	httpInternal "github.com/getsentry/sentry-go/internal/http"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/protocol"
@@ -526,7 +525,7 @@ func (client *Client) sdkInfo() *protocol.SdkInfo {
 }
 
 func (client *Client) setupTelemetryProcessor() {
-	transport := httpInternal.NewAsyncTransport(httpInternal.TransportOptions{
+	transport := newHTTPTransport(TransportOptions{
 		Dsn:           client.options.Dsn,
 		HTTPClient:    client.options.HTTPClient,
 		HTTPTransport: client.options.HTTPTransport,
