@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httptrace"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -538,25 +537,6 @@ func TestHTTPTransport_FlushWithContext(t *testing.T) {
 	})
 }
 
-// httptraceRoundTripper implements http.RoundTripper by wrapping
-// http.DefaultTransport and keeps track of whether TCP connections have been
-// reused for every request.
-//
-// For simplicity, httptraceRoundTripper is not safe for concurrent use.
-type httptraceRoundTripper struct {
-	reusedConn []bool
-}
-
-func (rt *httptraceRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	trace := &httptrace.ClientTrace{
-		GotConn: func(connInfo httptrace.GotConnInfo) {
-			rt.reusedConn = append(rt.reusedConn, connInfo.Reused)
-		},
-	}
-	req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
-	return http.DefaultTransport.RoundTrip(req)
-}
-
 func testKeepAlive(t *testing.T, tr Transport) {
 	// event is a test event. It is empty because here we only care about
 	// the reuse of TCP connections between client and server, not the
@@ -632,7 +612,7 @@ func testKeepAlive(t *testing.T, tr Transport) {
 	}
 }
 
-func TestKeepAlive(t *testing.T) {
+func TestLegacyKeepAlive(t *testing.T) {
 	t.Run("AsyncTransport", func(t *testing.T) {
 		testKeepAlive(t, NewHTTPTransport())
 	})

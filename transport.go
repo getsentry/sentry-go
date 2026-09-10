@@ -1,4 +1,4 @@
-package http
+package sentry
 
 import (
 	"bytes"
@@ -46,16 +46,16 @@ type TransportOptions struct {
 	SdkInfo       func() *protocol.SdkInfo
 }
 
-func getProxyConfig(options TransportOptions) func(*http.Request) (*url.URL, error) {
-	if len(options.HTTPSProxy) > 0 {
+func getProxyConfig(httpProxy, httpsProxy string) func(*http.Request) (*url.URL, error) {
+	if len(httpsProxy) > 0 {
 		return func(*http.Request) (*url.URL, error) {
-			return url.Parse(options.HTTPSProxy)
+			return url.Parse(httpsProxy)
 		}
 	}
 
-	if len(options.HTTPProxy) > 0 {
+	if len(httpProxy) > 0 {
 		return func(*http.Request) (*url.URL, error) {
-			return url.Parse(options.HTTPProxy)
+			return url.Parse(httpProxy)
 		}
 	}
 
@@ -193,7 +193,7 @@ func NewSyncTransport(options TransportOptions) telemetry.Transport {
 		transport.transport = options.HTTPTransport
 	} else {
 		transport.transport = &http.Transport{
-			Proxy:           getProxyConfig(options),
+			Proxy:           getProxyConfig(options.HTTPProxy, options.HTTPSProxy),
 			TLSClientConfig: getTLSConfig(options),
 		}
 	}
@@ -350,7 +350,7 @@ func NewAsyncTransport(options TransportOptions) telemetry.Transport {
 		transport.transport = options.HTTPTransport
 	} else {
 		transport.transport = &http.Transport{
-			Proxy:           getProxyConfig(options),
+			Proxy:           getProxyConfig(options.HTTPProxy, options.HTTPSProxy),
 			TLSClientConfig: getTLSConfig(options),
 		}
 	}
