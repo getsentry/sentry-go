@@ -10,10 +10,6 @@ import (
 // The version of the SDK.
 const SDKVersion = "0.49.0"
 
-// apiVersion is the minimum version of the Sentry API compatible with the
-// sentry-go SDK.
-const apiVersion = "7"
-
 // DefaultFlushTimeout is the default timeout used for flushing events.
 const DefaultFlushTimeout = 2 * time.Second
 
@@ -104,10 +100,8 @@ func Recover(ctx context.Context, recovered any, options ...CaptureOption) *Even
 // Flush should be called before terminating the program to avoid
 // unintentionally dropping events.
 //
-// Do not call Flush indiscriminately after every call to CaptureEvent,
-// CaptureException or CaptureMessage. Instead, to have the SDK send events over
-// the network synchronously, configure it to use the HTTPSyncTransport in the
-// call to Init.
+// Capture remains asynchronous with every transport. Flush at shutdown or at
+// the end of a serverless request when delivery must complete before returning.
 func Flush(timeout time.Duration) bool {
 	return ClientFromContext(context.Background()).Flush(timeout)
 }
@@ -121,10 +115,8 @@ func Flush(timeout time.Duration) bool {
 // FlushWithContext should be called before terminating the program to ensure no
 // events are unintentionally dropped.
 //
-// Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
-// CaptureException, or CaptureMessage. To send events synchronously over the network,
-// configure the SDK to use HTTPSyncTransport during initialization with Init.
-
+// FlushWithContext flushes the client selected by ctx. Capture remains
+// asynchronous even when using NewHTTPSyncTransport.
 func FlushWithContext(ctx context.Context) bool {
 	return ClientFromContext(ctx).FlushWithContext(ctx)
 }

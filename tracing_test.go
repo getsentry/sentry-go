@@ -126,7 +126,7 @@ func TestStartSpan(t *testing.T) {
 		RecorderLen: 1,
 	}.Check(t, span)
 
-	events := transport.Events()
+	events := capturedEvents(t, ClientFromContext(ctx), transport)
 	if got := len(events); got != 1 {
 		t.Fatalf("sent %d events, want 1", got)
 	}
@@ -164,7 +164,7 @@ func TestStartSpan(t *testing.T) {
 	}
 	// Check trace context explicitly, as we ignored all contexts above to
 	// disregard other contexts.
-	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
+	if diff := cmp.Diff(jsonContext(t, want.Contexts["trace"]), events[0].Contexts["trace"]); diff != "" {
 		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -188,7 +188,7 @@ func TestStartChild(t *testing.T) {
 	c.Check(t, span)
 	c.Check(t, child)
 
-	events := transport.Events()
+	events := capturedEvents(t, ClientFromContext(ctx), transport)
 	if got := len(events); got != 1 {
 		t.Fatalf("sent %d events, want 1", got)
 	}
@@ -226,7 +226,7 @@ func TestStartChild(t *testing.T) {
 			return k != "trace"
 		}),
 		cmpopts.IgnoreFields(Span{},
-			"StartTime", "EndTime",
+			"StartTime", "EndTime", "Sampled",
 		),
 		cmpopts.IgnoreUnexported(Span{}),
 		cmpopts.EquateEmpty(),
@@ -270,7 +270,7 @@ func TestStartTransaction(t *testing.T) {
 		RecorderLen: 1,
 	}.Check(t, transaction)
 
-	events := transport.Events()
+	events := capturedEvents(t, ClientFromContext(ctx), transport)
 	if got := len(events); got != 1 {
 		t.Fatalf("sent %d events, want 1", got)
 	}
@@ -307,7 +307,7 @@ func TestStartTransaction(t *testing.T) {
 	}
 	// Check trace context explicitly, as we ignored all contexts above to
 	// disregard other contexts.
-	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
+	if diff := cmp.Diff(jsonContext(t, want.Contexts["trace"]), events[0].Contexts["trace"]); diff != "" {
 		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -621,17 +621,17 @@ func TestDoubleSampling(t *testing.T) {
 
 	// CaptureException should not send any event because of SampleRate.
 	CaptureException(ctx, errors.New("ignored"))
-	if got := len(transport.Events()); got != 0 {
+	if got := len(capturedEvents(t, ClientFromContext(ctx), transport)); got != 0 {
 		t.Fatalf("got %d events, want 0", got)
 	}
 
 	// Finish should send one transaction event, always sampled via
 	// TracesSampleRate.
 	span.Finish()
-	if got := len(transport.Events()); got != 1 {
+	if got := len(capturedEvents(t, ClientFromContext(ctx), transport)); got != 1 {
 		t.Fatalf("got %d events, want 1", got)
 	}
-	if got := transport.Events()[0].Type; got != transactionType {
+	if got := capturedEvents(t, ClientFromContext(ctx), transport)[0].Type; got != transactionType {
 		t.Fatalf("got %v event, want %v", got, transactionType)
 	}
 }
@@ -1216,7 +1216,7 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 			)
 			transaction.Finish()
 
-			event := transport.Events()[0]
+			event := capturedEvents(t, ClientFromContext(ctx), transport)[0]
 
 			assertEqual(t, event.TransactionInfo.Source, tt.wantTransactionSource)
 		})
@@ -1269,10 +1269,10 @@ func TestRootFinishUsesContextClient(t *testing.T) {
 	}
 	transaction.Finish()
 
-	if got := len(firstTransport.Events()); got != 1 {
+	if got := len(capturedEvents(t, first, firstTransport)); got != 1 {
 		t.Fatalf("context client got %d transactions, want 1", got)
 	}
-	if got := len(secondTransport.Events()); got != 0 {
+	if got := len(capturedEvents(t, second, secondTransport)); got != 0 {
 		t.Fatalf("derived context client got %d transactions, want 0", got)
 	}
 }
@@ -1312,10 +1312,10 @@ func TestSpanScopeIsNotActiveSpanStack(t *testing.T) {
 	CaptureMessage(childSpan.Context(), "Test event")
 
 	// Flush to ensure the event is sent
-	transport.Flush(time.Second)
+	client.Flush(time.Second)
 
 	// Verify that the event has the correct trace data
-	events := transport.Events()
+	events := capturedEvents(t, ClientFromContext(ctx), transport)
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
@@ -1328,20 +1328,20 @@ func TestSpanScopeIsNotActiveSpanStack(t *testing.T) {
 	}
 
 	// Extract TraceID and SpanID from the trace context
-	traceID, ok := traceCtx["trace_id"].(TraceID)
+	traceID, ok := traceCtx["trace_id"].(string)
 	if !ok {
 		t.Fatalf("trace_id not found")
 	}
-	spanID, ok := traceCtx["span_id"].(SpanID)
+	spanID, ok := traceCtx["span_id"].(string)
 	if !ok {
 		t.Fatalf("span_id not found")
 	}
 
 	// Verify that the IDs match the explicitly supplied child context.
-	if traceID != childSpan.TraceID {
+	if traceID != childSpan.TraceID.String() {
 		t.Errorf("expected TraceID %s, got %s", transaction.TraceID, traceID)
 	}
-	if spanID != childSpan.SpanID {
+	if spanID != childSpan.SpanID.String() {
 		t.Errorf("expected SpanID %s, got %s", transaction.SpanID, spanID)
 	}
 }

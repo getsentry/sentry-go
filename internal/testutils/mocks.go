@@ -50,7 +50,7 @@ func (m *MockTelemetryTransport) HasCapacity() bool {
 	if m.capacity == 0 {
 		return true
 	}
-	return int(m.sendCount) < m.capacity
+	return int(atomic.LoadInt64(&m.sendCount)) < m.capacity
 }
 
 func (m *MockTelemetryTransport) Flush(_ time.Duration) bool {
@@ -59,10 +59,6 @@ func (m *MockTelemetryTransport) Flush(_ time.Duration) bool {
 
 func (m *MockTelemetryTransport) FlushWithContext(_ context.Context) bool {
 	return true
-}
-
-func (m *MockTelemetryTransport) Configure(_ interface{}) error {
-	return nil
 }
 
 func (m *MockTelemetryTransport) Close() {

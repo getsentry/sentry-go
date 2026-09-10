@@ -14,13 +14,14 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
 )
 
 // TransportOptions configures a transport at construction time.
+// A transport supplied to ClientOptions.Transport is already configured;
+// the client does not apply its HTTP or client-report options to it.
 type TransportOptions struct {
 	// Dsn is the destination for this transport. An empty or invalid DSN
 	// creates a no-op transport. Environment variables are not consulted.
@@ -42,6 +43,10 @@ type TransportOptions struct {
 	// Timeout bounds each HTTP request. Nonpositive values default to 30s.
 	// A supplied HTTPClient's timeout may impose a shorter limit.
 	Timeout time.Duration
+	// DisableClientReports disables reports of this transport's losses.
+	// Set ClientOptions.DisableClientReports as well to disable reports of
+	// client and telemetry-buffer losses when supplying a custom transport.
+	DisableClientReports bool
 }
 
 var (
@@ -52,6 +57,33 @@ var (
 	// ErrEmptyEnvelope indicates that an envelope contains no items.
 	ErrEmptyEnvelope = errors.New("empty envelope provided")
 )
+
+// NewHTTPTransport creates a fully initialized asynchronous HTTP transport.
+// Wrap the returned Transport to intercept envelopes before delivery.
+func NewHTTPTransport(options TransportOptions) Transport {
+	recorder, provider := newClientReports(options.DisableClientReports)
+	return newHTTPTransport(options, recorder, provider, defaultTransportSDKInfo)
+}
+
+// NewHTTPSyncTransport creates an HTTP transport without an envelope queue.
+// SendEnvelope blocks until the request finishes. A Client still uses the
+// asynchronous telemetry processor, so call Client.Flush before exiting.
+func NewHTTPSyncTransport(options TransportOptions) Transport {
+	recorder, provider := newClientReports(options.DisableClientReports)
+	return newHTTPSyncTransport(options, recorder, provider, defaultTransportSDKInfo)
+}
+
+func newClientReports(disabled bool) (report.ClientReportRecorder, report.ClientReportProvider) {
+	if disabled {
+		return report.NoopRecorder(), nil
+	}
+	aggregator := report.NewAggregator()
+	return aggregator, aggregator
+}
+
+func defaultTransportSDKInfo() *protocol.SdkInfo {
+	return &protocol.SdkInfo{Name: sdkIdentifier, Version: SDKVersion}
+}
 
 const (
 	httpAPIVersion = 7
@@ -181,7 +213,7 @@ type httpSyncTransport struct {
 	Timeout time.Duration
 }
 
-func newHTTPSyncTransport(options TransportOptions, recorder report.ClientReportRecorder, provider report.ClientReportProvider, sdkInfo func() *protocol.SdkInfo) telemetry.Transport {
+func newHTTPSyncTransport(options TransportOptions, recorder report.ClientReportRecorder, provider report.ClientReportProvider, sdkInfo func() *protocol.SdkInfo) Transport {
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil || dsn == nil {
 		debuglog.Printf("Transport is disabled: invalid dsn: %v\n", err)
@@ -352,7 +384,7 @@ type httpFlushRequest struct {
 	done chan struct{}
 }
 
-func newHTTPTransport(options TransportOptions, recorder report.ClientReportRecorder, provider report.ClientReportProvider, sdkInfo func() *protocol.SdkInfo) telemetry.Transport {
+func newHTTPTransport(options TransportOptions, recorder report.ClientReportRecorder, provider report.ClientReportProvider, sdkInfo func() *protocol.SdkInfo) Transport {
 	reporting := provider != nil
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil || dsn == nil {

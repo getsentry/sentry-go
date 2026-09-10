@@ -15,10 +15,11 @@ import (
 // Scheduler implements a weighted round-robin scheduler for processing buffered events.
 type Scheduler struct {
 	buffers   map[ratelimit.Category]Buffer[Item]
-	transport Transport
+	transport transport
 	dsn       *protocol.Dsn
 	sdkInfo   func() *protocol.SdkInfo
 	recorder  report.ClientReportRecorder
+	provider  report.ClientReportProvider
 
 	currentCycle []ratelimit.Priority
 	cyclePos     int
@@ -26,6 +27,7 @@ type Scheduler struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	processingWg sync.WaitGroup
+	processing   chan struct{}
 
 	mu         sync.Mutex
 	cond       *sync.Cond
@@ -33,12 +35,15 @@ type Scheduler struct {
 	finishOnce sync.Once
 }
 
+const clientReportInterval = 30 * time.Second
+
 func NewScheduler(
 	buffers map[ratelimit.Category]Buffer[Item],
-	transport Transport,
+	transport transport,
 	dsn *protocol.Dsn,
 	sdkInfo func() *protocol.SdkInfo,
 	recorder report.ClientReportRecorder,
+	provider report.ClientReportProvider,
 ) *Scheduler {
 	if recorder == nil {
 		recorder = report.NoopRecorder()
@@ -77,6 +82,8 @@ func NewScheduler(
 		dsn:          dsn,
 		sdkInfo:      sdkInfo,
 		recorder:     recorder,
+		provider:     provider,
+		processing:   make(chan struct{}, 1),
 		currentCycle: currentCycle,
 		ctx:          ctx,
 		cancel:       cancel,
@@ -146,8 +153,23 @@ func (s *Scheduler) Flush(timeout time.Duration) bool {
 }
 
 func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	select {
+	case s.processing <- struct{}{}:
+	case <-ctx.Done():
+		return false
+	}
+	defer func() { <-s.processing }()
 	s.flushBuffers()
-	return s.transport.FlushWithContext(ctx)
+	if !s.transport.FlushWithContext(ctx) {
+		return false
+	}
+	if s.sendClientReport() {
+		return s.transport.FlushWithContext(ctx)
+	}
+	return true
 }
 
 func (s *Scheduler) run() {
@@ -167,10 +189,14 @@ func (s *Scheduler) run() {
 		}
 	}()
 
+	lastReport := time.Now()
 	for {
 		s.mu.Lock()
 
 		for !s.hasWork() && s.ctx.Err() == nil {
+			if s.provider != nil && time.Since(lastReport) >= clientReportInterval {
+				break
+			}
 			s.cond.Wait()
 		}
 
@@ -180,8 +206,36 @@ func (s *Scheduler) run() {
 		}
 
 		s.mu.Unlock()
+		select {
+		case s.processing <- struct{}{}:
+		case <-s.ctx.Done():
+			return
+		}
+		if s.provider != nil && time.Since(lastReport) >= clientReportInterval {
+			s.sendClientReport()
+			lastReport = time.Now()
+		}
 		s.processNextBatch()
+		<-s.processing
 	}
+}
+
+func (s *Scheduler) sendClientReport() bool {
+	if s.provider == nil || !s.transport.HasCapacity() || s.transport.IsRateLimited(ratelimit.CategoryAll) {
+		return false
+	}
+	envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{
+		Dsn: s.dsn, Sdk: s.resolveSdkInfo(), SentAt: time.Now(),
+	})
+	s.provider.AttachToEnvelope(envelope)
+	if len(envelope.Items) == 0 {
+		return false
+	}
+	if err := s.transport.SendEnvelope(envelope); err != nil {
+		debuglog.Printf("failed to send client report: %v", err)
+		return false
+	}
+	return true
 }
 
 func (s *Scheduler) hasWork() bool {
@@ -285,6 +339,9 @@ func (s *Scheduler) sendItem(item EnvelopeConvertible) {
 		debuglog.Printf("error while converting to envelope: %v", err)
 		s.recorder.RecordItem(report.ReasonInternalError, item)
 		return
+	}
+	if s.provider != nil {
+		s.provider.AttachToEnvelope(envelope)
 	}
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)

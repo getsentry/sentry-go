@@ -15,6 +15,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -82,7 +83,7 @@ type Fixture struct {
 	// Client is the fixture's client, configured with the MockTransport.
 	Client *sentry.Client
 
-	// Transport captures all events sent through the client.
+	// Transport captures serialized envelopes.
 	Transport *sentry.MockTransport
 
 	// useSynctest indicates the fixture is running inside a synctest bubble.
@@ -90,7 +91,7 @@ type Fixture struct {
 }
 
 // Run creates a [Fixture] inside a [synctest.Test] bubble and calls fn
-// with it. All background goroutines (batch processors) use fake time, so
+// with it. Background processing uses fake time, so
 // [Fixture.Flush] completes instantly. This is the preferred way to
 // create fixtures.
 //
@@ -155,7 +156,7 @@ func newFixture(t testing.TB, useSynctest bool, opts ...Option) *Fixture {
 	f.Context = sentry.ContextWithClient(f.Context, f.Client)
 	f.Scope = sentry.ScopeFromContext(f.Context)
 
-	// Ensure background goroutines (batch processors) are stopped when the test finishes.
+	// Ensure telemetry workers are stopped when the test finishes.
 	// This is required for synctest bubbles which will panic if blocked goroutines remain
 	// after the bubble's root goroutine exits.
 	t.Cleanup(func() { f.Client.Close() })
@@ -188,12 +189,16 @@ func (f *Fixture) NewContext(parent context.Context) context.Context {
 	return sentry.ContextWithClient(ctx, f.Client)
 }
 
-// Events returns all captured events, including transactions.
-//
-// TODO: Add typed helper views (errors, transactions, logs, metrics,
-// check-ins) when the telemetry processor path is enabled in tests.
+// Events decodes captured envelopes into errors, transactions, check-ins, and
+// log/metric batch events. Call Flush before inspecting the result.
 func (f *Fixture) Events() []*sentry.Event {
 	return f.Transport.Events()
+}
+
+// Envelopes returns snapshots of captured envelopes, including client reports
+// and attachments. Call Flush before inspecting the result.
+func (f *Fixture) Envelopes() []*protocol.Envelope {
+	return f.Transport.Envelopes()
 }
 
 // AssertEventCount flushes and asserts the number of captured events.

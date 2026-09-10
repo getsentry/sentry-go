@@ -62,6 +62,7 @@ func initMockTransport(t *testing.T) *sentry.MockTransport {
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 	}))
+	t.Cleanup(sentry.ClientFromContext(context.Background()).Close)
 	return transport
 }
 
@@ -71,7 +72,7 @@ func spanStatusCode(t *testing.T, transport *sentry.MockTransport) int {
 	require.Len(t, events, 1)
 	for _, span := range events[0].Spans {
 		if span.Op == "rpc.client" {
-			return span.Data["rpc.grpc.status_code"].(int)
+			return int(span.Data["rpc.grpc.status_code"].(float64))
 		}
 	}
 	t.Fatal("missing rpc.client span")
