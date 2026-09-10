@@ -3,7 +3,6 @@ package sentry
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/testutils"
@@ -12,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func setupMetricsTest() (context.Context, *MockTransport) {
+func setupMetricsTest(t testing.TB) (context.Context, *MockTransport) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
@@ -29,6 +28,7 @@ func setupMetricsTest() (context.Context, *MockTransport) {
 	ctx = ContextWithClient(ctx, mockClient)
 	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 	scope.propagationContext.SpanID = SpanIDFromHex(logSpanID)
+	t.Cleanup(mockClient.Close)
 	return ctx, mockTransport
 }
 
@@ -257,7 +257,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, mockTransport := setupMetricsTest()
+			ctx, mockTransport := setupMetricsTest(t)
 			meter := NewMeter(ctx)
 
 			tt.metricsFunc(ctx, meter)
@@ -275,18 +275,18 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			}
 
 			for i, event := range gotEvents {
-				assertEqual(t, event.Type, traceMetricEvent.Type)
+				assertEqual(t, event.Type, traceMetricEventType)
 				if diff := cmp.Diff(tt.wantEvents[i].Metrics, event.Metrics, opts); diff != "" {
 					t.Errorf("event[%d] Metrics mismatch (-want +got):\n%s", i, diff)
 				}
-				mockTransport.events = nil
+				mockTransport.Reset()
 			}
 		})
 	}
 }
 
-func Test_batchMeter_Flush(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
+func Test_MetricDelivery_Flush(t *testing.T) {
+	ctx, mockTransport := setupMetricsTest(t)
 	meter := NewMeter(ctx)
 	meter.Count("test.count", 42)
 	flushFromContext(ctx, testutils.FlushTimeout())
@@ -297,8 +297,8 @@ func Test_batchMeter_Flush(t *testing.T) {
 	}
 }
 
-func Test_batchMeter_FlushWithContext(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
+func Test_MetricDelivery_FlushWithContext(t *testing.T) {
+	ctx, mockTransport := setupMetricsTest(t)
 	meter := NewMeter(ctx)
 	meter.Count("test.count", 42)
 
@@ -343,23 +343,8 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 	}
 }
 
-func Test_Meter_ExceedBatchSize(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
-	meter := NewMeter(ctx)
-	for i := 0; i < batchSize; i++ {
-		meter.Count("test.count", 1)
-	}
-
-	// sleep to wait for the batch to be processed
-	time.Sleep(time.Millisecond * 20)
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected only one event with 100 metrics, got %d", len(events))
-	}
-}
-
-func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
+func Test_MetricDelivery_FlushMultipleTimes(t *testing.T) {
+	ctx, mockTransport := setupMetricsTest(t)
 	meter := NewMeter(ctx)
 
 	for i := 0; i < 5; i++ {
@@ -376,7 +361,7 @@ func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
 		t.Fatalf("expected 5 metrics in first batch, got %d", len(events[0].Metrics))
 	}
 
-	mockTransport.events = nil
+	mockTransport.Reset()
 
 	for i := 0; i < 3; i++ {
 		meter.Count("test.count", 1)
@@ -391,7 +376,7 @@ func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
 		t.Fatalf("expected 3 metrics in second batch, got %d", len(events[0].Metrics))
 	}
 
-	mockTransport.events = nil
+	mockTransport.Reset()
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 	events = mockTransport.Events()
@@ -400,12 +385,11 @@ func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
 	}
 }
 
-func Test_batchMeter_Shutdown(t *testing.T) {
+func Test_MetricDelivery_Shutdown(t *testing.T) {
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
-		Dsn:                    testDsn,
-		Transport:              mockTransport,
-		DisableTelemetryBuffer: true,
+		Dsn:       testDsn,
+		Transport: mockTransport,
 	})
 	ctx, _ := WithIsolationScope(context.Background())
 	ctx = ContextWithClient(ctx, mockClient)
@@ -414,7 +398,7 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 		meter.Count("test.count", 1)
 	}
 
-	mockClient.batchMeter.Shutdown()
+	mockClient.Close()
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -424,11 +408,11 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 		t.Fatalf("expected 3 metrics in shutdown batch, got %d", len(events[0].Metrics))
 	}
 
-	mockTransport.events = nil
+	mockTransport.Reset()
 
 	// Test that shutdown can be called multiple times safely
-	mockClient.batchMeter.Shutdown()
-	mockClient.batchMeter.Shutdown()
+	mockClient.Close()
+	mockClient.Close()
 
 	events = mockTransport.Events()
 	if len(events) != 0 {
@@ -443,7 +427,7 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 }
 
 func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
+	ctx, mockTransport := setupMetricsTest(t)
 
 	// Start a new transaction
 	txn := StartTransaction(ctx, "test-transaction")
@@ -478,7 +462,7 @@ func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
 
 func TestSentryMeter_ExplicitScopePrecedesFallbackTrace(t *testing.T) {
 	t.Parallel()
-	ctx, transport := setupMetricsTest()
+	ctx, transport := setupMetricsTest(t)
 	fallback := StartTransaction(ctx, "fallback")
 	defer fallback.Finish()
 	meter := NewMeter(fallback.Context())
@@ -556,7 +540,7 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 }
 
 func Test_sentryMeter_SetAttributes(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
+	ctx, mockTransport := setupMetricsTest(t)
 	meter := NewMeter(ctx)
 	meter.SetAttributes(
 		attribute.String("key.string", "some str"),
@@ -588,7 +572,7 @@ func Test_sentryMeter_SetAttributes(t *testing.T) {
 }
 
 func Test_sentryMeter_SetAttributes_Persistence(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
+	ctx, mockTransport := setupMetricsTest(t)
 	meter := NewMeter(ctx)
 	meter.SetAttributes(attribute.Int("int", 42))
 	meter.Count("test.count1", 1)
@@ -610,7 +594,7 @@ func Test_sentryMeter_SetAttributes_Persistence(t *testing.T) {
 }
 
 func Test_sentryMeter_AttributePrecedence(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
+	ctx, mockTransport := setupMetricsTest(t)
 	scope := ScopeFromContext(ctx)
 	scope.SetUser(User{ID: "user123", Name: "TestUser"})
 	scope.SetAttributes(
@@ -673,7 +657,7 @@ func Test_sentryMeter_AttributePrecedence(t *testing.T) {
 }
 
 func Test_sentryMeter_EmptyName(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
+	ctx, mockTransport := setupMetricsTest(t)
 	meter := NewMeter(ctx)
 
 	meter.Count("", 1)
@@ -689,7 +673,7 @@ func Test_sentryMeter_EmptyName(t *testing.T) {
 }
 
 func Test_sentryMeter_WithContextScope(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
+	ctx, mockTransport := setupMetricsTest(t)
 	meter := NewMeter(ctx)
 
 	customCtx, customScope := WithIsolationScope(ctx)
@@ -728,7 +712,7 @@ func Test_sentryMeter_WithContextScope(t *testing.T) {
 }
 
 func TestSentryMeter_ScopeSetAttributesNoLeak(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
+	ctx, mockTransport := setupMetricsTest(t)
 
 	scopedCtx, clonedScope := WithIsolationScope(ctx)
 	clonedScope.SetAttributes(
@@ -753,7 +737,7 @@ func TestSentryMeter_ScopeSetAttributesNoLeak(t *testing.T) {
 	assert.NotContains(t, metricsBeforeScope[0].Attributes, "key.bool")
 	assert.NotContains(t, metricsBeforeScope[0].Attributes, "key.string")
 
-	mockTransport.events = nil
+	mockTransport.Reset()
 
 	meter := NewMeter(txn.Context())
 	meter.Count("test.count.after", 2)

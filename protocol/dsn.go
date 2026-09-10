@@ -6,11 +6,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 )
-
-// apiVersion is the version of the Sentry API.
-const apiVersion = "7"
 
 type scheme string
 
@@ -221,26 +217,6 @@ func (dsn Dsn) GetAPIURL() *url.URL {
 	rawURL += fmt.Sprintf("/api/%s/%s/", dsn.projectID, "envelope")
 	parsedURL, _ := url.Parse(rawURL)
 	return parsedURL
-}
-
-// RequestHeaders returns all the necessary headers that have to be used in the transport when sending events
-// to the /store endpoint.
-//
-// Deprecated: This method shall only be used if you want to implement your own transport that sends events to
-// the /store endpoint. If you're using the transport provided by the SDK, all necessary headers to authenticate
-// against the /envelope endpoint are added automatically.
-func (dsn Dsn) RequestHeaders(sdkVersion string) map[string]string {
-	auth := fmt.Sprintf("Sentry sentry_version=%s, sentry_timestamp=%d, "+
-		"sentry_client=sentry.go/%s, sentry_key=%s", apiVersion, time.Now().Unix(), sdkVersion, dsn.publicKey)
-
-	if dsn.secretKey != "" {
-		auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.secretKey)
-	}
-
-	return map[string]string{
-		"Content-Type":  "application/json",
-		"X-Sentry-Auth": auth,
-	}
 }
 
 // MarshalJSON converts the Dsn struct to JSON.

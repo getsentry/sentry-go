@@ -2,7 +2,6 @@ package telemetry
 
 import (
 	"context"
-	"time"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/protocol"
@@ -36,20 +35,9 @@ type EnvelopeConvertible interface {
 	ToEnvelope(*protocol.EnvelopeHeader) (*protocol.Envelope, error)
 }
 
-// Transport represents the envelope-first transport interface.
-// This interface is designed for the telemetry buffer system and provides
-// non-blocking sends with backpressure signals.
-type Transport interface {
-	// SendEnvelope sends an envelope to Sentry. Returns immediately with
-	// backpressure error if the queue is full.
-	SendEnvelope(envelope *protocol.Envelope) error
-
-	// Flush waits for all pending envelopes to be sent, with timeout
-	Flush(timeout time.Duration) bool
-
-	// FlushWithContext waits for all pending envelopes to be sent
-	FlushWithContext(ctx context.Context) bool
-
-	// Close shuts down the transport gracefully
-	Close()
+// transport is the delivery surface consumed by the processor. Public
+// sentry.Transport implementations satisfy it without depending on the SDK.
+type transport interface {
+	SendEnvelope(*protocol.Envelope) error
+	FlushWithContext(context.Context) bool
 }

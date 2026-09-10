@@ -3,7 +3,6 @@ package protocol
 import (
 	"encoding/json"
 	"errors"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -13,7 +12,6 @@ import (
 type DsnTest struct {
 	in     string
 	dsn    *Dsn   // expected value after parsing
-	url    string // expected Store API URL
 	envURL string // expected Envelope API URL
 }
 
@@ -29,7 +27,6 @@ var dsnTests = map[string]DsnTest{
 			path:      "/foo/bar",
 			projectID: "42",
 		},
-		url:    "https://domain:8888/foo/bar/api/42/store/",
 		envURL: "https://domain:8888/foo/bar/api/42/envelope/",
 	},
 	"MinimalSecure": {
@@ -41,7 +38,6 @@ var dsnTests = map[string]DsnTest{
 			port:      443,
 			projectID: "42",
 		},
-		url:    "https://domain/api/42/store/",
 		envURL: "https://domain/api/42/envelope/",
 	},
 	"MinimalInsecure": {
@@ -53,7 +49,6 @@ var dsnTests = map[string]DsnTest{
 			port:      80,
 			projectID: "42",
 		},
-		url:    "http://domain/api/42/store/",
 		envURL: "http://domain/api/42/envelope/",
 	},
 }
@@ -149,48 +144,6 @@ func TestDsnDeserializeInvalidJSON(t *testing.T) {
 	}
 	if invalidDsnErr == nil {
 		t.Error("expected dsn unmarshal to return error")
-	}
-}
-
-func TestRequestHeadersWithoutSecretKey(t *testing.T) {
-	url := "https://public@domain/42"
-	dsn, err := NewDsn(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	headers := dsn.RequestHeaders("sentry.go/1.0.0")
-	authRegexp := regexp.MustCompile("^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
-		"sentry_client=sentry.go/.+, sentry_key=public$")
-
-	if len(headers) != 2 {
-		t.Error("expected request to have 2 headers")
-	}
-	if headers["Content-Type"] != "application/json" {
-		t.Errorf("Expected Content-Type to be application/json, got %s", headers["Content-Type"])
-	}
-	if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
-		t.Error("expected auth header to fulfill provided pattern")
-	}
-}
-
-func TestRequestHeadersWithSecretKey(t *testing.T) {
-	url := "https://public:secret@domain/42" //nolint:gosec // G101: not real credentials
-	dsn, err := NewDsn(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	headers := dsn.RequestHeaders("sentry.go/1.0.0")
-	authRegexp := regexp.MustCompile("^Sentry sentry_version=7, sentry_timestamp=\\d+, " +
-		"sentry_client=sentry.go/.+, sentry_key=public, sentry_secret=secret$")
-
-	if len(headers) != 2 {
-		t.Error("expected request to have 2 headers")
-	}
-	if headers["Content-Type"] != "application/json" {
-		t.Errorf("Expected Content-Type to be application/json, got %s", headers["Content-Type"])
-	}
-	if authRegexp.FindStringIndex(headers["X-Sentry-Auth"]) == nil {
-		t.Error("expected auth header to fulfill provided pattern")
 	}
 }
 

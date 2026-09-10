@@ -115,7 +115,7 @@ type TraceParentContext struct {
 // than maps, because maps require careful nil checks to use properly or rely on
 // explicit initialization for every span, even when there might be no
 // tags/data. For Span.Data, must gracefully handle values that cannot be
-// marshaled into JSON (see transport.go:getRequestBodyFromEvent).
+// marshaled into an envelope by the telemetry processor.
 
 // StartSpan starts a new span to describe an operation. The new span will be a
 // child of the last span stored in ctx, if any.

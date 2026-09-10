@@ -31,8 +31,8 @@ func TestTransportConstructorsConfigureReports(t *testing.T) {
 		name         string
 		newTransport func(sentry.TransportOptions) configuredEnvelopeTransport
 	}{
-		{"async", func(cfg sentry.TransportOptions) configuredEnvelopeTransport { return sentry.NewAsyncTransport(cfg) }},
-		{"sync", func(cfg sentry.TransportOptions) configuredEnvelopeTransport { return sentry.NewSyncTransport(cfg) }},
+		{"async", func(cfg sentry.TransportOptions) configuredEnvelopeTransport { return sentry.NewHTTPTransport(cfg) }},
+		{"sync", func(cfg sentry.TransportOptions) configuredEnvelopeTransport { return sentry.NewHTTPSyncTransport(cfg) }},
 	} {
 		for _, disabled := range []bool{false, true} {
 			name := test.name

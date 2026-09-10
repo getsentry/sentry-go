@@ -43,7 +43,7 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 
 	client, transport := newCaptureTestClient(t, ClientOptions{MaxBreadcrumbs: defaultMaxBreadcrumbs})
 	require.NotNil(t, CaptureEvent(ContextWithClient(ctx, client), event, WithLevel(LevelDebug)))
-	captured := requireSingleEvent(t, transport)
+	captured := requireSingleEvent(t, client, transport)
 
 	want := &Event{
 		Tags:     map[string]string{"global": "global", "current": "current", "event": "event", "shared": "event"},
@@ -108,22 +108,22 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 					client.externalTraceResolver = testExternalResolverFunc(func(context.Context) (TraceID, SpanID, Sampled, bool) { return traceID, spanID, SampledUndefined, true })
 				}
 				require.NotNil(t, CaptureEvent(ctx, event))
-				captured := requireSingleEvent(t, transport)
+				captured := requireSingleEvent(t, client, transport)
 				if native != nil {
 					want := Context{traceIDContextKey: traceID.String(), spanIDContextKey: spanID.String()}
 					if native.SpanID == spanID {
 						want = native.traceContext().Map()
 					}
-					require.Equal(t, want, captured.Contexts[traceContextKey])
+					require.Equal(t, jsonContext(t, want), captured.Contexts[traceContextKey])
 				}
 				require.Equal(t, traceID.String(), fmt.Sprint(captured.Contexts[traceContextKey][traceIDContextKey]))
 				switch {
 				case test.eventDSC.HasEntries() || test.eventDSC.IsFrozen():
-					require.Equal(t, test.eventDSC, captured.sdkMetaData.dsc)
+					require.Equal(t, test.eventDSC.Entries, capturedTrace(t, transport, captured))
 				case test.matching:
-					require.Equal(t, dsc, captured.sdkMetaData.dsc)
+					require.Equal(t, dsc.Entries, capturedTrace(t, transport, captured))
 				default:
-					require.Empty(t, captured.sdkMetaData.dsc.Entries)
+					require.Empty(t, capturedTrace(t, transport, captured))
 				}
 			})
 		}
@@ -148,12 +148,12 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 					})
 				}
 				require.NotNil(t, CaptureMessage(ctx, "scope trace"))
-				require.Equal(t, custom, requireSingleEvent(t, transport).Contexts[traceContextKey])
+				require.Equal(t, custom, requireSingleEvent(t, client, transport).Contexts[traceContextKey])
 				explicit := Context{traceIDContextKey: TraceID{4}.String(), spanIDContextKey: SpanID{4}.String()}
 				for _, eventType := range []string{"", transactionType} {
 					require.NotNil(t, CaptureEvent(ctx, &Event{Type: eventType, Contexts: map[string]Context{traceContextKey: explicit}}))
 				}
-				for _, event := range transport.Events()[1:] {
+				for _, event := range capturedEvents(t, client, transport)[1:] {
 					require.Equal(t, explicit, event.Contexts[traceContextKey])
 				}
 			})
@@ -184,7 +184,7 @@ func TestCaptureObservesCurrentScopeContents(t *testing.T) {
 			}
 			client, transport := newCaptureTestClient(t, ClientOptions{MaxBreadcrumbs: defaultMaxBreadcrumbs})
 			require.NotNil(t, CaptureEvent(ContextWithClient(ctx, client), NewEvent()))
-			captured := requireSingleEvent(t, transport)
+			captured := requireSingleEvent(t, client, transport)
 			require.NotContains(t, captured.Tags, "tag")
 			require.Empty(t, captured.Breadcrumbs)
 		})
@@ -193,7 +193,7 @@ func TestCaptureObservesCurrentScopeContents(t *testing.T) {
 		client, transport := newCaptureTestClient(t, ClientOptions{MaxBreadcrumbs: defaultMaxBreadcrumbs})
 		ctx := ContextWithClient(ContextWithScope(context.Background(), NewScope()), client)
 		require.NotNil(t, CaptureEvent(ctx, NewEvent()))
-		captured := requireSingleEvent(t, transport)
+		captured := requireSingleEvent(t, client, transport)
 		require.NotContains(t, captured.Tags, "tag")
 		require.Empty(t, captured.Breadcrumbs)
 	})
@@ -219,7 +219,7 @@ func TestCaptureBreadcrumbOrderAndLimit(t *testing.T) {
 			event := &Event{Breadcrumbs: []*Breadcrumb{{Message: "event", Timestamp: testNow.Add(time.Hour)}}}
 			client, transport := newCaptureTestClient(t, ClientOptions{MaxBreadcrumbs: test.limit})
 			require.NotNil(t, CaptureEvent(ContextWithClient(ctx, client), event))
-			require.Equal(t, test.want, breadcrumbMessages(requireSingleEvent(t, transport).Breadcrumbs))
+			require.Equal(t, test.want, breadcrumbMessages(requireSingleEvent(t, client, transport).Breadcrumbs))
 		})
 	}
 }
@@ -257,7 +257,7 @@ func TestCaptureRunsProcessorsFromGenericToSpecific(t *testing.T) {
 
 	require.NotNil(t, CaptureEvent(ContextWithClient(ctx, client), NewEvent(), WithLevel(LevelDebug)))
 	require.Equal(t, []string{"global scope", "current scope", "client", "global processor", "before send"}, order)
-	require.Equal(t, LevelFatal, requireSingleEvent(t, transport).Level)
+	require.Equal(t, LevelFatal, requireSingleEvent(t, client, transport).Level)
 	require.Equal(t, Context{"value": "scope"}, data)
 }
 
@@ -280,9 +280,9 @@ func cleanGlobalScope(t testing.TB) *Scope {
 	return global
 }
 
-func requireSingleEvent(t *testing.T, transport *MockTransport) *Event {
+func requireSingleEvent(t *testing.T, client *Client, transport *MockTransport) *Event {
 	t.Helper()
-	events := transport.Events()
+	events := capturedEvents(t, client, transport)
 	require.Len(t, events, 1)
 	return events[0]
 }

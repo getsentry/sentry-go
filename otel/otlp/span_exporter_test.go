@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/protocol"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 )
 
@@ -50,7 +50,7 @@ func TestOTLPTracesURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			dsn, err := sentry.NewDsn(tt.dsn)
+			dsn, err := protocol.NewDsn(tt.dsn)
 			if err != nil {
 				t.Fatalf("failed to parse DSN: %v", err)
 			}
@@ -65,7 +65,7 @@ func TestOTLPTracesURL(t *testing.T) {
 func TestSentryAuthHeaders(t *testing.T) {
 	t.Parallel()
 
-	dsn, err := sentry.NewDsn("https://mykey@o123.ingest.sentry.io/456")
+	dsn, err := protocol.NewDsn("https://mykey@o123.ingest.sentry.io/456")
 	if err != nil {
 		t.Fatalf("failed to parse DSN: %v", err)
 	}
