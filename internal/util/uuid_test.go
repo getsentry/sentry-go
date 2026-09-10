@@ -1,4 +1,4 @@
-package protocol
+package util
 
 import (
 	"encoding/hex"
