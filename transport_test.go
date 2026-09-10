@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
@@ -214,7 +215,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		}
 		// manually set the queue size to simulate overflow
 		transport.queue = make(chan *protocol.Envelope, transport.QueueSize)
-		transport.flushRequest = make(chan chan struct{})
+		transport.flushRequest = make(chan flushRequest)
 		transport.start()
 		defer func() {
 			close(blockChan)
@@ -362,6 +363,69 @@ func TestAsyncTransport_Close(t *testing.T) {
 	default:
 		t.Error("transport should be closed")
 	}
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestHTTPTransportDeadlines(t *testing.T) {
+	// The supplied client has no timeout, so only the transport bounds requests.
+	options := TransportOptions{
+		Dsn: "https://key@sentry.io/123",
+		HTTPClient: &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		})},
+	}
+
+	t.Run("sync request timeout", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			transport := NewSyncTransport(options).(*SyncTransport)
+			transport.Timeout = time.Second
+			start := time.Now()
+			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+			if elapsed := time.Since(start); elapsed != time.Second {
+				t.Errorf("request took %v, want %v", elapsed, time.Second)
+			}
+		})
+	})
+
+	t.Run("async request timeout", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			transport := NewAsyncTransport(options).(*AsyncTransport)
+			defer transport.Close()
+			transport.Timeout = time.Second
+			start := time.Now()
+			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+			if !transport.Flush(time.Minute) {
+				t.Error("Flush should succeed after the request times out")
+			}
+			if elapsed := time.Since(start); elapsed != time.Second {
+				t.Errorf("request took %v, want %v", elapsed, time.Second)
+			}
+		})
+	})
+
+	t.Run("async flush deadline and close", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			transport := NewAsyncTransport(options).(*AsyncTransport)
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			if transport.FlushWithContext(ctx) {
+				t.Error("FlushWithContext should fail for a canceled context")
+			}
+			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+			if transport.Flush(time.Second) {
+				t.Error("Flush should time out while a request is in flight")
+			}
+			start := time.Now()
+			transport.Close()
+			if elapsed := time.Since(start); elapsed != 0 {
+				t.Errorf("Close waited %v for the in-flight request", elapsed)
+			}
+		})
+	})
 }
 
 func TestSyncTransport_SendEnvelope(t *testing.T) {
