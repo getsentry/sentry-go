@@ -90,7 +90,7 @@ func TestNewBucketedBuffer(t *testing.T) {
 	if b.Category() != ratelimit.CategoryLog {
 		t.Fatalf("category mismatch: %v", b.Category())
 	}
-	if b.Priority() != ratelimit.CategoryLog.GetPriority() {
+	if b.Priority() != ratelimit.PriorityForCategory(ratelimit.CategoryLog) {
 		t.Fatalf("priority mismatch: %v", b.Priority())
 	}
 }
