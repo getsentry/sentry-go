@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 // MaxDrainResponseBytes is the maximum number of bytes that transport

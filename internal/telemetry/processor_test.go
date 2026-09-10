@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 type bwItem struct{ id string }
@@ -34,7 +34,7 @@ func TestBuffer_Add_MissingCategory(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
 	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
-	storage := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{}
+	storage := map[ratelimit.Category]Buffer[Item]{}
 
 	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil)
 	ok := b.Add(bwItem{id: "1"})
@@ -48,8 +48,8 @@ func TestBuffer_AddAndFlush_Sends(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
 	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
-	storage := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
+	storage := map[ratelimit.Category]Buffer[Item]{
+		ratelimit.CategoryError: NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
 	}
 	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil)
 	if !b.Add(bwItem{id: "1"}) {
