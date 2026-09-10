@@ -287,9 +287,9 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 					assertBaggageStringsEqual(t, want.String(), GetBaggage(captureCtx))
 					require.NotNil(t, CaptureMessage(captureCtx, "later"))
 				}
-				require.Len(t, transport.Events(), 2)
+				require.Len(t, capturedEvents(t, replacement, transport), 2)
 				for _, event := range transport.Events() {
-					require.Equal(t, want, event.sdkMetaData.dsc)
+					require.Equal(t, want.Entries, capturedTrace(t, transport, event))
 				}
 			})
 		}
@@ -337,8 +337,14 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 					root.SetDynamicSamplingContext(DynamicSamplingContext{Entries: map[string]string{"release": "late"}})
 					root.Finish()
 				}
-				for _, event := range transport.Events() {
-					require.Equal(t, want, event.sdkMetaData.dsc)
+				events := capturedEvents(t, client, transport)
+				wantCount := 1
+				if root != nil {
+					wantCount++
+				}
+				require.Len(t, events, wantCount)
+				for _, event := range events {
+					require.Equal(t, want.Entries, capturedTrace(t, transport, event))
 				}
 			})
 		}

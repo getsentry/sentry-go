@@ -30,10 +30,10 @@ func (t *TransportWithHooks) RoundTrip(req *http.Request) (*http.Response, error
 // Initializing the SDK with a custom HTTP transport gives a lot of flexibility
 // to inspect requests and responses. This example adds before and after hooks.
 func Example_transportWithHooks() {
-	err := sentry.Init(sentry.ClientOptions{
-		// Either set your DSN here or set the SENTRY_DSN environment variable.
-		Dsn:   "",
-		Debug: true,
+	// Either set your DSN here or set the SENTRY_DSN environment variable.
+	dsn := os.Getenv("SENTRY_DSN")
+	transport := sentry.NewHTTPTransport(sentry.TransportOptions{
+		Dsn: dsn,
 		HTTPTransport: &TransportWithHooks{
 			RoundTripper: http.DefaultTransport,
 			Before: func(req *http.Request) error {
@@ -54,6 +54,7 @@ func Example_transportWithHooks() {
 			},
 		},
 	})
+	err := sentry.Init(sentry.ClientOptions{Dsn: dsn, Debug: true, Transport: transport})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sentry.Init: %s\n", err)
 		os.Exit(1)

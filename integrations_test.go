@@ -350,7 +350,7 @@ func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
 	scope.contexts["custom"] = Context{"key": "value"}
 	client.CaptureMessage(ContextWithScope(context.Background(), scope), "test event")
 
-	events := transport.Events()
+	events := capturedEvents(t, client, transport)
 	if len(events) != 1 {
 		b, err := json.MarshalIndent(events, "", "  ")
 		if err != nil {
@@ -403,17 +403,17 @@ func TestGlobalTagsIntegration(t *testing.T) {
 	client.CaptureEvent(ContextWithScope(context.Background(), scope), event)
 
 	assertEqual(t,
-		transport.lastEvent.Tags["foo"],
+		lastCapturedEvent(t, client, transport).Tags["foo"],
 		"foo_value_scope",
 		"scope tag should override any global tag",
 	)
 	assertEqual(t,
-		transport.lastEvent.Tags["bar"],
+		lastCapturedEvent(t, client, transport).Tags["bar"],
 		"bar_value_env",
 		"env tag present if not overridden by scope or client options tags",
 	)
 	assertEqual(t,
-		transport.lastEvent.Tags["baz"],
+		lastCapturedEvent(t, client, transport).Tags["baz"],
 		"baz_value_client_options",
 		"client options tag present if not overridden by scope and overrides env tag",
 	)

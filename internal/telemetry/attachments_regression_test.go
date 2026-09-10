@@ -38,8 +38,7 @@ func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
 		func() *protocol.SdkInfo {
 			return &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 		},
-		nil,
-	)
+		nil, nil)
 
 	require.True(t, processor.Add(event), "add failed")
 	require.True(t, processor.Flush(testutils.FlushTimeout()), "flush timed out")

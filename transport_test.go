@@ -46,7 +46,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("invalid DSN", func(t *testing.T) {
 		transport := newHTTPTransport(TransportOptions{}, nil, nil, nil)
 
-		if _, ok := transport.(*NoopTransport); !ok {
+		if _, ok := transport.(*noopEnvelopeTransport); !ok {
 			t.Errorf("expected NoopTransport for empty DSN, got %T", transport)
 		}
 
@@ -58,7 +58,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 
 	t.Run("closed transport", func(t *testing.T) {
 		tr := newHTTPTransport(TransportOptions{Dsn: "https://key@sentry.io/123"}, nil, nil, nil)
-		transport, ok := tr.(*AsyncTransport)
+		transport, ok := tr.(*httpAsyncTransport)
 		if !ok {
 			t.Fatalf("expected *AsyncTransport, got %T", tr)
 		}
@@ -67,6 +67,24 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
 		if !errors.Is(err, ErrTransportClosed) {
 			t.Errorf("expected ErrTransportClosed, got %v", err)
+		}
+	})
+
+	t.Run("invalid envelope", func(t *testing.T) {
+		async := newHTTPTransport(TransportOptions{Dsn: "https://key@sentry.io/123"}, nil, nil, nil)
+		defer async.Close()
+		sync := newHTTPSyncTransport(TransportOptions{Dsn: "https://key@sentry.io/123"}, nil, nil, nil)
+		for _, envelope := range []*protocol.Envelope{
+			nil,
+			{Items: testEnvelope(protocol.EnvelopeItemTypeEvent).Items},
+			{Header: &protocol.EnvelopeHeader{}},
+			{Header: &protocol.EnvelopeHeader{}, Items: []*protocol.EnvelopeItem{{}}},
+		} {
+			for _, transport := range []Transport{async, sync, &MockTransport{}} {
+				if err := transport.SendEnvelope(envelope); !errors.Is(err, ErrInvalidEnvelope) {
+					t.Errorf("%T: expected ErrInvalidEnvelope, got %v", transport, err)
+				}
+			}
 		}
 	})
 
@@ -92,7 +110,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		tr := newHTTPTransport(TransportOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		}, nil, nil, nil)
-		transport, ok := tr.(*AsyncTransport)
+		transport, ok := tr.(*httpAsyncTransport)
 		if !ok {
 			t.Fatalf("expected *AsyncTransport, got %T", tr)
 		}
@@ -126,7 +144,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		tr := newHTTPTransport(TransportOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		}, nil, nil, nil)
-		transport, ok := tr.(*AsyncTransport)
+		transport, ok := tr.(*httpAsyncTransport)
 		if !ok {
 			t.Fatalf("expected *AsyncTransport, got %T", tr)
 		}
@@ -160,7 +178,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		tr := newHTTPTransport(TransportOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		}, nil, nil, nil)
-		transport, ok := tr.(*AsyncTransport)
+		transport, ok := tr.(*httpAsyncTransport)
 		if !ok {
 			t.Fatalf("expected *AsyncTransport, got %T", tr)
 		}
@@ -204,7 +222,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 
 		transport := newHTTPTransport(TransportOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123", QueueSize: 2,
-		}, nil, nil, nil).(*AsyncTransport)
+		}, nil, nil, nil).(*httpAsyncTransport)
 		defer func() {
 			close(blockChan)
 			transport.Close()
@@ -216,7 +234,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 
 		<-requestReceived
 
-		for i := 0; i < transport.QueueSize; i++ {
+		for i := 0; i < cap(transport.queue); i++ {
 			if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
 				t.Errorf("send %d should succeed: %v", i, err)
 			}
@@ -239,7 +257,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		tr := newHTTPTransport(TransportOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		}, nil, nil, nil)
-		transport, ok := tr.(*AsyncTransport)
+		transport, ok := tr.(*httpAsyncTransport)
 		if !ok {
 			t.Fatalf("expected *AsyncTransport, got %T", tr)
 		}
@@ -275,7 +293,7 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 		tr := newHTTPTransport(TransportOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		}, nil, nil, nil)
-		transport, ok := tr.(*AsyncTransport)
+		transport, ok := tr.(*httpAsyncTransport)
 		if !ok {
 			t.Fatalf("expected *AsyncTransport, got %T", tr)
 		}
@@ -300,7 +318,7 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 		tr := newHTTPTransport(TransportOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		}, nil, nil, nil)
-		transport, ok := tr.(*AsyncTransport)
+		transport, ok := tr.(*httpAsyncTransport)
 		if !ok {
 			t.Fatalf("expected *AsyncTransport, got %T", tr)
 		}
@@ -321,7 +339,7 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 
 	t.Run("closed transport", func(t *testing.T) {
 		tr := newHTTPTransport(TransportOptions{Dsn: "https://key@sentry.io/123"}, nil, nil, nil)
-		transport, ok := tr.(*AsyncTransport)
+		transport, ok := tr.(*httpAsyncTransport)
 		if !ok {
 			t.Fatalf("expected *AsyncTransport, got %T", tr)
 		}
@@ -337,7 +355,7 @@ func TestAsyncTransport_Close(t *testing.T) {
 	tr := newHTTPTransport(TransportOptions{
 		Dsn: "https://key@sentry.io/123",
 	}, nil, nil, nil)
-	transport, ok := tr.(*AsyncTransport)
+	transport, ok := tr.(*httpAsyncTransport)
 	if !ok {
 		t.Fatalf("expected *AsyncTransport, got %T", tr)
 	}
@@ -404,13 +422,13 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 
 		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
 
-		if !transport.(*SyncTransport).disabled(ratelimit.CategoryError) {
+		if !transport.(*httpSyncTransport).disabled(ratelimit.CategoryError) {
 			t.Error("error category should be rate limited")
 		}
-		if !transport.(*SyncTransport).disabled(ratelimit.CategoryTransaction) {
+		if !transport.(*httpSyncTransport).disabled(ratelimit.CategoryTransaction) {
 			t.Error("transaction category should be rate limited")
 		}
-		if transport.(*SyncTransport).disabled(ratelimit.CategoryMonitor) {
+		if transport.(*httpSyncTransport).disabled(ratelimit.CategoryMonitor) {
 			t.Error("monitor category should not be rate limited")
 		}
 
@@ -502,7 +520,7 @@ func TestKeepAlive(t *testing.T) {
 					Dsn:           dsn,
 					HTTPTransport: rt,
 				}, nil, nil, nil)
-				asyncTransport, ok := tr.(*AsyncTransport)
+				asyncTransport, ok := tr.(*httpAsyncTransport)
 				if !ok {
 					t.Fatalf("expected *AsyncTransport")
 				}
@@ -577,7 +595,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 			if tt.async {
 				tr := newHTTPTransport(TransportOptions{Dsn: dsn}, nil, nil, nil)
-				asyncTransport, ok := tr.(*AsyncTransport)
+				asyncTransport, ok := tr.(*httpAsyncTransport)
 				if !ok {
 					t.Fatalf("expected *AsyncTransport")
 				}
@@ -619,8 +637,8 @@ func TestTransportConfiguration(t *testing.T) {
 			},
 			async: true,
 			validate: func(t *testing.T, tr interface{}) {
-				transport := tr.(*AsyncTransport)
-				httpTransport, ok := transport.transport.(*http.Transport)
+				transport := tr.(*httpAsyncTransport)
+				httpTransport, ok := transport.client.Transport.(*http.Transport)
 				if !ok {
 					t.Fatal("expected *http.Transport")
 				}
@@ -646,8 +664,8 @@ func TestTransportConfiguration(t *testing.T) {
 			},
 			async: true,
 			validate: func(t *testing.T, tr interface{}) {
-				transport := tr.(*AsyncTransport)
-				httpTransport, ok := transport.transport.(*http.Transport)
+				transport := tr.(*httpAsyncTransport)
+				httpTransport, ok := transport.client.Transport.(*http.Transport)
 				if !ok {
 					t.Fatal("expected *http.Transport")
 				}
@@ -671,8 +689,8 @@ func TestTransportConfiguration(t *testing.T) {
 			},
 			async: true,
 			validate: func(t *testing.T, tr interface{}) {
-				transport := tr.(*AsyncTransport)
-				if transport.transport.(*http.Transport).Proxy != nil {
+				transport := tr.(*httpAsyncTransport)
+				if transport.client.Transport.(*http.Transport).Proxy != nil {
 					t.Error("custom transport should not have proxy from options")
 				}
 			},
@@ -685,8 +703,8 @@ func TestTransportConfiguration(t *testing.T) {
 			},
 			async: false,
 			validate: func(t *testing.T, tr interface{}) {
-				transport := tr.(*SyncTransport)
-				httpTransport, ok := transport.transport.(*http.Transport)
+				transport := tr.(*httpSyncTransport)
+				httpTransport, ok := transport.client.Transport.(*http.Transport)
 				if !ok {
 					t.Fatal("expected *http.Transport")
 				}
@@ -705,12 +723,12 @@ func TestTransportConfiguration(t *testing.T) {
 			},
 			async: true,
 			validate: func(t *testing.T, tr interface{}) {
-				transport := tr.(*AsyncTransport)
-				if transport.QueueSize != defaultQueueSize {
-					t.Errorf("QueueSize = %d, want %d", transport.QueueSize, defaultQueueSize)
+				transport := tr.(*httpAsyncTransport)
+				if cap(transport.queue) != defaultQueueSize {
+					t.Errorf("queue size = %d, want %d", cap(transport.queue), defaultQueueSize)
 				}
-				if transport.Timeout != defaultTimeout {
-					t.Errorf("Timeout = %v, want %v", transport.Timeout, defaultTimeout)
+				if transport.timeout != defaultTimeout {
+					t.Errorf("timeout = %v, want %v", transport.timeout, defaultTimeout)
 				}
 			},
 		},
@@ -721,9 +739,9 @@ func TestTransportConfiguration(t *testing.T) {
 			},
 			async: false,
 			validate: func(t *testing.T, tr interface{}) {
-				transport := tr.(*SyncTransport)
-				if transport.Timeout != defaultTimeout {
-					t.Errorf("Timeout = %v, want %v", transport.Timeout, defaultTimeout)
+				transport := tr.(*httpSyncTransport)
+				if transport.timeout != defaultTimeout {
+					t.Errorf("timeout = %v, want %v", transport.timeout, defaultTimeout)
 				}
 			},
 		},
@@ -756,7 +774,7 @@ func TestAsyncTransportDoesntLeakGoroutines(t *testing.T) {
 			},
 		},
 	}, nil, nil, nil)
-	transport, ok := tr.(*AsyncTransport)
+	transport, ok := tr.(*httpAsyncTransport)
 	if !ok {
 		t.Fatalf("expected *AsyncTransport")
 	}

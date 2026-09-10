@@ -87,7 +87,7 @@ func TestNewTelemetryScheduler(t *testing.T) {
 		Version: "1.0.0",
 	}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	if scheduler == nil {
 		t.Fatal("Expected non-nil scheduler")
@@ -210,7 +210,7 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
 			buffers := tt.setupBuffers()
-			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 			tt.addItems(buffers)
 
@@ -240,7 +240,7 @@ func TestTelemetrySchedulerStartStop(t *testing.T) {
 	// no log buffer used in simplified scheduler tests
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	scheduler.Start()
 	scheduler.Start()
@@ -267,7 +267,7 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	scheduler.Start()
 
@@ -305,7 +305,7 @@ func TestTelemetrySchedulerBacksOffWhenQueueFull(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		transport := &rejectingTransport{err: ErrQueueFull}
 		buffer := NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
-		scheduler := NewScheduler(map[ratelimit.Category]Buffer[Item]{ratelimit.CategoryError: buffer}, transport, &protocol.Dsn{}, nil, nil)
+		scheduler := NewScheduler(map[ratelimit.Category]Buffer[Item]{ratelimit.CategoryError: buffer}, transport, &protocol.Dsn{}, nil, nil, nil)
 		scheduler.Start()
 		for range 3 {
 			scheduler.Add(&testTelemetryItem{data: "error"})
@@ -336,7 +336,7 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 			recorder := reportpkg.NewAggregator()
 			buffer := NewRingBuffer[Item](ratelimit.CategoryTransaction, 10, OverflowPolicyDropOldest, 1, 0, nil)
 			buffers := map[ratelimit.Category]Buffer[Item]{ratelimit.CategoryTransaction: buffer}
-			scheduler := NewScheduler(buffers, &rejectingTransport{err: tt.err}, &protocol.Dsn{}, nil, recorder)
+			scheduler := NewScheduler(buffers, &rejectingTransport{err: tt.err}, &protocol.Dsn{}, nil, recorder, nil)
 			buffer.Offer(tt.item)
 			scheduler.Flush(time.Second)
 

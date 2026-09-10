@@ -16,25 +16,11 @@ import (
 )
 
 const errorType = ""
-const eventType = "event"
 const transactionType = "transaction"
 const checkInType = "check_in"
 
-var logEvent = struct {
-	Type        string
-	ContentType string
-}{
-	"log",
-	"application/vnd.sentry.items.log+json",
-}
-
-var traceMetricEvent = struct {
-	Type        string
-	ContentType string
-}{
-	"trace_metric",
-	"application/vnd.sentry.items.trace-metric+json",
-}
+const logEventType = "log"
+const traceMetricEventType = "trace_metric"
 
 // Level marks the severity of the event.
 type Level string
@@ -47,10 +33,6 @@ const (
 	LevelError   Level = "error"
 	LevelFatal   Level = "fatal"
 )
-
-// SdkInfo contains all metadata about the SDK.
-type SdkInfo = protocol.SdkInfo
-type SdkPackage = protocol.SdkPackage
 
 // TODO: This type could be more useful, as map of interface{} is too generic
 // and requires a lot of type assertions in beforeBreadcrumb calls
@@ -372,7 +354,7 @@ type Event struct {
 	Message     string             `json:"message,omitempty"`
 	Platform    string             `json:"platform,omitempty"`
 	Release     string             `json:"release,omitempty"`
-	Sdk         SdkInfo            `json:"sdk,omitempty"`
+	Sdk         protocol.SdkInfo   `json:"sdk,omitempty"`
 	ServerName  string             `json:"server_name,omitempty"`
 	Threads     []Thread           `json:"threads,omitempty"`
 	Tags        map[string]string  `json:"tags,omitempty"`
@@ -398,10 +380,10 @@ type Event struct {
 	CheckIn       *CheckIn       `json:"check_in,omitempty"`
 	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
 
-	// The fields below are only relevant for logs
+	// Logs is populated by MockTransport.Events for captured log batches.
 	Logs []Log `json:"-"`
 
-	// The fields below are only relevant for metrics
+	// Metrics is populated by MockTransport.Events for captured metric batches.
 	Metrics []Metric `json:"-"`
 
 	// The fields below are not part of the final JSON payload.
@@ -460,10 +442,6 @@ func (e *Event) ToEnvelopeItem() (item *protocol.EnvelopeItem, err error) {
 		item = protocol.NewTransactionItem(e.GetSpanCount(), eventBody)
 	case checkInType:
 		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
-	case logEvent.Type:
-		item = protocol.NewLogItem(len(e.Logs), eventBody)
-	case traceMetricEvent.Type:
-		item = protocol.NewTraceMetricItem(len(e.Metrics), eventBody)
 	default:
 		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
 	}
@@ -521,19 +499,6 @@ func (e *Event) GetSpanCount() int {
 	return len(e.Spans) + 1
 }
 
-// GetLogByteSize returns the approximate total byte size of all logs in the event. It is used for client
-// reports. Returns 0 for non-log events.
-func (e *Event) GetLogByteSize() int {
-	if e.Type != logEvent.Type {
-		return 0
-	}
-	var size int
-	for i := range e.Logs {
-		size += e.Logs[i].ApproximateSize()
-	}
-	return size
-}
-
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
 // to prevent accidentally storing T when we mean *T.
 // For example, the TraceContext must be stored as *TraceContext to pick up the
@@ -561,25 +526,6 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 	if e.Type == transactionType {
 		return json.Marshal(struct{ *event }{(*event)(e)})
 	}
-	// metrics and logs should be serialized under the same `items` json field.
-	if e.Type == logEvent.Type {
-		type logEvent struct {
-			*event
-			Items []Log           `json:"items,omitempty"`
-			Type  json.RawMessage `json:"type,omitempty"`
-		}
-		return json.Marshal(logEvent{event: (*event)(e), Items: e.Logs})
-	}
-
-	if e.Type == traceMetricEvent.Type {
-		type metricEvent struct {
-			*event
-			Items []Metric        `json:"items,omitempty"`
-			Type  json.RawMessage `json:"type,omitempty"`
-		}
-		return json.Marshal(metricEvent{event: (*event)(e), Items: e.Metrics})
-	}
-
 	// errorEvent is like Event with shadowed fields for customizing JSON
 	// marshaling.
 	type errorEvent struct {
@@ -682,12 +628,8 @@ func (e *Event) toCategory() ratelimit.Category {
 		return ratelimit.CategoryError
 	case transactionType:
 		return ratelimit.CategoryTransaction
-	case logEvent.Type:
-		return ratelimit.CategoryLog
 	case checkInType:
 		return ratelimit.CategoryMonitor
-	case traceMetricEvent.Type:
-		return ratelimit.CategoryTraceMetric
 	default:
 		return ratelimit.CategoryUnknown
 	}
