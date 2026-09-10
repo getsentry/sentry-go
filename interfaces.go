@@ -11,8 +11,8 @@ import (
 
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 const errorType = ""
@@ -236,9 +236,9 @@ type Request struct {
 }
 
 func newRequest(r *http.Request, client *Client) *Request {
-	prot := protocol.SchemeHTTP
+	prot := "http"
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		prot = protocol.SchemeHTTPS
+		prot = "https"
 	}
 	url := fmt.Sprintf("%s://%s%s", prot, r.Host, r.URL.Path)
 

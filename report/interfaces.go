@@ -1,8 +1,8 @@
 package report
 
 import (
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 // ReportableItem is the minimal surface needed for client report accounting.

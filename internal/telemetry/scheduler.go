@@ -6,15 +6,16 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/util"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
 )
 
 // Scheduler implements a weighted round-robin scheduler for processing buffered events.
 type Scheduler struct {
-	buffers   map[ratelimit.Category]Buffer[protocol.TelemetryItem]
-	transport protocol.TelemetryTransport
+	buffers   map[ratelimit.Category]Buffer[Item]
+	transport Transport
 	dsn       *protocol.Dsn
 	sdkInfo   func() *protocol.SdkInfo
 	recorder  report.ClientReportRecorder
@@ -33,8 +34,8 @@ type Scheduler struct {
 }
 
 func NewScheduler(
-	buffers map[ratelimit.Category]Buffer[protocol.TelemetryItem],
-	transport protocol.TelemetryTransport,
+	buffers map[ratelimit.Category]Buffer[Item],
+	transport Transport,
 	dsn *protocol.Dsn,
 	sdkInfo func() *protocol.SdkInfo,
 	recorder report.ClientReportRecorder,
@@ -124,7 +125,7 @@ func (s *Scheduler) Signal() {
 	s.cond.Signal()
 }
 
-func (s *Scheduler) Add(item protocol.TelemetryItem) bool {
+func (s *Scheduler) Add(item Item) bool {
 	category := item.GetCategory()
 	buffer, exists := s.buffers[category]
 	if !exists {
@@ -200,7 +201,7 @@ func (s *Scheduler) processNextBatch() {
 	priority := s.currentCycle[s.cyclePos]
 	s.cyclePos = (s.cyclePos + 1) % len(s.currentCycle)
 
-	var bufferToProcess Buffer[protocol.TelemetryItem]
+	var bufferToProcess Buffer[Item]
 	var categoryToProcess ratelimit.Category
 	for category, buffer := range s.buffers {
 		if buffer.Priority() == priority && buffer.IsReadyToFlush() {
@@ -215,8 +216,8 @@ func (s *Scheduler) processNextBatch() {
 	}
 }
 
-func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category ratelimit.Category, force bool) {
-	var items []protocol.TelemetryItem
+func (s *Scheduler) processItems(buffer Buffer[Item], category ratelimit.Category, force bool) {
+	var items []Item
 
 	if force {
 		items = buffer.Drain()
@@ -247,14 +248,14 @@ func (s *Scheduler) processItems(buffer Buffer[protocol.TelemetryItem], category
 }
 
 // envelopeConvertibles converts single items or batches to satisfy the EnvelopeConvertible interface.
-func (s *Scheduler) envelopeConvertibles(category ratelimit.Category, items []protocol.TelemetryItem) []protocol.EnvelopeConvertible {
+func (s *Scheduler) envelopeConvertibles(category ratelimit.Category, items []Item) []EnvelopeConvertible {
 	switch category {
 	case ratelimit.CategoryLog, ratelimit.CategoryTraceMetric:
-		return []protocol.EnvelopeConvertible{protocol.NewItemContainer(category, items)}
+		return []EnvelopeConvertible{NewItemContainer(category, items)}
 	default:
-		convertibles := make([]protocol.EnvelopeConvertible, 0, len(items))
+		convertibles := make([]EnvelopeConvertible, 0, len(items))
 		for _, item := range items {
-			if convertible, ok := item.(protocol.EnvelopeConvertible); ok {
+			if convertible, ok := item.(EnvelopeConvertible); ok {
 				convertibles = append(convertibles, convertible)
 				continue
 			}
@@ -264,7 +265,7 @@ func (s *Scheduler) envelopeConvertibles(category ratelimit.Category, items []pr
 	}
 }
 
-func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
+func (s *Scheduler) sendItem(item EnvelopeConvertible) {
 	header := &protocol.EnvelopeHeader{
 		EventID: item.GetEventID(),
 		SentAt:  time.Now(),
@@ -273,7 +274,7 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
 		Sdk:     item.GetSdkInfo(),
 	}
 	if header.EventID == "" {
-		header.EventID = protocol.GenerateEventID()
+		header.EventID = util.GenerateEventID()
 	}
 	if header.Sdk == nil {
 		header.Sdk = s.resolveSdkInfo()

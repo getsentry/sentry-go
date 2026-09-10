@@ -21,7 +21,7 @@ var dsnTests = map[string]DsnTest{
 	"AllFields": { //nolint:gosec // G101: not real credentials
 		in: "https://public:secret@domain:8888/foo/bar/42",
 		dsn: &Dsn{
-			scheme:    SchemeHTTPS,
+			scheme:    schemeHTTPS,
 			publicKey: "public",
 			secretKey: "secret",
 			host:      "domain",
@@ -35,7 +35,7 @@ var dsnTests = map[string]DsnTest{
 	"MinimalSecure": {
 		in: "https://public@domain/42",
 		dsn: &Dsn{
-			scheme:    SchemeHTTPS,
+			scheme:    schemeHTTPS,
 			publicKey: "public",
 			host:      "domain",
 			port:      443,
@@ -47,7 +47,7 @@ var dsnTests = map[string]DsnTest{
 	"MinimalInsecure": {
 		in: "http://public@domain/42",
 		dsn: &Dsn{
-			scheme:    SchemeHTTP,
+			scheme:    schemeHTTP,
 			publicKey: "public",
 			host:      "domain",
 			port:      80,
