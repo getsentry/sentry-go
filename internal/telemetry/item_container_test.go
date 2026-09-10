@@ -1,10 +1,11 @@
-package protocol
+package telemetry
 
 import (
 	"encoding/json"
 	"testing"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 type dummyLog struct{ body string }
@@ -33,25 +34,25 @@ func TestItemContainer_ToEnvelopeItem_And_Getters(t *testing.T) {
 	tests := []struct {
 		name      string
 		category  ratelimit.Category
-		items     []TelemetryItem
-		itemType  EnvelopeItemType
+		items     []Item
+		itemType  protocol.EnvelopeItemType
 		wantItems int
 	}{
 		{
 			name:      "logs",
 			category:  ratelimit.CategoryLog,
-			items:     []TelemetryItem{dummyLog{body: "a"}, dummyLog{body: "b"}},
-			itemType:  EnvelopeItemTypeLog,
+			items:     []Item{dummyLog{body: "a"}, dummyLog{body: "b"}},
+			itemType:  protocol.EnvelopeItemTypeLog,
 			wantItems: 2,
 		},
 		{
 			name:     "metrics",
 			category: ratelimit.CategoryTraceMetric,
-			items: []TelemetryItem{
+			items: []Item{
 				dummyMetric{Name: "metric1", Type: "gauge", Value: 42},
 				dummyMetric{Name: "metric2", Type: "count", Value: 7},
 			},
-			itemType:  EnvelopeItemTypeTraceMetric,
+			itemType:  protocol.EnvelopeItemTypeTraceMetric,
 			wantItems: 2,
 		},
 	}
@@ -97,7 +98,7 @@ func TestItemContainer_ToEnvelopeItem_And_Getters(t *testing.T) {
 }
 
 func TestItemContainer_PartialMarshalFailureUsesSerializedItemCount(t *testing.T) {
-	container := NewItemContainer(ratelimit.CategoryTraceMetric, []TelemetryItem{
+	container := NewItemContainer(ratelimit.CategoryTraceMetric, []Item{
 		dummyMetric{Name: "metric1", Type: "gauge", Value: 42},
 		failingMetric{Name: "bad", Value: func() string { return "nope" }},
 		dummyMetric{Name: "metric2", Type: "count", Value: 7},
@@ -126,7 +127,7 @@ func TestItemContainer_PartialMarshalFailureUsesSerializedItemCount(t *testing.T
 }
 
 func TestItemContainer_AllItemsFailMarshal(t *testing.T) {
-	container := NewItemContainer(ratelimit.CategoryTraceMetric, []TelemetryItem{
+	container := NewItemContainer(ratelimit.CategoryTraceMetric, []Item{
 		failingMetric{Name: "bad1", Value: func() string { return "nope" }},
 		failingMetric{Name: "bad2", Value: func() string { return "still nope" }},
 	})
@@ -141,7 +142,7 @@ func TestItemContainer_AllItemsFailMarshal(t *testing.T) {
 }
 
 func TestItemContainer_UnsupportedCategory(t *testing.T) {
-	container := NewItemContainer(ratelimit.CategoryError, []TelemetryItem{
+	container := NewItemContainer(ratelimit.CategoryError, []Item{
 		dummyMetric{Name: "metric1", Type: "gauge", Value: 42},
 	})
 	if _, err := container.ToEnvelopeItem(); err == nil {
