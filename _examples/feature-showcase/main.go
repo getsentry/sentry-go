@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 func prettyPrint(v interface{}) string {
@@ -18,16 +19,13 @@ func prettyPrint(v interface{}) string {
 
 type devNullTransport struct{}
 
-func (t *devNullTransport) Configure(options sentry.ClientOptions) {
-	dsn, _ := sentry.NewDsn(options.Dsn)
-	fmt.Println()
-	fmt.Println("Envelope Endpoint:", dsn.GetAPIURL())
-	fmt.Println("Headers:", dsn.RequestHeaders())
-	fmt.Println()
+func (t *devNullTransport) SendEnvelope(envelope *protocol.Envelope) error {
+	fmt.Printf("Captured envelope with %d items\n", len(envelope.Items))
+	return nil
 }
-func (t *devNullTransport) SendEvent(event *sentry.Event) {
-	fmt.Println("Faked Transport")
-}
+
+func (t *devNullTransport) HasCapacity() bool                    { return true }
+func (t *devNullTransport) IsRateLimited(protocol.Category) bool { return false }
 
 func (t *devNullTransport) Flush(timeout time.Duration) bool {
 	return true

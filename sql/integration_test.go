@@ -56,7 +56,7 @@ func driverShapes(t *testing.T) []driverShape {
 				"db.driver.name": ctxName,
 				"db.namespace":   "appdb",
 				"server.address": "localhost",
-				"server.port":    5432,
+				"server.port":    float64(5432),
 			},
 		},
 		{
@@ -76,7 +76,7 @@ func driverShapes(t *testing.T) []driverShape {
 				"db.driver.name": legacyName,
 				"db.namespace":   "appdb",
 				"server.address": "localhost",
-				"server.port":    3306,
+				"server.port":    float64(3306),
 			},
 		},
 		{

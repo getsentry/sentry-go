@@ -18,7 +18,8 @@ Co-Authored-By: <agent model name> <agent-email-or-noreply@example.com>
 
 ### Core (`/`)
 
-The root package `sentry` contains the entire public API.
+The root package `sentry` contains the client and transport APIs. The public
+`protocol/` package owns wire envelopes, payload categories, DSNs, and SDK metadata.
 
 ### Attribute Package (`/attribute/`)
 
@@ -43,18 +44,23 @@ When adding a new integration, mirror an existing one.
 
 ### Transport Architecture
 
-**Current: `transport.go` (active)** — `HTTPTransport` is the default implementation of an async transport. `HTTPSyncTransport` is the blocking variant for serverless.
+The only delivery path is the telemetry processor followed by an envelope
+transport. Custom transports use the same processor as the default transport.
 
-**Next: `internal/telemetry/` + `internal/http/` (not yet enabled)** — Processor/buffer/scheduler architecture. Wired up in `client.go` (`setupTelemetryProcessor`) but **commented out** behind `DisableTelemetryBuffer`. Key parts:
+- `transport_interface.go` defines the public transport contract using
+  `protocol` types. Existing root DSN and SDK metadata aliases remain for compatibility.
+- `transport.go` owns HTTP constructors, their options, and the private implementation.
+  Recorder/provider/SDK dependencies are passed privately.
+- `internal/telemetry/` owns buffering, scheduling, client report emission,
+  item containers, and flushing. Its interfaces describe only the
+  processing and delivery behavior it consumes.
+- `internal/ratelimit/` owns rate-limit parsing, backoff, and scheduling priorities.
+  Publicly constructed HTTP transports also emit their own delivery-loss reports.
+- `mock_transport.go` captures envelopes; `internal/sentrytest` fixtures exercise
+  the full processor and expose envelopes plus a decoded event view.
 
-- `internal/telemetry/processor.go` — orchestrator; routes items to category-specific buffers
-- `internal/telemetry/scheduler.go` — weighted round-robin; errors get 5x priority over logs
-- `internal/telemetry/ring_buffer.go` — circular buffer with overflow policies and batch/timeout flushing
-- `internal/telemetry/bucketed_buffer.go` — groups items by trace ID
-- `internal/http/transport.go` — `AsyncTransport` with `HasCapacity()` backpressure
-- `internal/protocol/` — `Envelope`, `TelemetryItem` interfaces; log/metric batch types
-
-The `internalAsyncTransportAdapter` in `transport.go` bridges old `Transport` to new `TelemetryTransport`.
+Clients are selected through context independently of scopes. Isolation scopes
+snapshot their parent or global scope; transport workers never resolve scopes.
 
 ## Coding Standards
 

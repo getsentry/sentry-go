@@ -85,7 +85,7 @@ func TestNewTelemetryScheduler(t *testing.T) {
 		Version: "1.0.0",
 	}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	if scheduler == nil {
 		t.Fatal("Expected non-nil scheduler")
@@ -208,7 +208,7 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
 			buffers := tt.setupBuffers()
-			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 			tt.addItems(buffers)
 
@@ -238,7 +238,7 @@ func TestTelemetrySchedulerRateLimiting(t *testing.T) {
 	// no log buffer used in simplified scheduler tests
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	transport.SetRateLimited("error", true)
 
@@ -271,7 +271,7 @@ func TestTelemetrySchedulerStartStop(t *testing.T) {
 	// no log buffer used in simplified scheduler tests
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	scheduler.Start()
 	scheduler.Start()
@@ -298,7 +298,7 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	scheduler.Start()
 
@@ -332,7 +332,7 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 	}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, recorder)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, recorder, nil)
 
 	buffer.Offer(&failingTransactionTelemetryItem{
 		testTelemetryItem: testTelemetryItem{data: "tx", category: ratelimit.CategoryTransaction},

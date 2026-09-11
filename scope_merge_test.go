@@ -41,7 +41,7 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 
 	client, transport := newCaptureTestClient(t, ClientOptions{MaxBreadcrumbs: defaultMaxBreadcrumbs})
 	require.NotNil(t, CaptureEvent(ContextWithClient(ctx, client), event, WithLevel(LevelDebug)))
-	captured := requireSingleEvent(t, transport)
+	captured := requireSingleEvent(t, client, transport)
 
 	want := &Event{
 		Tags:     map[string]string{"global": "global", "current": "current", "event": "event", "shared": "event"},
@@ -83,7 +83,7 @@ func TestCaptureObservesCurrentScopeContents(t *testing.T) {
 			}
 			client, transport := newCaptureTestClient(t, ClientOptions{MaxBreadcrumbs: defaultMaxBreadcrumbs})
 			require.NotNil(t, CaptureEvent(ContextWithClient(ctx, client), NewEvent()))
-			captured := requireSingleEvent(t, transport)
+			captured := requireSingleEvent(t, client, transport)
 			require.NotContains(t, captured.Tags, "tag")
 			require.Empty(t, captured.Breadcrumbs)
 		})
@@ -97,7 +97,7 @@ func TestContextScopeReplacesGlobalScope(t *testing.T) {
 	client, transport := newCaptureTestClient(t, ClientOptions{MaxBreadcrumbs: defaultMaxBreadcrumbs})
 	ctx := ContextWithScope(context.Background(), NewScope())
 	require.NotNil(t, CaptureEvent(ContextWithClient(ctx, client), NewEvent()))
-	require.NotContains(t, requireSingleEvent(t, transport).Tags, "global")
+	require.NotContains(t, requireSingleEvent(t, client, transport).Tags, "global")
 }
 
 func TestCaptureBreadcrumbOrderAndLimit(t *testing.T) {
@@ -120,7 +120,7 @@ func TestCaptureBreadcrumbOrderAndLimit(t *testing.T) {
 			event := &Event{Breadcrumbs: []*Breadcrumb{{Message: "event", Timestamp: testNow.Add(time.Hour)}}}
 			client, transport := newCaptureTestClient(t, ClientOptions{MaxBreadcrumbs: test.limit})
 			require.NotNil(t, CaptureEvent(ContextWithClient(ctx, client), event))
-			require.Equal(t, test.want, breadcrumbMessages(requireSingleEvent(t, transport).Breadcrumbs))
+			require.Equal(t, test.want, breadcrumbMessages(requireSingleEvent(t, client, transport).Breadcrumbs))
 		})
 	}
 }
@@ -170,9 +170,9 @@ func cleanGlobalScope(t testing.TB) *Scope {
 	return global
 }
 
-func requireSingleEvent(t *testing.T, transport *MockTransport) *Event {
+func requireSingleEvent(t *testing.T, client *Client, transport *MockTransport) *Event {
 	t.Helper()
-	events := transport.Events()
+	events := capturedEvents(t, client, transport)
 	require.Len(t, events, 1)
 	return events[0]
 }

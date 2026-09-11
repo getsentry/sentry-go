@@ -336,11 +336,11 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 		"string_slice":  attribute.StringValue("[one two three]"),
 		"transaction":   attribute.StringValue("payment"),
 		"user":          attribute.StringValue("map[id:bob]"),
-		"uint":          attribute.Uint64Value(42),
-		"uint16":        attribute.Uint64Value(16),
-		"uint32":        attribute.Uint64Value(32),
-		"uint64":        attribute.Uint64Value(64),
-		"uint8":         attribute.Uint64Value(8),
+		"uint":          attribute.Int64Value(42),
+		"uint16":        attribute.Int64Value(16),
+		"uint32":        attribute.Int64Value(32),
+		"uint64":        attribute.Int64Value(64),
+		"uint8":         attribute.Int64Value(8),
 		"custom_key":    attribute.StringValue("[default custom]"),
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	pkgErrors "github.com/pkg/errors"
@@ -135,6 +136,7 @@ func TestRecoverUsesPanicOriginStacktrace(t *testing.T) {
 				recoverPanic(ctx, test.panicFunc)
 			}
 
+			require.True(t, sentry.ClientFromContext(ctx).Flush(time.Second))
 			events := transport.Events()
 			require.Len(t, events, 1)
 			require.NotEmpty(t, events[0].Exception)
@@ -176,6 +178,7 @@ func TestRecoverValueUsesPanicOriginStacktraceWhenConfigured(t *testing.T) {
 			ctx, transport := newRecoverTestContext(t)
 			recoverPanic(ctx, test.panicFunc)
 
+			require.True(t, sentry.ClientFromContext(ctx).Flush(time.Second))
 			events := transport.Events()
 			require.Len(t, events, 1)
 			require.Len(t, events[0].Threads, 1)
@@ -190,6 +193,7 @@ func TestRecoverOutsidePanicKeepsCallerStacktrace(t *testing.T) {
 	ctx, transport := newRecoverTestContext(t)
 	recoverHandledError(ctx)
 
+	require.True(t, sentry.ClientFromContext(ctx).Flush(time.Second))
 	events := transport.Events()
 	require.Len(t, events, 1)
 	require.Len(t, events[0].Exception, 1)
