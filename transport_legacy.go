@@ -910,17 +910,11 @@ func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
 		HTTPProxy:     options.HTTPProxy,
 		HTTPSProxy:    options.HTTPSProxy,
 		CaCerts:       options.CaCerts,
-		Recorder:      a.recorder,
-		Provider:      a.provider,
-		SdkInfo: func() *protocol.SdkInfo {
-			return &protocol.SdkInfo{
-				Name:    sdkIdentifier,
-				Version: SDKVersion,
-			}
-		},
 	}
 
-	a.transport = newHTTPTransport(transportOptions)
+	a.transport = newHTTPTransport(transportOptions, a.recorder, a.provider, func() *protocol.SdkInfo {
+		return &protocol.SdkInfo{Name: sdkIdentifier, Version: SDKVersion}
+	})
 
 	if options.Dsn != "" {
 		dsn, err := protocol.NewDsn(options.Dsn)

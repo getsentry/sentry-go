@@ -532,10 +532,7 @@ func (client *Client) setupTelemetryProcessor() {
 		HTTPProxy:     client.options.HTTPProxy,
 		HTTPSProxy:    client.options.HTTPSProxy,
 		CaCerts:       client.options.CaCerts,
-		Recorder:      client.reportRecorder,
-		Provider:      client.reportProvider,
-		SdkInfo:       client.sdkInfo,
-	})
+	}, client.reportRecorder, client.reportProvider, client.sdkInfo)
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
 	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
