@@ -97,16 +97,8 @@ func dataCollectionFromRequest(request *http.Request) sentry.DataCollection {
 
 func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
 	// Respect trace propagation targets
-	propagateTrace := len(s.tracePropagationTargets) == 0
-	if len(s.tracePropagationTargets) > 0 {
-		requestURL := request.URL.String()
-		for _, target := range s.tracePropagationTargets {
-			if strings.Contains(requestURL, target) {
-				propagateTrace = true
-				break
-			}
-		}
-	}
+	propagateTrace := len(s.tracePropagationTargets) == 0 ||
+		matchesTracePropagationTargets(request, s.tracePropagationTargets)
 
 	// Only create the `http.client` span only if there is a parent span.
 	parentSpan := sentry.SpanFromContext(request.Context())
@@ -177,6 +169,18 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	}
 
 	return response, err
+}
+
+func matchesTracePropagationTargets(request *http.Request, targets []string) bool {
+	requestURL := request.URL.String()
+
+	for _, target := range targets {
+		if strings.Contains(requestURL, target) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func filterOutgoingRequestHeaders(dc sentry.DataCollection, headers http.Header) map[string]string {
