@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	httpinternal "github.com/getsentry/sentry-go/internal/http"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/util"
@@ -904,7 +903,7 @@ type internalAsyncTransportAdapter struct {
 }
 
 func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
-	transportOptions := httpinternal.TransportOptions{
+	transportOptions := TransportOptions{
 		Dsn:           options.Dsn,
 		HTTPClient:    options.HTTPClient,
 		HTTPTransport: options.HTTPTransport,
@@ -921,7 +920,7 @@ func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
 		},
 	}
 
-	a.transport = httpinternal.NewAsyncTransport(transportOptions)
+	a.transport = newHTTPTransport(transportOptions)
 
 	if options.Dsn != "" {
 		dsn, err := protocol.NewDsn(options.Dsn)
