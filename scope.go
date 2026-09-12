@@ -5,14 +5,13 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/httputils"
-	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/report"
 )
 
 // Scope holds contextual data for the current scope.
@@ -351,142 +350,176 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 }
 
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
-func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event { //nolint:gocyclo
+func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event {
+	client = normalizeClient(client)
+	processors := scope.applyToEvent(event, client, hint, client.options.MaxBreadcrumbs)
+	return client.runEventProcessors(event, hint, processors)
+}
+
+// applyToEvent applies the effective scope to event and returns the scope
+// processors so they can run after the scope lock is released.
+func (scope *Scope) applyToEvent(
+	event *Event,
+	client *Client,
+	hint *EventHint,
+	maxBreadcrumbs int,
+) []EventProcessor {
+	_, explicitTrace := event.Contexts[traceContextKey]
+
 	scope.mu.RLock()
-	defer scope.mu.RUnlock()
-
-	if len(scope.breadcrumbs) > 0 {
-		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
-	}
-
-	if len(scope.attachments) > 0 {
-		event.Attachments = append(event.Attachments, scope.attachments...)
-	}
-
+	cloneContexts := len(scope.eventProcessors) > 0 ||
+		len(client.eventProcessors) > 0 ||
+		len(globalEventProcessors) > 0 ||
+		(event.Type == transactionType && client.options.BeforeSendTransaction != nil) ||
+		(event.Type != transactionType && event.Type != checkInType && client.options.BeforeSend != nil)
 	if len(scope.tags) > 0 {
 		if event.Tags == nil {
 			event.Tags = make(map[string]string, len(scope.tags))
 		}
-
 		for key, value := range scope.tags {
-			event.Tags[key] = value
+			if _, exists := event.Tags[key]; !exists {
+				event.Tags[key] = value
+			}
 		}
 	}
-
 	if len(scope.contexts) > 0 {
 		if event.Contexts == nil {
-			event.Contexts = make(map[string]Context)
+			event.Contexts = make(map[string]Context, len(scope.contexts))
 		}
-
 		for key, value := range scope.contexts {
-			if key == "trace" && event.Type == transactionType {
-				// Do not override trace context of
-				// transactions, otherwise it breaks the
-				// transaction event representation.
-				// For error events, the trace context is used
-				// to link errors and traces/spans in Sentry.
+			if key == traceContextKey && event.Type == transactionType {
 				continue
 			}
-
-			// Ensure we are not overwriting event fields
-			if _, ok := event.Contexts[key]; !ok {
-				event.Contexts[key] = cloneContext(value)
+			if _, exists := event.Contexts[key]; !exists {
+				if cloneContexts {
+					value = cloneContext(value)
+				}
+				event.Contexts[key] = value
 			}
 		}
 	}
 
-	if event.Contexts == nil {
-		event.Contexts = make(map[string]Context)
-	}
-
-	if scope.span != nil {
-		if _, ok := event.Contexts["trace"]; !ok {
-			event.Contexts["trace"] = scope.span.traceContext().Map()
-		}
-
-		transaction := scope.span.GetTransaction()
-		if transaction != nil {
-			event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
-		}
-	} else if scope.propagationContext.TraceID != zeroTraceID {
-		event.Contexts["trace"] = scope.propagationContext.Map()
-
-		dsc := scope.propagationContext.DynamicSamplingContext
-		if !dsc.HasEntries() && client.IsEnabled() {
-			dsc = DynamicSamplingContextFromScope(scope, client)
-		}
-		event.sdkMetaData.dsc = dsc
-	}
-
-	// If an external trace resolver is registered (e.g. OTel), override
-	// trace/span IDs from the hint context or the scope's request context.
-	if client.IsEnabled() {
-		var ctx context.Context
-		if hint != nil {
-			ctx = hint.Context
-		}
-		if ctx == nil && scope.request != nil {
-			ctx = scope.request.Context()
-		}
-		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); event.Type != transactionType && ok {
-			traceCtx := event.Contexts["trace"]
-			traceCtx[traceIDContextKey] = traceID.String()
-			traceCtx[spanIDContextKey] = spanID.String()
-		}
-	}
-
-	if event.User.IsEmpty() {
+	// Copy slice-backed scope data while holding the read lock. Snapshotting
+	// only the slice headers would race with concurrent append operations.
+	event.Breadcrumbs = mergeBreadcrumbs(scope.breadcrumbs, event.Breadcrumbs, maxBreadcrumbs)
+	event.Attachments = prependSlice(scope.attachments, event.Attachments)
+	if event.User.IsEmpty() && !scope.user.IsEmpty() {
 		event.User = scope.user
 	}
-
-	if len(event.Fingerprint) == 0 {
-		event.Fingerprint = append(event.Fingerprint, scope.fingerprint...)
+	if len(event.Fingerprint) == 0 && len(scope.fingerprint) > 0 {
+		event.Fingerprint = slices.Clone(scope.fingerprint)
 	}
-
 	if event.Level == "" {
 		event.Level = scope.level
 	}
 
-	if event.Request == nil && scope.request != nil {
-		event.Request = newRequest(scope.request, client)
-		// NOTE: The SDK does not attempt to send partial request body data.
-		//
-		// The reason being that Sentry's ingest pipeline and UI are optimized
-		// to show structured data. Additionally, tooling around PII scrubbing
-		// relies on structured data; truncated request bodies would create
-		// invalid payloads that are more prone to leaking PII data.
-		//
-		// Users can still send more data along their events if they want to,
-		// for example using Event.Contexts.
+	request := scope.request
+	requestBody := scope.requestBody
+	propagationContext := scope.propagationContext
+	span := scope.span
+	processors := scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
+	scope.mu.RUnlock()
+
+	if event.Request == nil && request != nil {
+		event.Request = newRequest(request, client)
 		dc := client.GetDataCollection()
-		if scope.requestBody != nil && !scope.requestBody.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
-			event.Request.Data = dc.FilterHTTPBody(scope.requestBody.Bytes(), scope.request.Header.Get("Content-Type"))
+		if requestBody != nil && !requestBody.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
+			event.Request.Data = dc.FilterHTTPBody(
+				requestBody.Bytes(),
+				request.Header.Get("Content-Type"),
+			)
 		}
 	}
 
-	for _, processor := range scope.eventProcessors {
-		id := event.EventID
-		category := event.toCategory()
-		spanCountBefore := event.GetSpanCount()
-		event = processor(event, hint)
-		if event == nil {
-			debuglog.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
-			if client.IsEnabled() {
-				client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
-				if category == ratelimit.CategoryTransaction {
-					client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
-				}
-			}
-			return nil
-		}
-		if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
-			if client.IsEnabled() {
-				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
-			}
-		}
+	applyTraceToEvent(event, hint, client, request, span, propagationContext, explicitTrace)
+	return processors
+}
+
+func applyTraceToEvent(
+	event *Event,
+	hint *EventHint,
+	client *Client,
+	request *http.Request,
+	span *Span,
+	propagationContext PropagationContext,
+	explicit bool,
+) {
+	if explicit || event.Type == transactionType {
+		return
 	}
 
-	return event
+	var ctx context.Context
+	if hint != nil {
+		ctx = hint.Context
+	}
+	if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
+		setEventTrace(event, Context{
+			traceIDContextKey: traceID.String(),
+			spanIDContextKey:  spanID.String(),
+		})
+		return
+	}
+	if span != nil {
+		setEventTrace(event, span.traceContext().Map())
+		if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() {
+			if transaction := span.GetTransaction(); transaction != nil {
+				event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
+			}
+		}
+		return
+	}
+	if request != nil {
+		if traceID, spanID, ok := client.externalTraceContextFromContext(request.Context()); ok {
+			setEventTrace(event, Context{
+				traceIDContextKey: traceID.String(),
+				spanIDContextKey:  spanID.String(),
+			})
+			return
+		}
+	}
+	if propagationContext.TraceID == zeroTraceID {
+		return
+	}
+
+	setEventTrace(event, propagationContext.Map())
+	if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() {
+		dsc := propagationContext.DynamicSamplingContext
+		if !dsc.HasEntries() {
+			dsc = dynamicSamplingContextFromPropagationContext(propagationContext, client)
+		}
+		event.sdkMetaData.dsc = dsc
+	}
+}
+
+func setEventTrace(event *Event, trace Context) {
+	if event.Contexts == nil {
+		event.Contexts = make(map[string]Context)
+	}
+	event.Contexts[traceContextKey] = trace
+}
+
+func mergeBreadcrumbs(scope, event []*Breadcrumb, limit int) []*Breadcrumb {
+	switch {
+	case limit < 0:
+		return nil
+	case limit == 0:
+		limit = defaultMaxBreadcrumbs
+	}
+
+	event = event[max(0, len(event)-limit):]
+	scopeLimit := limit - len(event)
+	scope = scope[max(0, len(scope)-scopeLimit):]
+	return prependSlice(scope, event)
+}
+
+func prependSlice[T any](prefix, suffix []T) []T {
+	if len(prefix) == 0 {
+		return suffix
+	}
+	merged := make([]T, len(prefix)+len(suffix))
+	copy(merged, prefix)
+	copy(merged[len(prefix):], suffix)
+	return merged
 }
 
 // cloneContext returns a new context with keys and values copied from the passed one.
@@ -495,11 +528,10 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 // a proper deep copy: if some context values are pointer types (e.g. maps),
 // they won't be properly copied.
 func cloneContext(c Context) Context {
-	res := make(Context, len(c))
-	for k, v := range c {
-		res[k] = v
+	if c == nil {
+		return Context{}
 	}
-	return res
+	return maps.Clone(c)
 }
 
 func (scope *Scope) populateAttrs(attrs map[string]attribute.Value) {
