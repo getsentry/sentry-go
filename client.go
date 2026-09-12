@@ -298,6 +298,7 @@ type ClientOptions struct {
 // instances. It must be created with NewClient.
 type Client struct {
 	mu                    sync.RWMutex
+	disabled              bool
 	options               ClientOptions
 	dsn                   *protocol.Dsn
 	eventProcessors       []EventProcessor
@@ -450,6 +451,38 @@ func NewClient(options ClientOptions) (*Client, error) {
 	return &client, nil
 }
 
+var noopClient = &Client{
+	disabled: true,
+	options: ClientOptions{
+		DisableTelemetryBuffer: true,
+		MaxErrorDepth:          maxErrorDepth,
+		MaxSpans:               defaultMaxSpans,
+		TraceIgnoreStatusCodes: [][]int{{404}},
+	},
+	sdkIdentifier:  sdkIdentifier,
+	sdkVersion:     SDKVersion,
+	Transport:      new(noopTransport),
+	reportRecorder: report.NoopRecorder(),
+	reportProvider: report.NoopProvider(),
+}
+
+func NewNoopClient() *Client {
+	return noopClient
+}
+
+func (client *Client) IsEnabled() bool {
+	return client != nil && !client.disabled
+}
+
+// normalizeClient returns client, or the shared no-op client when client is
+// nil.
+func normalizeClient(client *Client) *Client {
+	if client == nil {
+		return noopClient
+	}
+	return client
+}
+
 func (client *Client) setupTransport() {
 	opts := client.options
 	transport := opts.Transport
@@ -555,6 +588,9 @@ func (client *Client) setupIntegrations() {
 // client is shared among multiple hubs, one per goroutine, such that adding an
 // event processor to the client affects all hubs that share the client.
 func (client *Client) AddEventProcessor(processor EventProcessor) {
+	if !client.IsEnabled() {
+		return
+	}
 	client.eventProcessors = append(client.eventProcessors, processor)
 }
 
@@ -563,6 +599,9 @@ func (client *Client) AddEventProcessor(processor EventProcessor) {
 //
 // This is intended for integrations such as OpenTelemetry.
 func (client *Client) SetExternalContextTraceResolver(resolver func(ctx context.Context) (TraceID, SpanID, bool)) {
+	if !client.IsEnabled() {
+		return
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -596,7 +635,7 @@ func (client *Client) Options() ClientOptions {
 // GetDataCollection returns a copy of the resolved data collection
 // configuration used by the client.
 func (client *Client) GetDataCollection() DataCollection {
-	if client == nil || client.options.DataCollection == nil {
+	if !client.IsEnabled() || client.options.DataCollection == nil {
 		return DataCollection{}
 	}
 	return *cloneDataCollection(client.options.DataCollection)
@@ -604,22 +643,32 @@ func (client *Client) GetDataCollection() DataCollection {
 
 // CaptureMessage captures an arbitrary message.
 func (client *Client) CaptureMessage(message string, hint *EventHint, scope EventModifier) *EventID {
+	if !client.IsEnabled() {
+		return nil
+	}
 	event := client.EventFromMessage(message, LevelInfo)
 	return client.CaptureEvent(event, hint, scope)
 }
 
 // CaptureException captures an error.
 func (client *Client) CaptureException(exception error, hint *EventHint, scope EventModifier) *EventID {
+	if !client.IsEnabled() {
+		return nil
+	}
 	event := client.EventFromException(exception, LevelError)
 	return client.CaptureEvent(event, hint, scope)
 }
 
 // CaptureCheckIn captures a check in.
 func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
+	if !client.IsEnabled() {
+		return nil
+	}
 	event := client.EventFromCheckIn(checkIn, monitorConfig)
 	if event != nil && event.CheckIn != nil {
-		client.CaptureEvent(event, nil, scope)
-		return &event.CheckIn.ID
+		if client.CaptureEvent(event, nil, scope) != nil {
+			return &event.CheckIn.ID
+		}
 	}
 	return nil
 }
@@ -630,6 +679,9 @@ func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorCon
 // the utility methods like CaptureException. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
 func (client *Client) CaptureEvent(event *Event, hint *EventHint, scope EventModifier) *EventID {
+	if !client.IsEnabled() {
+		return nil
+	}
 	return client.processEvent(event, hint, scope)
 }
 
@@ -727,6 +779,9 @@ func (client *Client) RecoverWithContext(
 	if err == nil {
 		return nil
 	}
+	if !client.IsEnabled() {
+		return nil
+	}
 
 	if ctx != nil {
 		if hint == nil {
@@ -761,6 +816,9 @@ func (client *Client) RecoverWithContext(
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
+	if !client.IsEnabled() {
+		return false
+	}
 	if client.batchLogger != nil || client.batchMeter != nil || client.telemetryProcessor != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
@@ -770,9 +828,10 @@ func (client *Client) Flush(timeout time.Duration) bool {
 }
 
 // FlushWithContext waits until the underlying Transport sends any buffered events
-// to the Sentry server, blocking for at most the duration specified by the context.
-// It returns false if the context is canceled before the events are sent. In such a case,
-// some events may not be delivered.
+// to the Sentry server, blocking for at most the duration specified by the
+// context. It returns false if the client is disabled or the context is
+// canceled before the events are sent. In the latter case, some events may not
+// be delivered.
 //
 // FlushWithContext should be called before terminating the program to ensure no
 // events are unintentionally dropped.
@@ -782,6 +841,9 @@ func (client *Client) Flush(timeout time.Duration) bool {
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
 
 func (client *Client) FlushWithContext(ctx context.Context) bool {
+	if !client.IsEnabled() {
+		return false
+	}
 	if client.batchLogger != nil {
 		client.batchLogger.Flush(ctx.Done())
 	}
@@ -799,6 +861,9 @@ func (client *Client) FlushWithContext(ctx context.Context) bool {
 // Close should be called after Flush and before terminating the program
 // otherwise some events may be lost.
 func (client *Client) Close() {
+	if !client.IsEnabled() {
+		return
+	}
 	if client.telemetryProcessor != nil {
 		client.telemetryProcessor.Close(5 * time.Second)
 	}
@@ -875,6 +940,9 @@ func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorC
 }
 
 func (client *Client) SetSDKIdentifier(identifier string) {
+	if !client.IsEnabled() {
+		return
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
 

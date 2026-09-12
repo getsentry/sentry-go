@@ -63,7 +63,7 @@ func (h *handler) handle(c *gin.Context) {
 		hub = sentry.CurrentHub().Clone()
 	}
 
-	if client := hub.Client(); client != nil {
+	if client := hub.Client(); client.IsEnabled() {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
 

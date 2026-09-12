@@ -91,7 +91,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			ctx = sentry.SetHubOnContext(ctx, hub)
 		}
 
-		if client := hub.Client(); client != nil {
+		if client := hub.Client(); client.IsEnabled() {
 			client.SetSDKIdentifier(sdkIdentifier)
 		}
 
