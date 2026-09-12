@@ -4,6 +4,11 @@ import (
 	"crypto/rand"
 )
 
+const (
+	traceIDContextKey = "trace_id"
+	spanIDContextKey  = "span_id"
+)
+
 type PropagationContext struct {
 	TraceID                TraceID                `json:"trace_id"`
 	SpanID                 SpanID                 `json:"span_id"`
@@ -13,8 +18,8 @@ type PropagationContext struct {
 
 func (p PropagationContext) Map() map[string]interface{} {
 	m := map[string]interface{}{
-		"trace_id": p.TraceID,
-		"span_id":  p.SpanID,
+		traceIDContextKey: p.TraceID,
+		spanIDContextKey:  p.SpanID,
 	}
 
 	if p.ParentSpanID != zeroSpanID {
