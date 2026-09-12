@@ -1,10 +1,12 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
@@ -775,4 +778,28 @@ func TestAsyncTransportDoesntLeakGoroutines(t *testing.T) {
 	_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
 	transport.Flush(testutils.FlushTimeout())
 	transport.Close()
+}
+
+// TestNewAsyncTransportSpotlightOnlyLogMessage is a regression test: with no
+// DSN configured, NewAsyncTransport used to log "No events will be
+// delivered" (via NewNoopTransport) unconditionally, which is misleading in
+// Spotlight-only setups where Spotlight is a separate destination that still
+// receives everything. When TransportOptions.Spotlight is set, it should say
+// so instead.
+func TestNewAsyncTransportSpotlightOnlyLogMessage(t *testing.T) {
+	var buf bytes.Buffer
+	debuglog.SetOutput(&buf)
+	defer debuglog.SetOutput(io.Discard)
+
+	transport := NewAsyncTransport(TransportOptions{Spotlight: true})
+	if _, ok := transport.(*NoopTransport); !ok {
+		t.Fatalf("Expected *NoopTransport for an empty DSN, got %T", transport)
+	}
+
+	if strings.Contains(buf.String(), "No events will be delivered") {
+		t.Errorf("Expected no blanket 'no events will be delivered' message when Spotlight is enabled, got: %s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "Spotlight") {
+		t.Errorf("Expected the log to mention Spotlight, got: %s", buf.String())
+	}
 }
