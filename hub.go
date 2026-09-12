@@ -221,12 +221,11 @@ func (hub *Hub) CaptureEventWithHint(event *Event, hint *EventHint) *EventID {
 	if scope == nil {
 		return nil
 	}
-	eventID := client.CaptureEvent(event, hint, scope)
+	ctx := captureContext(scope, client, hint)
+	eventID := client.CaptureEvent(ctx, event, WithEventHint(hint))
 
-	if event.Type != transactionType && eventID != nil {
-		hub.mu.Lock()
-		hub.lastEventID = *eventID
-		hub.mu.Unlock()
+	if event == nil || (event.Type != transactionType && event.Type != checkInType) {
+		hub.setLastEventID(eventID)
 	}
 	return eventID
 }
@@ -239,13 +238,8 @@ func (hub *Hub) CaptureMessage(message string) *EventID {
 	if scope == nil {
 		return nil
 	}
-	eventID := client.CaptureMessage(message, nil, scope)
-
-	if eventID != nil {
-		hub.mu.Lock()
-		hub.lastEventID = *eventID
-		hub.mu.Unlock()
-	}
+	eventID := client.CaptureMessage(captureContext(scope, client, nil), message)
+	hub.setLastEventID(eventID)
 	return eventID
 }
 
@@ -257,13 +251,8 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 	if scope == nil {
 		return nil
 	}
-	eventID := client.CaptureException(exception, &EventHint{OriginalException: exception}, scope)
-
-	if eventID != nil {
-		hub.mu.Lock()
-		hub.lastEventID = *eventID
-		hub.mu.Unlock()
-	}
+	eventID := client.CaptureException(captureContext(scope, client, nil), exception)
+	hub.setLastEventID(eventID)
 	return eventID
 }
 
@@ -272,7 +261,38 @@ func (hub *Hub) CaptureException(exception error) *EventID {
 // Returns CheckInID if the check-in was captured successfully, or nil otherwise.
 func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 	client, scope := hub.Client(), hub.Scope()
-	return client.CaptureCheckIn(checkIn, monitorConfig, scope)
+	if scope == nil {
+		return nil
+	}
+	return client.CaptureCheckIn(captureContext(scope, client, nil), checkIn, monitorConfig)
+}
+
+func (hub *Hub) setLastEventID(eventID *EventID) {
+	if eventID == nil {
+		return
+	}
+	hub.mu.Lock()
+	hub.lastEventID = *eventID
+	hub.mu.Unlock()
+}
+
+func captureContext(scope *Scope, client *Client, hint *EventHint) context.Context {
+	var ctx context.Context
+	if hint != nil {
+		ctx = hint.Context
+	}
+	if ctx == nil && scope != nil {
+		scope.mu.RLock()
+		request := scope.request
+		scope.mu.RUnlock()
+		if request != nil {
+			ctx = request.Context()
+		}
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return ContextWithClient(ContextWithScope(ctx, scope), client)
 }
 
 // AddBreadcrumb records a new breadcrumb.
@@ -314,7 +334,9 @@ func (hub *Hub) Recover(err interface{}) *EventID {
 	if scope == nil {
 		return nil
 	}
-	return client.Recover(err, &EventHint{RecoveredException: err}, scope)
+	eventID := client.capturePanic(captureContext(scope, client, nil), err)
+	hub.setLastEventID(eventID)
+	return eventID
 }
 
 // RecoverWithContext calls the method of a same name on currently bound Client instance
@@ -328,7 +350,9 @@ func (hub *Hub) RecoverWithContext(ctx context.Context, err interface{}) *EventI
 	if scope == nil {
 		return nil
 	}
-	return client.RecoverWithContext(ctx, err, &EventHint{RecoveredException: err}, scope)
+	eventID := client.capturePanic(ContextWithClient(ContextWithScope(ctx, scope), client), err)
+	hub.setLastEventID(eventID)
+	return eventID
 }
 
 // Flush waits until the underlying Transport sends any buffered events to the
@@ -425,5 +449,14 @@ func hubFromContext(ctx context.Context) *Hub {
 
 // SetHubOnContext stores given Hub instance on the Context struct and returns a new Context.
 func SetHubOnContext(ctx context.Context, hub *Hub) context.Context {
-	return context.WithValue(ctx, HubContextKey, hub)
+	ctx = context.WithValue(ctx, HubContextKey, hub)
+	if hub == nil {
+		return ctx
+	}
+	ctx = ContextWithClient(ctx, hub.Client())
+	scope := hub.Scope()
+	if scope == nil {
+		return ctx
+	}
+	return ContextWithScope(ctx, scope)
 }
