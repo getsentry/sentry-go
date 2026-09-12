@@ -5,7 +5,7 @@ go 1.25.0
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.48.0
+	github.com/getsentry/sentry-go v0.49.0
 	github.com/gofiber/fiber/v3 v3.3.0
 	github.com/gofiber/utils/v2 v2.0.6
 	github.com/google/go-cmp v0.7.0
@@ -22,8 +22,8 @@ require (
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.71.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )

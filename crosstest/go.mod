@@ -18,28 +18,28 @@ replace (
 )
 
 require (
-	github.com/getsentry/sentry-go v0.48.0
-	github.com/getsentry/sentry-go/echo v0.48.0
-	github.com/getsentry/sentry-go/fasthttp v0.48.0
-	github.com/getsentry/sentry-go/fiber v0.48.0
-	github.com/getsentry/sentry-go/fiberv3 v0.48.0
-	github.com/getsentry/sentry-go/gin v0.48.0
-	github.com/getsentry/sentry-go/iris v0.48.0
-	github.com/getsentry/sentry-go/logrus v0.48.0
-	github.com/getsentry/sentry-go/negroni v0.48.0
-	github.com/getsentry/sentry-go/otel v0.48.0
-	github.com/getsentry/sentry-go/slog v0.48.0
-	github.com/getsentry/sentry-go/zap v0.48.0
+	github.com/getsentry/sentry-go v0.49.0
+	github.com/getsentry/sentry-go/echo v0.49.0
+	github.com/getsentry/sentry-go/fasthttp v0.49.0
+	github.com/getsentry/sentry-go/fiber v0.49.0
+	github.com/getsentry/sentry-go/fiberv3 v0.49.0
+	github.com/getsentry/sentry-go/gin v0.49.0
+	github.com/getsentry/sentry-go/iris v0.49.0
+	github.com/getsentry/sentry-go/logrus v0.49.0
+	github.com/getsentry/sentry-go/negroni v0.49.0
+	github.com/getsentry/sentry-go/otel v0.49.0
+	github.com/getsentry/sentry-go/slog v0.49.0
+	github.com/getsentry/sentry-go/zap v0.49.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/gofiber/fiber/v3 v3.3.0
 	github.com/google/go-cmp v0.7.0
 	github.com/kataras/iris/v12 v12.2.0
-	github.com/labstack/echo/v5 v5.0.3
+	github.com/labstack/echo/v5 v5.2.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/negroni/v3 v3.1.1
 	github.com/valyala/fasthttp v1.71.0
-	go.opentelemetry.io/otel/trace v1.43.0
+	go.opentelemetry.io/otel/trace v1.44.0
 	go.uber.org/zap v1.27.1
 )
 
@@ -101,14 +101,14 @@ require (
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
 	github.com/yosssi/ace v0.0.5 // indirect
-	go.opentelemetry.io/otel v1.43.0 // indirect
+	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
+	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/exp v0.0.0-20240404231335-c0f41cb1a7a0 // indirect
-	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
