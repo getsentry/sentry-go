@@ -196,10 +196,37 @@ func TestCaptureMessageCopiesHintAndUsesContext(t *testing.T) {
 	assert.Same(t, providedCtx, provided.Context)
 }
 
+func TestClientCaptureUsesContext(t *testing.T) {
+	client, transport := newCaptureTestClient(t, ClientOptions{})
+	scope := NewScope()
+	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
+	transaction := StartTransaction(ctx, "request", WithOpName("http.server"))
+
+	require.NotNil(t, client.CaptureMessage(transaction.Context(), "message"))
+
+	trace := requireSingleEvent(t, transport).Contexts[traceContextKey]
+	assert.Equal(t, transaction.TraceID, trace[traceIDContextKey])
+	assert.Equal(t, transaction.SpanID, trace[spanIDContextKey])
+}
+
 func TestCaptureMessageShouldSendEventWithProvidedMessage(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.CaptureMessage(ContextWithScope(context.Background(), scope), "foo")
 	assertEqual(t, transport.lastEvent.Message, "foo")
+}
+
+func TestCaptureMessagePreservesActiveSpanTraceContextWithoutScope(t *testing.T) {
+	client, _, transport := setupClientTest()
+	transaction := StartTransaction(context.Background(), "request", WithOpName("http.server"))
+	transaction.SetData("http.request.method", http.MethodGet)
+
+	CaptureMessage(ContextWithClient(transaction.Context(), client), "foo")
+
+	trace := transport.lastEvent.Contexts["trace"]
+	assertEqual(t, trace["trace_id"], transaction.TraceID)
+	assertEqual(t, trace["span_id"], transaction.SpanID)
+	assertEqual(t, trace["op"], "http.server")
+	assertEqual(t, trace["data"], map[string]any{"http.request.method": http.MethodGet})
 }
 
 func TestCaptureMessageShouldSucceedWithoutNilScope(t *testing.T) {

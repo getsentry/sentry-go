@@ -933,7 +933,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 	}
 
 	scope := scopeFromContextOrGlobal(ctx)
-	if event = client.prepareEvent(event, scope, opts); event == nil {
+	if event = client.prepareEvent(ctx, event, scope, opts); event == nil {
 		return nil
 	}
 
@@ -981,8 +981,8 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 	return &event.EventID
 }
 
-func (client *Client) prepareEvent(event *Event, scope *Scope, opts captureOptions) *Event {
-	scopeProcessors := scope.applyToEvent(event, client, opts.hint, client.options.MaxBreadcrumbs)
+func (client *Client) prepareEvent(ctx context.Context, event *Event, scope *Scope, opts captureOptions) *Event {
+	scopeProcessors := scope.applyToEvent(ctx, event, client, client.options.MaxBreadcrumbs)
 	if event.Level == "" {
 		event.Level = opts.defaultLevel
 	}
