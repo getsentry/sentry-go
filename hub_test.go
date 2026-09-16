@@ -381,18 +381,6 @@ func TestGetTraceparent(t *testing.T) {
 		hub      *Hub
 		expected string
 	}{
-		"With span": {
-			hub: func() *Hub {
-				h, _, s := setupHubTest()
-				s.span = &Span{
-					TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03"),
-					SpanID:  SpanIDFromHex("a9f442f9330b4e09"),
-					Sampled: SampledTrue,
-				}
-				return h
-			}(),
-			expected: "d49d9bf66f13450b81f65bc51cf49c03-a9f442f9330b4e09-1",
-		},
 		"Without span": {
 			hub: func() *Hub {
 				h, _, s := setupHubTest()
@@ -417,24 +405,6 @@ func TestGetBaggage(t *testing.T) {
 		hub      *Hub
 		expected string
 	}{
-		"With span": {
-			hub: func() *Hub {
-				h, _, s := setupHubTest()
-				s.span = &Span{
-					dynamicSamplingContext: DynamicSamplingContext{
-						Entries: map[string]string{"sample_rate": "1", "release": "1.0.0", "environment": "production"},
-					},
-					recorder: &spanRecorder{},
-					ctx:      context.Background(),
-					Sampled:  SampledTrue,
-				}
-
-				s.span.spanRecorder().record(s.span)
-
-				return h
-			}(),
-			expected: "sentry-environment=production,sentry-release=1.0.0,sentry-sample_rate=1",
-		},
 		"Without span": {
 			hub: func() *Hub {
 				h, _, s := setupHubTest()

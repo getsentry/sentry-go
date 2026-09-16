@@ -332,6 +332,40 @@ func TestCaptureMessageCopiesHintAndUsesContext(t *testing.T) {
 	assert.Same(t, providedCtx, provided.Context)
 }
 
+func TestCaptureMessagePreservesActiveSpanTraceContext(t *testing.T) {
+	for _, test := range []struct {
+		name                       string
+		directClient, withoutScope bool
+	}{
+		{name: "package capture"},
+		{name: "client capture", directClient: true},
+		{name: "without scope", withoutScope: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, transport := newCaptureTestClient(t, ClientOptions{})
+			ctx := ContextWithClient(context.Background(), client)
+			if test.withoutScope {
+				cleanGlobalScope(t)
+			} else {
+				ctx = ContextWithScope(ctx, NewScope())
+			}
+			transaction := StartTransaction(ctx, "request", WithOpName("http.server"))
+			transaction.SetData("http.request.method", http.MethodGet)
+			capture := CaptureMessage
+			if test.directClient {
+				capture = client.CaptureMessage
+			}
+			require.NotNil(t, capture(transaction.Context(), "message"))
+			require.Equal(t, Context{
+				traceIDContextKey: transaction.TraceID,
+				spanIDContextKey:  transaction.SpanID,
+				"op":              "http.server",
+				"data":            map[string]interface{}{"http.request.method": http.MethodGet},
+			}, requireSingleEvent(t, transport).Contexts[traceContextKey])
+		})
+	}
+}
+
 func TestCaptureMessageEmptyString(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
@@ -1238,9 +1272,13 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 			})
 
 			transaction := StartTransaction(ctx, "test")
+			child := transaction.StartChild("child")
+			child.Finish()
+			baggage := transaction.ToBaggage()
 			// Simulate HTTP response data like the integrations do
 			transaction.SetData("http.response.status_code", tt.statusCode)
 			transaction.Finish()
+			assertBaggageStringsEqual(t, baggage, transaction.ToBaggage())
 
 			dropped := transport.lastEvent == nil
 			if tt.expectDrop != dropped {
@@ -1735,5 +1773,73 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		assert.True(t, gotEvent, "event should arrive at new client")
 		assert.True(t, gotLog, "log should arrive at new client")
 		assert.True(t, gotMetric, "count should arrive at new client")
+	})
+	t.Run("explicit client owns the transaction and concurrent DSC", func(t *testing.T) {
+		creator, creatorTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "creator"})
+		override, overrideTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "override"})
+		ctx, _ := WithIsolationScope(ContextWithClient(context.Background(), creator))
+		root := StartTransaction(ctx, "root")
+		type callerKey struct{}
+		key := callerKey{}
+		require.Same(t, root, StartTransaction(context.WithValue(root.Context(), key, "caller"), "ignored"))
+		require.Nil(t, root.Context().Value(key))
+		child := StartSpan(ContextWithClient(root.Context(), override), "child")
+		var wg sync.WaitGroup
+		headers := make(chan string, 16)
+		for range 16 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				headers <- child.ToBaggage()
+				CaptureMessage(child.Context(), "capture")
+			}()
+		}
+		wg.Wait()
+		close(headers)
+		want := DynamicSamplingContextFromTransaction(root)
+		require.Equal(t, "creator", want.Entries["release"])
+		for header := range headers {
+			got, err := DynamicSamplingContextFromHeader([]byte(header))
+			require.NoError(t, err)
+			require.Equal(t, want, got)
+		}
+		require.Len(t, overrideTransport.Events(), 16)
+		for _, event := range overrideTransport.Events() {
+			require.Equal(t, want, event.sdkMetaData.dsc)
+		}
+		child.Finish()
+		root.Finish()
+		require.Len(t, creatorTransport.Events(), 1)
+		require.Equal(t, transactionType, creatorTransport.Events()[0].Type)
+		require.Equal(t, want, creatorTransport.Events()[0].sdkMetaData.dsc)
+	})
+	t.Run("unbound transaction follows later Init with frozen DSC", func(t *testing.T) {
+		previousClient, previousHubClient := globalClientSnapshot(), CurrentHub().Client()
+		t.Cleanup(func() {
+			setGlobalClient(previousClient)
+			CurrentHub().BindClient(previousHubClient)
+		})
+		initClient := func(release string, transport *MockTransport) {
+			require.NoError(t, Init(ClientOptions{
+				EnableTracing: true, TracesSampleRate: 1, Release: release,
+				Transport: transport, Integrations: func([]Integration) []Integration { return nil },
+			}))
+			t.Cleanup(globalClientSnapshot().Close)
+		}
+		first, second := &MockTransport{}, &MockTransport{}
+		initClient("first", first)
+		ctx := ContextWithScope(context.Background(), NewScope())
+		root := StartTransaction(ctx, "unbound")
+		frozen := root.ToBaggage()
+		require.Contains(t, frozen, "sentry-release=first")
+		frozenDSC, err := DynamicSamplingContextFromHeader([]byte(frozen))
+		require.NoError(t, err)
+		initClient("second", second)
+		root.Finish()
+		assert.Empty(t, first.Events())
+		events := second.Events()
+		require.Len(t, events, 1)
+		assert.Equal(t, transactionType, events[0].Type)
+		assert.Equal(t, frozenDSC, events[0].sdkMetaData.dsc)
 	})
 }

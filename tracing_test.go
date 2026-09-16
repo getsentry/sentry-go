@@ -18,6 +18,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TraceIDFromHex(s string) TraceID {
@@ -323,13 +324,13 @@ func TestStartTransaction_with_context(t *testing.T) {
 		}
 	})
 
-	t.Run("get transaction with latest context", func(t *testing.T) {
+	t.Run("does not replace transaction context", func(t *testing.T) {
 		tr := StartTransaction(context.TODO(), "")
 		ctx := context.WithValue(tr.Context(), testContextKey{}, testContextValue{})
 		existingTr := StartTransaction(ctx, "")
 		_, keyExists := existingTr.Context().Value(testContextKey{}).(testContextValue)
-		if !keyExists {
-			t.Fatalf("key not found in context")
+		if keyExists {
+			t.Fatalf("transaction context was replaced")
 		}
 	})
 }
@@ -400,9 +401,9 @@ func NewTestContext(options ClientOptions) context.Context {
 	if err != nil {
 		panic(err)
 	}
-	hub := NewHub(client, NewScope())
 	ctx := context.WithValue(context.Background(), testContextKey{}, testContextValue{})
-	return SetHubOnContext(ctx, hub)
+	ctx, _ = WithIsolationScope(ctx)
+	return ContextWithClient(ctx, client)
 }
 
 // A SpanCheck is a test helper describing span properties that can be checked
@@ -508,7 +509,35 @@ func TestContinueSpanFromRequest(t *testing.T) {
 	}
 }
 
-func TestContinueTransactionFromHeaders(t *testing.T) {
+func TestContinueSpanFromTrace(t *testing.T) {
+	traceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
+	spanID := SpanIDFromHex("b72fa28504b07285")
+
+	for _, sampled := range []Sampled{SampledTrue, SampledFalse, SampledUndefined} {
+		sampled := sampled
+		t.Run(sampled.String(), func(t *testing.T) {
+			s := &Span{}
+			s.ctx = context.Background()
+			trace := (&Span{
+				TraceID: traceID,
+				SpanID:  spanID,
+				Sampled: sampled,
+			}).ToSentryTrace()
+			ContinueFromTrace(trace)(s)
+			if s.TraceID != traceID {
+				t.Errorf("got %q, want %q", s.TraceID, traceID)
+			}
+			if s.ParentSpanID != spanID {
+				t.Errorf("got %q, want %q", s.ParentSpanID, spanID)
+			}
+			if s.Sampled != sampled {
+				t.Errorf("got %q, want %q", s.Sampled, sampled)
+			}
+		})
+	}
+}
+
+func TestContinueTrace(t *testing.T) {
 	tests := []struct {
 		name       string
 		traceStr   string
@@ -554,9 +583,22 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 			},
 		},
 		{
+			name:       "sentry-trace and malformed baggage => continue with empty frozen DSC",
+			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
+			baggageStr: "invalid baggage @@@",
+			wantSpan: &Span{
+				TraceID:      TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
+				ParentSpanID: SpanIDFromHex("b72fa28504b07285"),
+				Sampled:      1,
+				dynamicSamplingContext: DynamicSamplingContext{
+					Frozen: true,
+				},
+			},
+		},
+		{
 			name:       "sentry-trace and baggage with Sentry values => we freeze immediately.",
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
-			baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
+			baggageStr: "sentry-trace_id=bc6d53f15eb88f4320054569b8c553d4,sentry-public_key=public,sentry-sample_rate=1",
 			wantSpan: &Span{
 				TraceID:      TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
 				ParentSpanID: SpanIDFromHex("b72fa28504b07285"),
@@ -566,9 +608,20 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 					Entries: map[string]string{
 						"public_key":  "public",
 						"sample_rate": "1",
-						"trace_id":    "d49d9bf66f13450b81f65bc51cf49c03",
+						"trace_id":    "bc6d53f15eb88f4320054569b8c553d4",
 					},
 				},
+			},
+		},
+		{
+			name:       "conflicting DSC retains the incoming trace",
+			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
+			baggageStr: "sentry-trace_id=11111111111111111111111111111111,sentry-sample_rate=0.25",
+			wantSpan: &Span{
+				TraceID:                TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
+				ParentSpanID:           SpanIDFromHex("b72fa28504b07285"),
+				Sampled:                SampledTrue,
+				dynamicSamplingContext: DynamicSamplingContext{Frozen: true},
 			},
 		},
 		{
@@ -588,42 +641,17 @@ func TestContinueTransactionFromHeaders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Span{}
 			s.ctx = context.Background()
-			spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
+			spanOption := ContinueTrace(tt.traceStr, tt.baggageStr)
 			spanOption(s)
+			if tt.wantSpan.dynamicSamplingContext.IsFrozen() && !tt.wantSpan.dynamicSamplingContext.HasEntries() {
+				require.Empty(t, s.ToBaggage())
+			}
 
 			if diff := cmp.Diff(tt.wantSpan, s, cmp.Options{
 				cmp.AllowUnexported(Span{}),
 				cmpopts.IgnoreFields(Span{}, "ctx", "mu", "finishOnce", "serializationSafe"),
 			}); diff != "" {
 				t.Fatalf("Expected no difference on spans, got: %s", diff)
-			}
-		})
-	}
-}
-
-func TestContinueSpanFromTrace(t *testing.T) {
-	traceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
-	spanID := SpanIDFromHex("b72fa28504b07285")
-
-	for _, sampled := range []Sampled{SampledTrue, SampledFalse, SampledUndefined} {
-		sampled := sampled
-		t.Run(sampled.String(), func(t *testing.T) {
-			s := &Span{}
-			s.ctx = context.Background()
-			trace := (&Span{
-				TraceID: traceID,
-				SpanID:  spanID,
-				Sampled: sampled,
-			}).ToSentryTrace()
-			ContinueFromTrace(trace)(s)
-			if s.TraceID != traceID {
-				t.Errorf("got %q, want %q", s.TraceID, traceID)
-			}
-			if s.ParentSpanID != spanID {
-				t.Errorf("got %q, want %q", s.ParentSpanID, spanID)
-			}
-			if s.Sampled != sampled {
-				t.Errorf("got %q, want %q", s.Sampled, sampled)
 			}
 		})
 	}
@@ -666,7 +694,7 @@ func TestDoubleSampling(t *testing.T) {
 	span := StartSpan(ctx, "op", WithTransactionName("name"))
 
 	// CaptureException should not send any event because of SampleRate.
-	GetHubFromContext(ctx).CaptureException(errors.New("ignored"))
+	CaptureException(ctx, errors.New("ignored"))
 	if got := len(transport.Events()); got != 0 {
 		t.Fatalf("got %d events, want 0", got)
 	}
@@ -691,8 +719,8 @@ func TestSample(t *testing.T) {
 		EnableTracing: false,
 	})
 	span = StartSpan(ctx, "op", WithTransactionName("name"))
-	if got := span.Sampled; got != SampledFalse {
-		t.Fatalf("got %s, want %s", got, SampledFalse)
+	if got := span.Sampled; got != SampledUndefined {
+		t.Fatalf("got %s, want %s", got, SampledUndefined)
 	}
 
 	// explicit sampling decision
@@ -796,7 +824,6 @@ func TestSampleRatePropagation(t *testing.T) {
 			expectedRate:  0.0,
 			expectedBaggageEntries: []string{
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
-				"sentry-sample_rate=0",
 			},
 		},
 		{
@@ -813,7 +840,7 @@ func TestSampleRatePropagation(t *testing.T) {
 			expectedBaggageEntries: []string{
 				"sentry-sampled=true",
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
-				"sentry-sample_rate=0.8",
+				"sentry-sample_rate=1",
 			},
 		},
 		{
@@ -830,7 +857,7 @@ func TestSampleRatePropagation(t *testing.T) {
 			expectedBaggageEntries: []string{
 				"sentry-sampled=false",
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
-				"sentry-sample_rate=0.8",
+				"sentry-sample_rate=0.0",
 			},
 		},
 		{
@@ -846,7 +873,6 @@ func TestSampleRatePropagation(t *testing.T) {
 			expectedRate:  0.8,
 			expectedBaggageEntries: []string{
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
-				"sentry-sample_rate=0.8",
 			},
 		},
 		{
@@ -890,7 +916,6 @@ func TestSampleRatePropagation(t *testing.T) {
 			expectedRate:  0.4,
 			expectedBaggageEntries: []string{
 				"sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
-				"sentry-sample_rate=0.4",
 			},
 		},
 	}
@@ -905,9 +930,8 @@ func TestSampleRatePropagation(t *testing.T) {
 				Transport:        transport,
 			})
 
-			hub := GetHubFromContext(ctx)
 			options := []SpanOption{
-				ContinueTrace(hub, tt.traceHeader, tt.baggageHeader),
+				ContinueTrace(tt.traceHeader, tt.baggageHeader),
 			}
 			transaction := StartTransaction(ctx, "test-transaction", options...)
 			transaction.Finish()
@@ -924,6 +948,72 @@ func TestSampleRatePropagation(t *testing.T) {
 			}
 		})
 	}
+	t.Run("scope captures retain root sampling metadata", func(t *testing.T) {
+		for _, test := range []struct {
+			name   string
+			option SpanOption
+		}{
+			{name: "sampled"},
+			{name: "unsampled", option: WithSpanSampled(SampledFalse)},
+			{name: "incoming baggage", option: ContinueFromHeaders("11111111111111111111111111111111-2222222222222222-1", "sentry-trace_id=11111111111111111111111111111111,sentry-public_key=upstream,sentry-sampled=true")},
+			{name: "frozen empty baggage", option: ContinueFromTrace("11111111111111111111111111111111-2222222222222222-1")},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "scope-release"})
+				ctx, scope := WithIsolationScope(ContextWithClient(context.Background(), client))
+				options := []SpanOption{}
+				if test.option != nil {
+					options = append(options, test.option)
+				}
+				root := StartTransaction(ctx, "root", options...)
+				want := root.dynamicSamplingContextForPropagation()
+				require.Same(t, root, scope.GetSpan())
+				require.NotNil(t, CaptureMessage(ctx, "before"))
+				root.Finish()
+				require.NotNil(t, CaptureMessage(ctx, "after"))
+				var count int
+				for _, event := range transport.Events() {
+					if event.Type != transactionType {
+						count++
+						require.Equal(t, want, event.sdkMetaData.dsc)
+						require.Equal(t, root.TraceID, event.Contexts[traceContextKey][traceIDContextKey])
+					}
+				}
+				require.Equal(t, 2, count)
+			})
+		}
+	})
+
+	t.Run("disabled tracing preserves incoming decisions", func(t *testing.T) {
+		for _, test := range []struct {
+			name, header string
+			want         Sampled
+		}{
+			{name: "true", header: "11111111111111111111111111111111-2222222222222222-1", want: SampledTrue},
+			{name: "false", header: "11111111111111111111111111111111-2222222222222222-0", want: SampledFalse},
+			{name: "undefined", header: "11111111111111111111111111111111-2222222222222222", want: SampledUndefined},
+			{name: "fresh", want: SampledUndefined},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: false})
+				ctx, _ := WithIsolationScope(ContextWithClient(context.Background(), client))
+				root := StartTransaction(ctx, "disabled", ContinueTrace(test.header, ""))
+				require.Equal(t, test.want, root.Sampled)
+				root.Finish()
+				require.Empty(t, transport.Events())
+				require.Nil(t, client.reportProvider.TakeReport())
+			})
+		}
+	})
+
+	t.Run("child inherits the parent decision across client changes", func(t *testing.T) {
+		enabled, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
+		disabled, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: false})
+		ctx, _ := WithIsolationScope(ContextWithClient(context.Background(), enabled))
+		root := StartTransaction(ctx, "root")
+		child := StartSpan(ContextWithClient(root.Context(), disabled), "child", WithSpanSampled(SampledFalse))
+		require.Equal(t, SampledTrue, child.Sampled)
+	})
 }
 
 func TestTracesSamplerReceivesRemoteParent(t *testing.T) {
@@ -981,8 +1071,7 @@ func TestTracesSamplerReceivesRemoteParent(t *testing.T) {
 				},
 			})
 
-			hub := GetHubFromContext(ctx)
-			txn := StartTransaction(ctx, "test-txn", ContinueTrace(hub, tt.traceHeader, tt.baggageHeader))
+			txn := StartTransaction(ctx, "test-txn", ContinueTrace(tt.traceHeader, tt.baggageHeader))
 			txn.Finish()
 
 			assert.Nil(t, gotCtx.Parent, "SamplingContext.Parent should be nil for remote parent")
@@ -1141,6 +1230,17 @@ func TestToBaggage(t *testing.T) {
 		child.ToBaggage(),
 		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name,sentry-sample_rate=1,sentry-sampled=true",
 	)
+
+	// The generated DSC is frozen on first propagation, so later replacement is ignored.
+	transaction.SetDynamicSamplingContext(DynamicSamplingContext{
+		Entries: map[string]string{"release": "incoming-release"},
+		Frozen:  true,
+	})
+	assertBaggageStringsEqual(
+		t,
+		child.ToBaggage(),
+		"sentry-trace_id=f1a4c5c9071eca1cdf04e4132527ed16,sentry-release=test-release,sentry-transaction=transaction-name,sentry-sample_rate=1,sentry-sampled=true",
+	)
 }
 
 func TestSpanSetContext(t *testing.T) {
@@ -1184,7 +1284,7 @@ func TestConcurrentContextAccess(_ *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 1,
 	})
-	hub := GetHubFromContext(ctx)
+	scope := ScopeFromContext(ctx)
 
 	const writersNum = 200
 
@@ -1196,7 +1296,7 @@ func TestConcurrentContextAccess(_ *testing.T) {
 		go func() {
 			transaction := StartTransaction(ctx, "test")
 			c <- transaction
-			hub.Scope().SetContext("device", Context{"test": "bla"})
+			scope.SetContext("device", Context{"test": "bla"})
 		}()
 	}
 
@@ -1290,72 +1390,30 @@ func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 }
 
-func TestSpanScopeManagement(t *testing.T) {
-	// Initialize a test hub and client
-	transport := &MockTransport{}
-	client, err := NewClient(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-		Transport:        transport,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	hub := NewHub(client, NewScope())
+func TestSpanScopeIsNotActiveSpanStack(t *testing.T) {
+	client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
+	ctx, scope := WithIsolationScope(context.Background())
+	ctx = ContextWithClient(ctx, client)
 
-	// Set the hub on the context
-	ctx := context.Background()
-	ctx = SetHubOnContext(ctx, hub)
-
-	// Start a parent span (transaction)
 	transaction := StartTransaction(ctx, "parent-operation")
-	defer transaction.Finish()
+	require.Same(t, transaction, scope.GetSpan())
+	traceID, _ := resolveTrace(scope, client, ctx)
+	require.Equal(t, transaction.TraceID, traceID)
 
-	// Start a child span
 	childSpan := StartSpan(transaction.Context(), "child-operation")
-	// Finish the child span
-	defer childSpan.Finish()
-
+	siblingSpan := StartSpan(transaction.Context(), "sibling-operation")
 	subChildSpan := StartSpan(childSpan.Context(), "sub_child-operation")
+	childSpan.Finish()
+	siblingSpan.Finish()
 	subChildSpan.Finish()
 
-	// Capture an event after finishing the child span
-	// This event should be associated with the first child span
-	hub.CaptureMessage("Test event")
+	CaptureMessage(childSpan.Context(), "Test event")
 
-	// Flush to ensure the event is sent
-	transport.Flush(time.Second)
-
-	// Verify that the event has the correct trace data
-	events := transport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 2 event, got %d", len(events))
-	}
-	event := events[0]
-
-	// Extract the trace context from the event
-	traceCtx, ok := event.Contexts["trace"]
-	if !ok {
-		t.Fatalf("event does not have a trace context")
-	}
-
-	// Extract TraceID and SpanID from the trace context
-	traceID, ok := traceCtx["trace_id"].(TraceID)
-	if !ok {
-		t.Fatalf("trace_id not found")
-	}
-	spanID, ok := traceCtx["span_id"].(SpanID)
-	if !ok {
-		t.Fatalf("span_id not found")
-	}
-
-	// Verify that the IDs match the first child span IDs
-	if traceID != childSpan.TraceID {
-		t.Errorf("expected TraceID %s, got %s", transaction.TraceID, traceID)
-	}
-	if spanID != childSpan.SpanID {
-		t.Errorf("expected SpanID %s, got %s", transaction.SpanID, spanID)
-	}
+	trace := requireSingleEvent(t, transport).Contexts[traceContextKey]
+	require.Equal(t, childSpan.TraceID, trace[traceIDContextKey])
+	require.Equal(t, childSpan.SpanID, trace[spanIDContextKey])
+	transaction.Finish()
+	require.Same(t, transaction, scope.GetSpan())
 }
 
 func TestStrictTraceContinuation(t *testing.T) {
@@ -1404,9 +1462,8 @@ func TestStrictTraceContinuation(t *testing.T) {
 				baggage = baggageWithOrg(tt.baggageOrgID)
 			}
 
-			hub := GetHubFromContext(ctx)
 			transaction := StartTransaction(ctx, "test",
-				ContinueTrace(hub, sentryTrace, baggage),
+				ContinueTrace(sentryTrace, baggage),
 			)
 			transaction.Finish()
 

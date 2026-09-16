@@ -54,6 +54,17 @@ func TestPropagationContextFromHeaders(t *testing.T) {
 		want       PropagationContext
 	}{
 		{
+			traceStr:   "abcdef0123456789abcdef0123456789-2222222222222222-1",
+			baggageStr: "sentry-trace_id=ABCDEF0123456789ABCDEF0123456789,sentry-release=upstream",
+			want: PropagationContext{
+				TraceID:      TraceIDFromHex("abcdef0123456789abcdef0123456789"),
+				ParentSpanID: SpanIDFromHex("2222222222222222"),
+				DynamicSamplingContext: DynamicSamplingContext{Frozen: true, Entries: map[string]string{
+					"trace_id": "ABCDEF0123456789ABCDEF0123456789", "release": "upstream",
+				}},
+			},
+		},
+		{
 			// No sentry-trace or baggage => nothing to do, unfrozen DSC
 			traceStr:   "",
 			baggageStr: "",
@@ -71,7 +82,7 @@ func TestPropagationContextFromHeaders(t *testing.T) {
 			want: PropagationContext{
 				DynamicSamplingContext: DynamicSamplingContext{
 					Frozen:  false,
-					Entries: map[string]string{},
+					Entries: nil,
 				},
 			},
 		},
@@ -90,7 +101,7 @@ func TestPropagationContextFromHeaders(t *testing.T) {
 		},
 		{
 			traceStr:   "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1",
-			baggageStr: "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1",
+			baggageStr: "sentry-trace_id=bc6d53f15eb88f4320054569b8c553d4,sentry-public_key=public,sentry-sample_rate=1",
 			want: PropagationContext{
 				TraceID:      TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4"),
 				ParentSpanID: SpanIDFromHex("b72fa28504b07285"),
@@ -99,7 +110,7 @@ func TestPropagationContextFromHeaders(t *testing.T) {
 					Entries: map[string]string{
 						"public_key":  "public",
 						"sample_rate": "1",
-						"trace_id":    "d49d9bf66f13450b81f65bc51cf49c03",
+						"trace_id":    "bc6d53f15eb88f4320054569b8c553d4",
 					},
 				},
 			},
@@ -129,6 +140,25 @@ func TestPropagationContextFromHeaders(t *testing.T) {
 		}
 
 		assertEqual(t, p.DynamicSamplingContext, tt.want.DynamicSamplingContext)
+	}
+}
+
+func TestPropagationContextFromHeadersMalformedBaggageRetainsTrace(t *testing.T) {
+	trace := "11111111111111111111111111111111-2222222222222222-1"
+	p, err := PropagationContextFromHeaders(trace, "not-valid")
+	if err == nil {
+		t.Fatal("expected malformed baggage error")
+	}
+	if got := p.TraceID.String(); got != "11111111111111111111111111111111" {
+		t.Fatalf("TraceID = %s", got)
+	}
+	if p.Sampled != SampledTrue || !p.DynamicSamplingContext.Frozen || p.DynamicSamplingContext.HasEntries() {
+		t.Fatalf("unexpected propagation context: %#v", p)
+	}
+
+	p, err = PropagationContextFromHeaders("", "not-valid")
+	if err == nil || p.TraceID == zeroTraceID {
+		t.Fatalf("malformed baggage without trace = (%#v, %v)", p, err)
 	}
 }
 

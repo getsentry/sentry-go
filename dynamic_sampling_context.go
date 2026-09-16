@@ -39,11 +39,14 @@ func DynamicSamplingContextFromHeader(header []byte) (DynamicSamplingContext, er
 }
 
 func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
-	hub := hubFromContext(span.Context())
-	scope := hub.Scope()
-	client := hub.Client()
+	if span == nil {
+		return DynamicSamplingContext{}
+	}
+	return span.dynamicSamplingContextForPropagation()
+}
 
-	if !client.IsEnabled() || scope == nil {
+func dynamicSamplingContextFromTransaction(span *Span, client *Client) DynamicSamplingContext {
+	if !client.IsEnabled() {
 		return DynamicSamplingContext{
 			Entries: map[string]string{},
 			Frozen:  false,
@@ -55,8 +58,8 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	if traceID := span.TraceID.String(); traceID != "" {
 		entries[traceIDContextKey] = traceID
 	}
-	if sampleRate := span.sampleRate; sampleRate != 0 {
-		entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
+	if client.options.EnableTracing && span.sampleRate >= 0 {
+		entries["sample_rate"] = strconv.FormatFloat(span.sampleRate, 'f', -1, 64)
 	}
 
 	if dsn := client.dsn; dsn != nil {
@@ -75,13 +78,15 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	}
 
 	// Only include the transaction name if it's of good quality (not empty and not SourceURL)
-	if span.Source != "" && span.Source != SourceURL {
+	if client.options.EnableTracing && span.Source != "" && span.Source != SourceURL {
 		if span.IsTransaction() {
 			entries["transaction"] = span.Name
 		}
 	}
 
-	entries["sampled"] = strconv.FormatBool(span.Sampled.Bool())
+	if client.options.EnableTracing {
+		entries["sampled"] = strconv.FormatBool(span.Sampled.Bool())
+	}
 
 	return DynamicSamplingContext{Entries: entries, Frozen: true}
 }

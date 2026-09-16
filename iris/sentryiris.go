@@ -65,9 +65,10 @@ func (h *handler) handle(ctx iris.Context) {
 	}
 
 	r := ctx.Request()
+	requestCtx := sentry.SetHubOnContext(ctx, hub)
 
 	options := []sentry.SpanOption{
-		sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+		sentry.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(sentry.SourceRoute),
 		sentry.WithSpanOrigin(sentry.SpanOriginIris),
@@ -76,7 +77,7 @@ func (h *handler) handle(ctx iris.Context) {
 	currentRoute := ctx.GetCurrentRoute()
 
 	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(ctx, hub),
+		requestCtx,
 		fmt.Sprintf("%s %s", currentRoute.Method(), currentRoute.Path()),
 		options...,
 	)

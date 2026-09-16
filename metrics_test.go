@@ -28,6 +28,7 @@ func setupMetricsTest() (context.Context, *MockTransport) {
 	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+	hub.Scope().propagationContext.SpanID = SpanIDFromHex(logSpanID)
 
 	ctx = SetHubOnContext(ctx, hub)
 	return ctx, mockTransport
@@ -57,6 +58,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 					Metrics: []Metric{
 						{
 							TraceID: TraceIDFromHex(LogTraceID),
+							SpanID:  SpanIDFromHex(logSpanID),
 							Name:    "test.count",
 							Value:   Int64MetricValue(5),
 							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
@@ -79,6 +81,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 					Metrics: []Metric{
 						{
 							TraceID: TraceIDFromHex(LogTraceID),
+							SpanID:  SpanIDFromHex(logSpanID),
 							Name:    "test.distribution",
 							Value:   Float64MetricValue(3.14),
 							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
@@ -101,6 +104,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 					Metrics: []Metric{
 						{
 							TraceID: TraceIDFromHex(LogTraceID),
+							SpanID:  SpanIDFromHex(logSpanID),
 							Name:    "test.gauge",
 							Value:   Float64MetricValue(2.71),
 							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
@@ -123,6 +127,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 					Metrics: []Metric{
 						{
 							TraceID: TraceIDFromHex(LogTraceID),
+							SpanID:  SpanIDFromHex(logSpanID),
 							Name:    "test.zero.count",
 							Value:   Int64MetricValue(0),
 							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
@@ -145,6 +150,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 					Metrics: []Metric{
 						{
 							TraceID: TraceIDFromHex(LogTraceID),
+							SpanID:  SpanIDFromHex(logSpanID),
 							Name:    "test.zero.distribution",
 							Value:   Float64MetricValue(0),
 							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
@@ -167,6 +173,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 					Metrics: []Metric{
 						{
 							TraceID: TraceIDFromHex(LogTraceID),
+							SpanID:  SpanIDFromHex(logSpanID),
 							Name:    "test.zero.gauge",
 							Value:   Float64MetricValue(0),
 							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
@@ -189,6 +196,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 					Metrics: []Metric{
 						{
 							TraceID: TraceIDFromHex(LogTraceID),
+							SpanID:  SpanIDFromHex(logSpanID),
 							Name:    "test.negative.count",
 							Value:   Int64MetricValue(-10),
 							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
@@ -211,6 +219,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 					Metrics: []Metric{
 						{
 							TraceID: TraceIDFromHex(LogTraceID),
+							SpanID:  SpanIDFromHex(logSpanID),
 							Name:    "test.negative.distribution",
 							Value:   Float64MetricValue(-2.5),
 							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
@@ -233,6 +242,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 					Metrics: []Metric{
 						{
 							TraceID: TraceIDFromHex(LogTraceID),
+							SpanID:  SpanIDFromHex(logSpanID),
 							Name:    "test.negative.gauge",
 							Value:   Float64MetricValue(-5),
 							Attributes: testutils.MergeMaps(attrs, map[string]attribute.Value{
@@ -324,6 +334,7 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+	hub.Scope().propagationContext.SpanID = SpanIDFromHex(logSpanID)
 
 	ctx = SetHubOnContext(ctx, hub)
 
@@ -488,6 +499,7 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+	hub.Scope().propagationContext.SpanID = SpanIDFromHex(logSpanID)
 
 	hub.Scope().SetUser(User{
 		ID:    "user123",
