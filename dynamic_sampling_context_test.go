@@ -121,10 +121,11 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 			want: DynamicSamplingContext{
 				Frozen: true,
 				Entries: map[string]string{
-					"trace_id":   "d49d9bf66f13450b81f65bc51cf49c03",
-					"public_key": "public",
-					"release":    "1.0.0",
-					"sampled":    "false",
+					"trace_id":    "d49d9bf66f13450b81f65bc51cf49c03",
+					"public_key":  "public",
+					"release":     "1.0.0",
+					"sample_rate": "0",
+					"sampled":     "false",
 				},
 			},
 		},

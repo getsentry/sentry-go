@@ -15,6 +15,7 @@ type PropagationContext struct {
 	TraceID                TraceID                `json:"trace_id"`
 	SpanID                 SpanID                 `json:"span_id"`
 	ParentSpanID           SpanID                 `json:"parent_span_id,omitzero"`
+	Sampled                Sampled                `json:"-"`
 	DynamicSamplingContext DynamicSamplingContext `json:"-"`
 }
 
@@ -50,37 +51,21 @@ func NewPropagationContext() PropagationContext {
 	return p
 }
 
+// PropagationContextFromHeaders extracts incoming trace and sampling metadata.
+// Malformed baggage returns an error together with a usable propagation context;
+// a valid sentry-trace header is retained with empty, frozen sampling metadata.
 func PropagationContextFromHeaders(trace, baggage string) (PropagationContext, error) {
 	p := NewPropagationContext()
-
-	if _, err := rand.Read(p.SpanID[:]); err != nil {
-		panic(err)
-	}
-
-	hasTrace := false
-	if trace != "" {
-		if tpc, valid := ParseTraceParentContext([]byte(trace)); valid {
-			hasTrace = true
-			p.TraceID = tpc.TraceID
-			p.ParentSpanID = tpc.ParentSpanID
+	parsed, dsc, valid, err := parseIncomingTrace(trace, baggage)
+	if valid {
+		p.TraceID = parsed.TraceID
+		p.ParentSpanID = parsed.ParentSpanID
+		p.Sampled = parsed.Sampled
+		if dscMatchesTrace(parsed, dsc) {
+			p.DynamicSamplingContext = dsc
+		} else {
+			p.DynamicSamplingContext = DynamicSamplingContext{Frozen: true}
 		}
 	}
-
-	if baggage != "" {
-		dsc, err := DynamicSamplingContextFromHeader([]byte(baggage))
-		if err != nil {
-			return PropagationContext{}, err
-		}
-		p.DynamicSamplingContext = dsc
-	}
-
-	// In case a sentry-trace header is present but there are no sentry-related
-	// values in the baggage, create an empty, frozen DynamicSamplingContext.
-	if hasTrace && !p.DynamicSamplingContext.HasEntries() {
-		p.DynamicSamplingContext = DynamicSamplingContext{
-			Frozen: true,
-		}
-	}
-
-	return p, nil
+	return p, err
 }

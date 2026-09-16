@@ -18,6 +18,7 @@ import (
 
 const (
 	LogTraceID = "d49d9bf66f13450b81f65bc51cf49c03"
+	logSpanID  = "b72fa28504b07285"
 )
 
 // flushFromContext flushes the hub from the given context.
@@ -46,6 +47,7 @@ func setupMockTransport() (context.Context, *MockTransport) {
 	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+	hub.Scope().propagationContext.SpanID = SpanIDFromHex(logSpanID)
 
 	ctx = SetHubOnContext(ctx, hub)
 	return ctx, mockTransport
@@ -743,6 +745,7 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 	hub := CurrentHub()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+	hub.Scope().propagationContext.SpanID = SpanIDFromHex(logSpanID)
 
 	ctx = SetHubOnContext(ctx, hub)
 
@@ -858,6 +861,7 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 	hub := CurrentHub().Clone()
 	hub.BindClient(mockClient)
 	hub.Scope().propagationContext.TraceID = TraceIDFromHex(LogTraceID)
+	hub.Scope().propagationContext.SpanID = SpanIDFromHex(logSpanID)
 
 	hub.Scope().SetUser(User{
 		ID:    "user123",

@@ -66,6 +66,7 @@ func (h *handler) handle(c *gin.Context) {
 	if client := hub.Client(); client != nil {
 		client.SetSDKIdentifier(sdkIdentifier)
 	}
+	ctx = sentry.SetHubOnContext(ctx, hub)
 
 	transactionName := c.Request.URL.Path
 	transactionSource := sentry.SourceURL
@@ -76,14 +77,14 @@ func (h *handler) handle(c *gin.Context) {
 	}
 
 	options := []sentry.SpanOption{
-		sentry.ContinueTrace(hub, c.GetHeader(sentry.SentryTraceHeader), c.GetHeader(sentry.SentryBaggageHeader)),
+		sentry.ContinueTrace(c.GetHeader(sentry.SentryTraceHeader), c.GetHeader(sentry.SentryBaggageHeader)),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginGin),
 	}
 
 	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(ctx, hub),
+		ctx,
 		fmt.Sprintf("%s %s", c.Request.Method, transactionName),
 		options...,
 	)
