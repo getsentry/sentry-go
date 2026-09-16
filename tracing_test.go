@@ -21,6 +21,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type testExternalResolverFunc func(context.Context) (TraceID, SpanID, Sampled, bool)
+
+func (resolver testExternalResolverFunc) ResolveTraceContext(ctx context.Context) (TraceID, SpanID, Sampled, bool) {
+	return resolver(ctx)
+}
+
 func TraceIDFromHex(s string) TraceID {
 	var id TraceID
 	_, err := hex.Decode(id[:], []byte(s))
@@ -657,28 +663,11 @@ func TestContinueTrace(t *testing.T) {
 	}
 }
 
-func TestSpanFromContext(_ *testing.T) {
-	// SpanFromContext always returns a non-nil value, such that you can use
-	// it without nil checks.
-	// When no span was in the context, the returned value is a no-op.
-	// Calling StartChild on the no-op creates a valid transaction.
-	// SpanFromContext(ctx).StartChild(...) === StartSpan(ctx, ...)
+func TestSpanFromContextWithoutSpan(t *testing.T) {
+	t.Parallel()
 
-	ctx := NewTestContext(ClientOptions{})
-	span := SpanFromContext(ctx)
-
-	_ = span
-
-	// SpanCheck{
-	// 	ZeroTraceID: true,
-	// 	ZeroSpanID:  true,
-	// }.Check(t, span)
-
-	// // Should create a transaction
-	// child := span.StartChild("top")
-	// SpanCheck{
-	// 	RecorderLen: 1,
-	// }.Check(t, child)
+	assert.Nil(t, SpanFromContext(context.Background()))
+	assert.Nil(t, SpanFromContext(nil)) //nolint:staticcheck // Verify the nil-context fallback.
 }
 
 func TestDoubleSampling(t *testing.T) {
@@ -1416,6 +1405,131 @@ func TestSpanScopeIsNotActiveSpanStack(t *testing.T) {
 	require.Same(t, transaction, scope.GetSpan())
 }
 
+func TestContextPropagationHeaders(t *testing.T) {
+	t.Run("global propagation context", func(t *testing.T) {
+		client, _ := newCaptureTestClient(t, ClientOptions{})
+		ctx := ContextWithClient(context.Background(), client)
+		scope := cleanGlobalScope(t)
+		scope.SetPropagationContext(NewPropagationContext())
+		propagation := scope.propagationContextSnapshot()
+		traceparent := propagation.TraceID.String() + "-" + propagation.SpanID.String()
+		require.Equal(t, traceparent, GetTraceparent(ctx))
+		require.Equal(t, "00-"+traceparent+"-00", GetTraceparentW3C(ctx))
+		assertBaggageStringsEqual(t, GetBaggage(ctx), DynamicSamplingContextFromScope(scope, client).String())
+	})
+
+	t.Run("scope propagation context", func(t *testing.T) {
+		client, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true})
+		traceID := TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+		spanID := SpanIDFromHex("bbbbbbbbbbbbbbbb")
+		for _, test := range []struct {
+			name, suffix, flags, release string
+			sampled                      Sampled
+			staticZero                   bool
+		}{
+			{name: "undefined", flags: "00", release: "scope-release"},
+			{name: "sampled", suffix: "-1", flags: "01", release: "scope-release", sampled: SampledTrue},
+			{name: "unsampled", suffix: "-0", flags: "00", release: "scope-release", sampled: SampledFalse},
+			{name: "frozen empty", flags: "00"},
+			{name: "static zero deferred", suffix: "-0", flags: "00", staticZero: true},
+			{name: "static zero sampled", suffix: "-1", flags: "01", sampled: SampledTrue, staticZero: true},
+			{name: "static zero unsampled", suffix: "-0", flags: "00", sampled: SampledFalse, staticZero: true},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				ctx, scope := WithIsolationScope(context.Background())
+				dsc := DynamicSamplingContext{Frozen: true}
+				if test.release != "" {
+					dsc.Entries = map[string]string{"release": test.release}
+				}
+				propagation := PropagationContext{TraceID: traceID, SpanID: spanID, Sampled: test.sampled, DynamicSamplingContext: dsc}
+				if test.staticZero {
+					ctx = ContextWithClient(ctx, client)
+					propagation.ParentSpanID = SpanID{3}
+					dsc.Entries = map[string]string{traceIDContextKey: traceID.String(), "public_key": "upstream"}
+					propagation.DynamicSamplingContext = dsc
+				}
+				scope.SetPropagationContext(propagation)
+				ids := traceID.String() + "-" + spanID.String()
+				require.Equal(t, ids+test.suffix, GetTraceparent(ctx))
+				require.Equal(t, "00-"+ids+"-"+test.flags, GetTraceparentW3C(ctx))
+				assertBaggageStringsEqual(t, GetBaggage(ctx), dsc.String())
+				wantDecision := test.sampled
+				if test.staticZero && wantDecision == SampledUndefined {
+					wantDecision = SampledFalse
+				}
+				require.Equal(t, wantDecision, scope.propagationContextSnapshot().Sampled)
+			})
+		}
+	})
+
+	t.Run("static zero sample rate", func(t *testing.T) {
+		creator, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, Release: "creator"})
+		replacement, replacementTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, Release: "replacement"})
+		ctx, scope := WithIsolationScope(ContextWithClient(context.Background(), creator))
+
+		require.Equal(t, SampledUndefined, scope.propagationContextSnapshot().Sampled)
+		require.True(t, strings.HasSuffix(GetTraceparent(ctx), "-0"))
+		require.True(t, strings.HasSuffix(GetTraceparentW3C(ctx), "-00"))
+		require.False(t, scope.propagationContextSnapshot().DynamicSamplingContext.IsFrozen())
+
+		ctx = ContextWithClient(ctx, replacement)
+		baggage := GetBaggage(ctx)
+		require.Contains(t, baggage, "sentry-release=replacement")
+		require.Contains(t, baggage, "sentry-sampled=false")
+		require.Contains(t, baggage, "sentry-sample_rate=0")
+		require.NotNil(t, CaptureMessage(ctx, "static zero"))
+		dsc := requireSingleEvent(t, replacementTransport).sdkMetaData.dsc
+		require.Equal(t, SampledFalse, scope.propagationContextSnapshot().Sampled)
+		require.Equal(t, "false", dsc.Entries["sampled"])
+		require.Equal(t, "0", dsc.Entries["sample_rate"])
+	})
+
+	t.Run("deferred external trace and invalid fallback", func(t *testing.T) {
+		client, _ := newCaptureTestClient(t, ClientOptions{})
+		ctx, scope := WithIsolationScope(ContextWithClient(context.Background(), client))
+		externalTraceID, externalSpanID := TraceID{1}, SpanID{2}
+		client.externalTraceResolver = testExternalResolverFunc(func(ctx context.Context) (TraceID, SpanID, Sampled, bool) {
+			if ctx.Value(spanContextKey{}) != nil {
+				return TraceID{}, externalSpanID, SampledUndefined, true
+			}
+			return externalTraceID, externalSpanID, SampledUndefined, true
+		})
+		require.Equal(t, externalTraceID.String()+"-"+externalSpanID.String(), GetTraceparent(ctx))
+		require.Equal(t, "00-"+externalTraceID.String()+"-"+externalSpanID.String()+"-00", GetTraceparentW3C(ctx))
+		root := StartTransaction(ctx, "native")
+		defer root.Finish()
+		require.Equal(t, root.TraceID.String()+"-"+root.SpanID.String(), GetTraceparent(root.Context()))
+		require.Equal(t, SampledUndefined, scope.propagationContextSnapshot().Sampled)
+	})
+
+	for _, test := range []struct {
+		name          string
+		release       string
+		enableTracing bool
+		wantSampled   Sampled
+	}{
+		{name: "disabled tracing", release: "disabled-tracing", enableTracing: false, wantSampled: SampledUndefined},
+		{name: "custom client", release: "custom-client", enableTracing: true, wantSampled: SampledTrue},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client, err := NewClient(ClientOptions{
+				Dsn:              testDsn,
+				EnableTracing:    test.enableTracing,
+				TracesSampleRate: 1,
+				Release:          test.release,
+				Transport:        &MockTransport{},
+			})
+			require.NoError(t, err)
+			ctx, _ := WithIsolationScope(context.Background())
+			transaction := StartTransaction(ContextWithClient(ctx, client), "transaction")
+			require.Equal(t, test.wantSampled, transaction.Sampled)
+			require.Equal(t, transaction.ToSentryTrace(), GetTraceparent(transaction.Context()))
+			require.Equal(t, transaction.ToTraceparent(), GetTraceparentW3C(transaction.Context()))
+			require.Contains(t, GetBaggage(transaction.Context()), "sentry-release="+test.release)
+		})
+	}
+}
+
 func TestStrictTraceContinuation(t *testing.T) {
 	incomingTraceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
 	sentryTrace := "bc6d53f15eb88f4320054569b8c553d4-b72fa28504b07285-1"
@@ -1476,6 +1590,45 @@ func TestStrictTraceContinuation(t *testing.T) {
 					t.Errorf("expected new trace, but got continued TraceID %s", transaction.TraceID)
 				}
 			}
+		})
+	}
+}
+
+func TestGetBaggageForExternalTrace(t *testing.T) {
+	t.Parallel()
+
+	externalTraceID := TraceID{1}
+	matching := DynamicSamplingContext{Frozen: true, Entries: map[string]string{
+		"trace_id": externalTraceID.String(), "public_key": "upstream", "sampled": "true",
+	}}
+	for _, test := range []struct {
+		name string
+		dsc  DynamicSamplingContext
+		want string
+	}{
+		{name: "matching trace", dsc: matching, want: matching.String()},
+		{name: "different trace", dsc: DynamicSamplingContext{Frozen: true, Entries: map[string]string{
+			"trace_id": TraceID{2}.String(), "public_key": "upstream", "sampled": "true",
+		}}},
+		{name: "missing trace ID", dsc: DynamicSamplingContext{Frozen: true, Entries: map[string]string{"public_key": "upstream"}}},
+		{name: "frozen empty DSC", dsc: DynamicSamplingContext{Frozen: true}},
+		{name: "no DSC"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			client, _ := newCaptureTestClient(t, ClientOptions{})
+			client.externalTraceResolver = testExternalResolverFunc(func(context.Context) (TraceID, SpanID, Sampled, bool) {
+				return externalTraceID, SpanID{3}, SampledUndefined, true
+			})
+			scope := NewScope()
+			scope.SetPropagationContext(PropagationContext{TraceID: externalTraceID, SpanID: SpanID{4}, DynamicSamplingContext: test.dsc})
+			ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
+			before := scope.propagationContextSnapshot()
+
+			assertBaggageStringsEqual(t, GetBaggage(ctx), test.want)
+			require.Equal(t, externalTraceID.String()+"-"+(SpanID{3}).String(), GetTraceparent(ctx))
+			require.Equal(t, before, scope.propagationContextSnapshot())
 		})
 	}
 }

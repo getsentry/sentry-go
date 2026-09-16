@@ -737,8 +737,8 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 	}
 
 	// Expect "Baggage" and "Sentry-Trace" headers.
-	if value := response.Request.Header.Get("Baggage"); value != "" {
-		t.Errorf(`Expected "Baggage" header to be empty, got %s`, value)
+	if value := response.Request.Header.Get("Baggage"); !strings.Contains(value, "sentry-trace_id=") {
+		t.Errorf(`Expected scope trace baggage, got %s`, value)
 	}
 
 	if value := response.Request.Header.Get("Sentry-Trace"); value == "" {
