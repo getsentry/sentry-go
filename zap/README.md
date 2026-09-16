@@ -15,6 +15,7 @@ package main
 
 import (
     "context"
+    "errors"
     "time"
 
     "github.com/getsentry/sentry-go"

@@ -163,9 +163,8 @@ func newMockTransport() (context.Context, *sentry.MockTransport) {
 		Dsn:       "https://public@example.com/1",
 		Transport: mockTransport,
 	})
-	hub := sentry.CurrentHub()
-	hub.BindClient(mockClient)
-	ctx = sentry.SetHubOnContext(ctx, hub)
+	ctx, _ = sentry.WithIsolationScope(ctx)
+	ctx = sentry.ContextWithClient(ctx, mockClient)
 	return ctx, mockTransport
 }
 
@@ -202,7 +201,7 @@ func TestSentryHandlerAttrToSentryAttr(t *testing.T) {
 			}.NewSentryHandler(ctx)
 			logger := slog.New(handler)
 			logger.InfoContext(ctx, "test message", tt.attr...)
-			sentry.Flush(20 * time.Millisecond)
+			sentry.ClientFromContext(ctx).Flush(20 * time.Millisecond)
 
 			gotEvents := mockTransport.Events()
 			assert.Equal(t, 1, len(gotEvents))
@@ -232,7 +231,7 @@ func TestSentryHandlerAttrFromContext(t *testing.T) {
 	logger := slog.New(handler)
 
 	logger.InfoContext(ctx, "test message")
-	sentry.Flush(20 * time.Millisecond)
+	sentry.ClientFromContext(ctx).Flush(20 * time.Millisecond)
 
 	gotEvents := mockTransport.Events()
 	assert.Equal(t, 1, len(gotEvents))
@@ -240,6 +239,23 @@ func TestSentryHandlerAttrFromContext(t *testing.T) {
 	value, found := gotEvents[0].Logs[0].Attributes["userID"]
 	assert.True(t, found)
 	assert.Equal(t, "1234", value.AsInterface())
+}
+
+func TestSentryHandlerPreservesConfiguredActiveSpan(t *testing.T) {
+	ctx, mockTransport := newMockTransport()
+	span := sentry.StartSpan(ctx, "configured-operation")
+	defer span.Finish()
+
+	handler := Option{LogLevel: []slog.Level{slog.LevelInfo}}.NewSentryHandler(span.Context())
+	logger := slog.New(handler)
+	logger.Info("configured span log")
+	sentry.ClientFromContext(ctx).Flush(20 * time.Millisecond)
+
+	events := mockTransport.Events()
+	assert.Len(t, events, 1)
+	assert.Len(t, events[0].Logs, 1)
+	assert.Equal(t, span.TraceID, events[0].Logs[0].TraceID)
+	assert.Equal(t, span.SpanID, events[0].Logs[0].SpanID)
 }
 
 func TestSentryHandlerWithAttrsAndGroup(t *testing.T) {
@@ -262,7 +278,7 @@ func TestSentryHandlerWithAttrsAndGroup(t *testing.T) {
 	nestedLogger.InfoContext(ctx, "test with nested groups and attrs", "direct_attr", "direct_value")
 	baseLogger.InfoContext(ctx, "should not have attrs and groups")
 
-	sentry.Flush(20 * time.Millisecond)
+	sentry.ClientFromContext(ctx).Flush(20 * time.Millisecond)
 
 	gotEvents := mockTransport.Events()
 	assert.Equal(t, 1, len(gotEvents))
@@ -311,7 +327,7 @@ func TestSentryHandlerLogLevels(t *testing.T) {
 			logger := slog.New(handler)
 
 			tt.logFunc(ctx, logger, tt.message)
-			sentry.Flush(20 * time.Millisecond)
+			sentry.ClientFromContext(ctx).Flush(20 * time.Millisecond)
 
 			gotEvents := mockTransport.Events()
 			assert.Equal(t, 1, len(gotEvents))
@@ -337,7 +353,7 @@ func TestSentryHandlerReplaceAttr(t *testing.T) {
 
 	logger := slog.New(handler)
 	logger.InfoContext(ctx, "replace test", "foo", "bar", "num", 123)
-	sentry.Flush(20 * time.Millisecond)
+	sentry.ClientFromContext(ctx).Flush(20 * time.Millisecond)
 
 	gotEvents := mockTransport.Events()
 	assert.Equal(t, 1, len(gotEvents))
@@ -360,7 +376,7 @@ func TestSentryHandlerAddSource(t *testing.T) {
 
 	logger := slog.New(handler)
 	logger.InfoContext(ctx, "test with source")
-	sentry.Flush(20 * time.Millisecond)
+	sentry.ClientFromContext(ctx).Flush(20 * time.Millisecond)
 
 	gotEvents := mockTransport.Events()
 	assert.Equal(t, 1, len(gotEvents))
@@ -395,7 +411,7 @@ func TestSentryHandlerCustomLogLevels(t *testing.T) {
 			logger := slog.New(handler)
 
 			logger.LogAttrs(ctx, tt.customLevel, "test message with custom level", slog.String("level_name", tt.name))
-			sentry.Flush(20 * time.Millisecond)
+			sentry.ClientFromContext(ctx).Flush(20 * time.Millisecond)
 
 			gotEvents := mockTransport.Events()
 			assert.Equal(t, 1, len(gotEvents))

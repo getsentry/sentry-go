@@ -1,6 +1,7 @@
 package sentryzerolog
 
 import (
+	"context"
 	"errors"
 	"io"
 	"testing"
@@ -47,16 +48,15 @@ func TestFailedClientCreation(t *testing.T) {
 	require.NotNil(t, err)
 }
 
-func TestNewWithHub(t *testing.T) {
-	hub := sentry.CurrentHub()
-	require.NotNil(t, hub)
+func TestNewWithContext(t *testing.T) {
+	ctx, _ := sentry.WithIsolationScope(context.Background())
 
-	_, err := NewWithHub(hub, Options{
+	_, err := NewWithContext(ctx, Options{
 		Levels: []zerolog.Level{zerolog.ErrorLevel},
 	})
 	require.Nil(t, err)
 
-	_, err = NewWithHub(nil, Options{})
+	_, err = NewWithContext(nil, Options{}) // nolint: staticcheck // nil validation
 	require.NotNil(t, err)
 }
 
