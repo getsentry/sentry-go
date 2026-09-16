@@ -2,7 +2,6 @@ package sentry
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -390,15 +389,14 @@ func (hub *Hub) FlushWithContext(ctx context.Context) bool {
 
 // GetTraceparent returns the current Sentry traceparent string, to be used as a HTTP header value
 // or HTML meta tag value.
-// This function is context aware, as in it either returns the traceparent based
-// on the current span, or the scope's propagation context.
+// It uses the scope's root span as a propagation fallback.
 func (hub *Hub) GetTraceparent() string {
 	scope := hub.Scope()
 	if span := scope.GetSpan(); span != nil {
 		return span.ToSentryTrace()
 	}
 	propagationContext := scope.propagationContextSnapshot()
-	return fmt.Sprintf("%s-%s", propagationContext.TraceID, propagationContext.SpanID)
+	return formatSentryTrace(propagationContext.TraceID, propagationContext.SpanID, propagationContext.Sampled)
 }
 
 // GetTraceparentW3C returns the current traceparent string in W3C format.
@@ -409,13 +407,12 @@ func (hub *Hub) GetTraceparentW3C() string {
 		return span.ToTraceparent()
 	}
 	propagationContext := scope.propagationContextSnapshot()
-	return fmt.Sprintf("00-%s-%s-00", propagationContext.TraceID, propagationContext.SpanID)
+	return formatTraceparent(propagationContext.TraceID, propagationContext.SpanID, propagationContext.Sampled)
 }
 
 // GetBaggage returns the current Sentry baggage string, to be used as a HTTP header value
 // or HTML meta tag value.
-// This function is context aware, as in it either returns the baggage based
-// on the current span or the scope's propagation context.
+// It uses the scope's propagation context. Active spans are carried by context.Context.
 func (hub *Hub) GetBaggage() string {
 	scope := hub.Scope()
 	if span := scope.GetSpan(); span != nil {
@@ -441,7 +438,7 @@ func GetHubFromContext(ctx context.Context) *Hub {
 
 // hubFromContext returns either a hub stored in the context or the current hub.
 // The return value is guaranteed to be non-nil, unlike GetHubFromContext.
-func hubFromContext(ctx context.Context) *Hub {
+func hubFromContext(ctx context.Context) *Hub { // nolint: unused
 	if hub, ok := ctx.Value(HubContextKey).(*Hub); ok {
 		return hub
 	}
