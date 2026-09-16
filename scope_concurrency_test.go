@@ -44,7 +44,6 @@ func touchScope(ctx context.Context, scope *sentry.Scope, x int) {
 	scope.SetUser(sentry.User{ID: "foo"})
 	scope.SetRequest(httptest.NewRequest("GET", "/foo", nil))
 	scope.SetPropagationContext(sentry.NewPropagationContext())
-	scope.SetSpan(&sentry.Span{TraceID: sentry.TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")})
 
 	sentry.CaptureException(ctx, fmt.Errorf("error %d", x))
 
