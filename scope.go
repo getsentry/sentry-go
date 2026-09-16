@@ -5,6 +5,8 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,17 +52,19 @@ type scopeData struct {
 	level       Level
 	request     *http.Request
 	// requestBody holds a reference to the original request.Body.
-	requestBody interface {
-		// Bytes returns bytes from the original body, lazily buffered as the
-		// original body is read.
-		Bytes() []byte
-		// Overflow returns true if the body is larger than the maximum buffer
-		// size.
-		Overflow() bool
-	}
+	requestBody requestBody
 
 	propagationContext PropagationContext
 	span               *Span
+}
+
+type requestBody interface {
+	// Bytes returns bytes from the original body, lazily buffered as the
+	// original body is read.
+	Bytes() []byte
+	// Overflow returns true if the body is larger than the maximum buffer
+	// size.
+	Overflow() bool
 }
 
 // NewScope creates a new Scope.
@@ -350,126 +354,235 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
 func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event {
 	client = normalizeClient(client)
-	processors := scope.applyToEvent(event, hint, client)
+	processors := scope.applyToEvent(event, client, hint, client.options.MaxBreadcrumbs)
 	return client.runEventProcessors(event, hint, processors)
 }
 
-func (scope *Scope) applyToEvent(event *Event, hint *EventHint, client *Client) []EventProcessor { //nolint:gocyclo
+// applyToEvent applies the effective scope to event and returns the scope
+// processors so they can run after the scope lock is released.
+func (scope *Scope) applyToEvent(
+	event *Event,
+	client *Client,
+	hint *EventHint,
+	maxBreadcrumbs int,
+) []EventProcessor {
+	snapshot, processors := scope.copyToEvent(event, maxBreadcrumbs)
+	applyRequestToEvent(event, client, snapshot.request, snapshot.requestBody)
+	_, explicitTrace := event.Contexts[traceContextKey]
+	applyTraceToEvent(event, hint, client, snapshot.request, snapshot.span, snapshot.propagationContext, explicitTrace)
+	return processors
+}
+
+// applyScopesToEvent merges the global scope and the context scope into event. Data applies
+// from more specific to less specific. A nil scope only applies data from the global one.
+func applyScopesToEvent(
+	event *Event,
+	client *Client,
+	scope *Scope,
+	hint *EventHint,
+	maxBreadcrumbs int,
+) (globalProcessors, scopeProcessors []EventProcessor) {
+	global := GlobalScope()
+	if scope == global {
+		scope = nil
+	}
+
+	// The more specific scope goes first: every field only fills what is
+	// still missing, and slices are prepended, so no intermediate scope is built.
+	var snapshot scopeData
+	if scope != nil {
+		snapshot, scopeProcessors = scope.copyToEvent(event, maxBreadcrumbs)
+	}
+	globalSnapshot, globalProcessors := global.copyToEvent(event, maxBreadcrumbs)
+	if scope == nil {
+		// The global scope's trace is never used.
+		snapshot = globalSnapshot
+		snapshot.span = nil
+		snapshot.propagationContext = NewPropagationContext()
+	} else if snapshot.request == nil {
+		snapshot.request, snapshot.requestBody = globalSnapshot.request, globalSnapshot.requestBody
+	}
+	applyRequestToEvent(event, client, snapshot.request, snapshot.requestBody)
+
+	_, explicitTrace := event.Contexts[traceContextKey]
+	applyTraceToEvent(event, hint, client, snapshot.request, snapshot.span, snapshot.propagationContext, explicitTrace)
+	return globalProcessors, scopeProcessors
+}
+
+func applyRequestToEvent(event *Event, client *Client, request *http.Request, body requestBody) {
+	if event.Request != nil || request == nil {
+		return
+	}
+	event.Request = newRequest(request, client)
+	dc := client.GetDataCollection()
+	if body != nil && !body.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
+		event.Request.Data = dc.FilterHTTPBody(body.Bytes(), request.Header.Get("Content-Type"))
+	}
+}
+
+func (scope *Scope) copyToEvent(event *Event, maxBreadcrumbs int) (scopeData, []EventProcessor) {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
-
-	if len(scope.breadcrumbs) > 0 {
-		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
-	}
-
-	if len(scope.attachments) > 0 {
-		event.Attachments = append(event.Attachments, scope.attachments...)
-	}
-
 	if len(scope.tags) > 0 {
 		if event.Tags == nil {
 			event.Tags = make(map[string]string, len(scope.tags))
 		}
-
 		for key, value := range scope.tags {
-			event.Tags[key] = value
+			if _, exists := event.Tags[key]; !exists {
+				event.Tags[key] = value
+			}
 		}
 	}
-
 	if len(scope.contexts) > 0 {
 		if event.Contexts == nil {
-			event.Contexts = make(map[string]Context)
+			event.Contexts = make(map[string]Context, len(scope.contexts))
 		}
-
 		for key, value := range scope.contexts {
-			if key == "trace" && event.Type == transactionType {
-				// Do not override trace context of
-				// transactions, otherwise it breaks the
-				// transaction event representation.
-				// For error events, the trace context is used
-				// to link errors and traces/spans in Sentry.
+			if key == traceContextKey && event.Type == transactionType {
 				continue
 			}
-
-			// Ensure we are not overwriting event fields
-			if _, ok := event.Contexts[key]; !ok {
+			if _, exists := event.Contexts[key]; !exists {
 				event.Contexts[key] = cloneContext(value)
 			}
 		}
 	}
-
-	if event.Contexts == nil {
-		event.Contexts = make(map[string]Context)
-	}
-
-	if scope.span != nil {
-		if _, ok := event.Contexts["trace"]; !ok {
-			event.Contexts["trace"] = scope.span.traceContext().Map()
-		}
-
-		transaction := scope.span.GetTransaction()
-		if transaction != nil {
-			event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
-		}
-	} else if scope.propagationContext.TraceID != zeroTraceID {
-		event.Contexts["trace"] = scope.propagationContext.Map()
-
-		dsc := scope.propagationContext.DynamicSamplingContext
-		if !dsc.HasEntries() && client.IsEnabled() {
-			dsc = DynamicSamplingContextFromScope(scope, client)
-		}
-		event.sdkMetaData.dsc = dsc
-	}
-
-	// If an external trace resolver is registered (e.g. OTel), override
-	// trace/span IDs from the hint context or the scope's request context.
-	if client.IsEnabled() {
-		var ctx context.Context
-		if hint != nil {
-			ctx = hint.Context
-		}
-		if ctx == nil && scope.request != nil {
-			ctx = scope.request.Context()
-		}
-		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); event.Type != transactionType && ok {
-			traceCtx := event.Contexts["trace"]
-			traceCtx[traceIDContextKey] = traceID.String()
-			traceCtx[spanIDContextKey] = spanID.String()
-		}
-	}
-
-	if event.User.IsEmpty() {
+	// Copy slice-backed scope data while holding the read lock. Snapshotting
+	// only the slice headers would race with concurrent append operations.
+	event.Breadcrumbs = mergeBreadcrumbs(scope.breadcrumbs, event.Breadcrumbs, maxBreadcrumbs)
+	event.Attachments = prependSlice(scope.attachments, event.Attachments)
+	if event.User.IsEmpty() && !scope.user.IsEmpty() {
 		event.User = scope.user
 		event.User.Data = maps.Clone(scope.user.Data)
 	}
-
-	if len(event.Fingerprint) == 0 {
-		event.Fingerprint = append(event.Fingerprint, scope.fingerprint...)
+	if len(event.Fingerprint) == 0 && len(scope.fingerprint) > 0 {
+		event.Fingerprint = slices.Clone(scope.fingerprint)
 	}
-
 	if event.Level == "" {
 		event.Level = scope.level
 	}
 
-	if event.Request == nil && scope.request != nil {
-		event.Request = newRequest(scope.request, client)
-		// NOTE: The SDK does not attempt to send partial request body data.
-		//
-		// The reason being that Sentry's ingest pipeline and UI are optimized
-		// to show structured data. Additionally, tooling around PII scrubbing
-		// relies on structured data; truncated request bodies would create
-		// invalid payloads that are more prone to leaking PII data.
-		//
-		// Users can still send more data along their events if they want to,
-		// for example using Event.Contexts.
-		dc := client.GetDataCollection()
-		if scope.requestBody != nil && !scope.requestBody.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
-			event.Request.Data = dc.FilterHTTPBody(scope.requestBody.Bytes(), scope.request.Header.Get("Content-Type"))
-		}
+	return scope.scopeData, scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
+}
+
+func applyTraceToEvent(
+	event *Event,
+	hint *EventHint,
+	client *Client,
+	request *http.Request,
+	span *Span,
+	propagationContext PropagationContext,
+	explicit bool,
+) {
+	if event.Type == transactionType {
+		return
+	}
+	if explicit {
+		applyMatchingPropagationDSC(event, propagationContext, client)
+		return
 	}
 
-	processors := scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
-	return processors
+	var ctx context.Context
+	if hint != nil {
+		ctx = hint.Context
+	}
+	if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
+		native := SpanFromContext(ctx)
+		if native == nil {
+			native = span
+		}
+		if native != nil && native.TraceID == traceID && native.SpanID == spanID {
+			setEventTrace(event, native.traceContext().Map())
+		} else {
+			setEventTrace(event, Context{traceIDContextKey: traceID.String(), spanIDContextKey: spanID.String()})
+		}
+		applyMatchingPropagationDSC(event, propagationContext, client)
+		return
+	}
+	if span != nil {
+		setEventTrace(event, span.traceContext().Map())
+		if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() {
+			if transaction := span.GetTransaction(); transaction != nil {
+				event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
+			}
+		}
+		return
+	}
+	if request != nil {
+		if traceID, spanID, ok := client.externalTraceContextFromContext(request.Context()); ok {
+			setEventTrace(event, Context{
+				traceIDContextKey: traceID.String(),
+				spanIDContextKey:  spanID.String(),
+			})
+			applyMatchingPropagationDSC(event, propagationContext, client)
+			return
+		}
+	}
+	if propagationContext.TraceID == zeroTraceID {
+		return
+	}
+
+	setEventTrace(event, propagationContext.Map())
+	if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() {
+		dsc := propagationContext.DynamicSamplingContext
+		if !dsc.HasEntries() {
+			dsc = dynamicSamplingContextFromPropagationContext(propagationContext, client)
+		}
+		event.sdkMetaData.dsc = dsc
+	}
+}
+
+// applyMatchingPropagationDSC preserves scope sampling metadata only when it
+// belongs to the selected trace and the event has not already chosen its DSC.
+func applyMatchingPropagationDSC(event *Event, propagationContext PropagationContext, client *Client) {
+	if event.sdkMetaData.dsc.HasEntries() || event.sdkMetaData.dsc.IsFrozen() {
+		return
+	}
+
+	var traceID string
+	switch id := event.Contexts[traceContextKey][traceIDContextKey].(type) {
+	case string:
+		traceID = id
+	case TraceID:
+		traceID = id.String()
+	}
+	dsc := propagationContext.DynamicSamplingContext
+	if !dsc.HasEntries() && !dsc.IsFrozen() && client.IsEnabled() && propagationContext.TraceID != zeroTraceID && strings.EqualFold(traceID, propagationContext.TraceID.String()) {
+		dsc = dynamicSamplingContextFromPropagationContext(propagationContext, client)
+	}
+	if traceID != "" && strings.EqualFold(dsc.Entries[traceIDContextKey], traceID) {
+		event.sdkMetaData.dsc = dsc
+	}
+}
+
+func setEventTrace(event *Event, trace Context) {
+	if event.Contexts == nil {
+		event.Contexts = make(map[string]Context)
+	}
+	event.Contexts[traceContextKey] = trace
+}
+
+func mergeBreadcrumbs(scope, event []*Breadcrumb, limit int) []*Breadcrumb {
+	switch {
+	case limit < 0:
+		return event
+	case limit == 0:
+		limit = defaultMaxBreadcrumbs
+	}
+
+	event = event[max(0, len(event)-limit):]
+	scopeLimit := limit - len(event)
+	scope = scope[max(0, len(scope)-scopeLimit):]
+	return prependSlice(scope, event)
+}
+
+func prependSlice[T any](prefix, suffix []T) []T {
+	if len(prefix) == 0 {
+		return suffix
+	}
+	merged := make([]T, len(prefix)+len(suffix))
+	copy(merged, prefix)
+	copy(merged[len(prefix):], suffix)
+	return merged
 }
 
 // cloneContext returns a new context with keys and values copied from the passed one.
@@ -478,11 +591,10 @@ func (scope *Scope) applyToEvent(event *Event, hint *EventHint, client *Client) 
 // a proper deep copy: if some context values are pointer types (e.g. maps),
 // they won't be properly copied.
 func cloneContext(c Context) Context {
-	res := make(Context, len(c))
-	for k, v := range c {
-		res[k] = v
+	if c == nil {
+		return Context{}
 	}
-	return res
+	return maps.Clone(c)
 }
 
 func (scope *Scope) populateAttrs(attrs map[string]attribute.Value) {

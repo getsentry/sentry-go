@@ -940,7 +940,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 		return nil
 	}
 
-	scope := scopeFromContextOrGlobal(ctx)
+	scope := ScopeFromContext(ctx)
 	if event = client.prepareEvent(event, scope, opts); event == nil {
 		return nil
 	}
@@ -983,17 +983,14 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 		client.Transport.SendEvent(event)
 	}
 
-	if event.Type != transactionType && event.Type != checkInType {
+	if scope != nil && event.Type != transactionType && event.Type != checkInType {
 		scope.setLastEventID(event.EventID)
 	}
 	return &event.EventID
 }
 
 func (client *Client) prepareEvent(event *Event, scope *Scope, opts captureOptions) *Event {
-	var scopeProcessors []EventProcessor
-	if scope != nil {
-		scopeProcessors = scope.applyToEvent(event, opts.hint, client)
-	}
+	globalScopeProcessors, scopeProcessors := applyScopesToEvent(event, client, scope, opts.hint, client.options.MaxBreadcrumbs)
 	if event.Level == "" {
 		event.Level = opts.defaultLevel
 	}
@@ -1044,6 +1041,9 @@ func (client *Client) prepareEvent(event *Event, scope *Scope, opts captureOptio
 		}},
 	}
 
+	if event = client.runEventProcessors(event, opts.hint, globalScopeProcessors); event == nil {
+		return nil
+	}
 	if event = client.runEventProcessors(event, opts.hint, scopeProcessors); event == nil {
 		return nil
 	}

@@ -193,24 +193,17 @@ func TestCaptureMessageRouting(t *testing.T) {
 	}
 }
 
-func TestBackgroundCaptureUsesGlobalPropagationContext(t *testing.T) {
+func TestBackgroundCaptureStartsNewTrace(t *testing.T) {
 	client, transport := newCaptureTestClient(t, ClientOptions{})
-	previousClient := globalClientSnapshot()
-	previousID := GlobalScope().lastEventIDSnapshot()
-	previousScope := GlobalScope().Clone()
-	setGlobalClient(client)
-	t.Cleanup(func() {
-		setGlobalClient(previousClient)
-		GlobalScope().mu.Lock()
-		GlobalScope().scopeData = previousScope.scopeData
-		GlobalScope().mu.Unlock()
-		GlobalScope().setLastEventID(previousID)
-	})
+	ctx := ContextWithClient(context.Background(), client)
 
-	require.NotNil(t, CaptureMessage(context.Background(), "background"))
-	require.Len(t, transport.Events(), 1)
-	assert.Equal(t, "background", transport.Events()[0].Message)
-	assert.Equal(t, GlobalScope().propagationContextSnapshot().Map(), transport.Events()[0].Contexts["trace"])
+	require.NotNil(t, CaptureMessage(ctx, "first"))
+	require.NotNil(t, CaptureMessage(ctx, "second"))
+	require.Len(t, transport.Events(), 2)
+	first := transport.Events()[0].Contexts["trace"][traceIDContextKey]
+	second := transport.Events()[1].Contexts["trace"][traceIDContextKey]
+	assert.NotEmpty(t, first)
+	assert.NotEqual(t, first, second)
 }
 
 func TestInitFailureKeepsGlobalClient(t *testing.T) {
@@ -250,7 +243,7 @@ func TestWithScopeCreatesIndependentRoots(t *testing.T) {
 	client, transport := newCaptureTestClient(t, ClientOptions{})
 	global := GlobalScope()
 	previous := global.Clone()
-	global.SetTag("global-snapshot", "before")
+	global.SetTag("global-before", "before")
 	global.SetSpan(&Span{})
 	t.Cleanup(func() {
 		global.mu.Lock()
@@ -260,12 +253,12 @@ func TestWithScopeCreatesIndependentRoots(t *testing.T) {
 
 	firstCtx, first := WithScope(context.Background())
 	secondCtx, second := WithScope(context.Background())
-	global.SetTag("global-after-snapshot", "after")
+	global.SetTag("global-after", "after")
 	require.NotNil(t, CaptureMessage(ContextWithClient(firstCtx, client), "first root"))
 	require.NotNil(t, CaptureMessage(ContextWithClient(secondCtx, client), "second root"))
 	require.Len(t, transport.Events(), 2)
-	assert.Equal(t, "before", transport.Events()[0].Tags["global-snapshot"])
-	assert.NotContains(t, transport.Events()[0].Tags, "global-after-snapshot")
+	assert.Equal(t, "before", transport.Events()[0].Tags["global-before"])
+	assert.Equal(t, "after", transport.Events()[0].Tags["global-after"])
 	assert.NotEqual(t, transport.Events()[0].Contexts["trace"][traceIDContextKey], transport.Events()[1].Contexts["trace"][traceIDContextKey])
 	assert.Nil(t, first.GetSpan())
 	assert.Nil(t, second.GetSpan())
@@ -766,17 +759,8 @@ func TestCaptureUpdatesLastEventID(t *testing.T) {
 	}
 
 	client, _ := newCaptureTestClient(t, ClientOptions{})
-	global := GlobalScope()
-	previousClient := globalClientSnapshot()
-	previousID := global.lastEventIDSnapshot()
-	setGlobalClient(client)
-	t.Cleanup(func() {
-		setGlobalClient(previousClient)
-		global.setLastEventID(previousID)
-	})
-	globalID := CaptureMessage(context.Background(), "global")
-	require.NotNil(t, globalID)
-	assert.Equal(t, *globalID, LastEventID(context.Background()))
+	require.NotNil(t, client.CaptureMessage(context.Background(), "no scope"))
+	assert.Empty(t, LastEventID(context.Background()))
 
 	scope := NewScope()
 	ctx := ContextWithScope(context.Background(), scope)
