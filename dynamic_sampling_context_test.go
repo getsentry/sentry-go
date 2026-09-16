@@ -2,10 +2,12 @@ package sentry
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDynamicSamplingContextFromHeader(t *testing.T) {
@@ -185,6 +187,8 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 		scope    *Scope
 		client   *Client
 		expected DynamicSamplingContext
+		options  *ClientOptions
+		wantRate string
 	}{
 		"Valid input": {
 			scope: &Scope{
@@ -216,6 +220,10 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				Frozen: true,
 			},
 		},
+		"enabled static rate": {options: &ClientOptions{EnableTracing: true, TracesSampleRate: 0.25}, wantRate: "0.25"},
+		"tracing disabled":    {options: &ClientOptions{TracesSampleRate: 0.25}},
+		"custom sampler":      {options: &ClientOptions{EnableTracing: true, TracesSampleRate: 0.25, TracesSampler: func(SamplingContext) float64 { t.Error("scope-only DSC called a sampler"); return 1 }}},
+		"invalid static rate": {options: &ClientOptions{EnableTracing: true, TracesSampleRate: -1}},
 		"Nil client": {
 			scope: &Scope{
 				scopeData: scopeData{
@@ -243,8 +251,96 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			if tt.options != nil {
+				tt.scope = tests["Valid input"].scope.Clone()
+				tt.scope.SetPropagationContext(PropagationContext{TraceID: TraceID{1}, SpanID: SpanID{1}})
+				tt.client = &Client{options: *tt.options}
+				tt.expected = DynamicSamplingContext{Frozen: true, Entries: map[string]string{traceIDContextKey: (TraceID{1}).String()}}
+				if tt.wantRate != "" {
+					tt.expected.Entries["sample_rate"] = tt.wantRate
+				}
+			}
 			result := DynamicSamplingContextFromScope(tt.scope, tt.client)
+			if tt.options != nil {
+				require.Equal(t, SampledUndefined, tt.scope.propagationContextSnapshot().Sampled)
+			}
 			assertEqual(t, tt.expected, result)
 		})
 	}
+	t.Run("first export freezes DSC across clients and clones", func(t *testing.T) {
+		for _, boundary := range []string{"baggage", "event"} {
+			t.Run(boundary, func(t *testing.T) {
+				creator, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, Release: "creator"})
+				ctx, scope := WithIsolationScope(ContextWithClient(context.Background(), creator))
+				if boundary == "baggage" {
+					_ = GetBaggage(ctx)
+				} else {
+					require.NotNil(t, CaptureMessage(ctx, "first"))
+				}
+				want := scope.propagationContextSnapshot().DynamicSamplingContext
+				require.True(t, want.IsFrozen())
+				require.Equal(t, "creator", want.Entries["release"])
+				require.Empty(t, want.Entries["transaction"])
+				replacement, transport := newCaptureTestClient(t, ClientOptions{Release: "replacement"})
+				for _, selected := range []*Scope{scope, scope.Clone()} {
+					captureCtx := ContextWithClient(ContextWithScope(context.Background(), selected), replacement)
+					assertBaggageStringsEqual(t, want.String(), GetBaggage(captureCtx))
+					require.NotNil(t, CaptureMessage(captureCtx, "later"))
+				}
+				require.Len(t, transport.Events(), 2)
+				for _, event := range transport.Events() {
+					require.Equal(t, want, event.sdkMetaData.dsc)
+				}
+			})
+		}
+	})
+
+	t.Run("frozen foreign DSC is rejected and copied", func(t *testing.T) {
+		for _, test := range []struct {
+			name             string
+			native, matching bool
+		}{
+			{name: "scope foreign"},
+			{name: "scope matching", matching: true},
+			{name: "transaction foreign", native: true},
+			{name: "transaction matching", native: true, matching: true},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
+				ctx, scope := WithIsolationScope(ContextWithClient(context.Background(), client))
+				propagation := scope.propagationContextSnapshot()
+				traceID := propagation.TraceID
+				var root *Span
+				if test.native {
+					root = StartTransaction(ctx, "frozen")
+					ctx, traceID = root.Context(), root.TraceID
+				}
+				if !test.matching {
+					traceID = TraceID{9}
+				}
+				trace := strings.ToUpper(traceID.String())
+				dsc := DynamicSamplingContext{Frozen: true, Entries: map[string]string{traceIDContextKey: trace, "release": "upstream"}}
+				if root == nil {
+					propagation.DynamicSamplingContext = dsc
+					scope.SetPropagationContext(propagation)
+				} else {
+					root.SetDynamicSamplingContext(dsc)
+				}
+				dsc.Entries["release"] = "caller mutation"
+				want := DynamicSamplingContext{Frozen: true}
+				if test.matching {
+					want.Entries = map[string]string{traceIDContextKey: trace, "release": "upstream"}
+				}
+				assertBaggageStringsEqual(t, GetBaggage(ctx), want.String())
+				require.NotNil(t, CaptureMessage(ctx, "frozen"))
+				if root != nil {
+					root.SetDynamicSamplingContext(DynamicSamplingContext{Entries: map[string]string{"release": "late"}})
+					root.Finish()
+				}
+				for _, event := range transport.Events() {
+					require.Equal(t, want, event.sdkMetaData.dsc)
+				}
+			})
+		}
+	})
 }

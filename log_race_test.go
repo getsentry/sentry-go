@@ -36,11 +36,6 @@ func TestLoggingRaceConditions(t *testing.T) {
 			testFn:  testConcurrentLogEmission,
 		},
 		{
-			name:    "ConcurrentLogEntryOperations",
-			timeout: 5 * time.Second,
-			testFn:  testConcurrentLogEntryOperations,
-		},
-		{
 			name:    "ConcurrentLoggerCreationAndUsage",
 			timeout: testutils.FlushTimeout(),
 			testFn:  testConcurrentLoggerCreationAndUsage,
@@ -77,18 +72,15 @@ func TestLoggingRaceConditions(t *testing.T) {
 	}
 }
 
-func testConcurrentLoggerSetAttributes(t *testing.T) {
+func testConcurrentLoggerSetAttributes(_ *testing.T) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:       testDsn,
 		Transport: &MockTransport{},
 	})
-	hub := NewHub(client, NewScope())
-	ctx := SetHubOnContext(context.Background(), hub)
+	ctx, _ := WithIsolationScope(context.Background())
+	ctx = ContextWithClient(ctx, client)
 
 	logger := NewLogger(ctx)
-	if _, ok := logger.(*noopLogger); ok {
-		t.Skip("Logging is disabled, skipping test")
-	}
 
 	var wg sync.WaitGroup
 
@@ -131,8 +123,8 @@ func testConcurrentLogEmission(_ *testing.T) {
 		Dsn:       testDsn,
 		Transport: &MockTransport{},
 	})
-	hub := NewHub(client, NewScope())
-	ctx := SetHubOnContext(context.Background(), hub)
+	ctx, _ := WithIsolationScope(context.Background())
+	ctx = ContextWithClient(ctx, client)
 
 	var wg sync.WaitGroup
 
@@ -141,9 +133,6 @@ func testConcurrentLogEmission(_ *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			logger := NewLogger(ctx)
-			if _, ok := logger.(*noopLogger); ok {
-				return
-			}
 
 			for j := 0; j < loggingIterations/5; j++ {
 				var localWg sync.WaitGroup
@@ -202,69 +191,13 @@ func testConcurrentLogEmission(_ *testing.T) {
 	wg.Wait()
 }
 
-func testConcurrentLogEntryOperations(t *testing.T) {
-	t.Skip("A single instance of a log entry should not be used concurrently")
-
-	client, _ := NewClient(ClientOptions{
-		Dsn:       testDsn,
-		Transport: &MockTransport{},
-	})
-	hub := NewHub(client, NewScope())
-	ctx := SetHubOnContext(context.Background(), hub)
-
-	logger := NewLogger(ctx)
-	if _, ok := logger.(*noopLogger); ok {
-		t.Skip("Logging is disabled, skipping test")
-	}
-
-	var wg sync.WaitGroup
-
-	for i := 0; i < loggingGoroutines; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			for j := 0; j < loggingIterations/10; j++ {
-				entry := logger.Info()
-
-				var localWg sync.WaitGroup
-
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
-					entry.String("worker_id", fmt.Sprintf("worker-%d", id))
-					entry.Int("iteration", j)
-				}()
-
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
-					entry.Float64("progress", float64(j)/float64(loggingIterations/10))
-					entry.Bool("is_test", true)
-				}()
-
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
-					newCtx := context.WithValue(ctx, CtxKey(2), fmt.Sprintf("test_value_%d", id))
-					_ = entry.WithCtx(newCtx)
-				}()
-
-				localWg.Wait()
-				entry.Emit("Concurrent entry operations test %d-%d", id, j)
-				runtime.Gosched()
-			}
-		}(i)
-	}
-
-	wg.Wait()
-}
-
 func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:       testDsn,
 		Transport: &MockTransport{},
 	})
-	hub := NewHub(client, NewScope())
+	baseCtx, _ := WithIsolationScope(context.Background())
+	baseCtx = ContextWithClient(baseCtx, client)
 
 	var wg sync.WaitGroup
 
@@ -273,13 +206,9 @@ func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < loggingIterations/20; j++ {
-				ctx := context.WithValue(context.Background(), CtxKey(1), id)
-				ctx = SetHubOnContext(ctx, hub)
+				ctx := context.WithValue(baseCtx, CtxKey(1), id)
 
 				logger := NewLogger(ctx)
-				if _, ok := logger.(*noopLogger); ok {
-					continue
-				}
 
 				var localWg sync.WaitGroup
 
@@ -316,8 +245,8 @@ func testConcurrentLogWithSpanOperations(_ *testing.T) {
 		TracesSampleRate: 1.0,
 		Transport:        &MockTransport{},
 	})
-	hub := NewHub(client, NewScope())
-	ctx := SetHubOnContext(context.Background(), hub)
+	ctx, _ := WithIsolationScope(context.Background())
+	ctx = ContextWithClient(ctx, client)
 
 	var wg sync.WaitGroup
 
@@ -331,11 +260,6 @@ func testConcurrentLogWithSpanOperations(_ *testing.T) {
 
 				spanCtx := span.Context()
 				logger := NewLogger(spanCtx)
-				if _, ok := logger.(*noopLogger); ok {
-					span.Finish()
-					transaction.Finish()
-					continue
-				}
 
 				var localWg sync.WaitGroup
 

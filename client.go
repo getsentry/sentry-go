@@ -96,11 +96,13 @@ var DebugLogger = debuglog.GetLogger()
 // Event processors are used to change an event before it is sent to Sentry.
 type EventProcessor func(event *Event, hint *EventHint) *Event
 
-// externalContextTraceResolver extracts trace and span IDs from an external context source.
+// externalContextTraceResolver extracts trace/span IDs and sampling from an external context source.
 //
-// This is currently a workaround for extractring trace information from OTel SpanContext without
+// This is currently a workaround for extracting trace information from OTel SpanContext without
 // needing the otel dependency on the root package.
-type externalContextTraceResolver func(ctx context.Context) (traceID TraceID, spanID SpanID, ok bool)
+type externalContextTraceResolver interface {
+	ResolveTraceContext(context.Context) (TraceID, SpanID, Sampled, bool)
+}
 
 var globalEventProcessors []EventProcessor
 
@@ -570,6 +572,9 @@ func (client *Client) setupIntegrations() {
 			continue
 		}
 		client.integrations = append(client.integrations, integration)
+		if resolver, ok := integration.(externalContextTraceResolver); ok {
+			client.externalTraceResolver = resolver
+		}
 		integration.SetupOnce(client)
 		debuglog.Printf("Integration installed: %s\n", integration.Name())
 	}
@@ -593,34 +598,18 @@ func (client *Client) AddEventProcessor(processor EventProcessor) {
 	client.eventProcessors = append(client.eventProcessors, processor)
 }
 
-// SetExternalContextTraceResolver installs a resolver used to extract trace/span IDs
-// from external context implementations.
-//
-// This is intended for integrations such as OpenTelemetry.
-func (client *Client) SetExternalContextTraceResolver(resolver func(ctx context.Context) (TraceID, SpanID, bool)) {
-	if !client.IsEnabled() {
-		return
-	}
-	client.mu.Lock()
-	defer client.mu.Unlock()
-
-	client.externalTraceResolver = resolver
-}
-
-func (client *Client) externalTraceContextFromContext(ctx context.Context) (TraceID, SpanID, bool) {
+func (client *Client) externalTraceContextFromContext(ctx context.Context) (TraceID, SpanID, Sampled, bool) {
 	if ctx == nil {
-		return TraceID{}, SpanID{}, false
+		return TraceID{}, SpanID{}, SampledUndefined, false
 	}
 
-	client.mu.RLock()
 	resolver := client.externalTraceResolver
-	client.mu.RUnlock()
 
 	if resolver == nil {
-		return TraceID{}, SpanID{}, false
+		return TraceID{}, SpanID{}, SampledUndefined, false
 	}
 
-	return resolver(ctx)
+	return resolver.ResolveTraceContext(ctx)
 }
 
 // Options return ClientOptions for the current Client.
@@ -704,7 +693,7 @@ func (client *Client) CaptureEvent(ctx context.Context, event *Event, options ..
 	return client.capture(ctx, event, opts)
 }
 
-func (client *Client) captureLog(log *Log, _ *Scope) bool {
+func (client *Client) captureLog(log *Log) bool {
 	if log == nil {
 		return false
 	}
@@ -738,7 +727,7 @@ func (client *Client) captureLog(log *Log, _ *Scope) bool {
 	return true
 }
 
-func (client *Client) captureMetric(metric *Metric, _ *Scope) bool {
+func (client *Client) captureMetric(metric *Metric) bool {
 	if metric == nil {
 		return false
 	}

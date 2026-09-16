@@ -418,7 +418,7 @@ func (hub *Hub) GetBaggage() string {
 	if span := scope.GetSpan(); span != nil {
 		return span.ToBaggage()
 	}
-	return scope.propagationContextSnapshot().DynamicSamplingContext.String()
+	return scope.propagationContextForPropagation(hub.Client()).DynamicSamplingContext.String()
 }
 
 // HasHubOnContext checks whether Hub instance is bound to a given Context struct.

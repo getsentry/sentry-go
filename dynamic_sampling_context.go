@@ -121,19 +121,16 @@ func (d DynamicSamplingContext) String() string {
 	return baggage.String()
 }
 
-// DynamicSamplingContextFromScope Constructs a new DynamicSamplingContext using a scope and client. Accessing
-// fields on the scope are not thread safe, and this function should only be
-// called within scope methods.
+// DynamicSamplingContextFromScope returns the scope's propagation DSC.
+// It is safe for concurrent use and freezes an unfrozen scope DSC on first use.
 func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSamplingContext {
-	entries := map[string]string{}
-
-	if !client.IsEnabled() || scope == nil {
+	if scope == nil || !client.IsEnabled() {
 		return DynamicSamplingContext{
-			Entries: entries,
+			Entries: map[string]string{},
 			Frozen:  false,
 		}
 	}
-	return dynamicSamplingContextFromPropagationContext(scope.propagationContext, client)
+	return scope.propagationContextForPropagation(client).DynamicSamplingContext
 }
 
 func dynamicSamplingContextFromPropagationContext(
@@ -144,10 +141,9 @@ func dynamicSamplingContextFromPropagationContext(
 	if traceID := propagationContext.TraceID.String(); traceID != "" {
 		entries[traceIDContextKey] = traceID
 	}
-	if sampleRate := client.options.TracesSampleRate; sampleRate != 0 {
-		entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
+	if rate := client.options.TracesSampleRate; client.options.EnableTracing && client.options.TracesSampler == nil && rate >= 0 && rate <= 1 {
+		entries["sample_rate"] = strconv.FormatFloat(rate, 'f', -1, 64)
 	}
-
 	if dsn := client.dsn; dsn != nil {
 		if publicKey := dsn.GetPublicKey(); publicKey != "" {
 			entries["public_key"] = publicKey
@@ -167,4 +163,8 @@ func dynamicSamplingContextFromPropagationContext(
 		Entries: entries,
 		Frozen:  true,
 	}
+}
+
+func frozenDSCMatchesTrace(dsc DynamicSamplingContext, traceID TraceID) bool {
+	return !dsc.IsFrozen() || dsc.Entries[traceIDContextKey] == "" || strings.EqualFold(dsc.Entries[traceIDContextKey], traceID.String())
 }

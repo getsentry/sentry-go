@@ -30,6 +30,13 @@ func ScopeFromContext(ctx context.Context) *Scope {
 	return scope
 }
 
+func scopeAndTraceFallback(ctx, fallback context.Context) (*Scope, context.Context) {
+	if scope := ScopeFromContext(ctx); scope != nil {
+		return scope, nil
+	}
+	return ScopeFromContext(fallback), fallback
+}
+
 // ContextWithScope returns a context carrying scope. The supplied scope is the
 // complete scope for the derived context. A nil scope leaves ctx unchanged.
 func ContextWithScope(ctx context.Context, scope *Scope) context.Context {
@@ -75,6 +82,16 @@ func ClientFromContext(ctx context.Context) *Client {
 		}
 	}
 	return normalizeClient(globalClientSnapshot())
+}
+
+// clientFromContexts retains the construction client unless emission binds one.
+func clientFromContexts(ctx, fallback context.Context) *Client {
+	if ctx != nil {
+		if client, ok := ctx.Value(clientContextKey{}).(*Client); ok {
+			return client
+		}
+	}
+	return ClientFromContext(fallback)
 }
 
 func scopeFromContextOrGlobal(ctx context.Context) *Scope {

@@ -52,6 +52,14 @@ func TestMergeBaggage(t *testing.T) {
 		assertBaggageStringsEqual(t, got, "othervendor=bla,sentry-trace_id=new,sentry-sampled=true")
 	})
 
+	t.Run("empty generated baggage removes stale Sentry members", func(t *testing.T) {
+		got, err := MergeBaggage("othervendor=bla,sentry-trace_id=old,sentry-sampled=false", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		assertBaggageStringsEqual(t, got, "othervendor=bla")
+	})
+
 	t.Run("invalid existing returns sentry baggage", func(t *testing.T) {
 		got, err := MergeBaggage("not-valid", "sentry-trace_id=123,sentry-sampled=true")
 		if err != nil {
