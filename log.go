@@ -34,11 +34,9 @@ const (
 )
 
 type sentryLogger struct {
-	ctx               context.Context
-	hub               *Hub
-	attributes        map[string]attribute.Value
-	defaultAttributes map[string]attribute.Value
-	mu                sync.RWMutex
+	ctx        context.Context
+	attributes map[string]attribute.Value
+	mu         sync.RWMutex
 }
 
 type logEntry struct {
@@ -52,83 +50,51 @@ type logEntry struct {
 }
 
 // NewLogger returns a Logger that emits logs to Sentry.
-func NewLogger(ctx context.Context) Logger { // nolint: dupl
-	var hub *Hub
-	hub = GetHubFromContext(ctx)
-	if hub == nil {
-		hub = CurrentHub()
-	}
-
-	client := hub.Client()
-	if client.IsEnabled() {
-		// Build default attrs
-		serverAddr := client.options.ServerName
-		if serverAddr == "" {
-			serverAddr, _ = os.Hostname()
-		}
-
-		defaults := map[string]string{
-			"sentry.release":        client.options.Release,
-			"sentry.environment":    client.options.Environment,
-			"sentry.server.address": serverAddr,
-			"sentry.sdk.name":       client.sdkIdentifier,
-			"sentry.sdk.version":    client.sdkVersion,
-		}
-
-		defaultAttrs := make(map[string]attribute.Value, len(defaults))
-		for k, v := range defaults {
-			if v != "" {
-				defaultAttrs[k] = attribute.StringValue(v)
-			}
-		}
-
-		return &sentryLogger{
-			ctx:               ctx,
-			hub:               hub,
-			attributes:        make(map[string]attribute.Value),
-			defaultAttributes: defaultAttrs,
-			mu:                sync.RWMutex{},
-		}
-	}
-
-	debuglog.Println("fallback to noopLogger: SDK not initialized")
-	return &noopLogger{}
+func NewLogger(ctx context.Context) Logger {
+	return &sentryLogger{ctx: ctx}
 }
 
 func (l *sentryLogger) Write(p []byte) (int, error) {
+	if !ClientFromContext(l.ctx).IsEnabled() {
+		return len(p), nil
+	}
 	msg := strings.TrimRight(string(p), "\n")
 	l.Info().Emit(msg)
 	return len(p), nil
 }
 
 func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, message string, entryAttrs map[string]attribute.Value, format bool, args ...interface{}) {
-	if message == "" {
+	if (format && message == "") || (!format && len(args) == 0) {
 		return
 	}
 
-	hub := hubFromContexts(ctx, l.ctx)
-	if hub == nil {
-		hub = l.hub
-	}
-	client := hub.Client()
+	client := clientFromContexts(ctx, l.ctx)
 	if !client.IsEnabled() {
 		return
 	}
 
-	scope := hub.Scope()
-	traceID, spanID := resolveTrace(scope, client, ctx, l.ctx)
-
-	// Pre-allocate with capacity hint to avoid map growth reallocations
-	estimatedCap := len(l.defaultAttributes) + len(entryAttrs) + len(args) + 8 // scope ~3 + instance ~5
-	attrs := make(map[string]attribute.Value, estimatedCap)
-
-	// attribute precedence: default -> scope -> instance (from SetAttrs) -> entry-specific
-	for k, v := range l.defaultAttributes {
-		attrs[k] = v
+	var body string
+	if format {
+		body = fmt.Sprintf(message, args...)
+	} else {
+		body = fmt.Sprint(args...)
+		if body == "" {
+			return
+		}
 	}
-	scope.populateAttrs(attrs)
 
+	fallbackCtx := l.ctx
+	scope, fallbackCtx := scopeAndTraceFallback(ctx, fallbackCtx)
+	parameterAttributes := 0
+	if format {
+		parameterAttributes = len(args) + min(1, len(args))
+	}
 	l.mu.RLock()
+	attrs := mergeScopeAttributes(
+		client,
+		scope,
+		len(l.attributes)+len(entryAttrs)+parameterAttributes,
+	)
 	for k, v := range l.attributes {
 		attrs[k] = v
 	}
@@ -138,12 +104,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		attrs[k] = v
 	}
 
-	body := message
-	if format {
-		body = fmt.Sprintf(message, args...)
-	}
-
-	if len(args) > 0 {
+	if format && len(args) > 0 {
 		attrs["sentry.message.template"] = attribute.StringValue(message)
 		for i, p := range args {
 			attrs[fmt.Sprintf("sentry.message.parameters.%d", i)] = attribute.StringValue(fmt.Sprintf("%+v", p))
@@ -152,16 +113,15 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 
 	log := &Log{
 		Timestamp:  time.Now(),
-		TraceID:    traceID,
-		SpanID:     spanID,
 		Level:      level,
 		Severity:   severity,
 		Body:       body,
 		Attributes: attrs,
 	}
+	log.TraceID, log.SpanID = resolveTrace(scope, client, ctx, fallbackCtx)
 	log.approximateSize = computeLogSize(log)
 
-	client.captureLog(log, scope)
+	client.captureLog(log)
 	if client.options.Debug {
 		debuglog.Print(body)
 	}
@@ -175,6 +135,9 @@ func (l *sentryLogger) SetAttributes(attrs ...attribute.Builder) {
 		if a.Value.Type() == attribute.INVALID {
 			debuglog.Printf("invalid attribute: %v", a)
 			continue
+		}
+		if l.attributes == nil {
+			l.attributes = make(map[string]attribute.Value, len(attrs))
 		}
 		l.attributes[a.Key] = a.Value
 	}
@@ -332,7 +295,7 @@ func (e *logEntry) Uint64(key string, value uint64) LogEntry {
 }
 
 func (e *logEntry) Emit(args ...interface{}) {
-	e.logger.log(e.ctx, e.level, e.severity, fmt.Sprint(args...), e.attributes, false)
+	e.logger.log(e.ctx, e.level, e.severity, "", e.attributes, false, args...)
 
 	if e.level == LogLevelFatal {
 		if e.shouldPanic {

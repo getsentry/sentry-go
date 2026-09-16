@@ -1,6 +1,8 @@
 package sentryotel
 
 import (
+	"context"
+
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/otel/internal/common"
 )
@@ -19,6 +21,8 @@ func (integration) Name() string {
 	return "OTel"
 }
 
-func (integration) SetupOnce(client *sentry.Client) {
-	client.SetExternalContextTraceResolver(common.ResolveTraceContext)
+func (integration) SetupOnce(*sentry.Client) {}
+
+func (integration) ResolveTraceContext(ctx context.Context) (sentry.TraceID, sentry.SpanID, sentry.Sampled, bool) {
+	return common.ResolveTraceContextWithSampling(ctx)
 }

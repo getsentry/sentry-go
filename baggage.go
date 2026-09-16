@@ -10,9 +10,9 @@ import (
 
 // MergeBaggage merges an existing baggage header with a Sentry-generated one.
 //
-// Existing third-party members are preserved. If both baggage strings contain
-// the same member key, the Sentry-generated member wins. The helper is best-effort
-// and only keeps the sentry baggage in case the existing one is malformed.
+// Existing third-party members are preserved while stale Sentry members are
+// replaced by the generated baggage. The helper is best-effort and only keeps
+// the Sentry baggage in case the existing one is malformed.
 func MergeBaggage(existingHeader, sentryHeader string) (string, error) {
 	// TODO: we are reparsing the headers here, because we currently don't
 	// expose a method to get only DSC or its baggage members.
@@ -32,17 +32,12 @@ func MergeBaggage(existingHeader, sentryHeader string) (string, error) {
 		return sentryBaggage.String(), nil
 	}
 
-	sentryKeys := make(map[string]struct{}, sentryBaggage.Len())
-	for _, member := range sentryBaggage.Members() {
-		sentryKeys[member.Key()] = struct{}{}
-	}
-
 	parts := make([]string, 0, sentryBaggage.Len()+existingBaggage.Len())
 	if s := sentryBaggage.String(); s != "" {
 		parts = append(parts, s)
 	}
 	for _, member := range existingBaggage.Members() {
-		if _, collides := sentryKeys[member.Key()]; collides {
+		if strings.HasPrefix(member.Key(), sentryPrefix) {
 			continue
 		}
 		parts = append(parts, member.String())
