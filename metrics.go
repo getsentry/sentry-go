@@ -55,7 +55,7 @@ func NewMeter(ctx context.Context) Meter {
 		hub = CurrentHub()
 	}
 	client := hub.Client()
-	if client != nil {
+	if client.IsEnabled() {
 		// build default attrs
 		serverAddr := client.options.ServerName
 		if serverAddr == "" {
@@ -110,7 +110,7 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 	}
 
 	client := hub.Client()
-	if client == nil {
+	if !client.IsEnabled() {
 		return
 	}
 
