@@ -98,19 +98,16 @@ func main() {
 		),
 	)
 
-	// Example using a custom scope for isolating metrics
-	// This is useful when you want to capture metrics with a specific scope
-	// that has different context data (user, tags, etc.) than the current scope
-	customScope := sentry.NewScope()
+	// Example using an isolation scope for metrics with different context data.
+	customCtx, customScope := sentry.WithIsolationScope(context.Background())
 	customScope.SetUser(sentry.User{
 		ID:    "user-123",
 		Email: "user@example.com",
 	})
 	customScope.SetTag("environment", "staging")
 
-	meter.Distribution("api_latency", 250.0,
+	meter.WithCtx(customCtx).Distribution("api_latency", 250.0,
 		sentry.WithUnit(sentry.UnitMillisecond),
-		sentry.WithScopeOverride(customScope), // Use a custom scope for this metric
 		sentry.WithAttributes(
 			attribute.String("endpoint", "/api/orders"),
 		),
