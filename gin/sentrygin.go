@@ -10,18 +10,13 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/traceutils"
 	"github.com/gin-gonic/gin"
 )
 
 const (
 	// sdkIdentifier is the identifier of the Gin SDK.
 	sdkIdentifier = "sentry.go.gin"
-
-	// valuesKey is used as a key to store the Sentry Hub instance on the gin.Context.
-	valuesKey = "sentry"
-
-	// transactionKey is used as a key to store the Sentry transaction on the gin.Context.
-	transactionKey = "sentry_transaction"
 )
 
 type handler struct {
@@ -57,16 +52,10 @@ func New(options Options) gin.HandlerFunc {
 }
 
 func (h *handler) handle(c *gin.Context) {
-	ctx := c.Request.Context()
-	hub := sentry.GetHubFromContext(ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub().Clone()
-	}
+	created := sentry.SpanFromContext(c.Request.Context()) == nil
+	ctx, scope := sentry.WithIsolationScope(c.Request.Context())
 
-	if client := hub.Client(); client != nil {
-		client.SetSDKIdentifier(sdkIdentifier)
-	}
-	ctx = sentry.SetHubOnContext(ctx, hub)
+	sentry.ClientFromContext(ctx).SetSDKIdentifier(sdkIdentifier)
 
 	transactionName := c.Request.URL.Path
 	transactionSource := sentry.SourceURL
@@ -77,7 +66,7 @@ func (h *handler) handle(c *gin.Context) {
 	}
 
 	options := []sentry.SpanOption{
-		sentry.ContinueTrace(c.GetHeader(sentry.SentryTraceHeader), c.GetHeader(sentry.SentryBaggageHeader)),
+		traceutils.ContinueFromRequest(c.Request),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginGin),
@@ -89,33 +78,31 @@ func (h *handler) handle(c *gin.Context) {
 		options...,
 	)
 
-	transaction.SetData("http.request.method", c.Request.Method)
+	if created {
+		ctx = transaction.Context()
+		transaction.SetData("http.request.method", c.Request.Method)
+		defer func() {
+			status := c.Writer.Status()
+			transaction.Status = sentry.HTTPtoSpanStatus(status)
+			transaction.SetData("http.response.status_code", status)
+			transaction.Finish()
+		}()
+	}
 
-	defer func() {
-		status := c.Writer.Status()
-		transaction.Status = sentry.HTTPtoSpanStatus(status)
-		transaction.SetData("http.response.status_code", status)
-		transaction.Finish()
-	}()
-
-	c.Request = c.Request.WithContext(transaction.Context())
-	hub.Scope().SetRequest(c.Request)
-	c.Set(valuesKey, hub)
-	c.Set(transactionKey, transaction)
-	defer h.recoverWithSentry(hub, c.Request)
+	c.Request = c.Request.WithContext(ctx)
+	scope.SetRequest(c.Request)
+	defer h.recoverWithSentry(c.Request)
 
 	c.Next()
 }
 
-func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
+func (h *handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
 		if !isBrokenPipeError(err) {
-			eventID := hub.RecoverWithContext(
-				context.WithValue(r.Context(), sentry.RequestContextKey, r),
-				err,
-			)
+			ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
+			eventID := sentry.Recover(ctx, err)
 			if eventID != nil && h.waitForDelivery {
-				hub.Flush(h.timeout)
+				sentry.ClientFromContext(ctx).Flush(h.timeout)
 			}
 		}
 		if h.repanic {
@@ -135,30 +122,4 @@ func isBrokenPipeError(err interface{}) bool {
 		}
 	}
 	return false
-}
-
-// GetHubFromContext retrieves attached *sentry.Hub instance from gin.Context.
-func GetHubFromContext(ctx *gin.Context) *sentry.Hub {
-	if hub, ok := ctx.Get(valuesKey); ok {
-		if hub, ok := hub.(*sentry.Hub); ok {
-			return hub
-		}
-	}
-	return nil
-}
-
-// SetHubOnContext sets *sentry.Hub instance to gin.Context.
-func SetHubOnContext(ctx *gin.Context, hub *sentry.Hub) {
-	ctx.Set(valuesKey, hub)
-}
-
-// GetSpanFromContext retrieves attached *sentry.Span instance from gin.Context.
-// If there is no transaction on echo.Context, it will return nil.
-func GetSpanFromContext(ctx *gin.Context) *sentry.Span {
-	if span, ok := ctx.Get(transactionKey); ok {
-		if span, ok := span.(*sentry.Span); ok {
-			return span
-		}
-	}
-	return nil
 }

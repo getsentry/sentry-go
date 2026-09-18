@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/traceutils"
 	"github.com/kataras/iris/v12"
 )
 
@@ -14,12 +15,6 @@ import (
 const (
 	// sdkIdentifier is the identifier of the Iris SDK.
 	sdkIdentifier = "sentry.go.iris"
-
-	// valuesKey is used as a key to store the Sentry Hub instance on the iris.Context.
-	valuesKey = "sentry"
-
-	// transactionKey is used as a key to store the Sentry transaction on the iris.Context.
-	transactionKey = "sentry_transaction"
 )
 
 type handler struct {
@@ -55,20 +50,14 @@ func New(options Options) iris.Handler {
 }
 
 func (h *handler) handle(ctx iris.Context) {
-	hub := sentry.GetHubFromContext(ctx.Request().Context())
-	if hub == nil {
-		hub = sentry.CurrentHub().Clone()
-	}
-
-	if client := hub.Client(); client != nil {
-		client.SetSDKIdentifier(sdkIdentifier)
-	}
-
 	r := ctx.Request()
-	requestCtx := sentry.SetHubOnContext(ctx, hub)
+	created := sentry.SpanFromContext(r.Context()) == nil
+	requestCtx, scope := sentry.WithIsolationScope(r.Context())
+
+	sentry.ClientFromContext(requestCtx).SetSDKIdentifier(sdkIdentifier)
 
 	options := []sentry.SpanOption{
-		sentry.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+		traceutils.ContinueFromRequest(r),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(sentry.SourceRoute),
 		sentry.WithSpanOrigin(sentry.SpanOriginIris),
@@ -82,55 +71,32 @@ func (h *handler) handle(ctx iris.Context) {
 		options...,
 	)
 
-	defer func() {
-		transaction.SetData("http.response.status_code", ctx.GetStatusCode())
-		transaction.Status = sentry.HTTPtoSpanStatus(ctx.GetStatusCode())
-		transaction.Finish()
-	}()
+	if created {
+		requestCtx = transaction.Context()
+		transaction.SetData("http.request.method", r.Method)
+		defer func() {
+			transaction.SetData("http.response.status_code", ctx.GetStatusCode())
+			transaction.Status = sentry.HTTPtoSpanStatus(ctx.GetStatusCode())
+			transaction.Finish()
+		}()
+	}
 
-	transaction.SetData("http.request.method", r.Method)
-
-	hub.Scope().SetRequest(r)
-	ctx.Values().Set(valuesKey, hub)
-	ctx.Values().Set(transactionKey, transaction)
-	defer h.recoverWithSentry(hub, r)
+	r = r.WithContext(requestCtx)
+	ctx.ResetRequest(r)
+	scope.SetRequest(r)
+	defer h.recoverWithSentry(r)
 	ctx.Next()
 }
 
-func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
+func (h *handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
-		eventID := hub.RecoverWithContext(
-			context.WithValue(r.Context(), sentry.RequestContextKey, r),
-			err,
-		)
+		ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
+		eventID := sentry.Recover(ctx, err)
 		if eventID != nil && h.waitForDelivery {
-			hub.Flush(h.timeout)
+			sentry.ClientFromContext(ctx).Flush(h.timeout)
 		}
 		if h.repanic {
 			panic(err)
 		}
 	}
-}
-
-// GetHubFromContext retrieves attached *sentry.Hub instance from iris.Context.
-func GetHubFromContext(ctx iris.Context) *sentry.Hub {
-	if hub, ok := ctx.Values().Get(valuesKey).(*sentry.Hub); ok {
-		return hub
-	}
-	return nil
-}
-
-// SetHubOnContext attaches a *sentry.Hub instance to iris.Context.
-func SetHubOnContext(ctx iris.Context, hub *sentry.Hub) {
-	ctx.Values().Set(valuesKey, hub)
-}
-
-// GetSpanFromContext retrieves attached *sentry.Span instance from iris.Context.
-// If there is no transaction on iris.Context, it will return nil.
-func GetSpanFromContext(ctx iris.Context) *sentry.Span {
-	if span, ok := ctx.Values().Get(transactionKey).(*sentry.Span); ok {
-		return span
-	}
-
-	return nil
 }

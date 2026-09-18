@@ -117,12 +117,11 @@ func TestIntegration(t *testing.T) {
 			Body:        `{"safe":"value"}`,
 			ContentType: "application/json",
 			Handler: func(c *echo.Context) error {
-				hub := sentryecho.GetHubFromContext(c)
 				body, err := io.ReadAll(c.Request().Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage("post: " + string(body))
+				sentry.CaptureMessage(c.Request().Context(), "post: "+string(body))
 				return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 			},
 			WantEvent: &sentry.Event{
@@ -173,8 +172,7 @@ func TestIntegration(t *testing.T) {
 			Method:      "GET",
 			WantStatus:  200,
 			Handler: func(c *echo.Context) error {
-				hub := sentryecho.GetHubFromContext(c)
-				hub.CaptureMessage("get")
+				sentry.CaptureMessage(c.Request().Context(), "get")
 				return c.JSON(http.StatusOK, map[string]string{"status": "get"})
 			},
 			WantEvent: &sentry.Event{
@@ -220,12 +218,11 @@ func TestIntegration(t *testing.T) {
 			WantStatus:  200,
 			Body:        largePayload,
 			Handler: func(c *echo.Context) error {
-				hub := sentryecho.GetHubFromContext(c)
 				body, err := io.ReadAll(c.Request().Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(body)/1024))
+				sentry.CaptureMessage(c.Request().Context(), fmt.Sprintf("post: %d KB", len(body)/1024))
 				return nil
 			},
 			WantEvent: &sentry.Event{
@@ -275,8 +272,7 @@ func TestIntegration(t *testing.T) {
 			WantStatus:  200,
 			Body:        "client sends, server ignores, SDK doesn't read",
 			Handler: func(c *echo.Context) error {
-				hub := sentryecho.GetHubFromContext(c)
-				hub.CaptureMessage("body ignored")
+				sentry.CaptureMessage(c.Request().Context(), "body ignored")
 				return nil
 			},
 			WantEvent: &sentry.Event{
@@ -504,25 +500,27 @@ func TestIntegration(t *testing.T) {
 	}
 }
 
-func TestSetHubOnContext(t *testing.T) {
-	err := sentry.Init(sentry.ClientOptions{})
+func TestRequestContextState(t *testing.T) {
+	err := sentry.Init(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	hub := sentry.CurrentHub().Clone()
 	router := echo.New()
-	router.GET("/set-hub", func(c *echo.Context) error {
-		sentryecho.SetHubOnContext(c, hub)
-		retrievedHub := sentryecho.GetHubFromContext(c)
-		if retrievedHub == nil {
-			t.Error("expecting hub to be set on context")
+	router.GET("/with-span", func(c *echo.Context) error {
+		scope := sentry.ScopeFromContext(c.Request().Context())
+		if scope == nil {
+			t.Error("expecting scope to not be nil")
 		}
-		if retrievedHub != hub {
-			t.Error("expecting retrieved hub to be the same as the set hub")
+		span := sentry.SpanFromContext(c.Request().Context())
+		if span == nil {
+			t.Error("expecting span to not be nil")
 		}
 		return c.NoContent(http.StatusOK)
-	})
+	}, sentryecho.New(sentryecho.Options{}))
 
 	srv := httptest.NewServer(router)
 	defer srv.Close()
@@ -530,7 +528,7 @@ func TestSetHubOnContext(t *testing.T) {
 	c := srv.Client()
 	c.Timeout = time.Second
 
-	req, err := http.NewRequest("GET", srv.URL+"/set-hub", nil)
+	req, err := http.NewRequest("GET", srv.URL+"/with-span", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -545,73 +543,9 @@ func TestSetHubOnContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-}
 
-func TestGetSpanFromContext(t *testing.T) {
-	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	router := echo.New()
-	router.GET("/no-span", func(c *echo.Context) error {
-		span := sentryecho.GetSpanFromContext(c)
-		if span != nil {
-			t.Error("expecting span to be nil")
-		}
-		return c.NoContent(http.StatusOK)
-	})
-	router.GET("/with-span", func(c *echo.Context) error {
-		span := sentryecho.GetSpanFromContext(c)
-		if span == nil {
-			t.Error("expecting span to not be nil")
-		}
-		if requestSpan := sentry.SpanFromContext(c.Request().Context()); requestSpan != span {
-			t.Error("expecting request context to contain the middleware span")
-		}
-		return c.NoContent(http.StatusOK)
-	}, sentryecho.New(sentryecho.Options{}))
-
-	srv := httptest.NewServer(router)
-	defer srv.Close()
-
-	c := srv.Client()
-
-	tests := []struct {
-		RequestPath string
-	}{
-		{
-			RequestPath: "/no-span",
-		},
-		{
-			RequestPath: "/with-span",
-		},
-	}
-	c.Timeout = time.Second
-
-	for _, tt := range tests {
-		req, err := http.NewRequest("GET", srv.URL+tt.RequestPath, nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		res, err := c.Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if res.StatusCode != 200 {
-			t.Errorf("Status code = %d expected: %d", res.StatusCode, 200)
-		}
-		err = res.Body.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
-			t.Fatal("sentry.Flush timed out")
-		}
+	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+		t.Fatal("sentry.Flush timed out")
 	}
 }
 
