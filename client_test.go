@@ -210,6 +210,7 @@ func TestBackgroundCaptureUsesGlobalPropagationContext(t *testing.T) {
 	require.NotNil(t, CaptureMessage(context.Background(), "background"))
 	require.Len(t, transport.Events(), 1)
 	assert.Equal(t, "background", transport.Events()[0].Message)
+	assert.NotEqual(t, zeroTraceID, GlobalScope().propagationContextSnapshot().TraceID)
 	assert.Equal(t, GlobalScope().propagationContextSnapshot().Map(), transport.Events()[0].Contexts["trace"])
 }
 
@@ -287,14 +288,14 @@ func TestWithIsolationScopeClonesParentTrace(t *testing.T) {
 	propagation.DynamicSamplingContext.Entries["release"] = "child"
 	child.SetPropagationContext(propagation)
 	child.SetTag("child-only", "value")
+	assert.Equal(t, "parent", parent.propagationContextSnapshot().DynamicSamplingContext.Entries["release"])
+	assert.Equal(t, "child", child.propagationContextSnapshot().DynamicSamplingContext.Entries["release"])
 	require.NotNil(t, CaptureMessage(ContextWithClient(ctx, client), "child"))
 	require.Len(t, transport.Events(), 1)
 
 	assert.Equal(t, "parent", transport.Events()[0].Tags["source"])
 	assert.NotContains(t, parent.tags, "child-only")
 	assert.Equal(t, parent.propagationContextSnapshot().TraceID, transport.Events()[0].Contexts["trace"][traceIDContextKey])
-	assert.Equal(t, "parent", parent.propagationContextSnapshot().DynamicSamplingContext.Entries["release"])
-	assert.Equal(t, "child", child.propagationContextSnapshot().DynamicSamplingContext.Entries["release"])
 }
 
 func TestWithIsolationScopeInheritsActiveTransaction(t *testing.T) {
@@ -1274,11 +1275,17 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 			transaction := StartTransaction(ctx, "test")
 			child := transaction.StartChild("child")
 			child.Finish()
-			baggage := transaction.ToBaggage()
+			firstExportAfterFinish := name == "404 in ignore range" || name == "Single status code as single-element slice"
+			var baggage string
+			if !firstExportAfterFinish {
+				baggage = transaction.ToBaggage()
+			}
 			// Simulate HTTP response data like the integrations do
 			transaction.SetData("http.response.status_code", tt.statusCode)
 			transaction.Finish()
-			assertBaggageStringsEqual(t, baggage, transaction.ToBaggage())
+			if !firstExportAfterFinish {
+				assertBaggageStringsEqual(t, baggage, transaction.ToBaggage())
+			}
 
 			dropped := transport.lastEvent == nil
 			if tt.expectDrop != dropped {
@@ -1287,6 +1294,15 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 				} else {
 					t.Errorf("expected transaction with status code %d not to be dropped", tt.statusCode)
 				}
+			}
+			if firstExportAfterFinish {
+				require.Equal(t, SampledFalse, transaction.Sampled)
+				require.NotNil(t, CaptureMessage(ctx, "after finish"))
+				dsc, err := DynamicSamplingContextFromHeader([]byte(GetBaggage(ctx)))
+				require.NoError(t, err)
+				require.Equal(t, "true", dsc.Entries["sampled"])
+				require.Equal(t, "1", dsc.Entries["sample_rate"])
+				require.Equal(t, dsc, transport.Events()[0].sdkMetaData.dsc)
 			}
 		})
 	}
@@ -1598,17 +1614,17 @@ func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
 type multiClientEnv struct {
 	client1, client2       *Client
 	transport1, transport2 *MockTransport
-	hub1, hub2             *Hub
 	ctx1, ctx2             context.Context
 	traceID1, traceID2     TraceID
 }
 
 func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 	t.Helper()
-	mkClient := func(dsn string) (*Client, *MockTransport) {
+	mkClient := func(dsn, release string) (*Client, *MockTransport) {
 		tr := &MockTransport{}
 		c, err := NewClient(ClientOptions{
 			Dsn:       dsn,
+			Release:   release,
 			Transport: tr,
 			Integrations: func(_ []Integration) []Integration {
 				return []Integration{}
@@ -1619,20 +1635,19 @@ func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 	}
 
 	e := &multiClientEnv{}
-	e.client1, e.transport1 = mkClient("https://public@example.com/sentry/1")
-	e.client2, e.transport2 = mkClient("https://public@example.com/sentry/2")
+	e.client1, e.transport1 = mkClient("https://public@example.com/sentry/1", "release-1")
+	e.client2, e.transport2 = mkClient("https://public@example.com/sentry/2", "release-2")
 	e.traceID1 = TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
 	e.traceID2 = TraceIDFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2")
 
-	scope1 := NewScope()
+	var scope1 *Scope
+	e.ctx1, scope1 = WithIsolationScope(context.Background())
+	e.ctx1 = ContextWithClient(e.ctx1, e.client1)
 	scope1.SetPropagationContext(PropagationContext{TraceID: e.traceID1})
-	scope2 := NewScope()
+	var scope2 *Scope
+	e.ctx2, scope2 = WithIsolationScope(context.Background())
+	e.ctx2 = ContextWithClient(e.ctx2, e.client2)
 	scope2.SetPropagationContext(PropagationContext{TraceID: e.traceID2})
-
-	e.hub1 = NewHub(e.client1, scope1)
-	e.hub2 = NewHub(e.client2, scope2)
-	e.ctx1 = SetHubOnContext(context.Background(), e.hub1)
-	e.ctx2 = SetHubOnContext(context.Background(), e.hub2)
 
 	t.Cleanup(func() {
 		e.client1.Close()
@@ -1668,17 +1683,17 @@ func TestClient_MultiClientSetup(t *testing.T) {
 	t.Run("signals_route_to_correct_client", func(t *testing.T) {
 		e := setupMultiClientEnv(t)
 
-		e.hub1.CaptureMessage("msg-from-client1")
-		e.hub2.CaptureMessage("msg-from-client2")
+		e.client1.CaptureMessage(e.ctx1, "msg-from-client1")
+		e.client2.CaptureMessage(e.ctx2, "msg-from-client2")
 
 		require.Len(t, e.transport1.Events(), 1)
 		require.Len(t, e.transport2.Events(), 1)
 		assert.Equal(t, "msg-from-client1", e.transport1.Events()[0].Message)
 		assert.Equal(t, "msg-from-client2", e.transport2.Events()[0].Message)
 		assert.Equal(t, e.traceID1, eventTraceID(t, e.transport1.Events()[0]),
-			"event on client1 should carry hub1's trace ID")
+			"event on client1 should carry scope1's trace ID")
 		assert.Equal(t, e.traceID2, eventTraceID(t, e.transport2.Events()[0]),
-			"event on client2 should carry hub2's trace ID")
+			"event on client2 should carry scope2's trace ID")
 		e.resetTransports()
 
 		NewLogger(e.ctx1).Info().WithCtx(e.ctx1).Emit("log-from-client1")
@@ -1692,9 +1707,9 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		assert.Equal(t, "log-from-client1", e.transport1.Events()[0].Logs[0].Body)
 		assert.Equal(t, "log-from-client2", e.transport2.Events()[0].Logs[0].Body)
 		assert.Equal(t, e.traceID1, e.transport1.Events()[0].Logs[0].TraceID,
-			"log on client1 should carry hub1's trace ID")
+			"log on client1 should carry scope1's trace ID")
 		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
-			"log on client2 should carry hub2's trace ID")
+			"log on client2 should carry scope2's trace ID")
 		e.resetTransports()
 
 		NewMeter(e.ctx1).Count("counter-from-client1", 1)
@@ -1710,69 +1725,71 @@ func TestClient_MultiClientSetup(t *testing.T) {
 	})
 
 	t.Run("signals_respect_emit_context_client", func(t *testing.T) {
+		for _, test := range []struct {
+			name    string
+			derived bool
+		}{
+			{name: "unrelated context"},
+			{name: "derived context", derived: true},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				e := setupMultiClientEnv(t)
+				logger := NewLogger(e.ctx1)
+				meter := NewMeter(e.ctx1)
+				emitCtx, wantTraceID := e.ctx2, e.traceID2
+				if test.derived {
+					emitCtx = ContextWithClient(e.ctx1, e.client2)
+					wantTraceID = e.traceID1
+					assert.Same(t, ScopeFromContext(e.ctx1), ScopeFromContext(emitCtx))
+				}
+				logger.Info().WithCtx(emitCtx).Emit("cross-context-log")
+				meter.WithCtx(emitCtx).Count("cross-context-count", 1)
+				e.flushAll()
+
+				assert.Empty(t, e.transport1.Events(), "creation-time client should not receive the signals")
+				events := e.transport2.Events()
+				require.Len(t, events, 2, "emit-context client should receive the signals")
+				require.Len(t, events[0].Logs, 1)
+				require.Len(t, events[1].Metrics, 1)
+				assert.Equal(t, "cross-context-log", events[0].Logs[0].Body)
+				assert.Equal(t, "cross-context-count", events[1].Metrics[0].Name)
+				assert.Equal(t, wantTraceID, events[0].Logs[0].TraceID)
+				assert.Equal(t, wantTraceID, events[1].Metrics[0].TraceID)
+				assert.Equal(t, "release-2", events[0].Logs[0].Attributes["sentry.release"].AsString())
+				assert.Equal(t, "release-2", events[1].Metrics[0].Attributes["sentry.release"].AsString())
+			})
+		}
+	})
+
+	t.Run("signals_created_without_client_can_use_emit_context", func(t *testing.T) {
+		e := setupMultiClientEnv(t)
+		disabledCtx := ContextWithClient(context.Background(), NewNoopClient())
+		logger := NewLogger(disabledCtx)
+		meter := NewMeter(disabledCtx)
+
+		logger.Info().WithCtx(e.ctx2).Emit("enabled-context-log")
+		meter.WithCtx(e.ctx2).Count("enabled-context-count", 1)
+		NewLogger(e.ctx2).Info().WithCtx(disabledCtx).Emit("suppressed")
+		NewMeter(e.ctx2).WithCtx(disabledCtx).Count("suppressed", 1)
+		e.flushAll()
+
+		assert.Empty(t, e.transport1.Events())
+		require.Len(t, e.transport2.Events(), 2)
+	})
+
+	t.Run("signals_use_creation_context_as_fallback", func(t *testing.T) {
 		e := setupMultiClientEnv(t)
 		logger := NewLogger(e.ctx1)
 		meter := NewMeter(e.ctx1)
-		logger.Info().WithCtx(e.ctx2).Emit("cross-context-log")
-		meter.WithCtx(e.ctx2).Count("cross-context-count", 1)
+
+		logger.Info().WithCtx(context.TODO()).Emit("fallback-context-log")
+		meter.WithCtx(context.TODO()).Count("fallback-context-count", 1)
 		e.flushAll()
 
-		assert.Empty(t, e.transport1.Events(),
-			"creation-time client should NOT receive the log when emit context points elsewhere")
-		require.Len(t, e.transport2.Events(), 2,
-			"emit-context client should receive the signals")
-		require.Len(t, e.transport2.Events()[0].Logs, 1)
-		require.Len(t, e.transport2.Events()[1].Metrics, 1)
-		assert.Equal(t, "cross-context-log", e.transport2.Events()[0].Logs[0].Body)
-		assert.Equal(t, "cross-context-count", e.transport2.Events()[1].Metrics[0].Name)
-		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
-			"trace ID should come from the emit context's hub, not the creation context")
-	})
-
-	t.Run("signals_follow_bind_client", func(t *testing.T) {
-		e := setupMultiClientEnv(t)
-
-		traceID := TraceIDFromHex("cccccccccccccccccccccccccccccccc")
-		scope := NewScope()
-		scope.SetPropagationContext(PropagationContext{TraceID: traceID})
-		hub := NewHub(e.client1, scope)
-		ctx := SetHubOnContext(context.Background(), hub)
-		logger := NewLogger(ctx)
-		meter := NewMeter(ctx)
-
-		hub.BindClient(e.client2)
-
-		hub.CaptureMessage("event-after-rebind")
-		logger.Info().WithCtx(ctx).Emit("log-after-rebind")
-		meter.WithCtx(ctx).Count("count-after-rebind", 1)
-		e.flushAll()
-
-		assert.Empty(t, e.transport1.Events(),
-			"old client should not receive any signals after BindClient")
-		require.Len(t, e.transport2.Events(), 3,
-			"new client should receive all signals")
-
-		var gotEvent, gotLog, gotMetric bool
-		for _, ev := range e.transport2.Events() {
-			if ev.Message == "event-after-rebind" {
-				gotEvent = true
-				assert.Equal(t, traceID, eventTraceID(t, ev),
-					"event should carry the hub's trace ID")
-			}
-			if len(ev.Logs) == 1 && ev.Logs[0].Body == "log-after-rebind" {
-				gotLog = true
-				assert.Equal(t, traceID, ev.Logs[0].TraceID,
-					"log should carry the hub's trace ID")
-			}
-			if len(ev.Metrics) == 1 && ev.Metrics[0].Name == "count-after-rebind" {
-				gotMetric = true
-				assert.Equal(t, traceID, ev.Metrics[0].TraceID,
-					"count should carry the hub's trace ID")
-			}
-		}
-		assert.True(t, gotEvent, "event should arrive at new client")
-		assert.True(t, gotLog, "log should arrive at new client")
-		assert.True(t, gotMetric, "count should arrive at new client")
+		require.Len(t, e.transport1.Events(), 2)
+		assert.Empty(t, e.transport2.Events())
+		assert.Equal(t, e.traceID1, e.transport1.Events()[0].Logs[0].TraceID)
+		assert.Equal(t, e.traceID1, e.transport1.Events()[1].Metrics[0].TraceID)
 	})
 	t.Run("explicit client owns the transaction and concurrent DSC", func(t *testing.T) {
 		creator, creatorTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "creator"})

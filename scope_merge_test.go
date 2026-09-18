@@ -3,6 +3,7 @@ package sentry
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,11 +65,13 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 		for _, test := range []struct {
 			name, source string
 			matching     bool
+			uppercase    bool
 			nativeSpanID SpanID
 			eventDSC     DynamicSamplingContext
 		}{
 			{name: "typed", source: "typed", matching: true},
 			{name: "string", source: "string", matching: true},
+			{name: "string uppercase", source: "string", matching: true, uppercase: true},
 			{name: "external", source: "external", matching: true},
 			{name: "external foreign", source: "external"},
 			{name: "external matching native span", source: "external", matching: true, nativeSpanID: spanID},
@@ -82,6 +85,9 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 					dscTraceID = TraceID{3}
 				}
 				dsc := DynamicSamplingContext{Frozen: true, Entries: map[string]string{traceIDContextKey: dscTraceID.String(), "public_key": "public"}}
+				if test.uppercase {
+					dsc.Entries[traceIDContextKey] = strings.ToUpper(dsc.Entries[traceIDContextKey])
+				}
 				scope := NewScope()
 				scope.SetPropagationContext(PropagationContext{TraceID: dscTraceID, SpanID: spanID, DynamicSamplingContext: dsc})
 				client, transport := newCaptureTestClient(t, ClientOptions{})
@@ -99,7 +105,7 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 				case "string":
 					event.Contexts = map[string]Context{traceContextKey: {traceIDContextKey: traceID.String(), spanIDContextKey: spanID.String()}}
 				case "external":
-					client.SetExternalContextTraceResolver(func(context.Context) (TraceID, SpanID, bool) { return traceID, spanID, true })
+					client.externalTraceResolver = testExternalResolverFunc(func(context.Context) (TraceID, SpanID, Sampled, bool) { return traceID, spanID, SampledUndefined, true })
 				}
 				require.NotNil(t, CaptureEvent(ctx, event))
 				captured := requireSingleEvent(t, transport)
@@ -137,7 +143,9 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 				case "native":
 					scope.SetSpan(&Span{TraceID: TraceID{3}, SpanID: SpanID{3}})
 				case "external":
-					client.SetExternalContextTraceResolver(func(context.Context) (TraceID, SpanID, bool) { return TraceID{3}, SpanID{3}, true })
+					client.externalTraceResolver = testExternalResolverFunc(func(context.Context) (TraceID, SpanID, Sampled, bool) {
+						return TraceID{3}, SpanID{3}, SampledUndefined, true
+					})
 				}
 				require.NotNil(t, CaptureMessage(ctx, "scope trace"))
 				require.Equal(t, custom, requireSingleEvent(t, transport).Contexts[traceContextKey])

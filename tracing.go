@@ -429,6 +429,9 @@ func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
 	if s.dynamicSamplingContext.IsFrozen() {
 		return
 	}
+	if !frozenDSCMatchesTrace(dsc, s.TraceID) {
+		dsc = DynamicSamplingContext{Frozen: true}
+	}
 	s.dynamicSamplingContext = DynamicSamplingContext{Entries: maps.Clone(dsc.Entries), Frozen: dsc.Frozen}
 }
 
@@ -456,11 +459,13 @@ func (s *Span) shouldIgnoreStatusCode(client *Client) bool {
 		return false
 	}
 
+	// Preserve the head sampling decision before a late status filter changes it.
 	for _, ignoredRange := range ignoreStatusCodes {
 		switch len(ignoredRange) {
 		case 1:
 			// Single status code
 			if statusCode == ignoredRange[0] {
+				s.dynamicSamplingContextForPropagation()
 				s.mu.Lock()
 				s.Sampled = SampledFalse
 				s.mu.Unlock()
@@ -470,6 +475,7 @@ func (s *Span) shouldIgnoreStatusCode(client *Client) bool {
 		case 2:
 			// Range of status codes [min, max]
 			if ignoredRange[0] <= statusCode && statusCode <= ignoredRange[1] {
+				s.dynamicSamplingContextForPropagation()
 				s.mu.Lock()
 				s.Sampled = SampledFalse
 				s.mu.Unlock()
@@ -1096,6 +1102,52 @@ func dscMatchesTrace(trace TraceParentContext, dsc DynamicSamplingContext) bool 
 // an existing TraceID.
 func ContinueFromTrace(trace string) SpanOption {
 	return ContinueTrace(trace, "")
+}
+
+// GetTraceparent returns the Sentry trace header value carried by ctx.
+func GetTraceparent(ctx context.Context) string {
+	trace, _ := traceForPropagation(ctx, false)
+	if trace.traceID == zeroTraceID || trace.spanID == zeroSpanID {
+		return ""
+	}
+	return formatSentryTrace(trace.traceID, trace.spanID, trace.sampled)
+}
+
+// GetTraceparentW3C returns the W3C traceparent header value carried by ctx.
+func GetTraceparentW3C(ctx context.Context) string {
+	trace, _ := traceForPropagation(ctx, false)
+	if trace.traceID == zeroTraceID || trace.spanID == zeroSpanID {
+		return ""
+	}
+	return formatTraceparent(trace.traceID, trace.spanID, trace.sampled)
+}
+
+// GetBaggage returns the Sentry baggage header value carried by ctx.
+func GetBaggage(ctx context.Context) string {
+	_, dsc := traceForPropagation(ctx, true)
+	return dsc.String()
+}
+
+func traceForPropagation(ctx context.Context, freezeDSC bool) (activeTrace, DynamicSamplingContext) {
+	client := ClientFromContext(ctx)
+	trace := activeTraceFromContexts(client, ctx)
+	scope := scopeFromContextOrGlobal(ctx)
+	scope.mu.Lock()
+	root := scope.span
+	if trace.traceID == zeroTraceID && trace.span == nil && root == nil {
+		applyStaticSamplingDecision(&scope.propagationContext, client)
+	}
+	propagation := scope.propagationContext
+	scope.mu.Unlock()
+	trace = trace.withScope(root, propagation)
+	if !freezeDSC || trace.traceID == zeroTraceID || trace.spanID == zeroSpanID {
+		return trace, DynamicSamplingContext{}
+	}
+	if trace.propagation {
+		propagation = scope.propagationContextForPropagation(client)
+		return (activeTrace{}).withScope(nil, propagation), propagation.DynamicSamplingContext
+	}
+	return trace, matchingDSC(trace.traceID.String(), propagation, SpanFromContext(ctx), root)
 }
 
 // spanContextKey is used to store span values in contexts.
