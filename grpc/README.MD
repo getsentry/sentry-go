@@ -22,6 +22,7 @@ go get github.com/getsentry/sentry-go/grpc
 
 ```go
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -56,14 +57,14 @@ func main() {
 	// Start the server
 	listener, err := net.Listen("tcp", ":50051")
 	if err != nil {
-		sentry.CaptureException(err)
+		sentry.CaptureException(context.Background(), err)
 		fmt.Printf("Failed to listen: %v\n", err)
 		return
 	}
 
 	fmt.Println("Server running...")
 	if err := server.Serve(listener); err != nil {
-		sentry.CaptureException(err)
+		sentry.CaptureException(context.Background(), err)
 	}
 }
 ```
@@ -99,7 +100,7 @@ func main() {
 		grpc.WithStreamInterceptor(sentrygrpc.StreamClientInterceptor()),
 	)
 	if err != nil {
-		sentry.CaptureException(err)
+		sentry.CaptureException(context.Background(), err)
 		fmt.Printf("Failed to connect: %v\n", err)
 		return
 	}
@@ -110,7 +111,7 @@ func main() {
 	// Make a request
 	_, err = client.YourMethod(context.Background(), &YourRequest{})
 	if err != nil {
-		sentry.CaptureException(err)
+		sentry.CaptureException(context.Background(), err)
 		fmt.Printf("Error calling method: %v\n", err)
 	}
 }
@@ -137,6 +138,6 @@ type ServerOptions struct {
 
 ## Notes
 
-- The interceptors automatically create and manage a Sentry *Hub for each gRPC request or stream.
+- The interceptors create an isolated Sentry scope for each gRPC request or stream.
 - Use the Sentry SDK’s context-based APIs to capture exceptions and add additional context.
 - Ensure you handle the context correctly to propagate tracing information across requests.
