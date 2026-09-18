@@ -639,7 +639,7 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	assertEqual(t, 2, len(processedEvent.Tags), "should merge tags")
 	assertEqual(t, 4, len(processedEvent.Contexts), "should merge contexts")
 	assertEqual(t, event.Contexts[sharedContextsKey], processedEvent.Contexts[sharedContextsKey], "should not override event trace context")
-	assertEqual(t, LevelDebug, processedEvent.Level, "should use event level if set")
+	assertEqual(t, event.Level, processedEvent.Level, "should use event level if set")
 	assertEqual(t, event.User, processedEvent.User, "should use event user if one exists")
 	assertEqual(t, event.Request, processedEvent.Request, "should use event request if one exists")
 	assertEqual(t, event.Fingerprint, processedEvent.Fingerprint, "should use event fingerprints if they exist")

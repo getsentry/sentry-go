@@ -11,8 +11,6 @@ import (
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/httputils"
-	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/report"
 )
 
 // Scope holds contextual data for the current scope.
@@ -33,6 +31,9 @@ type Scope struct {
 	mu sync.RWMutex
 	// eventProcessors are retained by Clear and inherited by Clone.
 	eventProcessors []EventProcessor
+
+	lastEventMu sync.Mutex
+	lastEventID EventID
 
 	// scopeData keeps track of all scope specific data
 	scopeData
@@ -93,6 +94,20 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 	if len(scope.breadcrumbs) > limit {
 		scope.breadcrumbs = scope.breadcrumbs[1 : limit+1]
 	}
+}
+
+func (scope *Scope) setLastEventID(id EventID) {
+	scope.lastEventMu.Lock()
+	defer scope.lastEventMu.Unlock()
+
+	scope.lastEventID = id
+}
+
+func (scope *Scope) lastEventIDSnapshot() EventID {
+	scope.lastEventMu.Lock()
+	defer scope.lastEventMu.Unlock()
+
+	return scope.lastEventID
 }
 
 // ClearBreadcrumbs clears all breadcrumbs from the current scope.
@@ -260,14 +275,14 @@ func (scope *Scope) SetPropagationContext(propagationContext PropagationContext)
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	scope.propagationContext = propagationContext
+	scope.propagationContext = propagationContext.clone()
 }
 
 func (scope *Scope) propagationContextSnapshot() PropagationContext {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 
-	return scope.propagationContext
+	return scope.propagationContext.clone()
 }
 
 // GetSpan returns the span from the current scope.
@@ -286,7 +301,7 @@ func (scope *Scope) SetSpan(span *Span) {
 	scope.span = span
 }
 
-// Clone returns a copy of the current scope with all data copied over.
+// Clone returns a copy of the current scope without its last event ID.
 func (scope *Scope) Clone() *Scope {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
@@ -307,13 +322,13 @@ func (scope *Scope) Clone() *Scope {
 	clone.request = scope.request
 	clone.requestBody = scope.requestBody
 	clone.eventProcessors = scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
-	clone.propagationContext = scope.propagationContext
+	clone.propagationContext = scope.propagationContext.clone()
 	clone.span = scope.span
 	return clone
 }
 
-// Clear removes enrichment data while preserving event processors and trace
-// correlation. It is safe for concurrent use.
+// Clear removes enrichment data while preserving event processors, trace
+// correlation, and the last event ID. It is safe for concurrent use.
 func (scope *Scope) Clear() {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
@@ -333,9 +348,14 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 }
 
 // ApplyToEvent takes the data from the current scope and attaches it to the event.
-func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event { //nolint:gocyclo
+func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event {
+	client = normalizeClient(client)
+	processors := scope.applyToEvent(event, hint, client)
+	return client.runEventProcessors(event, hint, processors)
+}
+
+func (scope *Scope) applyToEvent(event *Event, hint *EventHint, client *Client) []EventProcessor { //nolint:gocyclo
 	scope.mu.RLock()
-	defer scope.mu.RUnlock()
 
 	if len(scope.breadcrumbs) > 0 {
 		event.Breadcrumbs = append(event.Breadcrumbs, scope.breadcrumbs...)
@@ -390,7 +410,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		if transaction != nil {
 			event.sdkMetaData.dsc = DynamicSamplingContextFromTransaction(transaction)
 		}
-	} else {
+	} else if scope.propagationContext.TraceID != zeroTraceID {
 		event.Contexts["trace"] = scope.propagationContext.Map()
 
 		dsc := scope.propagationContext.DynamicSamplingContext
@@ -426,7 +446,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		event.Fingerprint = append(event.Fingerprint, scope.fingerprint...)
 	}
 
-	if scope.level != "" {
+	if event.Level == "" {
 		event.Level = scope.level
 	}
 
@@ -447,29 +467,9 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 		}
 	}
 
-	for _, processor := range scope.eventProcessors {
-		id := event.EventID
-		category := event.toCategory()
-		spanCountBefore := event.GetSpanCount()
-		event = processor(event, hint)
-		if event == nil {
-			debuglog.Printf("Event dropped by one of the Scope EventProcessors: %s\n", id)
-			if client.IsEnabled() {
-				client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
-				if category == ratelimit.CategoryTransaction {
-					client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
-				}
-			}
-			return nil
-		}
-		if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
-			if client.IsEnabled() {
-				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
-			}
-		}
-	}
-
-	return event
+	processors := scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
+	scope.mu.RUnlock()
+	return processors
 }
 
 // cloneContext returns a new context with keys and values copied from the passed one.

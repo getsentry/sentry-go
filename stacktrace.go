@@ -357,7 +357,7 @@ func setInAppFrame(frame *Frame) {
 
 func callerFunctionName() string {
 	pcs := make([]uintptr, 1)
-	runtime.Callers(3, pcs)
+	runtime.Callers(2, pcs)
 	callersFrames := runtime.CallersFrames(pcs)
 	callerFrame, _ := callersFrames.Next()
 	return baseName(callerFrame.Function)

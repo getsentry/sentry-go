@@ -1,6 +1,7 @@
 package sentry_test
 
 import (
+	"context"
 	"fmt"
 	"net/http/httptest"
 	"sync"
@@ -8,47 +9,30 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/sentrytest"
+	"github.com/stretchr/testify/require"
 )
 
-func TestConcurrentScopeUsage(_ *testing.T) {
+func TestConcurrentSharedIsolation(t *testing.T) {
+	t.Parallel()
+	f := sentrytest.NewFixture(t)
+	ctx, scope := sentry.WithIsolationScope(sentry.ContextWithClient(context.Background(), f.Client))
 	var wg sync.WaitGroup
-
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 20; i++ {
 		wg.Add(1)
 		go func(x int) {
 			defer wg.Done()
-			sentry.WithScope(func(scope *sentry.Scope) {
-				touchScope(scope, x)
-			})
-		}(i)
-		wg.Add(1)
-		go func(x int) {
-			defer wg.Done()
-			sentry.ConfigureScope(func(scope *sentry.Scope) {
-				touchScope(scope, x)
-			})
+			touchScope(ctx, scope, x)
+			scope.Clear()
+			scope.Clone()
 		}(i)
 	}
-
-	for i := 0; i < 10; i++ {
-		func(x int) {
-			sentry.WithScope(func(scope *sentry.Scope) {
-				touchScope(scope, x)
-			})
-		}(i)
-
-		func(x int) {
-			sentry.ConfigureScope(func(scope *sentry.Scope) {
-				touchScope(scope, x)
-			})
-		}(i)
-	}
-
-	// wait for goroutines to finish
 	wg.Wait()
+	f.Flush()
+	require.Len(t, f.Events(), 20)
 }
 
-func touchScope(scope *sentry.Scope, x int) {
+func touchScope(ctx context.Context, scope *sentry.Scope, x int) {
 	scope.SetTag("foo", "bar")
 	scope.SetContext("foo", sentry.Context{"foo": "bar"})
 	scope.SetAttributes(attribute.String("foo", "bar"))
@@ -62,7 +46,7 @@ func touchScope(scope *sentry.Scope, x int) {
 	scope.SetPropagationContext(sentry.NewPropagationContext())
 	scope.SetSpan(&sentry.Span{TraceID: sentry.TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")})
 
-	sentry.CaptureException(fmt.Errorf("error %d", x))
+	sentry.CaptureException(ctx, fmt.Errorf("error %d", x))
 
 	scope.ClearBreadcrumbs()
 	scope.Clone()
