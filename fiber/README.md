@@ -68,11 +68,10 @@ Timeout time.Duration
 
 ## Usage
 
-`sentryfiber` attaches an instance of `*sentry.Hub` (https://godoc.org/github.com/getsentry/sentry-go#Hub) to the request's context, which makes it available throughout the rest of the request's lifetime.
-You can access it by using the `sentryfiber.GetHubFromContext()` method on the context itself in any of your proceeding middleware and routes.
-And it should be used instead of the global `sentry.CaptureMessage`, `sentry.CaptureException`, or any other calls, as it keeps the separation of data between the requests.
+`sentryfiber` attaches a request-specific `*sentry.Scope` and transaction to Fiber's user context. Pass `ctx.UserContext()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event. In outer middleware or a custom error handler, use `sentryfiber.GetContext(ctx)` after the Sentry middleware has returned.
+Use `sentry.ScopeFromContext(ctx.UserContext())` when you need to add data that should be available to captures made during the request.
 
-**Keep in mind that `*sentry.Hub` won't be available in middleware attached before to `sentryfiber`!**
+**Keep in mind that the request scope won't be available in middleware attached before `sentryfiber`!**
 
 ```go
 // Later in the code
@@ -82,9 +81,7 @@ sentryHandler := sentryfiber.New(sentryfiber.Options{
 })
 
 enhanceSentryEvent := func(ctx *fiber.Ctx) {
-    if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
-        hub.Scope().SetTag("someRandomTag", "maybeYouNeedIt")
-    }
+    sentry.ScopeFromContext(ctx.UserContext()).SetTag("someRandomTag", "maybeYouNeedIt")
     ctx.Next()
 }
 
@@ -97,12 +94,9 @@ app.All("/foo", enhanceSentryEvent, func(ctx *fiber.Ctx) {
 })
 
 app.All("/", func(ctx *fiber.Ctx) {
-    if hub := sentryfiber.GetHubFromContext(ctx); hub != nil {
-        hub.WithScope(func(scope *sentry.Scope) {
-            scope.SetTag("unwantedQuery", "someQueryDataMaybe")
-            hub.CaptureMessage("User provided unwanted query string, but we recovered just fine")
-        })
-    }
+    scope := sentry.ScopeFromContext(ctx.UserContext())
+    scope.SetTag("unwantedQuery", "someQueryDataMaybe")
+    sentry.CaptureMessage(ctx.UserContext(), "User provided unwanted query string, but we recovered just fine")
     ctx.Status(fiber.StatusOK)
 })
 

@@ -13,18 +13,26 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/traceutils"
 )
 
 const (
 	// sdkIdentifier is the identifier of the Fiber SDK.
 	sdkIdentifier = "sentry.go.fiberv3"
-
-	// valuesKey is used as a key to store the Sentry Hub instance on the fiber.Ctx.
-	valuesKey = "sentry"
-
-	// transactionKey is used as a key to store the Sentry transaction on the fiber.Ctx.
-	transactionKey = "sentry_transaction"
 )
+
+type contextKey struct{}
+
+type storedContext struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// Close lets Fiber release the request context after its error handler has run.
+func (ctx *storedContext) Close() error {
+	ctx.cancel()
+	return nil
+}
 
 type handler struct {
 	repanic         bool
@@ -58,96 +66,91 @@ func New(options Options) fiber.Handler {
 }
 
 func (h *handler) handle(ctx fiber.Ctx) error {
-	hub := GetHubFromContext(ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub().Clone()
-	}
+	savedCtx := ctx.Context()
+	previous, _ := ctx.Locals(contextKey{}).(*storedContext)
+	created := sentry.SpanFromContext(savedCtx) == nil
+	requestCtx, cancel := context.WithCancel(savedCtx)
+	storedCtx := &storedContext{ctx: requestCtx, cancel: cancel}
+	ctx.Locals(contextKey{}, storedCtx)
+	// Keep the outer closer registered; its cancellation reaches nested contexts.
+	defer func() {
+		if previous != nil {
+			ctx.Locals(contextKey{}, previous)
+		}
+	}()
+	defer func() {
+		if ctx.IsAbandoned() {
+			cancel()
+		}
+	}()
+	defer ctx.SetContext(savedCtx)
+	requestCtx, scope := sentry.WithIsolationScope(requestCtx)
 
-	if client := hub.Client(); client != nil {
-		client.SetSDKIdentifier(sdkIdentifier)
-	}
+	sentry.ClientFromContext(requestCtx).SetSDKIdentifier(sdkIdentifier)
 
 	r := convert(ctx)
 	transactionName := ctx.Path()
 	transactionSource := sentry.SourceURL
 
 	options := []sentry.SpanOption{
-		sentry.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+		traceutils.ContinueFromRequest(r),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),
 	}
 
-	savedCtx := ctx.Context()
-	requestCtx, cancel := context.WithCancel(savedCtx)
-	defer cancel()
-	defer ctx.SetContext(savedCtx)
-
 	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(requestCtx, hub),
+		requestCtx,
 		fmt.Sprintf("%s %s", r.Method, transactionName),
 		options...,
 	)
-	ctx.SetContext(transaction.Context())
+	if created {
+		requestCtx = transaction.Context()
+		transaction.SetData("http.request.method", r.Method)
+		defer func() {
+			if routePath := ctx.Route().Path; routePath != "" && !ctx.IsMiddleware() {
+				transaction.Name = fmt.Sprintf("%s %s", r.Method, routePath)
+				transaction.Source = sentry.SourceRoute
+			}
+			status := ctx.Response().StatusCode()
+			transaction.Status = sentry.HTTPtoSpanStatus(status)
+			transaction.SetData("http.response.status_code", status)
+			transaction.Finish()
+		}()
+	}
+	storedCtx.ctx = requestCtx
+	ctx.SetContext(requestCtx)
+	r = r.WithContext(requestCtx)
 
-	defer func() {
-		if routePath := ctx.Route().Path; routePath != "" && !ctx.IsMiddleware() {
-			transaction.Name = fmt.Sprintf("%s %s", r.Method, routePath)
-			transaction.Source = sentry.SourceRoute
-		}
-		status := ctx.Response().StatusCode()
-		transaction.Status = sentry.HTTPtoSpanStatus(status)
-		transaction.SetData("http.response.status_code", status)
-		transaction.Finish()
-	}()
-
-	transaction.SetData("http.request.method", r.Method)
-	r = r.WithContext(transaction.Context())
-
-	scope := hub.Scope()
 	scope.SetRequest(r)
 	scope.SetRequestBody(bytes.Clone(ctx.Body()))
-	ctx.Locals(valuesKey, hub)
-	ctx.Locals(transactionKey, transaction)
-	defer h.recoverWithSentry(hub, ctx)
+	defer h.recoverWithSentry(requestCtx, ctx, cancel)
 
 	return ctx.Next()
 }
 
-func (h *handler) recoverWithSentry(hub *sentry.Hub, ctx fiber.Ctx) {
+func (h *handler) recoverWithSentry(requestCtx context.Context, ctx fiber.Ctx, cancel context.CancelFunc) {
 	if err := recover(); err != nil {
-		eventID := hub.RecoverWithContext(
-			context.WithValue(ctx.Context(), sentry.RequestContextKey, ctx),
-			err,
-		)
+		requestCtx = context.WithValue(requestCtx, sentry.RequestContextKey, ctx)
+		eventID := sentry.Recover(requestCtx, err)
 		if eventID != nil && h.waitForDelivery {
-			hub.Flush(h.timeout)
+			sentry.ClientFromContext(requestCtx).Flush(h.timeout)
 		}
 		if h.repanic {
+			cancel()
 			panic(err)
 		}
 	}
 }
 
-// GetHubFromContext retrieves the Hub instance from the fiber.Ctx.
-func GetHubFromContext(ctx fiber.Ctx) *sentry.Hub {
-	if hub, ok := ctx.Locals(valuesKey).(*sentry.Hub); ok {
-		return hub
+// GetContext returns the request's Sentry context. Unlike Ctx.Context, it
+// remains available to outer middleware and custom error handlers after the
+// Sentry middleware restores Fiber's original context.
+func GetContext(ctx fiber.Ctx) context.Context {
+	if storedCtx, ok := ctx.Locals(contextKey{}).(*storedContext); ok {
+		return storedCtx.ctx
 	}
-	return nil
-}
-
-// SetHubOnContext sets the Hub instance on the fiber.Ctx.
-func SetHubOnContext(ctx fiber.Ctx, hub *sentry.Hub) {
-	ctx.Locals(valuesKey, hub)
-}
-
-// GetSpanFromContext retrieves the Span instance from the fiber.Ctx.
-func GetSpanFromContext(ctx fiber.Ctx) *sentry.Span {
-	if span, ok := ctx.Locals(transactionKey).(*sentry.Span); ok {
-		return span
-	}
-	return nil
+	return ctx.Context()
 }
 
 func convert(ctx fiber.Ctx) *http.Request {
