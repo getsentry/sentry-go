@@ -90,16 +90,13 @@ func run() error {
 	// A new transaction is automatically sent to Sentry when the handler is
 	// invoked.
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Use GetHubFromContext to get a hub associated with the
-		// current request. Hubs provide data isolation, such that tags,
-		// breadcrumbs and other attributes are never mixed up across
-		// requests.
+		// Use the request context for captures and scope data. The middleware
+		// isolates this data so it is never mixed across requests.
 		ctx := r.Context()
-		hub := sentry.GetHubFromContext(ctx)
 
 		if r.URL.Path != "/" {
-			hub.Scope().SetTag("url", r.URL.Path)
-			hub.CaptureMessage("Page Not Found")
+			sentry.ScopeFromContext(ctx).SetTag("url", r.URL.Path)
+			sentry.CaptureMessage(ctx, "Page Not Found")
 			http.NotFound(w, r)
 			return
 		}
@@ -163,8 +160,7 @@ func run() error {
 
 		if err != nil {
 			log.Printf("[%q] %s", r.URL.Path, err)
-			hub := sentry.GetHubFromContext(ctx)
-			hub.CaptureException(err)
+			sentry.CaptureException(ctx, err)
 			code := http.StatusInternalServerError
 			http.Error(w, http.StatusText(code), code)
 			return

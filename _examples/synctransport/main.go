@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -18,23 +19,23 @@ func main() {
 	})
 
 	go func() {
-		sentry.CaptureMessage("Event #1")
+		sentry.CaptureMessage(context.Background(), "Event #1")
 		log.Println(1)
-		sentry.CaptureMessage("Event #2")
+		sentry.CaptureMessage(context.Background(), "Event #2")
 		log.Println(2)
 	}()
 
-	sentry.CaptureMessage("Event #3")
+	sentry.CaptureMessage(context.Background(), "Event #3")
 	log.Println(3)
-	sentry.CaptureMessage("Event #4")
+	sentry.CaptureMessage(context.Background(), "Event #4")
 	log.Println(4)
-	sentry.CaptureMessage("Event #5")
+	sentry.CaptureMessage(context.Background(), "Event #5")
 	log.Println(5)
 
 	go func() {
-		sentry.CaptureMessage("Event #6")
+		sentry.CaptureMessage(context.Background(), "Event #6")
 		log.Println(6)
-		sentry.CaptureMessage("Event #7")
+		sentry.CaptureMessage(context.Background(), "Event #7")
 		log.Println(7)
 	}()
 }
