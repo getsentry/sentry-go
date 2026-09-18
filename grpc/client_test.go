@@ -5,10 +5,11 @@ import (
 	"io"
 	"strings"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/getsentry/sentry-go"
 	sentrygrpc "github.com/getsentry/sentry-go/grpc"
+	"github.com/getsentry/sentry-go/internal/sentrytest"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,13 +70,20 @@ func spanStatusCode(t *testing.T, transport *sentry.MockTransport) int {
 	t.Helper()
 	events := transport.Events()
 	require.Len(t, events, 1)
-	return events[0].Contexts["trace"]["data"].(map[string]any)["rpc.grpc.status_code"].(int)
+	for _, span := range events[0].Spans {
+		if span.Op == "rpc.client" {
+			return span.Data["rpc.grpc.status_code"].(int)
+		}
+	}
+	t.Fatal("missing rpc.client span")
+	return 0
 }
 
-func flushEventCount(t *testing.T, transport *sentry.MockTransport) int {
+func startClientTransaction(base context.Context, t *testing.T) (context.Context, *sentry.Span) {
 	t.Helper()
-	sentry.Flush(testutils.FlushTimeout())
-	return len(transport.Events())
+	ctx, _ := sentry.WithIsolationScope(base)
+	transaction := sentry.StartTransaction(ctx, "test client transaction")
+	return transaction.Context(), transaction
 }
 
 func requireUnaryClientBaggagePropagation(
@@ -87,7 +95,8 @@ func requireUnaryClientBaggagePropagation(
 
 	transport := initMockTransport(t)
 	interceptor := sentrygrpc.UnaryClientInterceptor()
-	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+	ctx, transaction := startClientTransaction(context.Background(), t)
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 		sentry.SentryBaggageHeader, existingBaggage,
 	))
 
@@ -99,6 +108,7 @@ func requireUnaryClientBaggagePropagation(
 	})
 
 	require.NoError(t, err)
+	transaction.Finish()
 	sentry.Flush(testutils.FlushTimeout())
 	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
@@ -137,9 +147,11 @@ func TestUnaryClientInterceptor(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			transport := initMockTransport(t)
 			interceptor := sentrygrpc.UnaryClientInterceptor()
+			ctx, transaction := startClientTransaction(tc.ctx, t)
 
-			err := interceptor(tc.ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, tc.invoker)
+			err := interceptor(ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, tc.invoker)
 			tc.assertErr(t, err)
+			transaction.Finish()
 			sentry.Flush(testutils.FlushTimeout())
 
 			assert.Equal(t, int(tc.wantCode), spanStatusCode(t, transport))
@@ -153,7 +165,8 @@ func TestUnaryClientInterceptor_ReplacesExistingTraceHeaders(t *testing.T) {
 
 	oldTrace := "0123456789abcdef0123456789abcdef-0123456789abcdef-1"
 	oldBaggage := "sentry-trace_id=0123456789abcdef0123456789abcdef"
-	ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+	ctx, transaction := startClientTransaction(context.Background(), t)
+	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 		sentry.SentryTraceHeader, oldTrace,
 		sentry.SentryBaggageHeader, oldBaggage,
 		"existing", "value",
@@ -171,6 +184,7 @@ func TestUnaryClientInterceptor_ReplacesExistingTraceHeaders(t *testing.T) {
 	})
 
 	require.NoError(t, err)
+	transaction.Finish()
 	sentry.Flush(testutils.FlushTimeout())
 	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
@@ -187,6 +201,53 @@ func TestUnaryClientInterceptor_PropagatesSentryBaggageWhenExistingBaggageIsMalf
 		assert.NotContains(t, baggageHeader, "not-valid")
 		assert.Contains(t, baggageHeader, "sentry-trace_id")
 	})
+}
+
+func TestUnaryClientInterceptor_PropagatesScopeWithoutSpan(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		continued bool
+		existing  []string
+		want      string
+	}{
+		{name: "generated", existing: []string{"othervendor=value", "sentry-release=old,sentry-extra=stale"}},
+		{name: "frozen empty", continued: true, existing: []string{"othervendor=value", "sentry-release=old,sentry-extra=stale"}, want: "othervendor=value"},
+		{name: "frozen empty with malformed baggage", continued: true, existing: []string{"not-valid"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{Release: "scope-release"}))
+			ctx := f.NewContext(context.Background())
+			if test.continued {
+				sentry.StartTransaction(ctx, "incoming", sentry.ContinueTrace("11111111111111111111111111111111-2222222222222222-1", "")).Finish()
+			}
+			wantTrace := sentry.GetTraceparent(ctx)
+			require.NotEmpty(t, wantTrace)
+			original := metadata.MD{sentry.SentryBaggageHeader: test.existing}
+			ctx = metadata.NewOutgoingContext(ctx, original)
+			err := sentrygrpc.UnaryClientInterceptor()(ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, func(ctx context.Context, _ string, _, _ any, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
+				require.Nil(t, sentry.SpanFromContext(ctx))
+				md, ok := metadata.FromOutgoingContext(ctx)
+				require.True(t, ok)
+				require.Equal(t, []string{wantTrace}, md.Get(sentry.SentryTraceHeader))
+				value := strings.Join(md.Get(sentry.SentryBaggageHeader), ",")
+				if test.continued {
+					require.Equal(t, test.want, value)
+				} else {
+					require.Contains(t, value, "othervendor=value")
+					require.Contains(t, value, "sentry-release=scope-release")
+					require.NotContains(t, value, "sentry-release=old")
+					require.NotContains(t, value, "sentry-extra=stale")
+				}
+				return nil
+			})
+			require.NoError(t, err)
+			require.Equal(t, test.existing, original.Get(sentry.SentryBaggageHeader))
+			f.Flush()
+			require.Empty(t, f.Events())
+		})
+	}
 }
 
 func TestStreamClientInterceptor(t *testing.T) {
@@ -221,14 +282,6 @@ func TestStreamClientInterceptor(t *testing.T) {
 				return nil, nil
 			},
 			wantCode: codes.Internal,
-		},
-		"RecvMsg EOF finishes span with OK": {
-			ctx: context.Background(),
-			streamer: func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
-				return &mockClientStream{recvMsgFn: func(_ any) error { return io.EOF }}, nil
-			},
-			streamOp: func(stream grpc.ClientStream) { require.Error(t, stream.RecvMsg(nil)) },
-			wantCode: codes.OK,
 		},
 		"RecvMsg error records error status": {
 			ctx: context.Background(),
@@ -275,8 +328,9 @@ func TestStreamClientInterceptor(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			transport := initMockTransport(t)
 			interceptor := sentrygrpc.StreamClientInterceptor()
+			ctx, transaction := startClientTransaction(tc.ctx, t)
 
-			stream, err := interceptor(tc.ctx, &grpc.StreamDesc{}, nil, "/test.TestService/Method", tc.streamer)
+			stream, err := interceptor(ctx, &grpc.StreamDesc{}, nil, "/test.TestService/Method", tc.streamer)
 			if tc.wantCode == codes.OK {
 				require.NoError(t, err)
 			}
@@ -284,6 +338,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 				tc.streamOp(stream)
 			}
 
+			transaction.Finish()
 			sentry.Flush(testutils.FlushTimeout())
 			assert.Equal(t, int(tc.wantCode), spanStatusCode(t, transport))
 		})
@@ -293,8 +348,9 @@ func TestStreamClientInterceptor(t *testing.T) {
 func TestStreamClientInterceptor_FinishesNonServerStreamingResponseOnFirstRecv(t *testing.T) {
 	transport := initMockTransport(t)
 	interceptor := sentrygrpc.StreamClientInterceptor()
+	ctx, transaction := startClientTransaction(context.Background(), t)
 
-	stream, err := interceptor(context.Background(), &grpc.StreamDesc{}, nil, "/test.TestService/Method", func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
+	stream, err := interceptor(ctx, &grpc.StreamDesc{}, nil, "/test.TestService/Method", func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
 		return &mockClientStream{recvMsgFn: func(_ any) error { return nil }}, nil
 	})
 
@@ -302,6 +358,7 @@ func TestStreamClientInterceptor_FinishesNonServerStreamingResponseOnFirstRecv(t
 	require.NotNil(t, stream)
 	require.NoError(t, stream.RecvMsg(nil))
 
+	transaction.Finish()
 	sentry.Flush(testutils.FlushTimeout())
 	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
@@ -309,17 +366,22 @@ func TestStreamClientInterceptor_FinishesNonServerStreamingResponseOnFirstRecv(t
 func TestStreamClientInterceptor_CloseSendWaitsForRecvMsg(t *testing.T) {
 	transport := initMockTransport(t)
 	interceptor := sentrygrpc.StreamClientInterceptor()
+	ctx, transaction := startClientTransaction(context.Background(), t)
+	var rpcSpan *sentry.Span
 
-	stream, err := interceptor(context.Background(), &grpc.StreamDesc{ClientStreams: true}, nil, "/test.TestService/Method", func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
+	stream, err := interceptor(ctx, &grpc.StreamDesc{ClientStreams: true}, nil, "/test.TestService/Method", func(ctx context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
+		rpcSpan = sentry.SpanFromContext(ctx)
 		return &mockClientStream{recvMsgFn: func(_ any) error { return nil }}, nil
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, stream)
+	require.NotNil(t, rpcSpan)
 	require.NoError(t, stream.CloseSend())
-	assert.Equal(t, 0, flushEventCount(t, transport))
+	assert.True(t, rpcSpan.EndTime.IsZero(), "CloseSend must leave the RPC span unfinished")
 
 	require.NoError(t, stream.RecvMsg(nil))
+	transaction.Finish()
 	sentry.Flush(testutils.FlushTimeout())
 	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
@@ -327,8 +389,11 @@ func TestStreamClientInterceptor_CloseSendWaitsForRecvMsg(t *testing.T) {
 func TestStreamClientInterceptor_SendMsgEOFWaitsForRecvMsgStatus(t *testing.T) {
 	transport := initMockTransport(t)
 	interceptor := sentrygrpc.StreamClientInterceptor()
+	ctx, transaction := startClientTransaction(context.Background(), t)
+	var rpcSpan *sentry.Span
 
-	stream, err := interceptor(context.Background(), &grpc.StreamDesc{ClientStreams: true, ServerStreams: true}, nil, "/test.TestService/Method", func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
+	stream, err := interceptor(ctx, &grpc.StreamDesc{ClientStreams: true, ServerStreams: true}, nil, "/test.TestService/Method", func(ctx context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
+		rpcSpan = sentry.SpanFromContext(ctx)
 		return &mockClientStream{
 			sendMsgFn: func(_ any) error { return io.EOF },
 			recvMsgFn: func(_ any) error { return status.Error(codes.Unavailable, "down") },
@@ -337,42 +402,44 @@ func TestStreamClientInterceptor_SendMsgEOFWaitsForRecvMsgStatus(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, stream)
+	require.NotNil(t, rpcSpan)
 	assert.ErrorIs(t, stream.SendMsg(nil), io.EOF)
-	assert.Equal(t, 0, flushEventCount(t, transport))
+	assert.True(t, rpcSpan.EndTime.IsZero(), "SendMsg EOF must leave the RPC span unfinished")
 
 	err = stream.RecvMsg(nil)
 	require.Error(t, err)
 	assert.Equal(t, codes.Unavailable, status.Code(err))
 
+	transaction.Finish()
 	sentry.Flush(testutils.FlushTimeout())
 	assert.Equal(t, int(codes.Unavailable), spanStatusCode(t, transport))
 }
 
 func TestStreamClientInterceptor_FinishesOnContextCancellation(t *testing.T) {
-	transport := initMockTransport(t)
-	interceptor := sentrygrpc.StreamClientInterceptor()
+	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := interceptor(ctx, &grpc.StreamDesc{}, nil, "/test.TestService/Method", func(ctx context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
-		md, ok := metadata.FromOutgoingContext(ctx)
-		require.True(t, ok)
-		assert.Contains(t, md, sentry.SentryTraceHeader)
-		assert.Contains(t, md, sentry.SentryBaggageHeader)
-		return &mockClientStream{}, nil
-	})
+	sentrytest.Run(t, func(t *testing.T, fixture *sentrytest.Fixture) {
+		ctx, transaction := startClientTransaction(fixture.NewContext(context.Background()), t)
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		var rpcSpan *sentry.Span
+		stream, err := sentrygrpc.StreamClientInterceptor()(ctx, &grpc.StreamDesc{}, nil, "/test.TestService/Method", func(ctx context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
+			rpcSpan = sentry.SpanFromContext(ctx)
+			return &mockClientStream{}, nil
+		})
+		require.NoError(t, err)
+		require.NotNil(t, stream)
+		require.NotNil(t, rpcSpan)
+		require.True(t, rpcSpan.EndTime.IsZero())
 
-	require.NoError(t, err)
-	require.NotNil(t, stream)
-
-	cancel()
-
-	require.Eventually(t, func() bool {
-		sentry.Flush(testutils.FlushTimeout())
-		return len(transport.Events()) > 0
-	}, testutils.FlushTimeout(), 10*time.Millisecond)
-
-	events := transport.Events()
-	lastEvent := events[len(events)-1]
-	statusCode := lastEvent.Contexts["trace"]["data"].(map[string]any)["rpc.grpc.status_code"].(int)
-	assert.Equal(t, int(codes.Canceled), statusCode)
+		cancel()
+		synctest.Wait()
+		require.False(t, rpcSpan.EndTime.IsZero(), "cancellation must finish the RPC span without another stream operation")
+		transaction.Finish()
+		fixture.Flush()
+		assert.Equal(t, int(codes.Canceled), spanStatusCode(t, fixture.Transport))
+	}, sentrytest.WithClientOptions(sentry.ClientOptions{
+		EnableTracing:    true,
+		TracesSampleRate: 1.0,
+	}))
 }
