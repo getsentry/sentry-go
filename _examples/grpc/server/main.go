@@ -61,6 +61,7 @@ func main() {
 	// Initialize Sentry
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:              "",
+		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 	})
 	if err != nil {

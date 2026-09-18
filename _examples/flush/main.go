@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -13,13 +14,13 @@ func main() {
 		Debug: true,
 	})
 
-	sentry.CaptureMessage("Event #1")
-	sentry.CaptureMessage("Event #2")
-	sentry.CaptureMessage("Event #3")
+	sentry.CaptureMessage(context.Background(), "Event #1")
+	sentry.CaptureMessage(context.Background(), "Event #2")
+	sentry.CaptureMessage(context.Background(), "Event #3")
 
 	go func() {
-		sentry.CaptureMessage("Event #4")
-		sentry.CaptureMessage("Event #5")
+		sentry.CaptureMessage(context.Background(), "Event #4")
+		sentry.CaptureMessage(context.Background(), "Event #5")
 	}()
 
 	fmt.Println("=> Flushing transport buffer")
