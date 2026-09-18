@@ -60,7 +60,7 @@ func NewLogger(ctx context.Context) Logger { // nolint: dupl
 	}
 
 	client := hub.Client()
-	if client != nil {
+	if client.IsEnabled() {
 		// Build default attrs
 		serverAddr := client.options.ServerName
 		if serverAddr == "" {
@@ -111,7 +111,7 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		hub = l.hub
 	}
 	client := hub.Client()
-	if client == nil {
+	if !client.IsEnabled() {
 		return
 	}
 
