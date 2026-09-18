@@ -74,10 +74,6 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 	}
 	fallbackCtx := m.fallbackCtx
 	scope, fallbackCtx := scopeAndTraceFallback(ctx, fallbackCtx)
-	if options.scope != nil {
-		scope = options.scope
-		fallbackCtx = nil
-	}
 
 	m.mu.RLock()
 	attrs := mergeScopeAttributes(client, scope, len(m.attributes)+len(options.attributes))

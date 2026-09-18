@@ -85,11 +85,11 @@ func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		created := sentry.SpanFromContext(r.Context()) == nil
-		ctx, scope := sentry.WithIsolationScope(r.Context())
+		ctx, scope := sentry.WithScope(r.Context())
 
 		sentry.ClientFromContext(ctx).SetSDKIdentifier(sdkIdentifier)
 		options := []sentry.SpanOption{
-			traceutils.ContinueFromRequest(r),
+			sentry.ContinueFromRequest(r),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),

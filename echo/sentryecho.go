@@ -8,7 +8,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/traceutils"
 	"github.com/labstack/echo/v5"
 )
 
@@ -61,7 +60,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx *echo.Context) error {
 		r := ctx.Request()
 		created := sentry.SpanFromContext(r.Context()) == nil
-		requestCtx, scope := sentry.WithIsolationScope(r.Context())
+		requestCtx, scope := sentry.WithScope(r.Context())
 
 		sentry.ClientFromContext(requestCtx).SetSDKIdentifier(sdkIdentifier)
 
@@ -74,7 +73,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		options := []sentry.SpanOption{
-			traceutils.ContinueFromRequest(r),
+			sentry.ContinueFromRequest(r),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(transactionSource),
 			sentry.WithSpanOrigin(sentry.SpanOriginEcho),

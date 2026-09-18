@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/internal/traceutils"
 	"github.com/kataras/iris/v12"
 )
 
@@ -57,12 +56,12 @@ func GetContext(ctx iris.Context) context.Context {
 func (h *handler) handle(ctx iris.Context) {
 	r := ctx.Request()
 	created := sentry.SpanFromContext(r.Context()) == nil
-	requestCtx, scope := sentry.WithIsolationScope(r.Context())
+	requestCtx, scope := sentry.WithScope(r.Context())
 
 	sentry.ClientFromContext(requestCtx).SetSDKIdentifier(sdkIdentifier)
 
 	options := []sentry.SpanOption{
-		traceutils.ContinueFromRequest(r),
+		sentry.ContinueFromRequest(r),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(sentry.SourceRoute),
 		sentry.WithSpanOrigin(sentry.SpanOriginIris),
