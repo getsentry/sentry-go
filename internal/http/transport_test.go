@@ -18,7 +18,6 @@ import (
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
-	"github.com/getsentry/sentry-go/internal/util"
 	"go.uber.org/goleak"
 )
 
@@ -485,13 +484,17 @@ func TestKeepAlive(t *testing.T) {
 		{"SyncTransport", false},
 	}
 
+	// After go 1.27, the runtime reuses http connections when the response body is less than 256 KiB automatically.
+	// To test keepalive we need a response body larger than this limit.
+	maxDrainResponseBytes := 256 << 11
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			largeResponse := false
+			largeResponseBody := strings.Repeat(" ", maxDrainResponseBytes)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				fmt.Fprintln(w, `{"id":"ec71d87189164e79ab1e61030c183af0"}`)
 				if largeResponse {
-					fmt.Fprintln(w, strings.Repeat(" ", util.MaxDrainResponseBytes))
+					fmt.Fprintln(w, largeResponseBody)
 				}
 			}))
 			defer server.Close()

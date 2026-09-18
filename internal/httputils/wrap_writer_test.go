@@ -37,6 +37,30 @@ func (c *CustomResponseWriter) ReadFrom(r io.Reader) (n int64, err error) {
 	return
 }
 
+// FlusherHijacker for testing a writer that supports http.Flusher and
+// http.Hijacker, but not io.ReaderFrom, like most compressing middlewares.
+type FlusherHijacker struct {
+	*httptest.ResponseRecorder
+}
+
+func (c *FlusherHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return nil, nil, errors.New("hijack not supported in tests")
+}
+
+func (c *FlusherHijacker) Flush() {
+	c.ResponseRecorder.Flush()
+}
+
+// HijackerOnly for testing a writer that supports http.Hijacker, but neither
+// http.Flusher nor io.ReaderFrom.
+type HijackerOnly struct {
+	http.ResponseWriter
+}
+
+func (c *HijackerOnly) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return nil, nil, errors.New("hijack not supported in tests")
+}
+
 func TestHttpFancyWriterRemembersWroteHeaderWhenFlushed(t *testing.T) {
 	f := &httpFancyWriter{basicWriter: basicWriter{ResponseWriter: httptest.NewRecorder()}}
 	f.Flush()
@@ -92,6 +116,62 @@ func TestNewWrapResponseWriter(t *testing.T) {
 	w2 := NewWrapResponseWriter(customRec, 2)
 	if _, ok := w2.(*http2FancyWriter); !ok {
 		t.Fatalf("expected http2FancyWriter, got %T", w2)
+	}
+}
+
+func TestNewWrapResponseWriterKeepsHijacker(t *testing.T) {
+	// Flusher, Hijacker and io.ReaderFrom
+	w1 := NewWrapResponseWriter(&CustomResponseWriter{httptest.NewRecorder()}, 1)
+	if _, ok := w1.(*httpFancyWriter); !ok {
+		t.Fatalf("expected httpFancyWriter, got %T", w1)
+	}
+	if _, ok := w1.(http.Hijacker); !ok {
+		t.Fatalf("%T does not implement http.Hijacker", w1)
+	}
+
+	// Flusher and Hijacker
+	w2 := NewWrapResponseWriter(&FlusherHijacker{httptest.NewRecorder()}, 1)
+	if _, ok := w2.(*flushHijackWriter); !ok {
+		t.Fatalf("expected flushHijackWriter, got %T", w2)
+	}
+	if _, ok := w2.(http.Hijacker); !ok {
+		t.Fatalf("%T does not implement http.Hijacker", w2)
+	}
+
+	// Hijacker only
+	w3 := NewWrapResponseWriter(&HijackerOnly{httptest.NewRecorder()}, 1)
+	if _, ok := w3.(*hijackWriter); !ok {
+		t.Fatalf("expected hijackWriter, got %T", w3)
+	}
+	if _, ok := w3.(http.Hijacker); !ok {
+		t.Fatalf("%T does not implement http.Hijacker", w3)
+	}
+}
+
+func TestFlushHijackWriterRemembersWroteHeaderWhenFlushed(t *testing.T) {
+	f := &flushHijackWriter{basicWriter{ResponseWriter: &FlusherHijacker{httptest.NewRecorder()}}}
+	f.Flush()
+
+	if !f.wroteHeader {
+		t.Fatal("want Flush to have set wroteHeader=true")
+	}
+}
+
+func TestFlushHijackWriterHijack(t *testing.T) {
+	f := &flushHijackWriter{basicWriter{ResponseWriter: &FlusherHijacker{httptest.NewRecorder()}}}
+
+	_, _, err := f.Hijack()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestHijackWriterHijack(t *testing.T) {
+	f := &hijackWriter{basicWriter{ResponseWriter: &HijackerOnly{httptest.NewRecorder()}}}
+
+	_, _, err := f.Hijack()
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }
 
