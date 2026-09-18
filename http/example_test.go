@@ -16,13 +16,11 @@ func Example() {
 	// sentry.Init(...)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Use GetHubFromContext to get a hub associated with the current
-		// request. Hubs provide data isolation, such that tags, breadcrumbs
-		// and other attributes are never mixed up across requests.
-		hub := sentry.GetHubFromContext(r.Context())
+		// Capture with the request context so the request-specific scope and
+		// trace are applied to the event.
 		_, err := http.Get("example.com")
 		if err != nil {
-			hub.CaptureException(err)
+			sentry.CaptureException(r.Context(), err)
 		}
 	})
 
