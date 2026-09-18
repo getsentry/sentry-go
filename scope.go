@@ -310,18 +310,18 @@ func applyStaticSamplingDecision(propagationContext *PropagationContext, client 
 	}
 }
 
-// GetSpan returns the span attached to the current scope. The SDK attaches a
+// getSpan returns the span attached to the current scope. The SDK attaches a
 // request root for propagation and capture fallback; use [SpanFromContext] to
 // retrieve the active child span.
-func (scope *Scope) GetSpan() *Span {
+func (scope *Scope) getSpan() *Span {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 	return scope.span
 }
 
-// SetSpan attaches span to the current scope. SDK-created roots use this as a
+// setSpan attaches span to the current scope. SDK-created roots use this as a
 // propagation fallback; callers can attach any span.
-func (scope *Scope) SetSpan(span *Span) {
+func (scope *Scope) setSpan(span *Span) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 	scope.span = span

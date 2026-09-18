@@ -255,7 +255,7 @@ func TestWithIsolationScopeCreatesIndependentRoots(t *testing.T) {
 	global := GlobalScope()
 	previous := global.Clone()
 	global.SetTag("global-snapshot", "before")
-	global.SetSpan(&Span{})
+	global.setSpan(&Span{})
 	t.Cleanup(func() {
 		global.mu.Lock()
 		global.scopeData = previous.scopeData
@@ -271,8 +271,8 @@ func TestWithIsolationScopeCreatesIndependentRoots(t *testing.T) {
 	assert.Equal(t, "before", transport.Events()[0].Tags["global-snapshot"])
 	assert.NotContains(t, transport.Events()[0].Tags, "global-after-snapshot")
 	assert.NotEqual(t, transport.Events()[0].Contexts["trace"][traceIDContextKey], transport.Events()[1].Contexts["trace"][traceIDContextKey])
-	assert.Nil(t, first.GetSpan())
-	assert.Nil(t, second.GetSpan())
+	assert.Nil(t, first.getSpan())
+	assert.Nil(t, second.getSpan())
 }
 
 func TestWithIsolationScopeClonesParentTrace(t *testing.T) {
