@@ -44,6 +44,7 @@ const (
 	EnvelopeItemTypeEvent        EnvelopeItemType = "event"
 	EnvelopeItemTypeTransaction  EnvelopeItemType = "transaction"
 	EnvelopeItemTypeCheckIn      EnvelopeItemType = "check_in"
+	EnvelopeItemTypeFeedback     EnvelopeItemType = "feedback"
 	EnvelopeItemTypeAttachment   EnvelopeItemType = "attachment"
 	EnvelopeItemTypeLog          EnvelopeItemType = "log"
 	EnvelopeItemTypeTraceMetric  EnvelopeItemType = "trace_metric"

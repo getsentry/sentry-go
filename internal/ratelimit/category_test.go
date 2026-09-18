@@ -13,6 +13,7 @@ func TestCategory_String(t *testing.T) {
 		{CategoryError, "CategoryError"},
 		{CategoryTransaction, "CategoryTransaction"},
 		{CategoryMonitor, "CategoryMonitor"},
+		{CategoryFeedback, "CategoryFeedback"},
 		{CategoryLog, "CategoryLog"},
 		{CategoryTraceMetric, "CategoryTraceMetric"},
 		{Category("custom type"), "CategoryCustomType"},
@@ -35,6 +36,7 @@ func TestKnownCategories(t *testing.T) {
 		CategoryError,
 		CategoryTransaction,
 		CategoryMonitor,
+		CategoryFeedback,
 		CategoryLog,
 		CategoryTraceMetric,
 	}
@@ -90,6 +92,7 @@ func TestCategory_GetPriority(t *testing.T) {
 	}{
 		{CategoryError, PriorityCritical},
 		{CategoryMonitor, PriorityHigh},
+		{CategoryFeedback, PriorityHigh},
 		{CategoryLog, PriorityLow},
 		{CategoryTransaction, PriorityMedium},
 		{CategoryTraceMetric, PriorityLow},

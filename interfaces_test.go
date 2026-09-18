@@ -791,6 +791,7 @@ func TestEvent_ToCategory(t *testing.T) {
 		{"transaction", transactionType, ratelimit.CategoryTransaction},
 		{"log", logEvent.Type, ratelimit.CategoryLog},
 		{"checkin", checkInType, ratelimit.CategoryMonitor},
+		{"feedback", feedbackType, ratelimit.CategoryFeedback},
 		{"unknown", "foobar", ratelimit.CategoryUnknown},
 	}
 	for _, tc := range cases {

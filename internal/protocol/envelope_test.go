@@ -34,6 +34,12 @@ func TestEnvelope_ItemsAndSerialization(t *testing.T) {
 			creator:  func(p []byte) *EnvelopeItem { return NewEnvelopeItem(EnvelopeItemTypeCheckIn, p) },
 		},
 		{
+			name:     "feedback",
+			itemType: EnvelopeItemTypeFeedback,
+			payload:  []byte(`{"type":"feedback","contexts":{"feedback":{"message":"It works"}}}`),
+			creator:  func(p []byte) *EnvelopeItem { return NewEnvelopeItem(EnvelopeItemTypeFeedback, p) },
+		},
+		{
 			name:     "attachment",
 			itemType: EnvelopeItemTypeAttachment,
 			payload:  []byte("test attachment content"),

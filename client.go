@@ -614,6 +614,15 @@ func (client *Client) CaptureException(exception error, hint *EventHint, scope E
 	return client.CaptureEvent(event, hint, scope)
 }
 
+// CaptureFeedback captures user-provided feedback.
+func (client *Client) CaptureFeedback(feedback *Feedback, hint *EventHint, scope EventModifier) *EventID {
+	event := client.EventFromFeedback(feedback)
+	if event == nil {
+		return nil
+	}
+	return client.CaptureEvent(event, hint, scope)
+}
+
 // CaptureCheckIn captures a check in.
 func (client *Client) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig, scope EventModifier) *EventID {
 	event := client.EventFromCheckIn(checkIn, monitorConfig)
@@ -847,6 +856,20 @@ func (client *Client) EventFromException(exception error, level Level) *Event {
 	return event
 }
 
+// EventFromFeedback creates a new Sentry event from the given feedback.
+func (client *Client) EventFromFeedback(feedback *Feedback) *Event {
+	if feedback == nil {
+		return nil
+	}
+
+	event := NewEvent()
+	event.Type = feedbackType
+	event.Level = LevelInfo
+	event.Contexts[feedbackType] = feedback.context()
+
+	return event
+}
+
 // EventFromCheckIn creates a new Sentry event from the given `check_in` instance.
 func (client *Client) EventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
 	if checkIn == nil {
@@ -896,8 +919,9 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 
 	// Transactions are sampled by options.TracesSampleRate or
 	// options.TracesSampler when they are started. Other events
-	// (errors, messages) are sampled here. Does not apply to check-ins.
-	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
+	// (errors, messages) are sampled here. Does not apply to check-ins or
+	// user-submitted feedback.
+	if event.Type != transactionType && event.Type != checkInType && event.Type != feedbackType && !sample(client.options.SampleRate) {
 		debuglog.Println("Event dropped due to SampleRate hit.")
 		client.reportRecorder.RecordOne(report.ReasonSampleRate, event.toCategory())
 		return nil
@@ -927,7 +951,7 @@ func (client *Client) processEvent(event *Event, hint *EventHint, scope EventMod
 				client.reportRecorder.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, int64(droppedSpans))
 			}
 		}
-	case checkInType: // not a default case, since we shouldn't apply BeforeSend on check-in events
+	case checkInType, feedbackType: // don't apply the error BeforeSend hook to check-ins or feedback
 	default:
 		if client.options.BeforeSend != nil {
 			if event = client.options.BeforeSend(event, hint); event == nil {
