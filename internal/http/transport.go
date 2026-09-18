@@ -43,6 +43,13 @@ type TransportOptions struct {
 	Recorder      report.ClientReportRecorder
 	Provider      report.ClientReportProvider
 	SdkInfo       func() *protocol.SdkInfo
+
+	// Spotlight indicates a Spotlight sidecar is configured to receive a
+	// copy of every envelope independently of this transport. It only
+	// affects the wording of the "no DSN" debug log below, so an empty/
+	// invalid Dsn isn't reported as "no events will be delivered" when
+	// Spotlight is in fact still receiving them.
+	Spotlight bool
 }
 
 func getProxyConfig(options TransportOptions) func(*http.Request) (*url.URL, error) {
@@ -318,6 +325,10 @@ type AsyncTransport struct {
 func NewAsyncTransport(options TransportOptions) protocol.TelemetryTransport {
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil || dsn == nil {
+		if options.Spotlight {
+			debuglog.Printf("No Sentry DSN configured (%v); events will not be delivered to Sentry, but Spotlight is enabled and will still receive them.", err)
+			return &NoopTransport{spotlight: true}
+		}
 		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)
 		return NewNoopTransport()
 	}
@@ -375,8 +386,7 @@ func (t *AsyncTransport) start() {
 		if t.provider == nil {
 			t.provider = report.NoopProvider()
 		}
-		t.wg.Add(1)
-		go t.worker()
+		t.wg.Go(t.worker)
 	})
 }
 
@@ -484,8 +494,6 @@ func (t *AsyncTransport) resolveSdkInfo() *protocol.SdkInfo {
 }
 
 func (t *AsyncTransport) worker() {
-	defer t.wg.Done()
-
 	crTicker := time.NewTicker(defaultClientReportsTick)
 	defer crTicker.Stop()
 
@@ -611,7 +619,12 @@ func (t *AsyncTransport) isRateLimited(category ratelimit.Category) bool {
 
 // NoopTransport is a transport implementation that drops all events.
 // Used internally when an empty or invalid DSN is provided.
-type NoopTransport struct{}
+type NoopTransport struct {
+	// spotlight, when set, means envelopes handed to this transport are
+	// still delivered to a Spotlight sidecar independently, so SendEnvelope
+	// shouldn't log them as dropped outright.
+	spotlight bool
+}
 
 func NewNoopTransport() *NoopTransport {
 	debuglog.Println("Transport initialized with invalid DSN. Using NoopTransport. No events will be delivered.")
@@ -619,6 +632,10 @@ func NewNoopTransport() *NoopTransport {
 }
 
 func (t *NoopTransport) SendEnvelope(_ *protocol.Envelope) error {
+	if t.spotlight {
+		debuglog.Println("Envelope not sent to Sentry (NoopTransport), but Spotlight will still receive it.")
+		return nil
+	}
 	debuglog.Println("Envelope dropped due to NoopTransport usage.")
 	return nil
 }

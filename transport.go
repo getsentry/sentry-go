@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
@@ -565,7 +566,7 @@ started:
 	}
 
 fail:
-	debuglog.Println("Buffer flushing was canceled or timed out.")
+	debuglog.Println("Buffer flushing was canceled or timed out. Some events may not have been sent.")
 	return false
 }
 
@@ -859,27 +860,509 @@ func (t *HTTPSyncTransport) disabled(c ratelimit.Category) bool {
 
 // noopTransport is an implementation of Transport interface which drops all the events.
 // Only used internally when an empty DSN is provided, which effectively disables the SDK.
-type noopTransport struct{}
+type noopTransport struct {
+	// spotlight, when set, means events handed to this transport are still
+	// delivered to a Spotlight sidecar independently, so SendEvent shouldn't
+	// log them as dropped outright.
+	spotlight bool
+}
 
-var _ Transport = noopTransport{}
+var _ Transport = &noopTransport{}
 
-func (noopTransport) Configure(ClientOptions) {
+func (t *noopTransport) Configure(options ClientOptions) {
+	t.spotlight = options.Spotlight
+	if options.Spotlight {
+		debuglog.Println("Sentry client initialized with an empty DSN. No events will be delivered to Sentry, but Spotlight is enabled and will still receive them.")
+		return
+	}
 	debuglog.Println("Sentry client initialized with an empty DSN. Using noopTransport. No events will be delivered.")
 }
 
-func (noopTransport) SendEvent(*Event) {
+func (t *noopTransport) SendEvent(*Event) {
+	if t.spotlight {
+		debuglog.Println("Event not sent to Sentry (noopTransport), but Spotlight will still receive it.")
+		return
+	}
 	debuglog.Println("Event dropped due to noopTransport usage.")
 }
 
-func (noopTransport) Flush(time.Duration) bool {
+func (t *noopTransport) Flush(time.Duration) bool {
 	return true
 }
 
-func (noopTransport) FlushWithContext(context.Context) bool {
+func (t *noopTransport) FlushWithContext(context.Context) bool {
 	return true
 }
 
-func (noopTransport) Close() {}
+func (t *noopTransport) Close() {}
+
+// SpotlightTransport decorates Transport to also send events to Spotlight.
+type SpotlightTransport struct {
+	underlying   Transport
+	client       *http.Client
+	spotlightURL string
+
+	// placeholderDsn exists only so envelopeFromBody has a Dsn to put in the
+	// envelope header - requests go straight to spotlightURL, not a DSN
+	// endpoint, so its value doesn't matter. Parsed once here, not per-send.
+	placeholderDsn *Dsn
+
+	// ctx is cancelled on Close to signal goroutines to stop.
+	// inFlight tracks in-flight sends so Close/Flush can wait for them.
+	// It's a plain counter rather than a sync.WaitGroup because SendEvent
+	// can run concurrently with Flush/Close from another goroutine, and
+	// WaitGroup panics if Add races with Wait on a zeroed counter.
+	ctx      context.Context
+	cancel   context.CancelFunc
+	inFlight atomic.Int64
+
+	backoff spotlightBackoff
+}
+
+const (
+	// defaultSpotlightURL is the default address of the local Spotlight sidecar.
+	defaultSpotlightURL = "http://localhost:8969/stream"
+
+	spotlightInitialRetryDelay = time.Second
+	spotlightMaxRetryDelay     = 60 * time.Second
+
+	// spotlightWaitPollInterval is how often SpotlightTransport's Flush/Close
+	// poll for in-flight Spotlight sends to complete.
+	spotlightWaitPollInterval = 5 * time.Millisecond
+)
+
+// spotlightBackoff tracks connectivity backoff and log-deduplication state
+// shared by anything that sends to the Spotlight sidecar. It is safe for
+// concurrent use, since sends happen one goroutine per event/envelope.
+type spotlightBackoff struct {
+	mu          sync.Mutex
+	retryDelay  time.Duration
+	nextAttempt time.Time
+	errorLogged bool
+}
+
+func newSpotlightBackoff() spotlightBackoff {
+	return spotlightBackoff{retryDelay: spotlightInitialRetryDelay}
+}
+
+// ready reports whether enough time has passed since the last failed send to
+// attempt another one, implementing a simple exponential backoff so an
+// unreachable Spotlight server does not get hammered with a request per
+// captured event/envelope.
+func (b *spotlightBackoff) ready() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.nextAttempt.IsZero() || !time.Now().Before(b.nextAttempt)
+}
+
+// recordFailure logs a connectivity error at most once per outage (further
+// failures are suppressed until a send succeeds again) and schedules the next
+// allowed attempt using exponential backoff, capped at spotlightMaxRetryDelay.
+func (b *spotlightBackoff) recordFailure(spotlightURL string, err error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if !b.errorLogged {
+		debuglog.Printf(
+			"Failed to send to Spotlight at %s: %v. "+
+				"Make sure Spotlight is running (npm install -g @spotlightjs/spotlight && spotlight). "+
+				"Further connectivity errors will be suppressed until Spotlight is reachable again.",
+			spotlightURL, err,
+		)
+		b.errorLogged = true
+	}
+
+	// Concurrent sends can race past ready() before one of them extends the
+	// backoff window; only let the one that actually starts/restarts the
+	// outage push it out, so stragglers don't compound the delay.
+	now := time.Now()
+	if !b.nextAttempt.IsZero() && now.Before(b.nextAttempt) {
+		return
+	}
+
+	b.nextAttempt = now.Add(b.retryDelay)
+	if b.retryDelay < spotlightMaxRetryDelay {
+		b.retryDelay = min(b.retryDelay*2, spotlightMaxRetryDelay)
+	}
+}
+
+// recordSuccess resets the backoff/log-dedup state after a successful send.
+func (b *spotlightBackoff) recordSuccess() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.retryDelay = spotlightInitialRetryDelay
+	b.nextAttempt = time.Time{}
+	b.errorLogged = false
+}
+
+func NewSpotlightTransport(underlying Transport) *SpotlightTransport {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	placeholderDsn, err := NewDsn("https://placeholder@localhost/1")
+	if err != nil {
+		// Unreachable in practice: the DSN above is a fixed, valid literal.
+		debuglog.Printf("Failed to create Spotlight placeholder DSN: %v", err)
+	}
+
+	return &SpotlightTransport{
+		underlying:     underlying,
+		placeholderDsn: placeholderDsn,
+		client: &http.Client{
+			Timeout: 5 * time.Second,
+		},
+		spotlightURL: defaultSpotlightURL,
+		ctx:          ctx,
+		cancel:       cancel,
+		backoff:      newSpotlightBackoff(),
+	}
+}
+
+// readyToSend reports whether enough time has passed since the last failed
+// Spotlight send to attempt another one, implementing a simple exponential
+// backoff so an unreachable Spotlight server does not get hammered with a
+// request per captured event.
+func (st *SpotlightTransport) readyToSend() bool {
+	return st.backoff.ready()
+}
+
+func (st *SpotlightTransport) recordFailure(err error) {
+	st.backoff.recordFailure(st.spotlightURL, err)
+}
+
+func (st *SpotlightTransport) recordSuccess() {
+	st.backoff.recordSuccess()
+}
+
+func (st *SpotlightTransport) Configure(options ClientOptions) {
+	st.underlying.Configure(options)
+
+	if options.SpotlightURL != "" {
+		st.spotlightURL = options.SpotlightURL
+	}
+
+	st.buildHTTPClient(options)
+}
+
+func (st *SpotlightTransport) buildHTTPClient(opts ClientOptions) {
+	st.client = buildSpotlightHTTPClient(opts)
+}
+
+// buildSpotlightHTTPClient builds an *http.Client for talking to the
+// Spotlight sidecar, respecting the user's proxy/TLS/custom HTTPClient or
+// HTTPTransport settings while enforcing Spotlight's own fixed timeout.
+// Spotlight is dev-only; a long or zero timeout inherited from the user's
+// client would defeat the point of never blocking normal operation.
+func buildSpotlightHTTPClient(opts ClientOptions) *http.Client {
+	if opts.HTTPClient != nil {
+		return &http.Client{
+			Transport:     opts.HTTPClient.Transport,
+			CheckRedirect: opts.HTTPClient.CheckRedirect,
+			Jar:           opts.HTTPClient.Jar,
+			Timeout:       5 * time.Second,
+		}
+	}
+
+	var transport http.RoundTripper
+	if opts.HTTPTransport != nil {
+		transport = opts.HTTPTransport
+	} else {
+		transport = &http.Transport{
+			// Deliberately not getProxyConfig(opts): that honors the user's
+			// Sentry-specific HTTPProxy/HTTPSProxy, which would force even
+			// localhost Spotlight traffic through a proxy meant for Sentry's
+			// API. http.ProxyFromEnvironment respects standard NO_PROXY
+			// loopback exclusions instead.
+			Proxy:           http.ProxyFromEnvironment,
+			TLSClientConfig: getTLSConfig(opts),
+		}
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   5 * time.Second,
+	}
+}
+
+// SendEvent serializes event and builds the Spotlight envelope synchronously,
+// before returning, so nothing touches event's mutable fields (maps like
+// Contexts/Extra/Tags) after the caller regains control of it. Only the
+// network request itself runs in the background goroutine.
+func (st *SpotlightTransport) SendEvent(event *Event) {
+	st.underlying.SendEvent(event)
+
+	if st.isShuttingDown() {
+		debuglog.Printf("Skipping Spotlight send: transport shutting down")
+		return
+	}
+	if !st.readyToSend() {
+		// Backing off after a recent connectivity failure; drop this event
+		// rather than hammering an unreachable Spotlight server.
+		return
+	}
+	if st.placeholderDsn == nil {
+		debuglog.Println("Skipping Spotlight send: no placeholder DSN available")
+		return
+	}
+
+	eventBody := getRequestBodyFromEvent(event)
+	if eventBody == nil {
+		debuglog.Println("Failed to serialize event for Spotlight")
+		return
+	}
+
+	envelope, err := envelopeFromBody(event, st.placeholderDsn, time.Now(), eventBody)
+	if err != nil {
+		debuglog.Printf("Failed to create Spotlight envelope: %v", err)
+		return
+	}
+
+	st.inFlight.Add(1)
+	go func() {
+		defer st.inFlight.Add(-1)
+		st.postToSpotlight(envelope)
+	}()
+}
+
+func (st *SpotlightTransport) isShuttingDown() bool {
+	return st.ctx.Err() != nil
+}
+
+func (st *SpotlightTransport) postToSpotlight(envelope *bytes.Buffer) {
+	timeoutCtx, cancel := context.WithTimeout(st.ctx, st.client.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(timeoutCtx, "POST", st.spotlightURL, envelope)
+	if err != nil {
+		debuglog.Printf("Failed to create Spotlight request: %v", err)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/x-sentry-envelope")
+	req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", sdkIdentifier, SDKVersion))
+
+	resp, err := st.client.Do(req)
+	if err != nil {
+		st.recordFailure(err)
+		return
+	}
+	defer func() {
+		// Drain body up to a limit and close it, allowing the
+		// transport to reuse TCP connections.
+		_, _ = io.CopyN(io.Discard, resp.Body, util.MaxDrainResponseBytes)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			debuglog.Printf("Failed to close Spotlight response body: %v", closeErr)
+		}
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		st.recordFailure(fmt.Errorf("spotlight server returned status %d", resp.StatusCode))
+	} else {
+		st.recordSuccess()
+	}
+}
+
+// Flush waits for the underlying transport to send pending events to Sentry,
+// and for any in-flight Spotlight sends to complete, up to timeout.
+func (st *SpotlightTransport) Flush(timeout time.Duration) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return st.FlushWithContext(ctx)
+}
+
+// FlushWithContext waits for the underlying transport to send pending events
+// to Sentry, and for any in-flight Spotlight sends to complete, up until ctx
+// is done.
+func (st *SpotlightTransport) FlushWithContext(ctx context.Context) bool {
+	underlyingOK := st.underlying.FlushWithContext(ctx)
+
+	spotlightOK := util.WaitForZero(ctx, &st.inFlight, spotlightWaitPollInterval)
+	if !spotlightOK {
+		debuglog.Printf("Timed out waiting for in-flight Spotlight sends to complete")
+	}
+
+	return underlyingOK && spotlightOK
+}
+
+func (st *SpotlightTransport) Close() {
+	st.cancel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if util.WaitForZero(ctx, &st.inFlight, spotlightWaitPollInterval) {
+		debuglog.Printf("All Spotlight sends completed")
+	} else {
+		debuglog.Printf("Spotlight sends timed out during shutdown")
+	}
+
+	st.underlying.Close()
+}
+
+// cloneEnvelopeForSpotlight copies an envelope so the Spotlight send doesn't
+// share mutable state with the original, which keeps going through the real
+// transport concurrently.
+func cloneEnvelopeForSpotlight(envelope *protocol.Envelope) *protocol.Envelope {
+	var header *protocol.EnvelopeHeader
+	if envelope.Header != nil {
+		h := *envelope.Header
+		header = &h
+	}
+
+	cloned := protocol.NewEnvelope(header)
+	for _, item := range envelope.Items {
+		if item == nil {
+			continue
+		}
+		cloned.AddItem(&protocol.EnvelopeItem{
+			Header:  cloneEnvelopeItemHeader(item.Header),
+			Payload: append([]byte(nil), item.Payload...),
+		})
+	}
+	return cloned
+}
+
+// cloneEnvelopeItemHeader deep-copies an EnvelopeItemHeader, including its
+// Length and ItemCount pointer fields.
+func cloneEnvelopeItemHeader(header *protocol.EnvelopeItemHeader) *protocol.EnvelopeItemHeader {
+	if header == nil {
+		return nil
+	}
+	newHeader := *header
+	if header.Length != nil {
+		length := *header.Length
+		newHeader.Length = &length
+	}
+	if header.ItemCount != nil {
+		itemCount := *header.ItemCount
+		newHeader.ItemCount = &itemCount
+	}
+	return &newHeader
+}
+
+// spotlightEnvelopeSender implements telemetry.SpotlightSender, forwarding a
+// copy of every envelope the internal/telemetry scheduler sends to a local
+// Spotlight sidecar. This is what makes Spotlight work on the default
+// transport path; SpotlightTransport below handles the legacy path instead
+// (custom Transport / HTTPTransport / HTTPSyncTransport).
+type spotlightEnvelopeSender struct {
+	client       *http.Client
+	spotlightURL string
+
+	// ctx is cancelled on Close to signal in-flight sends to stop.
+	// inFlight tracks in-flight sends so Close/FlushWithContext can wait on
+	// them. It's a plain counter, not a sync.WaitGroup: Send can be called
+	// from the scheduler's background run() goroutine while a concurrent
+	// client.Flush() call from a different goroutine is also happening
+	// (e.g. a new event captured while Flush is in progress), and WaitGroup
+	// panics if Add races with Wait on a zeroed counter.
+	ctx      context.Context
+	cancel   context.CancelFunc
+	inFlight atomic.Int64
+
+	backoff spotlightBackoff
+}
+
+func newSpotlightEnvelopeSender(opts ClientOptions) *spotlightEnvelopeSender {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	url := opts.SpotlightURL
+	if url == "" {
+		url = defaultSpotlightURL
+	}
+
+	return &spotlightEnvelopeSender{
+		client:       buildSpotlightHTTPClient(opts),
+		spotlightURL: url,
+		ctx:          ctx,
+		cancel:       cancel,
+		backoff:      newSpotlightBackoff(),
+	}
+}
+
+// Send implements telemetry.SpotlightSender. It clones the envelope before
+// returning, since the scheduler hands the same pointer to the real
+// transport, which mutates it later (e.g. attaching a client report) on its
+// own background worker. Only the network request itself runs async.
+func (s *spotlightEnvelopeSender) Send(envelope *protocol.Envelope) {
+	if s.ctx.Err() != nil {
+		debuglog.Printf("Skipping Spotlight send: shutting down")
+		return
+	}
+	if !s.backoff.ready() {
+		// Backing off after a recent connectivity failure; drop this
+		// envelope rather than hammering an unreachable Spotlight server.
+		return
+	}
+
+	cloned := cloneEnvelopeForSpotlight(envelope)
+
+	s.inFlight.Add(1)
+	go func() {
+		defer s.inFlight.Add(-1)
+		s.send(cloned)
+	}()
+}
+
+func (s *spotlightEnvelopeSender) send(envelope *protocol.Envelope) {
+	body, err := envelope.Serialize()
+	if err != nil {
+		debuglog.Printf("Failed to serialize envelope for Spotlight: %v", err)
+		return
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(s.ctx, s.client.Timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(timeoutCtx, "POST", s.spotlightURL, bytes.NewReader(body))
+	if err != nil {
+		debuglog.Printf("Failed to create Spotlight request: %v", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/x-sentry-envelope")
+	req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", sdkIdentifier, SDKVersion))
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		s.backoff.recordFailure(s.spotlightURL, err)
+		return
+	}
+	defer func() {
+		_, _ = io.CopyN(io.Discard, resp.Body, util.MaxDrainResponseBytes)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			debuglog.Printf("Failed to close Spotlight response body: %v", closeErr)
+		}
+	}()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		s.backoff.recordFailure(s.spotlightURL, fmt.Errorf("spotlight server returned status %d", resp.StatusCode))
+	} else {
+		s.backoff.recordSuccess()
+	}
+}
+
+// FlushWithContext implements telemetry.SpotlightSender.
+func (s *spotlightEnvelopeSender) FlushWithContext(ctx context.Context) bool {
+	if util.WaitForZero(ctx, &s.inFlight, spotlightWaitPollInterval) {
+		return true
+	}
+	debuglog.Printf("Timed out waiting for in-flight Spotlight sends to complete")
+	return false
+}
+
+// Close implements telemetry.SpotlightSender.
+func (s *spotlightEnvelopeSender) Close() {
+	s.cancel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if util.WaitForZero(ctx, &s.inFlight, spotlightWaitPollInterval) {
+		debuglog.Printf("All Spotlight sends completed")
+	} else {
+		debuglog.Printf("Spotlight sends timed out during shutdown")
+	}
+}
 
 // ================================
 // Internal Transport Adapters

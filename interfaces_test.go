@@ -1317,7 +1317,7 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 		),
 	}
 
-	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil)
+	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil, nil)
 
 	contexts := map[string]Context{
 		"app": {"version": "1.0"},

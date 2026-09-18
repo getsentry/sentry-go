@@ -15,14 +15,17 @@ type Processor struct {
 }
 
 // NewProcessor creates a new Processor with the given configuration.
+// spotlight is optional (nil-able); when set, a copy of every envelope sent
+// by the scheduler is also forwarded to it.
 func NewProcessor(
 	buffers map[ratelimit.Category]Buffer[protocol.TelemetryItem],
 	transport protocol.TelemetryTransport,
 	dsn *protocol.Dsn,
 	sdkInfo func() *protocol.SdkInfo,
 	recorder report.ClientReportRecorder,
+	spotlight SpotlightSender,
 ) *Processor {
-	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, recorder)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, recorder, spotlight)
 	scheduler.Start()
 
 	return &Processor{
