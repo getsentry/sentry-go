@@ -30,7 +30,15 @@ import (
 // an event for reporting, the current client adds information from the current
 // scope into the event.
 type Scope struct {
-	mu          sync.RWMutex
+	mu sync.RWMutex
+	// eventProcessors are retained by Clear and inherited by Clone.
+	eventProcessors []EventProcessor
+
+	// scopeData keeps track of all scope specific data
+	scopeData
+}
+
+type scopeData struct {
 	attributes  map[string]attribute.Value
 	breadcrumbs []*Breadcrumb
 	attachments []*Attachment
@@ -49,7 +57,6 @@ type Scope struct {
 		// size.
 		Overflow() bool
 	}
-	eventProcessors []EventProcessor
 
 	propagationContext PropagationContext
 	span               *Span
@@ -57,14 +64,18 @@ type Scope struct {
 
 // NewScope creates a new Scope.
 func NewScope() *Scope {
-	return &Scope{
+	return &Scope{scopeData: newScopeData(NewPropagationContext())}
+}
+
+func newScopeData(propagationContext PropagationContext) scopeData {
+	return scopeData{
 		attributes:         make(map[string]attribute.Value),
 		breadcrumbs:        make([]*Breadcrumb, 0),
 		attachments:        make([]*Attachment, 0),
 		tags:               make(map[string]string),
 		contexts:           make(map[string]Context),
 		fingerprint:        make([]string, 0),
-		propagationContext: NewPropagationContext(),
+		propagationContext: propagationContext,
 	}
 }
 
@@ -282,6 +293,7 @@ func (scope *Scope) Clone() *Scope {
 
 	clone := NewScope()
 	clone.user = scope.user
+	clone.user.Data = maps.Clone(scope.user.Data)
 	clone.breadcrumbs = make([]*Breadcrumb, len(scope.breadcrumbs))
 	copy(clone.breadcrumbs, scope.breadcrumbs)
 	clone.attachments = make([]*Attachment, len(scope.attachments))
@@ -300,9 +312,16 @@ func (scope *Scope) Clone() *Scope {
 	return clone
 }
 
-// Clear removes the data from the current scope. Not safe for concurrent use.
+// Clear removes enrichment data while preserving event processors and trace
+// correlation. It is safe for concurrent use.
 func (scope *Scope) Clear() {
-	*scope = *NewScope()
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
+	propagationContext := scope.propagationContext
+	span := scope.span
+	scope.scopeData = newScopeData(propagationContext)
+	scope.span = span
 }
 
 // AddEventProcessor adds an event processor to the current scope.
@@ -400,6 +419,7 @@ func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) 
 
 	if event.User.IsEmpty() {
 		event.User = scope.user
+		event.User.Data = maps.Clone(scope.user.Data)
 	}
 
 	if len(event.Fingerprint) == 0 {
