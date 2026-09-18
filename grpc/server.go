@@ -80,11 +80,12 @@ func startServerTransaction(ctx context.Context, fullMethod string) (context.Con
 	name, service, method := parseGRPCMethod(fullMethod)
 
 	setScopeMetadata(hub, name, md)
+	ctx = sentry.SetHubOnContext(ctx, hub)
 
 	transaction := sentry.StartTransaction(
-		sentry.SetHubOnContext(ctx, hub),
+		ctx,
 		name,
-		sentry.ContinueTrace(hub, sentryTraceHeader, sentryBaggageHeader),
+		sentry.ContinueTrace(sentryTraceHeader, sentryBaggageHeader),
 		sentry.WithOpName(defaultServerOperationName),
 		sentry.WithDescription(name),
 		sentry.WithTransactionSource(sentry.SourceRoute),

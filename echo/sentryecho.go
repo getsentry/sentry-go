@@ -69,6 +69,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		r := ctx.Request()
+		requestCtx := sentry.SetHubOnContext(r.Context(), hub)
 
 		transactionName := r.URL.Path
 		transactionSource := sentry.SourceURL
@@ -79,14 +80,14 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		options := []sentry.SpanOption{
-			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+			sentry.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(transactionSource),
 			sentry.WithSpanOrigin(sentry.SpanOriginEcho),
 		}
 
 		transaction := sentry.StartTransaction(
-			sentry.SetHubOnContext(r.Context(), hub),
+			requestCtx,
 			fmt.Sprintf("%s %s", r.Method, transactionName),
 			options...,
 		)
