@@ -597,7 +597,7 @@ func TestRequestIsolation(t *testing.T) {
 	require.ErrorIs(t, firstCtx.Err(), context.Canceled)
 	require.NoError(t, secondCtx.Err())
 
-	ctx, scope := sentry.WithIsolationScope(context.Background())
+	ctx, scope := sentry.WithScope(context.Background())
 	scope.SetTag("parent", "injected")
 	parent := sentry.StartTransaction(sentry.ContextWithClient(ctx, sentry.NewNoopClient()), "injected")
 	defer parent.Finish()

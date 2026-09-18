@@ -63,6 +63,35 @@ More on this in the [Configuration section of the official Sentry Go SDK documen
 
 The SDK supports reporting errors and tracking application performance.
 
+### Contexts and scopes
+
+Pass the current `context.Context` to Sentry APIs. A context without an attached
+scope, including `context.Background()`, uses the global scope. `WithScope`
+returns a derived context with a fork of the scope carried by its parent, or a
+snapshot of the global scope when the parent has no scope. Use
+`ContextWithScope` to attach a specific scope to a context. `NewScope` creates
+an empty scope; it does not copy global data. `ScopeFromContext` returns `nil`
+when no scope is attached.
+
+```go
+ctx, scope := sentry.WithScope(context.Background())
+scope.SetTag("request", "example")
+sentry.CaptureMessage(ctx, "handled request")
+```
+
+To capture a panic from a deferred recovery call, defer `Recover` directly so
+Go's built-in `recover` runs in the deferred function:
+
+```go
+func handle(ctx context.Context) {
+	defer sentry.Recover(ctx, nil)
+	// Handle the request.
+}
+```
+
+`GetTraceparent` returns Sentry's `sentry-trace` header value. Use
+`GetTraceparentW3C` for the W3C `traceparent` header value.
+
 To get started, have a look at one of our [examples](_examples/):
 - [Basic error instrumentation](_examples/basic/main.go)
 - [Error and tracing for HTTP servers](_examples/http/main.go)

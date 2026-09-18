@@ -25,7 +25,7 @@ func setupClientTest() (*sentry.Client, *sentry.MockTransport) {
 }
 
 func contextWithClient(client *sentry.Client) context.Context {
-	ctx, _ := sentry.WithIsolationScope(context.Background())
+	ctx, _ := sentry.WithScope(context.Background())
 	return sentry.ContextWithClient(ctx, client)
 }
 

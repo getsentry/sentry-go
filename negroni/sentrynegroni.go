@@ -48,12 +48,12 @@ func New(options Options) negroni.Handler {
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	created := sentry.SpanFromContext(r.Context()) == nil
-	ctx, scope := sentry.WithIsolationScope(r.Context())
+	ctx, scope := sentry.WithScope(r.Context())
 
 	sentry.ClientFromContext(ctx).SetSDKIdentifier(sdkIdentifier)
 
 	options := []sentry.SpanOption{
-		traceutils.ContinueFromRequest(r),
+		sentry.ContinueFromRequest(r),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(sentry.SourceURL),
 		sentry.WithSpanOrigin(sentry.SpanOriginNegroni),
@@ -101,7 +101,7 @@ func (h *handler) recoverWithSentry(r *http.Request) {
 // PanicHandlerFunc can be used for Negroni's default Recovery middleware option called PanicHandlerFunc,
 // which let you "plug-in" to its own handler.
 func PanicHandlerFunc(info *negroni.PanicInformation) {
-	ctx, scope := sentry.WithIsolationScope(info.Request.Context())
+	ctx, scope := sentry.WithScope(info.Request.Context())
 	request := info.Request.WithContext(ctx)
 	scope.SetRequest(request)
 	ctx = context.WithValue(ctx, sentry.RequestContextKey, request)

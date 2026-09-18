@@ -63,7 +63,7 @@ func traceHeadersFromContext(ctx context.Context) (metadata.MD, string, string) 
 
 func startServerTransaction(ctx context.Context, fullMethod string) (context.Context, *sentry.Span, bool) {
 	owned := sentry.SpanFromContext(ctx) == nil
-	ctx, scope := sentry.WithIsolationScope(ctx)
+	ctx, scope := sentry.WithScope(ctx)
 	client := sentry.ClientFromContext(ctx)
 	client.SetSDKIdentifier(sdkIdentifier)
 
@@ -75,7 +75,7 @@ func startServerTransaction(ctx context.Context, fullMethod string) (context.Con
 	transaction := sentry.StartTransaction(
 		ctx,
 		name,
-		sentry.ContinueTrace(sentryTraceHeader, sentryBaggageHeader),
+		sentry.ContinueFromHeaders(sentryTraceHeader, sentryBaggageHeader),
 		sentry.WithOpName(defaultServerOperationName),
 		sentry.WithDescription(name),
 		sentry.WithTransactionSource(sentry.SourceRoute),

@@ -62,10 +62,10 @@ func ContextWithClient(ctx context.Context, client *Client) context.Context {
 	return context.WithValue(ctx, clientContextKey{}, client)
 }
 
-// WithIsolationScope returns a derived context and an independent scope.
+// WithScope returns a derived context and a forked scope.
 // It clones a carried scope, or snapshots the global scope when ctx does not
-// carry one. A root isolation scope starts a new propagation context.
-func WithIsolationScope(ctx context.Context) (context.Context, *Scope) {
+// carry one. A root scope starts a new propagation context.
+func WithScope(ctx context.Context) (context.Context, *Scope) {
 	parent := ScopeFromContext(ctx)
 	var scope *Scope
 	if parent == nil {
