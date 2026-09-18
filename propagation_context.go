@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	traceContextKey   = "trace"
 	traceIDContextKey = "trace_id"
 	spanIDContextKey  = "span_id"
 )

@@ -646,6 +646,10 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	assertNotEqual(t, scope.user, processedEvent.User, "should not use scope user if event user exists")
 	assertNotEqual(t, scope.request, processedEvent.Request, "should not use scope request if event request exists")
 	assertNotEqual(t, scope.fingerprint, processedEvent.Fingerprint, "should not use scope fingerprint if event fingerprint exists")
+
+	scope.SetContext(traceContextKey, Context{traceIDContextKey: "scope"})
+	event.Contexts[traceContextKey] = Context{traceIDContextKey: "event"}
+	assertEqual(t, event.Contexts[traceContextKey], scope.ApplyToEvent(event, nil, nil).Contexts[traceContextKey], "event trace context takes precedence")
 }
 
 func TestApplyToEventUsingEmptyScope(t *testing.T) {
@@ -676,6 +680,8 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
 	assertEqual(t, processedEvent.Level, scope.level, "should use scope level")
 	assertEqual(t, processedEvent.Request, NewRequest(scope.request), "should use scope request")
+	processedEvent.Contexts["scopeContextsKey"]["scopeContextKey"] = "changed by transport"
+	assertEqual(t, "scopeContextValue", scope.contexts["scopeContextsKey"]["scopeContextKey"], "event must not own scope context")
 }
 
 func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
