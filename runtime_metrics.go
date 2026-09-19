@@ -141,6 +141,10 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 		return
 	}
 
+	onceRuntimeMetrics.Do(func() {
+		runtimeMetricsRunning = true
+	})
+
 	// Handle opt-in metrics
 	if config.CollectGCMetrics {
 		runtimeMetricsKeys = append(
@@ -155,10 +159,6 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 			runtime_metrics.Sample{Name: "/sched/pauses/total/gc:seconds"},
 		)
 	}
-
-	onceRuntimeMetrics.Do(func() {
-		runtimeMetricsRunning = true
-	})
 
 	// XXX(aldy505): Do we guard the `interval` when it's below or over a certain threshold?
 	// Javascript SDK defaults to 30 seconds.
