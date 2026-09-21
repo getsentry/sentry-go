@@ -29,6 +29,12 @@ type RuntimeMetricsConfig struct {
 	// CollectGCMetrics enables the collection of GC metrics.
 	// Default is false (disabled).
 	CollectGCMetrics bool
+
+	// newTicker returns a channel that delivers ticks at the given interval
+	// plus a function that stops them. nil means time.NewTicker. Tests inject
+	// a deterministic ticker so they can drive collection without waiting on
+	// the wall clock.
+	newTicker func(time.Duration) (<-chan time.Time, func())
 }
 
 // Strongly typed metric keys
@@ -83,23 +89,31 @@ var runtimeMetricsRunning = false
 type cpuUtilizationTracker struct {
 	lastCPUSeconds float64
 	lastSampleTime time.Time
+
+	// now returns the current time. nil means time.Now. Tests inject a
+	// deterministic clock to advance wall-clock time explicitly.
+	now func() time.Time
 }
 
 var maxProcs = float64(runtime.GOMAXPROCS(-1))
 
 func (t *cpuUtilizationTracker) GetCPUUtilization(currentCPUSeconds float64) float64 {
-	now := time.Now()
+	now := t.now
+	if now == nil {
+		now = time.Now
+	}
+	nowTime := now()
 
 	// First sample — can't calculate yet
 	if t.lastSampleTime.IsZero() {
 		t.lastCPUSeconds = currentCPUSeconds
-		t.lastSampleTime = now
+		t.lastSampleTime = nowTime
 		return 0.0
 	}
 
 	// Calculate deltas
 	cpuDelta := currentCPUSeconds - t.lastCPUSeconds
-	wallClockDelta := now.Sub(t.lastSampleTime).Seconds()
+	wallClockDelta := nowTime.Sub(t.lastSampleTime).Seconds()
 
 	// Normalize by GOMAXPROCS to get utilization percentage
 	// cpuDelta represents CPU-seconds consumed across all GOMAXPROCS goroutines
@@ -117,7 +131,7 @@ func (t *cpuUtilizationTracker) GetCPUUtilization(currentCPUSeconds float64) flo
 
 	// Update state for next sample
 	t.lastCPUSeconds = currentCPUSeconds
-	t.lastSampleTime = now
+	t.lastSampleTime = nowTime
 
 	return utilization
 }
@@ -174,15 +188,21 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 
 	meter := NewMeter(config.Context)
 
-	timer := time.NewTicker(config.Interval)
-	defer timer.Stop()
+	if config.newTicker == nil {
+		config.newTicker = func(d time.Duration) (<-chan time.Time, func()) {
+			ticker := time.NewTicker(d)
+			return ticker.C, ticker.Stop
+		}
+	}
+	tickCh, stopTicker := config.newTicker(config.Interval)
+	defer stopTicker()
 	cpuTracker := cpuUtilizationTracker{}
 
 	for {
 		select {
 		case <-config.Context.Done():
 			return
-		case <-timer.C:
+		case <-tickCh:
 			runtime_metrics.Read(runtimeMetricsSamples)
 			for i, sample := range runtimeMetricsSamples {
 				switch sample.Value.Kind() {
