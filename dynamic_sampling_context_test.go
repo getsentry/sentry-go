@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/stretchr/testify/require"
 )
 

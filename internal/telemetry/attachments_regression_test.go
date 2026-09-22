@@ -4,10 +4,10 @@ import (
 	"testing"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,8 +28,8 @@ func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
 
 	transport := &testutils.MockTelemetryTransport{}
 	processor := telemetry.NewProcessor(
-		map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-			ratelimit.CategoryError: telemetry.NewRingBuffer[protocol.TelemetryItem](
+		map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
+			ratelimit.CategoryError: telemetry.NewRingBuffer[telemetry.Item](
 				ratelimit.CategoryError, 10, telemetry.OverflowPolicyDropOldest, 1, 0, nil,
 			),
 		},
