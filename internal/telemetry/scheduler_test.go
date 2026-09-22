@@ -2,7 +2,9 @@ package telemetry
 
 import (
 	"errors"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
@@ -227,39 +229,6 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 	}
 }
 
-func TestTelemetrySchedulerRateLimiting(t *testing.T) {
-	transport := &testutils.MockTelemetryTransport{}
-	dsn := &protocol.Dsn{}
-
-	buffer := NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
-	buffers := map[ratelimit.Category]Buffer[Item]{
-		ratelimit.CategoryError: buffer,
-	}
-	// no log buffer used in simplified scheduler tests
-	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
-
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
-
-	transport.SetRateLimited("error", true)
-
-	scheduler.Start()
-	defer scheduler.Stop(100 * time.Millisecond)
-
-	item := &testTelemetryItem{id: 1, data: "test"}
-	buffer.Offer(item)
-	scheduler.Signal()
-
-	time.Sleep(200 * time.Millisecond)
-
-	if transport.GetSendCount() > 0 {
-		t.Errorf("Expected 0 items to be processed due to rate limiting, got %d", transport.GetSendCount())
-	}
-
-	if transport.GetRateLimitedCalls() == 0 {
-		t.Error("Expected rate limit check to be called")
-	}
-}
-
 func TestTelemetrySchedulerStartStop(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
@@ -321,43 +290,73 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	}
 }
 
-func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T) {
-	transport := &testutils.MockTelemetryTransport{}
-	dsn := &protocol.Dsn{}
-	recorder := reportpkg.NewAggregator()
+type rejectingTransport struct {
+	testutils.MockTelemetryTransport
+	err   error
+	sends atomic.Int32
+}
 
-	buffer := NewRingBuffer[Item](ratelimit.CategoryTransaction, 10, OverflowPolicyDropOldest, 1, 0, nil)
-	buffers := map[ratelimit.Category]Buffer[Item]{
-		ratelimit.CategoryTransaction: buffer,
-	}
-	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
+func (t *rejectingTransport) SendEnvelope(*protocol.Envelope) error {
+	t.sends.Add(1)
+	return t.err
+}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, recorder)
-
-	buffer.Offer(&failingTransactionTelemetryItem{
-		testTelemetryItem: testTelemetryItem{data: "tx", category: ratelimit.CategoryTransaction},
-		spanCount:         3,
-	})
-
-	scheduler.Flush(time.Second)
-
-	clientReport := recorder.TakeReport()
-	if clientReport == nil {
-		t.Fatal("expected client report")
-	}
-
-	outcomes := map[ratelimit.Category]int64{}
-	for _, discarded := range clientReport.DiscardedEvents {
-		if discarded.Reason != reportpkg.ReasonInternalError {
-			t.Fatalf("unexpected reason: %s", discarded.Reason)
+func TestTelemetrySchedulerBacksOffWhenQueueFull(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		transport := &rejectingTransport{err: ErrQueueFull}
+		buffer := NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
+		scheduler := NewScheduler(map[ratelimit.Category]Buffer[Item]{ratelimit.CategoryError: buffer}, transport, &protocol.Dsn{}, nil, nil)
+		scheduler.Start()
+		for range 3 {
+			scheduler.Add(&testTelemetryItem{data: "error"})
 		}
-		outcomes[discarded.Category] += discarded.Quantity
-	}
+		synctest.Wait()
+		if sends, pending := transport.sends.Load(), buffer.Size(); sends != 1 || pending != 2 {
+			t.Fatalf("sends=%d pending=%d, want one rejected send and two buffered items", sends, pending)
+		}
+		scheduler.Stop(time.Second)
+	})
+}
 
-	if outcomes[ratelimit.CategoryTransaction] != 1 {
-		t.Fatalf("expected one discarded transaction, got %d", outcomes[ratelimit.CategoryTransaction])
-	}
-	if outcomes[ratelimit.CategorySpan] != 3 {
-		t.Fatalf("expected discarded span count to be recorded, got %d", outcomes[ratelimit.CategorySpan])
+func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		item   Item
+		err    error
+		reason reportpkg.DiscardReason
+		spans  int64
+	}{
+		{"conversion error", &failingTransactionTelemetryItem{
+			testTelemetryItem: testTelemetryItem{data: "tx", category: ratelimit.CategoryTransaction}, spanCount: 3,
+		}, nil, reportpkg.ReasonInternalError, 3},
+		{"queue full", &testTelemetryItem{data: "tx", category: ratelimit.CategoryTransaction}, ErrQueueFull, reportpkg.ReasonQueueOverflow, 0},
+		{"rejected", &testTelemetryItem{data: "tx", category: ratelimit.CategoryTransaction}, errors.New("closed"), reportpkg.ReasonSendError, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := reportpkg.NewAggregator()
+			buffer := NewRingBuffer[Item](ratelimit.CategoryTransaction, 10, OverflowPolicyDropOldest, 1, 0, nil)
+			buffers := map[ratelimit.Category]Buffer[Item]{ratelimit.CategoryTransaction: buffer}
+			scheduler := NewScheduler(buffers, &rejectingTransport{err: tt.err}, &protocol.Dsn{}, nil, recorder)
+			buffer.Offer(tt.item)
+			scheduler.Flush(time.Second)
+
+			clientReport := recorder.TakeReport()
+			if clientReport == nil {
+				t.Fatal("expected client report")
+			}
+			outcomes := map[ratelimit.Category]int64{}
+			for _, discarded := range clientReport.DiscardedEvents {
+				if discarded.Reason != tt.reason {
+					t.Fatalf("unexpected reason: %s", discarded.Reason)
+				}
+				outcomes[discarded.Category] += discarded.Quantity
+			}
+			if outcomes[ratelimit.CategoryTransaction]+outcomes[ratelimit.CategoryError] != 1 {
+				t.Fatalf("expected one discarded item, got %v", outcomes)
+			}
+			if outcomes[ratelimit.CategorySpan] != tt.spans {
+				t.Fatalf("expected %d discarded spans, got %d", tt.spans, outcomes[ratelimit.CategorySpan])
+			}
+		})
 	}
 }

@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -32,6 +33,9 @@ type Scheduler struct {
 	startOnce  sync.Once
 	finishOnce sync.Once
 }
+
+// queueFullBackoff delays scheduling after a transport reports a full queue.
+const queueFullBackoff = 100 * time.Millisecond
 
 func NewScheduler(
 	buffers map[ratelimit.Category]Buffer[Item],
@@ -180,7 +184,14 @@ func (s *Scheduler) run() {
 		}
 
 		s.mu.Unlock()
-		s.processNextBatch()
+		if s.processNextBatch() {
+			// Keep items in the prioritized buffers while the transport is full.
+			select {
+			case <-time.After(queueFullBackoff):
+			case <-s.ctx.Done():
+				return
+			}
+		}
 	}
 }
 
@@ -193,9 +204,10 @@ func (s *Scheduler) hasWork() bool {
 	return false
 }
 
-func (s *Scheduler) processNextBatch() {
+// processNextBatch reports whether the transport queue was full.
+func (s *Scheduler) processNextBatch() bool {
 	if len(s.currentCycle) == 0 {
-		return
+		return false
 	}
 
 	priority := s.currentCycle[s.cyclePos]
@@ -212,11 +224,12 @@ func (s *Scheduler) processNextBatch() {
 	}
 
 	if bufferToProcess != nil {
-		s.processItems(bufferToProcess, categoryToProcess, false)
+		return s.processItems(bufferToProcess, categoryToProcess, false)
 	}
+	return false
 }
 
-func (s *Scheduler) processItems(buffer Buffer[Item], category ratelimit.Category, force bool) {
+func (s *Scheduler) processItems(buffer Buffer[Item], category ratelimit.Category, force bool) (full bool) {
 	var items []Item
 
 	if force {
@@ -226,25 +239,15 @@ func (s *Scheduler) processItems(buffer Buffer[Item], category ratelimit.Categor
 	}
 
 	if len(items) == 0 {
-		return
-	}
-
-	if s.isRateLimited(category) {
-		for _, item := range items {
-			s.recorder.RecordItem(report.ReasonRateLimitBackoff, item)
-		}
-		return
-	}
-	if !s.transport.HasCapacity() {
-		for _, item := range items {
-			s.recorder.RecordItem(report.ReasonQueueOverflow, item)
-		}
-		return
+		return false
 	}
 
 	for _, item := range s.envelopeConvertibles(category, items) {
-		s.sendItem(item)
+		if errors.Is(s.sendItem(item), ErrQueueFull) {
+			full = true
+		}
 	}
+	return full
 }
 
 // envelopeConvertibles converts single items or batches to satisfy the EnvelopeConvertible interface.
@@ -265,7 +268,7 @@ func (s *Scheduler) envelopeConvertibles(category ratelimit.Category, items []It
 	}
 }
 
-func (s *Scheduler) sendItem(item EnvelopeConvertible) {
+func (s *Scheduler) sendItem(item EnvelopeConvertible) error {
 	header := &protocol.EnvelopeHeader{
 		EventID: item.GetEventID(),
 		SentAt:  time.Now(),
@@ -284,11 +287,18 @@ func (s *Scheduler) sendItem(item EnvelopeConvertible) {
 	if err != nil {
 		debuglog.Printf("error while converting to envelope: %v", err)
 		s.recorder.RecordItem(report.ReasonInternalError, item)
-		return
+		return err
 	}
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)
+		reason := report.ReasonSendError
+		if errors.Is(err, ErrQueueFull) {
+			reason = report.ReasonQueueOverflow
+		}
+		s.recorder.RecordForEnvelope(reason, envelope)
+		return err
 	}
+	return nil
 }
 
 func (s *Scheduler) flushBuffers() {
@@ -297,8 +307,4 @@ func (s *Scheduler) flushBuffers() {
 			s.processItems(buffer, category, true)
 		}
 	}
-}
-
-func (s *Scheduler) isRateLimited(category ratelimit.Category) bool {
-	return s.transport.IsRateLimited(category)
 }

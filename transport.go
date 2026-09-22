@@ -30,7 +30,7 @@ const (
 
 var (
 	// ErrTransportQueueFull indicates that an async envelope could not be queued.
-	ErrTransportQueueFull = errors.New("transport queue full")
+	ErrTransportQueueFull = telemetry.ErrQueueFull
 	// ErrTransportClosed indicates that the transport has been closed.
 	ErrTransportClosed = errors.New("transport is closed")
 	// ErrEmptyEnvelope indicates that an envelope contains no items.
@@ -155,6 +155,8 @@ func categoryFromEnvelope(envelope *protocol.Envelope) ratelimit.Category {
 			return ratelimit.CategoryMonitor
 		case protocol.EnvelopeItemTypeLog:
 			return ratelimit.CategoryLog
+		case protocol.EnvelopeItemTypeTraceMetric:
+			return ratelimit.CategoryTraceMetric
 		case protocol.EnvelopeItemTypeAttachment, protocol.EnvelopeItemTypeClientReport:
 			continue
 		default:
@@ -241,12 +243,6 @@ func (t *SyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 
 func (t *SyncTransport) Close() {}
 
-func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
-	return t.disabled(category)
-}
-
-func (t *SyncTransport) HasCapacity() bool { return true }
-
 func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *protocol.Envelope) error {
 	ctx, cancel := context.WithTimeout(ctx, t.Timeout)
 	defer cancel()
@@ -270,7 +266,7 @@ func (t *SyncTransport) sendEnvelope(ctx context.Context, envelope *protocol.Env
 	if err != nil {
 		debuglog.Printf("There was an issue creating the request: %v", err)
 		t.recorder.RecordForEnvelope(report.ReasonInternalError, envelope)
-		return err
+		return nil
 	}
 	identifier := util.EnvelopeIdentifier(envelope)
 	debuglog.Printf(
@@ -284,7 +280,7 @@ func (t *SyncTransport) sendEnvelope(ctx context.Context, envelope *protocol.Env
 	if err != nil {
 		debuglog.Printf("There was an issue with sending an event: %v", err)
 		t.recorder.RecordForEnvelope(report.ReasonNetworkError, envelope)
-		return err
+		return nil
 	}
 	if result.IsSendError() {
 		t.recorder.RecordForEnvelope(report.ReasonSendError, envelope)
@@ -425,19 +421,6 @@ func newHTTPTransport(options TransportOptions, recorder report.ClientReportReco
 	return transport
 }
 
-// HasCapacity reports whether the async transport queue appears to have space
-// for at least one more envelope. This is a best-effort, non-blocking check.
-func (t *AsyncTransport) HasCapacity() bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	select {
-	case <-t.done:
-		return false
-	default:
-	}
-	return len(t.queue) < cap(t.queue)
-}
-
 func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	select {
 	case <-t.done:
@@ -469,7 +452,6 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 		)
 		return nil
 	default:
-		t.recorder.RecordForEnvelope(report.ReasonQueueOverflow, envelope)
 		return ErrTransportQueueFull
 	}
 }
@@ -513,10 +495,6 @@ func (t *AsyncTransport) Close() {
 		close(t.done)
 		t.wg.Wait()
 	})
-}
-
-func (t *AsyncTransport) IsRateLimited(category ratelimit.Category) bool {
-	return t.isRateLimited(category)
 }
 
 func (t *AsyncTransport) worker() {
@@ -651,10 +629,6 @@ func (t *NoopTransport) SendEnvelope(_ *protocol.Envelope) error {
 	return nil
 }
 
-func (t *NoopTransport) IsRateLimited(_ ratelimit.Category) bool {
-	return false
-}
-
 func (t *NoopTransport) Flush(_ time.Duration) bool {
 	return true
 }
@@ -666,8 +640,6 @@ func (t *NoopTransport) FlushWithContext(_ context.Context) bool {
 func (t *NoopTransport) Close() {
 	// Nothing to close
 }
-
-func (t *NoopTransport) HasCapacity() bool { return true }
 
 func newClientReports(disabled bool) (report.ClientReportRecorder, report.ClientReportProvider) {
 	if disabled {

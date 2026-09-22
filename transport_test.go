@@ -171,13 +171,13 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			t.Fatal("Flush timed out")
 		}
 
-		if !transport.IsRateLimited(ratelimit.CategoryError) {
+		if !transport.isRateLimited(ratelimit.CategoryError) {
 			t.Error("error category should be rate limited")
 		}
-		if !transport.IsRateLimited(ratelimit.CategoryTransaction) {
+		if !transport.isRateLimited(ratelimit.CategoryTransaction) {
 			t.Error("transaction category should be rate limited")
 		}
-		if transport.IsRateLimited(ratelimit.CategoryMonitor) {
+		if transport.isRateLimited(ratelimit.CategoryMonitor) {
 			t.Error("monitor category should not be rate limited")
 		}
 
@@ -404,13 +404,13 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 
 		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
 
-		if !transport.IsRateLimited(ratelimit.CategoryError) {
+		if !transport.(*SyncTransport).disabled(ratelimit.CategoryError) {
 			t.Error("error category should be rate limited")
 		}
-		if !transport.IsRateLimited(ratelimit.CategoryTransaction) {
+		if !transport.(*SyncTransport).disabled(ratelimit.CategoryTransaction) {
 			t.Error("transaction category should be rate limited")
 		}
-		if transport.IsRateLimited(ratelimit.CategoryMonitor) {
+		if transport.(*SyncTransport).disabled(ratelimit.CategoryMonitor) {
 			t.Error("monitor category should not be rate limited")
 		}
 

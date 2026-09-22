@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
@@ -36,19 +37,18 @@ type EnvelopeConvertible interface {
 	ToEnvelope(*protocol.EnvelopeHeader) (*protocol.Envelope, error)
 }
 
+// ErrQueueFull reports that a transport rejected an envelope because its queue is full.
+var ErrQueueFull = errors.New("transport queue full")
+
 // Transport represents the envelope-first transport interface.
 // This interface is designed for the telemetry buffer system and provides
 // non-blocking sends with backpressure signals.
 type Transport interface {
-	// SendEnvelope sends an envelope to Sentry. Returns immediately with
-	// backpressure error if the queue is full.
+	// SendEnvelope sends an envelope to Sentry. A returned error means the
+	// envelope was rejected and the caller records the loss; ErrQueueFull
+	// also asks the caller to back off. Transports record losses only for
+	// envelopes they accepted.
 	SendEnvelope(envelope *protocol.Envelope) error
-
-	// HasCapacity reports whether the transport has capacity to accept at least one more envelope.
-	HasCapacity() bool
-
-	// IsRateLimited checks if a specific category is currently rate limited
-	IsRateLimited(category ratelimit.Category) bool
 
 	// Flush waits for all pending envelopes to be sent, with timeout
 	Flush(timeout time.Duration) bool
