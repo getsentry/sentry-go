@@ -44,12 +44,6 @@ type Transport interface {
 	// backpressure error if the queue is full.
 	SendEnvelope(envelope *protocol.Envelope) error
 
-	// HasCapacity reports whether the transport has capacity to accept at least one more envelope.
-	HasCapacity() bool
-
-	// IsRateLimited checks if a specific category is currently rate limited
-	IsRateLimited(category ratelimit.Category) bool
-
 	// Flush waits for all pending envelopes to be sent, with timeout
 	Flush(timeout time.Duration) bool
 

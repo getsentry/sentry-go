@@ -227,39 +227,6 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 	}
 }
 
-func TestTelemetrySchedulerRateLimiting(t *testing.T) {
-	transport := &testutils.MockTelemetryTransport{}
-	dsn := &protocol.Dsn{}
-
-	buffer := NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
-	buffers := map[ratelimit.Category]Buffer[Item]{
-		ratelimit.CategoryError: buffer,
-	}
-	// no log buffer used in simplified scheduler tests
-	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
-
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
-
-	transport.SetRateLimited("error", true)
-
-	scheduler.Start()
-	defer scheduler.Stop(100 * time.Millisecond)
-
-	item := &testTelemetryItem{id: 1, data: "test"}
-	buffer.Offer(item)
-	scheduler.Signal()
-
-	time.Sleep(200 * time.Millisecond)
-
-	if transport.GetSendCount() > 0 {
-		t.Errorf("Expected 0 items to be processed due to rate limiting, got %d", transport.GetSendCount())
-	}
-
-	if transport.GetRateLimitedCalls() == 0 {
-		t.Error("Expected rate limit check to be called")
-	}
-}
-
 func TestTelemetrySchedulerStartStop(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}

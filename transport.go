@@ -155,6 +155,8 @@ func categoryFromEnvelope(envelope *protocol.Envelope) ratelimit.Category {
 			return ratelimit.CategoryMonitor
 		case protocol.EnvelopeItemTypeLog:
 			return ratelimit.CategoryLog
+		case protocol.EnvelopeItemTypeTraceMetric:
+			return ratelimit.CategoryTraceMetric
 		case protocol.EnvelopeItemTypeAttachment, protocol.EnvelopeItemTypeClientReport:
 			continue
 		default:
@@ -240,12 +242,6 @@ func (t *SyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 }
 
 func (t *SyncTransport) Close() {}
-
-func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
-	return t.disabled(category)
-}
-
-func (t *SyncTransport) HasCapacity() bool { return true }
 
 func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *protocol.Envelope) error {
 	ctx, cancel := context.WithTimeout(ctx, t.Timeout)
@@ -436,19 +432,6 @@ func (t *AsyncTransport) start() {
 	})
 }
 
-// HasCapacity reports whether the async transport queue appears to have space
-// for at least one more envelope. This is a best-effort, non-blocking check.
-func (t *AsyncTransport) HasCapacity() bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	select {
-	case <-t.done:
-		return false
-	default:
-	}
-	return len(t.queue) < cap(t.queue)
-}
-
 func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	t.closeMu.RLock()
 	defer t.closeMu.RUnlock()
@@ -529,10 +512,6 @@ func (t *AsyncTransport) Close() {
 		close(t.done)
 		t.wg.Wait()
 	})
-}
-
-func (t *AsyncTransport) IsRateLimited(category ratelimit.Category) bool {
-	return t.isRateLimited(category)
 }
 
 func (t *AsyncTransport) worker() {
@@ -680,10 +659,6 @@ func (t *NoopTransport) SendEnvelope(_ *protocol.Envelope) error {
 	return nil
 }
 
-func (t *NoopTransport) IsRateLimited(_ ratelimit.Category) bool {
-	return false
-}
-
 func (t *NoopTransport) Flush(_ time.Duration) bool {
 	return true
 }
@@ -695,8 +670,6 @@ func (t *NoopTransport) FlushWithContext(_ context.Context) bool {
 func (t *NoopTransport) Close() {
 	// Nothing to close
 }
-
-func (t *NoopTransport) HasCapacity() bool { return true }
 
 func newClientReports(disabled bool) (report.ClientReportRecorder, report.ClientReportProvider) {
 	if disabled {

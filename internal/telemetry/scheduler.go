@@ -229,19 +229,6 @@ func (s *Scheduler) processItems(buffer Buffer[Item], category ratelimit.Categor
 		return
 	}
 
-	if s.isRateLimited(category) {
-		for _, item := range items {
-			s.recorder.RecordItem(report.ReasonRateLimitBackoff, item)
-		}
-		return
-	}
-	if !s.transport.HasCapacity() {
-		for _, item := range items {
-			s.recorder.RecordItem(report.ReasonQueueOverflow, item)
-		}
-		return
-	}
-
 	for _, item := range s.envelopeConvertibles(category, items) {
 		s.sendItem(item)
 	}
@@ -297,8 +284,4 @@ func (s *Scheduler) flushBuffers() {
 			s.processItems(buffer, category, true)
 		}
 	}
-}
-
-func (s *Scheduler) isRateLimited(category ratelimit.Category) bool {
-	return s.transport.IsRateLimited(category)
 }
