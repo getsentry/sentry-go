@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	internalHttp "github.com/getsentry/sentry-go/internal/http"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -1610,7 +1609,7 @@ func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
 	if client.telemetryProcessor == nil {
 		t.Fatal("expected telemetryProcessor to not be nil when DSN is missing")
 	}
-	require.IsType(t, &internalHttp.NoopTransport{}, client.Transport.(*internalAsyncTransportAdapter).transport)
+	require.IsType(t, &NoopTransport{}, client.Transport.(*internalAsyncTransportAdapter).transport)
 }
 
 type multiClientEnv struct {
