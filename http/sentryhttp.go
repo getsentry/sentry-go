@@ -34,13 +34,8 @@ type Options struct {
 	// current goroutine and wait until the panic event has been reported to
 	// Sentry before repanicking or resuming normal execution.
 	//
-	// This option is normally not needed. Unless you need different behaviors
-	// for different HTTP handlers, configure the SDK to use the
-	// HTTPSyncTransport instead.
-	//
-	// Waiting (or using HTTPSyncTransport) is useful when the web server runs
-	// in an environment that interrupts execution at the end of a request flow,
-	// like modern serverless platforms.
+	// Enable this when execution may stop at the end of a request, such as on
+	// serverless platforms. Capture remains asynchronous with every transport.
 	WaitForDelivery bool
 	// Timeout for the delivery of panic events. Defaults to 2s. Only relevant
 	// when WaitForDelivery is true.

@@ -133,7 +133,7 @@ func TestStartSpan(t *testing.T) {
 		RecorderLen: 1,
 	}.Check(t, span)
 
-	events := transport.Events()
+	events := capturedEvents(t, ClientFromContext(ctx), transport)
 	if got := len(events); got != 1 {
 		t.Fatalf("sent %d events, want 1", got)
 	}
@@ -171,7 +171,7 @@ func TestStartSpan(t *testing.T) {
 	}
 	// Check trace context explicitly, as we ignored all contexts above to
 	// disregard other contexts.
-	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
+	if diff := cmp.Diff(jsonContext(t, want.Contexts["trace"]), events[0].Contexts["trace"]); diff != "" {
 		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -195,7 +195,7 @@ func TestStartChild(t *testing.T) {
 	c.Check(t, span)
 	c.Check(t, child)
 
-	events := transport.Events()
+	events := capturedEvents(t, ClientFromContext(ctx), transport)
 	if got := len(events); got != 1 {
 		t.Fatalf("sent %d events, want 1", got)
 	}
@@ -233,7 +233,7 @@ func TestStartChild(t *testing.T) {
 			return k != "trace"
 		}),
 		cmpopts.IgnoreFields(Span{},
-			"StartTime", "EndTime",
+			"StartTime", "EndTime", "Sampled",
 		),
 		cmpopts.IgnoreUnexported(Span{}),
 		cmpopts.EquateEmpty(),
@@ -277,7 +277,7 @@ func TestStartTransaction(t *testing.T) {
 		RecorderLen: 1,
 	}.Check(t, transaction)
 
-	events := transport.Events()
+	events := capturedEvents(t, ClientFromContext(ctx), transport)
 	if got := len(events); got != 1 {
 		t.Fatalf("sent %d events, want 1", got)
 	}
@@ -314,7 +314,7 @@ func TestStartTransaction(t *testing.T) {
 	}
 	// Check trace context explicitly, as we ignored all contexts above to
 	// disregard other contexts.
-	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
+	if diff := cmp.Diff(jsonContext(t, want.Contexts["trace"]), events[0].Contexts["trace"]); diff != "" {
 		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -653,17 +653,17 @@ func TestDoubleSampling(t *testing.T) {
 
 	// CaptureException should not send any event because of SampleRate.
 	CaptureException(ctx, errors.New("ignored"))
-	if got := len(transport.Events()); got != 0 {
+	if got := len(capturedEvents(t, ClientFromContext(ctx), transport)); got != 0 {
 		t.Fatalf("got %d events, want 0", got)
 	}
 
 	// Finish should send one transaction event, always sampled via
 	// TracesSampleRate.
 	span.Finish()
-	if got := len(transport.Events()); got != 1 {
+	if got := len(capturedEvents(t, ClientFromContext(ctx), transport)); got != 1 {
 		t.Fatalf("got %d events, want 1", got)
 	}
-	if got := transport.Events()[0].Type; got != transactionType {
+	if got := capturedEvents(t, ClientFromContext(ctx), transport)[0].Type; got != transactionType {
 		t.Fatalf("got %v event, want %v", got, transactionType)
 	}
 }
@@ -930,11 +930,11 @@ func TestSampleRatePropagation(t *testing.T) {
 				root.Finish()
 				require.NotNil(t, CaptureMessage(ctx, "after"))
 				var count int
-				for _, event := range transport.Events() {
+				for _, event := range capturedEvents(t, client, transport) {
 					if event.Type != transactionType {
 						count++
-						require.Equal(t, want, event.sdkMetaData.dsc)
-						require.Equal(t, root.TraceID, event.Contexts[traceContextKey][traceIDContextKey])
+						require.Equal(t, want.Entries, capturedTrace(t, transport, event))
+						require.Equal(t, root.TraceID.String(), event.Contexts[traceContextKey][traceIDContextKey])
 					}
 				}
 				require.Equal(t, 2, count)
@@ -1316,7 +1316,7 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 			)
 			transaction.Finish()
 
-			event := transport.Events()[0]
+			event := capturedEvents(t, ClientFromContext(ctx), transport)[0]
 
 			assertEqual(t, event.TransactionInfo.Source, tt.wantTransactionSource)
 		})
@@ -1367,9 +1367,9 @@ func TestSpanScopeIsNotActiveSpanStack(t *testing.T) {
 
 	CaptureMessage(childSpan.Context(), "Test event")
 
-	trace := requireSingleEvent(t, transport).Contexts[traceContextKey]
-	require.Equal(t, childSpan.TraceID, trace[traceIDContextKey])
-	require.Equal(t, childSpan.SpanID, trace[spanIDContextKey])
+	trace := requireSingleEvent(t, client, transport).Contexts[traceContextKey]
+	require.Equal(t, childSpan.TraceID.String(), trace[traceIDContextKey])
+	require.Equal(t, childSpan.SpanID.String(), trace[spanIDContextKey])
 	transaction.Finish()
 	require.Same(t, transaction, scope.getSpan())
 }
@@ -1447,10 +1447,10 @@ func TestContextPropagationHeaders(t *testing.T) {
 		require.Contains(t, baggage, "sentry-sampled=false")
 		require.Contains(t, baggage, "sentry-sample_rate=0")
 		require.NotNil(t, CaptureMessage(ctx, "static zero"))
-		dsc := requireSingleEvent(t, replacementTransport).sdkMetaData.dsc
+		dsc := capturedTrace(t, replacementTransport, requireSingleEvent(t, replacement, replacementTransport))
 		require.Equal(t, SampledFalse, scope.propagationContextSnapshot().Sampled)
-		require.Equal(t, "false", dsc.Entries["sampled"])
-		require.Equal(t, "0", dsc.Entries["sample_rate"])
+		require.Equal(t, "false", dsc["sampled"])
+		require.Equal(t, "0", dsc["sample_rate"])
 	})
 
 	t.Run("deferred external trace and invalid fallback", func(t *testing.T) {

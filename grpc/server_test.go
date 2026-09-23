@@ -40,7 +40,7 @@ func (t *flushCountingTransport) FlushWithContext(context.Context) bool {
 type txSummary struct {
 	Name   string
 	Op     string
-	Status sentry.SpanStatus
+	Status string
 	Data   map[string]any
 	GRPC   map[string]any
 }
@@ -49,7 +49,7 @@ func summarizeTx(tx *sentry.Event) txSummary {
 	s := txSummary{
 		Name:   tx.Transaction,
 		Op:     tx.Contexts["trace"]["op"].(string),
-		Status: tx.Contexts["trace"]["status"].(sentry.SpanStatus),
+		Status: tx.Contexts["trace"]["status"].(string),
 		Data:   tx.Contexts["trace"]["data"].(map[string]any),
 	}
 	if g, ok := tx.Contexts["grpc"]; ok {
@@ -79,12 +79,12 @@ func TestUnaryServerInterceptor(t *testing.T) {
 	if diff := cmp.Diff(txSummary{
 		Name:   "test.TestService/Method",
 		Op:     "rpc.server",
-		Status: sentry.SpanStatusOK,
+		Status: sentry.SpanStatusOK.String(),
 		Data: map[string]any{
 			"rpc.system":           "grpc",
 			"rpc.service":          "test.TestService",
 			"rpc.method":           "Method",
-			"rpc.grpc.status_code": int(codes.OK),
+			"rpc.grpc.status_code": float64(codes.OK),
 		},
 		GRPC: map[string]any{
 			"method":   "test.TestService/Method",
@@ -123,7 +123,7 @@ func TestUnaryServerInterceptor_ContinuesIncomingTrace(t *testing.T) {
 	sentry.Flush(testutils.FlushTimeout())
 	events := transport.Events()
 	require.Len(t, events, 1)
-	assert.Equal(t, traceID, events[0].Contexts["trace"]["trace_id"].(sentry.TraceID).String())
+	assert.Equal(t, traceID, events[0].Contexts["trace"]["trace_id"].(string))
 	t.Run("reuses an active child without finishing its root", func(t *testing.T) {
 		f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{EnableTracing: true, TracesSampleRate: 1}))
 		outer := sentry.StartTransaction(f.NewContext(context.Background()), "gateway")
@@ -299,8 +299,8 @@ func TestServerInterceptors_MapStatus(t *testing.T) {
 			events := transport.Events()
 			require.Len(t, events, 1)
 			summary := summarizeTx(events[0])
-			assert.Equal(t, tc.wantStatus, summary.Status)
-			assert.Equal(t, int(tc.code), summary.Data["rpc.grpc.status_code"])
+			assert.Equal(t, tc.wantStatus.String(), summary.Status)
+			assert.Equal(t, float64(tc.code), summary.Data["rpc.grpc.status_code"])
 		})
 	}
 }
@@ -331,12 +331,12 @@ func TestStreamServerInterceptor(t *testing.T) {
 	if diff := cmp.Diff(txSummary{
 		Name:   "test.TestService/StreamMethod",
 		Op:     "rpc.server",
-		Status: sentry.SpanStatusOK,
+		Status: sentry.SpanStatusOK.String(),
 		Data: map[string]any{
 			"rpc.system":           "grpc",
 			"rpc.service":          "test.TestService",
 			"rpc.method":           "StreamMethod",
-			"rpc.grpc.status_code": int(codes.OK),
+			"rpc.grpc.status_code": float64(codes.OK),
 		},
 		GRPC: map[string]any{
 			"method":   "test.TestService/StreamMethod",

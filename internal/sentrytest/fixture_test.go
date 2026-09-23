@@ -113,8 +113,17 @@ func TestSentryFixture_Events_IncludesTransactions(t *testing.T) {
 
 	events := f.Events()
 	assert.Len(t, events, 2, "event count")
-	assert.Equal(t, "error event", events[0].Message, "event message")
-	assert.Equal(t, "transaction", events[1].Type, "event type")
+	var messages, transactions []string
+	for _, event := range events {
+		if event.Type == "transaction" {
+			transactions = append(transactions, event.Transaction)
+		} else {
+			messages = append(messages, event.Message)
+		}
+	}
+	assert.Equal(t, []string{"error event"}, messages)
+	assert.Equal(t, []string{"test-tx"}, transactions)
+	assert.Len(t, f.Envelopes(), 2)
 }
 
 func TestSentryFixture_AssertEventCount(t *testing.T) {

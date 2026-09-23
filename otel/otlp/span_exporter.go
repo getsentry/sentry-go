@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/protocol"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
@@ -93,7 +94,7 @@ func buildOTLPOptions(dsn string, opts ...otlptracehttp.Option) ([]otlptracehttp
 		return nil, errors.New("sentryotlp: dsn must be provided")
 	}
 
-	parsedDSN, err := sentry.NewDsn(dsn)
+	parsedDSN, err := protocol.NewDsn(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("sentryotlp: invalid DSN: %w", err)
 	}
@@ -111,7 +112,7 @@ func buildOTLPOptions(dsn string, opts ...otlptracehttp.Option) ([]otlptracehttp
 	return otlpOpts, nil
 }
 
-func otlpTracesURL(dsn *sentry.Dsn) *url.URL {
+func otlpTracesURL(dsn *protocol.Dsn) *url.URL {
 	apiURL := dsn.GetAPIURL()
 	apiURL.Path = strings.TrimSuffix(apiURL.Path, "/envelope/") + "/integration/otlp/v1/traces/"
 	return apiURL
@@ -128,7 +129,7 @@ func (e *sentryOTLPExporter) Shutdown(ctx context.Context) error {
 }
 
 // sentryAuthHeaders builds the X-Sentry-Auth header map for OTLP requests.
-func sentryAuthHeaders(dsn *sentry.Dsn) map[string]string {
+func sentryAuthHeaders(dsn *protocol.Dsn) map[string]string {
 	auth := fmt.Sprintf(
 		"Sentry sentry_version=%s, sentry_client=sentry.go/%s, sentry_key=%s",
 		apiVersion, sentry.SDKVersion, dsn.GetPublicKey(),

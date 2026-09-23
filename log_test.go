@@ -47,7 +47,7 @@ func TestDisabledLoggerDoesNotFormatValues(t *testing.T) {
 	assert.Zero(t, value.calls, "disabled logs must not format values")
 }
 
-func setupMockTransport() (context.Context, *MockTransport) {
+func setupMockTransport(t testing.TB) (context.Context, *MockTransport) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
@@ -64,6 +64,7 @@ func setupMockTransport() (context.Context, *MockTransport) {
 	ctx = ContextWithClient(ctx, mockClient)
 	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 	scope.propagationContext.SpanID = SpanIDFromHex(logSpanID)
+	t.Cleanup(mockClient.Close)
 	return ctx, mockTransport
 }
 
@@ -199,7 +200,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, mockTransport := setupMockTransport()
+			ctx, mockTransport := setupMockTransport(t)
 			l := NewLogger(ctx)
 			l.SetAttributes(
 				attribute.Int("key.int", 42),
@@ -222,12 +223,12 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 				t.Fatalf("expected %d events, got %d", len(tt.wantEvents), len(gotEvents))
 			}
 			for i, event := range gotEvents {
-				assertEqual(t, event.Type, logEvent.Type)
+				assertEqual(t, event.Type, logEventType)
 				if diff := cmp.Diff(tt.wantEvents[i].Logs, event.Logs, opts); diff != "" {
 					t.Errorf("Log mismatch (-want +got):\n%s", diff)
 				}
 				// pop used mock event
-				mockTransport.events = nil
+				mockTransport.Reset()
 			}
 		})
 	}
@@ -357,7 +358,7 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, mockTransport := setupMockTransport()
+			ctx, mockTransport := setupMockTransport(t)
 			l := NewLogger(ctx)
 			tt.logFunc(ctx, l, tt.args)
 			flushFromContext(ctx, testutils.FlushTimeout())
@@ -372,12 +373,12 @@ func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
 				t.Fatalf("expected %d events, got %d", len(tt.wantEvents), len(gotEvents))
 			}
 			for i, event := range gotEvents {
-				assertEqual(t, event.Type, logEvent.Type)
+				assertEqual(t, event.Type, logEventType)
 				if diff := cmp.Diff(tt.wantEvents[i].Logs, event.Logs, opts); diff != "" {
 					t.Errorf("Log mismatch (-want +got):\n%s", diff)
 				}
 				// pop used mock event
-				mockTransport.events = nil
+				mockTransport.Reset()
 			}
 		})
 	}
@@ -392,7 +393,7 @@ func Test_sentryLogger_Panic(t *testing.T) {
 				t.Logf("recovered panic: %v", r)
 			}
 		}()
-		ctx, _ := setupMockTransport()
+		ctx, _ := setupMockTransport(t)
 		l := NewLogger(ctx)
 		l.Panic().Emit("panic message") // This should panic
 	})
@@ -405,7 +406,7 @@ func Test_sentryLogger_Panic(t *testing.T) {
 				t.Logf("recovered panic: %v", r)
 			}
 		}()
-		ctx, _ := setupMockTransport()
+		ctx, _ := setupMockTransport(t)
 		l := NewLogger(ctx)
 		l.Panic().Emitf("panic message") // This should panic
 	})
@@ -431,7 +432,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 		},
 	}
 
-	ctx, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMockTransport(t)
 	l := NewLogger(ctx)
 	n, err := l.Write(msg)
 
@@ -448,7 +449,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(gotEvents))
 	}
 	event := gotEvents[0]
-	assertEqual(t, event.Type, logEvent.Type)
+	assertEqual(t, event.Type, logEventType)
 
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Log{}, "approximateSize", "Timestamp"),
@@ -500,7 +501,7 @@ func Test_sentryLogger_EmitPreservesLiteralPercent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, mockTransport := setupMockTransport()
+			ctx, mockTransport := setupMockTransport(t)
 			l := NewLogger(ctx)
 			tt.logFunc(t, ctx, l)
 			flushFromContext(ctx, testutils.FlushTimeout())
@@ -521,7 +522,7 @@ func Test_sentryLogger_EmitPreservesLiteralPercent(t *testing.T) {
 
 func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 	msg := []byte("something")
-	ctx, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMockTransport(t)
 	l := NewLogger(ctx)
 	l.SetAttributes(attribute.Int("int", 42))
 	l.Info().WithCtx(ctx).Emit(msg)
@@ -544,7 +545,7 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 
 func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 	msg := []byte("something")
-	ctx, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMockTransport(t)
 	l := NewLogger(ctx)
 	l.Info().
 		String("key.string", "some str").
@@ -577,7 +578,7 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 }
 
 func Test_sentryLogger_AttributePrecedence(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMockTransport(t)
 	scope := ScopeFromContext(ctx)
 	scope.SetUser(User{ID: "user456", Name: "TestUser"})
 	scope.SetAttributes(
@@ -636,8 +637,8 @@ func Test_sentryLogger_AttributePrecedence(t *testing.T) {
 	}
 }
 
-func Test_batchLogger_Flush(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
+func Test_LogDelivery_Flush(t *testing.T) {
+	ctx, mockTransport := setupMockTransport(t)
 	l := NewLogger(ctx)
 	l.Info().Emit("context done log")
 	flushFromContext(ctx, testutils.FlushTimeout())
@@ -648,8 +649,8 @@ func Test_batchLogger_Flush(t *testing.T) {
 	}
 }
 
-func Test_batchLogger_FlushWithContext(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
+func Test_LogDelivery_FlushWithContext(t *testing.T) {
+	ctx, mockTransport := setupMockTransport(t)
 	l := NewLogger(ctx)
 	l.Info().Emit("context done log")
 
@@ -663,8 +664,8 @@ func Test_batchLogger_FlushWithContext(t *testing.T) {
 	}
 }
 
-func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
+func Test_LogDelivery_FlushMultipleTimes(t *testing.T) {
+	ctx, mockTransport := setupMockTransport(t)
 	l := NewLogger(ctx)
 
 	for i := 0; i < 5; i++ {
@@ -685,7 +686,7 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 		t.Fatalf("expected 5 logs in first batch, got %d", len(events[0].Logs))
 	}
 
-	mockTransport.events = nil
+	mockTransport.Reset()
 
 	for i := 0; i < 3; i++ {
 		l.Info().Emit("test")
@@ -700,7 +701,7 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 		t.Fatalf("expected 3 logs in second batch, got %d", len(events[0].Logs))
 	}
 
-	mockTransport.events = nil
+	mockTransport.Reset()
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 	events = mockTransport.Events()
@@ -709,12 +710,11 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 	}
 }
 
-func Test_batchLogger_Shutdown(t *testing.T) {
+func Test_LogDelivery_Shutdown(t *testing.T) {
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
-		Dsn:                    testDsn,
-		Transport:              mockTransport,
-		DisableTelemetryBuffer: true,
+		Dsn:       testDsn,
+		Transport: mockTransport,
 	})
 	ctx, _ := WithIsolationScope(context.Background())
 	ctx = ContextWithClient(ctx, mockClient)
@@ -723,7 +723,7 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 		l.Info().WithCtx(ctx).Emit("test")
 	}
 
-	mockClient.batchLogger.Shutdown()
+	mockClient.Close()
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -733,11 +733,11 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 		t.Fatalf("expected 3 logs in shutdown batch, got %d", len(events[0].Logs))
 	}
 
-	mockTransport.events = nil
+	mockTransport.Reset()
 
 	// Test that shutdown can be called multiple times safely
-	mockClient.batchLogger.Shutdown()
-	mockClient.batchLogger.Shutdown()
+	mockClient.Close()
+	mockClient.Close()
 
 	events = mockTransport.Events()
 	if len(events) != 0 {
@@ -783,7 +783,7 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 }
 
 func Test_Logger_ExceedBatchSize(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMockTransport(t)
 	l := NewLogger(ctx)
 	for i := 0; i < 100; i++ {
 		l.Info().Emit("test")
@@ -798,7 +798,7 @@ func Test_Logger_ExceedBatchSize(t *testing.T) {
 }
 
 func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMockTransport(t)
 
 	// Start a new transaction
 	txn := StartTransaction(ctx, "test-transaction")
@@ -832,7 +832,7 @@ func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
 }
 
 func TestSentryLogger_ExplicitScopePrecedesFallbackTrace(t *testing.T) {
-	ctx, transport := setupMockTransport()
+	ctx, transport := setupMockTransport(t)
 	fallback := StartTransaction(ctx, "fallback")
 	defer fallback.Finish()
 	logger := NewLogger(fallback.Context())
@@ -946,7 +946,7 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 }
 
 func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
+	ctx, mockTransport := setupMockTransport(t)
 
 	scopedCtx, clonedScope := WithIsolationScope(ctx)
 	clonedScope.SetAttributes(
@@ -971,7 +971,7 @@ func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 	assert.NotContains(t, logsBeforeScope[0].Attributes, "key.bool")
 	assert.NotContains(t, logsBeforeScope[0].Attributes, "key.string")
 
-	mockTransport.events = nil
+	mockTransport.Reset()
 
 	logger := NewLogger(txn.Context())
 	logger.Info().WithCtx(txn.Context()).Emit("message with attrs")
@@ -990,7 +990,7 @@ func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 }
 
 func TestLogEntryWithCtx_ShouldCopy(t *testing.T) {
-	ctx, _ := setupMockTransport()
+	ctx, _ := setupMockTransport(t)
 	l := NewLogger(ctx)
 
 	// using WithCtx should return a new log entry with the new ctx

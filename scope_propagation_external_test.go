@@ -51,7 +51,8 @@ func TestBaggageBeforeClientBinding(t *testing.T) {
 			require.NotNil(t, sentry.CaptureMessage(ctx, "after client binding"))
 			f.Flush()
 			require.Len(t, f.Events(), 1)
-			require.Equal(t, after.Entries, f.Events()[0].GetDynamicSamplingContext())
+			require.Len(t, f.Envelopes(), 1)
+			require.Equal(t, after.Entries, f.Envelopes()[0].Header.Trace)
 		})
 	}
 }

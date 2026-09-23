@@ -1213,7 +1213,7 @@ func TestTracePropagationTargets(t *testing.T) {
 						assert.Equal(t, "GET https://example.com/foo", span.Description)
 						assert.Equal(t, transaction.SpanID, span.ParentSpanID)
 						assert.Equal(t, sentry.SpanStatusOK, span.Status)
-						assert.Equal(t, http.StatusOK, span.Data["http.response.status_code"])
+						assert.Equal(t, float64(http.StatusOK), span.Data["http.response.status_code"])
 						assert.False(t, span.EndTime.IsZero())
 					})
 				}
