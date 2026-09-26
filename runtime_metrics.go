@@ -6,6 +6,7 @@ import (
 	"runtime"
 	runtime_metrics "runtime/metrics"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
@@ -74,17 +75,10 @@ var runtimeMetricsSamples = []runtime_metrics.Sample{
 	{Name: "/gc/heap/allocs:bytes"},
 }
 
-// To ensure that the runtime metrics integration is only started once.
-// From the Go docs:
-//
-// > It is safe to execute multiple Read calls concurrently, but their arguments
-// > must share no underlying memory. When in doubt, create a new []Sample from
-// > scratch, which is always safe, though may be inefficient.
-var onceRuntimeMetrics = sync.Once{}
-
 // A simple marker to guarantee that the runtime metrics integration is only
 // started once.
-var runtimeMetricsRunning = false
+var runtimeMetricsMutex = sync.Mutex{}
+var runtimeMetricsRunning = atomic.Bool{}
 
 type cpuUtilizationTracker struct {
 	lastCPUSeconds float64
@@ -151,13 +145,13 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 		return
 	}
 
-	if runtimeMetricsRunning {
+	if runtimeMetricsRunning.Load() {
 		return
 	}
 
-	onceRuntimeMetrics.Do(func() {
-		runtimeMetricsRunning = true
-	})
+	runtimeMetricsMutex.Lock()
+	runtimeMetricsRunning.Store(true)
+	runtimeMetricsMutex.Unlock()
 
 	// Handle opt-in metrics
 	if config.CollectGCMetrics {
@@ -201,6 +195,9 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 	for {
 		select {
 		case <-config.Context.Done():
+			runtimeMetricsMutex.Lock()
+			runtimeMetricsRunning.Store(false)
+			runtimeMetricsMutex.Unlock()
 			return
 		case <-tickCh:
 			runtime_metrics.Read(runtimeMetricsSamples)

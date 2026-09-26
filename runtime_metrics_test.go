@@ -96,7 +96,11 @@ func (h *runtimeMetricsHarness) start(config RuntimeMetricsConfig) {
 	h.t.Helper()
 	config.Context = h.ctx
 	h.launch(config)
-	h.t.Cleanup(func() { runtimeMetricsRunning = false })
+	h.t.Cleanup(func() {
+		runtimeMetricsMutex.Lock()
+		runtimeMetricsRunning.Store(false)
+		runtimeMetricsMutex.Unlock()
+	})
 }
 
 // assertReturnsImmediately runs the integration in the background and fails if
@@ -271,7 +275,7 @@ func Test_StartRuntimeMetrics_Disabled(t *testing.T) {
 	defer h.shutdown()
 	defer h.stopCollecting()
 
-	require.False(t, runtimeMetricsRunning)
+	require.False(t, runtimeMetricsRunning.Load())
 
 	// Disabled must return immediately, before the running guard is set.
 	h.assertReturnsImmediately(RuntimeMetricsConfig{Disabled: true, Interval: time.Second})
@@ -279,15 +283,21 @@ func Test_StartRuntimeMetrics_Disabled(t *testing.T) {
 	h.flush()
 
 	assert.Empty(t, h.transport.Events())
-	assert.False(t, runtimeMetricsRunning)
+	assert.False(t, runtimeMetricsRunning.Load())
 }
 
 func Test_StartRuntimeMetrics_AlreadyRunning(t *testing.T) {
 	h := newRuntimeMetricsHarness(t, ClientOptions{})
 	defer h.shutdown()
 
-	runtimeMetricsRunning = true
-	defer func() { runtimeMetricsRunning = false }()
+	runtimeMetricsMutex.Lock()
+	runtimeMetricsRunning.Store(true)
+	runtimeMetricsMutex.Unlock()
+	defer func() {
+		runtimeMetricsMutex.Lock()
+		runtimeMetricsRunning.Store(false)
+		runtimeMetricsMutex.Unlock()
+	}()
 	// Cancelling is a no-op for the passing case; it releases a collector that
 	// a regression started despite the running guard.
 	defer h.stopCollecting()
@@ -431,7 +441,11 @@ func Test_StartRuntimeMetrics_NilContextUsesCurrentHub(t *testing.T) {
 	prev := hub.Client()
 	hub.BindClient(h.client)
 	defer hub.BindClient(prev)
-	defer func() { runtimeMetricsRunning = false }()
+	defer func() {
+		runtimeMetricsMutex.Lock()
+		runtimeMetricsRunning.Store(false)
+		runtimeMetricsMutex.Unlock()
+	}()
 
 	h.launch(RuntimeMetricsConfig{Interval: time.Second})
 
