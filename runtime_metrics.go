@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/debuglog"
 )
 
@@ -40,9 +41,10 @@ type RuntimeMetricsConfig struct {
 
 // Strongly typed metric keys
 type runtimeMetricKeyMap struct {
-	Key  string
-	Unit string
-	Type MetricType
+	Key          string
+	Unit         string
+	DetailedType string
+	Type         MetricType
 }
 
 // The following metrics are collected by the runtime metrics integration.
@@ -132,28 +134,48 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 	runtimeMetricsMutex.Unlock()
 
 	runtimeMetricsKeys = []runtimeMetricKeyMap{
-		{"go.cpu.utilization", UnitRatio, MetricTypeGauge},
-		{"go.memory.used.total", UnitByte, MetricTypeGauge},
-		{"go.memory.used.heap.objects", UnitByte, MetricTypeGauge},
-		{"go.memory.used.heap.free", UnitByte, MetricTypeGauge},
-		{"go.memory.used.heap.unused", UnitByte, MetricTypeGauge},
-		{"go.memory.used.heap.stacks", UnitByte, MetricTypeGauge},
-		{"go.memory.used.other", UnitByte, MetricTypeGauge},
-		{"go.memory.limit", UnitByte, MetricTypeGauge},
-		{"go.goroutines.count", "goroutines", MetricTypeGauge},
-		{"go.memory.allocated", UnitByte, MetricTypeCounter},
+		{"go.cpu.utilization", UnitRatio, "", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "heap.free", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "heap.objects", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "heap.released", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "heap.stacks", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "heap.unused", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "metadata.mcache.free", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "metadata.mcache.inuse", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "metadata.mspan.free", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "metadata.mspan.inuse", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "metadata.other", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "os-stacks", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "other", MetricTypeGauge},
+		{"go.memory.used", UnitByte, "profiling.buckets", MetricTypeGauge},
+		{"go.memory.limit", UnitByte, "", MetricTypeGauge},
+		{"go.goroutines.count", "goroutines", "not-in-go", MetricTypeGauge},
+		{"go.goroutines.count", "goroutines", "runnable", MetricTypeGauge},
+		{"go.goroutines.count", "goroutines", "running", MetricTypeGauge},
+		{"go.goroutines.count", "goroutines", "waiting", MetricTypeGauge},
+		{"go.memory.allocated", UnitByte, "", MetricTypeCounter},
 	}
 
 	runtimeMetricsSamples = []runtime_metrics.Sample{
 		{Name: "/cpu/classes/total:cpu-seconds"},
-		{Name: "/memory/classes/total:bytes"},
-		{Name: "/memory/classes/heap/objects:bytes"},
 		{Name: "/memory/classes/heap/free:bytes"},
-		{Name: "/memory/classes/heap/unused:bytes"},
+		{Name: "/memory/classes/heap/objects:bytes"},
+		{Name: "/memory/classes/heap/released:bytes"},
 		{Name: "/memory/classes/heap/stacks:bytes"},
+		{Name: "/memory/classes/heap/unused:bytes"},
+		{Name: "/memory/classes/metadata/mcache/free:bytes"},
+		{Name: "/memory/classes/metadata/mcache/inuse:bytes"},
+		{Name: "/memory/classes/metadata/mspan/free:bytes"},
+		{Name: "/memory/classes/metadata/mspan/inuse:bytes"},
+		{Name: "/memory/classes/metadata/other:bytes"},
+		{Name: "/memory/classes/os-stacks:bytes"},
 		{Name: "/memory/classes/other:bytes"},
+		{Name: "/memory/classes/profiling/buckets:bytes"},
 		{Name: "/gc/gomemlimit:bytes"},
-		{Name: "/sched/goroutines:goroutines"},
+		{Name: "/sched/goroutines/not-in-go:goroutines"},
+		{Name: "/sched/goroutines/runnable:goroutines"},
+		{Name: "/sched/goroutines/running:goroutines"},
+		{Name: "/sched/goroutines/waiting:goroutines"},
 		{Name: "/gc/heap/allocs:bytes"},
 	}
 
@@ -161,8 +183,8 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 	if config.CollectOptionalMetrics {
 		runtimeMetricsKeys = append(
 			runtimeMetricsKeys,
-			runtimeMetricKeyMap{"go.memory.gc.cycles", "cycles", MetricTypeCounter},
-			runtimeMetricKeyMap{"go.memory.gc.pause", UnitSecond, MetricTypeDistribution},
+			runtimeMetricKeyMap{"go.memory.gc.cycles", "cycles", "", MetricTypeCounter},
+			runtimeMetricKeyMap{"go.memory.gc.pause", UnitSecond, "", MetricTypeDistribution},
 		)
 
 		runtimeMetricsSamples = append(
@@ -214,7 +236,11 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 					}
 					switch runtimeMetricsKeys[i].Type {
 					case MetricTypeGauge:
-						meter.Gauge(runtimeMetricsKeys[i].Key, value, WithUnit(runtimeMetricsKeys[i].Unit))
+						opts := []MeterOption{WithUnit(runtimeMetricsKeys[i].Unit)}
+						if runtimeMetricsKeys[i].DetailedType != "" {
+							opts = append(opts, WithAttributes(attribute.String("detailed_type", runtimeMetricsKeys[i].DetailedType)))
+						}
+						meter.Gauge(runtimeMetricsKeys[i].Key, value, opts...)
 					case MetricTypeCounter:
 						meter.Count(runtimeMetricsKeys[i].Key, int64(value), WithUnit(runtimeMetricsKeys[i].Unit))
 					case MetricTypeDistribution:
@@ -227,7 +253,11 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 					}
 					switch runtimeMetricsKeys[i].Type {
 					case MetricTypeGauge:
-						meter.Gauge(runtimeMetricsKeys[i].Key, value, WithUnit(runtimeMetricsKeys[i].Unit))
+						opts := []MeterOption{WithUnit(runtimeMetricsKeys[i].Unit)}
+						if runtimeMetricsKeys[i].DetailedType != "" {
+							opts = append(opts, WithAttributes(attribute.String("detailed_type", runtimeMetricsKeys[i].DetailedType)))
+						}
+						meter.Gauge(runtimeMetricsKeys[i].Key, value, opts...)
 					case MetricTypeCounter:
 						meter.Count(runtimeMetricsKeys[i].Key, int64(value), WithUnit(runtimeMetricsKeys[i].Unit))
 					case MetricTypeDistribution:
