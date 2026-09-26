@@ -387,7 +387,7 @@ func Test_StartRuntimeMetrics_StopsOnContextCancel(t *testing.T) {
 	assert.Equal(t, want, total)
 }
 
-func Test_StartRuntimeMetrics_CollectGCMetrics(t *testing.T) {
+func Test_StartRuntimeMetrics_CollectOptionalMetrics(t *testing.T) {
 	// The opt-in appends to the package-level tables; restore them so later
 	// tests collect the base set only.
 	origKeys, origSamples := runtimeMetricsKeys, runtimeMetricsSamples
@@ -400,7 +400,7 @@ func Test_StartRuntimeMetrics_CollectGCMetrics(t *testing.T) {
 	defer h.shutdown()
 	defer h.stopCollecting()
 
-	h.start(RuntimeMetricsConfig{Interval: time.Second, CollectGCMetrics: true})
+	h.start(RuntimeMetricsConfig{Interval: time.Second, CollectOptionalMetrics: true})
 
 	assert.Len(t, runtimeMetricsKeys, len(origKeys)+2)
 	assert.Len(t, runtimeMetricsSamples, len(origSamples)+2)

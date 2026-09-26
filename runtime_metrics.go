@@ -27,9 +27,9 @@ type RuntimeMetricsConfig struct {
 	// integration. If you don't provide a context, the SDK will create
 	// an empty background context.
 	Context context.Context
-	// CollectGCMetrics enables the collection of GC metrics.
+	// CollectOptionalMetrics enables the collection of GC metrics.
 	// Default is false (disabled).
-	CollectGCMetrics bool
+	CollectOptionalMetrics bool
 
 	// newTicker returns a channel that delivers ticks at the given interval
 	// plus a function that stops them. nil means time.NewTicker. Tests inject
@@ -47,33 +47,11 @@ type runtimeMetricKeyMap struct {
 
 // The following metrics are collected by the runtime metrics integration.
 // This should be synced with the `runtimeMetricsSamples` variable.
-var runtimeMetricsKeys = []runtimeMetricKeyMap{
-	{"go.cpu.utilization", UnitRatio, MetricTypeGauge},
-	{"go.memory.used.total", UnitByte, MetricTypeGauge},
-	{"go.memory.used.heap.objects", UnitByte, MetricTypeGauge},
-	{"go.memory.used.heap.free", UnitByte, MetricTypeGauge},
-	{"go.memory.used.heap.unused", UnitByte, MetricTypeGauge},
-	{"go.memory.used.heap.stacks", UnitByte, MetricTypeGauge},
-	{"go.memory.used.other", UnitByte, MetricTypeGauge},
-	{"go.memory.limit", UnitByte, MetricTypeGauge},
-	{"go.goroutines.count", "goroutines", MetricTypeGauge},
-	{"go.memory.allocated", UnitByte, MetricTypeCounter},
-}
+var runtimeMetricsKeys = []runtimeMetricKeyMap{}
 
 // The following metrics are collected by the runtime metrics integration.
 // This should be synced with the `runtimeMetricsKeys` variable.
-var runtimeMetricsSamples = []runtime_metrics.Sample{
-	{Name: "/cpu/classes/total:cpu-seconds"},
-	{Name: "/memory/classes/total:bytes"},
-	{Name: "/memory/classes/heap/objects:bytes"},
-	{Name: "/memory/classes/heap/free:bytes"},
-	{Name: "/memory/classes/heap/unused:bytes"},
-	{Name: "/memory/classes/heap/stacks:bytes"},
-	{Name: "/memory/classes/other:bytes"},
-	{Name: "/gc/gomemlimit:bytes"},
-	{Name: "/sched/goroutines:goroutines"},
-	{Name: "/gc/heap/allocs:bytes"},
-}
+var runtimeMetricsSamples = []runtime_metrics.Sample{}
 
 // A simple marker to guarantee that the runtime metrics integration is only
 // started once.
@@ -153,8 +131,34 @@ func StartRuntimeMetrics(config RuntimeMetricsConfig) {
 	runtimeMetricsRunning.Store(true)
 	runtimeMetricsMutex.Unlock()
 
+	runtimeMetricsKeys = []runtimeMetricKeyMap{
+		{"go.cpu.utilization", UnitRatio, MetricTypeGauge},
+		{"go.memory.used.total", UnitByte, MetricTypeGauge},
+		{"go.memory.used.heap.objects", UnitByte, MetricTypeGauge},
+		{"go.memory.used.heap.free", UnitByte, MetricTypeGauge},
+		{"go.memory.used.heap.unused", UnitByte, MetricTypeGauge},
+		{"go.memory.used.heap.stacks", UnitByte, MetricTypeGauge},
+		{"go.memory.used.other", UnitByte, MetricTypeGauge},
+		{"go.memory.limit", UnitByte, MetricTypeGauge},
+		{"go.goroutines.count", "goroutines", MetricTypeGauge},
+		{"go.memory.allocated", UnitByte, MetricTypeCounter},
+	}
+
+	runtimeMetricsSamples = []runtime_metrics.Sample{
+		{Name: "/cpu/classes/total:cpu-seconds"},
+		{Name: "/memory/classes/total:bytes"},
+		{Name: "/memory/classes/heap/objects:bytes"},
+		{Name: "/memory/classes/heap/free:bytes"},
+		{Name: "/memory/classes/heap/unused:bytes"},
+		{Name: "/memory/classes/heap/stacks:bytes"},
+		{Name: "/memory/classes/other:bytes"},
+		{Name: "/gc/gomemlimit:bytes"},
+		{Name: "/sched/goroutines:goroutines"},
+		{Name: "/gc/heap/allocs:bytes"},
+	}
+
 	// Handle opt-in metrics
-	if config.CollectGCMetrics {
+	if config.CollectOptionalMetrics {
 		runtimeMetricsKeys = append(
 			runtimeMetricsKeys,
 			runtimeMetricKeyMap{"go.memory.gc.cycles", "cycles", MetricTypeCounter},
