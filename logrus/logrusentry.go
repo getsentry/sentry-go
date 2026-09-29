@@ -158,7 +158,7 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 
 	hub := sentry.GetHubFromContext(ctx)
 	if h.useCustomProvider {
-		if customHub := h.hubProvider(); customHub != nil && customHub.Client() != nil {
+		if customHub := h.hubProvider(); customHub != nil && customHub.Client().IsEnabled() {
 			hub = customHub
 		}
 	}

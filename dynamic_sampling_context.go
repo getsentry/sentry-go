@@ -43,7 +43,7 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	scope := hub.Scope()
 	client := hub.Client()
 
-	if client == nil || scope == nil {
+	if !client.IsEnabled() || scope == nil {
 		return DynamicSamplingContext{
 			Entries: map[string]string{},
 			Frozen:  false,
@@ -122,7 +122,7 @@ func (d DynamicSamplingContext) String() string {
 func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSamplingContext {
 	entries := map[string]string{}
 
-	if client == nil || scope == nil {
+	if !client.IsEnabled() || scope == nil {
 		return DynamicSamplingContext{
 			Entries: entries,
 			Frozen:  false,

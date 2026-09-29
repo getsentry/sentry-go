@@ -109,6 +109,27 @@ func TestLogHookSetHubProviderUsesProviderForLogs(t *testing.T) {
 	assert.Equal(t, "provider", got[0].Logs[0].Attributes["sentry.environment"].String())
 }
 
+func TestLogHookNoopHubProviderFallsBack(t *testing.T) {
+	t.Parallel()
+	transport := &sentry.MockTransport{}
+	client, err := sentry.NewClient(sentry.ClientOptions{
+		Dsn: "http://whatever@example.com/1337", Transport: transport,
+	})
+	if !assert.NoError(t, err) {
+		return
+	}
+	t.Cleanup(client.Close)
+	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
+	hook.SetHubProvider(func() *sentry.Hub { return sentry.NewHub(sentry.NewNoopClient(), sentry.NewScope()) })
+	ctx := sentry.SetHubOnContext(context.Background(), sentry.NewHub(client, sentry.NewScope()))
+
+	assert.NoError(t, hook.Fire(&logrus.Entry{Context: ctx, Level: logrus.InfoLevel, Message: "fallback log"}))
+	assert.True(t, client.Flush(testutils.FlushTimeout()))
+	if events := transport.Events(); assert.Len(t, events, 1) && assert.Len(t, events[0].Logs, 1) {
+		assert.Equal(t, "fallback log", events[0].Logs[0].Body)
+	}
+}
+
 func TestLogHookUsesContextHubWithoutCustomProvider(t *testing.T) {
 	defaultTransport := &sentry.MockTransport{}
 	defaultClient, err := sentry.NewClient(sentry.ClientOptions{
