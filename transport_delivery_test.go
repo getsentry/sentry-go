@@ -121,6 +121,10 @@ func TestHTTPDeliveryRequestTimeout(t *testing.T) {
 			})}
 			transport := newTestHTTPDelivery(async, TransportOptions{
 				Dsn: "https://public@example.com/1", HTTPClient: httpClient, Timeout: 50 * time.Millisecond,
+				HTTPTransport: deliveryRoundTripper(func(*http.Request) (*http.Response, error) {
+					t.Error("HTTPTransport must be ignored when HTTPClient is supplied")
+					return nil, http.ErrHandlerTimeout
+				}),
 			}, nil)
 			t.Cleanup(transport.Close)
 			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))

@@ -9,11 +9,13 @@ import (
 )
 
 func main() {
-	sentrySyncTransport := sentry.NewHTTPSyncTransport()
-	sentrySyncTransport.Timeout = time.Second * 3
+	const dsn = "https://hello@example.com/1337"
+	sentrySyncTransport := sentry.NewHTTPSyncTransport(sentry.TransportOptions{
+		Dsn: dsn, Timeout: 3 * time.Second,
+	})
 
 	_ = sentry.Init(sentry.ClientOptions{
-		Dsn:       "https://hello@example.com/1337",
+		Dsn:       dsn,
 		Debug:     true,
 		Transport: sentrySyncTransport,
 	})

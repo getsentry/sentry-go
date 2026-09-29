@@ -2,7 +2,7 @@ package telemetry
 
 import (
 	"context"
-	"time"
+	"errors"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/protocol"
@@ -36,26 +36,19 @@ type EnvelopeConvertible interface {
 	ToEnvelope(*protocol.EnvelopeHeader) (*protocol.Envelope, error)
 }
 
-// Transport represents the envelope-first transport interface.
-// This interface is designed for the telemetry buffer system and provides
-// non-blocking sends with backpressure signals.
-type Transport interface {
-	// SendEnvelope sends an envelope to Sentry. Returns immediately with
-	// backpressure error if the queue is full.
-	SendEnvelope(envelope *protocol.Envelope) error
+// ErrQueueFull reports that a transport rejected an envelope because its queue is full.
+var ErrQueueFull = errors.New("transport queue full")
 
-	// HasCapacity reports whether the transport has capacity to accept at least one more envelope.
-	HasCapacity() bool
+// transport is the delivery surface consumed by the processor. Public
+// sentry.Transport implementations satisfy it without depending on the SDK.
+// A SendEnvelope error means the envelope was rejected and the processor
+// records the loss; ErrQueueFull also makes the processor back off.
+type transport interface {
+	SendEnvelope(*protocol.Envelope) error
+	FlushWithContext(context.Context) bool
+}
 
-	// IsRateLimited checks if a specific category is currently rate limited
-	IsRateLimited(category ratelimit.Category) bool
-
-	// Flush waits for all pending envelopes to be sent, with timeout
-	Flush(timeout time.Duration) bool
-
-	// FlushWithContext waits for all pending envelopes to be sent
-	FlushWithContext(ctx context.Context) bool
-
-	// Close shuts down the transport gracefully
-	Close()
+// synchronousTransport marks transports that deliver events during Add.
+type synchronousTransport interface {
+	Synchronous()
 }

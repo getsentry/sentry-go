@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
@@ -42,7 +42,7 @@ func TestNewClientAllowsEmptyDSN(t *testing.T) {
 	}
 
 	client.CaptureException(context.Background(), errors.New("custom error"))
-	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
+	assertEqual(t, lastCapturedEvent(t, client, transport).Exception[0].Value, "custom error")
 }
 
 func TestNewClientRejectsMalformedDSN(t *testing.T) {
@@ -103,7 +103,7 @@ func (e customComplexError) AnswerToLife() string {
 	return "42"
 }
 
-func setupClientTest() (*Client, *Scope, *MockTransport) {
+func setupClientTest(t testing.TB) (*Client, *Scope, *MockTransport) {
 	scope := NewScope()
 	transport := &MockTransport{}
 	client, _ := NewClient(ClientOptions{
@@ -115,6 +115,7 @@ func setupClientTest() (*Client, *Scope, *MockTransport) {
 		},
 	})
 
+	t.Cleanup(client.Close)
 	return client, scope, transport
 }
 
@@ -175,6 +176,8 @@ func TestCaptureMessageRouting(t *testing.T) {
 			scope := NewScope()
 			scope.SetTag("source", test.name)
 			id := test.capture(ContextWithScope(context.Background(), scope), local)
+			require.True(t, global.Flush(testutils.FlushTimeout()))
+			require.True(t, local.Flush(testutils.FlushTimeout()))
 			if test.destination == "none" {
 				assert.Nil(t, id)
 				assert.Empty(t, globalTransport.Events())
@@ -210,10 +213,10 @@ func TestBackgroundCaptureUsesGlobalPropagationContext(t *testing.T) {
 	})
 
 	require.NotNil(t, CaptureMessage(context.Background(), "background"))
-	require.Len(t, transport.Events(), 1)
-	assert.Equal(t, "background", transport.Events()[0].Message)
+	require.Len(t, capturedEvents(t, client, transport), 1)
+	assert.Equal(t, "background", capturedEvents(t, client, transport)[0].Message)
 	assert.NotEqual(t, zeroTraceID, GlobalScope().propagationContextSnapshot().TraceID)
-	assert.Equal(t, GlobalScope().propagationContextSnapshot().Map(), transport.Events()[0].Contexts["trace"])
+	assert.Equal(t, jsonContext(t, GlobalScope().propagationContextSnapshot().Map()), capturedEvents(t, client, transport)[0].Contexts["trace"])
 }
 
 func TestInitFailureKeepsGlobalClient(t *testing.T) {
@@ -266,10 +269,10 @@ func TestWithScopeCreatesIndependentRoots(t *testing.T) {
 	global.SetTag("global-after-snapshot", "after")
 	require.NotNil(t, CaptureMessage(ContextWithClient(firstCtx, client), "first root"))
 	require.NotNil(t, CaptureMessage(ContextWithClient(secondCtx, client), "second root"))
-	require.Len(t, transport.Events(), 2)
-	assert.Equal(t, "before", transport.Events()[0].Tags["global-snapshot"])
-	assert.NotContains(t, transport.Events()[0].Tags, "global-after-snapshot")
-	assert.NotEqual(t, transport.Events()[0].Contexts["trace"][traceIDContextKey], transport.Events()[1].Contexts["trace"][traceIDContextKey])
+	require.Len(t, capturedEvents(t, client, transport), 2)
+	assert.Equal(t, "before", capturedEvents(t, client, transport)[0].Tags["global-snapshot"])
+	assert.NotContains(t, capturedEvents(t, client, transport)[0].Tags, "global-after-snapshot")
+	assert.NotEqual(t, capturedEvents(t, client, transport)[0].Contexts["trace"][traceIDContextKey], capturedEvents(t, client, transport)[1].Contexts["trace"][traceIDContextKey])
 	assert.Nil(t, first.getSpan())
 	assert.Nil(t, second.getSpan())
 }
@@ -293,11 +296,11 @@ func TestWithScopeClonesParentTrace(t *testing.T) {
 	assert.Equal(t, "parent", parent.propagationContextSnapshot().DynamicSamplingContext.Entries["release"])
 	assert.Equal(t, "child", child.propagationContextSnapshot().DynamicSamplingContext.Entries["release"])
 	require.NotNil(t, CaptureMessage(ContextWithClient(ctx, client), "child"))
-	require.Len(t, transport.Events(), 1)
+	require.Len(t, capturedEvents(t, client, transport), 1)
 
-	assert.Equal(t, "parent", transport.Events()[0].Tags["source"])
+	assert.Equal(t, "parent", capturedEvents(t, client, transport)[0].Tags["source"])
 	assert.NotContains(t, parent.tags, "child-only")
-	assert.Equal(t, parent.propagationContextSnapshot().TraceID, transport.Events()[0].Contexts["trace"][traceIDContextKey])
+	assert.Equal(t, parent.propagationContextSnapshot().TraceID.String(), capturedEvents(t, client, transport)[0].Contexts["trace"][traceIDContextKey])
 }
 
 func TestWithScopeInheritsActiveTransaction(t *testing.T) {
@@ -307,8 +310,8 @@ func TestWithScopeInheritsActiveTransaction(t *testing.T) {
 
 	ctx, _ := WithScope(transaction.Context())
 	require.NotNil(t, CaptureMessage(ctx, "child"))
-	require.Len(t, transport.Events(), 1)
-	assert.Equal(t, transaction.TraceID, transport.Events()[0].Contexts["trace"][traceIDContextKey])
+	require.Len(t, capturedEvents(t, client, transport), 1)
+	assert.Equal(t, transaction.TraceID.String(), capturedEvents(t, client, transport)[0].Contexts["trace"][traceIDContextKey])
 }
 
 func TestUnboundTransactionDoesNotBecomeGlobalScopeSpan(t *testing.T) {
@@ -377,18 +380,18 @@ func TestCaptureMessagePreservesActiveSpanTraceContext(t *testing.T) {
 				capture = client.CaptureMessage
 			}
 			require.NotNil(t, capture(transaction.Context(), "message"))
-			require.Equal(t, Context{
+			require.Equal(t, jsonContext(t, Context{
 				traceIDContextKey: transaction.TraceID,
 				spanIDContextKey:  transaction.SpanID,
 				"op":              "http.server",
 				"data":            map[string]interface{}{"http.request.method": http.MethodGet},
-			}, requireSingleEvent(t, transport).Contexts[traceContextKey])
+			}), requireSingleEvent(t, client, transport).Contexts[traceContextKey])
 		})
 	}
 }
 
 func TestCaptureMessageEmptyString(t *testing.T) {
-	client, scope, transport := setupClientTest()
+	client, scope, transport := setupClientTest(t)
 	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
 	CaptureMessage(ctx, "")
 	want := &Event{
@@ -396,11 +399,11 @@ func TestCaptureMessageEmptyString(t *testing.T) {
 			{
 				Type:       "sentry.usageError",
 				Value:      "CaptureMessage called with empty message",
-				Stacktrace: &Stacktrace{Frames: []Frame{}},
+				Stacktrace: &Stacktrace{},
 			},
 		},
 	}
-	got := transport.lastEvent
+	got := lastCapturedEvent(t, client, transport)
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
 		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
@@ -461,7 +464,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "sentry.usageError",
 					Value:      "CaptureException called with nil error",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: &Stacktrace{},
 				},
 			},
 		},
@@ -472,7 +475,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "*errors.errorString",
 					Value:      "custom error",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: &Stacktrace{},
 				},
 			},
 		},
@@ -498,7 +501,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "*errors.withStack",
 					Value:      "wat",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: &Stacktrace{},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeGeneric,
 						ExceptionID:      0,
@@ -516,7 +519,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "*sentry.customErrWithCause",
 					Value:      "err",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: &Stacktrace{},
 				},
 			},
 		},
@@ -539,7 +542,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "*sentry.customErrWithCause",
 					Value:      "err",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: &Stacktrace{},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeGeneric,
 						ExceptionID:      0,
@@ -569,7 +572,7 @@ func TestCaptureException(t *testing.T) {
 				{
 					Type:       "sentry.wrappedError",
 					Value:      "wrapped: original",
-					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Stacktrace: &Stacktrace{},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeGeneric,
 						ExceptionID:      0,
@@ -597,12 +600,12 @@ func TestCaptureException(t *testing.T) {
 		for _, tt := range grp.tests {
 			tt := tt
 			t.Run(grp.name+"/"+tt.name, func(t *testing.T) {
-				client, _, transport := setupClientTest()
+				client, _, transport := setupClientTest(t)
 				CaptureException(ContextWithClient(context.Background(), client), tt.err)
-				if transport.lastEvent == nil {
+				if lastCapturedEvent(t, client, transport) == nil {
 					t.Fatal("missing event")
 				}
-				got := transport.lastEvent.Exception
+				got := lastCapturedEvent(t, client, transport).Exception
 				if diff := cmp.Diff(tt.want, got); diff != "" {
 					t.Errorf("Event mismatch (-want +got):\n%s", diff)
 				}
@@ -612,7 +615,7 @@ func TestCaptureException(t *testing.T) {
 }
 
 func TestCaptureEvent(t *testing.T) {
-	client, _, transport := setupClientTest()
+	client, _, transport := setupClientTest(t)
 
 	eventID := EventID("0123456789abcdef")
 	timestamp := time.Now().UTC()
@@ -624,7 +627,7 @@ func TestCaptureEvent(t *testing.T) {
 		ServerName: serverName,
 	})
 
-	if transport.lastEvent == nil {
+	if lastCapturedEvent(t, client, transport) == nil {
 		t.Fatal("missing event")
 	}
 	want := &Event{
@@ -633,11 +636,11 @@ func TestCaptureEvent(t *testing.T) {
 		ServerName: serverName,
 		Level:      LevelInfo,
 		Platform:   "go",
-		Sdk: SdkInfo{
+		Sdk: protocol.SdkInfo{
 			Name:         "sentry.go",
 			Version:      SDKVersion,
-			Integrations: []string{},
-			Packages: []SdkPackage{
+			Integrations: nil,
+			Packages: []protocol.SdkPackage{
 				{
 					// FIXME: name format doesn't follow spec in
 					// https://docs.sentry.io/development/sdk-dev/event-payloads/sdk/
@@ -650,7 +653,7 @@ func TestCaptureEvent(t *testing.T) {
 			},
 		},
 	}
-	got := transport.lastEvent
+	got := lastCapturedEvent(t, client, transport)
 	opts := cmp.Options{cmpopts.IgnoreFields(Event{}, "Release", "Contexts"), cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe")}
 	if diff := cmp.Diff(want, got, opts); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
@@ -658,15 +661,15 @@ func TestCaptureEvent(t *testing.T) {
 }
 
 func TestCaptureEventShouldSendEventWithMessage(t *testing.T) {
-	client, scope, transport := setupClientTest()
+	client, scope, transport := setupClientTest(t)
 	event := NewEvent()
 	event.Message = "event message"
 	client.CaptureEvent(ContextWithScope(context.Background(), scope), event)
-	assertEqual(t, transport.lastEvent.Message, "event message")
+	assertEqual(t, lastCapturedEvent(t, client, transport).Message, "event message")
 }
 
 func TestCaptureEventNil(t *testing.T) {
-	client, scope, transport := setupClientTest()
+	client, scope, transport := setupClientTest(t)
 	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
 	CaptureEvent(ctx, nil)
 	want := &Event{
@@ -674,11 +677,11 @@ func TestCaptureEventNil(t *testing.T) {
 			{
 				Type:       "sentry.usageError",
 				Value:      "CaptureEvent called with nil event",
-				Stacktrace: &Stacktrace{Frames: []Frame{}},
+				Stacktrace: &Stacktrace{},
 			},
 		},
 	}
-	got := transport.lastEvent
+	got := lastCapturedEvent(t, client, transport)
 	assert.Equal(t, LevelError, got.Level)
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
@@ -746,8 +749,8 @@ func TestCaptureLevelPrecedence(t *testing.T) {
 			})
 			ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
 			test.capture(ctx, client)
-			require.Len(t, transport.Events(), 1)
-			assert.Equal(t, test.want, transport.Events()[0].Level)
+			require.Len(t, capturedEvents(t, client, transport), 1)
+			assert.Equal(t, test.want, capturedEvents(t, client, transport)[0].Level)
 			assert.Equal(t, test.want, observed)
 		})
 	}
@@ -902,9 +905,9 @@ func TestCaptureCheckIn(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			client, _, transport := setupClientTest()
+			client, _, transport := setupClientTest(t)
 			client.CaptureCheckIn(context.Background(), tt.checkIn, tt.monitorConfig)
-			capturedEvent := transport.lastEvent
+			capturedEvent := lastCapturedEvent(t, client, transport)
 
 			if tt.expectNilEvent && capturedEvent == nil {
 				// Event is nil as expected, nothing else to check
@@ -931,7 +934,7 @@ func TestCaptureCheckIn(t *testing.T) {
 }
 
 func TestCaptureCheckInExistingID(t *testing.T) {
-	client, _, _ := setupClientTest()
+	client, _, _ := setupClientTest(t)
 
 	monitorConfig := &MonitorConfig{
 		Schedule:      IntervalSchedule(1, MonitorScheduleUnitDay),
@@ -959,18 +962,18 @@ func TestCaptureCheckInExistingID(t *testing.T) {
 }
 
 func TestSampleRateCanDropEvent(t *testing.T) {
-	client, scope, transport := setupClientTest()
+	client, scope, transport := setupClientTest(t)
 	client.options.SampleRate = 0.000000000000001
 
 	client.CaptureMessage(ContextWithScope(context.Background(), scope), "Foo")
 
-	if transport.lastEvent != nil {
+	if lastCapturedEvent(t, client, transport) != nil {
 		t.Error("expected event to be dropped")
 	}
 }
 
 func TestApplyToScopeCanDropEvent(t *testing.T) {
-	client, scope, transport := setupClientTest()
+	client, scope, transport := setupClientTest(t)
 	scope.AddEventProcessor(func(*Event, *EventHint) *Event { return nil })
 
 	client.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
@@ -980,26 +983,26 @@ func TestApplyToScopeCanDropEvent(t *testing.T) {
 
 	client.CaptureMessage(ContextWithScope(context.Background(), scope), "Foo")
 
-	if transport.lastEvent != nil {
+	if lastCapturedEvent(t, client, transport) != nil {
 		t.Error("expected event to be dropped")
 	}
 }
 
 func TestBeforeSendCanDropEvent(t *testing.T) {
-	client, scope, transport := setupClientTest()
+	client, scope, transport := setupClientTest(t)
 	client.options.BeforeSend = func(_ *Event, _ *EventHint) *Event {
 		return nil
 	}
 
 	client.CaptureMessage(ContextWithScope(context.Background(), scope), "Foo")
 
-	if transport.lastEvent != nil {
+	if lastCapturedEvent(t, client, transport) != nil {
 		t.Error("expected event to be dropped")
 	}
 }
 
 func TestBeforeSendGetAccessToEventHint(t *testing.T) {
-	client, scope, transport := setupClientTest()
+	client, scope, transport := setupClientTest(t)
 	client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
 		if ex, ok := hint.OriginalException.(customComplexError); ok {
 			event.Message = event.Exception[0].Value + " " + ex.AnswerToLife()
@@ -1011,7 +1014,7 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
 	CaptureException(ctx, ex, WithEventHint(&EventHint{OriginalException: ex}))
 
-	assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
+	assertEqual(t, lastCapturedEvent(t, client, transport).Message, "customComplexError: Foo 42")
 }
 
 func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
@@ -1035,7 +1038,7 @@ func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
 	)
 	transaction.Finish()
 
-	if transport.lastEvent != nil {
+	if lastCapturedEvent(t, ClientFromContext(ctx), transport) != nil {
 		t.Error("expected event to be dropped")
 	}
 }
@@ -1062,10 +1065,10 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 	)
 	transaction.Finish()
 
-	lastEvent := transport.lastEvent
+	lastEvent := lastCapturedEvent(t, ClientFromContext(ctx), transport)
 	assertEqual(t, lastEvent.Transaction, "Bar")
 	// Make sure it's the same span
-	assertEqual(t, lastEvent.Contexts["trace"]["span_id"], transaction.SpanID)
+	assertEqual(t, lastEvent.Contexts["trace"]["span_id"], transaction.SpanID.String())
 }
 
 func TestIgnoreErrors(t *testing.T) {
@@ -1114,7 +1117,7 @@ func TestIgnoreErrors(t *testing.T) {
 
 			client.CaptureMessage(context.Background(), tt.message)
 
-			dropped := transport.lastEvent == nil
+			dropped := lastCapturedEvent(t, client, transport) == nil
 			if tt.expectDrop != dropped {
 				t.Errorf("expected event to be dropped")
 			}
@@ -1170,7 +1173,7 @@ func TestIgnoreTransactions(t *testing.T) {
 			)
 			transaction.Finish()
 
-			dropped := transport.lastEvent == nil
+			dropped := lastCapturedEvent(t, ClientFromContext(ctx), transport) == nil
 			if tt.expectDrop != dropped {
 				t.Errorf("expected event to be dropped")
 			}
@@ -1190,7 +1193,7 @@ func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
 	// Transaction has no http.response.status_code
 	transaction.Finish()
 
-	dropped := transport.lastEvent == nil
+	dropped := lastCapturedEvent(t, ClientFromContext(ctx), transport) == nil
 	assertEqual(t, dropped, false, "expected transaction to not be dropped")
 }
 
@@ -1307,7 +1310,7 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 				assertBaggageStringsEqual(t, baggage, transaction.ToBaggage())
 			}
 
-			dropped := transport.lastEvent == nil
+			dropped := lastCapturedEvent(t, ClientFromContext(ctx), transport) == nil
 			if tt.expectDrop != dropped {
 				if tt.expectDrop {
 					t.Errorf("expected transaction with status code %d to be dropped", tt.statusCode)
@@ -1322,7 +1325,7 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, "true", dsc.Entries["sampled"])
 				require.Equal(t, "1", dsc.Entries["sample_rate"])
-				require.Equal(t, dsc, transport.Events()[0].sdkMetaData.dsc)
+				require.Equal(t, dsc.Entries, capturedTrace(t, transport, capturedEvents(t, ClientFromContext(ctx), transport)[0]))
 			}
 		})
 	}
@@ -1438,7 +1441,7 @@ func TestRecover(t *testing.T) {
 					{
 						Type:       "*errors.errorString",
 						Value:      "panic error",
-						Stacktrace: &Stacktrace{Frames: []Frame{}},
+						Stacktrace: &Stacktrace{},
 					},
 				},
 			},
@@ -1477,7 +1480,7 @@ func TestRecover(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(fmt.Sprintf("Recover/%v", tt.v), func(t *testing.T) {
-			client, scope, transport := setupClientTest()
+			client, scope, transport := setupClientTest(t)
 			captureCtx := ContextWithClient(ContextWithScope(context.TODO(), scope), client)
 			var called bool
 			client.AddEventProcessor(func(event *Event, hint *EventHint) *Event {
@@ -1492,7 +1495,7 @@ func TestRecover(t *testing.T) {
 				panic(tt.v)
 			}()
 			tt.want.Level = LevelFatal
-			checkEvent(t, transport.Events(), tt.want)
+			checkEvent(t, capturedEvents(t, client, transport), tt.want)
 			if !called {
 				t.Error("event processor not called, could not test that hint has context")
 			}
@@ -1515,7 +1518,7 @@ func TestNoopClientRecover(t *testing.T) {
 }
 
 func TestCustomMaxSpansProperty(t *testing.T) {
-	client, _, _ := setupClientTest()
+	client, _, _ := setupClientTest(t)
 	assertEqual(t, client.Options().MaxSpans, defaultMaxSpans)
 
 	client.options.MaxSpans = 2000
@@ -1530,7 +1533,7 @@ func TestCustomMaxSpansProperty(t *testing.T) {
 }
 
 func TestSDKIdentifier(t *testing.T) {
-	client, _, _ := setupClientTest()
+	client, _, _ := setupClientTest(t)
 	assertEqual(t, client.GetSDKIdentifier(), "sentry.go")
 
 	client.SetSDKIdentifier("sentry.go.test")
@@ -1538,17 +1541,7 @@ func TestSDKIdentifier(t *testing.T) {
 }
 
 func TestClientSetsUpTransport(t *testing.T) {
-	client, _ := NewClient(ClientOptions{
-		Dsn: testDsn,
-		HTTPClient: &http.Client{
-			Transport: &http.Transport{
-				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-					return nil, fmt.Errorf("mock transport - no real connections")
-				},
-			},
-		},
-		Transport: &MockTransport{},
-	})
+	client, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &MockTransport{}})
 	require.IsType(t, &MockTransport{}, client.Transport)
 }
 
@@ -1627,7 +1620,7 @@ func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
 	if client.telemetryProcessor == nil {
 		t.Fatal("expected telemetryProcessor to not be nil when DSN is missing")
 	}
-	require.IsType(t, &NoopTransport{}, client.Transport.(*internalAsyncTransportAdapter).transport)
+	require.IsType(t, &noopEnvelopeTransport{}, client.Transport)
 }
 
 type multiClientEnv struct {
@@ -1650,6 +1643,7 @@ func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 			},
 		})
 		require.NoError(t, err)
+		t.Cleanup(c.Close)
 		return c, tr
 	}
 
@@ -1676,12 +1670,8 @@ func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 }
 
 func (e *multiClientEnv) resetTransports() {
-	e.transport1.mu.Lock()
-	e.transport1.events = nil
-	e.transport1.mu.Unlock()
-	e.transport2.mu.Lock()
-	e.transport2.events = nil
-	e.transport2.mu.Unlock()
+	e.transport1.Reset()
+	e.transport2.Reset()
 }
 
 func (e *multiClientEnv) flushAll() {
@@ -1693,9 +1683,9 @@ func eventTraceID(t *testing.T, ev *Event) TraceID {
 	t.Helper()
 	traceCtx, ok := ev.Contexts["trace"]
 	require.True(t, ok, "event should have a trace context")
-	tid, ok := traceCtx["trace_id"].(TraceID)
+	tid, ok := traceCtx["trace_id"].(string)
 	require.True(t, ok, "trace context should contain a TraceID")
-	return tid
+	return TraceIDFromHex(tid)
 }
 
 func TestClient_MultiClientSetup(t *testing.T) {
@@ -1704,6 +1694,7 @@ func TestClient_MultiClientSetup(t *testing.T) {
 
 		e.client1.CaptureMessage(e.ctx1, "msg-from-client1")
 		e.client2.CaptureMessage(e.ctx2, "msg-from-client2")
+		e.flushAll()
 
 		require.Len(t, e.transport1.Events(), 1)
 		require.Len(t, e.transport2.Events(), 1)
@@ -1721,13 +1712,13 @@ func TestClient_MultiClientSetup(t *testing.T) {
 
 		require.Len(t, e.transport1.Events(), 1, "client1 transport should have 1 log event")
 		require.Len(t, e.transport2.Events(), 1, "client2 transport should have 1 log event")
-		require.Len(t, e.transport1.Events()[0].Logs, 1)
-		require.Len(t, e.transport2.Events()[0].Logs, 1)
-		assert.Equal(t, "log-from-client1", e.transport1.Events()[0].Logs[0].Body)
-		assert.Equal(t, "log-from-client2", e.transport2.Events()[0].Logs[0].Body)
-		assert.Equal(t, e.traceID1, e.transport1.Events()[0].Logs[0].TraceID,
+		require.Len(t, capturedEventOfType(t, e.client1, e.transport1, "log").Logs, 1)
+		require.Len(t, capturedEventOfType(t, e.client2, e.transport2, "log").Logs, 1)
+		assert.Equal(t, "log-from-client1", capturedEventOfType(t, e.client1, e.transport1, "log").Logs[0].Body)
+		assert.Equal(t, "log-from-client2", capturedEventOfType(t, e.client2, e.transport2, "log").Logs[0].Body)
+		assert.Equal(t, e.traceID1, capturedEventOfType(t, e.client1, e.transport1, "log").Logs[0].TraceID,
 			"log on client1 should carry scope1's trace ID")
-		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
+		assert.Equal(t, e.traceID2, capturedEventOfType(t, e.client2, e.transport2, "log").Logs[0].TraceID,
 			"log on client2 should carry scope2's trace ID")
 		e.resetTransports()
 
@@ -1737,10 +1728,10 @@ func TestClient_MultiClientSetup(t *testing.T) {
 
 		require.Len(t, e.transport1.Events(), 1, "client1 transport should have 1 metric event")
 		require.Len(t, e.transport2.Events(), 1, "client2 transport should have 1 metric event")
-		require.Len(t, e.transport1.Events()[0].Metrics, 1)
-		require.Len(t, e.transport2.Events()[0].Metrics, 1)
-		assert.Equal(t, "counter-from-client1", e.transport1.Events()[0].Metrics[0].Name)
-		assert.Equal(t, "counter-from-client2", e.transport2.Events()[0].Metrics[0].Name)
+		require.Len(t, capturedEventOfType(t, e.client1, e.transport1, "trace_metric").Metrics, 1)
+		require.Len(t, capturedEventOfType(t, e.client2, e.transport2, "trace_metric").Metrics, 1)
+		assert.Equal(t, "counter-from-client1", capturedEventOfType(t, e.client1, e.transport1, "trace_metric").Metrics[0].Name)
+		assert.Equal(t, "counter-from-client2", capturedEventOfType(t, e.client2, e.transport2, "trace_metric").Metrics[0].Name)
 	})
 
 	t.Run("signals_respect_emit_context_client", func(t *testing.T) {
@@ -1768,14 +1759,16 @@ func TestClient_MultiClientSetup(t *testing.T) {
 				assert.Empty(t, e.transport1.Events(), "creation-time client should not receive the signals")
 				events := e.transport2.Events()
 				require.Len(t, events, 2, "emit-context client should receive the signals")
-				require.Len(t, events[0].Logs, 1)
-				require.Len(t, events[1].Metrics, 1)
-				assert.Equal(t, "cross-context-log", events[0].Logs[0].Body)
-				assert.Equal(t, "cross-context-count", events[1].Metrics[0].Name)
-				assert.Equal(t, wantTraceID, events[0].Logs[0].TraceID)
-				assert.Equal(t, wantTraceID, events[1].Metrics[0].TraceID)
-				assert.Equal(t, "release-2", events[0].Logs[0].Attributes["sentry.release"].AsString())
-				assert.Equal(t, "release-2", events[1].Metrics[0].Attributes["sentry.release"].AsString())
+				logEvent := capturedEventOfType(t, e.client2, e.transport2, "log")
+				metricEvent := capturedEventOfType(t, e.client2, e.transport2, "trace_metric")
+				require.Len(t, logEvent.Logs, 1)
+				require.Len(t, metricEvent.Metrics, 1)
+				assert.Equal(t, "cross-context-log", logEvent.Logs[0].Body)
+				assert.Equal(t, "cross-context-count", metricEvent.Metrics[0].Name)
+				assert.Equal(t, wantTraceID, logEvent.Logs[0].TraceID)
+				assert.Equal(t, wantTraceID, metricEvent.Metrics[0].TraceID)
+				assert.Equal(t, "release-2", logEvent.Logs[0].Attributes["sentry.release"].AsString())
+				assert.Equal(t, "release-2", metricEvent.Metrics[0].Attributes["sentry.release"].AsString())
 			})
 		}
 	})
@@ -1807,8 +1800,8 @@ func TestClient_MultiClientSetup(t *testing.T) {
 
 		require.Len(t, e.transport1.Events(), 2)
 		assert.Empty(t, e.transport2.Events())
-		assert.Equal(t, e.traceID1, e.transport1.Events()[0].Logs[0].TraceID)
-		assert.Equal(t, e.traceID1, e.transport1.Events()[1].Metrics[0].TraceID)
+		assert.Equal(t, e.traceID1, capturedEventOfType(t, e.client1, e.transport1, "log").Logs[0].TraceID)
+		assert.Equal(t, e.traceID1, capturedEventOfType(t, e.client1, e.transport1, "trace_metric").Metrics[0].TraceID)
 	})
 	t.Run("explicit client owns the transaction and concurrent DSC", func(t *testing.T) {
 		creator, creatorTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "creator"})
@@ -1839,15 +1832,15 @@ func TestClient_MultiClientSetup(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, want, got)
 		}
-		require.Len(t, overrideTransport.Events(), 16)
-		for _, event := range overrideTransport.Events() {
-			require.Equal(t, want, event.sdkMetaData.dsc)
+		require.Len(t, capturedEvents(t, override, overrideTransport), 16)
+		for _, event := range capturedEvents(t, override, overrideTransport) {
+			require.Equal(t, want.Entries, capturedTrace(t, overrideTransport, event))
 		}
 		child.Finish()
 		root.Finish()
-		require.Len(t, creatorTransport.Events(), 1)
-		require.Equal(t, transactionType, creatorTransport.Events()[0].Type)
-		require.Equal(t, want, creatorTransport.Events()[0].sdkMetaData.dsc)
+		require.Len(t, capturedEvents(t, creator, creatorTransport), 1)
+		require.Equal(t, transactionType, capturedEvents(t, creator, creatorTransport)[0].Type)
+		require.Equal(t, want.Entries, capturedTrace(t, creatorTransport, capturedEvents(t, creator, creatorTransport)[0]))
 	})
 	t.Run("unbound transaction follows later Init with frozen DSC", func(t *testing.T) {
 		previousClient := globalClientSnapshot()
@@ -1872,9 +1865,9 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		initClient("second", second)
 		root.Finish()
 		assert.Empty(t, first.Events())
-		events := second.Events()
+		events := capturedEvents(t, globalClientSnapshot(), second)
 		require.Len(t, events, 1)
 		assert.Equal(t, transactionType, events[0].Type)
-		assert.Equal(t, frozenDSC, events[0].sdkMetaData.dsc)
+		assert.Equal(t, frozenDSC.Entries, capturedTrace(t, second, events[0]))
 	})
 }
