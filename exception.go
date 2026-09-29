@@ -20,7 +20,7 @@ type visited struct {
 
 func (v *visited) seenError(err error) bool {
 	t := reflect.ValueOf(err)
-	if t.Kind() == reflect.Ptr && !t.IsNil() {
+	if t.Kind() == reflect.Pointer && !t.IsNil() {
 		ptr := t.Pointer()
 		if _, ok := v.ptrs[ptr]; ok {
 			return true
