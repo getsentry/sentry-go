@@ -212,12 +212,14 @@ func (dsn *Dsn) SetOrgID(orgID uint64) {
 // associated with the DSN.
 func (dsn Dsn) GetAPIURL() *url.URL {
 	host := dsn.host
+	port := ""
 	if dsn.port != dsn.scheme.defaultPort() {
-		host = net.JoinHostPort(host, strconv.Itoa(dsn.port))
-	} else if strings.Contains(host, ":") {
-		// IPv6 literals must be bracketed.
-		host = "[" + host + "]"
+		port = strconv.Itoa(dsn.port)
 	}
+	// JoinHostPort correctly adds brackets for IPv6 hosts. However with an
+	// empty port it leaves a trailing ":", which we trim to omit the default port.
+	host = net.JoinHostPort(host, port)
+	host = strings.TrimSuffix(host, ":")
 	return &url.URL{
 		Scheme: string(dsn.scheme),
 		Host:   host,
