@@ -73,6 +73,29 @@ func TestScopeSetUserOverrides(t *testing.T) {
 	assertEqual(t, User{ID: "bar"}, scope.user)
 }
 
+func TestScopeUserDataIsolation(t *testing.T) {
+	t.Parallel()
+
+	data := map[string]string{"role": "original"}
+	parent := NewScope()
+	parent.SetUser(User{Data: data})
+	child := parent.Clone()
+	data["role"] = "parent changed"
+	assertEqual(t, "original", child.ApplyToEvent(NewEvent(), nil, nil).User.Data["role"])
+
+	mutate := true
+	child.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
+		if mutate {
+			mutate = false
+			event.User.Data["role"] = "event changed"
+		}
+		return event
+	})
+	assertEqual(t, "event changed", child.ApplyToEvent(NewEvent(), nil, nil).User.Data["role"])
+	assertEqual(t, "original", child.ApplyToEvent(NewEvent(), nil, nil).User.Data["role"])
+	assertEqual(t, "parent changed", parent.ApplyToEvent(NewEvent(), nil, nil).User.Data["role"])
+}
+
 func TestScopeSetRequest(t *testing.T) {
 	r := httptest.NewRequest("GET", "/foo", nil)
 	scope := NewScope()
@@ -539,6 +562,10 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 
 func TestClear(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
+	propagationContext := scope.propagationContextSnapshot()
+	span := scope.GetSpan()
+	processor := func(event *Event, _ *EventHint) *Event { return event }
+	scope.AddEventProcessor(processor)
 	scope.Clear()
 
 	assertEqual(t, []*Breadcrumb{}, scope.breadcrumbs)
@@ -550,7 +577,9 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, (*http.Request)(nil), scope.request)
-	assertEqual(t, (*Span)(nil), scope.GetSpan())
+	assertEqual(t, span, scope.GetSpan())
+	assertEqual(t, 1, len(scope.eventProcessors))
+	assertEqual(t, propagationContext, scope.propagationContextSnapshot())
 }
 
 func TestClearAndReconfigure(t *testing.T) {
