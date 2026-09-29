@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/protocol"
+	"github.com/getsentry/sentry-go/internal/util"
 	exec "golang.org/x/sys/execabs"
 )
 
 func uuid() string {
-	return protocol.GenerateEventID()
+	return util.GenerateEventID()
 }
 
 func fileExists(fileName string) bool {
