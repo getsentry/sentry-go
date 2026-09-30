@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"sync"
 	"testing"
 	"time"
 
@@ -349,6 +350,57 @@ func TestSentryHandlerReplaceAttr(t *testing.T) {
 	val, found = gotEvents[0].Logs[0].Attributes["num"]
 	assert.True(t, found)
 	assert.Equal(t, int64(123), val.AsInterface())
+}
+
+func TestSentryHandlerReplaceAttrKeepsGroupedHandlerAttrs(t *testing.T) {
+	ctx, mockTransport := newMockTransport()
+	handler := Option{
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == "user" {
+				return slog.String(a.Key, "masked("+a.Value.String()+")")
+			}
+			return a
+		},
+	}.NewSentryHandler(ctx)
+
+	logger := slog.New(handler).With(slog.Group("request", slog.String("user", "alice")))
+	logger.InfoContext(ctx, "first")
+	logger.InfoContext(ctx, "second")
+	sentry.Flush(20 * time.Millisecond)
+
+	var logs []sentry.Log
+	for _, event := range mockTransport.Events() {
+		logs = append(logs, event.Logs...)
+	}
+	assert.Equal(t, 2, len(logs))
+	for _, entry := range logs {
+		assert.Equal(t, "masked(alice)", entry.Attributes["request.user"].AsInterface(), entry.Body)
+	}
+}
+
+func TestSentryHandlerConcurrentGroupedAttrs(t *testing.T) {
+	ctx, mockTransport := newMockTransport()
+	logger := slog.New(Option{}.NewSentryHandler(ctx)).
+		With(slog.Group("request", slog.Group("user", slog.String("id", "42"))))
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 20; j++ {
+				logger.InfoContext(ctx, "concurrent")
+			}
+		}()
+	}
+	wg.Wait()
+	sentry.Flush(20 * time.Millisecond)
+
+	for _, event := range mockTransport.Events() {
+		for _, entry := range event.Logs {
+			assert.Equal(t, "42", entry.Attributes["request.user.id"].AsInterface())
+		}
+	}
 }
 
 func TestSentryHandlerAddSource(t *testing.T) {
