@@ -8,6 +8,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/contextkey"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -73,7 +74,7 @@ func NewSentryCore(ctx context.Context, opts Option) *SentryCore {
 
 // Context returns a zapcore.Field that can be used with logger.With() to link
 // traces with the provided context. This allows propagating Sentry trace information
-// from the context to logs without needing to pass a Hub.
+// from the context to logs.
 //
 // Example:
 //
@@ -168,12 +169,14 @@ func (c *SentryCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
 
 // Sync flushes any buffered log entries to Sentry.
 func (c *SentryCore) Sync() error {
-	hub := sentry.GetHubFromContext(c.ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub()
+	client := sentry.ClientFromContext(c.logger.GetCtx())
+	if c.ctx != nil {
+		if explicit, ok := c.ctx.Value(contextkey.Client{}).(*sentry.Client); ok {
+			client = explicit
+		}
 	}
-	if ok := hub.Flush(c.option.FlushTimeout); !ok {
-		return fmt.Errorf("failed to flush client: %v", hub.Client())
+	if ok := client.Flush(c.option.FlushTimeout); !ok {
+		return fmt.Errorf("failed to flush client: %v", client)
 	}
 	return nil
 }
