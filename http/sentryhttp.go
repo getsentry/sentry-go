@@ -66,7 +66,7 @@ func New(options Options) *Handler {
 
 // Handle works as a middleware that wraps an existing http.Handler. A wrapped
 // handler will recover from and report panics to Sentry, and provide access to
-// a request-specific hub to report messages and errors.
+// a request-specific scope through the request context.
 func (h *Handler) Handle(handler http.Handler) http.Handler {
 	return h.handle(handler)
 }
@@ -84,20 +84,12 @@ func (h *Handler) HandleFunc(handler http.HandlerFunc) http.HandlerFunc {
 
 func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		hub := sentry.GetHubFromContext(r.Context())
-		if hub == nil {
-			hub = sentry.CurrentHub().Clone()
-			ctx = sentry.SetHubOnContext(ctx, hub)
-		}
+		created := sentry.SpanFromContext(r.Context()) == nil
+		ctx, scope := sentry.WithIsolationScope(r.Context())
 
-		if client := hub.Client(); client != nil {
-			client.SetSDKIdentifier(sdkIdentifier)
-		}
-		ctx = sentry.SetHubOnContext(ctx, hub)
-
+		sentry.ClientFromContext(ctx).SetSDKIdentifier(sdkIdentifier)
 		options := []sentry.SpanOption{
-			sentry.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+			traceutils.ContinueFromRequest(r),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
@@ -107,39 +99,38 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 			traceutils.GetHTTPSpanName(r),
 			options...,
 		)
-		transaction.SetData("http.request.method", r.Method)
-
 		rw := httputils.NewWrapResponseWriter(w, r.ProtoMajor)
+		if created {
+			ctx = transaction.Context()
+			transaction.SetData("http.request.method", r.Method)
+			defer func() {
+				// r.Pattern is populated by ServeMux after routing, so we
+				// read it here in the defer after the handler has run.
+				if r.Pattern != "" {
+					transaction.Name = traceutils.GetHTTPSpanName(r)
+					transaction.Source = sentry.SourceRoute
+				}
+				status := rw.Status()
+				transaction.Status = sentry.HTTPtoSpanStatus(status)
+				transaction.SetData("http.response.status_code", status)
+				transaction.Finish()
+			}()
+		}
 
-		defer func() {
-			// r.Pattern is populated by ServeMux after routing, so we
-			// read it here in the defer after the handler has run.
-			if r.Pattern != "" {
-				transaction.Name = traceutils.GetHTTPSpanName(r)
-				transaction.Source = sentry.SourceRoute
-			}
-			status := rw.Status()
-			transaction.Status = sentry.HTTPtoSpanStatus(status)
-			transaction.SetData("http.response.status_code", status)
-			transaction.Finish()
-		}()
-
-		hub.Scope().SetRequest(r)
-		r = r.WithContext(transaction.Context())
-		defer h.recoverWithSentry(hub, r)
+		r = r.WithContext(ctx)
+		scope.SetRequest(r)
+		defer h.recoverWithSentry(r)
 
 		handler.ServeHTTP(rw, r)
 	}
 }
 
-func (h *Handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
+func (h *Handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
-		eventID := hub.RecoverWithContext(
-			context.WithValue(r.Context(), sentry.RequestContextKey, r),
-			err,
-		)
+		ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
+		eventID := sentry.Recover(ctx, err)
 		if eventID != nil && h.waitForDelivery {
-			hub.Flush(h.timeout)
+			sentry.ClientFromContext(ctx).Flush(h.timeout)
 		}
 		if h.repanic {
 			panic(err)
