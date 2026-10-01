@@ -56,6 +56,30 @@ var dsnTests = map[string]DsnTest{
 		url:    "http://domain/api/42/store/",
 		envURL: "http://domain/api/42/envelope/",
 	},
+	"IPv6WithPort": {
+		in: "https://public@[2001:db8::1]:8888/42",
+		dsn: &Dsn{
+			scheme:    SchemeHTTPS,
+			publicKey: "public",
+			host:      "2001:db8::1",
+			port:      8888,
+			projectID: "42",
+		},
+		url:    "https://[2001:db8::1]:8888/api/42/store/",
+		envURL: "https://[2001:db8::1]:8888/api/42/envelope/",
+	},
+	"IPv6DefaultPort": {
+		in: "https://public@[::1]/42",
+		dsn: &Dsn{
+			scheme:    SchemeHTTPS,
+			publicKey: "public",
+			host:      "::1",
+			port:      443,
+			projectID: "42",
+		},
+		url:    "https://[::1]/api/42/store/",
+		envURL: "https://[::1]/api/42/envelope/",
+	},
 }
 
 func TestNewDsn(t *testing.T) {
@@ -72,6 +96,29 @@ func TestNewDsn(t *testing.T) {
 			url := dsn.GetAPIURL().String()
 			if diff := cmp.Diff(tt.envURL, url); diff != "" {
 				t.Errorf("dsn.EnvelopeAPIURL() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestGetAPIURLEscaping(t *testing.T) {
+	tests := map[string]struct {
+		in   string
+		want string
+	}{
+		"IPv6ZoneID":     {"http://public@[fe80::1%25eth0]:9000/42", "http://[fe80::1%25eth0]:9000/api/42/envelope/"},
+		"EncodedNewline": {"http://public@domain/42%0A", "http://domain/api/42%0A/envelope/"},
+		"EncodedHash":    {"http://public@domain/pre%23fix/42", "http://domain/pre%23fix/api/42/envelope/"},
+		"EncodedQuery":   {"http://public@domain/42%3Fa", "http://domain/api/42%3Fa/envelope/"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			dsn, err := NewDsn(tt.in)
+			if err != nil {
+				t.Fatalf("NewDsn() error: %q", err)
+			}
+			if diff := cmp.Diff(tt.want, dsn.GetAPIURL().String()); diff != "" {
+				t.Errorf("GetAPIURL() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

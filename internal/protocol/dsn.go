@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -210,17 +211,20 @@ func (dsn *Dsn) SetOrgID(orgID uint64) {
 // GetAPIURL returns the URL of the envelope endpoint of the project
 // associated with the DSN.
 func (dsn Dsn) GetAPIURL() *url.URL {
-	var rawURL string
-	rawURL += fmt.Sprintf("%s://%s", dsn.scheme, dsn.host)
+	host := dsn.host
+	port := ""
 	if dsn.port != dsn.scheme.defaultPort() {
-		rawURL += fmt.Sprintf(":%d", dsn.port)
+		port = strconv.Itoa(dsn.port)
 	}
-	if dsn.path != "" {
-		rawURL += dsn.path
+	// JoinHostPort correctly adds brackets for IPv6 hosts. However with an
+	// empty port it leaves a trailing ":", which we trim to omit the default port.
+	host = net.JoinHostPort(host, port)
+	host = strings.TrimSuffix(host, ":")
+	return &url.URL{
+		Scheme: string(dsn.scheme),
+		Host:   host,
+		Path:   dsn.path + "/api/" + dsn.projectID + "/envelope/",
 	}
-	rawURL += fmt.Sprintf("/api/%s/%s/", dsn.projectID, "envelope")
-	parsedURL, _ := url.Parse(rawURL)
-	return parsedURL
 }
 
 // RequestHeaders returns all the necessary headers that have to be used in the transport when sending events
