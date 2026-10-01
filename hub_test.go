@@ -542,6 +542,10 @@ func TestHub_Flush(t *testing.T) {
 	if gotEvents[0].Message != wantEvent.Message {
 		t.Fatalf("expected message to be %v, got %v", wantEvent.Message, gotEvents[0].Message)
 	}
+
+	if transport.FlushCount() != 1 {
+		t.Fatalf("expected transport.Flush called 1 time, got %d", transport.FlushCount())
+	}
 }
 
 func TestHub_Flush_NoClient(t *testing.T) {
@@ -578,5 +582,9 @@ func TestHub_FlushWithContext(t *testing.T) {
 	}
 	if gotEvents[0].Message != wantEvent.Message {
 		t.Fatalf("expected message to be %v, got %v", wantEvent.Message, gotEvents[0].Message)
+	}
+
+	if transport.FlushCount() != 1 {
+		t.Fatalf("expected transport.FlushWithContext called 1 time, got %d", transport.FlushCount())
 	}
 }
