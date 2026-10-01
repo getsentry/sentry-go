@@ -25,7 +25,7 @@ func setupMetricsTest() (context.Context, *MockTransport) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	ctx, scope := WithIsolationScope(ctx)
+	ctx, scope := WithScope(ctx)
 	ctx = ContextWithClient(ctx, mockClient)
 	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 	scope.propagationContext.SpanID = SpanIDFromHex(logSpanID)
@@ -328,7 +328,7 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	ctx, scope := WithIsolationScope(ctx)
+	ctx, scope := WithScope(ctx)
 	ctx = ContextWithClient(ctx, mockClient)
 	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 	scope.propagationContext.SpanID = SpanIDFromHex(logSpanID)
@@ -407,7 +407,7 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 		Transport:              mockTransport,
 		DisableTelemetryBuffer: true,
 	})
-	ctx, _ := WithIsolationScope(context.Background())
+	ctx, _ := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, mockClient)
 	meter := NewMeter(ctx)
 	for i := 0; i < 3; i++ {
@@ -482,7 +482,7 @@ func TestSentryMeter_ExplicitScopePrecedesFallbackTrace(t *testing.T) {
 	fallback := StartTransaction(ctx, "fallback")
 	defer fallback.Finish()
 	meter := NewMeter(fallback.Context())
-	emitCtx, scope := WithIsolationScope(context.Background())
+	emitCtx, scope := WithScope(context.Background())
 	wantTraceID := TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	wantSpanID := SpanIDFromHex("bbbbbbbbbbbbbbbb")
 	scope.SetPropagationContext(PropagationContext{TraceID: wantTraceID, SpanID: wantSpanID})
@@ -509,7 +509,7 @@ func Test_sentryMeter_UserAttributes(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	ctx, scope := WithIsolationScope(ctx)
+	ctx, scope := WithScope(ctx)
 	ctx = ContextWithClient(ctx, mockClient)
 	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 	scope.propagationContext.SpanID = SpanIDFromHex(logSpanID)
@@ -692,7 +692,7 @@ func Test_sentryMeter_WithContextScope(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 	meter := NewMeter(ctx)
 
-	customCtx, customScope := WithIsolationScope(ctx)
+	customCtx, customScope := WithScope(ctx)
 	customScope.SetUser(User{
 		ID:    "custom-user-123",
 		Email: "custom@example.com",
@@ -730,7 +730,7 @@ func Test_sentryMeter_WithContextScope(t *testing.T) {
 func TestSentryMeter_ScopeSetAttributesNoLeak(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 
-	scopedCtx, clonedScope := WithIsolationScope(ctx)
+	scopedCtx, clonedScope := WithScope(ctx)
 	clonedScope.SetAttributes(
 		attribute.String("key.string", "str"),
 		attribute.Bool("key.bool", true),

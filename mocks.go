@@ -6,23 +6,6 @@ import (
 	"time"
 )
 
-// MockScope implements [Scope] for use in tests.
-type MockScope struct {
-	breadcrumb      *Breadcrumb
-	shouldDropEvent bool
-}
-
-func (scope *MockScope) AddBreadcrumb(breadcrumb *Breadcrumb, _ int) {
-	scope.breadcrumb = breadcrumb
-}
-
-func (scope *MockScope) ApplyToEvent(event *Event, _ *EventHint, _ *Client) *Event {
-	if scope.shouldDropEvent {
-		return nil
-	}
-	return event
-}
-
 // MockTransport implements [Transport] for use in tests.
 type MockTransport struct {
 	mu        sync.Mutex

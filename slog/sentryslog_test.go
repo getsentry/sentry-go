@@ -168,7 +168,7 @@ func newMockTransport(t *testing.T) (context.Context, *sentry.MockTransport) {
 	})
 	require.NoError(t, err)
 	t.Cleanup(mockClient.Close)
-	ctx, _ = sentry.WithIsolationScope(ctx)
+	ctx, _ = sentry.WithScope(ctx)
 	ctx = sentry.ContextWithClient(ctx, mockClient)
 	return ctx, mockTransport
 }

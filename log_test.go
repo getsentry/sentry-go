@@ -60,7 +60,7 @@ func setupMockTransport() (context.Context, *MockTransport) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	ctx, scope := WithIsolationScope(ctx)
+	ctx, scope := WithScope(ctx)
 	ctx = ContextWithClient(ctx, mockClient)
 	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 	scope.propagationContext.SpanID = SpanIDFromHex(logSpanID)
@@ -716,7 +716,7 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 		Transport:              mockTransport,
 		DisableTelemetryBuffer: true,
 	})
-	ctx, _ := WithIsolationScope(context.Background())
+	ctx, _ := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, mockClient)
 	l := NewLogger(ctx)
 	for i := 0; i < 3; i++ {
@@ -767,7 +767,7 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	ctx, scope := WithIsolationScope(ctx)
+	ctx, scope := WithScope(ctx)
 	ctx = ContextWithClient(ctx, mockClient)
 	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 	scope.propagationContext.SpanID = SpanIDFromHex(logSpanID)
@@ -837,7 +837,7 @@ func TestSentryLogger_ExplicitScopePrecedesFallbackTrace(t *testing.T) {
 	defer fallback.Finish()
 	logger := NewLogger(fallback.Context())
 
-	emitCtx, scope := WithIsolationScope(context.Background())
+	emitCtx, scope := WithScope(context.Background())
 	wantTraceID := TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	scope.SetPropagationContext(PropagationContext{TraceID: wantTraceID})
 	logger.Info().WithCtx(emitCtx).Emit("explicit scope")
@@ -869,7 +869,7 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 				Transport: &MockTransport{},
 				Debug:     true,
 			})
-			ctx, _ := WithIsolationScope(context.Background())
+			ctx, _ := WithScope(context.Background())
 			ctx = ContextWithClient(ctx, mockClient)
 
 			// set the debug logger output after NewClient, so that it doesn't change.
@@ -899,7 +899,7 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
-	ctx, scope := WithIsolationScope(ctx)
+	ctx, scope := WithScope(ctx)
 	ctx = ContextWithClient(ctx, mockClient)
 	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
 	scope.propagationContext.SpanID = SpanIDFromHex(logSpanID)
@@ -948,7 +948,7 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 
-	scopedCtx, clonedScope := WithIsolationScope(ctx)
+	scopedCtx, clonedScope := WithScope(ctx)
 	clonedScope.SetAttributes(
 		attribute.String("key.string", "str"),
 		attribute.Bool("key.bool", true),
