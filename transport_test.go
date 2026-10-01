@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -19,8 +20,19 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/protocol"
+	"github.com/getsentry/sentry-go/report"
 	"go.uber.org/goleak"
 )
+
+func takeOutcomes(recorder *report.Aggregator) map[report.OutcomeKey]int64 {
+	outcomes := make(map[report.OutcomeKey]int64)
+	if clientReport := recorder.TakeReport(); clientReport != nil {
+		for _, event := range clientReport.DiscardedEvents {
+			outcomes[report.OutcomeKey{Reason: event.Reason, Category: event.Category}] += event.Quantity
+		}
+	}
+	return outcomes
+}
 
 func testEnvelope(itemType protocol.EnvelopeItemType) *protocol.Envelope {
 	return &protocol.Envelope{
@@ -74,13 +86,15 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		tests := []struct {
 			name     string
-			itemType protocol.EnvelopeItemType
+			envelope *protocol.Envelope
+			wantErr  error
 		}{
-			{"event", protocol.EnvelopeItemTypeEvent},
-			{"transaction", protocol.EnvelopeItemTypeTransaction},
-			{"check-in", protocol.EnvelopeItemTypeCheckIn},
-			{"log", protocol.EnvelopeItemTypeLog},
-			{"attachment", protocol.EnvelopeItemTypeAttachment},
+			{"event", testEnvelope(protocol.EnvelopeItemTypeEvent), nil},
+			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), nil},
+			{"check-in", testEnvelope(protocol.EnvelopeItemTypeCheckIn), nil},
+			{"log", testEnvelope(protocol.EnvelopeItemTypeLog), nil},
+			{"attachment", testEnvelope(protocol.EnvelopeItemTypeAttachment), nil},
+			{"nil header", &protocol.Envelope{Items: testEnvelope(protocol.EnvelopeItemTypeEvent).Items}, ErrInvalidEnvelope},
 		}
 
 		var count int64
@@ -100,8 +114,8 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		defer transport.Close()
 
 		for _, tt := range tests {
-			if err := transport.SendEnvelope(testEnvelope(tt.itemType)); err != nil {
-				t.Errorf("send %s failed: %v", tt.name, err)
+			if err := transport.SendEnvelope(tt.envelope); !errors.Is(err, tt.wantErr) {
+				t.Errorf("send %s returned %v, want %v", tt.name, err, tt.wantErr)
 			}
 		}
 
@@ -109,7 +123,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			t.Fatal("Flush timed out")
 		}
 
-		expectedCount := int64(len(tests))
+		expectedCount := int64(len(tests) - 1) // one invalid envelope
 		if sent := atomic.LoadInt64(&count); sent != expectedCount {
 			t.Errorf("expected %d sent, got %d", expectedCount, sent)
 		}
@@ -172,13 +186,13 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			t.Fatal("Flush timed out")
 		}
 
-		if !transport.IsRateLimited(ratelimit.CategoryError) {
+		if !transport.isRateLimited(ratelimit.CategoryError) {
 			t.Error("error category should be rate limited")
 		}
-		if !transport.IsRateLimited(ratelimit.CategoryTransaction) {
+		if !transport.isRateLimited(ratelimit.CategoryTransaction) {
 			t.Error("transaction category should be rate limited")
 		}
-		if transport.IsRateLimited(ratelimit.CategoryMonitor) {
+		if transport.isRateLimited(ratelimit.CategoryMonitor) {
 			t.Error("monitor category should not be rate limited")
 		}
 
@@ -204,14 +218,18 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		defer server.Close()
 
 		dsn, _ := protocol.NewDsn("http://key@" + server.URL[7:] + "/123")
+		recorder := report.NewAggregator()
 		transport := &AsyncTransport{
+			httpSender: &httpSender{
+				limits:    make(ratelimit.Map),
+				dsn:       dsn,
+				transport: &http.Transport{},
+				client:    &http.Client{Timeout: defaultTimeout},
+				recorder:  recorder,
+			},
 			QueueSize: 2,
 			Timeout:   defaultTimeout,
 			done:      make(chan struct{}),
-			limits:    make(ratelimit.Map),
-			dsn:       dsn,
-			transport: &http.Transport{},
-			client:    &http.Client{Timeout: defaultTimeout},
 		}
 		// manually set the queue size to simulate overflow
 		transport.queue = make(chan *protocol.Envelope, transport.QueueSize)
@@ -237,6 +255,9 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
 		if !errors.Is(err, ErrTransportQueueFull) {
 			t.Errorf("expected ErrTransportQueueFull, got %v", err)
+		}
+		if outcomes := takeOutcomes(recorder); len(outcomes) != 0 {
+			t.Errorf("rejected envelope should not be recorded by the transport, got %v", outcomes)
 		}
 	})
 
@@ -440,13 +461,19 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		tests := []struct {
 			name     string
-			itemType protocol.EnvelopeItemType
+			envelope *protocol.Envelope
+			wantErr  error
 		}{
-			{"event", protocol.EnvelopeItemTypeEvent},
-			{"transaction", protocol.EnvelopeItemTypeTransaction},
-			{"check-in", protocol.EnvelopeItemTypeCheckIn},
-			{"log", protocol.EnvelopeItemTypeLog},
-			{"attachment", protocol.EnvelopeItemTypeAttachment},
+			{"event", testEnvelope(protocol.EnvelopeItemTypeEvent), nil},
+			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), nil},
+			{"check-in", testEnvelope(protocol.EnvelopeItemTypeCheckIn), nil},
+			{"log", testEnvelope(protocol.EnvelopeItemTypeLog), nil},
+			{"attachment", testEnvelope(protocol.EnvelopeItemTypeAttachment), nil},
+			{"nil envelope", nil, ErrInvalidEnvelope},
+			{"nil header", &protocol.Envelope{Items: testEnvelope(protocol.EnvelopeItemTypeEvent).Items}, ErrInvalidEnvelope},
+			{"no items", &protocol.Envelope{Header: &protocol.EnvelopeHeader{}}, ErrInvalidEnvelope},
+			{"nil item", &protocol.Envelope{Header: &protocol.EnvelopeHeader{}, Items: []*protocol.EnvelopeItem{nil}}, ErrInvalidEnvelope},
+			{"nil item header", &protocol.Envelope{Header: &protocol.EnvelopeHeader{}, Items: []*protocol.EnvelopeItem{{}}}, ErrInvalidEnvelope},
 		}
 
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -460,55 +487,90 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 		defer transport.Close()
 
 		for _, tt := range tests {
-			if err := transport.SendEnvelope(testEnvelope(tt.itemType)); err != nil {
-				t.Errorf("send %s failed: %v", tt.name, err)
+			if err := transport.SendEnvelope(tt.envelope); !errors.Is(err, tt.wantErr) {
+				t.Errorf("send %s returned %v, want %v", tt.name, err, tt.wantErr)
 			}
 		}
 	})
 
 	t.Run("rate limited", func(t *testing.T) {
+		var requests atomic.Int32
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Add("X-Sentry-Rate-Limits", "60:error,60:transaction")
+			requests.Add(1)
+			w.Header().Add("X-Sentry-Rate-Limits", "60:error,60:transaction,60:trace_metric")
 			w.WriteHeader(http.StatusTooManyRequests)
 		}))
 		defer server.Close()
 
+		recorder := report.NewAggregator()
 		transport := NewSyncTransport(TransportOptions{
-			Dsn: "http://key@" + server.URL[7:] + "/123",
+			Dsn:      "http://key@" + server.URL[7:] + "/123",
+			Recorder: recorder,
 		})
 
 		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+		_ = takeOutcomes(recorder)
 
-		if !transport.IsRateLimited(ratelimit.CategoryError) {
-			t.Error("error category should be rate limited")
+		pending, _ := (&report.ClientReport{DiscardedEvents: []report.DiscardedEvent{
+			{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 2},
+		}}).ToEnvelopeItem()
+		backoff := func(category ratelimit.Category) report.OutcomeKey {
+			return report.OutcomeKey{Reason: report.ReasonRateLimitBackoff, Category: category}
 		}
-		if !transport.IsRateLimited(ratelimit.CategoryTransaction) {
-			t.Error("transaction category should be rate limited")
+		tests := []struct {
+			name     string
+			envelope *protocol.Envelope
+			want     map[report.OutcomeKey]int64 // nil when the envelope is sent
+		}{
+			{"event", testEnvelope(protocol.EnvelopeItemTypeEvent), map[report.OutcomeKey]int64{backoff(ratelimit.CategoryError): 1}},
+			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), map[report.OutcomeKey]int64{backoff(ratelimit.CategoryTransaction): 1}},
+			{"trace metric", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, protocol.NewTraceMetricItem(3, []byte(`{"items":[]}`))),
+				map[report.OutcomeKey]int64{backoff(ratelimit.CategoryTraceMetric): 3}},
+			{"client report before event", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, pending, testEnvelope(protocol.EnvelopeItemTypeEvent).Items[0]),
+				map[report.OutcomeKey]int64{backoff(ratelimit.CategoryError): 1, {Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError}: 2}},
+			{"check-in", testEnvelope(protocol.EnvelopeItemTypeCheckIn), nil},
 		}
-		if transport.IsRateLimited(ratelimit.CategoryMonitor) {
-			t.Error("monitor category should not be rate limited")
-		}
-
-		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
-		if err != nil {
-			t.Errorf("rate limited envelope should return nil, got %v", err)
+		for _, tt := range tests {
+			sent := requests.Load()
+			if err := transport.SendEnvelope(tt.envelope); err != nil {
+				t.Errorf("%s: rate limited envelope should return nil, got %v", tt.name, err)
+			}
+			if gotSent := requests.Load() > sent; gotSent != (tt.want == nil) {
+				t.Errorf("%s: sent = %v, want %v", tt.name, gotSent, tt.want == nil)
+			}
+			if outcomes := takeOutcomes(recorder); tt.want != nil && fmt.Sprint(outcomes) != fmt.Sprint(tt.want) {
+				t.Errorf("%s: got outcomes %v, want %v", tt.name, outcomes, tt.want)
+			}
 		}
 	})
 
-	t.Run("server error", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = w.Write([]byte("internal error"))
-		}))
-		defer server.Close()
+	t.Run("delivery errors", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			roundTrip roundTripperFunc
+			reason    report.DiscardReason
+		}{
+			{"server error", func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusInternalServerError, Body: io.NopCloser(strings.NewReader("internal error"))}, nil
+			}, report.ReasonSendError},
+			{"network error", func(*http.Request) (*http.Response, error) {
+				return nil, errors.New("connection refused")
+			}, report.ReasonNetworkError},
+		}
+		for _, tt := range tests {
+			recorder := report.NewAggregator()
+			transport := NewSyncTransport(TransportOptions{
+				Dsn: "https://key@sentry.io/123", Recorder: recorder, HTTPTransport: tt.roundTrip,
+			})
 
-		transport := NewSyncTransport(TransportOptions{
-			Dsn: "http://key@" + server.URL[7:] + "/123",
-		})
-
-		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
-		if err != nil {
-			t.Errorf("server error should not return error, got %v", err)
+			// The transport records losses of accepted envelopes itself.
+			if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
+				t.Errorf("%s: should not return error, got %v", tt.name, err)
+			}
+			want := map[report.OutcomeKey]int64{{Reason: tt.reason, Category: ratelimit.CategoryError}: 1}
+			if outcomes := takeOutcomes(recorder); fmt.Sprint(outcomes) != fmt.Sprint(want) {
+				t.Errorf("%s: got outcomes %v, want %v", tt.name, outcomes, want)
+			}
 		}
 	})
 }

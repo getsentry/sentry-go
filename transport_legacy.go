@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -925,6 +926,13 @@ func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
 
 	if err := a.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("Error sending envelope: %v", err)
+		if a.recorder != nil {
+			reason := report.ReasonSendError
+			if errors.Is(err, ErrTransportQueueFull) {
+				reason = report.ReasonQueueOverflow
+			}
+			a.recorder.RecordForEnvelope(reason, envelope)
+		}
 	}
 }
 
