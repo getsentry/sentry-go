@@ -992,7 +992,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 func (client *Client) prepareEvent(event *Event, scope *Scope, opts captureOptions) *Event {
 	var scopeProcessors []EventProcessor
 	if scope != nil {
-		scopeProcessors = scope.applyToEvent(event, opts.hint, client)
+		scopeProcessors = scope.applyToEvent(event, client, opts.hint, client.options.MaxBreadcrumbs)
 	}
 	if event.Level == "" {
 		event.Level = opts.defaultLevel
