@@ -27,18 +27,24 @@ func source(sourceKey string, r *slog.Record) slog.Attr {
 
 type replaceAttrFn = func(groups []string, a slog.Attr) slog.Attr
 
+// replaceAttrs returns a new slice and never writes to attrs: group values
+// share their backing array with the handler's stored attributes, which are
+// read concurrently and must not be replaced more than once.
 func replaceAttrs(fn replaceAttrFn, groups []string, attrs ...slog.Attr) []slog.Attr {
-	for i := range attrs {
-		attr := attrs[i]
+	result := make([]slog.Attr, len(attrs))
+	for i, attr := range attrs {
 		value := attr.Value.Resolve()
-		if value.Kind() == slog.KindGroup {
-			attrs[i].Value = slog.GroupValue(replaceAttrs(fn, append(groups, attr.Key), value.Group()...)...)
-		} else if fn != nil {
-			attrs[i] = fn(groups, attr)
+		switch {
+		case value.Kind() == slog.KindGroup:
+			result[i] = slog.Attr{Key: attr.Key, Value: slog.GroupValue(replaceAttrs(fn, append(groups, attr.Key), value.Group()...)...)}
+		case fn != nil:
+			result[i] = fn(groups, attr)
+		default:
+			result[i] = attr
 		}
 	}
 
-	return attrs
+	return result
 }
 
 func attrsToMap(attrs ...slog.Attr) map[string]any {
