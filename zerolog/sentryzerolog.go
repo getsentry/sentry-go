@@ -263,14 +263,14 @@ func parseLogEvent(data []byte) (*sentry.Event, bool) {
 	event.Timestamp = now()
 	event.Logger = logger
 
-	err := jsonparser.ObjectEach(data, func(key, value []byte, _ jsonparser.ValueType, _ int) error {
+	err := jsonparser.ObjectEach(data, func(key, value []byte, dataType jsonparser.ValueType, _ int) error {
 		k := string(key)
 		switch k {
 		case zerolog.MessageFieldName:
-			event.Message = string(value)
+			event.Message = stringValue(value, dataType)
 		case zerolog.ErrorFieldName:
 			event.Exception = append(event.Exception, sentry.Exception{
-				Value:      string(value),
+				Value:      stringValue(value, dataType),
 				Stacktrace: sentry.NewStacktrace(),
 			})
 		case zerolog.LevelFieldName, zerolog.TimestampFieldName:
@@ -283,7 +283,7 @@ func parseLogEvent(data []byte) (*sentry.Event, bool) {
 				event.User = user
 			}
 		case FieldTransaction:
-			event.Transaction = string(value)
+			event.Transaction = stringValue(value, dataType)
 		case FieldFingerprint:
 			var fp []string
 			err := json.Unmarshal(value, &fp)
@@ -294,9 +294,21 @@ func parseLogEvent(data []byte) (*sentry.Event, bool) {
 			}
 		case FieldGoVersion, FieldMaxProcs:
 		default:
-			event.Tags[k] = string(value)
+			event.Tags[k] = stringValue(value, dataType)
 		}
 		return nil
 	})
 	return event, err == nil
+}
+
+// stringValue returns the unescaped contents of a JSON string value.
+// jsonparser.ObjectEach hands over string values still escaped, so without
+// this quotes, backslashes and newlines reach Sentry as \", \\ and \n.
+func stringValue(value []byte, dataType jsonparser.ValueType) string {
+	if dataType == jsonparser.String {
+		if s, err := jsonparser.ParseString(value); err == nil {
+			return s
+		}
+	}
+	return string(value)
 }

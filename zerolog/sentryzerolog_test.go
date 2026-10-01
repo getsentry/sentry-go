@@ -42,6 +42,20 @@ func TestParseLogEvent(t *testing.T) {
 	assert.Equal(t, "bee07485-2485-4f64-99e1-d10165884ca7", ev.Tags["requestId"])
 }
 
+func TestParseLogEventUnescapesStrings(t *testing.T) {
+	logEvent := []byte(`{"level":"error","error":"strconv.Atoi: parsing \"abc\": invalid syntax","path":"C:\\tmp\\app.log","transaction":"GET \"/users\"","count":3,"message":"line1\nline2 \u00e9"}`)
+
+	ev, ok := parseLogEvent(logEvent)
+	require.True(t, ok)
+
+	assert.Equal(t, "line1\nline2 é", ev.Message)
+	require.Len(t, ev.Exception, 1)
+	assert.Equal(t, `strconv.Atoi: parsing "abc": invalid syntax`, ev.Exception[0].Value)
+	assert.Equal(t, `GET "/users"`, ev.Transaction)
+	assert.Equal(t, `C:\tmp\app.log`, ev.Tags["path"])
+	assert.Equal(t, "3", ev.Tags["count"])
+}
+
 func TestFailedClientCreation(t *testing.T) {
 	_, err := New(Config{ClientOptions: sentry.ClientOptions{Dsn: "invalid"}})
 	require.NotNil(t, err)
