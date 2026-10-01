@@ -1,6 +1,7 @@
 package sentryfasthttp_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -12,9 +13,11 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	sentryfasthttp "github.com/getsentry/sentry-go/fasthttp"
+	"github.com/getsentry/sentry-go/internal/sentrytest"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/fasthttputil"
 )
@@ -36,7 +39,8 @@ func TestIntegration(t *testing.T) {
 	}{
 		{
 			Path: "/panic",
-			Handler: func(*fasthttp.RequestCtx) {
+			Handler: func(ctx *fasthttp.RequestCtx) {
+				sentryfasthttp.SetContext(context.Background(), ctx)
 				panic("test")
 			},
 			WantStatus: 200,
@@ -84,8 +88,7 @@ func TestIntegration(t *testing.T) {
 			Body:        `{"safe":"value"}`,
 			ContentType: "application/json",
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureMessage("post: " + string(ctx.Request.Body()))
+				sentry.CaptureMessage(sentryfasthttp.GetContext(ctx), "post: "+string(ctx.Request.Body()))
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -131,8 +134,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path: "/get",
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureMessage(http.MethodGet)
+				sentry.CaptureMessage(sentryfasthttp.GetContext(ctx), http.MethodGet)
 			},
 			WantStatus: 200,
 			WantEvent: &sentry.Event{
@@ -178,8 +180,7 @@ func TestIntegration(t *testing.T) {
 			Body:       largePayload,
 			WantStatus: 200,
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(ctx.Request.Body())/1024))
+				sentry.CaptureMessage(sentryfasthttp.GetContext(ctx), fmt.Sprintf("post: %d KB", len(ctx.Request.Body())/1024))
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -228,8 +229,7 @@ func TestIntegration(t *testing.T) {
 			ContentType: "application/json",
 			WantStatus:  200,
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureMessage("body ignored")
+				sentry.CaptureMessage(sentryfasthttp.GetContext(ctx), "body ignored")
 			},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -278,8 +278,7 @@ func TestIntegration(t *testing.T) {
 			Path:   "/post/error-handler",
 			Method: "POST",
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				hub := sentryfasthttp.GetHubFromContext(ctx)
-				hub.CaptureException(exception)
+				sentry.CaptureException(sentryfasthttp.GetContext(ctx), exception)
 			},
 			WantStatus: 200,
 			WantEvent: &sentry.Event{
@@ -517,7 +516,11 @@ func TestGetTransactionFromContext(t *testing.T) {
 			defer ln.Close()
 
 			handler := func(ctx *fasthttp.RequestCtx) {
-				span := sentryfasthttp.GetSpanFromContext(ctx)
+				scope := sentry.ScopeFromContext(sentryfasthttp.GetContext(ctx))
+				if tc.useSentry && scope == nil {
+					t.Error("expecting scope not to be nil")
+				}
+				span := sentry.SpanFromContext(sentryfasthttp.GetContext(ctx))
 				if tc.useSentry && span == nil {
 					t.Error("expecting span not to be nil")
 				}
@@ -573,20 +576,76 @@ func TestGetTransactionFromContext(t *testing.T) {
 	}
 }
 
-func TestSetHubOnContext(t *testing.T) {
-	hub := sentry.NewHub(sentry.CurrentHub().Client(), sentry.NewScope())
-	ctx := &fasthttp.RequestCtx{}
-
-	sentryfasthttp.SetHubOnContext(ctx, hub)
-
-	retrievedHub := sentryfasthttp.GetHubFromContext(ctx)
-	if retrievedHub == nil {
-		t.Fatal("expected hub to be set on context, but got nil")
+func TestRequestIsolation(t *testing.T) {
+	t.Parallel()
+	fixture := sentrytest.NewFixture(t)
+	prepare := func(ctx *fasthttp.RequestCtx) {
+		ctx.Request.SetRequestURI("http://example.com/test")
+		ctx.Request.Header.SetMethod(http.MethodGet)
 	}
+	handler := sentryfasthttp.New(sentryfasthttp.Options{}).Handle(func(*fasthttp.RequestCtx) {})
 
-	if !reflect.DeepEqual(hub, retrievedHub) {
-		t.Fatalf("expected hub to be %v, but got %v", hub, retrievedHub)
-	}
+	reused := &fasthttp.RequestCtx{}
+	prepare(reused)
+	sentryfasthttp.SetContext(fixture.NewContext(context.Background()), reused)
+	handler(reused)
+	firstCtx := sentryfasthttp.GetContext(reused)
+
+	handler(reused)
+	secondCtx := sentryfasthttp.GetContext(reused)
+	require.NotEqual(t, sentry.SpanFromContext(firstCtx).TraceID, sentry.SpanFromContext(secondCtx).TraceID)
+	require.ErrorIs(t, firstCtx.Err(), context.Canceled)
+	require.NoError(t, secondCtx.Err())
+
+	ctx, scope := sentry.WithIsolationScope(context.Background())
+	scope.SetTag("parent", "injected")
+	parent := sentry.StartTransaction(sentry.ContextWithClient(ctx, sentry.NewNoopClient()), "injected")
+	defer parent.Finish()
+	sentryfasthttp.SetContext(parent.Context(), reused)
+	handler(reused)
+	thirdCtx := sentryfasthttp.GetContext(reused)
+	require.ErrorIs(t, secondCtx.Err(), context.Canceled)
+	require.Same(t, parent, sentry.TransactionFromContext(thirdCtx))
+	require.Same(t, sentry.NewNoopClient(), sentry.ClientFromContext(thirdCtx))
+	require.NoError(t, thirdCtx.Err())
+	fixture.Client.CaptureMessage(thirdCtx, "injected parent")
+	fixture.Flush()
+	require.Equal(t, "injected", fixture.Events()[0].Tags["parent"])
+	reused.ResetUserValues()
+	require.ErrorIs(t, thirdCtx.Err(), context.Canceled)
+
+	type nestedKey struct{}
+	nestedRequest := &fasthttp.RequestCtx{}
+	prepare(nestedRequest)
+	sentryfasthttp.SetContext(context.WithValue(fixture.NewContext(context.Background()), nestedKey{}, "preserved"), nestedRequest)
+	var outerCtx, innerCtx context.Context
+	inner := sentryfasthttp.New(sentryfasthttp.Options{}).Handle(func(ctx *fasthttp.RequestCtx) {
+		innerCtx = sentryfasthttp.GetContext(ctx)
+	})
+	outer := sentryfasthttp.New(sentryfasthttp.Options{}).Handle(func(ctx *fasthttp.RequestCtx) {
+		outerCtx = sentryfasthttp.GetContext(ctx)
+		sentryfasthttp.SetContext(outerCtx, ctx)
+		inner(ctx)
+	})
+	outer(nestedRequest)
+	require.Equal(t, "preserved", outerCtx.Value(nestedKey{}))
+	require.Equal(t, "preserved", innerCtx.Value(nestedKey{}))
+	require.Equal(t, sentry.SpanFromContext(outerCtx).TraceID, sentry.SpanFromContext(innerCtx).TraceID)
+	require.NoError(t, outerCtx.Err())
+	require.NoError(t, innerCtx.Err())
+	nestedRequest.ResetUserValues()
+	require.ErrorIs(t, outerCtx.Err(), context.Canceled)
+	require.ErrorIs(t, innerCtx.Err(), context.Canceled)
+
+	sentrytest.CheckRequestIsolation(t, func() (context.Context, context.Context, error) {
+		ctx := &fasthttp.RequestCtx{}
+		prepare(ctx)
+		sentryfasthttp.SetContext(fixture.NewContext(context.Background()), ctx)
+		handler(ctx)
+		requestCtx := sentryfasthttp.GetContext(ctx)
+		ctx.ResetUserValues()
+		return requestCtx, nil, nil
+	})
 }
 
 // TestMalformedURLNoPanic verifies that malformed URLs don't cause panics
