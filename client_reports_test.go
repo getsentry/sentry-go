@@ -15,96 +15,115 @@ import (
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/report"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
 )
 
 // TestClientReports_Integration tests that client reports are properly generated
 // and sent when events are dropped for various reasons.
 func TestClientReports_Integration(t *testing.T) {
-	var receivedBodies [][]byte
-	var mu sync.Mutex
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		mu.Lock()
-		receivedBodies = append(receivedBodies, body)
-		mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id":"test-event-id"}`))
-	}))
-	defer srv.Close()
-
-	dsn := strings.Replace(srv.URL, "//", "//test@", 1) + "/1"
-	c, err := NewClient(ClientOptions{
-		Dsn:                  dsn,
-		DisableClientReports: false,
-		SampleRate:           1.0,
-		BeforeSend: func(event *Event, _ *EventHint) *Event {
-			if event.Message == "drop-me" {
-				return nil
-			}
-			return event
-		},
-	})
-	if err != nil {
-		t.Fatalf("Init failed: %v", err)
+	t.Parallel()
+	tests := []struct {
+		name       string
+		reportOnly bool
+		disabled   bool
+		status     int
+	}{
+		{"attached", false, false, http.StatusOK},
+		{"report-only flush", true, false, http.StatusOK},
+		{"disabled", true, true, http.StatusOK},
+		{"failed report is retained without retrying", true, false, http.StatusInternalServerError},
 	}
-	ctx, _ := WithScope(context.Background())
-	defer c.Flush(testutils.FlushTimeout())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var receivedBodies [][]byte
+			var mu sync.Mutex
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				mu.Lock()
+				receivedBodies = append(receivedBodies, body)
+				mu.Unlock()
+				w.WriteHeader(tt.status)
+				_, _ = w.Write([]byte(`{"id":"test-event-id"}`))
+			}))
+			defer srv.Close()
 
-	// second client with disabled reports shouldn't affect the first
-	_, _ = NewClient(ClientOptions{
-		Dsn:                  testDsn,
-		DisableClientReports: true,
-	})
+			dsn := strings.Replace(srv.URL, "//", "//test@", 1) + "/1"
+			c, err := NewClient(ClientOptions{
+				Dsn:                  dsn,
+				DisableClientReports: tt.disabled,
+				SampleRate:           1.0,
+				BeforeSend: func(event *Event, _ *EventHint) *Event {
+					if event.Message == "drop-me" {
+						return nil
+					}
+					return event
+				},
+			})
+			require.NoError(t, err)
+			defer c.Close()
 
-	// simulate dropped events for report outcomes
-	c.CaptureMessage(ctx, "drop-me")
-	processorCtx, processorScope := WithScope(ctx)
-	processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
-		if event.Message == "processor-drop" {
-			return nil
-		}
-		return event
-	})
-	c.CaptureMessage(processorCtx, "processor-drop")
+			// A second client's disabled reports must not affect the first client.
+			disabled, err := NewClient(ClientOptions{Dsn: testDsn, DisableClientReports: true})
+			require.NoError(t, err)
+			defer disabled.Close()
 
-	c.CaptureMessage(ctx, "hi") // send an event to capture the report along with it
-	if !c.Flush(testutils.FlushTimeout()) {
-		t.Fatal("Flush timed out")
-	}
-
-	var got report.ClientReport
-	require.Eventually(t, func() bool {
-		mu.Lock()
-		bodies := make([][]byte, len(receivedBodies))
-		copy(bodies, receivedBodies)
-		mu.Unlock()
-
-		for _, b := range bodies {
-			for _, line := range bytes.Split(b, []byte("\n")) {
-				var report report.ClientReport
-				if json.Unmarshal(line, &report) == nil && len(report.DiscardedEvents) > 0 {
-					got = report
-					return true
+			ctx, _ := WithScope(context.Background())
+			c.CaptureMessage(ctx, "drop-me")
+			processorCtx, processorScope := WithScope(ctx)
+			processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
+				if event.Message == "processor-drop" {
+					return nil
 				}
+				return event
+			})
+			c.CaptureMessage(processorCtx, "processor-drop")
+			if !tt.reportOnly {
+				c.CaptureMessage(ctx, "hi")
 			}
-		}
-		return false
-	}, time.Second, 10*time.Millisecond, "no client report found in envelope bodies with: %v", got)
+			require.True(t, c.Flush(testutils.FlushTimeout()))
 
-	if got.Timestamp.IsZero() {
-		t.Error("client report missing timestamp")
-	}
-
-	want := []report.DiscardedEvent{
-		{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 1},
-		{Reason: report.ReasonEventProcessor, Category: ratelimit.CategoryError, Quantity: 1},
-	}
-	if diff := cmp.Diff(want, got.DiscardedEvents, cmpopts.SortSlices(func(a, b report.DiscardedEvent) bool {
-		return a.Reason < b.Reason
-	})); diff != "" {
-		t.Errorf("DiscardedEvents mismatch (-want +got):\n%s", diff)
+			if tt.disabled {
+				mu.Lock()
+				count := len(receivedBodies)
+				mu.Unlock()
+				require.Zero(t, count)
+				require.Nil(t, c.reportProvider.TakeReport())
+				return
+			}
+			var got report.ClientReport
+			require.Eventually(t, func() bool {
+				mu.Lock()
+				defer mu.Unlock()
+				for _, body := range receivedBodies {
+					for _, line := range bytes.Split(body, []byte("\n")) {
+						var candidate report.ClientReport
+						if json.Unmarshal(line, &candidate) == nil && len(candidate.DiscardedEvents) > 0 {
+							got = candidate
+							return true
+						}
+					}
+				}
+				return false
+			}, time.Second, 10*time.Millisecond, "no client report received")
+			if tt.reportOnly {
+				mu.Lock()
+				count := len(receivedBodies)
+				mu.Unlock()
+				require.Equal(t, 1, count, "flush must not retry failed reports")
+			}
+			pending := c.reportProvider.TakeReport()
+			require.False(t, got.Timestamp.IsZero(), "client report missing timestamp")
+			want := []report.DiscardedEvent{
+				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 1},
+				{Reason: report.ReasonEventProcessor, Category: ratelimit.CategoryError, Quantity: 1},
+			}
+			require.ElementsMatch(t, want, got.DiscardedEvents)
+			if tt.status == http.StatusOK {
+				require.Nil(t, pending)
+			} else {
+				require.NotNil(t, pending)
+				require.ElementsMatch(t, want, pending.DiscardedEvents)
+			}
+		})
 	}
 }

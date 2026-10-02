@@ -535,8 +535,6 @@ func (client *Client) setupTelemetryProcessor() {
 		HTTPSProxy:    client.options.HTTPSProxy,
 		CaCerts:       client.options.CaCerts,
 		Recorder:      client.reportRecorder,
-		Provider:      client.reportProvider,
-		SdkInfo:       client.sdkInfo,
 	})
 	client.Transport = &internalAsyncTransportAdapter{transport: transport}
 
@@ -548,7 +546,7 @@ func (client *Client) setupTelemetryProcessor() {
 		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
 	}
 
-	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, client.dsn, client.sdkInfo, client.reportRecorder)
+	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, client.dsn, client.sdkInfo, client.reportRecorder, client.reportProvider)
 }
 
 func (client *Client) setupIntegrations() {

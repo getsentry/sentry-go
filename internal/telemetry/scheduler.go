@@ -13,6 +13,8 @@ import (
 	"github.com/getsentry/sentry-go/report"
 )
 
+const clientReportInterval = 30 * time.Second
+
 // Scheduler implements a weighted round-robin scheduler for processing buffered events.
 type Scheduler struct {
 	buffers   map[ratelimit.Category]Buffer[Item]
@@ -20,6 +22,7 @@ type Scheduler struct {
 	dsn       *protocol.Dsn
 	sdkInfo   func() *protocol.SdkInfo
 	recorder  report.ClientReportRecorder
+	provider  report.ClientReportProvider
 
 	currentCycle []ratelimit.Priority
 	cyclePos     int
@@ -43,9 +46,13 @@ func NewScheduler(
 	dsn *protocol.Dsn,
 	sdkInfo func() *protocol.SdkInfo,
 	recorder report.ClientReportRecorder,
+	provider report.ClientReportProvider,
 ) *Scheduler {
 	if recorder == nil {
 		recorder = report.NoopRecorder()
+	}
+	if provider == nil {
+		provider = report.NoopProvider()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118: cancel is stored in s.cancel and called in Shutdown()
@@ -81,6 +88,7 @@ func NewScheduler(
 		dsn:          dsn,
 		sdkInfo:      sdkInfo,
 		recorder:     recorder,
+		provider:     provider,
 		currentCycle: currentCycle,
 		ctx:          ctx,
 		cancel:       cancel,
@@ -154,7 +162,13 @@ func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
 	if !s.flushBuffers(ctx) {
 		return false
 	}
-	return s.transport.FlushWithContext(ctx)
+	if !s.transport.FlushWithContext(ctx) {
+		return false
+	}
+	if s.sendClientReport() {
+		return s.transport.FlushWithContext(ctx)
+	}
+	return true
 }
 
 func (s *Scheduler) run() {
@@ -162,12 +176,16 @@ func (s *Scheduler) run() {
 
 	go func() {
 		ticker := time.NewTicker(100 * time.Millisecond)
+		reportTicker := time.NewTicker(clientReportInterval)
 		defer ticker.Stop()
+		defer reportTicker.Stop()
 
 		for {
 			select {
 			case <-ticker.C:
 				s.cond.Broadcast()
+			case <-reportTicker.C:
+				s.sendClientReport()
 			case <-s.ctx.Done():
 				return
 			}
@@ -287,6 +305,18 @@ func (s *Scheduler) sendItem(item EnvelopeConvertible) {
 		s.recorder.RecordItem(report.ReasonInternalError, item)
 		return
 	}
+	s.sendEnvelope(envelope)
+}
+
+func (s *Scheduler) sendEnvelope(envelope *protocol.Envelope) bool {
+	if len(envelope.Items) == 0 {
+		return false
+	}
+	s.provider.AttachToEnvelope(envelope)
+	return s.sendPreparedEnvelope(envelope)
+}
+
+func (s *Scheduler) sendPreparedEnvelope(envelope *protocol.Envelope) bool {
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)
 		reason := report.ReasonSendError
@@ -294,7 +324,9 @@ func (s *Scheduler) sendItem(item EnvelopeConvertible) {
 			reason = report.ReasonQueueOverflow
 		}
 		s.recorder.RecordForEnvelope(reason, envelope)
+		return false
 	}
+	return true
 }
 
 func (s *Scheduler) flushBuffers(ctx context.Context) bool {
@@ -314,4 +346,18 @@ func (s *Scheduler) flushBuffers(ctx context.Context) bool {
 		}
 	}
 	return ctx.Err() == nil
+}
+
+// sendClientReport submits a standalone client report, if one is pending.
+func (s *Scheduler) sendClientReport() bool {
+	envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{
+		SentAt: time.Now(),
+		Dsn:    s.dsn,
+		Sdk:    s.resolveSdkInfo(),
+	})
+	s.provider.AttachToEnvelope(envelope)
+	if len(envelope.Items) == 0 {
+		return false
+	}
+	return s.sendPreparedEnvelope(envelope)
 }
