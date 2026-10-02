@@ -393,15 +393,18 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 		err    error
 		reason reportpkg.DiscardReason
 	}{
-		{"conversion error", &failingTransactionTelemetryItem{testTelemetryItem: transaction, spanCount: 3}, nil, reportpkg.ReasonInternalError},
+		{"conversion error", &failingTransactionTelemetryItem{testTelemetryItem: transaction, spanCount: 3}, errors.New("report rejected"), reportpkg.ReasonInternalError},
 		{"queue full", &transactionTelemetryItem{transaction}, ErrQueueFull, reportpkg.ReasonQueueOverflow},
 		{"send error", &transactionTelemetryItem{transaction}, errors.New("send failed"), reportpkg.ReasonSendError},
+		{"standalone report queue full", nil, ErrQueueFull, reportpkg.ReasonQueueOverflow},
+		{"standalone report send error", nil, errors.New("send failed"), reportpkg.ReasonSendError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &rejectingTransport{err: tt.err}
 			dsn := &protocol.Dsn{}
 			recorder := reportpkg.NewAggregator()
+			recorder.Record(reportpkg.ReasonBeforeSend, ratelimit.CategoryError, 2)
 
 			buffer := NewRingBuffer[Item](ratelimit.CategoryTransaction, 10, OverflowPolicyDropOldest, 1, 0, nil)
 			buffers := map[ratelimit.Category]Buffer[Item]{
@@ -409,31 +412,23 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 			}
 			sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, recorder)
+			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, recorder, recorder)
 
-			buffer.Offer(tt.item)
-
-			scheduler.Flush(time.Second)
+			if tt.item != nil {
+				buffer.Offer(tt.item)
+			}
+			require.True(t, scheduler.Flush(time.Second))
 
 			clientReport := recorder.TakeReport()
-			if clientReport == nil {
-				t.Fatal("expected client report")
+			require.NotNil(t, clientReport)
+			want := []reportpkg.DiscardedEvent{{Reason: reportpkg.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 2}}
+			if tt.item != nil {
+				want = append(want,
+					reportpkg.DiscardedEvent{Reason: tt.reason, Category: ratelimit.CategoryTransaction, Quantity: 1},
+					reportpkg.DiscardedEvent{Reason: tt.reason, Category: ratelimit.CategorySpan, Quantity: 3},
+				)
 			}
-
-			outcomes := map[ratelimit.Category]int64{}
-			for _, discarded := range clientReport.DiscardedEvents {
-				if discarded.Reason != tt.reason {
-					t.Fatalf("unexpected reason: %s", discarded.Reason)
-				}
-				outcomes[discarded.Category] += discarded.Quantity
-			}
-
-			if outcomes[ratelimit.CategoryTransaction] != 1 {
-				t.Fatalf("expected one discarded transaction, got %d", outcomes[ratelimit.CategoryTransaction])
-			}
-			if outcomes[ratelimit.CategorySpan] != 3 {
-				t.Fatalf("expected discarded span count to be recorded, got %d", outcomes[ratelimit.CategorySpan])
-			}
+			require.ElementsMatch(t, want, clientReport.DiscardedEvents)
 		})
 	}
 }
