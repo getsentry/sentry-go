@@ -54,6 +54,26 @@ func CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
 	return hub.CaptureCheckIn(checkIn, monitorConfig)
 }
 
+// WithMonitor runs fn and reports its outcome as check-ins for the cron
+// monitor identified by monitorSlug, creating or updating the monitor with
+// monitorConfig when it is not nil. It is a shorthand for
+// CurrentHub().WithMonitor.
+//
+// Example:
+//
+//	err := sentry.WithMonitor("nightly-cleanup", &sentry.MonitorConfig{
+//		Schedule:      sentry.CrontabSchedule("0 3 * * *"),
+//		CheckInMargin: 5,
+//		MaxRuntime:    30,
+//		Timezone:      "UTC",
+//	}, func() error {
+//		return cleanup()
+//	})
+func WithMonitor(monitorSlug string, monitorConfig *MonitorConfig, fn func() error) error {
+	hub := CurrentHub()
+	return hub.WithMonitor(monitorSlug, monitorConfig, fn)
+}
+
 // CaptureEvent captures an event on the currently active client if any.
 //
 // The event must already be assembled. Typically code would instead use
