@@ -4,6 +4,7 @@ package sentrycron
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -87,8 +88,12 @@ func timezone(loc *time.Location) (string, bool) {
 	return "UTC", true
 }
 
-// localName follows how the time package picks time.Local.
+// localName follows how the time package picks time.Local on Unix. Windows
+// reads the zone from the registry, which has no IANA name.
 func localName() string {
+	if runtime.GOOS == "windows" {
+		return ""
+	}
 	path := localtimePath
 	if tz, ok := os.LookupEnv("TZ"); ok {
 		if tz == "" {

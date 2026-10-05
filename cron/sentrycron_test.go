@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -48,6 +49,9 @@ func TestNewMonitorConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.spec, func(t *testing.T) {
+			if tt.timezone == "America/New_York" && runtime.GOOS == "windows" {
+				t.Skip("time.Local ignores TZ on Windows")
+			}
 			config := newMonitorConfig(tt.spec, tt.loc, &sentry.MonitorConfig{MaxRuntime: 30})
 			if tt.schedule == nil {
 				assert.Nil(t, config)
@@ -84,6 +88,9 @@ func TestAddFunc(t *testing.T) {
 }
 
 func TestLocalName(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("time.Local comes from the registry on Windows")
+	}
 	dir := t.TempDir()
 	zone := filepath.Join(dir, "zoneinfo", "America", "Toronto")
 	require.NoError(t, os.MkdirAll(filepath.Dir(zone), 0o755))
