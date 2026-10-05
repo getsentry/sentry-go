@@ -16,7 +16,6 @@ import (
 )
 
 const errorType = ""
-const eventType = "event"
 const transactionType = "transaction"
 const checkInType = "check_in"
 

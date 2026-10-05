@@ -346,16 +346,14 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 func Test_Meter_ExceedBatchSize(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 	meter := NewMeter(ctx)
-	for i := 0; i < batchSize; i++ {
+	for i := 0; i < 100; i++ {
 		meter.Count("test.count", 1)
 	}
 
-	// sleep to wait for the batch to be processed
-	time.Sleep(time.Millisecond * 20)
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected only one event with 100 metrics, got %d", len(events))
-	}
+	assert.Eventually(t, func() bool {
+		events := mockTransport.Events()
+		return len(events) == 1 && len(events[0].Metrics) == 100
+	}, testutils.FlushTimeout(), time.Millisecond, "expected one batch with 100 metrics")
 }
 
 func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
@@ -403,9 +401,8 @@ func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
 func Test_batchMeter_Shutdown(t *testing.T) {
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
-		Dsn:                    testDsn,
-		Transport:              mockTransport,
-		DisableTelemetryBuffer: true,
+		Dsn:       testDsn,
+		Transport: mockTransport,
 	})
 	ctx, _ := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, mockClient)
@@ -414,7 +411,7 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 		meter.Count("test.count", 1)
 	}
 
-	mockClient.batchMeter.Shutdown()
+	mockClient.Close()
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -427,8 +424,8 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 	mockTransport.events = nil
 
 	// Test that shutdown can be called multiple times safely
-	mockClient.batchMeter.Shutdown()
-	mockClient.batchMeter.Shutdown()
+	mockClient.Close()
+	mockClient.Close()
 
 	events = mockTransport.Events()
 	if len(events) != 0 {

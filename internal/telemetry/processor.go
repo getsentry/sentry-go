@@ -31,13 +31,23 @@ func NewProcessor(
 	}
 }
 
-// Add adds a TelemetryItem to the appropriate buffer based on its category.
+// Add submits single-item categories inline and buffers batched categories.
 //
 // The processor should call MakeSerializationSafe to eliminate any race on user mutable fields,
 // since the serialization happens on a background goroutine.
 func (b *Processor) Add(item Item) bool {
 	item.MakeSerializationSafe()
-	return b.scheduler.Add(item)
+	switch item.GetCategory() {
+	case ratelimit.CategoryError, ratelimit.CategoryTransaction, ratelimit.CategoryMonitor:
+		convertible, ok := item.(EnvelopeConvertible)
+		if !ok {
+			b.scheduler.recorder.RecordItem(report.ReasonInternalError, item)
+			return false
+		}
+		return b.scheduler.sendItem(convertible)
+	default:
+		return b.scheduler.Add(item)
+	}
 }
 
 // Flush forces all buffers to flush within the given timeout.
