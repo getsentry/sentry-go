@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	sentrySyncTransport := sentry.NewHTTPSyncTransport()
+	sentrySyncTransport := sentry.NewSyncTransport()
 	sentrySyncTransport.Timeout = time.Second * 3
 
 	_ = sentry.Init(sentry.ClientOptions{

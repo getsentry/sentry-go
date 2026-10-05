@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,9 +15,60 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
 	"github.com/stretchr/testify/require"
 )
+
+type reportingTransport struct {
+	NoopTransport
+	err error
+}
+
+func (t *reportingTransport) SendEnvelope(_ *protocol.Envelope) error { return t.err }
+
+func TestClientReports_CustomTransport(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name     string
+		err      error
+		reason   report.DiscardReason
+		disabled bool
+	}{
+		{"queue rejection", ErrTransportQueueFull, report.ReasonQueueOverflow, false},
+		{"send rejection", errors.New("rejected"), report.ReasonSendError, false},
+		{"disabled", ErrTransportQueueFull, report.ReasonQueueOverflow, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewClient(ClientOptions{
+				DisableClientReports: tt.disabled,
+				Transport:            &reportingTransport{err: tt.err},
+				BeforeSend: func(event *Event, _ *EventHint) *Event {
+					if event.Message == "drop" {
+						return nil
+					}
+					return event
+				},
+			})
+			require.NoError(t, err)
+			defer client.Close()
+			ctx, _ := WithScope(context.Background())
+			client.CaptureMessage(ctx, "drop")
+			id := client.CaptureMessage(ctx, "send")
+			require.Equal(t, tt.err == nil, id != nil)
+			pending := client.reportProvider.TakeReport()
+			if tt.disabled {
+				require.Nil(t, pending)
+				return
+			}
+			require.NotNil(t, pending)
+			require.ElementsMatch(t, []report.DiscardedEvent{
+				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 1},
+				{Reason: tt.reason, Category: ratelimit.CategoryError, Quantity: 1},
+			}, pending.DiscardedEvents)
+		})
+	}
+}
 
 // TestClientReports_Integration tests that client reports are properly generated
 // and sent when events are dropped for various reasons.
@@ -27,11 +79,16 @@ func TestClientReports_Integration(t *testing.T) {
 		reportOnly bool
 		disabled   bool
 		status     int
+		transport  Transport
 	}{
-		{"attached", false, false, http.StatusOK},
-		{"report-only flush", true, false, http.StatusOK},
-		{"disabled", true, true, http.StatusOK},
-		{"failed report is retained without retrying", true, false, http.StatusInternalServerError},
+		{"attached", false, false, http.StatusOK, nil},
+		{"report-only flush", true, false, http.StatusOK, nil},
+		{"disabled", true, true, http.StatusOK, nil},
+		{"failed report is retained without retrying", true, false, http.StatusInternalServerError, nil},
+		{"wrapped attached", false, false, http.StatusOK, &wrappedTransport{NewSyncTransport()}},
+		{"wrapped disabled", true, true, http.StatusOK, &wrappedTransport{NewSyncTransport()}},
+		{"wrapped failed report", true, false, http.StatusInternalServerError, &wrappedTransport{NewSyncTransport()}},
+		{"wrapped failed event", false, false, http.StatusInternalServerError, &wrappedTransport{NewSyncTransport()}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -50,6 +107,7 @@ func TestClientReports_Integration(t *testing.T) {
 			dsn := strings.Replace(srv.URL, "//", "//test@", 1) + "/1"
 			c, err := NewClient(ClientOptions{
 				Dsn:                  dsn,
+				Transport:            tt.transport,
 				DisableClientReports: tt.disabled,
 				SampleRate:           1.0,
 				BeforeSend: func(event *Event, _ *EventHint) *Event {
@@ -122,6 +180,9 @@ func TestClientReports_Integration(t *testing.T) {
 				require.Nil(t, pending)
 			} else {
 				require.NotNil(t, pending)
+				if !tt.reportOnly {
+					want = append(want, report.DiscardedEvent{Reason: report.ReasonSendError, Category: ratelimit.CategoryError, Quantity: 1})
+				}
 				require.ElementsMatch(t, want, pending.DiscardedEvents)
 			}
 		})

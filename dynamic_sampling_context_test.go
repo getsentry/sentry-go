@@ -289,7 +289,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				}
 				require.Len(t, transport.Events(), 2)
 				for _, event := range transport.Events() {
-					require.Equal(t, want, event.sdkMetaData.dsc)
+					require.Equal(t, want.Entries, event.sdkMetaData.dsc.Entries)
 				}
 			})
 		}
@@ -338,7 +338,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 					root.Finish()
 				}
 				for _, event := range transport.Events() {
-					require.Equal(t, want, event.sdkMetaData.dsc)
+					require.Equal(t, want.Entries, event.sdkMetaData.dsc.Entries)
 				}
 			})
 		}

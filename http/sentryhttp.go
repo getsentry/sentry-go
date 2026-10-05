@@ -36,9 +36,9 @@ type Options struct {
 	//
 	// This option is normally not needed. Unless you need different behaviors
 	// for different HTTP handlers, configure the SDK to use the
-	// HTTPSyncTransport instead.
+	// SyncTransport instead.
 	//
-	// Waiting (or using HTTPSyncTransport) is useful when the web server runs
+	// Waiting (or using SyncTransport) is useful when the web server runs
 	// in an environment that interrupts execution at the end of a request flow,
 	// like modern serverless platforms.
 	WaitForDelivery bool

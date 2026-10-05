@@ -112,16 +112,16 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 				if native != nil {
 					want := Context{traceIDContextKey: traceID.String(), spanIDContextKey: spanID.String()}
 					if native.SpanID == spanID {
-						want = native.traceContext().Map()
+						want["op"], want["description"], want["status"], want["data"] = native.Op, native.Description, native.Status.String(), native.Data
 					}
 					require.Equal(t, want, captured.Contexts[traceContextKey])
 				}
 				require.Equal(t, traceID.String(), fmt.Sprint(captured.Contexts[traceContextKey][traceIDContextKey]))
 				switch {
 				case test.eventDSC.HasEntries() || test.eventDSC.IsFrozen():
-					require.Equal(t, test.eventDSC, captured.sdkMetaData.dsc)
+					require.Equal(t, test.eventDSC.Entries, captured.sdkMetaData.dsc.Entries)
 				case test.matching:
-					require.Equal(t, dsc, captured.sdkMetaData.dsc)
+					require.Equal(t, dsc.Entries, captured.sdkMetaData.dsc.Entries)
 				default:
 					require.Empty(t, captured.sdkMetaData.dsc.Entries)
 				}

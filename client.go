@@ -196,7 +196,7 @@ type ClientOptions struct {
 	Integrations func([]Integration) []Integration
 	// io.Writer implementation that should be used with the Debug mode.
 	DebugWriter io.Writer
-	// The transport to use. Defaults to HTTPTransport.
+	// The transport to use. Defaults to AsyncTransport.
 	Transport Transport
 	// The server name to be reported.
 	ServerName string
@@ -283,8 +283,9 @@ type ClientOptions struct {
 	// IMPORTANT: to not ignore any status codes, the option should be an empty slice and not nil. The nil option is
 	// used for defaulting to 404 ignores.
 	TraceIgnoreStatusCodes [][]int
-	// DisableTelemetryBuffer disables the telemetry buffer layer for prioritizing events and uses the old transport layer.
-	DisableTelemetryBuffer bool
+
+	// recorder carries the client's loss accounting into the built-in transports.
+	recorder report.ClientReportRecorder
 }
 
 // Client processes telemetry captured through the SDK.
@@ -302,8 +303,6 @@ type Client struct {
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
 	Transport          Transport
-	batchLogger        *logBatchProcessor
-	batchMeter         *metricBatchProcessor
 	telemetryProcessor *telemetry.Processor
 	reportRecorder     report.ClientReportRecorder
 	reportProvider     report.ClientReportProvider
@@ -420,21 +419,8 @@ func NewClient(options ClientOptions) (*Client, error) {
 		client.reportProvider = a
 	}
 
-	// We currently disallow using custom Transport with the new Telemetry Processor, due to the difference in transport signatures.
-	// The option should be enabled when the new Transport interface signature changes.
-	if !options.DisableTelemetryBuffer && client.options.Transport == nil {
-		client.setupTelemetryProcessor()
-	} else {
-		if client.options.Transport != nil {
-			debuglog.Println("Cannot enable Telemetry Processor with custom Transport: fallback to old transport")
-		}
-		client.setupTransport()
-
-		client.batchLogger = newLogBatchProcessor(&client)
-		client.batchLogger.Start()
-		client.batchMeter = newMetricBatchProcessor(&client)
-		client.batchMeter.Start()
-	}
+	client.setupTransport()
+	client.setupTelemetryProcessor()
 	client.setupIntegrations()
 	if options.OrgID != 0 && client.dsn != nil {
 		client.dsn.SetOrgID(options.OrgID)
@@ -446,14 +432,13 @@ func NewClient(options ClientOptions) (*Client, error) {
 var noopClient = &Client{
 	disabled: true,
 	options: ClientOptions{
-		DisableTelemetryBuffer: true,
 		MaxErrorDepth:          maxErrorDepth,
 		MaxSpans:               defaultMaxSpans,
 		TraceIgnoreStatusCodes: [][]int{{404}},
 	},
 	sdkIdentifier:  sdkIdentifier,
 	sdkVersion:     SDKVersion,
-	Transport:      new(noopTransport),
+	Transport:      new(NoopTransport),
 	reportRecorder: report.NoopRecorder(),
 	reportProvider: report.NoopProvider(),
 }
@@ -483,33 +468,16 @@ func normalizeClient(client *Client) *Client {
 }
 
 func (client *Client) setupTransport() {
+	client.options.recorder = client.reportRecorder
 	opts := client.options
 	transport := opts.Transport
-
 	if transport == nil {
 		if opts.Dsn == "" {
-			transport = new(noopTransport)
+			transport = NewNoopTransport()
 		} else {
-			httpTransport := NewHTTPTransport()
-			httpTransport.recorder = client.reportRecorder
-			httpTransport.provider = client.reportProvider
-			transport = httpTransport
-		}
-	} else {
-		// For known transport types, inject the client report interfaces.
-		switch tr := transport.(type) {
-		case *HTTPTransport:
-			tr.recorder = client.reportRecorder
-			tr.provider = client.reportProvider
-		case *HTTPSyncTransport:
-			tr.recorder = client.reportRecorder
-			tr.provider = client.reportProvider
-		case *internalAsyncTransportAdapter:
-			tr.recorder = client.reportRecorder
-			tr.provider = client.reportProvider
+			transport = NewAsyncTransport()
 		}
 	}
-
 	transport.Configure(opts)
 	client.Transport = transport
 }
@@ -527,17 +495,6 @@ func (client *Client) sdkInfo() *protocol.SdkInfo {
 }
 
 func (client *Client) setupTelemetryProcessor() {
-	transport := NewAsyncTransport(TransportOptions{
-		Dsn:           client.options.Dsn,
-		HTTPClient:    client.options.HTTPClient,
-		HTTPTransport: client.options.HTTPTransport,
-		HTTPProxy:     client.options.HTTPProxy,
-		HTTPSProxy:    client.options.HTTPSProxy,
-		CaCerts:       client.options.CaCerts,
-		Recorder:      client.reportRecorder,
-	})
-	client.Transport = &internalAsyncTransportAdapter{transport: transport}
-
 	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
 		ratelimit.CategoryError:       telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder),
 		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder),
@@ -546,7 +503,7 @@ func (client *Client) setupTelemetryProcessor() {
 		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
 	}
 
-	client.telemetryProcessor = telemetry.NewProcessor(buffers, transport, client.dsn, client.sdkInfo, client.reportRecorder, client.reportProvider)
+	client.telemetryProcessor = telemetry.NewProcessor(buffers, client.Transport, client.dsn, client.sdkInfo, client.reportRecorder, client.reportProvider)
 }
 
 func (client *Client) setupIntegrations() {
@@ -705,19 +662,10 @@ func (client *Client) captureLog(log *Log) bool {
 		}
 	}
 
-	if client.telemetryProcessor != nil {
-		if !client.telemetryProcessor.Add(log) {
-			debuglog.Print("Dropping log: telemetry buffer full or category missing")
-			// Note: processor tracks client report
-			return false
-		}
-	} else if client.batchLogger != nil {
-		if !client.batchLogger.Send(log) {
-			debuglog.Printf("Dropping log [%s]: buffer full", log.Level)
-			client.reportRecorder.RecordOne(report.ReasonBufferOverflow, ratelimit.CategoryLog)
-			client.reportRecorder.Record(report.ReasonBufferOverflow, ratelimit.CategoryLogByte, int64(log.ApproximateSize()))
-			return false
-		}
+	if !client.IsEnabled() || !client.telemetryProcessor.Add(log) {
+		debuglog.Print("Dropping log: telemetry buffer full or category missing")
+		// Note: processor tracks client report
+		return false
 	}
 
 	return true
@@ -737,18 +685,10 @@ func (client *Client) captureMetric(metric *Metric) bool {
 		}
 	}
 
-	if client.telemetryProcessor != nil {
-		if !client.telemetryProcessor.Add(metric) {
-			debuglog.Printf("Dropping metric: telemetry buffer full or category missing")
-			// Note: processor tracks client report
-			return false
-		}
-	} else if client.batchMeter != nil {
-		if !client.batchMeter.Send(metric) {
-			debuglog.Printf("Dropping metric %q: buffer full", metric.Name)
-			client.reportRecorder.RecordOne(report.ReasonBufferOverflow, ratelimit.CategoryTraceMetric)
-			return false
-		}
+	if !client.IsEnabled() || !client.telemetryProcessor.Add(metric) {
+		debuglog.Printf("Dropping metric: telemetry buffer full or category missing")
+		// Note: processor tracks client report
+		return false
 	}
 
 	return true
@@ -787,18 +727,15 @@ func (client *Client) capturePanic(ctx context.Context, recovered any, options .
 //
 // Do not call Flush indiscriminately after every call to CaptureEvent,
 // CaptureException or CaptureMessage. Instead, to have the SDK send events over
-// the network synchronously, configure it to use the HTTPSyncTransport in the
+// the network synchronously, configure it to use the SyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
 	if !client.IsEnabled() {
 		return false
 	}
-	if client.batchLogger != nil || client.batchMeter != nil || client.telemetryProcessor != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		return client.FlushWithContext(ctx)
-	}
-	return client.Transport.Flush(timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return client.FlushWithContext(ctx)
 }
 
 // FlushWithContext waits until the underlying Transport sends any buffered events
@@ -812,22 +749,13 @@ func (client *Client) Flush(timeout time.Duration) bool {
 //
 // Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
 // CaptureException, or CaptureMessage. To send events synchronously over the network,
-// configure the SDK to use HTTPSyncTransport during initialization with Init.
+// configure the SDK to use SyncTransport during initialization with Init.
 
 func (client *Client) FlushWithContext(ctx context.Context) bool {
 	if !client.IsEnabled() {
 		return false
 	}
-	if client.batchLogger != nil {
-		client.batchLogger.Flush(ctx.Done())
-	}
-	if client.batchMeter != nil {
-		client.batchMeter.Flush(ctx.Done())
-	}
-	if client.telemetryProcessor != nil {
-		return client.telemetryProcessor.FlushWithContext(ctx)
-	}
-	return client.Transport.FlushWithContext(ctx)
+	return client.telemetryProcessor.FlushWithContext(ctx)
 }
 
 // Close clean up underlying Transport resources.
@@ -838,15 +766,7 @@ func (client *Client) Close() {
 	if !client.IsEnabled() {
 		return
 	}
-	if client.telemetryProcessor != nil {
-		client.telemetryProcessor.Close(5 * time.Second)
-	}
-	if client.batchLogger != nil {
-		client.batchLogger.Shutdown()
-	}
-	if client.batchMeter != nil {
-		client.batchMeter.Shutdown()
-	}
+	client.telemetryProcessor.Close(5 * time.Second)
 	client.Transport.Close()
 }
 
@@ -959,13 +879,9 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 		}
 	}
 
-	if client.telemetryProcessor != nil {
-		if !client.telemetryProcessor.Add(event) {
-			debuglog.Println("Event dropped: telemetry buffer full or unavailable")
-			return nil
-		}
-	} else {
-		client.Transport.SendEvent(event)
+	if !client.telemetryProcessor.Add(event) {
+		debuglog.Println("Event dropped: telemetry buffer full or unavailable")
+		return nil
 	}
 
 	if event.Type != transactionType && event.Type != checkInType {

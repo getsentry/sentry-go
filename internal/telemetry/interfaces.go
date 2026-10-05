@@ -42,10 +42,10 @@ var ErrQueueFull = errors.New("transport queue full")
 
 // Transport represents the envelope-first transport interface.
 // This interface is designed for the telemetry buffer system and provides
-// non-blocking sends with backpressure signals.
+// sends with backpressure signals.
 type Transport interface {
-	// SendEnvelope sends an envelope to Sentry. Returns immediately with
-	// backpressure error if the queue is full.
+	// SendEnvelope sends an envelope to Sentry. Returns an error only if
+	// the envelope is rejected.
 	SendEnvelope(envelope *protocol.Envelope) error
 
 	// Flush waits for all pending envelopes to be sent, with timeout

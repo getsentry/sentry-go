@@ -57,24 +57,23 @@ func testEnvelope(itemType protocol.EnvelopeItemType) *protocol.Envelope {
 // nolint:gocyclo
 func TestAsyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("invalid DSN", func(t *testing.T) {
-		transport := NewAsyncTransport(TransportOptions{})
+		transport := NewAsyncTransport()
+		transport.Configure(ClientOptions{})
 
-		if _, ok := transport.(*NoopTransport); !ok {
-			t.Errorf("expected NoopTransport for empty DSN, got %T", transport)
+		defer transport.Close()
+		if !transport.Flush(testutils.FlushTimeout()) {
+			t.Error("disabled transport should flush without blocking")
 		}
 
 		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
 		if err != nil {
-			t.Errorf("NoopTransport should not error, got %v", err)
+			t.Errorf("invalid DSN should return nil, got %v", err)
 		}
 	})
 
 	t.Run("closed transport", func(t *testing.T) {
-		tr := NewAsyncTransport(TransportOptions{Dsn: "https://key@sentry.io/123"})
-		transport, ok := tr.(*AsyncTransport)
-		if !ok {
-			t.Fatalf("expected *AsyncTransport, got %T", tr)
-		}
+		transport := NewAsyncTransport()
+		transport.Configure(ClientOptions{Dsn: "https://key@sentry.io/123"})
 		transport.Close()
 
 		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
@@ -104,13 +103,10 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		}))
 		defer server.Close()
 
-		tr := NewAsyncTransport(TransportOptions{
+		transport := NewAsyncTransport()
+		transport.Configure(ClientOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		})
-		transport, ok := tr.(*AsyncTransport)
-		if !ok {
-			t.Fatalf("expected *AsyncTransport, got %T", tr)
-		}
 		defer transport.Close()
 
 		for _, tt := range tests {
@@ -138,13 +134,10 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		}))
 		defer server.Close()
 
-		tr := NewAsyncTransport(TransportOptions{
+		transport := NewAsyncTransport()
+		transport.Configure(ClientOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		})
-		transport, ok := tr.(*AsyncTransport)
-		if !ok {
-			t.Fatalf("expected *AsyncTransport, got %T", tr)
-		}
 		defer transport.Close()
 
 		if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
@@ -172,13 +165,10 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		}))
 		defer server.Close()
 
-		tr := NewAsyncTransport(TransportOptions{
+		transport := NewAsyncTransport()
+		transport.Configure(ClientOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		})
-		transport, ok := tr.(*AsyncTransport)
-		if !ok {
-			t.Fatalf("expected *AsyncTransport, got %T", tr)
-		}
 		defer transport.Close()
 
 		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
@@ -269,13 +259,10 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		}))
 		defer server.Close()
 
-		tr := NewAsyncTransport(TransportOptions{
+		transport := NewAsyncTransport()
+		transport.Configure(ClientOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		})
-		transport, ok := tr.(*AsyncTransport)
-		if !ok {
-			t.Fatalf("expected *AsyncTransport, got %T", tr)
-		}
 		defer transport.Close()
 
 		if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
@@ -305,13 +292,10 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 		}))
 		defer server.Close()
 
-		tr := NewAsyncTransport(TransportOptions{
+		transport := NewAsyncTransport()
+		transport.Configure(ClientOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		})
-		transport, ok := tr.(*AsyncTransport)
-		if !ok {
-			t.Fatalf("expected *AsyncTransport, got %T", tr)
-		}
 		defer transport.Close()
 
 		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
@@ -330,13 +314,10 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 		}))
 		defer server.Close()
 
-		tr := NewAsyncTransport(TransportOptions{
+		transport := NewAsyncTransport()
+		transport.Configure(ClientOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		})
-		transport, ok := tr.(*AsyncTransport)
-		if !ok {
-			t.Fatalf("expected *AsyncTransport, got %T", tr)
-		}
 		defer func() {
 			close(blockChan)
 			transport.Close()
@@ -353,11 +334,8 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 	})
 
 	t.Run("closed transport", func(t *testing.T) {
-		tr := NewAsyncTransport(TransportOptions{Dsn: "https://key@sentry.io/123"})
-		transport, ok := tr.(*AsyncTransport)
-		if !ok {
-			t.Fatalf("expected *AsyncTransport, got %T", tr)
-		}
+		transport := NewAsyncTransport()
+		transport.Configure(ClientOptions{Dsn: "https://key@sentry.io/123"})
 		transport.Close()
 
 		if transport.FlushWithContext(context.Background()) {
@@ -367,13 +345,10 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 }
 
 func TestAsyncTransport_Close(t *testing.T) {
-	tr := NewAsyncTransport(TransportOptions{
+	transport := NewAsyncTransport()
+	transport.Configure(ClientOptions{
 		Dsn: "https://key@sentry.io/123",
 	})
-	transport, ok := tr.(*AsyncTransport)
-	if !ok {
-		t.Fatalf("expected *AsyncTransport, got %T", tr)
-	}
 
 	transport.Close()
 	transport.Close()
@@ -392,7 +367,7 @@ func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { r
 
 func TestHTTPTransportDeadlines(t *testing.T) {
 	// The supplied client has no timeout, so only the transport bounds requests.
-	options := TransportOptions{
+	options := ClientOptions{
 		Dsn: "https://key@sentry.io/123",
 		HTTPClient: &http.Client{Transport: roundTripperFunc(func(r *http.Request) (*http.Response, error) {
 			<-r.Context().Done()
@@ -402,7 +377,8 @@ func TestHTTPTransportDeadlines(t *testing.T) {
 
 	t.Run("sync request timeout", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			transport := NewSyncTransport(options).(*SyncTransport)
+			transport := NewSyncTransport()
+			transport.Configure(options)
 			transport.Timeout = time.Second
 			start := time.Now()
 			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
@@ -414,7 +390,8 @@ func TestHTTPTransportDeadlines(t *testing.T) {
 
 	t.Run("async request timeout", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			transport := NewAsyncTransport(options).(*AsyncTransport)
+			transport := NewAsyncTransport()
+			transport.Configure(options)
 			defer transport.Close()
 			transport.Timeout = time.Second
 			start := time.Now()
@@ -430,7 +407,8 @@ func TestHTTPTransportDeadlines(t *testing.T) {
 
 	t.Run("async flush deadline and close", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			transport := NewAsyncTransport(options).(*AsyncTransport)
+			transport := NewAsyncTransport()
+			transport.Configure(options)
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 			if transport.FlushWithContext(ctx) {
@@ -451,7 +429,8 @@ func TestHTTPTransportDeadlines(t *testing.T) {
 
 func TestSyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("invalid DSN", func(t *testing.T) {
-		transport := NewSyncTransport(TransportOptions{})
+		transport := NewSyncTransport()
+		transport.Configure(ClientOptions{})
 		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
 		if err != nil {
 			t.Errorf("invalid DSN should return nil, got %v", err)
@@ -481,7 +460,8 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 		}))
 		defer server.Close()
 
-		transport := NewSyncTransport(TransportOptions{
+		transport := NewSyncTransport()
+		transport.Configure(ClientOptions{
 			Dsn: "http://key@" + server.URL[7:] + "/123",
 		})
 		defer transport.Close()
@@ -503,9 +483,10 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 		defer server.Close()
 
 		recorder := report.NewAggregator()
-		transport := NewSyncTransport(TransportOptions{
+		transport := NewSyncTransport()
+		transport.Configure(ClientOptions{
 			Dsn:      "http://key@" + server.URL[7:] + "/123",
-			Recorder: recorder,
+			recorder: recorder,
 		})
 
 		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
@@ -559,8 +540,9 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 		}
 		for _, tt := range tests {
 			recorder := report.NewAggregator()
-			transport := NewSyncTransport(TransportOptions{
-				Dsn: "https://key@sentry.io/123", Recorder: recorder, HTTPTransport: tt.roundTrip,
+			transport := NewSyncTransport()
+			transport.Configure(ClientOptions{
+				Dsn: "https://key@sentry.io/123", recorder: recorder, HTTPTransport: tt.roundTrip,
 			})
 
 			// The transport records losses of accepted envelopes itself.
@@ -576,7 +558,8 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 }
 
 func TestSyncTransport_Flush(t *testing.T) {
-	transport := NewSyncTransport(TransportOptions{})
+	transport := NewSyncTransport()
+	transport.Configure(ClientOptions{})
 
 	if !transport.Flush(testutils.FlushTimeout()) {
 		t.Error("Flush should always succeed")
@@ -628,25 +611,19 @@ func TestKeepAlive(t *testing.T) {
 			rt := &httptraceRoundTripper{}
 			dsn := "http://key@" + server.URL[7:] + "/123"
 
-			var transport interface {
-				SendEnvelope(*protocol.Envelope) error
-				Flush(time.Duration) bool
-				Close()
-			}
+			var transport Transport
 
 			if tt.async {
-				tr := NewAsyncTransport(TransportOptions{
+				asyncTransport := NewAsyncTransport()
+				asyncTransport.Configure(ClientOptions{
 					Dsn:           dsn,
 					HTTPTransport: rt,
 				})
-				asyncTransport, ok := tr.(*AsyncTransport)
-				if !ok {
-					t.Fatalf("expected *AsyncTransport")
-				}
 				defer asyncTransport.Close()
 				transport = asyncTransport
 			} else {
-				transport = NewSyncTransport(TransportOptions{
+				transport = NewSyncTransport()
+				transport.Configure(ClientOptions{
 					Dsn:           dsn,
 					HTTPTransport: rt,
 				})
@@ -706,22 +683,16 @@ func TestConcurrentAccess(t *testing.T) {
 
 			dsn := "http://key@" + server.URL[7:] + "/123"
 
-			var transport interface {
-				SendEnvelope(*protocol.Envelope) error
-				Flush(time.Duration) bool
-				Close()
-			}
+			var transport Transport
 
 			if tt.async {
-				tr := NewAsyncTransport(TransportOptions{Dsn: dsn})
-				asyncTransport, ok := tr.(*AsyncTransport)
-				if !ok {
-					t.Fatalf("expected *AsyncTransport")
-				}
+				asyncTransport := NewAsyncTransport()
+				asyncTransport.Configure(ClientOptions{Dsn: dsn})
 				defer asyncTransport.Close()
 				transport = asyncTransport
 			} else {
-				transport = NewSyncTransport(TransportOptions{Dsn: dsn})
+				transport = NewSyncTransport()
+				transport.Configure(ClientOptions{Dsn: dsn})
 			}
 
 			var wg sync.WaitGroup
@@ -744,13 +715,13 @@ func TestConcurrentAccess(t *testing.T) {
 func TestTransportConfiguration(t *testing.T) {
 	tests := []struct {
 		name     string
-		options  TransportOptions
+		options  ClientOptions
 		async    bool
 		validate func(*testing.T, interface{})
 	}{
 		{
 			name: "HTTPProxy",
-			options: TransportOptions{
+			options: ClientOptions{
 				Dsn:       "https://key@sentry.io/123",
 				HTTPProxy: "http://proxy:8080",
 			},
@@ -777,7 +748,7 @@ func TestTransportConfiguration(t *testing.T) {
 		},
 		{
 			name: "HTTPSProxy",
-			options: TransportOptions{
+			options: ClientOptions{
 				Dsn:        "https://key@sentry.io/123",
 				HTTPSProxy: "https://secure-proxy:8443",
 			},
@@ -801,7 +772,7 @@ func TestTransportConfiguration(t *testing.T) {
 		},
 		{
 			name: "CustomHTTPTransport",
-			options: TransportOptions{
+			options: ClientOptions{
 				Dsn:           "https://key@sentry.io/123",
 				HTTPTransport: &http.Transport{},
 				HTTPProxy:     "http://proxy:8080",
@@ -816,7 +787,7 @@ func TestTransportConfiguration(t *testing.T) {
 		},
 		{
 			name: "CaCerts",
-			options: TransportOptions{
+			options: ClientOptions{
 				Dsn:     "https://key@sentry.io/123",
 				CaCerts: x509.NewCertPool(),
 			},
@@ -837,7 +808,7 @@ func TestTransportConfiguration(t *testing.T) {
 		},
 		{
 			name: "AsyncTransport defaults",
-			options: TransportOptions{
+			options: ClientOptions{
 				Dsn: "https://key@sentry.io/123",
 			},
 			async: true,
@@ -853,7 +824,7 @@ func TestTransportConfiguration(t *testing.T) {
 		},
 		{
 			name: "SyncTransport defaults",
-			options: TransportOptions{
+			options: ClientOptions{
 				Dsn: "https://key@sentry.io/123",
 			},
 			async: false,
@@ -869,11 +840,13 @@ func TestTransportConfiguration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.async {
-				transport := NewAsyncTransport(tt.options)
+				transport := NewAsyncTransport()
+				transport.Configure(tt.options)
 				defer transport.Close()
 				tt.validate(t, transport)
 			} else {
-				transport := NewSyncTransport(tt.options)
+				transport := NewSyncTransport()
+				transport.Configure(tt.options)
 				tt.validate(t, transport)
 			}
 		})
@@ -883,7 +856,8 @@ func TestTransportConfiguration(t *testing.T) {
 func TestAsyncTransportDoesntLeakGoroutines(t *testing.T) {
 	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
 
-	tr := NewAsyncTransport(TransportOptions{
+	transport := NewAsyncTransport()
+	transport.Configure(ClientOptions{
 		Dsn: "https://test@foobar/1",
 		HTTPClient: &http.Client{
 			Transport: &http.Transport{
@@ -893,10 +867,6 @@ func TestAsyncTransportDoesntLeakGoroutines(t *testing.T) {
 			},
 		},
 	})
-	transport, ok := tr.(*AsyncTransport)
-	if !ok {
-		t.Fatalf("expected *AsyncTransport")
-	}
 
 	_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
 	transport.Flush(testutils.FlushTimeout())

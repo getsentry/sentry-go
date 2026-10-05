@@ -701,9 +701,8 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 func Test_batchLogger_Shutdown(t *testing.T) {
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
-		Dsn:                    testDsn,
-		Transport:              mockTransport,
-		DisableTelemetryBuffer: true,
+		Dsn:       testDsn,
+		Transport: mockTransport,
 	})
 	ctx, _ := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, mockClient)
@@ -712,7 +711,7 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 		l.Info().WithCtx(ctx).Emit("test")
 	}
 
-	mockClient.batchLogger.Shutdown()
+	mockClient.Close()
 
 	events := mockTransport.Events()
 	if len(events) != 1 {
@@ -725,8 +724,8 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 	mockTransport.events = nil
 
 	// Test that shutdown can be called multiple times safely
-	mockClient.batchLogger.Shutdown()
-	mockClient.batchLogger.Shutdown()
+	mockClient.Close()
+	mockClient.Close()
 
 	events = mockTransport.Events()
 	if len(events) != 0 {
@@ -778,12 +777,10 @@ func Test_Logger_ExceedBatchSize(t *testing.T) {
 		l.Info().Emit("test")
 	}
 
-	// sleep to wait for events to propagate
-	time.Sleep(20 * time.Millisecond)
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected only one event with 100 logs, got %d", len(events))
-	}
+	assert.Eventually(t, func() bool {
+		events := mockTransport.Events()
+		return len(events) == 1 && len(events[0].Logs) == 100
+	}, testutils.FlushTimeout(), time.Millisecond, "expected one batch with 100 logs")
 }
 
 func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {

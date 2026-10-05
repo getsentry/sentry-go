@@ -284,7 +284,7 @@ func (s *Scheduler) envelopeConvertibles(category ratelimit.Category, items []It
 	}
 }
 
-func (s *Scheduler) sendItem(item EnvelopeConvertible) {
+func (s *Scheduler) sendItem(item EnvelopeConvertible) bool {
 	header := &protocol.EnvelopeHeader{
 		EventID: item.GetEventID(),
 		SentAt:  time.Now(),
@@ -303,9 +303,9 @@ func (s *Scheduler) sendItem(item EnvelopeConvertible) {
 	if err != nil {
 		debuglog.Printf("error while converting to envelope: %v", err)
 		s.recorder.RecordItem(report.ReasonInternalError, item)
-		return
+		return false
 	}
-	s.sendEnvelope(envelope)
+	return s.sendEnvelope(envelope)
 }
 
 func (s *Scheduler) sendEnvelope(envelope *protocol.Envelope) bool {
