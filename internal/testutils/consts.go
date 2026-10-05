@@ -1,6 +1,7 @@
 package testutils
 
 import (
+	"context"
 	"os"
 	"time"
 )
@@ -16,4 +17,11 @@ func FlushTimeout() time.Duration {
 	}
 
 	return time.Second
+}
+
+// FlushWithTimeout flushes f, waiting for at most timeout.
+func FlushWithTimeout(f interface{ FlushWithContext(context.Context) bool }, timeout time.Duration) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return f.FlushWithContext(ctx)
 }

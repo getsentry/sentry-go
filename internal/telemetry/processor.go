@@ -31,18 +31,29 @@ func NewProcessor(
 	}
 }
 
-// Add adds a TelemetryItem to the appropriate buffer based on its category.
+// Add buffers item if its category has a buffer and otherwise sends it inline.
 //
 // The processor should call MakeSerializationSafe to eliminate any race on user mutable fields,
 // since the serialization happens on a background goroutine.
-func (b *Processor) Add(item Item) bool {
+func (b *Processor) Add(ctx context.Context, item Item) bool {
 	item.MakeSerializationSafe()
-	return b.scheduler.Add(item)
-}
-
-// Flush forces all buffers to flush within the given timeout.
-func (b *Processor) Flush(timeout time.Duration) bool {
-	return b.scheduler.Flush(timeout)
+	if _, buffered := b.scheduler.buffers[item.GetCategory()]; buffered {
+		return b.scheduler.Add(item)
+	}
+	// Unbuffered categories (synchronous delivery) are sent inline.
+	if b.scheduler.isClosed() {
+		return false
+	}
+	convertible, ok := item.(EnvelopeConvertible)
+	if !ok {
+		b.scheduler.recorder.RecordItem(report.ReasonInternalError, item)
+		return false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// A finished request must not cancel delivery of its own events
+	return b.scheduler.sendItem(context.WithoutCancel(ctx), convertible, false)
 }
 
 // FlushWithContext flushes with a custom context for cancellation.

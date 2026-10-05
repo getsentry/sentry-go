@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
@@ -23,9 +22,8 @@ import (
 const (
 	apiVersion = 7
 
-	defaultTimeout           = time.Second * 30
-	defaultQueueSize         = 1000
-	defaultClientReportsTick = time.Second * 30
+	defaultTimeout    = time.Second * 30
+	defaultBufferSize = 1000
 )
 
 var (
@@ -34,16 +32,24 @@ var (
 	ErrInvalidEnvelope    = errors.New("invalid envelope: missing header or items")
 )
 
-type TransportOptions struct {
-	Dsn           string
-	HTTPClient    *http.Client
-	HTTPTransport http.RoundTripper
-	HTTPProxy     string
-	HTTPSProxy    string
-	CaCerts       *x509.CertPool
-	Recorder      report.ClientReportRecorder
-	Provider      report.ClientReportProvider
-	SdkInfo       func() *protocol.SdkInfo
+// Transport delivers envelopes prepared by the telemetry processor.
+// Implementations may send immediately or enqueue envelopes for delivery and
+// must be safe for concurrent use.
+type Transport interface {
+	// Configure initializes the transport before use. NewClient calls it once
+	// with resolved options; wrappers must forward it to their transport.
+	Configure(options ClientOptions)
+	// SendEnvelope returns an error only when rejecting an envelope. The caller
+	// records rejected items; built-in transports record losses after acceptance.
+	// A nil error does not guarantee delivery. Implementations must return
+	// promptly once ctx is done.
+	SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error
+	// FlushWithContext waits for pending delivery attempts until ctx is canceled.
+	// It must return false if ctx is done before they complete, including
+	// attempts that SendEnvelope made inline with the same ctx.
+	FlushWithContext(ctx context.Context) bool
+	// Close releases transport resources.
+	Close()
 }
 
 func getProxyConfig(httpProxy, httpsProxy string) func(*http.Request) (*url.URL, error) {
@@ -62,7 +68,7 @@ func getProxyConfig(httpProxy, httpsProxy string) func(*http.Request) (*url.URL,
 	return http.ProxyFromEnvironment
 }
 
-func getTLSConfig(options TransportOptions) *tls.Config {
+func getTLSConfig(options ClientOptions) *tls.Config {
 	if options.CaCerts != nil {
 		return &tls.Config{
 			RootCAs:    options.CaCerts,
@@ -141,6 +147,13 @@ func categoryFromEnvelope(envelope *protocol.Envelope) ratelimit.Category {
 	return ratelimit.CategoryAll
 }
 
+// markSyncDelivery tells the configuring client that events must be sent inline.
+func (o ClientOptions) markSyncDelivery() {
+	if o.syncDelivery != nil {
+		*o.syncDelivery = true
+	}
+}
+
 func validEnvelope(envelope *protocol.Envelope) bool {
 	if envelope == nil || envelope.Header == nil || len(envelope.Items) == 0 {
 		return false
@@ -153,35 +166,27 @@ func validEnvelope(envelope *protocol.Envelope) bool {
 	return true
 }
 
-// httpSender holds the delivery state shared by SyncTransport and AsyncTransport.
+// httpSender holds the delivery state shared by HTTPSyncTransport and HTTPTransport.
 type httpSender struct {
 	dsn       *protocol.Dsn
 	client    *http.Client
 	transport http.RoundTripper
 	recorder  report.ClientReportRecorder
-	provider  report.ClientReportProvider
-	sdkInfo   func() *protocol.SdkInfo
 
 	mu     sync.RWMutex
 	limits ratelimit.Map
 }
 
-func newHTTPSender(dsn *protocol.Dsn, options TransportOptions, timeout time.Duration) *httpSender {
-	recorder := options.Recorder
+func newHTTPSender(dsn *protocol.Dsn, options ClientOptions, timeout time.Duration) *httpSender {
+	recorder := options.recorder
 	if recorder == nil {
 		recorder = report.NoopRecorder()
-	}
-	provider := options.Provider
-	if provider == nil {
-		provider = report.NoopProvider()
 	}
 
 	sender := &httpSender{
 		limits:   make(ratelimit.Map),
 		dsn:      dsn,
 		recorder: recorder,
-		provider: provider,
-		sdkInfo:  options.SdkInfo,
 	}
 
 	if options.HTTPTransport != nil {
@@ -205,9 +210,9 @@ func newHTTPSender(dsn *protocol.Dsn, options TransportOptions, timeout time.Dur
 	return sender
 }
 
-// SyncTransport is a blocking implementation of Transport.
+// HTTPSyncTransport is a blocking implementation of Transport.
 //
-// Clients using this transport will send requests to Sentry sequentially and
+// Clients using this transport will send requests to Sentry and
 // block until a response is returned.
 //
 // The blocking behavior is useful in a limited set of use cases. For example,
@@ -215,37 +220,50 @@ func newHTTPSender(dsn *protocol.Dsn, options TransportOptions, timeout time.Dur
 // platform, where any work happening in a background goroutine is not
 // guaranteed to execute.
 //
-// For most cases, prefer AsyncTransport.
-type SyncTransport struct {
+// For most cases, prefer HTTPTransport.
+type HTTPSyncTransport struct {
 	*httpSender
+
+	// ctx bounds in-flight requests and is canceled by Close.
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	Timeout time.Duration
 }
 
-func NewSyncTransport(options TransportOptions) telemetry.Transport {
+// NewHTTPSyncTransport creates a blocking HTTP transport.
+func NewHTTPSyncTransport() *HTTPSyncTransport {
+	return &HTTPSyncTransport{Timeout: defaultTimeout}
+}
+
+// Configure initializes the transport with the client's options before use.
+func (t *HTTPSyncTransport) Configure(options ClientOptions) {
+	options.markSyncDelivery()
+	t.ctx, t.cancel = context.WithCancel(context.Background())
 	dsn, err := protocol.NewDsn(options.Dsn)
+	t.httpSender = newHTTPSender(dsn, options, t.Timeout)
 	if err != nil || dsn == nil {
-		debuglog.Printf("Transport is disabled: invalid dsn: %v\n", err)
-		return NewNoopTransport()
+		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)
 	}
-
-	transport := &SyncTransport{
-		httpSender: newHTTPSender(dsn, options, defaultTimeout),
-		Timeout:    defaultTimeout,
-	}
-
-	return transport
 }
 
-func (t *SyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
-	return t.SendEnvelopeWithContext(context.Background(), envelope)
+// Close cancels in-flight requests and rejects later sends.
+func (t *HTTPSyncTransport) Close() {
+	if t.cancel != nil {
+		t.cancel()
+	}
 }
 
-func (t *SyncTransport) Close() {}
-
-func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *protocol.Envelope) error {
+func (t *HTTPSyncTransport) SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error {
+	if t.httpSender == nil || t.dsn == nil {
+		return nil
+	}
+	if t.ctx.Err() != nil {
+		return ErrTransportClosed
+	}
 	ctx, cancel := context.WithTimeout(ctx, t.Timeout)
 	defer cancel()
+	defer context.AfterFunc(t.ctx, cancel)()
 
 	if !validEnvelope(envelope) {
 		return ErrInvalidEnvelope
@@ -261,20 +279,20 @@ func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *p
 	return nil
 }
 
-func (t *SyncTransport) Flush(_ time.Duration) bool {
-	return true
+// FlushWithContext reports whether ctx is still live.
+//
+// Sends block on the sync transport, so when ctx deadline is reached, it
+// indicates that Flush did not succeed.
+func (t *HTTPSyncTransport) FlushWithContext(ctx context.Context) bool {
+	return ctx.Err() == nil
 }
 
-func (t *SyncTransport) FlushWithContext(_ context.Context) bool {
-	return true
-}
-
-// AsyncTransport is the default, non-blocking, implementation of Transport.
+// HTTPTransport is the default, non-blocking, implementation of Transport.
 //
 // Clients using this transport will enqueue requests in a queue and return to
 // the caller before any network communication has happened. Requests are sent
 // to Sentry sequentially from a background goroutine.
-type AsyncTransport struct {
+type HTTPTransport struct {
 	*httpSender
 
 	queue chan *protocol.Envelope
@@ -289,8 +307,10 @@ type AsyncTransport struct {
 
 	closeMu sync.RWMutex
 
-	QueueSize int
-	Timeout   time.Duration
+	// Size of the transport buffer, in envelopes. Defaults to 1000.
+	BufferSize int
+	// HTTP Client request timeout. Defaults to 30 seconds.
+	Timeout time.Duration
 
 	startOnce sync.Once
 	closeOnce sync.Once
@@ -301,34 +321,33 @@ type flushRequest struct {
 	done chan struct{}
 }
 
-func NewAsyncTransport(options TransportOptions) telemetry.Transport {
-	dsn, err := protocol.NewDsn(options.Dsn)
-	if err != nil || dsn == nil {
-		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)
-		return NewNoopTransport()
-	}
-
-	transport := &AsyncTransport{
-		httpSender: newHTTPSender(dsn, options, defaultTimeout),
-		QueueSize:  defaultQueueSize,
+// NewHTTPTransport creates an asynchronous HTTP transport with a bounded queue.
+// NewClient configures it before use.
+func NewHTTPTransport() *HTTPTransport {
+	return &HTTPTransport{
+		BufferSize: defaultBufferSize,
 		Timeout:    defaultTimeout,
-		done:       make(chan struct{}),
 	}
-
-	transport.queue = make(chan *protocol.Envelope, transport.QueueSize)
-	transport.flushRequest = make(chan flushRequest)
-
-	transport.start()
-	return transport
 }
 
-func (t *AsyncTransport) start() {
+// Configure initializes the transport with the client's options before use.
+func (t *HTTPTransport) Configure(options ClientOptions) {
+	t.done = make(chan struct{})
+	dsn, err := protocol.NewDsn(options.Dsn)
+	t.httpSender = newHTTPSender(dsn, options, t.Timeout)
+	if err != nil || dsn == nil {
+		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)
+		return
+	}
+	t.queue = make(chan *protocol.Envelope, t.BufferSize)
+	t.flushRequest = make(chan flushRequest)
+	t.start()
+}
+
+func (t *HTTPTransport) start() {
 	t.startOnce.Do(func() {
 		if t.recorder == nil {
 			t.recorder = report.NoopRecorder()
-		}
-		if t.provider == nil {
-			t.provider = report.NoopProvider()
 		}
 		t.ctx, t.cancel = context.WithCancel(context.Background())
 		t.wg.Add(1)
@@ -336,7 +355,11 @@ func (t *AsyncTransport) start() {
 	})
 }
 
-func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
+// SendEnvelope enqueues envelope without waiting for queue space.
+func (t *HTTPTransport) SendEnvelope(_ context.Context, envelope *protocol.Envelope) error {
+	if t.httpSender == nil || t.dsn == nil {
+		return nil
+	}
 	t.closeMu.RLock()
 	defer t.closeMu.RUnlock()
 
@@ -374,29 +397,32 @@ func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
 	}
 }
 
-func (t *AsyncTransport) Flush(timeout time.Duration) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return t.FlushWithContext(ctx)
-}
-
-func (t *AsyncTransport) FlushWithContext(ctx context.Context) bool {
+func (t *HTTPTransport) FlushWithContext(ctx context.Context) bool {
+	if t.httpSender == nil || t.dsn == nil {
+		return true
+	}
 	t.closeMu.RLock()
 	defer t.closeMu.RUnlock()
 
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || t.ctx.Err() != nil {
 		return false
 	}
 	flushResponse := make(chan struct{})
 	select {
-	case <-t.done:
+	case <-t.ctx.Done():
 		debuglog.Println("Failed to flush, transport is closed.")
 		return false
 	case t.flushRequest <- flushRequest{ctx: ctx, done: flushResponse}:
 		select {
 		case <-flushResponse:
+			if ctx.Err() != nil || t.ctx.Err() != nil {
+				return false
+			}
 			debuglog.Println("Buffer flushed successfully.")
-			return ctx.Err() == nil
+			return true
+		case <-t.ctx.Done():
+			debuglog.Println("Failed to flush, transport is closed.")
+			return false
 		case <-ctx.Done():
 			debuglog.Println("Failed to flush, buffer timed out.")
 			return false
@@ -407,36 +433,28 @@ func (t *AsyncTransport) FlushWithContext(ctx context.Context) bool {
 	}
 }
 
-func (t *AsyncTransport) Close() {
+func (t *HTTPTransport) Close() {
 	t.closeOnce.Do(func() {
-		t.cancel()
+		if t.cancel != nil {
+			t.cancel()
+		}
 		t.closeMu.Lock()
 		defer t.closeMu.Unlock()
 
-		close(t.done)
+		if t.done != nil {
+			close(t.done)
+		}
 		t.wg.Wait()
 	})
 }
 
-func (t *AsyncTransport) resolveSdkInfo() *protocol.SdkInfo {
-	if t.sdkInfo == nil {
-		return &protocol.SdkInfo{}
-	}
-	return t.sdkInfo()
-}
-
-func (t *AsyncTransport) worker() {
+func (t *HTTPTransport) worker() {
 	defer t.wg.Done()
 
-	crTicker := time.NewTicker(defaultClientReportsTick)
-	defer crTicker.Stop()
-
-	for {
+	for t.ctx.Err() == nil {
 		select {
-		case <-t.done:
+		case <-t.ctx.Done():
 			return
-		case <-crTicker.C:
-			t.sendClientReport()
 		case envelope, open := <-t.queue:
 			if !open {
 				return
@@ -452,46 +470,8 @@ func (t *AsyncTransport) worker() {
 	}
 }
 
-// sendClientReport sends a standalone envelope containing only a client report.
-func (t *AsyncTransport) sendClientReport() {
-	r := t.provider.TakeReport()
-	if r == nil {
-		return
-	}
-	item, err := r.ToEnvelopeItem()
-	if err != nil {
-		debuglog.Printf("Failed to serialize client report: %v", err)
-		return
-	}
-	header := &protocol.EnvelopeHeader{
-		SentAt: time.Now(),
-		Dsn:    t.dsn,
-		Sdk:    t.resolveSdkInfo(),
-	}
-	envelope := protocol.NewEnvelope(header)
-	envelope.AddItem(item)
-
-	ctx, cancel := context.WithTimeout(t.ctx, t.Timeout)
-	defer cancel()
-
-	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
-	if err != nil {
-		debuglog.Printf("Failed to create client report request: %v", err)
-		return
-	}
-	result, err := util.DoSendRequest(t.client, request, "client report")
-	if err != nil {
-		debuglog.Printf("Failed to send client report: %v", err)
-		return
-	}
-
-	t.mu.Lock()
-	t.limits.Merge(result.Limits)
-	t.mu.Unlock()
-}
-
-func (t *AsyncTransport) drainQueue(ctx context.Context) {
-	for ctx.Err() == nil {
+func (t *HTTPTransport) drainQueue(ctx context.Context) {
+	for ctx.Err() == nil && t.ctx.Err() == nil {
 		select {
 		case envelope, open := <-t.queue:
 			if !open {
@@ -504,27 +484,24 @@ func (t *AsyncTransport) drainQueue(ctx context.Context) {
 	}
 }
 
-func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool { //nolint: unparam
+func (t *HTTPTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) {
 	ctx, cancel := context.WithTimeout(t.ctx, t.Timeout)
 	defer cancel()
-	return t.send(ctx, envelope)
+	t.send(ctx, envelope)
 }
 
 // send records every loss of an accepted envelope.
-func (s *httpSender) send(ctx context.Context, envelope *protocol.Envelope) bool {
+func (s *httpSender) send(ctx context.Context, envelope *protocol.Envelope) {
 	category := categoryFromEnvelope(envelope)
 	if s.isRateLimited(category) {
 		s.recorder.RecordForEnvelope(report.ReasonRateLimitBackoff, envelope)
-		return false
+		return
 	}
-	// attach to envelope after rate-limit check
-	s.provider.AttachToEnvelope(envelope)
-
 	request, err := getSentryRequestFromEnvelope(ctx, s.dsn, envelope)
 	if err != nil {
 		debuglog.Printf("Failed to create request from envelope: %v", err)
 		s.recorder.RecordForEnvelope(report.ReasonInternalError, envelope)
-		return false
+		return
 	}
 
 	identifier := util.EnvelopeIdentifier(envelope)
@@ -532,7 +509,7 @@ func (s *httpSender) send(ctx context.Context, envelope *protocol.Envelope) bool
 	if err != nil {
 		debuglog.Printf("HTTP request failed: %v", err)
 		s.recorder.RecordForEnvelope(report.ReasonNetworkError, envelope)
-		return false
+		return
 	}
 	if result.IsSendError() {
 		s.recorder.RecordForEnvelope(report.ReasonSendError, envelope)
@@ -541,8 +518,6 @@ func (s *httpSender) send(ctx context.Context, envelope *protocol.Envelope) bool
 	s.mu.Lock()
 	s.limits.Merge(result.Limits)
 	s.mu.Unlock()
-
-	return result.Success
 }
 
 func (s *httpSender) isRateLimited(category ratelimit.Category) bool {
@@ -564,13 +539,11 @@ func NewNoopTransport() *NoopTransport {
 	return &NoopTransport{}
 }
 
-func (t *NoopTransport) SendEnvelope(_ *protocol.Envelope) error {
+func (t *NoopTransport) Configure(_ ClientOptions) {}
+
+func (t *NoopTransport) SendEnvelope(_ context.Context, _ *protocol.Envelope) error {
 	debuglog.Println("Envelope dropped due to NoopTransport usage.")
 	return nil
-}
-
-func (t *NoopTransport) Flush(_ time.Duration) bool {
-	return true
 }
 
 func (t *NoopTransport) FlushWithContext(_ context.Context) bool {

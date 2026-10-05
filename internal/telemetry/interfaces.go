@@ -3,7 +3,6 @@ package telemetry
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/protocol"
@@ -42,16 +41,13 @@ var ErrQueueFull = errors.New("transport queue full")
 
 // Transport represents the envelope-first transport interface.
 // This interface is designed for the telemetry buffer system and provides
-// non-blocking sends with backpressure signals.
+// sends with backpressure signals.
 type Transport interface {
-	// SendEnvelope sends an envelope to Sentry. Returns immediately with
-	// backpressure error if the queue is full.
-	SendEnvelope(envelope *protocol.Envelope) error
+	// SendEnvelope sends an envelope to Sentry. Returns an error only if
+	// the envelope is rejected.
+	SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error
 
-	// Flush waits for all pending envelopes to be sent, with timeout
-	Flush(timeout time.Duration) bool
-
-	// FlushWithContext waits for all pending envelopes to be sent
+	// FlushWithContext waits for all pending envelopes to be sent.
 	FlushWithContext(ctx context.Context) bool
 
 	// Close shuts down the transport gracefully

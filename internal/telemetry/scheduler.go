@@ -8,7 +8,6 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
 )
@@ -36,6 +35,7 @@ type Scheduler struct {
 
 	mu         sync.Mutex
 	cond       *sync.Cond
+	closed     bool // guarded by mu
 	startOnce  sync.Once
 	finishOnce sync.Once
 }
@@ -115,10 +115,21 @@ func (s *Scheduler) Start() {
 
 func (s *Scheduler) Stop(timeout time.Duration) {
 	s.finishOnce.Do(func() {
-		s.Flush(timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
 
+		// Reject new items
+		s.mu.Lock()
+		s.closed = true
+		s.mu.Unlock()
+
+		s.FlushWithContext(ctx)
+
+		// Cancel under s.mu
+		s.mu.Lock()
 		s.cancel()
 		s.cond.Broadcast()
+		s.mu.Unlock()
 
 		done := make(chan struct{})
 		go func() {
@@ -128,10 +139,16 @@ func (s *Scheduler) Stop(timeout time.Duration) {
 
 		select {
 		case <-done:
-		case <-time.After(timeout):
+		case <-ctx.Done():
 			debuglog.Printf("scheduler stop timed out after %v", timeout)
 		}
 	})
+}
+
+func (s *Scheduler) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
 }
 
 func (s *Scheduler) Signal() {
@@ -145,6 +162,12 @@ func (s *Scheduler) Add(item Item) bool {
 		return false
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return false
+	}
+
 	accepted := buffer.Offer(item)
 	if accepted {
 		s.Signal()
@@ -152,20 +175,21 @@ func (s *Scheduler) Add(item Item) bool {
 	return accepted
 }
 
-func (s *Scheduler) Flush(timeout time.Duration) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return s.FlushWithContext(ctx)
-}
-
 func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
+	select {
+	case s.processing <- struct{}{}:
+		defer func() { <-s.processing }()
+	case <-ctx.Done():
+		return false
+	}
+
 	if !s.flushBuffers(ctx) {
 		return false
 	}
 	if !s.transport.FlushWithContext(ctx) {
 		return false
 	}
-	if s.sendClientReport() {
+	if s.sendClientReport(ctx) {
 		return s.transport.FlushWithContext(ctx)
 	}
 	return true
@@ -174,7 +198,9 @@ func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
 func (s *Scheduler) run() {
 	defer s.processingWg.Done()
 
+	s.processingWg.Add(1)
 	go func() {
+		defer s.processingWg.Done()
 		ticker := time.NewTicker(100 * time.Millisecond)
 		reportTicker := time.NewTicker(clientReportInterval)
 		defer ticker.Stop()
@@ -185,7 +211,13 @@ func (s *Scheduler) run() {
 			case <-ticker.C:
 				s.cond.Broadcast()
 			case <-reportTicker.C:
-				s.sendClientReport()
+				select {
+				case s.processing <- struct{}{}:
+					s.sendClientReport(s.ctx)
+					<-s.processing
+				case <-s.ctx.Done():
+					return
+				}
 			case <-s.ctx.Done():
 				return
 			}
@@ -244,11 +276,11 @@ func (s *Scheduler) processNextBatch() {
 	}
 
 	if bufferToProcess != nil {
-		s.processItems(bufferToProcess, categoryToProcess, false)
+		s.processItems(s.ctx, bufferToProcess, categoryToProcess, false)
 	}
 }
 
-func (s *Scheduler) processItems(buffer Buffer[Item], category ratelimit.Category, force bool) {
+func (s *Scheduler) processItems(ctx context.Context, buffer Buffer[Item], category ratelimit.Category, force bool) {
 	var items []Item
 
 	if force {
@@ -262,7 +294,7 @@ func (s *Scheduler) processItems(buffer Buffer[Item], category ratelimit.Categor
 	}
 
 	for _, item := range s.envelopeConvertibles(category, items) {
-		s.sendItem(item)
+		s.sendItem(ctx, item, true)
 	}
 }
 
@@ -284,16 +316,14 @@ func (s *Scheduler) envelopeConvertibles(category ratelimit.Category, items []It
 	}
 }
 
-func (s *Scheduler) sendItem(item EnvelopeConvertible) {
+// sendItem converts the item to an envelope and attaches pending client reports.
+func (s *Scheduler) sendItem(ctx context.Context, item EnvelopeConvertible, wait bool) bool {
 	header := &protocol.EnvelopeHeader{
 		EventID: item.GetEventID(),
 		SentAt:  time.Now(),
 		Dsn:     s.dsn,
 		Trace:   item.GetDynamicSamplingContext(),
 		Sdk:     item.GetSdkInfo(),
-	}
-	if header.EventID == "" {
-		header.EventID = util.GenerateEventID()
 	}
 	if header.Sdk == nil {
 		header.Sdk = s.resolveSdkInfo()
@@ -303,53 +333,47 @@ func (s *Scheduler) sendItem(item EnvelopeConvertible) {
 	if err != nil {
 		debuglog.Printf("error while converting to envelope: %v", err)
 		s.recorder.RecordItem(report.ReasonInternalError, item)
-		return
-	}
-	s.sendEnvelope(envelope)
-}
-
-func (s *Scheduler) sendEnvelope(envelope *protocol.Envelope) bool {
-	if len(envelope.Items) == 0 {
 		return false
 	}
 	s.provider.AttachToEnvelope(envelope)
-	return s.sendPreparedEnvelope(envelope)
+	return s.sendEnvelope(ctx, envelope, wait)
 }
 
-func (s *Scheduler) sendPreparedEnvelope(envelope *protocol.Envelope) bool {
-	if err := s.transport.SendEnvelope(envelope); err != nil {
-		debuglog.Printf("error sending envelope: %v", err)
-		reason := report.ReasonSendError
-		if errors.Is(err, ErrQueueFull) {
-			reason = report.ReasonQueueOverflow
-		}
-		s.recorder.RecordForEnvelope(reason, envelope)
-		return false
+// sendEnvelope hands envelope to the transport.
+//
+// With wait, a queue-full rejection flushes the transport and retries once.
+func (s *Scheduler) sendEnvelope(ctx context.Context, envelope *protocol.Envelope, wait bool) bool {
+	err := s.transport.SendEnvelope(ctx, envelope)
+	if wait && errors.Is(err, ErrQueueFull) && s.transport.FlushWithContext(ctx) {
+		err = s.transport.SendEnvelope(ctx, envelope)
 	}
-	return true
+	if err == nil {
+		return true
+	}
+
+	debuglog.Printf("error sending envelope: %v", err)
+	reason := report.ReasonSendError
+	if errors.Is(err, ErrQueueFull) {
+		reason = report.ReasonQueueOverflow
+	}
+	s.recorder.RecordForEnvelope(reason, envelope)
+	return false
 }
 
 func (s *Scheduler) flushBuffers(ctx context.Context) bool {
-	select {
-	case s.processing <- struct{}{}:
-		defer func() { <-s.processing }()
-	case <-ctx.Done():
-		return false
-	}
-
 	for category, buffer := range s.buffers {
 		if ctx.Err() != nil {
 			return false
 		}
 		if !buffer.IsEmpty() {
-			s.processItems(buffer, category, true)
+			s.processItems(ctx, buffer, category, true)
 		}
 	}
 	return ctx.Err() == nil
 }
 
 // sendClientReport submits a standalone client report, if one is pending.
-func (s *Scheduler) sendClientReport() bool {
+func (s *Scheduler) sendClientReport(ctx context.Context) bool {
 	envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{
 		SentAt: time.Now(),
 		Dsn:    s.dsn,
@@ -359,5 +383,5 @@ func (s *Scheduler) sendClientReport() bool {
 	if len(envelope.Items) == 0 {
 		return false
 	}
-	return s.sendPreparedEnvelope(envelope)
+	return s.sendEnvelope(ctx, envelope, false)
 }
