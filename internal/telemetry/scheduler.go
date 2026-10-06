@@ -26,6 +26,9 @@ type Scheduler struct {
 	cancel       context.CancelFunc
 	processingWg sync.WaitGroup
 
+	// processing serializes buffer-to-transport handoffs and allows cancelable waits.
+	processing chan struct{}
+
 	mu         sync.Mutex
 	cond       *sync.Cond
 	startOnce  sync.Once
@@ -79,6 +82,7 @@ func NewScheduler(
 		currentCycle: currentCycle,
 		ctx:          ctx,
 		cancel:       cancel,
+		processing:   make(chan struct{}, 1),
 	}
 	s.cond = sync.NewCond(&s.mu)
 
@@ -145,7 +149,9 @@ func (s *Scheduler) Flush(timeout time.Duration) bool {
 }
 
 func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
-	s.flushBuffers()
+	if !s.flushBuffers(ctx) {
+		return false
+	}
 	return s.transport.FlushWithContext(ctx)
 }
 
@@ -193,6 +199,13 @@ func (s *Scheduler) hasWork() bool {
 }
 
 func (s *Scheduler) processNextBatch() {
+	select {
+	case s.processing <- struct{}{}:
+		defer func() { <-s.processing }()
+	case <-s.ctx.Done():
+		return
+	}
+
 	if len(s.currentCycle) == 0 {
 		return
 	}
@@ -290,12 +303,23 @@ func (s *Scheduler) sendItem(item protocol.EnvelopeConvertible) {
 	}
 }
 
-func (s *Scheduler) flushBuffers() {
+func (s *Scheduler) flushBuffers(ctx context.Context) bool {
+	select {
+	case s.processing <- struct{}{}:
+		defer func() { <-s.processing }()
+	case <-ctx.Done():
+		return false
+	}
+
 	for category, buffer := range s.buffers {
+		if ctx.Err() != nil {
+			return false
+		}
 		if !buffer.IsEmpty() {
 			s.processItems(buffer, category, true)
 		}
 	}
+	return ctx.Err() == nil
 }
 
 func (s *Scheduler) isRateLimited(category ratelimit.Category) bool {

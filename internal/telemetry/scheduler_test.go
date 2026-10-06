@@ -1,9 +1,14 @@
 package telemetry
 
 import (
+	"context"
 	"errors"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
@@ -225,6 +230,85 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			}
 		})
 	}
+}
+
+type blockingTelemetryTransport struct {
+	testutils.MockTelemetryTransport
+	sendStarted chan struct{}
+	resumeSend  chan struct{}
+}
+
+func (t *blockingTelemetryTransport) SendEnvelope(envelope *protocol.Envelope) error {
+	close(t.sendStarted)
+	<-t.resumeSend
+	return t.MockTelemetryTransport.SendEnvelope(envelope)
+}
+
+func TestTelemetrySchedulerFlushWaitsForInFlightBatch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		finish func(cancel context.CancelFunc, resume func())
+		want   bool
+	}{
+		{"sent", func(_ context.CancelFunc, resume func()) { resume() }, true},
+		{"canceled", func(cancel context.CancelFunc, _ func()) { cancel() }, false},
+		{"timed out", func(_ context.CancelFunc, _ func()) { time.Sleep(time.Second) }, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				transport := &blockingTelemetryTransport{
+					sendStarted: make(chan struct{}),
+					resumeSend:  make(chan struct{}),
+				}
+				buffer := NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
+				scheduler := NewScheduler(map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
+					ratelimit.CategoryError: buffer,
+				}, transport, &protocol.Dsn{}, nil, nil)
+				scheduler.Start()
+				resume := sync.OnceFunc(func() { close(transport.resumeSend) })
+				t.Cleanup(func() {
+					resume()
+					scheduler.Stop(testutils.FlushTimeout())
+				})
+
+				require.True(t, scheduler.Add(&testTelemetryItem{data: "in-flight"}))
+				<-transport.sendStarted
+				require.True(t, buffer.IsEmpty())
+
+				ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+				defer cancel()
+				flushed := make(chan bool, 2)
+				for range cap(flushed) {
+					go func() { flushed <- scheduler.FlushWithContext(ctx) }()
+				}
+				synctest.Wait()
+				require.Empty(t, flushed, "Flush returned before the batch reached the transport")
+
+				tt.finish(cancel, resume)
+				for range cap(flushed) {
+					require.Equal(t, tt.want, <-flushed)
+				}
+
+				resume()
+				require.True(t, scheduler.Flush(testutils.FlushTimeout()))
+				require.Equal(t, int64(1), transport.GetSendCount())
+			})
+		})
+	}
+}
+
+func TestTelemetrySchedulerFlushAlreadyCanceled(t *testing.T) {
+	t.Parallel()
+
+	transport := &testutils.MockTelemetryTransport{}
+	scheduler := NewScheduler(nil, transport, &protocol.Dsn{}, nil, nil)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.False(t, scheduler.FlushWithContext(ctx))
+	require.True(t, scheduler.Flush(testutils.FlushTimeout()))
 }
 
 func TestTelemetrySchedulerRateLimiting(t *testing.T) {
