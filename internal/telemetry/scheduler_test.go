@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -90,7 +91,7 @@ func TestNewTelemetryScheduler(t *testing.T) {
 		Version: "1.0.0",
 	}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	if scheduler == nil {
 		t.Fatal("Expected non-nil scheduler")
@@ -213,7 +214,7 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
 			buffers := tt.setupBuffers()
-			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 			tt.addItems(buffers)
 
@@ -266,7 +267,7 @@ func TestTelemetrySchedulerFlushWaitsForInFlightBatch(t *testing.T) {
 				buffer := NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
 				scheduler := NewScheduler(map[ratelimit.Category]Buffer[Item]{
 					ratelimit.CategoryError: buffer,
-				}, transport, &protocol.Dsn{}, nil, nil)
+				}, transport, &protocol.Dsn{}, nil, nil, nil)
 				scheduler.Start()
 				resume := sync.OnceFunc(func() { close(transport.resumeSend) })
 				t.Cleanup(func() {
@@ -304,7 +305,7 @@ func TestTelemetrySchedulerFlushAlreadyCanceled(t *testing.T) {
 	t.Parallel()
 
 	transport := &testutils.MockTelemetryTransport{}
-	scheduler := NewScheduler(nil, transport, &protocol.Dsn{}, nil, nil)
+	scheduler := NewScheduler(nil, transport, &protocol.Dsn{}, nil, nil, nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	require.False(t, scheduler.FlushWithContext(ctx))
@@ -322,7 +323,7 @@ func TestTelemetrySchedulerStartStop(t *testing.T) {
 	// no log buffer used in simplified scheduler tests
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	scheduler.Start()
 	scheduler.Start()
@@ -349,7 +350,7 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
 
 	scheduler.Start()
 
@@ -369,6 +370,77 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Error("Scheduler stop took too long")
+	}
+}
+
+func TestTelemetrySchedulerClientReportDelivery(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name       string
+		telemetry  bool
+		pending    bool
+		standalone bool
+	}{
+		{name: "empty envelope"},
+		{name: "empty envelope preserves pending report", pending: true},
+		{name: "telemetry without report", telemetry: true},
+		{name: "telemetry with report", telemetry: true, pending: true},
+		{name: "standalone without report", standalone: true},
+		{name: "standalone with report", standalone: true, pending: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			transport := &testutils.MockTelemetryTransport{}
+			recorder := reportpkg.NewAggregator()
+			want := []reportpkg.DiscardedEvent{{Reason: reportpkg.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 2}}
+			if tt.pending {
+				recorder.Record(reportpkg.ReasonBeforeSend, ratelimit.CategoryError, 2)
+			}
+			scheduler := NewScheduler(nil, transport, &protocol.Dsn{}, nil, recorder, recorder)
+			t.Cleanup(scheduler.cancel)
+
+			var sent bool
+			if tt.standalone {
+				sent = scheduler.sendClientReport()
+			} else {
+				envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{})
+				if tt.telemetry {
+					envelope.AddItem(protocol.NewTransactionItem(0, []byte(`{}`)))
+				}
+				sent = scheduler.sendEnvelope(envelope)
+			}
+
+			wantSent := tt.telemetry || (tt.standalone && tt.pending)
+			require.Equal(t, wantSent, sent)
+			envelopes := transport.GetSentEnvelopes()
+			if !wantSent {
+				require.Empty(t, envelopes)
+				if tt.pending {
+					pending := recorder.TakeReport()
+					require.NotNil(t, pending)
+					require.Equal(t, want, pending.DiscardedEvents)
+				}
+				return
+			}
+
+			require.Len(t, envelopes, 1)
+			items := envelopes[0].Items
+			if tt.telemetry {
+				require.Equal(t, protocol.EnvelopeItemTypeTransaction, items[0].Header.Type)
+				items = items[1:]
+			}
+			if tt.pending {
+				require.Len(t, items, 1)
+				require.Equal(t, protocol.EnvelopeItemTypeClientReport, items[0].Header.Type)
+				var clientReport reportpkg.ClientReport
+				require.NoError(t, json.Unmarshal(items[0].Payload, &clientReport))
+				require.Equal(t, want, clientReport.DiscardedEvents)
+			} else {
+				require.Empty(t, items)
+			}
+			require.Nil(t, recorder.TakeReport())
+		})
 	}
 }
 

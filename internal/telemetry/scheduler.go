@@ -46,14 +46,13 @@ func NewScheduler(
 	dsn *protocol.Dsn,
 	sdkInfo func() *protocol.SdkInfo,
 	recorder report.ClientReportRecorder,
-	providers ...report.ClientReportProvider,
+	provider report.ClientReportProvider,
 ) *Scheduler {
 	if recorder == nil {
 		recorder = report.NoopRecorder()
 	}
-	provider := report.NoopProvider()
-	if len(providers) > 0 && providers[0] != nil {
-		provider = providers[0]
+	if provider == nil {
+		provider = report.NoopProvider()
 	}
 
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118: cancel is stored in s.cancel and called in Shutdown()
@@ -310,10 +309,14 @@ func (s *Scheduler) sendItem(item EnvelopeConvertible) {
 }
 
 func (s *Scheduler) sendEnvelope(envelope *protocol.Envelope) bool {
-	s.provider.AttachToEnvelope(envelope)
 	if len(envelope.Items) == 0 {
 		return false
 	}
+	s.provider.AttachToEnvelope(envelope)
+	return s.sendPreparedEnvelope(envelope)
+}
+
+func (s *Scheduler) sendPreparedEnvelope(envelope *protocol.Envelope) bool {
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)
 		reason := report.ReasonSendError
@@ -347,9 +350,14 @@ func (s *Scheduler) flushBuffers(ctx context.Context) bool {
 
 // sendClientReport submits a standalone client report, if one is pending.
 func (s *Scheduler) sendClientReport() bool {
-	return s.sendEnvelope(protocol.NewEnvelope(&protocol.EnvelopeHeader{
+	envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{
 		SentAt: time.Now(),
 		Dsn:    s.dsn,
 		Sdk:    s.resolveSdkInfo(),
-	}))
+	})
+	s.provider.AttachToEnvelope(envelope)
+	if len(envelope.Items) == 0 {
+		return false
+	}
+	return s.sendPreparedEnvelope(envelope)
 }
