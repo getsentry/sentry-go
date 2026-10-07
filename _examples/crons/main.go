@@ -42,6 +42,21 @@ func runTask(monitorSlug string, duration time.Duration, shouldFail bool) {
 	fmt.Printf("Task finished: %s; Status: %s\n", task, status)
 }
 
+// runMonitoredTask does the same as runTask using sentry.WithMonitor, which
+// sends the in_progress and final check-ins around the job and creates or
+// updates the monitor from the given config.
+func runMonitoredTask(monitorSlug string, duration time.Duration) {
+	err := sentry.WithMonitor(monitorSlug, &sentry.MonitorConfig{
+		Schedule:      sentry.CrontabSchedule("* * * * *"),
+		MaxRuntime:    2,
+		CheckInMargin: 1,
+	}, func() error {
+		time.Sleep(duration)
+		return nil
+	})
+	fmt.Printf("Task finished: monitor_slug=%s; err=%v\n", monitorSlug, err)
+}
+
 func main() {
 	_ = sentry.Init(sentry.ClientOptions{
 		Dsn:   "",
@@ -65,6 +80,16 @@ func main() {
 			go runTask("sentry-go-periodic-task-sometimes-fail", 2*time.Second, shouldFail)
 			time.Sleep(time.Minute)
 			shouldFail = !shouldFail
+		}
+	}()
+
+	time.Sleep(3 * time.Second)
+
+	// Start a task that runs every minute, wrapped with sentry.WithMonitor
+	go func() {
+		for {
+			go runMonitoredTask("sentry-go-periodic-task-with-monitor", time.Second)
+			time.Sleep(time.Minute)
 		}
 	}()
 

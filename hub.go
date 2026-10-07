@@ -275,6 +275,43 @@ func (hub *Hub) CaptureCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *
 	return client.CaptureCheckIn(checkIn, monitorConfig, scope)
 }
 
+// WithMonitor runs fn and reports its outcome as check-ins for the cron
+// monitor identified by monitorSlug.
+//
+// An in_progress check-in carrying monitorConfig is sent before fn runs. When
+// monitorConfig is not nil, Sentry creates the monitor if it does not exist,
+// or updates its configuration. After fn returns, an ok check-in is sent if
+// it returned nil, or an error check-in otherwise, along with the measured
+// duration. If fn panics, an error check-in is sent and the panic continues.
+//
+// The error returned by fn is returned unchanged.
+func (hub *Hub) WithMonitor(monitorSlug string, monitorConfig *MonitorConfig, fn func() error) error {
+	checkInID := hub.CaptureCheckIn(&CheckIn{
+		MonitorSlug: monitorSlug,
+		Status:      CheckInStatusInProgress,
+	}, monitorConfig)
+	start := time.Now()
+
+	status := CheckInStatusError
+	defer func() {
+		checkIn := &CheckIn{
+			MonitorSlug: monitorSlug,
+			Status:      status,
+			Duration:    time.Since(start),
+		}
+		if checkInID != nil {
+			checkIn.ID = *checkInID
+		}
+		hub.CaptureCheckIn(checkIn, nil)
+	}()
+
+	err := fn()
+	if err == nil {
+		status = CheckInStatusOK
+	}
+	return err
+}
+
 // AddBreadcrumb records a new breadcrumb.
 //
 // The total number of breadcrumbs that can be recorded are limited by the
