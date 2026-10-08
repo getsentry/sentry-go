@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
+	"slices"
 )
 
 func source(sourceKey string, r *slog.Record) slog.Attr {
@@ -27,12 +28,15 @@ func source(sourceKey string, r *slog.Record) slog.Attr {
 
 type replaceAttrFn = func(groups []string, a slog.Attr) slog.Attr
 
+// replaceAttrs rewrites attrs in place, so the caller must own the slice.
+// Groups are cloned first because they share the handler's stored attrs.
 func replaceAttrs(fn replaceAttrFn, groups []string, attrs ...slog.Attr) []slog.Attr {
 	for i := range attrs {
 		attr := attrs[i]
 		value := attr.Value.Resolve()
 		if value.Kind() == slog.KindGroup {
-			attrs[i].Value = slog.GroupValue(replaceAttrs(fn, append(groups, attr.Key), value.Group()...)...)
+			groupAttrs := slices.Clone(value.Group())
+			attrs[i].Value = slog.GroupValue(replaceAttrs(fn, append(groups, attr.Key), groupAttrs...)...)
 		} else if fn != nil {
 			attrs[i] = fn(groups, attr)
 		}
