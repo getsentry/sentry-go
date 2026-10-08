@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.50.0
+
+### Breaking Changes 🛠
+
+- adds NoopClient implementation. The SDK now returns a non-nil noop client and handles the previous nil checks with checking for a disabled client. Code paths that were using nil checks now need to check for `client.IsEnabled`. by @giortzisg in [#1365](https://github.com/getsentry/sentry-go/pull/1365)
+
+### New Features ✨
+
+#### Crons
+
+- Add `sentry.WithMonitor` and `Hub.WithMonitor` to wrap a job in cron check-ins and create or update the monitor from code. by @wedamija in [#1443](https://github.com/getsentry/sentry-go/pull/1443)
+- Add `sentrycron.AddFunc` to report robfig/cron jobs to Sentry Crons, using the job's spec as the monitor schedule. by @wedamija in [#1443](https://github.com/getsentry/sentry-go/pull/1443)
+- Docs: https://github.com/getsentry/sentry-docs/pull/19778 by @wedamija in [#1443](https://github.com/getsentry/sentry-go/pull/1443)
+
+### Bug Fixes 🐛
+
+- (dsn) Build envelope URL without re-parsing by @giortzisg in [#1436](https://github.com/getsentry/sentry-go/pull/1436)
+- (httpclient) Decouple span creation from trace propagation by @giortzisg in [#1421](https://github.com/getsentry/sentry-go/pull/1421)
+- (slog) Stop replaceAttrs from mutating the handler's grouped attrs by @breken-ai in [#1439](https://github.com/getsentry/sentry-go/pull/1439)
+- (zerolog) Unescape JSON string values before sending to Sentry by @breken-ai in [#1440](https://github.com/getsentry/sentry-go/pull/1440)
+- Guard concurrent flushes by @giortzisg in [#1449](https://github.com/getsentry/sentry-go/pull/1449)
+- Keep http.Hijacker when wrapping a response writer by @knQzx in [#1387](https://github.com/getsentry/sentry-go/pull/1387)
+
+### Internal Changes 🔧
+
+#### Deps
+
+- Bump getsentry/craft from 2.30.1 to 2.31.2 by @dependabot in [#1441](https://github.com/getsentry/sentry-go/pull/1441)
+- Bump getsentry/github-workflows/validate-pr from 4013fc6e1aeb1be1f9d3b4d232624f0ec1afa613 to 36c729264d2edc29ebae61950c50e1e9f043ad7e by @dependabot in [#1442](https://github.com/getsentry/sentry-go/pull/1442)
+- Bump go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp from 1.43.0 to 1.45.0 in /otel/otlp by @dependabot in [#1430](https://github.com/getsentry/sentry-go/pull/1430)
+- Bump go.opentelemetry.io/otel/sdk from 1.44.0 to 1.45.0 by @dependabot in [#1431](https://github.com/getsentry/sentry-go/pull/1431)
+- Bump google.golang.org/grpc from 1.83.1 to 1.83.2 by @dependabot in [#1422](https://github.com/getsentry/sentry-go/pull/1422)
+- Bump getsentry/craft from 2.27.2 to 2.30.1 by @dependabot in [#1411](https://github.com/getsentry/sentry-go/pull/1411)
+- Bump google.golang.org/grpc from 1.82.1 to 1.83.1 by @dependabot in [#1413](https://github.com/getsentry/sentry-go/pull/1413)
+
 ## 0.49.0
 
 ### Breaking Changes 🛠
