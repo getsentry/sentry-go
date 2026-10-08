@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
+	"slices"
 )
 
 func source(sourceKey string, r *slog.Record) slog.Attr {
@@ -27,24 +28,26 @@ func source(sourceKey string, r *slog.Record) slog.Attr {
 
 type replaceAttrFn = func(groups []string, a slog.Attr) slog.Attr
 
-// replaceAttrs returns a new slice and never writes to attrs: group values
-// share their backing array with the handler's stored attributes, which are
-// read concurrently and must not be replaced more than once.
+// replaceAttrs applies fn to attrs in place and returns attrs, so the caller
+// must own the top-level slice (Handle builds a fresh one for every record).
+// A group's value is different: value.Group() returns the group's own backing
+// array, which is shared with the attributes the handler stored in
+// WithAttrs/With and is read by concurrent Handle calls. Each group is
+// therefore copied before it is rewritten, so the stored attributes are never
+// modified and fn never runs twice on the same value.
 func replaceAttrs(fn replaceAttrFn, groups []string, attrs ...slog.Attr) []slog.Attr {
-	result := make([]slog.Attr, len(attrs))
-	for i, attr := range attrs {
+	for i := range attrs {
+		attr := attrs[i]
 		value := attr.Value.Resolve()
-		switch {
-		case value.Kind() == slog.KindGroup:
-			result[i] = slog.Attr{Key: attr.Key, Value: slog.GroupValue(replaceAttrs(fn, append(groups, attr.Key), value.Group()...)...)}
-		case fn != nil:
-			result[i] = fn(groups, attr)
-		default:
-			result[i] = attr
+		if value.Kind() == slog.KindGroup {
+			groupAttrs := slices.Clone(value.Group())
+			attrs[i].Value = slog.GroupValue(replaceAttrs(fn, append(groups, attr.Key), groupAttrs...)...)
+		} else if fn != nil {
+			attrs[i] = fn(groups, attr)
 		}
 	}
 
-	return result
+	return attrs
 }
 
 func attrsToMap(attrs ...slog.Attr) map[string]any {
