@@ -28,13 +28,8 @@ func source(sourceKey string, r *slog.Record) slog.Attr {
 
 type replaceAttrFn = func(groups []string, a slog.Attr) slog.Attr
 
-// replaceAttrs applies fn to attrs in place and returns attrs, so the caller
-// must own the top-level slice (Handle builds a fresh one for every record).
-// A group's value is different: value.Group() returns the group's own backing
-// array, which is shared with the attributes the handler stored in
-// WithAttrs/With and is read by concurrent Handle calls. Each group is
-// therefore copied before it is rewritten, so the stored attributes are never
-// modified and fn never runs twice on the same value.
+// replaceAttrs rewrites attrs in place, so the caller must own the slice.
+// Groups are cloned first because they share the handler's stored attrs.
 func replaceAttrs(fn replaceAttrFn, groups []string, attrs ...slog.Attr) []slog.Attr {
 	for i := range attrs {
 		attr := attrs[i]
