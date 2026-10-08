@@ -239,10 +239,10 @@ type blockingTelemetryTransport struct {
 	resumeSend  chan struct{}
 }
 
-func (t *blockingTelemetryTransport) SendEnvelope(envelope *protocol.Envelope) error {
+func (t *blockingTelemetryTransport) SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error {
 	close(t.sendStarted)
 	<-t.resumeSend
-	return t.MockTelemetryTransport.SendEnvelope(envelope)
+	return t.MockTelemetryTransport.SendEnvelope(ctx, envelope)
 }
 
 func TestTelemetrySchedulerFlushWaitsForInFlightBatch(t *testing.T) {
@@ -402,13 +402,13 @@ func TestTelemetrySchedulerClientReportDelivery(t *testing.T) {
 
 			var sent bool
 			if tt.standalone {
-				sent = scheduler.sendClientReport()
+				sent = scheduler.sendClientReport(context.Background())
 			} else {
 				envelope := protocol.NewEnvelope(&protocol.EnvelopeHeader{})
 				if tt.telemetry {
 					envelope.AddItem(protocol.NewTransactionItem(0, []byte(`{}`)))
 				}
-				sent = scheduler.sendEnvelope(envelope)
+				sent = scheduler.sendEnvelope(context.Background(), envelope)
 			}
 
 			wantSent := tt.telemetry || (tt.standalone && tt.pending)
@@ -449,7 +449,7 @@ type rejectingTransport struct {
 	err error
 }
 
-func (t *rejectingTransport) SendEnvelope(*protocol.Envelope) error { return t.err }
+func (t *rejectingTransport) SendEnvelope(context.Context, *protocol.Envelope) error { return t.err }
 
 type transactionTelemetryItem struct{ testTelemetryItem }
 

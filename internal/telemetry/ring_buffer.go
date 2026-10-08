@@ -79,6 +79,10 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 	defer b.mu.Unlock()
 
 	if b.size < b.capacity {
+		if b.size == 0 {
+			// The batch timeout starts with the first buffered item.
+			b.lastFlushTime = time.Now()
+		}
 		b.items[b.tail] = item
 		b.tail = (b.tail + 1) % b.capacity
 		b.size++

@@ -25,7 +25,7 @@ type reportingTransport struct {
 	err error
 }
 
-func (t *reportingTransport) SendEnvelope(_ *protocol.Envelope) error { return t.err }
+func (t *reportingTransport) SendEnvelope(context.Context, *protocol.Envelope) error { return t.err }
 
 func TestClientReports_CustomTransport(t *testing.T) {
 	t.Parallel()

@@ -41,8 +41,9 @@ type Transport interface {
 	Configure(options ClientOptions)
 	// SendEnvelope returns an error only when rejecting an envelope. The caller
 	// records rejected items; built-in transports record losses after acceptance.
-	// A nil error does not guarantee delivery.
-	SendEnvelope(envelope *protocol.Envelope) error
+	// A nil error does not guarantee delivery. Implementations must return
+	// promptly once ctx is done.
+	SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error
 	// Flush waits for pending delivery attempts up to the given timeout.
 	Flush(timeout time.Duration) bool
 	// FlushWithContext waits for pending delivery attempts until ctx is canceled.
@@ -216,6 +217,10 @@ func newHTTPSender(dsn *protocol.Dsn, options ClientOptions, timeout time.Durati
 type SyncTransport struct {
 	*httpSender
 
+	// ctx bounds in-flight requests and is canceled by Close.
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	Timeout time.Duration
 }
 
@@ -226,6 +231,7 @@ func NewSyncTransport() *SyncTransport {
 
 // Configure initializes the transport with the client's options before use.
 func (t *SyncTransport) Configure(options ClientOptions) {
+	t.ctx, t.cancel = context.WithCancel(context.Background())
 	dsn, err := protocol.NewDsn(options.Dsn)
 	t.httpSender = newHTTPSender(dsn, options, t.Timeout)
 	if err != nil || dsn == nil {
@@ -233,18 +239,23 @@ func (t *SyncTransport) Configure(options ClientOptions) {
 	}
 }
 
-func (t *SyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
-	return t.SendEnvelopeWithContext(context.Background(), envelope)
+// Close cancels in-flight requests and rejects later sends.
+func (t *SyncTransport) Close() {
+	if t.cancel != nil {
+		t.cancel()
+	}
 }
 
-func (t *SyncTransport) Close() {}
-
-func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *protocol.Envelope) error {
+func (t *SyncTransport) SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error {
 	if t.httpSender == nil || t.dsn == nil {
 		return nil
 	}
+	if t.ctx.Err() != nil {
+		return ErrTransportClosed
+	}
 	ctx, cancel := context.WithTimeout(ctx, t.Timeout)
 	defer cancel()
+	defer context.AfterFunc(t.ctx, cancel)()
 
 	if !validEnvelope(envelope) {
 		return ErrInvalidEnvelope
@@ -334,7 +345,8 @@ func (t *AsyncTransport) start() {
 	})
 }
 
-func (t *AsyncTransport) SendEnvelope(envelope *protocol.Envelope) error {
+// SendEnvelope enqueues envelope without waiting for queue space.
+func (t *AsyncTransport) SendEnvelope(_ context.Context, envelope *protocol.Envelope) error {
 	if t.httpSender == nil || t.dsn == nil {
 		return nil
 	}
@@ -521,7 +533,7 @@ func NewNoopTransport() *NoopTransport {
 
 func (t *NoopTransport) Configure(_ ClientOptions) {}
 
-func (t *NoopTransport) SendEnvelope(_ *protocol.Envelope) error {
+func (t *NoopTransport) SendEnvelope(_ context.Context, _ *protocol.Envelope) error {
 	debuglog.Println("Envelope dropped due to NoopTransport usage.")
 	return nil
 }

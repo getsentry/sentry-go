@@ -16,7 +16,7 @@ type MockTelemetryTransport struct {
 	sendCount     int64
 }
 
-func (m *MockTelemetryTransport) SendEnvelope(envelope *protocol.Envelope) error {
+func (m *MockTelemetryTransport) SendEnvelope(_ context.Context, envelope *protocol.Envelope) error {
 	atomic.AddInt64(&m.sendCount, 1)
 	m.mu.Lock()
 	defer m.mu.Unlock()

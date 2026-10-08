@@ -65,7 +65,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			t.Error("disabled transport should flush without blocking")
 		}
 
-		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+		err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 		if err != nil {
 			t.Errorf("invalid DSN should return nil, got %v", err)
 		}
@@ -76,7 +76,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		transport.Configure(ClientOptions{Dsn: "https://key@sentry.io/123"})
 		transport.Close()
 
-		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+		err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 		if !errors.Is(err, ErrTransportClosed) {
 			t.Errorf("expected ErrTransportClosed, got %v", err)
 		}
@@ -110,7 +110,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		defer transport.Close()
 
 		for _, tt := range tests {
-			if err := transport.SendEnvelope(tt.envelope); !errors.Is(err, tt.wantErr) {
+			if err := transport.SendEnvelope(context.Background(), tt.envelope); !errors.Is(err, tt.wantErr) {
 				t.Errorf("send %s returned %v, want %v", tt.name, err, tt.wantErr)
 			}
 		}
@@ -140,7 +140,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		})
 		defer transport.Close()
 
-		if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
+		if err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
 			t.Fatalf("failed to send envelope: %v", err)
 		}
 
@@ -171,7 +171,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		})
 		defer transport.Close()
 
-		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+		_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 		if !transport.Flush(testutils.FlushTimeout()) {
 			t.Fatal("Flush timed out")
 		}
@@ -187,7 +187,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		}
 
 		for i := 0; i < 2; i++ {
-			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 		}
 		if !transport.Flush(testutils.FlushTimeout()) {
 			t.Fatal("Flush timed out")
@@ -230,19 +230,19 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 			transport.Close()
 		}()
 
-		if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
+		if err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
 			t.Fatalf("first send should succeed: %v", err)
 		}
 
 		<-requestReceived
 
 		for i := 0; i < transport.QueueSize; i++ {
-			if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
+			if err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
 				t.Errorf("send %d should succeed: %v", i, err)
 			}
 		}
 
-		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+		err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 		if !errors.Is(err, ErrTransportQueueFull) {
 			t.Errorf("expected ErrTransportQueueFull, got %v", err)
 		}
@@ -265,7 +265,7 @@ func TestAsyncTransport_SendEnvelope(t *testing.T) {
 		})
 		defer transport.Close()
 
-		if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
+		if err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
 			t.Fatalf("failed to send envelope: %v", err)
 		}
 		if !transport.Flush(testutils.FlushTimeout()) {
@@ -298,7 +298,7 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 		})
 		defer transport.Close()
 
-		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+		_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 
 		ctx := context.Background()
 		if !transport.FlushWithContext(ctx) {
@@ -323,7 +323,7 @@ func TestAsyncTransport_FlushWithContext(t *testing.T) {
 			transport.Close()
 		}()
 
-		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+		_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
@@ -381,7 +381,7 @@ func TestHTTPTransportDeadlines(t *testing.T) {
 			transport.Configure(options)
 			transport.Timeout = time.Second
 			start := time.Now()
-			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 			if elapsed := time.Since(start); elapsed != time.Second {
 				t.Errorf("request took %v, want %v", elapsed, time.Second)
 			}
@@ -395,7 +395,7 @@ func TestHTTPTransportDeadlines(t *testing.T) {
 			defer transport.Close()
 			transport.Timeout = time.Second
 			start := time.Now()
-			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 			if !transport.Flush(time.Minute) {
 				t.Error("Flush should succeed after the request times out")
 			}
@@ -414,7 +414,7 @@ func TestHTTPTransportDeadlines(t *testing.T) {
 			if transport.FlushWithContext(ctx) {
 				t.Error("FlushWithContext should fail for a canceled context")
 			}
-			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 			if transport.Flush(time.Second) {
 				t.Error("Flush should time out while a request is in flight")
 			}
@@ -431,7 +431,7 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 	t.Run("invalid DSN", func(t *testing.T) {
 		transport := NewSyncTransport()
 		transport.Configure(ClientOptions{})
-		err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+		err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 		if err != nil {
 			t.Errorf("invalid DSN should return nil, got %v", err)
 		}
@@ -467,7 +467,7 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 		defer transport.Close()
 
 		for _, tt := range tests {
-			if err := transport.SendEnvelope(tt.envelope); !errors.Is(err, tt.wantErr) {
+			if err := transport.SendEnvelope(context.Background(), tt.envelope); !errors.Is(err, tt.wantErr) {
 				t.Errorf("send %s returned %v, want %v", tt.name, err, tt.wantErr)
 			}
 		}
@@ -489,7 +489,7 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 			recorder: recorder,
 		})
 
-		_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+		_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 		_ = takeOutcomes(recorder)
 
 		pending, _ := (&report.ClientReport{DiscardedEvents: []report.DiscardedEvent{
@@ -513,7 +513,7 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 		}
 		for _, tt := range tests {
 			sent := requests.Load()
-			if err := transport.SendEnvelope(tt.envelope); err != nil {
+			if err := transport.SendEnvelope(context.Background(), tt.envelope); err != nil {
 				t.Errorf("%s: rate limited envelope should return nil, got %v", tt.name, err)
 			}
 			if gotSent := requests.Load() > sent; gotSent != (tt.want == nil) {
@@ -546,7 +546,7 @@ func TestSyncTransport_SendEnvelope(t *testing.T) {
 			})
 
 			// The transport records losses of accepted envelopes itself.
-			if err := transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
+			if err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
 				t.Errorf("%s: should not return error, got %v", tt.name, err)
 			}
 			want := map[report.OutcomeKey]int64{{Reason: tt.reason, Category: ratelimit.CategoryError}: 1}
@@ -644,21 +644,21 @@ func TestKeepAlive(t *testing.T) {
 				}
 			}
 
-			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 			checkReuse(false)
 
 			for i := 0; i < 3; i++ {
-				_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+				_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 				checkReuse(true)
 			}
 
 			largeResponse = true
 
-			_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 			checkReuse(true)
 
 			for i := 0; i < 3; i++ {
-				_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+				_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 				checkReuse(false)
 			}
 		})
@@ -701,7 +701,7 @@ func TestConcurrentAccess(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					for j := 0; j < 5; j++ {
-						_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+						_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 					}
 				}()
 			}
@@ -868,7 +868,7 @@ func TestAsyncTransportDoesntLeakGoroutines(t *testing.T) {
 		},
 	})
 
-	_ = transport.SendEnvelope(testEnvelope(protocol.EnvelopeItemTypeEvent))
+	_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 	transport.Flush(testutils.FlushTimeout())
 	transport.Close()
 }

@@ -26,7 +26,7 @@ func (t *devNullTransport) Configure(options sentry.ClientOptions) {
 	fmt.Println("Headers:", dsn.RequestHeaders())
 	fmt.Println()
 }
-func (t *devNullTransport) SendEnvelope(_ *protocol.Envelope) error {
+func (t *devNullTransport) SendEnvelope(_ context.Context, _ *protocol.Envelope) error {
 	fmt.Println("Faked Transport")
 	return nil
 }

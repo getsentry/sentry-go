@@ -46,7 +46,7 @@ var ErrQueueFull = errors.New("transport queue full")
 type Transport interface {
 	// SendEnvelope sends an envelope to Sentry. Returns an error only if
 	// the envelope is rejected.
-	SendEnvelope(envelope *protocol.Envelope) error
+	SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error
 
 	// Flush waits for all pending envelopes to be sent, with timeout
 	Flush(timeout time.Duration) bool

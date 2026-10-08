@@ -24,7 +24,7 @@ type MockTransport struct {
 func (t *MockTransport) Configure(_ ClientOptions) {}
 
 // SendEnvelope captures an envelope and decodes its events for assertions.
-func (t *MockTransport) SendEnvelope(envelope *protocol.Envelope) error {
+func (t *MockTransport) SendEnvelope(_ context.Context, envelope *protocol.Envelope) error {
 	if !validEnvelope(envelope) {
 		return ErrInvalidEnvelope
 	}

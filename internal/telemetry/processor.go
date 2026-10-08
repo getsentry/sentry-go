@@ -37,17 +37,7 @@ func NewProcessor(
 // since the serialization happens on a background goroutine.
 func (b *Processor) Add(item Item) bool {
 	item.MakeSerializationSafe()
-	switch item.GetCategory() {
-	case ratelimit.CategoryError, ratelimit.CategoryTransaction, ratelimit.CategoryMonitor:
-		convertible, ok := item.(EnvelopeConvertible)
-		if !ok {
-			b.scheduler.recorder.RecordItem(report.ReasonInternalError, item)
-			return false
-		}
-		return b.scheduler.sendItem(convertible)
-	default:
-		return b.scheduler.Add(item)
-	}
+	return b.scheduler.Add(item)
 }
 
 // Flush forces all buffers to flush within the given timeout.
