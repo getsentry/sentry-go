@@ -16,6 +16,9 @@ targets:
     tagPrefix: otel/otlp/v
     tagOnly: true
   - name: github
+    tagPrefix: cron/v
+    tagOnly: true
+  - name: github
     tagPrefix: echo/v
     tagOnly: true
   - name: github
