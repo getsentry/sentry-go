@@ -31,13 +31,26 @@ func NewProcessor(
 	}
 }
 
-// Add submits single-item categories inline and buffers batched categories.
+// Add buffers item, or submits single-item categories.
 //
 // The processor should call MakeSerializationSafe to eliminate any race on user mutable fields,
 // since the serialization happens on a background goroutine.
-func (b *Processor) Add(item Item) bool {
+func (b *Processor) Add(ctx context.Context, item Item) bool {
 	item.MakeSerializationSafe()
-	return b.scheduler.Add(item)
+	if _, buffered := b.scheduler.buffers[item.GetCategory()]; buffered {
+		return b.scheduler.Add(item)
+	}
+	// this handles client reports and bypasses adding to the scheduler buffer for the sync
+	// transport to be blocking.
+	convertible, ok := item.(EnvelopeConvertible)
+	if !ok {
+		b.scheduler.recorder.RecordItem(report.ReasonInternalError, item)
+		return false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return b.scheduler.sendItem(ctx, convertible, false)
 }
 
 // Flush forces all buffers to flush within the given timeout.

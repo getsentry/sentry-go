@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -373,6 +374,37 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	}
 }
 
+func TestTelemetrySchedulerStopFlushesAcceptedItems(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	buffer := NewRingBuffer[Item](ratelimit.CategoryLog, 1<<20, OverflowPolicyDropNewest, 1<<20, time.Hour, nil)
+	scheduler := NewScheduler(map[ratelimit.Category]Buffer[Item]{ratelimit.CategoryLog: buffer}, transport, &protocol.Dsn{}, nil, nil, nil)
+	scheduler.Start()
+
+	var accepted atomic.Int64
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Go(func() {
+			for scheduler.Add(&testTelemetryItem{category: ratelimit.CategoryLog}) {
+				accepted.Add(1)
+			}
+		})
+	}
+	for accepted.Load() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	scheduler.Stop(testutils.FlushTimeout())
+	wg.Wait()
+
+	var sent int64
+	for _, envelope := range transport.GetSentEnvelopes() {
+		for _, item := range envelope.Items {
+			sent += int64(*item.Header.ItemCount)
+		}
+	}
+	require.Equal(t, accepted.Load(), sent, "every accepted item must be flushed")
+	require.False(t, scheduler.Add(&testTelemetryItem{category: ratelimit.CategoryLog}), "Add after Stop must be rejected")
+}
+
 func TestTelemetrySchedulerClientReportDelivery(t *testing.T) {
 	t.Parallel()
 
@@ -408,7 +440,7 @@ func TestTelemetrySchedulerClientReportDelivery(t *testing.T) {
 				if tt.telemetry {
 					envelope.AddItem(protocol.NewTransactionItem(0, []byte(`{}`)))
 				}
-				sent = scheduler.sendEnvelope(context.Background(), envelope)
+				sent = scheduler.sendEnvelope(context.Background(), envelope, false)
 			}
 
 			wantSent := tt.telemetry || (tt.standalone && tt.pending)

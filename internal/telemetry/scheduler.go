@@ -116,12 +116,15 @@ func (s *Scheduler) Start() {
 
 func (s *Scheduler) Stop(timeout time.Duration) {
 	s.finishOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
 		// Reject new items
 		s.mu.Lock()
 		s.closed = true
 		s.mu.Unlock()
 
-		s.Flush(timeout)
+		s.FlushWithContext(ctx)
 
 		// Cancel under s.mu
 		s.mu.Lock()
@@ -137,7 +140,7 @@ func (s *Scheduler) Stop(timeout time.Duration) {
 
 		select {
 		case <-done:
-		case <-time.After(timeout):
+		case <-ctx.Done():
 			debuglog.Printf("scheduler stop timed out after %v", timeout)
 		}
 	})
@@ -279,7 +282,7 @@ func (s *Scheduler) processItems(ctx context.Context, buffer Buffer[Item], categ
 	}
 
 	for _, item := range s.envelopeConvertibles(category, items) {
-		s.sendItem(ctx, item)
+		s.sendItem(ctx, item, true)
 	}
 }
 
@@ -301,7 +304,7 @@ func (s *Scheduler) envelopeConvertibles(category ratelimit.Category, items []It
 	}
 }
 
-func (s *Scheduler) sendItem(ctx context.Context, item EnvelopeConvertible) bool {
+func (s *Scheduler) sendItem(ctx context.Context, item EnvelopeConvertible, wait bool) bool {
 	header := &protocol.EnvelopeHeader{
 		EventID: item.GetEventID(),
 		SentAt:  time.Now(),
@@ -322,21 +325,20 @@ func (s *Scheduler) sendItem(ctx context.Context, item EnvelopeConvertible) bool
 		s.recorder.RecordItem(report.ReasonInternalError, item)
 		return false
 	}
-	return s.sendEnvelope(ctx, envelope)
+	return s.sendEnvelope(ctx, envelope, wait)
 }
 
-func (s *Scheduler) sendEnvelope(ctx context.Context, envelope *protocol.Envelope) bool {
+func (s *Scheduler) sendEnvelope(ctx context.Context, envelope *protocol.Envelope, wait bool) bool {
 	if len(envelope.Items) == 0 {
 		return false
 	}
 	s.provider.AttachToEnvelope(envelope)
-	return s.sendPreparedEnvelope(ctx, envelope)
+	return s.sendPreparedEnvelope(ctx, envelope, wait)
 }
 
-// sendPreparedEnvelope waits for queue space until ctx is done
-func (s *Scheduler) sendPreparedEnvelope(ctx context.Context, envelope *protocol.Envelope) bool {
+func (s *Scheduler) sendPreparedEnvelope(ctx context.Context, envelope *protocol.Envelope, wait bool) bool {
 	err := s.transport.SendEnvelope(ctx, envelope)
-	if errors.Is(err, ErrQueueFull) && s.transport.FlushWithContext(ctx) {
+	if wait && errors.Is(err, ErrQueueFull) && s.transport.FlushWithContext(ctx) {
 		err = s.transport.SendEnvelope(ctx, envelope)
 	}
 	if err != nil {
@@ -381,5 +383,5 @@ func (s *Scheduler) sendClientReport(ctx context.Context) bool {
 	if len(envelope.Items) == 0 {
 		return false
 	}
-	return s.sendPreparedEnvelope(ctx, envelope)
+	return s.sendPreparedEnvelope(ctx, envelope, false)
 }

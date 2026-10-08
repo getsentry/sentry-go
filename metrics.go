@@ -96,7 +96,7 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 	}
 	metric.TraceID, metric.SpanID = resolveTrace(scope, client, ctx, fallbackCtx)
 
-	if client.captureMetric(metric) && client.options.Debug {
+	if client.captureMetric(ctx, metric) && client.options.Debug {
 		debuglog.Printf("Metric %s [%s]: %v %s", metricType, name, value.AsInterface(), options.unit)
 	}
 }

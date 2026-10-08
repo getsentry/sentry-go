@@ -496,11 +496,14 @@ func (client *Client) sdkInfo() *protocol.SdkInfo {
 
 func (client *Client) setupTelemetryProcessor() {
 	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
-		ratelimit.CategoryError:       telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder),
-		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder),
 		ratelimit.CategoryLog:         telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
-		ratelimit.CategoryMonitor:     telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder),
 		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
+	}
+	// only the AsyncTransport adds single item events. The Sync one sends them blocking.
+	if _, ok := client.Transport.(*AsyncTransport); ok {
+		buffers[ratelimit.CategoryError] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder)
+		buffers[ratelimit.CategoryTransaction] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder)
+		buffers[ratelimit.CategoryMonitor] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder)
 	}
 
 	client.telemetryProcessor = telemetry.NewProcessor(buffers, client.Transport, client.dsn, client.sdkInfo, client.reportRecorder, client.reportProvider)
@@ -646,7 +649,7 @@ func (client *Client) CaptureEvent(ctx context.Context, event *Event, options ..
 	return client.capture(ctx, event, opts)
 }
 
-func (client *Client) captureLog(log *Log) bool {
+func (client *Client) captureLog(ctx context.Context, log *Log) bool {
 	if log == nil {
 		return false
 	}
@@ -662,7 +665,7 @@ func (client *Client) captureLog(log *Log) bool {
 		}
 	}
 
-	if !client.IsEnabled() || !client.telemetryProcessor.Add(log) {
+	if !client.IsEnabled() || !client.telemetryProcessor.Add(ctx, log) {
 		debuglog.Print("Dropping log: telemetry buffer full or category missing")
 		// Note: processor tracks client report
 		return false
@@ -671,7 +674,7 @@ func (client *Client) captureLog(log *Log) bool {
 	return true
 }
 
-func (client *Client) captureMetric(metric *Metric) bool {
+func (client *Client) captureMetric(ctx context.Context, metric *Metric) bool {
 	if metric == nil {
 		return false
 	}
@@ -685,7 +688,7 @@ func (client *Client) captureMetric(metric *Metric) bool {
 		}
 	}
 
-	if !client.IsEnabled() || !client.telemetryProcessor.Add(metric) {
+	if !client.IsEnabled() || !client.telemetryProcessor.Add(ctx, metric) {
 		debuglog.Printf("Dropping metric: telemetry buffer full or category missing")
 		// Note: processor tracks client report
 		return false
@@ -879,7 +882,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 		}
 	}
 
-	if !client.telemetryProcessor.Add(event) {
+	if !client.telemetryProcessor.Add(ctx, event) {
 		debuglog.Println("Event dropped: telemetry buffer full or unavailable")
 		return nil
 	}

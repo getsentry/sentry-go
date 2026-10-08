@@ -405,6 +405,43 @@ func TestHTTPTransportDeadlines(t *testing.T) {
 		})
 	})
 
+	t.Run("sync request honors caller context", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			transport := NewSyncTransport()
+			transport.Configure(options)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			start := time.Now()
+			_ = transport.SendEnvelope(ctx, testEnvelope(protocol.EnvelopeItemTypeEvent))
+			if elapsed := time.Since(start); elapsed != time.Second {
+				t.Errorf("request took %v, want %v", elapsed, time.Second)
+			}
+		})
+	})
+
+	t.Run("sync close aborts in-flight request", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			transport := NewSyncTransport()
+			transport.Configure(options)
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
+			}()
+			synctest.Wait()
+			transport.Close()
+			synctest.Wait()
+			select {
+			case <-done:
+			default:
+				t.Error("Close should abort the in-flight request")
+			}
+			if err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent)); !errors.Is(err, ErrTransportClosed) {
+				t.Errorf("SendEnvelope after Close = %v, want %v", err, ErrTransportClosed)
+			}
+		})
+	})
+
 	t.Run("async flush deadline and close", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			transport := NewAsyncTransport()
