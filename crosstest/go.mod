@@ -18,18 +18,18 @@ replace (
 )
 
 require (
-	github.com/getsentry/sentry-go v0.49.0
-	github.com/getsentry/sentry-go/echo v0.49.0
-	github.com/getsentry/sentry-go/fasthttp v0.49.0
-	github.com/getsentry/sentry-go/fiber v0.49.0
-	github.com/getsentry/sentry-go/fiberv3 v0.49.0
-	github.com/getsentry/sentry-go/gin v0.49.0
-	github.com/getsentry/sentry-go/iris v0.49.0
-	github.com/getsentry/sentry-go/logrus v0.49.0
-	github.com/getsentry/sentry-go/negroni v0.49.0
-	github.com/getsentry/sentry-go/otel v0.49.0
-	github.com/getsentry/sentry-go/slog v0.49.0
-	github.com/getsentry/sentry-go/zap v0.49.0
+	github.com/getsentry/sentry-go v0.50.0
+	github.com/getsentry/sentry-go/echo v0.50.0
+	github.com/getsentry/sentry-go/fasthttp v0.50.0
+	github.com/getsentry/sentry-go/fiber v0.50.0
+	github.com/getsentry/sentry-go/fiberv3 v0.50.0
+	github.com/getsentry/sentry-go/gin v0.50.0
+	github.com/getsentry/sentry-go/iris v0.50.0
+	github.com/getsentry/sentry-go/logrus v0.50.0
+	github.com/getsentry/sentry-go/negroni v0.50.0
+	github.com/getsentry/sentry-go/otel v0.50.0
+	github.com/getsentry/sentry-go/slog v0.50.0
+	github.com/getsentry/sentry-go/zap v0.50.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/gofiber/fiber/v3 v3.3.0
