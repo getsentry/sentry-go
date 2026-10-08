@@ -146,6 +146,12 @@ func (s *Scheduler) Stop(timeout time.Duration) {
 	})
 }
 
+func (s *Scheduler) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
+}
+
 func (s *Scheduler) Signal() {
 	s.cond.Signal()
 }
@@ -177,6 +183,13 @@ func (s *Scheduler) Flush(timeout time.Duration) bool {
 }
 
 func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
+	select {
+	case s.processing <- struct{}{}:
+		defer func() { <-s.processing }()
+	case <-ctx.Done():
+		return false
+	}
+
 	if !s.flushBuffers(ctx) {
 		return false
 	}
@@ -205,7 +218,13 @@ func (s *Scheduler) run() {
 			case <-ticker.C:
 				s.cond.Broadcast()
 			case <-reportTicker.C:
-				s.sendClientReport(s.ctx)
+				select {
+				case s.processing <- struct{}{}:
+					s.sendClientReport(s.ctx)
+					<-s.processing
+				case <-s.ctx.Done():
+					return
+				}
 			case <-s.ctx.Done():
 				return
 			}
@@ -354,13 +373,6 @@ func (s *Scheduler) sendPreparedEnvelope(ctx context.Context, envelope *protocol
 }
 
 func (s *Scheduler) flushBuffers(ctx context.Context) bool {
-	select {
-	case s.processing <- struct{}{}:
-		defer func() { <-s.processing }()
-	case <-ctx.Done():
-		return false
-	}
-
 	for category, buffer := range s.buffers {
 		if ctx.Err() != nil {
 			return false

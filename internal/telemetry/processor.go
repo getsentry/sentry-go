@@ -42,6 +42,9 @@ func (b *Processor) Add(ctx context.Context, item Item) bool {
 	}
 	// this handles client reports and bypasses adding to the scheduler buffer for the sync
 	// transport to be blocking.
+	if b.scheduler.isClosed() {
+		return false
+	}
 	convertible, ok := item.(EnvelopeConvertible)
 	if !ok {
 		b.scheduler.recorder.RecordItem(report.ReasonInternalError, item)
@@ -50,7 +53,8 @@ func (b *Processor) Add(ctx context.Context, item Item) bool {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return b.scheduler.sendItem(ctx, convertible, false)
+	// A finished request must not cancel delivery of its own events
+	return b.scheduler.sendItem(context.WithoutCancel(ctx), convertible, false)
 }
 
 // Flush forces all buffers to flush within the given timeout.
