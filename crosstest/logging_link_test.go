@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/sentrytest"
 	sentrylogrus "github.com/getsentry/sentry-go/logrus"
 	sentryslog "github.com/getsentry/sentry-go/slog"
@@ -35,11 +34,10 @@ func TestSlogLinksOTelTrace(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		otelCtx, traceID, spanID := fixedOTelContext()
 
-		baseCtx := context.Background()
-		baseCtx = sentry.SetHubOnContext(baseCtx, f.Hub)
+		baseCtx := f.NewContext(context.Background())
 		handler := sentryslog.Option{}.NewSentryHandler(baseCtx)
 		logger := slog.New(handler)
-		logger.InfoContext(sentry.SetHubOnContext(otelCtx, f.Hub), "slog linked log")
+		logger.InfoContext(f.NewContext(otelCtx), "slog linked log")
 
 		f.Flush()
 		requireLinked(t, f.Events(), linkedLogEvent(traceID, spanID, "slog linked log"))
@@ -51,7 +49,7 @@ func TestZapLinksOTelTrace(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		otelCtx, traceID, spanID := fixedOTelContext()
 
-		logger := zap.New(sentryzap.NewSentryCore(sentry.SetHubOnContext(otelCtx, f.Hub), sentryzap.Option{}))
+		logger := zap.New(sentryzap.NewSentryCore(f.NewContext(otelCtx), sentryzap.Option{}))
 		logger.Info("zap linked log")
 
 		f.Flush()

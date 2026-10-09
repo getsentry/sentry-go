@@ -1,6 +1,7 @@
 package sentryzerolog
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -113,18 +114,20 @@ func New(cfg Config) (*Writer, error) {
 		levels[lvl] = struct{}{}
 	}
 
+	ctx := sentry.ContextWithScope(context.Background(), sentry.NewScope())
+	ctx = sentry.ContextWithClient(ctx, client)
 	return &Writer{
-		hub:             sentry.NewHub(client, sentry.NewScope()),
+		ctx:             ctx,
 		levels:          levels,
 		flushTimeout:    cfg.FlushTimeout,
 		withBreadcrumbs: cfg.WithBreadcrumbs,
 	}, nil
 }
 
-// NewWithHub creates a writer using an existing sentry Hub and options.
-func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
-	if hub == nil {
-		return nil, errors.New("hub cannot be nil")
+// NewWithContext creates a writer using a Sentry scope context and options.
+func NewWithContext(ctx context.Context, opts Options) (*Writer, error) {
+	if ctx == nil {
+		return nil, errors.New("context cannot be nil")
 	}
 
 	opts.SetDefaults()
@@ -135,7 +138,7 @@ func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 	}
 
 	return &Writer{
-		hub:             hub,
+		ctx:             ctx,
 		levels:          levels,
 		flushTimeout:    opts.FlushTimeout,
 		withBreadcrumbs: opts.WithBreadcrumbs,
@@ -144,7 +147,7 @@ func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 
 // Writer is a sentry events writer with std io.Writer interface.
 type Writer struct {
-	hub             *sentry.Hub
+	ctx             context.Context
 	levels          map[zerolog.Level]struct{}
 	flushTimeout    time.Duration
 	withBreadcrumbs bool
@@ -169,13 +172,13 @@ func (w *Writer) addBreadcrumb(event *sentry.Event) {
 		data[k] = v
 	}
 
-	w.hub.AddBreadcrumb(&sentry.Breadcrumb{
+	sentry.AddBreadcrumb(w.ctx, &sentry.Breadcrumb{
 		Type:     breadcrumbType,
 		Category: category,
 		Message:  event.Message,
 		Level:    event.Level,
 		Data:     data,
-	}, nil)
+	})
 }
 
 // Write handles zerolog's json and sends events to sentry.
@@ -203,10 +206,10 @@ func (w *Writer) Write(data []byte) (int, error) {
 		return n, nil
 	}
 
-	w.hub.CaptureEvent(event)
+	sentry.CaptureEvent(w.ctx, event)
 	// should flush before os.Exit
 	if event.Level == sentry.LevelFatal {
-		w.hub.Flush(w.flushTimeout)
+		sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout)
 	}
 
 	return n, nil
@@ -231,10 +234,10 @@ func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (int, error) {
 		return n, nil
 	}
 
-	w.hub.CaptureEvent(event)
+	sentry.CaptureEvent(w.ctx, event)
 	// should flush before os.Exit
 	if event.Level == sentry.LevelFatal {
-		w.hub.Flush(w.flushTimeout)
+		sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout)
 	}
 
 	return n, nil
@@ -243,7 +246,7 @@ func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (int, error) {
 // Close forces client to flush all pending events.
 // Can be useful before application exits.
 func (w *Writer) Close() error {
-	if ok := w.hub.Flush(w.flushTimeout); !ok {
+	if ok := sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout); !ok {
 		return ErrFlushTimeout
 	}
 	return nil

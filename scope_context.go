@@ -3,10 +3,12 @@ package sentry
 import (
 	"context"
 	"sync"
+
+	"github.com/getsentry/sentry-go/internal/contextkey"
 )
 
 type scopeContextKey struct{}
-type clientContextKey struct{}
+type clientContextKey = contextkey.Client
 
 // globalScope is the process-wide global scope.
 var globalScope = NewScope()
