@@ -20,7 +20,7 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 	}
 	defer Flush(testutils.FlushTimeout())
 
-	ctx1, _ := WithIsolationScope(context.Background())
+	ctx1, _ := WithScope(context.Background())
 	span1 := StartTransaction(ctx1, "request-1")
 	ctx1 = span1.Context()
 	traceID1 := span1.TraceID
@@ -30,7 +30,7 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 	logger.Info().Emit("Log in request-1")
 	span1.Finish()
 
-	ctx2, _ := WithIsolationScope(context.Background())
+	ctx2, _ := WithScope(context.Background())
 	span2 := StartTransaction(ctx2, "request-2")
 	ctx2 = span2.Context()
 	traceID2 := span2.TraceID

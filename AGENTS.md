@@ -71,7 +71,7 @@ Test tier preference (use the highest tier that covers what you need):
 
 1. **Integration tests** (default) — Prefer `internal/sentrytest` with `sentrytest.Run` or `sentrytest.NewFixture`, plus real routers / `httptest` requests where needed. Prefer tests that use the public API.
 2. **Context-level tests** — Prefer `sentrytest.NewContext` or `fixture.NewContext(parent)` for tracing / context propagation tests. Prefer `sentrytest.NewFixture` for isolated client + hub setup when no HTTP server is needed.
-3. **Unit tests** (sparingly) — Direct `NewClient` + `MockScope` only for self-contained logic where `sentrytest` would add unnecessary indirection.
+3. **Unit tests** (sparingly) — Direct `NewClient` + `NewScope` only for self-contained logic where `sentrytest` would add unnecessary indirection.
 
 Conventions:
 

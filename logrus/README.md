@@ -113,7 +113,7 @@ You can set a custom context provider using `SetContextProvider` (import `contex
 
 ```go
 logHook.SetContextProvider(func() context.Context {
-    ctx, _ := sentry.WithIsolationScope(context.Background())
+    ctx, _ := sentry.WithScope(context.Background())
     // client is the operation-specific *sentry.Client.
     return sentry.ContextWithClient(ctx, client)
 })

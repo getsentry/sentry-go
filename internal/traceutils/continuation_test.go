@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/internal/traceutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,8 +30,8 @@ func TestContinueFromRequest(t *testing.T) {
 				r.Header.Add(sentry.SentryBaggageHeader, "sentry-trace_id="+traceID.String())
 				r.Header.Add(sentry.SentryBaggageHeader, "sentry-public_key=upstream")
 			}
-			ctx, _ := sentry.WithIsolationScope(sentry.ContextWithClient(context.Background(), sentry.NewNoopClient()))
-			root := sentry.StartTransaction(ctx, "request", traceutils.ContinueFromRequest(r))
+			ctx, _ := sentry.WithScope(sentry.ContextWithClient(context.Background(), sentry.NewNoopClient()))
+			root := sentry.StartTransaction(ctx, "request", sentry.ContinueFromRequest(r))
 			require.Equal(t, traceID, root.TraceID)
 			require.Equal(t, parentID, root.ParentSpanID)
 			require.Equal(t, test.sampled, root.Sampled)
@@ -46,11 +45,11 @@ func TestContinueFromRequest(t *testing.T) {
 	}
 
 	t.Run("active child ignores incoming parent", func(t *testing.T) {
-		ctx, _ := sentry.WithIsolationScope(sentry.ContextWithClient(context.Background(), sentry.NewNoopClient()))
+		ctx, _ := sentry.WithScope(sentry.ContextWithClient(context.Background(), sentry.NewNoopClient()))
 		root := sentry.StartTransaction(ctx, "root")
 		r := httptest.NewRequest("GET", "/", nil)
 		r.Header.Set(sentry.SentryTraceHeader, traceID.String()+"-"+parentID.String()+"-1")
-		child := sentry.StartSpan(root.Context(), "child", traceutils.ContinueFromRequest(r))
+		child := sentry.StartSpan(root.Context(), "child", sentry.ContinueFromRequest(r))
 		require.Equal(t, root.TraceID, child.TraceID)
 		require.Equal(t, root.SpanID, child.ParentSpanID)
 		child.Finish()

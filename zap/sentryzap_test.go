@@ -20,7 +20,7 @@ func newMockTransport() (context.Context, *sentry.MockTransport) {
 		Dsn:       "https://public@example.com/1",
 		Transport: mockTransport,
 	})
-	ctx, _ = sentry.WithIsolationScope(ctx)
+	ctx, _ = sentry.WithScope(ctx)
 	ctx = sentry.ContextWithClient(ctx, mockClient)
 	return ctx, mockTransport
 }

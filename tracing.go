@@ -210,7 +210,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		// Never push children to the scope and never pop on Finish: contexts
 		// determine local parenting while the root remains a stable fallback.
 		if scope := ScopeFromContext(ctx); scope != nil {
-			scope.SetSpan(&span)
+			scope.setSpan(&span)
 		}
 	}
 
@@ -1039,9 +1039,9 @@ func WithSpanOrigin(origin SpanOrigin) SpanOption {
 	}
 }
 
-// ContinueTrace returns a span option that continues a trace from sentry-trace
-// and baggage header values.
-func ContinueTrace(trace, baggage string) SpanOption {
+// ContinueFromHeaders returns a span option that continues a trace from the
+// sentry-trace and baggage header values.
+func ContinueFromHeaders(trace, baggage string) SpanOption {
 	return func(s *Span) {
 		if s.parent != nil {
 			return
@@ -1060,21 +1060,10 @@ func ContinueTrace(trace, baggage string) SpanOption {
 	}
 }
 
-// ContinueFromRequest returns a span option that updates the span to continue
-// an existing trace. If it cannot detect an existing trace in the request, the
-// span will be left unchanged.
-//
-// ContinueFromRequest is an alias for:
-//
-// ContinueFromHeaders(r.Header.Get(SentryTraceHeader), strings.Join(r.Header.Values(SentryBaggageHeader), ",")).
+// ContinueFromRequest returns a span option that continues a trace from r's
+// sentry-trace and baggage headers. All baggage header values are combined.
 func ContinueFromRequest(r *http.Request) SpanOption {
 	return ContinueFromHeaders(r.Header.Get(SentryTraceHeader), strings.Join(r.Header.Values(SentryBaggageHeader), ","))
-}
-
-// ContinueFromHeaders returns a span option that updates the span to continue
-// an existing TraceID and propagates the Dynamic Sampling context.
-func ContinueFromHeaders(trace, baggage string) SpanOption {
-	return ContinueTrace(trace, baggage)
 }
 
 // parseIncomingTrace preserves a valid sentry-trace even if baggage is
@@ -1100,13 +1089,8 @@ func dscMatchesTrace(trace TraceParentContext, dsc DynamicSamplingContext) bool 
 	return dsc.Entries[traceIDContextKey] == "" || strings.EqualFold(dsc.Entries[traceIDContextKey], trace.TraceID.String())
 }
 
-// ContinueFromTrace returns a span option that updates the span to continue
-// an existing TraceID.
-func ContinueFromTrace(trace string) SpanOption {
-	return ContinueTrace(trace, "")
-}
-
-// GetTraceparent returns the Sentry trace header value carried by ctx.
+// GetTraceparent returns the sentry-trace header value carried by ctx.
+// It is not the W3C traceparent header; use GetTraceparentW3C for that value.
 func GetTraceparent(ctx context.Context) string {
 	trace, _ := traceForPropagation(ctx, false)
 	if trace.traceID == zeroTraceID || trace.spanID == zeroSpanID {

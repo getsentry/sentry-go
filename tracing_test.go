@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net/http"
 	"reflect"
 	"strings"
 	"sync"
@@ -408,7 +407,7 @@ func NewTestContext(options ClientOptions) context.Context {
 		panic(err)
 	}
 	ctx := context.WithValue(context.Background(), testContextKey{}, testContextValue{})
-	ctx, _ = WithIsolationScope(ctx)
+	ctx, _ = WithScope(ctx)
 	return ContextWithClient(ctx, client)
 }
 
@@ -485,37 +484,7 @@ func TestToSentryTrace(t *testing.T) {
 	}
 }
 
-func TestContinueSpanFromRequest(t *testing.T) {
-	traceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
-	spanID := SpanIDFromHex("b72fa28504b07285")
-
-	for _, sampled := range []Sampled{SampledTrue, SampledFalse, SampledUndefined} {
-		sampled := sampled
-		t.Run(sampled.String(), func(t *testing.T) {
-			var s Span
-			s.ctx = context.Background()
-			hkey := http.CanonicalHeaderKey("sentry-trace")
-			hval := (&Span{
-				TraceID: traceID,
-				SpanID:  spanID,
-				Sampled: sampled,
-			}).ToSentryTrace()
-			header := http.Header{hkey: []string{hval}}
-			ContinueFromRequest(&http.Request{Header: header})(&s)
-			if s.TraceID != traceID {
-				t.Errorf("got %q, want %q", s.TraceID, traceID)
-			}
-			if s.ParentSpanID != spanID {
-				t.Errorf("got %q, want %q", s.ParentSpanID, spanID)
-			}
-			if s.Sampled != sampled {
-				t.Errorf("got %q, want %q", s.Sampled, sampled)
-			}
-		})
-	}
-}
-
-func TestContinueSpanFromTrace(t *testing.T) {
+func TestContinueFromHeadersWithoutBaggage(t *testing.T) {
 	traceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
 	spanID := SpanIDFromHex("b72fa28504b07285")
 
@@ -529,7 +498,7 @@ func TestContinueSpanFromTrace(t *testing.T) {
 				SpanID:  spanID,
 				Sampled: sampled,
 			}).ToSentryTrace()
-			ContinueFromTrace(trace)(s)
+			ContinueFromHeaders(trace, "")(s)
 			if s.TraceID != traceID {
 				t.Errorf("got %q, want %q", s.TraceID, traceID)
 			}
@@ -543,7 +512,7 @@ func TestContinueSpanFromTrace(t *testing.T) {
 	}
 }
 
-func TestContinueTrace(t *testing.T) {
+func TestContinueFromHeaders(t *testing.T) {
 	tests := []struct {
 		name       string
 		traceStr   string
@@ -647,7 +616,7 @@ func TestContinueTrace(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &Span{}
 			s.ctx = context.Background()
-			spanOption := ContinueTrace(tt.traceStr, tt.baggageStr)
+			spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
 			spanOption(s)
 			if tt.wantSpan.dynamicSamplingContext.IsFrozen() && !tt.wantSpan.dynamicSamplingContext.HasEntries() {
 				require.Empty(t, s.ToBaggage())
@@ -920,7 +889,7 @@ func TestSampleRatePropagation(t *testing.T) {
 			})
 
 			options := []SpanOption{
-				ContinueTrace(tt.traceHeader, tt.baggageHeader),
+				ContinueFromHeaders(tt.traceHeader, tt.baggageHeader),
 			}
 			transaction := StartTransaction(ctx, "test-transaction", options...)
 			transaction.Finish()
@@ -945,18 +914,18 @@ func TestSampleRatePropagation(t *testing.T) {
 			{name: "sampled"},
 			{name: "unsampled", option: WithSpanSampled(SampledFalse)},
 			{name: "incoming baggage", option: ContinueFromHeaders("11111111111111111111111111111111-2222222222222222-1", "sentry-trace_id=11111111111111111111111111111111,sentry-public_key=upstream,sentry-sampled=true")},
-			{name: "frozen empty baggage", option: ContinueFromTrace("11111111111111111111111111111111-2222222222222222-1")},
+			{name: "frozen empty baggage", option: ContinueFromHeaders("11111111111111111111111111111111-2222222222222222-1", "")},
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "scope-release"})
-				ctx, scope := WithIsolationScope(ContextWithClient(context.Background(), client))
+				ctx, scope := WithScope(ContextWithClient(context.Background(), client))
 				options := []SpanOption{}
 				if test.option != nil {
 					options = append(options, test.option)
 				}
 				root := StartTransaction(ctx, "root", options...)
 				want := root.dynamicSamplingContextForPropagation()
-				require.Same(t, root, scope.GetSpan())
+				require.Same(t, root, scope.getSpan())
 				require.NotNil(t, CaptureMessage(ctx, "before"))
 				root.Finish()
 				require.NotNil(t, CaptureMessage(ctx, "after"))
@@ -985,8 +954,8 @@ func TestSampleRatePropagation(t *testing.T) {
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: false})
-				ctx, _ := WithIsolationScope(ContextWithClient(context.Background(), client))
-				root := StartTransaction(ctx, "disabled", ContinueTrace(test.header, ""))
+				ctx, _ := WithScope(ContextWithClient(context.Background(), client))
+				root := StartTransaction(ctx, "disabled", ContinueFromHeaders(test.header, ""))
 				require.Equal(t, test.want, root.Sampled)
 				root.Finish()
 				require.Empty(t, transport.Events())
@@ -998,7 +967,7 @@ func TestSampleRatePropagation(t *testing.T) {
 	t.Run("child inherits the parent decision across client changes", func(t *testing.T) {
 		enabled, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
 		disabled, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: false})
-		ctx, _ := WithIsolationScope(ContextWithClient(context.Background(), enabled))
+		ctx, _ := WithScope(ContextWithClient(context.Background(), enabled))
 		root := StartTransaction(ctx, "root")
 		child := StartSpan(ContextWithClient(root.Context(), disabled), "child", WithSpanSampled(SampledFalse))
 		require.Equal(t, SampledTrue, child.Sampled)
@@ -1060,7 +1029,7 @@ func TestTracesSamplerReceivesRemoteParent(t *testing.T) {
 				},
 			})
 
-			txn := StartTransaction(ctx, "test-txn", ContinueTrace(tt.traceHeader, tt.baggageHeader))
+			txn := StartTransaction(ctx, "test-txn", ContinueFromHeaders(tt.traceHeader, tt.baggageHeader))
 			txn.Finish()
 
 			assert.Nil(t, gotCtx.Parent, "SamplingContext.Parent should be nil for remote parent")
@@ -1381,11 +1350,11 @@ func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
 
 func TestSpanScopeIsNotActiveSpanStack(t *testing.T) {
 	client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
-	ctx, scope := WithIsolationScope(context.Background())
+	ctx, scope := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, client)
 
 	transaction := StartTransaction(ctx, "parent-operation")
-	require.Same(t, transaction, scope.GetSpan())
+	require.Same(t, transaction, scope.getSpan())
 	traceID, _ := resolveTrace(scope, client, ctx)
 	require.Equal(t, transaction.TraceID, traceID)
 
@@ -1402,7 +1371,7 @@ func TestSpanScopeIsNotActiveSpanStack(t *testing.T) {
 	require.Equal(t, childSpan.TraceID, trace[traceIDContextKey])
 	require.Equal(t, childSpan.SpanID, trace[spanIDContextKey])
 	transaction.Finish()
-	require.Same(t, transaction, scope.GetSpan())
+	require.Same(t, transaction, scope.getSpan())
 }
 
 func TestContextPropagationHeaders(t *testing.T) {
@@ -1436,7 +1405,7 @@ func TestContextPropagationHeaders(t *testing.T) {
 			{name: "static zero unsampled", suffix: "-0", flags: "00", sampled: SampledFalse, staticZero: true},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				ctx, scope := WithIsolationScope(context.Background())
+				ctx, scope := WithScope(context.Background())
 				dsc := DynamicSamplingContext{Frozen: true}
 				if test.release != "" {
 					dsc.Entries = map[string]string{"release": test.release}
@@ -1465,7 +1434,7 @@ func TestContextPropagationHeaders(t *testing.T) {
 	t.Run("static zero sample rate", func(t *testing.T) {
 		creator, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, Release: "creator"})
 		replacement, replacementTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, Release: "replacement"})
-		ctx, scope := WithIsolationScope(ContextWithClient(context.Background(), creator))
+		ctx, scope := WithScope(ContextWithClient(context.Background(), creator))
 
 		require.Equal(t, SampledUndefined, scope.propagationContextSnapshot().Sampled)
 		require.True(t, strings.HasSuffix(GetTraceparent(ctx), "-0"))
@@ -1486,7 +1455,7 @@ func TestContextPropagationHeaders(t *testing.T) {
 
 	t.Run("deferred external trace and invalid fallback", func(t *testing.T) {
 		client, _ := newCaptureTestClient(t, ClientOptions{})
-		ctx, scope := WithIsolationScope(ContextWithClient(context.Background(), client))
+		ctx, scope := WithScope(ContextWithClient(context.Background(), client))
 		externalTraceID, externalSpanID := TraceID{1}, SpanID{2}
 		client.externalTraceResolver = testExternalResolverFunc(func(ctx context.Context) (TraceID, SpanID, Sampled, bool) {
 			if ctx.Value(spanContextKey{}) != nil {
@@ -1520,7 +1489,7 @@ func TestContextPropagationHeaders(t *testing.T) {
 				Transport:        &MockTransport{},
 			})
 			require.NoError(t, err)
-			ctx, _ := WithIsolationScope(context.Background())
+			ctx, _ := WithScope(context.Background())
 			transaction := StartTransaction(ContextWithClient(ctx, client), "transaction")
 			require.Equal(t, test.wantSampled, transaction.Sampled)
 			require.Equal(t, transaction.ToSentryTrace(), GetTraceparent(transaction.Context()))
@@ -1577,7 +1546,7 @@ func TestStrictTraceContinuation(t *testing.T) {
 			}
 
 			transaction := StartTransaction(ctx, "test",
-				ContinueTrace(sentryTrace, baggage),
+				ContinueFromHeaders(sentryTrace, baggage),
 			)
 			transaction.Finish()
 
