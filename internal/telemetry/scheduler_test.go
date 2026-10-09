@@ -234,18 +234,6 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 	}
 }
 
-type blockingTelemetryTransport struct {
-	testutils.MockTelemetryTransport
-	sendStarted chan struct{}
-	resumeSend  chan struct{}
-}
-
-func (t *blockingTelemetryTransport) SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error {
-	close(t.sendStarted)
-	<-t.resumeSend
-	return t.MockTelemetryTransport.SendEnvelope(ctx, envelope)
-}
-
 func TestTelemetrySchedulerFlushWaitsForInFlightBatch(t *testing.T) {
 	t.Parallel()
 
@@ -261,23 +249,25 @@ func TestTelemetrySchedulerFlushWaitsForInFlightBatch(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				transport := &blockingTelemetryTransport{
-					sendStarted: make(chan struct{}),
-					resumeSend:  make(chan struct{}),
-				}
+				sendStarted, resumeSend := make(chan struct{}), make(chan struct{})
+				transport := &testutils.MockTelemetryTransport{SendFunc: func(context.Context, *protocol.Envelope) error {
+					close(sendStarted)
+					<-resumeSend
+					return nil
+				}}
 				buffer := NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
 				scheduler := NewScheduler(map[ratelimit.Category]Buffer[Item]{
 					ratelimit.CategoryError: buffer,
 				}, transport, &protocol.Dsn{}, nil, nil, nil)
 				scheduler.Start()
-				resume := sync.OnceFunc(func() { close(transport.resumeSend) })
+				resume := sync.OnceFunc(func() { close(resumeSend) })
 				t.Cleanup(func() {
 					resume()
 					scheduler.Stop(testutils.FlushTimeout())
 				})
 
 				require.True(t, scheduler.Add(&testTelemetryItem{data: "in-flight"}))
-				<-transport.sendStarted
+				<-sendStarted
 				require.True(t, buffer.IsEmpty())
 
 				ctx, cancel := context.WithTimeout(t.Context(), time.Second)
@@ -476,13 +466,6 @@ func TestTelemetrySchedulerClientReportDelivery(t *testing.T) {
 	}
 }
 
-type rejectingTransport struct {
-	testutils.MockTelemetryTransport
-	err error
-}
-
-func (t *rejectingTransport) SendEnvelope(context.Context, *protocol.Envelope) error { return t.err }
-
 type transactionTelemetryItem struct{ testTelemetryItem }
 
 func (t *transactionTelemetryItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
@@ -505,7 +488,7 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			transport := &rejectingTransport{err: tt.err}
+			transport := &testutils.MockTelemetryTransport{SendFunc: func(context.Context, *protocol.Envelope) error { return tt.err }}
 			dsn := &protocol.Dsn{}
 			recorder := reportpkg.NewAggregator()
 			recorder.Record(reportpkg.ReasonBeforeSend, ratelimit.CategoryError, 2)

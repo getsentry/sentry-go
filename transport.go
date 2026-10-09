@@ -147,6 +147,13 @@ func categoryFromEnvelope(envelope *protocol.Envelope) ratelimit.Category {
 	return ratelimit.CategoryAll
 }
 
+// markSyncDelivery tells the configuring client that events must be sent inline.
+func (o ClientOptions) markSyncDelivery() {
+	if o.syncDelivery != nil {
+		*o.syncDelivery = true
+	}
+}
+
 func validEnvelope(envelope *protocol.Envelope) bool {
 	if envelope == nil || envelope.Header == nil || len(envelope.Items) == 0 {
 		return false
@@ -231,6 +238,7 @@ func NewSyncTransport() *SyncTransport {
 
 // Configure initializes the transport with the client's options before use.
 func (t *SyncTransport) Configure(options ClientOptions) {
+	options.markSyncDelivery()
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 	dsn, err := protocol.NewDsn(options.Dsn)
 	t.httpSender = newHTTPSender(dsn, options, t.Timeout)

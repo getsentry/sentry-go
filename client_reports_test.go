@@ -20,13 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type reportingTransport struct {
-	NoopTransport
-	err error
-}
-
-func (t *reportingTransport) SendEnvelope(context.Context, *protocol.Envelope) error { return t.err }
-
 func TestClientReports_CustomTransport(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -42,7 +35,9 @@ func TestClientReports_CustomTransport(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client, err := NewClient(ClientOptions{
 				DisableClientReports: tt.disabled,
-				Transport:            &reportingTransport{err: tt.err},
+				Transport: &wrappedTransport{Transport: &NoopTransport{}, send: func(context.Context, *protocol.Envelope) error {
+					return tt.err
+				}},
 				BeforeSend: func(event *Event, _ *EventHint) *Event {
 					if event.Message == "drop" {
 						return nil
@@ -54,8 +49,8 @@ func TestClientReports_CustomTransport(t *testing.T) {
 			defer client.Close()
 			ctx, _ := WithScope(context.Background())
 			client.CaptureMessage(ctx, "drop")
-			id := client.CaptureMessage(ctx, "send")
-			require.Equal(t, tt.err == nil, id != nil)
+			require.NotNil(t, client.CaptureMessage(ctx, "send"))
+			client.Flush(testutils.FlushTimeout())
 			pending := client.reportProvider.TakeReport()
 			if tt.disabled {
 				require.Nil(t, pending)
@@ -85,10 +80,10 @@ func TestClientReports_Integration(t *testing.T) {
 		{"report-only flush", true, false, http.StatusOK, nil},
 		{"disabled", true, true, http.StatusOK, nil},
 		{"failed report is retained without retrying", true, false, http.StatusInternalServerError, nil},
-		{"wrapped attached", false, false, http.StatusOK, &wrappedTransport{NewSyncTransport()}},
-		{"wrapped disabled", true, true, http.StatusOK, &wrappedTransport{NewSyncTransport()}},
-		{"wrapped failed report", true, false, http.StatusInternalServerError, &wrappedTransport{NewSyncTransport()}},
-		{"wrapped failed event", false, false, http.StatusInternalServerError, &wrappedTransport{NewSyncTransport()}},
+		{"wrapped attached", false, false, http.StatusOK, &wrappedTransport{Transport: NewSyncTransport()}},
+		{"wrapped disabled", true, true, http.StatusOK, &wrappedTransport{Transport: NewSyncTransport()}},
+		{"wrapped failed report", true, false, http.StatusInternalServerError, &wrappedTransport{Transport: NewSyncTransport()}},
+		{"wrapped failed event", false, false, http.StatusInternalServerError, &wrappedTransport{Transport: NewSyncTransport()}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

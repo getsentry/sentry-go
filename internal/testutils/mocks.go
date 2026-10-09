@@ -10,21 +10,25 @@ import (
 )
 
 type MockTelemetryTransport struct {
+	// SendFunc, when set, runs before an envelope is recorded; a non-nil error
+	// rejects it. It runs without holding the mock's lock, so it may block.
+	SendFunc func(context.Context, *protocol.Envelope) error
+
 	sentEnvelopes []*protocol.Envelope
-	sendError     error
 	mu            sync.Mutex
 	sendCount     int64
 }
 
-func (m *MockTelemetryTransport) SendEnvelope(_ context.Context, envelope *protocol.Envelope) error {
+func (m *MockTelemetryTransport) SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error {
 	atomic.AddInt64(&m.sendCount, 1)
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.sendError != nil {
-		return m.sendError
+	if m.SendFunc != nil {
+		if err := m.SendFunc(ctx, envelope); err != nil {
+			return err
+		}
 	}
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.sentEnvelopes = append(m.sentEnvelopes, envelope)
 	return nil
 }

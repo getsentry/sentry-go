@@ -30,19 +30,12 @@ func (b bwItem) GetSdkInfo() *protocol.SdkInfo                { return &protocol
 func (b bwItem) GetDynamicSamplingContext() map[string]string { return nil }
 func (b bwItem) MakeSerializationSafe()                       {}
 
-// ctxTransport records the error of the context each envelope is sent with.
-type ctxTransport struct {
-	testutils.MockTelemetryTransport
-	ctxErr error
-}
-
-func (t *ctxTransport) SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error {
-	t.ctxErr = ctx.Err()
-	return t.MockTelemetryTransport.SendEnvelope(ctx, envelope)
-}
-
 func TestBuffer_Add_MissingCategory(t *testing.T) {
-	transport := &ctxTransport{}
+	var ctxErr error
+	transport := &testutils.MockTelemetryTransport{SendFunc: func(ctx context.Context, _ *protocol.Envelope) error {
+		ctxErr = ctx.Err()
+		return nil
+	}}
 	dsn := &protocol.Dsn{}
 	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
 	storage := map[ratelimit.Category]Buffer[Item]{}
@@ -53,8 +46,8 @@ func TestBuffer_Add_MissingCategory(t *testing.T) {
 	if !b.Add(canceled, bwItem{id: "1"}) || transport.GetSendCount() != 1 {
 		t.Fatal("expected items without storage to be submitted inline")
 	}
-	if transport.ctxErr != nil {
-		t.Fatalf("inline send inherited capture cancellation: %v", transport.ctxErr)
+	if ctxErr != nil {
+		t.Fatalf("inline send inherited capture cancellation: %v", ctxErr)
 	}
 	b.Close(testutils.FlushTimeout())
 	if b.Add(context.Background(), bwItem{id: "2"}) || transport.GetSendCount() != 1 {

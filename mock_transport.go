@@ -21,7 +21,8 @@ type MockTransport struct {
 	lastEvent *Event
 }
 
-func (t *MockTransport) Configure(_ ClientOptions) {}
+// Configure marks delivery as synchronous so captured events are visible immediately.
+func (t *MockTransport) Configure(options ClientOptions) { options.markSyncDelivery() }
 
 // SendEnvelope captures an envelope and decodes its events for assertions.
 func (t *MockTransport) SendEnvelope(_ context.Context, envelope *protocol.Envelope) error {

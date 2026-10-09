@@ -286,6 +286,9 @@ type ClientOptions struct {
 
 	// recorder carries the client's loss accounting into the built-in transports.
 	recorder report.ClientReportRecorder
+	// syncDelivery is set by synchronous transports during Configure, which
+	// wrappers forward, so wrapped transports are detected too.
+	syncDelivery *bool
 }
 
 // Client processes telemetry captured through the SDK.
@@ -303,6 +306,7 @@ type Client struct {
 	// Transport is read-only. Replacing the transport of an existing client is
 	// not supported, create a new client instead.
 	Transport          Transport
+	syncDelivery       bool
 	telemetryProcessor *telemetry.Processor
 	reportRecorder     report.ClientReportRecorder
 	reportProvider     report.ClientReportProvider
@@ -470,6 +474,7 @@ func normalizeClient(client *Client) *Client {
 func (client *Client) setupTransport() {
 	client.options.recorder = client.reportRecorder
 	opts := client.options
+	opts.syncDelivery = &client.syncDelivery
 	transport := opts.Transport
 	if transport == nil {
 		if opts.Dsn == "" {
@@ -499,8 +504,8 @@ func (client *Client) setupTelemetryProcessor() {
 		ratelimit.CategoryLog:         telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
 		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
 	}
-	// only the AsyncTransport adds single item events. The Sync one sends them blocking.
-	if _, ok := client.Transport.(*AsyncTransport); ok {
+	// Synchronous transports send blocking events, we don't it on buffers.
+	if !client.syncDelivery {
 		buffers[ratelimit.CategoryError] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder)
 		buffers[ratelimit.CategoryTransaction] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder)
 		buffers[ratelimit.CategoryMonitor] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder)

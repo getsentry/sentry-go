@@ -19,6 +19,7 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
@@ -1538,7 +1539,59 @@ func TestSDKIdentifier(t *testing.T) {
 	assertEqual(t, client.GetSDKIdentifier(), "sentry.go.test")
 }
 
-type wrappedTransport struct{ Transport }
+// wrappedTransport forwards to Transport, calling send instead of the wrapped
+// SendEnvelope when set.
+type wrappedTransport struct {
+	Transport
+	send func(context.Context, *protocol.Envelope) error
+}
+
+func (t *wrappedTransport) SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error {
+	if t.send != nil {
+		return t.send(ctx, envelope)
+	}
+	return t.Transport.SendEnvelope(ctx, envelope)
+}
+
+func TestClientRoutesEventsByDelivery(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		inner    Transport
+		buffered bool
+	}{
+		{"wrapped async is buffered", NewAsyncTransport(), true},
+		{"custom transport is buffered", &NoopTransport{}, true},
+		{"wrapped sync is sent inline", NewSyncTransport(), false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				release := make(chan struct{})
+				gate := &wrappedTransport{Transport: tt.inner, send: func(ctx context.Context, envelope *protocol.Envelope) error {
+					<-release
+					return tt.inner.SendEnvelope(ctx, envelope)
+				}}
+				client, err := NewClient(ClientOptions{
+					Dsn:       testDsn,
+					Transport: gate,
+					HTTPClient: &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+						return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+					})},
+				})
+				require.NoError(t, err)
+				var returned atomic.Bool
+				go func() {
+					client.CaptureMessage(context.Background(), "message")
+					returned.Store(true)
+				}()
+				synctest.Wait()
+				// Buffered captures return while the worker waits on the transport.
+				require.Equal(t, tt.buffered, returned.Load())
+				close(release)
+				client.Close()
+			})
+		})
+	}
+}
 
 func TestClientSetsUpTransport(t *testing.T) {
 	for _, tt := range []struct {
@@ -1549,7 +1602,7 @@ func TestClientSetsUpTransport(t *testing.T) {
 		{"default", nil, false},
 		{"async", NewAsyncTransport(), false},
 		{"sync", NewSyncTransport(), true},
-		{"wrapped sync", &wrappedTransport{NewSyncTransport()}, true},
+		{"wrapped sync", &wrappedTransport{Transport: NewSyncTransport()}, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
