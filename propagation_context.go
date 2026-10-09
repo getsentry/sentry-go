@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"crypto/rand"
+	"maps"
 )
 
 const (
@@ -14,6 +15,11 @@ type PropagationContext struct {
 	SpanID                 SpanID                 `json:"span_id"`
 	ParentSpanID           SpanID                 `json:"parent_span_id,omitzero"`
 	DynamicSamplingContext DynamicSamplingContext `json:"-"`
+}
+
+func (p PropagationContext) clone() PropagationContext {
+	p.DynamicSamplingContext.Entries = maps.Clone(p.DynamicSamplingContext.Entries)
+	return p
 }
 
 func (p PropagationContext) Map() map[string]interface{} {

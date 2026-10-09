@@ -1,6 +1,6 @@
 module github.com/getsentry/sentry-go/fasthttp
 
-go 1.25.0
+go 1.26.0
 
 replace github.com/getsentry/sentry-go => ../
 
@@ -14,6 +14,6 @@ require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 )
