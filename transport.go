@@ -408,19 +408,25 @@ func (t *AsyncTransport) FlushWithContext(ctx context.Context) bool {
 	t.closeMu.RLock()
 	defer t.closeMu.RUnlock()
 
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || t.ctx.Err() != nil {
 		return false
 	}
 	flushResponse := make(chan struct{})
 	select {
-	case <-t.done:
+	case <-t.ctx.Done():
 		debuglog.Println("Failed to flush, transport is closed.")
 		return false
 	case t.flushRequest <- flushRequest{ctx: ctx, done: flushResponse}:
 		select {
 		case <-flushResponse:
+			if ctx.Err() != nil || t.ctx.Err() != nil {
+				return false
+			}
 			debuglog.Println("Buffer flushed successfully.")
-			return ctx.Err() == nil
+			return true
+		case <-t.ctx.Done():
+			debuglog.Println("Failed to flush, transport is closed.")
+			return false
 		case <-ctx.Done():
 			debuglog.Println("Failed to flush, buffer timed out.")
 			return false
@@ -449,9 +455,9 @@ func (t *AsyncTransport) Close() {
 func (t *AsyncTransport) worker() {
 	defer t.wg.Done()
 
-	for {
+	for t.ctx.Err() == nil {
 		select {
-		case <-t.done:
+		case <-t.ctx.Done():
 			return
 		case envelope, open := <-t.queue:
 			if !open {
@@ -469,7 +475,7 @@ func (t *AsyncTransport) worker() {
 }
 
 func (t *AsyncTransport) drainQueue(ctx context.Context) {
-	for ctx.Err() == nil {
+	for ctx.Err() == nil && t.ctx.Err() == nil {
 		select {
 		case envelope, open := <-t.queue:
 			if !open {
