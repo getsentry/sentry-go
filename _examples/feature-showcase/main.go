@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 func prettyPrint(v interface{}) string {
@@ -25,8 +26,9 @@ func (t *devNullTransport) Configure(options sentry.ClientOptions) {
 	fmt.Println("Headers:", dsn.RequestHeaders())
 	fmt.Println()
 }
-func (t *devNullTransport) SendEvent(event *sentry.Event) {
+func (t *devNullTransport) SendEnvelope(_ context.Context, _ *protocol.Envelope) error {
 	fmt.Println("Faked Transport")
+	return nil
 }
 
 func (t *devNullTransport) Flush(timeout time.Duration) bool {

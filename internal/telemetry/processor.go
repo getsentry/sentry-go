@@ -31,13 +31,30 @@ func NewProcessor(
 	}
 }
 
-// Add adds a TelemetryItem to the appropriate buffer based on its category.
+// Add buffers item, or submits single-item categories.
 //
 // The processor should call MakeSerializationSafe to eliminate any race on user mutable fields,
 // since the serialization happens on a background goroutine.
-func (b *Processor) Add(item Item) bool {
+func (b *Processor) Add(ctx context.Context, item Item) bool {
 	item.MakeSerializationSafe()
-	return b.scheduler.Add(item)
+	if _, buffered := b.scheduler.buffers[item.GetCategory()]; buffered {
+		return b.scheduler.Add(item)
+	}
+	// this handles client reports and bypasses adding to the scheduler buffer for the sync
+	// transport to be blocking.
+	if b.scheduler.isClosed() {
+		return false
+	}
+	convertible, ok := item.(EnvelopeConvertible)
+	if !ok {
+		b.scheduler.recorder.RecordItem(report.ReasonInternalError, item)
+		return false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// A finished request must not cancel delivery of its own events
+	return b.scheduler.sendItem(context.WithoutCancel(ctx), convertible, false)
 }
 
 // Flush forces all buffers to flush within the given timeout.

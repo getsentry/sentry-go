@@ -148,7 +148,7 @@ func Recover(ctx context.Context, recovered any, options ...CaptureOption) *Even
 //
 // Do not call Flush indiscriminately after every call to CaptureEvent,
 // CaptureException or CaptureMessage. Instead, to have the SDK send events over
-// the network synchronously, configure it to use the HTTPSyncTransport in the
+// the network synchronously, configure it to use the SyncTransport in the
 // call to Init.
 func Flush(timeout time.Duration) bool {
 	return ClientFromContext(context.Background()).Flush(timeout)
@@ -165,7 +165,7 @@ func Flush(timeout time.Duration) bool {
 //
 // Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
 // CaptureException, or CaptureMessage. To send events synchronously over the network,
-// configure the SDK to use HTTPSyncTransport during initialization with Init.
+// configure the SDK to use SyncTransport during initialization with Init.
 
 func FlushWithContext(ctx context.Context) bool {
 	return ClientFromContext(ctx).FlushWithContext(ctx)

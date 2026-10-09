@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -1378,7 +1379,7 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 		User: User{ID: "42", Data: map[string]string{"role": "admin"}},
 	}
 
-	ok := proc.Add(event)
+	ok := proc.Add(context.Background(), event)
 	if !ok {
 		t.Fatal("Add returned false")
 	}

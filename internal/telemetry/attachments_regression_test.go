@@ -1,6 +1,7 @@
 package telemetry_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -42,7 +43,7 @@ func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
 		nil,
 	)
 
-	require.True(t, processor.Add(event), "add failed")
+	require.True(t, processor.Add(context.Background(), event), "add failed")
 	require.True(t, processor.Flush(testutils.FlushTimeout()), "flush timed out")
 	processor.Close(testutils.FlushTimeout())
 

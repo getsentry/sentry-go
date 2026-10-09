@@ -141,15 +141,15 @@ func TestStartSpan(t *testing.T) {
 		Type:        transactionType,
 		Transaction: transaction,
 		Contexts: map[string]Context{
-			"trace": TraceContext{
-				TraceID:      span.TraceID,
-				SpanID:       span.SpanID,
-				ParentSpanID: parentSpanID,
-				Op:           op,
-				Data:         span.Data,
-				Description:  description,
-				Status:       status,
-			}.Map(),
+			"trace": {
+				"trace_id":       span.TraceID.String(),
+				"span_id":        span.SpanID.String(),
+				"parent_span_id": parentSpanID.String(),
+				"op":             op,
+				"data":           span.Data,
+				"description":    description,
+				"status":         status.String(),
+			},
 		},
 		Tags:      nil,
 		Timestamp: endTime,
@@ -203,11 +203,11 @@ func TestStartChild(t *testing.T) {
 		Type:        transactionType,
 		Transaction: "Test Transaction",
 		Contexts: map[string]Context{
-			"trace": TraceContext{
-				TraceID: span.TraceID,
-				SpanID:  span.SpanID,
-				Op:      span.Op,
-			}.Map(),
+			"trace": {
+				"trace_id": span.TraceID.String(),
+				"span_id":  span.SpanID.String(),
+				"op":       span.Op,
+			},
 		},
 		Spans: []*Span{
 			{
@@ -215,7 +215,6 @@ func TestStartChild(t *testing.T) {
 				SpanID:       child.SpanID,
 				ParentSpanID: child.ParentSpanID,
 				Op:           child.Op,
-				Sampled:      SampledTrue,
 				Origin:       SpanOriginManual,
 			},
 		},
@@ -285,13 +284,13 @@ func TestStartTransaction(t *testing.T) {
 		Type:        transactionType,
 		Transaction: transactionName,
 		Contexts: map[string]Context{
-			"trace": TraceContext{
-				TraceID:     transaction.TraceID,
-				SpanID:      transaction.SpanID,
-				Data:        transaction.Data,
-				Description: description,
-				Status:      status,
-			}.Map(),
+			"trace": {
+				"trace_id":    transaction.TraceID.String(),
+				"span_id":     transaction.SpanID.String(),
+				"data":        transaction.Data,
+				"description": description,
+				"status":      status.String(),
+			},
 			"otel": {"k": "v"},
 		},
 		Tags:      nil,
@@ -933,8 +932,8 @@ func TestSampleRatePropagation(t *testing.T) {
 				for _, event := range transport.Events() {
 					if event.Type != transactionType {
 						count++
-						require.Equal(t, want, event.sdkMetaData.dsc)
-						require.Equal(t, root.TraceID, event.Contexts[traceContextKey][traceIDContextKey])
+						require.Equal(t, want.Entries, event.sdkMetaData.dsc.Entries)
+						require.Equal(t, root.TraceID.String(), event.Contexts[traceContextKey][traceIDContextKey])
 					}
 				}
 				require.Equal(t, 2, count)
@@ -1368,8 +1367,8 @@ func TestSpanScopeIsNotActiveSpanStack(t *testing.T) {
 	CaptureMessage(childSpan.Context(), "Test event")
 
 	trace := requireSingleEvent(t, transport).Contexts[traceContextKey]
-	require.Equal(t, childSpan.TraceID, trace[traceIDContextKey])
-	require.Equal(t, childSpan.SpanID, trace[spanIDContextKey])
+	require.Equal(t, childSpan.TraceID.String(), trace[traceIDContextKey])
+	require.Equal(t, childSpan.SpanID.String(), trace[spanIDContextKey])
 	transaction.Finish()
 	require.Same(t, transaction, scope.getSpan())
 }

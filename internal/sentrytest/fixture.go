@@ -189,7 +189,7 @@ func (f *Fixture) NewContext(parent context.Context) context.Context {
 // Events returns all captured events, including transactions.
 //
 // TODO: Add typed helper views (errors, transactions, logs, metrics,
-// check-ins) when the telemetry processor path is enabled in tests.
+// check-ins).
 func (f *Fixture) Events() []*sentry.Event {
 	return f.Transport.Events()
 }
