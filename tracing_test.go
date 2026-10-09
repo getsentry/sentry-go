@@ -1610,7 +1610,7 @@ func TestGetBaggageForExternalTrace(t *testing.T) {
 		{name: "different trace", dsc: DynamicSamplingContext{Frozen: true, Entries: map[string]string{
 			"trace_id": TraceID{2}.String(), "public_key": "upstream", "sampled": "true",
 		}}},
-		{name: "missing trace ID", dsc: DynamicSamplingContext{Frozen: true, Entries: map[string]string{"public_key": "upstream"}}},
+		{name: "missing trace ID", dsc: DynamicSamplingContext{Frozen: true, Entries: map[string]string{"public_key": "upstream"}}, want: "sentry-public_key=upstream"},
 		{name: "frozen empty DSC", dsc: DynamicSamplingContext{Frozen: true}},
 		{name: "no DSC"},
 	} {
