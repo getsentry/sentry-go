@@ -47,54 +47,50 @@ func New(options Options) negroni.Handler {
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	hub := sentry.GetHubFromContext(r.Context())
-	if hub == nil {
-		hub = sentry.CurrentHub().Clone()
-	}
+	created := sentry.SpanFromContext(r.Context()) == nil
+	ctx, scope := sentry.WithIsolationScope(r.Context())
 
-	if client := hub.Client(); client != nil {
-		client.SetSDKIdentifier(sdkIdentifier)
-	}
-	requestCtx := sentry.SetHubOnContext(r.Context(), hub)
+	sentry.ClientFromContext(ctx).SetSDKIdentifier(sdkIdentifier)
 
 	options := []sentry.SpanOption{
-		sentry.ContinueTrace(r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+		traceutils.ContinueFromRequest(r),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(sentry.SourceURL),
 		sentry.WithSpanOrigin(sentry.SpanOriginNegroni),
 	}
 
 	transaction := sentry.StartTransaction(
-		requestCtx,
+		ctx,
 		traceutils.GetHTTPSpanName(r),
 		options...,
 	)
 
-	transaction.SetData("http.request.method", r.Method)
 	rw := httputils.NewWrapResponseWriter(w, r.ProtoMajor)
 
-	defer func() {
-		status := rw.Status()
-		transaction.Status = sentry.HTTPtoSpanStatus(status)
-		transaction.SetData("http.response.status_code", status)
-		transaction.Finish()
-	}()
+	if created {
+		ctx = transaction.Context()
+		transaction.SetData("http.request.method", r.Method)
+		defer func() {
+			status := rw.Status()
+			transaction.Status = sentry.HTTPtoSpanStatus(status)
+			transaction.SetData("http.response.status_code", status)
+			transaction.Finish()
+		}()
+	}
 
-	hub.Scope().SetRequest(r)
-	r = r.WithContext(transaction.Context())
-	defer h.recoverWithSentry(hub, r)
+	r = r.WithContext(ctx)
+	scope.SetRequest(r)
+	defer h.recoverWithSentry(r)
 
-	next(rw, r.WithContext(r.Context()))
+	next(rw, r)
 }
 
-func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
+func (h *handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
-		eventID := hub.RecoverWithContext(
-			context.WithValue(r.Context(), sentry.RequestContextKey, r),
-			err,
-		)
+		ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
+		eventID := sentry.Recover(ctx, err)
 		if eventID != nil && h.waitForDelivery {
-			hub.Flush(h.timeout)
+			sentry.ClientFromContext(ctx).Flush(h.timeout)
 		}
 		if h.repanic {
 			panic(err)
@@ -105,12 +101,9 @@ func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
 // PanicHandlerFunc can be used for Negroni's default Recovery middleware option called PanicHandlerFunc,
 // which let you "plug-in" to its own handler.
 func PanicHandlerFunc(info *negroni.PanicInformation) {
-	hub := sentry.CurrentHub().Clone()
-	hub.WithScope(func(scope *sentry.Scope) {
-		scope.SetRequest(info.Request)
-		hub.RecoverWithContext(
-			context.WithValue(context.Background(), sentry.RequestContextKey, info.Request),
-			info.RecoveredPanic,
-		)
-	})
+	ctx, scope := sentry.WithIsolationScope(info.Request.Context())
+	request := info.Request.WithContext(ctx)
+	scope.SetRequest(request)
+	ctx = context.WithValue(ctx, sentry.RequestContextKey, request)
+	sentry.Recover(ctx, info.RecoveredPanic)
 }
