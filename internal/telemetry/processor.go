@@ -21,8 +21,9 @@ func NewProcessor(
 	dsn *protocol.Dsn,
 	sdkInfo func() *protocol.SdkInfo,
 	recorder report.ClientReportRecorder,
+	provider report.ClientReportProvider,
 ) *Processor {
-	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, recorder)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, recorder, provider)
 	scheduler.Start()
 
 	return &Processor{
