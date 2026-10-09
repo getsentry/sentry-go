@@ -13,9 +13,10 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/util"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
 )
 
@@ -163,7 +164,7 @@ type SyncTransport struct {
 	Timeout time.Duration
 }
 
-func NewSyncTransport(options TransportOptions) protocol.TelemetryTransport {
+func NewSyncTransport(options TransportOptions) telemetry.Transport {
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil || dsn == nil {
 		debuglog.Printf("Transport is disabled: invalid dsn: %v\n", err)
@@ -315,7 +316,7 @@ type AsyncTransport struct {
 	closeOnce sync.Once
 }
 
-func NewAsyncTransport(options TransportOptions) protocol.TelemetryTransport {
+func NewAsyncTransport(options TransportOptions) telemetry.Transport {
 	dsn, err := protocol.NewDsn(options.Dsn)
 	if err != nil || dsn == nil {
 		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)

@@ -14,9 +14,10 @@ import (
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	httpinternal "github.com/getsentry/sentry-go/internal/http"
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/util"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
 )
 
@@ -896,7 +897,7 @@ func newInternalAsyncTransport() Transport {
 // internalAsyncTransportAdapter wraps the internal AsyncTransport to implement
 // the root-level Transport interface.
 type internalAsyncTransportAdapter struct {
-	transport protocol.TelemetryTransport
+	transport telemetry.Transport
 	dsn       *protocol.Dsn
 	recorder  report.ClientReportRecorder
 	provider  report.ClientReportProvider
@@ -935,7 +936,7 @@ func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
 func (a *internalAsyncTransportAdapter) SendEvent(event *Event) {
 	header := &protocol.EnvelopeHeader{EventID: string(event.EventID), SentAt: time.Now(), Dsn: a.dsn, Sdk: &protocol.SdkInfo{Name: event.Sdk.Name, Version: event.Sdk.Version}}
 	if header.EventID == "" {
-		header.EventID = protocol.GenerateEventID()
+		header.EventID = util.GenerateEventID()
 	}
 	envelope, err := event.ToEnvelope(header)
 	if err != nil {

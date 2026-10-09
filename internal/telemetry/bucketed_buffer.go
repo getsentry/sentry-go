@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/report"
 )
@@ -413,7 +412,7 @@ func (b *BucketedBuffer[T]) MarkFlushed() {
 }
 
 func (b *BucketedBuffer[T]) recordDroppedItem(item T) {
-	if ti, ok := any(item).(protocol.TelemetryItem); ok {
+	if ti, ok := any(item).(Item); ok {
 		b.recorder.RecordItem(report.ReasonBufferOverflow, ti)
 	} else {
 		b.recorder.RecordOne(report.ReasonBufferOverflow, b.category)

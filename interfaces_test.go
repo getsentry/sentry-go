@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -1334,8 +1334,8 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 	dsn := &protocol.Dsn{}
 	sdk := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError: telemetry.NewRingBuffer[protocol.TelemetryItem](
+	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
+		ratelimit.CategoryError: telemetry.NewRingBuffer[telemetry.Item](
 			ratelimit.CategoryError,
 			10,
 			telemetry.OverflowPolicyDropOldest,
