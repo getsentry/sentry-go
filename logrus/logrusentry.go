@@ -15,9 +15,6 @@ import (
 )
 
 const (
-	// sdkIdentifier is the identifier of the Logrus SDK.
-	sdkIdentifier = "sentry.go.logrus"
-
 	// These fields are simply omitted, as they are duplicated by the Sentry SDK.
 	FieldGoVersion = "go_version"
 	FieldMaxProcs  = "go_maxprocs"
@@ -30,8 +27,6 @@ const (
 // It is not safe to configure the hook while logging is happening. Please
 // perform all configuration before using it.
 type Hook interface {
-	// SetHubProvider sets a function to provide a hub for each log entry.
-	SetHubProvider(provider func() *sentry.Hub)
 	// AddTags adds tags to the hook's scope.
 	AddTags(tags map[string]string)
 	// SetFallback sets a fallback function for the eventHook.
@@ -56,30 +51,20 @@ type Hook interface {
 type FallbackFunc func(*logrus.Entry) error
 
 type logHook struct {
-	defaultHub        *sentry.Hub
-	hubProvider       func() *sentry.Hub
-	useCustomProvider bool
-	fallback          FallbackFunc
-	keys              map[string]string
-	levels            []logrus.Level
-	attributes        []attribute.Builder
-	logger            sentry.Logger
+	ctx      context.Context
+	fallback FallbackFunc
+	keys     map[string]string
+	levels   []logrus.Level
+	logger   sentry.Logger
 }
 
 var _ Hook = &logHook{}
 var _ logrus.Hook = &logHook{} // logHook also needs to be a logrus.Hook
 
-func (h *logHook) SetHubProvider(provider func() *sentry.Hub) {
-	h.hubProvider = provider
-	h.useCustomProvider = true
-}
-
 func (h *logHook) AddTags(tags map[string]string) {
 	// for logs convert tags to attributes
 	for k, v := range tags {
-		attr := attribute.String(k, v)
-		h.attributes = append(h.attributes, attr)
-		h.logger.SetAttributes(attr)
+		h.logger.SetAttributes(attribute.String(k, v))
 	}
 }
 
@@ -151,45 +136,25 @@ func logrusFieldToLogEntry(logEntry sentry.LogEntry, key string, value interface
 }
 
 func (h *logHook) Fire(entry *logrus.Entry) error {
-	ctx := context.Background()
-	if entry.Context != nil {
-		ctx = entry.Context
-	}
-
-	hub := sentry.GetHubFromContext(ctx)
-	if h.useCustomProvider {
-		if customHub := h.hubProvider(); customHub != nil && customHub.Client().IsEnabled() {
-			hub = customHub
-		}
-	}
-	if hub == nil {
-		hub = h.defaultHub
-	}
-	ctx = sentry.SetHubOnContext(ctx, hub)
-
-	logger := h.logger
-	if hub.Client() != h.defaultHub.Client() {
-		logger = sentry.NewLogger(ctx)
-		logger.SetAttributes(h.attributes...)
-	}
+	ctx := entry.Context
 
 	// Create the base log entry for the appropriate level
 	var logEntry sentry.LogEntry
 	switch entry.Level {
 	case logrus.TraceLevel:
-		logEntry = logger.Trace().WithCtx(ctx)
+		logEntry = h.logger.Trace().WithCtx(ctx)
 	case logrus.DebugLevel:
-		logEntry = logger.Debug().WithCtx(ctx)
+		logEntry = h.logger.Debug().WithCtx(ctx)
 	case logrus.InfoLevel:
-		logEntry = logger.Info().WithCtx(ctx)
+		logEntry = h.logger.Info().WithCtx(ctx)
 	case logrus.WarnLevel:
-		logEntry = logger.Warn().WithCtx(ctx)
+		logEntry = h.logger.Warn().WithCtx(ctx)
 	case logrus.ErrorLevel:
-		logEntry = logger.Error().WithCtx(ctx)
+		logEntry = h.logger.Error().WithCtx(ctx)
 	case logrus.FatalLevel:
-		logEntry = logger.LFatal().WithCtx(ctx)
+		logEntry = h.logger.LFatal().WithCtx(ctx)
 	case logrus.PanicLevel:
-		logEntry = logger.LFatal().WithCtx(ctx)
+		logEntry = h.logger.LFatal().WithCtx(ctx)
 	default:
 		debuglog.Printf("Invalid logrus logging level: %v. Dropping log.", entry.Level)
 		if h.fallback != nil {
@@ -218,43 +183,27 @@ func (h *logHook) Levels() []logrus.Level {
 }
 
 func (h *logHook) Flush(timeout time.Duration) bool {
-	return h.hubProvider().Client().Flush(timeout)
+	return sentry.ClientFromContext(h.ctx).Flush(timeout)
 }
 
 func (h *logHook) FlushWithContext(ctx context.Context) bool {
-	return h.hubProvider().Client().FlushWithContext(ctx)
+	return sentry.ClientFromContext(h.ctx).FlushWithContext(ctx)
 }
 
-// NewLogHook initializes a new Logrus hook which sends logs to a new Sentry client
-// configured according to opts.
-func NewLogHook(levels []logrus.Level, opts sentry.ClientOptions) (Hook, error) {
-	client, err := sentry.NewClient(opts)
-	if err != nil {
-		return nil, err
+// NewLogHook initializes a new Logrus hook which sends logs at the given levels
+// to Sentry.
+func NewLogHook(ctx context.Context, levels []logrus.Level) Hook {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-
-	client.SetSDKIdentifier(sdkIdentifier)
-	return NewLogHookFromClient(levels, client), nil
-}
-
-// NewLogHookFromClient initializes a new Logrus hook which sends logs to the provided
-// sentry client.
-func NewLogHookFromClient(levels []logrus.Level, client *sentry.Client) Hook {
-	defaultHub := sentry.NewHub(client, sentry.NewScope())
-	ctx := sentry.SetHubOnContext(context.Background(), defaultHub)
 	logger := sentry.NewLogger(ctx)
 	origin := attribute.String("sentry.origin", LogrusOrigin)
 	logger.SetAttributes(origin)
 
 	return &logHook{
-		defaultHub: defaultHub,
-		levels:     levels,
-		hubProvider: func() *sentry.Hub {
-			// Default to using the same hub if no specific provider is set
-			return defaultHub
-		},
-		keys:       make(map[string]string),
-		attributes: []attribute.Builder{origin},
-		logger:     logger,
+		ctx:    ctx,
+		levels: levels,
+		keys:   make(map[string]string),
+		logger: logger,
 	}
 }

@@ -1,12 +1,14 @@
 package sentryzerolog
 
 import (
+	"context"
 	"errors"
 	"io"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/sentrytest"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,15 +16,28 @@ import (
 
 // A large portion of this implementation has been taken from https://github.com/archdx/zerolog-sentry/blob/master/writer_test.go
 
+// testConfig bundles the client and writer options used to build a test writer.
+type testConfig struct {
+	sentry.ClientOptions
+	Options
+}
+
+// newTestWriter returns a writer bound to a dedicated client built from cfg.
+func newTestWriter(tb testing.TB, cfg testConfig) *Writer {
+	tb.Helper()
+
+	ctx := sentrytest.NewContext(context.Background(), tb, sentrytest.WithClientOptions(cfg.ClientOptions))
+	writer, err := New(ctx, cfg.Options)
+	require.NoError(tb, err)
+	return writer
+}
+
 var logEventJSON = []byte(`{"level":"error","requestId":"bee07485-2485-4f64-99e1-d10165884ca7","error":"dial timeout","time":"2020-06-25T17:19:00+03:00","message":"test message"}`)
 
 func TestParseLogEvent(t *testing.T) {
 	ts := time.Now()
 
 	now = func() time.Time { return ts }
-
-	_, err := New(Config{})
-	require.Nil(t, err)
 
 	ev, ok := parseLogEvent(logEventJSON)
 	require.True(t, ok)
@@ -56,28 +71,19 @@ func TestParseLogEventUnescapesStrings(t *testing.T) {
 	assert.Equal(t, "3", ev.Tags["count"])
 }
 
-func TestFailedClientCreation(t *testing.T) {
-	_, err := New(Config{ClientOptions: sentry.ClientOptions{Dsn: "invalid"}})
-	require.NotNil(t, err)
-}
+func TestNewWithContext(t *testing.T) {
+	ctx, _ := sentry.WithIsolationScope(context.Background())
 
-func TestNewWithHub(t *testing.T) {
-	hub := sentry.CurrentHub()
-	require.NotNil(t, hub)
-
-	_, err := NewWithHub(hub, Options{
+	_, err := New(ctx, Options{
 		Levels: []zerolog.Level{zerolog.ErrorLevel},
 	})
 	require.Nil(t, err)
 
-	_, err = NewWithHub(nil, Options{})
+	_, err = New(nil, Options{}) // nolint: staticcheck // nil validation
 	require.NotNil(t, err)
 }
 
 func TestParseLogLevel(t *testing.T) {
-	_, err := New(Config{})
-	require.Nil(t, err)
-
 	level, err := parseLogLevel(logEventJSON)
 	require.Nil(t, err)
 	assert.Equal(t, zerolog.ErrorLevel, level)
@@ -85,7 +91,7 @@ func TestParseLogLevel(t *testing.T) {
 
 func TestWrite(t *testing.T) {
 	var beforeSendCalled bool
-	cfg := Config{
+	cfg := testConfig{
 		ClientOptions: sentry.ClientOptions{
 			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				assert.Equal(t, sentry.LevelError, event.Level)
@@ -102,8 +108,7 @@ func TestWrite(t *testing.T) {
 			WithBreadcrumbs: true,
 		},
 	}
-	writer, err := New(cfg)
-	require.Nil(t, err)
+	writer := newTestWriter(t, cfg)
 
 	var zerologError error
 	zerolog.ErrorHandler = func(err error) {
@@ -124,17 +129,16 @@ func TestWrite(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	cfg := Config{}
-	writer, err := New(cfg)
-	require.Nil(t, err)
+	cfg := testConfig{}
+	writer := newTestWriter(t, cfg)
 
-	err = writer.Close()
+	err := writer.Close()
 	require.Nil(t, err)
 }
 
 func TestWrite_TraceDoesNotPanic(t *testing.T) {
 	var beforeSendCalled bool
-	cfg := Config{
+	cfg := testConfig{
 		ClientOptions: sentry.ClientOptions{
 			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				beforeSendCalled = true
@@ -145,8 +149,7 @@ func TestWrite_TraceDoesNotPanic(t *testing.T) {
 			WithBreadcrumbs: false,
 		},
 	}
-	writer, err := New(cfg)
-	require.Nil(t, err)
+	writer := newTestWriter(t, cfg)
 
 	var zerologError error
 	zerolog.ErrorHandler = func(err error) {
@@ -168,7 +171,7 @@ func TestWrite_TraceDoesNotPanic(t *testing.T) {
 
 func TestWriteLevel(t *testing.T) {
 	var beforeSendCalled bool
-	cfg := Config{
+	cfg := testConfig{
 		ClientOptions: sentry.ClientOptions{
 			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				assert.Equal(t, sentry.LevelError, event.Level)
@@ -185,8 +188,7 @@ func TestWriteLevel(t *testing.T) {
 			WithBreadcrumbs: true,
 		},
 	}
-	writer, err := New(cfg)
-	require.Nil(t, err)
+	writer := newTestWriter(t, cfg)
 
 	var zerologError error
 	zerolog.ErrorHandler = func(err error) { zerologError = err }
@@ -202,7 +204,7 @@ func TestWriteLevel(t *testing.T) {
 }
 
 func TestWriteInvalidLevel(t *testing.T) {
-	cfg := Config{
+	cfg := testConfig{
 		ClientOptions: sentry.ClientOptions{
 			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				assert.Equal(t, sentry.LevelError, event.Level)
@@ -218,8 +220,7 @@ func TestWriteInvalidLevel(t *testing.T) {
 			WithBreadcrumbs: true,
 		},
 	}
-	writer, err := New(cfg)
-	require.Nil(t, err)
+	writer := newTestWriter(t, cfg)
 
 	log := zerolog.New(writer).With().Timestamp().
 		Str("requestId", "bee07485-2485-4f64-99e1-d10165884ca7").
@@ -229,7 +230,7 @@ func TestWriteInvalidLevel(t *testing.T) {
 
 func TestWrite_Disabled(t *testing.T) {
 	var beforeSendCalled bool
-	cfg := Config{
+	cfg := testConfig{
 		ClientOptions: sentry.ClientOptions{
 			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				beforeSendCalled = true
@@ -242,9 +243,7 @@ func TestWrite_Disabled(t *testing.T) {
 		},
 	}
 
-	writer, err := New(cfg)
-
-	require.Nil(t, err)
+	writer := newTestWriter(t, cfg)
 
 	var zerologError error
 	zerolog.ErrorHandler = func(err error) {
@@ -264,7 +263,7 @@ func TestWrite_Disabled(t *testing.T) {
 
 func TestWriteLevel_Disabled(t *testing.T) {
 	var beforeSendCalled bool
-	cfg := Config{
+	cfg := testConfig{
 		ClientOptions: sentry.ClientOptions{
 			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				beforeSendCalled = true
@@ -276,8 +275,7 @@ func TestWriteLevel_Disabled(t *testing.T) {
 			WithBreadcrumbs: true,
 		},
 	}
-	writer, err := New(cfg)
-	require.Nil(t, err)
+	writer := newTestWriter(t, cfg)
 
 	var zerologError error
 	zerolog.ErrorHandler = func(err error) {
@@ -297,7 +295,7 @@ func TestWriteLevel_Disabled(t *testing.T) {
 
 func TestWriteLevelFatal(t *testing.T) {
 	var beforeSendCalled bool
-	cfg := Config{
+	cfg := testConfig{
 		ClientOptions: sentry.ClientOptions{
 			BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 				beforeSendCalled = true
@@ -309,8 +307,7 @@ func TestWriteLevelFatal(t *testing.T) {
 			WithBreadcrumbs: true,
 		},
 	}
-	writer, err := New(cfg)
-	require.Nil(t, err)
+	writer := newTestWriter(t, cfg)
 
 	var zerologError error
 	zerolog.ErrorHandler = func(err error) {
@@ -334,10 +331,7 @@ func BenchmarkParseLogEvent(b *testing.B) {
 }
 
 func BenchmarkWriteLogEvent(b *testing.B) {
-	w, err := New(Config{})
-	if err != nil {
-		b.Errorf("failed to create writer: %v", err)
-	}
+	w := newTestWriter(b, testConfig{})
 
 	for i := 0; i < b.N; i++ {
 		_, _ = w.Write(logEventJSON)
@@ -345,10 +339,7 @@ func BenchmarkWriteLogEvent(b *testing.B) {
 }
 
 func BenchmarkWriteLogLevelEvent(b *testing.B) {
-	w, err := New(Config{})
-	if err != nil {
-		b.Errorf("failed to create writer: %v", err)
-	}
+	w := newTestWriter(b, testConfig{})
 
 	for i := 0; i < b.N; i++ {
 		_, _ = w.WriteLevel(zerolog.ErrorLevel, logEventJSON)

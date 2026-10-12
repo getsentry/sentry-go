@@ -26,6 +26,7 @@ go get github.com/getsentry/sentry-go/zerolog
 package main
 
 import (
+	"context"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -44,16 +45,10 @@ func main() {
 	defer sentry.Flush(2 * time.Second)
 
 	// Configure Sentry Zerolog Writer
-	writer, err := sentryzerolog.New(sentryzerolog.Config{
-		ClientOptions: sentry.ClientOptions{
-			Dsn:   "your-public-dsn",
-			Debug: true,
-		},
-		Options: sentryzerolog.Options{
-			Levels:         []zerolog.Level{zerolog.ErrorLevel, zerolog.FatalLevel},
-			FlushTimeout:   3 * time.Second,
-			WithBreadcrumbs: true,
-		},
+	writer, err := sentryzerolog.NewWithContext(context.Background(), sentryzerolog.Options{
+		Levels:          []zerolog.Level{zerolog.ErrorLevel, zerolog.FatalLevel},
+		FlushTimeout:    3 * time.Second,
+		WithBreadcrumbs: true,
 	})
 	if err != nil {
 		panic(err)
@@ -72,10 +67,11 @@ func main() {
 
 ## Configuration
 
-The `sentryzerolog.New` function accepts a `sentryzerolog.Config` struct, which allows for the following configuration options:
+The `sentryzerolog.NewWithContext` function accepts a `context.Context` and a `sentryzerolog.Options` struct.
 
-- `ClientOptions`: A struct of `sentry.ClientOptions` that allows you to configure how the Sentry client will behave.
-- `Options`: A struct of `sentryzerolog.Options` that allows you to configure how the Sentry Zerolog writer will behave.
+The writer sends events with the client configured by `sentry.Init`. To send them with a dedicated client instead, bind it to the context with `sentry.ContextWithClient(ctx, client)`.
+
+If the context does not carry a scope, the writer uses its own isolation scope, so breadcrumbs and events never touch the global scope.
 
 The `sentryzerolog.Options` struct allows you to configure the following:
 

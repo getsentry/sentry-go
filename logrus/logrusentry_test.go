@@ -3,11 +3,11 @@ package sentrylogrus
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/sentrytest"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -15,151 +15,29 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func setupClientTest() (*sentry.Client, *sentry.MockTransport) {
-	mockTransport := &sentry.MockTransport{}
-	mockClient, _ := sentry.NewClient(sentry.ClientOptions{
-		Dsn:       "http://whatever@example.com/1337",
-		Transport: mockTransport,
-	})
-	hub := sentry.CurrentHub()
-	hub.BindClient(mockClient)
-
-	return mockClient, mockTransport
-}
-
 func TestNewLogHook(t *testing.T) {
-	t.Parallel()
-
 	levels := []logrus.Level{logrus.InfoLevel, logrus.ErrorLevel}
-
-	t.Run("invalid DSN", func(t *testing.T) {
-		t.Parallel()
-
-		_, err := NewLogHook(levels, sentry.ClientOptions{Dsn: "%xxx"})
-		if err == nil || !strings.Contains(err.Error(), "invalid URL escape") {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("success", func(t *testing.T) {
-		t.Parallel()
-
-		hook, err := NewLogHook(levels, sentry.ClientOptions{})
-		assert.NoError(t, err)
-		assert.Equal(t, levels, hook.Levels())
-		assert.True(t, hook.Flush(testutils.FlushTimeout()))
-	})
-}
-
-func TestNewLogHookFromClient(t *testing.T) {
-	client, _ := setupClientTest()
-	levels := []logrus.Level{logrus.InfoLevel, logrus.ErrorLevel}
-	hook := NewLogHookFromClient(levels, client)
+	hook := NewLogHook(sentrytest.NewContext(context.Background(), t), levels)
 
 	assert.NotNil(t, hook)
 	assert.Equal(t, levels, hook.Levels())
 }
 
-func TestLogHookSetHubProvider(t *testing.T) {
-	client, _ := setupClientTest()
-	customHub := sentry.NewHub(client, sentry.NewScope())
+func TestLogHookUsesEntryContextClient(t *testing.T) {
+	defaultFixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{Environment: "default"}))
+	contextFixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{Environment: "context"}))
 
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
-	hook.SetHubProvider(func() *sentry.Hub { return customHub })
-
-	assert.Equal(t, customHub, hook.(*logHook).hubProvider())
-	assert.True(t, hook.(*logHook).useCustomProvider)
-}
-
-func TestLogHookSetHubProviderUsesProviderForLogs(t *testing.T) {
-	originalTransport := &sentry.MockTransport{}
-	originalClient, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:         "http://whatever@example.com/1337",
-		Environment: "original",
-		Transport:   originalTransport,
-	})
-	assert.NoError(t, err)
-
-	providerTransport := &sentry.MockTransport{}
-	providerClient, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:         "http://whatever@example.com/1337",
-		Environment: "provider",
-		Transport:   providerTransport,
-	})
-	assert.NoError(t, err)
-	providerHub := sentry.NewHub(providerClient, sentry.NewScope())
-
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, originalClient)
-	hook.SetHubProvider(func() *sentry.Hub { return providerHub })
-	ctx := sentry.SetHubOnContext(context.Background(), sentry.NewHub(originalClient, sentry.NewScope()))
-
-	err = hook.Fire(&logrus.Entry{
-		Context: ctx,
-		Level:   logrus.InfoLevel,
-		Message: "provider log",
-	})
-	assert.NoError(t, err)
-	assert.True(t, hook.Flush(testutils.FlushTimeout()))
-
-	assert.Empty(t, originalTransport.Events())
-	got := providerTransport.Events()
-	assert.Equal(t, 1, len(got))
-	assert.Equal(t, 1, len(got[0].Logs))
-	assert.Equal(t, "provider log", got[0].Logs[0].Body)
-	assert.Equal(t, "provider", got[0].Logs[0].Attributes["sentry.environment"].String())
-}
-
-func TestLogHookNoopHubProviderFallsBack(t *testing.T) {
-	t.Parallel()
-	transport := &sentry.MockTransport{}
-	client, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn: "http://whatever@example.com/1337", Transport: transport,
-	})
-	if !assert.NoError(t, err) {
-		return
-	}
-	t.Cleanup(client.Close)
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
-	hook.SetHubProvider(func() *sentry.Hub { return sentry.NewHub(sentry.NewNoopClient(), sentry.NewScope()) })
-	ctx := sentry.SetHubOnContext(context.Background(), sentry.NewHub(client, sentry.NewScope()))
-
-	assert.NoError(t, hook.Fire(&logrus.Entry{Context: ctx, Level: logrus.InfoLevel, Message: "fallback log"}))
-	assert.True(t, client.Flush(testutils.FlushTimeout()))
-	if events := transport.Events(); assert.Len(t, events, 1) && assert.Len(t, events[0].Logs, 1) {
-		assert.Equal(t, "fallback log", events[0].Logs[0].Body)
-	}
-}
-
-func TestLogHookUsesContextHubWithoutCustomProvider(t *testing.T) {
-	defaultTransport := &sentry.MockTransport{}
-	defaultClient, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:         "http://whatever@example.com/1337",
-		Environment: "default",
-		Transport:   defaultTransport,
-	})
-	assert.NoError(t, err)
-
-	contextTransport := &sentry.MockTransport{}
-	contextClient, err := sentry.NewClient(sentry.ClientOptions{
-		Dsn:         "http://whatever@example.com/1337",
-		Environment: "context",
-		Transport:   contextTransport,
-	})
-	assert.NoError(t, err)
-	contextHub := sentry.NewHub(contextClient, sentry.NewScope())
-	ctx := sentry.SetHubOnContext(context.Background(), contextHub)
-
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, defaultClient)
-	err = hook.Fire(&logrus.Entry{
-		Context: ctx,
+	hook := NewLogHook(defaultFixture.NewContext(context.Background()), []logrus.Level{logrus.InfoLevel})
+	err := hook.Fire(&logrus.Entry{
+		Context: contextFixture.NewContext(context.Background()),
 		Level:   logrus.InfoLevel,
 		Message: "context log",
 	})
 	assert.NoError(t, err)
-	assert.True(t, contextHub.Flush(testutils.FlushTimeout()))
+	contextFixture.Flush()
 
-	assert.Empty(t, defaultTransport.Events())
-	got := contextTransport.Events()
+	assert.Empty(t, defaultFixture.Events())
+	got := contextFixture.Events()
 	assert.Equal(t, 1, len(got))
 	assert.Equal(t, 1, len(got[0].Logs))
 	assert.Equal(t, "context log", got[0].Logs[0].Body)
@@ -167,8 +45,7 @@ func TestLogHookUsesContextHubWithoutCustomProvider(t *testing.T) {
 }
 
 func TestLogHookSetFallback(t *testing.T) {
-	client, _ := setupClientTest()
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
+	hook := NewLogHook(sentrytest.NewContext(context.Background(), t), []logrus.Level{logrus.InfoLevel})
 
 	var called bool
 	fallback := FallbackFunc(func(_ *logrus.Entry) error {
@@ -184,8 +61,7 @@ func TestLogHookSetFallback(t *testing.T) {
 }
 
 func TestLogHookSetKey(t *testing.T) {
-	client, _ := setupClientTest()
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
+	hook := NewLogHook(sentrytest.NewContext(context.Background(), t), []logrus.Level{logrus.InfoLevel})
 	logHook := hook.(*logHook)
 
 	hook.SetKey("oldKey", "newKey")
@@ -201,8 +77,7 @@ func TestLogHookSetKey(t *testing.T) {
 }
 
 func TestLogHookKey(t *testing.T) {
-	client, _ := setupClientTest()
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client)
+	hook := NewLogHook(sentrytest.NewContext(context.Background(), t), []logrus.Level{logrus.InfoLevel})
 	logHook := hook.(*logHook)
 
 	logHook.keys["mappedKey"] = "newKey"
@@ -211,23 +86,21 @@ func TestLogHookKey(t *testing.T) {
 }
 
 func TestLogHookLevels(t *testing.T) {
-	client, _ := setupClientTest()
 	levels := []logrus.Level{logrus.InfoLevel, logrus.ErrorLevel}
-	hook := NewLogHookFromClient(levels, client)
+	hook := NewLogHook(sentrytest.NewContext(context.Background(), t), levels)
 
 	assert.Equal(t, levels, hook.Levels())
 }
 
 func TestLogHookFire(t *testing.T) {
-	client, _ := setupClientTest()
-	hook := NewLogHookFromClient([]logrus.Level{
+	hook := NewLogHook(sentrytest.NewContext(context.Background(), t), []logrus.Level{
 		logrus.TraceLevel,
 		logrus.DebugLevel,
 		logrus.InfoLevel,
 		logrus.WarnLevel,
 		logrus.ErrorLevel,
 		logrus.FatalLevel,
-	}, client).(*logHook)
+	}).(*logHook)
 
 	tests := []struct {
 		name  string
@@ -254,8 +127,7 @@ func TestLogHookFire(t *testing.T) {
 }
 
 func TestLogHookFireInvalidLevelUsesFallback(t *testing.T) {
-	client, _ := setupClientTest()
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client).(*logHook)
+	hook := NewLogHook(sentrytest.NewContext(context.Background(), t), []logrus.Level{logrus.InfoLevel}).(*logHook)
 
 	var called bool
 	hook.SetFallback(func(_ *logrus.Entry) error {
@@ -272,8 +144,8 @@ func TestLogHookFireInvalidLevelUsesFallback(t *testing.T) {
 }
 
 func TestLogHookAddTags(t *testing.T) {
-	client, transport := setupClientTest()
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client).(*logHook)
+	f := sentrytest.NewFixture(t)
+	hook := NewLogHook(f.NewContext(context.Background()), []logrus.Level{logrus.InfoLevel}).(*logHook)
 
 	tags := map[string]string{"tag1": "value1", "tag2": "value2"}
 	hook.AddTags(tags)
@@ -285,15 +157,15 @@ func TestLogHookAddTags(t *testing.T) {
 
 	hook.Flush(testutils.FlushTimeout())
 
-	got := transport.Events()
+	got := f.Events()
 	assert.Equal(t, 1, len(got))
 	assert.Equal(t, tags["tag1"], got[0].Logs[0].Attributes["tag1"].String())
 	assert.Equal(t, tags["tag2"], got[0].Logs[0].Attributes["tag2"].String())
 }
 
 func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
-	client, transport := setupClientTest()
-	hook := NewLogHookFromClient([]logrus.Level{logrus.InfoLevel}, client).(*logHook)
+	f := sentrytest.NewFixture(t)
+	hook := NewLogHook(f.NewContext(context.Background()), []logrus.Level{logrus.InfoLevel}).(*logHook)
 
 	type complexStruct struct {
 		Name  string
@@ -363,7 +235,7 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 
 	hook.Flush(testutils.FlushTimeout())
 
-	got := transport.Events()
+	got := f.Events()
 	assert.Equal(t, 1, len(got))
 	if diff := cmp.Diff(wantAttrs, got[0].Logs[0].Attributes,
 		cmp.AllowUnexported(attribute.Value{}),
