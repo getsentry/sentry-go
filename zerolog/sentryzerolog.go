@@ -1,6 +1,7 @@
 package sentryzerolog
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -34,9 +35,6 @@ var (
 	now = time.Now
 )
 
-// The identifier of the Zerolog SDK.
-const sdkIdentifier = "sentry.go.zerolog"
-
 // These default log field keys are used to pass specific metadata in a way that
 // Sentry understands. If they are found in the log fields, and the value is of
 // the expected datatype, it will be converted from a generic field, into Sentry
@@ -59,11 +57,6 @@ const (
 	// Name of the logger used by the Sentry SDK.
 	logger = "zerolog"
 )
-
-type Config struct {
-	sentry.ClientOptions
-	Options
-}
 
 type Options struct {
 	// Levels specifies the log levels that will trigger event sending to Sentry.
@@ -97,34 +90,13 @@ func (o *Options) SetDefaults() {
 	}
 }
 
-// New creates writer with provided DSN and options.
-func New(cfg Config) (*Writer, error) {
-	client, err := sentry.NewClient(cfg.ClientOptions)
-	if err != nil {
-		return nil, err
+// New creates a writer using a Sentry scope context and options.
+func New(ctx context.Context, opts Options) (*Writer, error) {
+	if ctx == nil {
+		return nil, errors.New("context cannot be nil")
 	}
-
-	client.SetSDKIdentifier(sdkIdentifier)
-
-	cfg.SetDefaults()
-
-	levels := make(map[zerolog.Level]struct{}, len(cfg.Levels))
-	for _, lvl := range cfg.Levels {
-		levels[lvl] = struct{}{}
-	}
-
-	return &Writer{
-		hub:             sentry.NewHub(client, sentry.NewScope()),
-		levels:          levels,
-		flushTimeout:    cfg.FlushTimeout,
-		withBreadcrumbs: cfg.WithBreadcrumbs,
-	}, nil
-}
-
-// NewWithHub creates a writer using an existing sentry Hub and options.
-func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
-	if hub == nil {
-		return nil, errors.New("hub cannot be nil")
+	if sentry.ScopeFromContext(ctx) == nil {
+		ctx, _ = sentry.WithScope(ctx)
 	}
 
 	opts.SetDefaults()
@@ -135,7 +107,7 @@ func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 	}
 
 	return &Writer{
-		hub:             hub,
+		ctx:             ctx,
 		levels:          levels,
 		flushTimeout:    opts.FlushTimeout,
 		withBreadcrumbs: opts.WithBreadcrumbs,
@@ -144,7 +116,7 @@ func NewWithHub(hub *sentry.Hub, opts Options) (*Writer, error) {
 
 // Writer is a sentry events writer with std io.Writer interface.
 type Writer struct {
-	hub             *sentry.Hub
+	ctx             context.Context
 	levels          map[zerolog.Level]struct{}
 	flushTimeout    time.Duration
 	withBreadcrumbs bool
@@ -169,13 +141,13 @@ func (w *Writer) addBreadcrumb(event *sentry.Event) {
 		data[k] = v
 	}
 
-	w.hub.AddBreadcrumb(&sentry.Breadcrumb{
+	sentry.AddBreadcrumb(w.ctx, &sentry.Breadcrumb{
 		Type:     breadcrumbType,
 		Category: category,
 		Message:  event.Message,
 		Level:    event.Level,
 		Data:     data,
-	}, nil)
+	})
 }
 
 // Write handles zerolog's json and sends events to sentry.
@@ -203,10 +175,10 @@ func (w *Writer) Write(data []byte) (int, error) {
 		return n, nil
 	}
 
-	w.hub.CaptureEvent(event)
+	sentry.CaptureEvent(w.ctx, event)
 	// should flush before os.Exit
 	if event.Level == sentry.LevelFatal {
-		w.hub.Flush(w.flushTimeout)
+		sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout)
 	}
 
 	return n, nil
@@ -231,10 +203,10 @@ func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (int, error) {
 		return n, nil
 	}
 
-	w.hub.CaptureEvent(event)
+	sentry.CaptureEvent(w.ctx, event)
 	// should flush before os.Exit
 	if event.Level == sentry.LevelFatal {
-		w.hub.Flush(w.flushTimeout)
+		sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout)
 	}
 
 	return n, nil
@@ -243,7 +215,7 @@ func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (int, error) {
 // Close forces client to flush all pending events.
 // Can be useful before application exits.
 func (w *Writer) Close() error {
-	if ok := w.hub.Flush(w.flushTimeout); !ok {
+	if ok := sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout); !ok {
 		return ErrFlushTimeout
 	}
 	return nil
