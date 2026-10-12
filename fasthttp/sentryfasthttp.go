@@ -10,7 +10,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/traceutils"
 	"github.com/valyala/fasthttp"
 )
 
@@ -88,14 +87,14 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 				cancel()
 			}
 		}()
-		requestCtx, scope := sentry.WithIsolationScope(requestCtx)
+		requestCtx, scope := sentry.WithScope(requestCtx)
 
 		sentry.ClientFromContext(requestCtx).SetSDKIdentifier(sdkIdentifier)
 
 		r := convert(ctx)
 
 		options := []sentry.SpanOption{
-			traceutils.ContinueFromRequest(r),
+			sentry.ContinueFromRequest(r),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginFastHTTP),

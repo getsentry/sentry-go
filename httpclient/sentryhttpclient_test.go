@@ -70,7 +70,7 @@ func (c *captureRoundTripper) RoundTrip(request *http.Request) (*http.Response, 
 }
 
 func contextWithClient(client *sentry.Client) context.Context {
-	ctx, _ := sentry.WithIsolationScope(context.Background())
+	ctx, _ := sentry.WithScope(context.Background())
 	return sentry.ContextWithClient(ctx, client)
 }
 
@@ -803,7 +803,7 @@ func TestPropagateTraceparentHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ctx, _ := sentry.WithIsolationScope(context.Background())
+	ctx, _ := sentry.WithScope(context.Background())
 	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
 	ctx = span.Context()
 
@@ -1074,7 +1074,7 @@ func TestFrozenBaggageReplacesPreviousTrace(t *testing.T) {
 			t.Parallel()
 			f := sentrytest.NewFixture(t)
 			ctx := f.NewContext(context.Background())
-			sentry.StartTransaction(ctx, "incoming", sentry.ContinueTrace("11111111111111111111111111111111-2222222222222222-1", test.incoming)).Finish()
+			sentry.StartTransaction(ctx, "incoming", sentry.ContinueFromHeaders("11111111111111111111111111111111-2222222222222222-1", test.incoming)).Finish()
 			request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
 			require.NoError(t, err)
 			for _, value := range test.existing {

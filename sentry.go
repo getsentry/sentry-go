@@ -33,7 +33,7 @@ func Init(options ClientOptions) error {
 //
 // The total number of breadcrumbs that can be recorded are limited by the
 // configuration on the client.
-func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb) {
+func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb, options ...BreadcrumbOption) {
 	client := ClientFromContext(ctx)
 	limit := client.options.MaxBreadcrumbs
 	switch {
@@ -43,7 +43,16 @@ func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb) {
 		limit = defaultMaxBreadcrumbs
 	}
 	if client.options.BeforeBreadcrumb != nil {
-		if breadcrumb = client.options.BeforeBreadcrumb(breadcrumb, &BreadcrumbHint{}); breadcrumb == nil {
+		resolved := breadcrumbOptions{}
+		for _, option := range options {
+			if option != nil {
+				option(&resolved)
+			}
+		}
+		if resolved.hint == nil {
+			resolved.hint = &BreadcrumbHint{}
+		}
+		if breadcrumb = client.options.BeforeBreadcrumb(breadcrumb, resolved.hint); breadcrumb == nil {
 			debuglog.Println("breadcrumb dropped due to BeforeBreadcrumb callback.")
 			return
 		}

@@ -22,7 +22,7 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 	global.AddBreadcrumb(&Breadcrumb{Message: "global"}, defaultMaxBreadcrumbs)
 	global.AddAttachment(&Attachment{Filename: "global.txt"})
 
-	ctx, current := WithIsolationScope(context.Background())
+	ctx, current := WithScope(context.Background())
 	current.SetTags(map[string]string{"current": "current", "shared": "current"})
 	current.SetContext("shared", Context{"source": "current"})
 	current.SetUser(User{ID: "current"})
@@ -96,7 +96,7 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 				var native *Span
 				if test.nativeSpanID != zeroSpanID {
 					native = &Span{TraceID: traceID, SpanID: test.nativeSpanID, Op: "db.query", Description: "read users", Status: SpanStatusOK, Data: map[string]interface{}{"query": "users"}}
-					scope.SetSpan(native)
+					scope.setSpan(native)
 					ctx = context.WithValue(ctx, spanContextKey{}, native)
 				}
 				switch test.source {
@@ -141,7 +141,7 @@ func TestCaptureMergesIsolationScopeSnapshotAndEvent(t *testing.T) {
 				case "propagation":
 					scope.SetPropagationContext(PropagationContext{TraceID: TraceID{2}, SpanID: SpanID{2}})
 				case "native":
-					scope.SetSpan(&Span{TraceID: TraceID{3}, SpanID: SpanID{3}})
+					scope.setSpan(&Span{TraceID: TraceID{3}, SpanID: SpanID{3}})
 				case "external":
 					client.externalTraceResolver = testExternalResolverFunc(func(context.Context) (TraceID, SpanID, Sampled, bool) {
 						return TraceID{3}, SpanID{3}, SampledUndefined, true
@@ -173,7 +173,7 @@ func TestCaptureObservesCurrentScopeContents(t *testing.T) {
 		{"remove", false}, {"clear", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			ctx, current := WithIsolationScope(context.Background())
+			ctx, current := WithScope(context.Background())
 			current.SetTag("tag", "current")
 			current.AddBreadcrumb(&Breadcrumb{Message: "current"}, defaultMaxBreadcrumbs)
 			if test.clear {
@@ -204,7 +204,7 @@ func TestCaptureBreadcrumbOrderAndLimit(t *testing.T) {
 	global.AddBreadcrumb(&Breadcrumb{Message: "global-1", Timestamp: testNow.Add(4 * time.Hour)}, defaultMaxBreadcrumbs)
 	global.AddBreadcrumb(&Breadcrumb{Message: "global-2", Timestamp: testNow.Add(3 * time.Hour)}, defaultMaxBreadcrumbs)
 
-	ctx, current := WithIsolationScope(context.Background())
+	ctx, current := WithScope(context.Background())
 	current.AddBreadcrumb(&Breadcrumb{Message: "current", Timestamp: testNow.Add(2 * time.Hour)}, defaultMaxBreadcrumbs)
 
 	for _, test := range []struct {
@@ -239,7 +239,7 @@ func TestCaptureRunsProcessorsFromGenericToSpecific(t *testing.T) {
 		}
 	}
 	global.AddEventProcessor(processor("global scope", LevelDebug))
-	ctx, current := WithIsolationScope(context.Background())
+	ctx, current := WithScope(context.Background())
 	current.SetLevel(LevelError)
 	current.AddEventProcessor(processor("current scope", LevelDebug))
 	data := Context{"value": "scope"}

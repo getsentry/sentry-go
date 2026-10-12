@@ -96,7 +96,7 @@ func New(ctx context.Context, opts Options) (*Writer, error) {
 		return nil, errors.New("context cannot be nil")
 	}
 	if sentry.ScopeFromContext(ctx) == nil {
-		ctx, _ = sentry.WithIsolationScope(ctx)
+		ctx, _ = sentry.WithScope(ctx)
 	}
 
 	opts.SetDefaults()

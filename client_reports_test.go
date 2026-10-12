@@ -50,7 +50,7 @@ func TestClientReports_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Init failed: %v", err)
 	}
-	ctx, _ := WithIsolationScope(context.Background())
+	ctx, _ := WithScope(context.Background())
 	defer c.Flush(testutils.FlushTimeout())
 
 	// second client with disabled reports shouldn't affect the first
@@ -61,7 +61,7 @@ func TestClientReports_Integration(t *testing.T) {
 
 	// simulate dropped events for report outcomes
 	c.CaptureMessage(ctx, "drop-me")
-	processorCtx, processorScope := WithIsolationScope(ctx)
+	processorCtx, processorScope := WithScope(ctx)
 	processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 		if event.Message == "processor-drop" {
 			return nil

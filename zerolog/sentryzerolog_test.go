@@ -72,7 +72,7 @@ func TestParseLogEventUnescapesStrings(t *testing.T) {
 }
 
 func TestNewWithContext(t *testing.T) {
-	ctx, _ := sentry.WithIsolationScope(context.Background())
+	ctx, _ := sentry.WithScope(context.Background())
 
 	_, err := New(ctx, Options{
 		Levels: []zerolog.Level{zerolog.ErrorLevel},

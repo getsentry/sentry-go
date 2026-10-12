@@ -151,7 +151,6 @@ type MeterOption func(*meterOptions)
 
 type meterOptions struct {
 	unit       string
-	scope      *Scope
 	attributes map[string]attribute.Value
 }
 
@@ -159,14 +158,6 @@ type meterOptions struct {
 func WithUnit(unit string) MeterOption {
 	return func(o *meterOptions) {
 		o.unit = unit
-	}
-}
-
-// WithScopeOverride sets a custom scope for the metric, overriding the context
-// scope and preventing fallback to the meter's creation trace.
-func WithScopeOverride(scope *Scope) MeterOption {
-	return func(o *meterOptions) {
-		o.scope = scope
 	}
 }
 

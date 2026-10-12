@@ -16,7 +16,7 @@ import (
 func TestConcurrentSharedIsolation(t *testing.T) {
 	t.Parallel()
 	f := sentrytest.NewFixture(t)
-	ctx, scope := sentry.WithIsolationScope(sentry.ContextWithClient(context.Background(), f.Client))
+	ctx, scope := sentry.WithScope(sentry.ContextWithClient(context.Background(), f.Client))
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(1)

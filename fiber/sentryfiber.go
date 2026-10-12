@@ -13,7 +13,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/traceutils"
 )
 
 const (
@@ -86,7 +85,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 		}
 	}()
 	defer func() { ctx.SetUserContext(savedCtx) }()
-	requestCtx, scope := sentry.WithIsolationScope(requestCtx)
+	requestCtx, scope := sentry.WithScope(requestCtx)
 
 	sentry.ClientFromContext(requestCtx).SetSDKIdentifier(sdkIdentifier)
 
@@ -95,7 +94,7 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 	transactionSource := sentry.SourceURL
 
 	options := []sentry.SpanOption{
-		traceutils.ContinueFromRequest(r),
+		sentry.ContinueFromRequest(r),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),

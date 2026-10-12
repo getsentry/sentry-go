@@ -150,7 +150,7 @@ func newFixture(t testing.TB, useSynctest bool, opts ...Option) *Fixture {
 		}
 		f.Client = client
 	}
-	f.Context, f.Scope = sentry.WithIsolationScope(context.Background())
+	f.Context, f.Scope = sentry.WithScope(context.Background())
 	f.Context = sentry.ContextWithClient(f.Context, f.Client)
 
 	// Ensure background goroutines (batch processors) are stopped when the test finishes.
@@ -182,7 +182,7 @@ func (f *Fixture) NewContext(parent context.Context) context.Context {
 	if parent == nil {
 		parent = context.Background()
 	}
-	ctx, _ := sentry.WithIsolationScope(parent)
+	ctx, _ := sentry.WithScope(parent)
 	return sentry.ContextWithClient(ctx, f.Client)
 }
 

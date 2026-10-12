@@ -77,7 +77,7 @@ func testConcurrentLoggerSetAttributes(_ *testing.T) {
 		Dsn:       testDsn,
 		Transport: &MockTransport{},
 	})
-	ctx, _ := WithIsolationScope(context.Background())
+	ctx, _ := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, client)
 
 	logger := NewLogger(ctx)
@@ -123,7 +123,7 @@ func testConcurrentLogEmission(_ *testing.T) {
 		Dsn:       testDsn,
 		Transport: &MockTransport{},
 	})
-	ctx, _ := WithIsolationScope(context.Background())
+	ctx, _ := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, client)
 
 	var wg sync.WaitGroup
@@ -196,7 +196,7 @@ func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 		Dsn:       testDsn,
 		Transport: &MockTransport{},
 	})
-	baseCtx, _ := WithIsolationScope(context.Background())
+	baseCtx, _ := WithScope(context.Background())
 	baseCtx = ContextWithClient(baseCtx, client)
 
 	var wg sync.WaitGroup
@@ -245,7 +245,7 @@ func testConcurrentLogWithSpanOperations(_ *testing.T) {
 		TracesSampleRate: 1.0,
 		Transport:        &MockTransport{},
 	})
-	ctx, _ := WithIsolationScope(context.Background())
+	ctx, _ := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, client)
 
 	var wg sync.WaitGroup

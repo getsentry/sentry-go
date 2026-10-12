@@ -271,7 +271,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 		for _, boundary := range []string{"baggage", "event"} {
 			t.Run(boundary, func(t *testing.T) {
 				creator, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, Release: "creator"})
-				ctx, scope := WithIsolationScope(ContextWithClient(context.Background(), creator))
+				ctx, scope := WithScope(ContextWithClient(context.Background(), creator))
 				if boundary == "baggage" {
 					_ = GetBaggage(ctx)
 				} else {
@@ -307,7 +307,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
-				ctx, scope := WithIsolationScope(ContextWithClient(context.Background(), client))
+				ctx, scope := WithScope(ContextWithClient(context.Background(), client))
 				propagation := scope.propagationContextSnapshot()
 				traceID := propagation.TraceID
 				var root *Span

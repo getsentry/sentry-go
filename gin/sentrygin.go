@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/internal/traceutils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -58,7 +57,7 @@ func GetContext(c *gin.Context) context.Context {
 
 func (h *handler) handle(c *gin.Context) {
 	created := sentry.SpanFromContext(c.Request.Context()) == nil
-	ctx, scope := sentry.WithIsolationScope(c.Request.Context())
+	ctx, scope := sentry.WithScope(c.Request.Context())
 
 	sentry.ClientFromContext(ctx).SetSDKIdentifier(sdkIdentifier)
 
@@ -71,7 +70,7 @@ func (h *handler) handle(c *gin.Context) {
 	}
 
 	options := []sentry.SpanOption{
-		traceutils.ContinueFromRequest(c.Request),
+		sentry.ContinueFromRequest(c.Request),
 		sentry.WithOpName("http.server"),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginGin),

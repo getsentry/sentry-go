@@ -250,20 +250,20 @@ func TestGlobalClientConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-func TestWithIsolationScopeCreatesIndependentRoots(t *testing.T) {
+func TestWithScopeCreatesIndependentRoots(t *testing.T) {
 	client, transport := newCaptureTestClient(t, ClientOptions{})
 	global := GlobalScope()
 	previous := global.Clone()
 	global.SetTag("global-snapshot", "before")
-	global.SetSpan(&Span{})
+	global.setSpan(&Span{})
 	t.Cleanup(func() {
 		global.mu.Lock()
 		global.scopeData = previous.scopeData
 		global.mu.Unlock()
 	})
 
-	firstCtx, first := WithIsolationScope(context.Background())
-	secondCtx, second := WithIsolationScope(context.Background())
+	firstCtx, first := WithScope(context.Background())
+	secondCtx, second := WithScope(context.Background())
 	global.SetTag("global-after-snapshot", "after")
 	require.NotNil(t, CaptureMessage(ContextWithClient(firstCtx, client), "first root"))
 	require.NotNil(t, CaptureMessage(ContextWithClient(secondCtx, client), "second root"))
@@ -271,11 +271,11 @@ func TestWithIsolationScopeCreatesIndependentRoots(t *testing.T) {
 	assert.Equal(t, "before", transport.Events()[0].Tags["global-snapshot"])
 	assert.NotContains(t, transport.Events()[0].Tags, "global-after-snapshot")
 	assert.NotEqual(t, transport.Events()[0].Contexts["trace"][traceIDContextKey], transport.Events()[1].Contexts["trace"][traceIDContextKey])
-	assert.Nil(t, first.GetSpan())
-	assert.Nil(t, second.GetSpan())
+	assert.Nil(t, first.getSpan())
+	assert.Nil(t, second.getSpan())
 }
 
-func TestWithIsolationScopeClonesParentTrace(t *testing.T) {
+func TestWithScopeClonesParentTrace(t *testing.T) {
 	client, transport := newCaptureTestClient(t, ClientOptions{})
 	parent := NewScope()
 	parent.SetTag("source", "parent")
@@ -286,7 +286,7 @@ func TestWithIsolationScopeClonesParentTrace(t *testing.T) {
 		},
 	})
 
-	ctx, child := WithIsolationScope(ContextWithScope(context.Background(), parent))
+	ctx, child := WithScope(ContextWithScope(context.Background(), parent))
 	propagation := child.propagationContextSnapshot()
 	propagation.DynamicSamplingContext.Entries["release"] = "child"
 	child.SetPropagationContext(propagation)
@@ -301,12 +301,12 @@ func TestWithIsolationScopeClonesParentTrace(t *testing.T) {
 	assert.Equal(t, parent.propagationContextSnapshot().TraceID, transport.Events()[0].Contexts["trace"][traceIDContextKey])
 }
 
-func TestWithIsolationScopeInheritsActiveTransaction(t *testing.T) {
+func TestWithScopeInheritsActiveTransaction(t *testing.T) {
 	client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true})
 	transaction := StartTransaction(ContextWithClient(context.Background(), client), "transaction")
 	t.Cleanup(transaction.Finish)
 
-	ctx, _ := WithIsolationScope(transaction.Context())
+	ctx, _ := WithScope(transaction.Context())
 	require.NotNil(t, CaptureMessage(ctx, "child"))
 	require.Len(t, transport.Events(), 1)
 	assert.Equal(t, transaction.TraceID, transport.Events()[0].Contexts["trace"][traceIDContextKey])
@@ -324,7 +324,7 @@ func TestUnboundTransactionDoesNotBecomeGlobalScopeSpan(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	require.Nil(t, global.GetSpan())
+	require.Nil(t, global.getSpan())
 }
 
 func TestCaptureMessageCopiesHintAndUsesContext(t *testing.T) {
@@ -1661,11 +1661,11 @@ func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 	e.traceID2 = TraceIDFromHex("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2")
 
 	var scope1 *Scope
-	e.ctx1, scope1 = WithIsolationScope(context.Background())
+	e.ctx1, scope1 = WithScope(context.Background())
 	e.ctx1 = ContextWithClient(e.ctx1, e.client1)
 	scope1.SetPropagationContext(PropagationContext{TraceID: e.traceID1})
 	var scope2 *Scope
-	e.ctx2, scope2 = WithIsolationScope(context.Background())
+	e.ctx2, scope2 = WithScope(context.Background())
 	e.ctx2 = ContextWithClient(e.ctx2, e.client2)
 	scope2.SetPropagationContext(PropagationContext{TraceID: e.traceID2})
 
@@ -1814,7 +1814,7 @@ func TestClient_MultiClientSetup(t *testing.T) {
 	t.Run("explicit client owns the transaction and concurrent DSC", func(t *testing.T) {
 		creator, creatorTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "creator"})
 		override, overrideTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "override"})
-		ctx, _ := WithIsolationScope(ContextWithClient(context.Background(), creator))
+		ctx, _ := WithScope(ContextWithClient(context.Background(), creator))
 		root := StartTransaction(ctx, "root")
 		type callerKey struct{}
 		key := callerKey{}
