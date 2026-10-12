@@ -50,3 +50,17 @@ func resolveCaptureOptionsWithOptions(ctx context.Context, options []CaptureOpti
 	resolved.hint = hint
 	return resolved
 }
+
+// BreadcrumbOption configures a single breadcrumb operation.
+type BreadcrumbOption func(*breadcrumbOptions)
+
+type breadcrumbOptions struct {
+	hint *BreadcrumbHint
+}
+
+// WithBreadcrumbHint supplies metadata to the before-breadcrumb callback.
+func WithBreadcrumbHint(hint *BreadcrumbHint) BreadcrumbOption {
+	return func(options *breadcrumbOptions) {
+		options.hint = hint
+	}
+}

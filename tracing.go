@@ -1118,7 +1118,9 @@ func dscMatchesTrace(trace TraceParentContext, dsc DynamicSamplingContext) bool 
 	return dsc.Entries[traceIDContextKey] == "" || strings.EqualFold(dsc.Entries[traceIDContextKey], trace.TraceID.String())
 }
 
-// GetTraceparent returns the Sentry trace header value carried by ctx.
+// GetTraceparent returns the sentry-trace header value carried by ctx.
+// The sentry-trace header is distinct from the W3C traceparent header,
+// which can be obtained using `GetTraceparentW3C`.
 func GetTraceparent(ctx context.Context) string {
 	trace, _ := traceForPropagation(ctx, false)
 	if trace.traceID == zeroTraceID || trace.spanID == zeroSpanID {
