@@ -30,8 +30,7 @@ func ScopeFromContext(ctx context.Context) *Scope {
 	return scope
 }
 
-// ContextWithScope returns a context carrying scope. The supplied scope is the
-// complete scope for the derived context. A nil scope leaves ctx unchanged.
+// ContextWithScope returns a context carrying scope. A nil scope leaves ctx unchanged.
 func ContextWithScope(ctx context.Context, scope *Scope) context.Context {
 	if scope == nil {
 		return ctx
@@ -49,20 +48,17 @@ func ContextWithClient(ctx context.Context, client *Client) context.Context {
 }
 
 // WithScope returns a derived context and a forked scope.
-// It clones a carried scope, or snapshots the global scope when ctx does not
-// carry one. A root isolation scope starts a new propagation context.
+// It clones a carried scope, or starts an empty scope with a new propagation
+// context when ctx does not carry one.
 func WithScope(ctx context.Context) (context.Context, *Scope) {
-	parent := ScopeFromContext(ctx)
 	var scope *Scope
-	if parent == nil {
-		scope = GlobalScope().Clone()
-		scope.propagationContext = NewPropagationContext()
-		scope.span = nil
+	if parent := ScopeFromContext(ctx); parent != nil {
+		scope = parent.Clone()
+	} else {
+		scope = NewScope()
 		if span := SpanFromContext(ctx); span != nil {
 			scope.span = span.GetTransaction()
 		}
-	} else {
-		scope = parent.Clone()
 	}
 	return ContextWithScope(ctx, scope), scope
 }
@@ -75,13 +71,6 @@ func ClientFromContext(ctx context.Context) *Client {
 		}
 	}
 	return normalizeClient(globalClientSnapshot())
-}
-
-func scopeFromContextOrGlobal(ctx context.Context) *Scope {
-	if scope := ScopeFromContext(ctx); scope != nil {
-		return scope
-	}
-	return GlobalScope()
 }
 
 func setGlobalClient(client *Client) {
