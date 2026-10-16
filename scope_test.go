@@ -422,8 +422,6 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone.SetRequest(r1)
 	p1 := NewPropagationContext()
 	clone.SetPropagationContext(p1)
-	s1 := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
-	clone.SetSpan(s1)
 
 	scope.SetTag("foo", "baz")
 	scope.SetContext("foo", Context{"foo": "baz"})
@@ -437,8 +435,6 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	scope.SetRequest(r2)
 	p2 := NewPropagationContext()
 	scope.SetPropagationContext(p2)
-	s2 := &Span{TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")}
-	scope.SetSpan(s2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, clone.contexts)
@@ -450,7 +446,6 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r1, clone.request)
 	assertEqual(t, p1, clone.propagationContext)
-	assertEqual(t, s1, clone.GetSpan())
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -461,7 +456,6 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r2, scope.request)
-	assertEqual(t, s2, scope.GetSpan())
 }
 
 func TestScopeCloneEventProcessorsIsolation(t *testing.T) {
@@ -514,8 +508,6 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	})
 	p1 := NewPropagationContext()
 	scope.SetPropagationContext(p1)
-	s1 := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
-	scope.SetSpan(s1)
 
 	clone := scope.Clone()
 	clone.SetTag("foo", "bar")
@@ -533,8 +525,6 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	})
 	p2 := NewPropagationContext()
 	clone.SetPropagationContext(p2)
-	s2 := &Span{TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")}
-	clone.SetSpan(s2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, clone.contexts)
@@ -552,7 +542,6 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r2, clone.request)
 	assertEqual(t, p2, clone.propagationContext)
-	assertEqual(t, s2, clone.GetSpan())
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -564,7 +553,6 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r1, scope.request)
 	assertEqual(t, p1, scope.propagationContext)
-	assertEqual(t, s1, scope.GetSpan())
 
 	assertEqual(t, len(scope.eventProcessors), 1)
 	assertEqual(t, len(clone.eventProcessors), 2)
@@ -608,8 +596,6 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetRequest(r)
 	p := NewPropagationContext()
 	scope.SetPropagationContext(p)
-	s := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
-	scope.SetSpan(s)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, scope.contexts)
@@ -621,7 +607,6 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, scope.user)
 	assertEqual(t, r, scope.request)
 	assertEqual(t, p, scope.propagationContext)
-	assertEqual(t, s, scope.GetSpan())
 }
 
 func TestClearBreadcrumbs(t *testing.T) {
@@ -908,12 +893,4 @@ func TestScopeSetPropagationContext(t *testing.T) {
 	scope.SetPropagationContext(p)
 
 	assertEqual(t, scope.propagationContext, p)
-}
-
-func TestScopeSetSpan(t *testing.T) {
-	scope := NewScope()
-	s := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
-	scope.SetSpan(s)
-
-	assertEqual(t, scope.span, s)
 }

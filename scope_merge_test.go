@@ -90,7 +90,6 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 				var native *Span
 				if test.nativeSpanID != zeroSpanID {
 					native = &Span{TraceID: traceID, SpanID: test.nativeSpanID, Op: "db.query", Description: "read users", Status: SpanStatusOK, Data: map[string]interface{}{"query": "users"}}
-					scope.SetSpan(native)
 					ctx = context.WithValue(ctx, spanContextKey{}, native)
 				}
 				switch test.source {
@@ -135,7 +134,7 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 				case "propagation":
 					scope.SetPropagationContext(PropagationContext{TraceID: TraceID{2}, SpanID: SpanID{2}})
 				case "native":
-					scope.SetSpan(&Span{TraceID: TraceID{3}, SpanID: SpanID{3}})
+					ctx = context.WithValue(ctx, spanContextKey{}, &Span{TraceID: TraceID{3}, SpanID: SpanID{3}})
 				case "external":
 					client.SetExternalContextTraceResolver(func(context.Context) (TraceID, SpanID, bool) { return TraceID{3}, SpanID{3}, true })
 				}

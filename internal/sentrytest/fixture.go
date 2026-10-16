@@ -178,13 +178,15 @@ func (f *Fixture) Flush() {
 	}
 }
 
-// NewContext returns parent with the fixture's hub attached. If parent is nil,
-// [context.Background] is used.
+// NewContext returns parent with a fresh fixture scope and client. If parent is
+// nil, [context.Background] is used.
 func (f *Fixture) NewContext(parent context.Context) context.Context {
 	if parent == nil {
 		parent = context.Background()
 	}
-	return sentry.SetHubOnContext(parent, f.Hub)
+	ctx, scope := sentry.WithScope(parent)
+	// Keep unmigrated integrations on the same isolated scope and client.
+	return sentry.SetHubOnContext(ctx, sentry.NewHub(f.Client, scope))
 }
 
 // Events returns all captured events, including transactions.
