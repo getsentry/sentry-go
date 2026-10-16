@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 	"sync"
@@ -49,7 +50,7 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 			{Message: "initial breadcrumb", Timestamp: time.Now()},
 		}
 
-		proc.Add(event)
+		proc.Add(context.Background(), event)
 		// Yield to let the scheduler goroutine start processing
 		runtime.Gosched()
 
@@ -75,7 +76,7 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 	}
 
 	wg.Wait()
-	proc.Flush(2 * time.Second)
+	testutils.FlushWithTimeout(proc, 2*time.Second)
 }
 
 func TestTelemetryProcessorRaceSpans(_ *testing.T) {
@@ -121,7 +122,7 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 		event.Timestamp = time.Now()
 		event.Spans = children
 
-		proc.Add(event)
+		proc.Add(context.Background(), event)
 		runtime.Gosched()
 
 		wg.Add(1)
@@ -137,5 +138,5 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 	}
 
 	wg.Wait()
-	proc.Flush(2 * time.Second)
+	testutils.FlushWithTimeout(proc, 2*time.Second)
 }
