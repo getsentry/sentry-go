@@ -16,15 +16,15 @@ const apiVersion = "7"
 type scheme string
 
 const (
-	SchemeHTTP  scheme = "http"
-	SchemeHTTPS scheme = "https"
+	schemeHTTP  scheme = "http"
+	schemeHTTPS scheme = "https"
 )
 
 func (scheme scheme) defaultPort() int {
 	switch scheme {
-	case SchemeHTTPS:
+	case schemeHTTPS:
 		return 443
-	case SchemeHTTP:
+	case schemeHTTP:
 		return 80
 	default:
 		return 80
@@ -67,9 +67,9 @@ func NewDsn(rawURL string) (*Dsn, error) {
 	var scheme scheme
 	switch parsedURL.Scheme {
 	case "http":
-		scheme = SchemeHTTP
+		scheme = schemeHTTP
 	case "https":
-		scheme = SchemeHTTPS
+		scheme = schemeHTTPS
 	default:
 		return nil, &DsnParseError{"invalid scheme"}
 	}

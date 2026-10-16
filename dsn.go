@@ -1,7 +1,7 @@
 package sentry
 
 import (
-	"github.com/getsentry/sentry-go/internal/protocol"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 // Re-export protocol types to maintain public API compatibility
