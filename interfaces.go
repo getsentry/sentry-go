@@ -75,11 +75,7 @@ type Breadcrumb struct {
 
 // Logger provides a chaining API for structured logging to Sentry.
 type Logger interface {
-	// Write implements the io.Writer interface. Currently, the [sentry.Hub] is
-	// context aware, in order to get the correct trace correlation. Using this
-	// might result in incorrect span association on logs. If you need to use
-	// Write it is recommended to create a NewLogger so that the associated context
-	// is passed correctly.
+	// Write implements the io.Writer interface using the context passed to NewLogger.
 	Write(p []byte) (n int, err error)
 
 	// SetAttributes allows attaching parameters to the logger using the attribute API.
@@ -155,7 +151,6 @@ type MeterOption func(*meterOptions)
 
 type meterOptions struct {
 	unit       string
-	scope      *Scope
 	attributes map[string]attribute.Value
 }
 
@@ -163,13 +158,6 @@ type meterOptions struct {
 func WithUnit(unit string) MeterOption {
 	return func(o *meterOptions) {
 		o.unit = unit
-	}
-}
-
-// WithScopeOverride sets a custom scope for the metric, overriding the default scope from the hub.
-func WithScopeOverride(scope *Scope) MeterOption {
-	return func(o *meterOptions) {
-		o.scope = scope
 	}
 }
 
