@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -242,19 +243,6 @@ func (s *Scheduler) processItems(buffer Buffer[Item], category ratelimit.Categor
 		return
 	}
 
-	if s.isRateLimited(category) {
-		for _, item := range items {
-			s.recorder.RecordItem(report.ReasonRateLimitBackoff, item)
-		}
-		return
-	}
-	if !s.transport.HasCapacity() {
-		for _, item := range items {
-			s.recorder.RecordItem(report.ReasonQueueOverflow, item)
-		}
-		return
-	}
-
 	for _, item := range s.envelopeConvertibles(category, items) {
 		s.sendItem(item)
 	}
@@ -301,6 +289,11 @@ func (s *Scheduler) sendItem(item EnvelopeConvertible) {
 	}
 	if err := s.transport.SendEnvelope(envelope); err != nil {
 		debuglog.Printf("error sending envelope: %v", err)
+		reason := report.ReasonSendError
+		if errors.Is(err, ErrQueueFull) {
+			reason = report.ReasonQueueOverflow
+		}
+		s.recorder.RecordForEnvelope(reason, envelope)
 	}
 }
 
@@ -321,8 +314,4 @@ func (s *Scheduler) flushBuffers(ctx context.Context) bool {
 		}
 	}
 	return ctx.Err() == nil
-}
-
-func (s *Scheduler) isRateLimited(category ratelimit.Category) bool {
-	return s.transport.IsRateLimited(category)
 }
