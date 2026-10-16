@@ -9,6 +9,11 @@ import (
 
 type scopeContextKey struct{}
 type clientContextKey = contextkey.Client
+type requestContextKey struct{}
+
+// RequestContextKey is the key used to store the current request object in a
+// capture context.
+var RequestContextKey requestContextKey
 
 // globalScope is the process-wide global scope.
 var globalScope = NewScope()
@@ -65,10 +70,6 @@ func WithScope(ctx context.Context) (context.Context, *Scope) {
 		scope = parent.Clone()
 	} else {
 		scope = NewScope()
-	}
-	scope.span = nil
-	if span := SpanFromContext(ctx); span != nil {
-		scope.span = span.GetTransaction()
 	}
 	return ContextWithScope(ctx, scope), scope
 }

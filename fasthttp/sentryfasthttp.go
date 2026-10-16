@@ -116,7 +116,6 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 			}()
 		}
 		storedCtx.ctx = requestCtx
-		r = r.WithContext(requestCtx)
 
 		scope.SetRequest(r)
 		scope.SetRequestBody(bytes.Clone(ctx.Request.Body()))
