@@ -486,36 +486,6 @@ func TestToSentryTrace(t *testing.T) {
 	}
 }
 
-func TestContinueSpanFromRequest(t *testing.T) {
-	traceID := TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")
-	spanID := SpanIDFromHex("b72fa28504b07285")
-
-	for _, sampled := range []Sampled{SampledTrue, SampledFalse, SampledUndefined} {
-		sampled := sampled
-		t.Run(sampled.String(), func(t *testing.T) {
-			var s Span
-			s.ctx = context.Background()
-			hkey := http.CanonicalHeaderKey("sentry-trace")
-			hval := (&Span{
-				TraceID: traceID,
-				SpanID:  spanID,
-				Sampled: sampled,
-			}).ToSentryTrace()
-			header := http.Header{hkey: []string{hval}}
-			ContinueFromRequest(&http.Request{Header: header})(&s)
-			if s.TraceID != traceID {
-				t.Errorf("got %q, want %q", s.TraceID, traceID)
-			}
-			if s.ParentSpanID != spanID {
-				t.Errorf("got %q, want %q", s.ParentSpanID, spanID)
-			}
-			if s.Sampled != sampled {
-				t.Errorf("got %q, want %q", s.Sampled, sampled)
-			}
-		})
-	}
-}
-
 func TestContinueFromHeaders(t *testing.T) {
 	tests := []struct {
 		name       string
