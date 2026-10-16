@@ -15,6 +15,7 @@ package main
 
 import (
     "context"
+    "errors"
     "time"
 
     "github.com/getsentry/sentry-go"
@@ -175,6 +176,9 @@ scopedLogger := logger.With(sentryzap.Context(span.Context()))
 // These logs will be associated with the transaction
 scopedLogger.Info("Processing started")
 scopedLogger.Info("Processing completed")
+
+// Or pass the context to a single log call
+logger.Info("Processing step", sentryzap.Context(span.Context()))
 ```
 
 ## Notes

@@ -19,14 +19,17 @@ go get github.com/getsentry/sentry-go/logrus
 ## Usage
 
 ```go
+package main
+
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/getsentry/sentry-go"
 	sentrylogrus "github.com/getsentry/sentry-go/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
@@ -37,34 +40,25 @@ func main() {
 	logger.Level = logrus.DebugLevel
 	logger.Out = os.Stderr
 
-	// send logs on InfoLevel and above
-	logHook, err := sentrylogrus.NewLogHook(
-		[]logrus.Level{
-			logrus.InfoLevel,
-			logrus.ErrorLevel,
-			logrus.FatalLevel,
-			logrus.PanicLevel,
+	// Initialize Sentry
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn: "your-public-dsn",
+		BeforeSendLog: func(log *sentry.Log) *sentry.Log {
+			fmt.Println(log)
+			return log
 		},
-		sentry.ClientOptions{
-			Dsn: "your-public-dsn",
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-				if hint.Context != nil {
-					if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
-						// You have access to the original Request
-						fmt.Println(req)
-					}
-				}
-				fmt.Println(event)
-				return event
-			},
-			// need to have logs enabled
-			Debug:            true,
-			AttachStacktrace: true,
-		})
-
+	})
 	if err != nil {
 		panic(err)
 	}
+
+	// send logs on InfoLevel and above, using the client configured by sentry.Init
+	logHook := sentrylogrus.NewLogHook(context.Background(), []logrus.Level{
+		logrus.InfoLevel,
+		logrus.ErrorLevel,
+		logrus.FatalLevel,
+		logrus.PanicLevel,
+	})
 	defer logHook.Flush(5 * time.Second)
 	logger.AddHook(logHook)
 
@@ -90,18 +84,25 @@ func main() {
 
 ## Configuration
 
-The `sentrylogrus` package accepts an array of `logrus.Level` and a struct of `sentry.ClientOptions` that allows you to configure how the hook will behave.
+The `sentrylogrus` package accepts a context and an array of `logrus.Level`.
 The `logrus.Level` array defines which log levels should be sent to Sentry.
 
-In addition, the Hook returned by `sentrylogrus.New` can be configured with the following options:
+In addition, the Hook returned by `sentrylogrus.NewLogHook` can be configured with the following options:
 
-- Fallback Functionality: Configure a fallback for handling errors during log transmission.
+To send logs with a dedicated client, bind it to the context passed to `NewLogHook`:
 
 ```go
-sentryHook.Fallback = func(entry *logrus.Entry, err error) {
-    // Handle error
+client, err := sentry.NewClient(sentry.ClientOptions{Dsn: "your-public-dsn"})
+if err != nil {
+    panic(err)
 }
+logHook := sentrylogrus.NewLogHook(
+    sentry.ContextWithClient(context.Background(), client),
+    []logrus.Level{logrus.ErrorLevel},
+)
 ```
+
+
 
 - Setting default tags for all events sent to Sentry
 
@@ -111,20 +112,13 @@ sentryHook.AddTags(map[string]string{
 })
 ```
 
-- Using `hubProvider` for Scoped Sentry Hubs
+- Using a per-entry context for scoped Sentry clients, scopes, or traces
 
-The hubProvider allows you to configure the Sentry hook to use a custom Sentry hub. This can be particularly useful when you want to scope logs to specific goroutines or operations, enabling more precise grouping and context in Sentry.
-
-You can set a custom hubProvider function using the SetHubProvider method:
+The hook reads the context attached to each log entry. Pass the operation's context with `WithContext` when logs should use an operation-specific client, scope, or trace:
 
 ```go
-sentryHook.SetHubProvider(func() *sentry.Hub {
-    // Create or return a specific Sentry hub
-    return sentry.NewHub(sentry.GetCurrentHub().Client(), sentry.NewScope())
-})
+logger.WithContext(ctx).Info("handled request")
 ```
-
-This ensures that logs from specific contexts or threads use the appropriate Sentry hub and scope.
 
 
 ## Notes
