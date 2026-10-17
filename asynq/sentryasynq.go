@@ -59,7 +59,7 @@ func (p configProvider) GetConfigs() ([]*asynq.PeriodicTaskConfig, error) {
 			counts[c.Task.Type()]++
 		}
 	}
-	for _, c := range configs {
+	for i, c := range configs {
 		if c == nil || c.Task == nil || c.Task.Headers()[slugHeader] != "" {
 			continue
 		}
@@ -71,7 +71,9 @@ func (p configProvider) GetConfigs() ([]*asynq.PeriodicTaskConfig, error) {
 			debuglog.Printf("sentryasynq: task type %q is used by more than one periodic task; use WithMonitor to monitor them", taskType)
 			continue
 		}
-		c.Task = WithMonitor(c.Task, taskType, c.Cronspec, p.options)
+		monitored := *c
+		monitored.Task = WithMonitor(c.Task, taskType, c.Cronspec, p.options)
+		configs[i] = &monitored
 	}
 	return configs, err
 }
