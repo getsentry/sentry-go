@@ -52,18 +52,29 @@ func ExtractStacktrace(err error) *Stacktrace {
 	method := extractReflectedStacktraceMethod(err)
 
 	var pcs []uintptr
+	var runtimeFrames []runtime.Frame
 
 	if method.IsValid() {
-		pcs = extractPcs(method)
+		result := method.Call(nil)[0]
+		if frames, ok := extractRuntimeFrames(result); ok {
+			// The error already resolved its frames. Resolving their PCs a
+			// second time would shift them and expand inlined calls twice.
+			runtimeFrames = frames
+		} else {
+			pcs = extractPcs(result)
+		}
 	} else {
 		pcs = extractXErrorsPC(err)
 	}
 
-	if len(pcs) == 0 {
+	if len(pcs) > 0 {
+		runtimeFrames = extractFrames(pcs)
+	}
+
+	if len(runtimeFrames) == 0 {
 		return nil
 	}
 
-	runtimeFrames := extractFrames(pcs)
 	frames := createFrames(runtimeFrames)
 
 	stacktrace := Stacktrace{
@@ -102,10 +113,24 @@ func extractReflectedStacktraceMethod(err error) reflect.Value {
 	return reflect.Value{}
 }
 
-func extractPcs(method reflect.Value) []uintptr {
-	var pcs []uintptr
+// extractRuntimeFrames returns the frames of a stack trace that is already a
+// slice of runtime.Frame, innermost frame first like runtime.Callers, in the
+// order createFrames expects (outermost first).
+func extractRuntimeFrames(stacktrace reflect.Value) ([]runtime.Frame, bool) {
+	if stacktrace.Kind() != reflect.Slice || stacktrace.Type().Elem() != reflect.TypeOf(runtime.Frame{}) {
+		return nil, false
+	}
 
-	stacktrace := method.Call(nil)[0]
+	frames := make([]runtime.Frame, stacktrace.Len())
+	for i := range frames {
+		frames[len(frames)-1-i] = stacktrace.Index(i).Interface().(runtime.Frame)
+	}
+
+	return frames, true
+}
+
+func extractPcs(stacktrace reflect.Value) []uintptr {
+	var pcs []uintptr
 
 	if stacktrace.Kind() != reflect.Slice {
 		return nil
