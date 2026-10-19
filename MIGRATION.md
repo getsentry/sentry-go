@@ -5,48 +5,51 @@
 The v1 version of the SDK introduces a new, ergonomic API built around Go's
 `context.Context`. Request isolation now works by default. You pass `context.Context` and
 the SDK uses it to decide which scope and which trace an event belongs to, without the need
-to clone a `Hub`. Linking works through the same context, so that errors, logs and metrics 
-are attached to the request's trace and show up linked in Sentry. v1 also includes transport
-improvements. Telemetry buffers are now always enabled, which moves serialization to the
-background and sends events by priority to limit drops.
+to clone a `Hub`. Linking works through the same context, so that errors, logs and metrics
+are attached to the request's trace and show up linked in Sentry.
 
-```go
-// Before
-hub := sentry.CurrentHub().Clone()
-hub.ConfigureScope(func(scope *sentry.Scope) {
-	scope.SetTag("job", "checkout")
-})
-hub.CaptureException(err)
+v1 also includes transport improvements. Telemetry buffers are now always enabled, which
+moves serialization to the background and sends events by priority to limit drops.
 
-// After
-ctx, scope := sentry.WithScope(ctx)
-scope.SetTag("job", "checkout")
-sentry.CaptureException(ctx, err)
-```
+> [!NOTE]
+> v1 is in alpha. Let us know how the upgrade goes in the
+> [v1 alpha feedback issue](https://github.com/getsentry/sentry-go/issues/1463).
 
-The sections below cover what to update. [All changes](#all-changes) lists every
-removed and replaced API.
+The following sections cover the changes most applications need to make.
+[Appendix: All API Breakages](#appendix-all-api-breakages) maps every removed or
+changed API to its v1 replacement.
 
 ### Scopes
 
 `WithScope(ctx)` forks the scope carried by `ctx`, or starts one, and returns a
-context that carries it. Middlewares do this for every request. For isolated work
-create a scope and keep passing the returned context:
+context that carries it. Middlewares do this for every request. For isolated work,
+fork a scope from the context you already have and keep passing the returned context:
 
 ```go
-ctx, _ := sentry.WithScope(context.Background())
-sentry.AddBreadcrumb(ctx, &sentry.Breadcrumb{Message: "loaded config"})
-sentry.CaptureException(ctx, err)
+func processJob(ctx context.Context, job Job) {
+	ctx, scope := sentry.WithScope(ctx)
+	scope.SetTag("job", job.Name)
+	sentry.AddBreadcrumb(ctx, &sentry.Breadcrumb{Message: "job started"})
+	if err := job.Run(ctx); err != nil {
+		sentry.CaptureException(ctx, err)
+	}
+}
 ```
 
-A context without a scope, such as `context.Background()`, still captures
-events, but drops breadcrumbs and has no last event ID.
+Start from `context.Background()` only when there is no context to pass down, such
+as in `main`. A context without a scope still captures events, but drops
+breadcrumbs and has no last event ID.
+
+If you are new to `context.Context`, see the [`context` package documentation](https://pkg.go.dev/context)
+and [Go Concurrency Patterns: Context](https://go.dev/blog/context).
 
 ### Capturing events
 
-The API is now reworked to always require `context.Context` as the first value
-to `CaptureException`, `CaptureMessage`, `CaptureEvent`, `CaptureCheckIn`, `AddBreadcrumb`,
-and `WithMonitor`. Config parameters also become optional. 
+`CaptureException`, `CaptureMessage`, `CaptureEvent`, `CaptureCheckIn`, `AddBreadcrumb`,
+and `WithMonitor` now take `context.Context` as their first argument. Hints, which
+used to be required arguments or separate methods such as `CaptureEventWithHint`,
+are now optional trailing options. Use `WithEventHint` and `WithLevel` for a single
+capture, and `WithBreadcrumbHint` for a single breadcrumb:
 
 ```go
 sentry.CaptureMessage(ctx, "Payment delayed", sentry.WithLevel(sentry.LevelWarning))
@@ -59,14 +62,34 @@ Integrations fork a scope for every request. Get the request's context from the
 integration, and use it like any other context:
 
 ```go
-ctx := sentrygin.GetContext(c) // r.Context() for net/http, the handler's ctx for gRPC
-sentry.ScopeFromContext(ctx).SetTag("page", "checkout")
-sentry.CaptureException(ctx, err)
+// net/http
+func handler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	sentry.ScopeFromContext(ctx).SetTag("page", "checkout")
+	sentry.CaptureException(ctx, err)
+}
+
+// Gin
+func handler(c *gin.Context) {
+	ctx := sentrygin.GetContext(c)
+	sentry.CaptureException(ctx, err)
+}
+
+// gRPC
+func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.User, error) {
+	sentry.CaptureException(ctx, err)
+}
 ```
+
+The appendix lists how to get the request's context for every integration.
 
 ### Tracing
 
-Captures now correctly follow the span in context, rather than the span the hub's scope last saw.
+Starting a span no longer changes the scope. Previously, `StartSpan` stored the span
+on the hub's scope, and any later capture through that hub was linked to it, even
+from another goroutine. Now an event is linked only to the span carried by the
+context you pass, so pass `span.Context()` instead of the context you started the
+span from:
 
 ```go
 span := sentry.StartSpan(ctx, "payment.authorize")
@@ -74,8 +97,8 @@ defer span.Finish()
 sentry.CaptureException(span.Context(), err)
 ```
 
-Continue incoming traces with `ContinueFromRequest(r)` or
-`ContinueFromHeaders(trace, baggage)`.
+The integrations continue incoming traces for you. Without an integration, start the
+transaction with `ContinueFromRequest(r)`, or with `ContinueFromHeaders(trace, baggage)`.
 
 ### Logs and metrics
 
@@ -95,9 +118,9 @@ writer, err := sentryzerolog.New(ctx, writerOptions)
 
 ### Transports
 
-Custom transports send envelopes and flush with a context. The new async 
+Custom transports send envelopes and flush with a context. The new async
 transport includes priority scheduling, background serialization and flushing
-fixes. Import `github.com/getsentry/sentry-go/protocol` and implement:
+fixes. To create a custom transport, import `github.com/getsentry/sentry-go/protocol` and implement:
 
 ```go
 type Transport interface {
@@ -108,7 +131,7 @@ type Transport interface {
 }
 ```
 
-### All changes
+### Appendix: All API Breakages
 
 <details>
 <summary>Scopes and hubs</summary>
@@ -204,7 +227,7 @@ type Transport interface {
 
 </details>
 
-## Feedback
+### Feedback
 
 We would love to hear your experience while trying out the SDK. You can leave your feedback under [v1 alpha](https://github.com/getsentry/sentry-go/issues/1463).
 
