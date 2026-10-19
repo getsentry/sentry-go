@@ -19,19 +19,19 @@ replace (
 )
 
 require (
-	github.com/getsentry/sentry-go v0.50.0
-	github.com/getsentry/sentry-go/echo v0.50.0
-	github.com/getsentry/sentry-go/fasthttp v0.50.0
-	github.com/getsentry/sentry-go/fiber v0.50.0
-	github.com/getsentry/sentry-go/fiberv3 v0.50.0
-	github.com/getsentry/sentry-go/gin v0.50.0
-	github.com/getsentry/sentry-go/grpc v0.50.0
-	github.com/getsentry/sentry-go/iris v0.50.0
-	github.com/getsentry/sentry-go/logrus v0.50.0
-	github.com/getsentry/sentry-go/negroni v0.50.0
-	github.com/getsentry/sentry-go/otel v0.50.0
-	github.com/getsentry/sentry-go/slog v0.50.0
-	github.com/getsentry/sentry-go/zap v0.50.0
+	github.com/getsentry/sentry-go v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/echo v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/fasthttp v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/fiber v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/fiberv3 v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/gin v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/grpc v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/iris v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/logrus v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/negroni v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/otel v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/slog v1.0.0-alpha.1
+	github.com/getsentry/sentry-go/zap v1.0.0-alpha.1
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/gofiber/fiber/v3 v3.3.0
