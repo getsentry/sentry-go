@@ -557,7 +557,6 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 func TestClear(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	propagationContext := scope.propagationContextSnapshot()
-	span := scope.GetSpan()
 	processor := func(event *Event, _ *EventHint) *Event { return event }
 	scope.AddEventProcessor(processor)
 	scope.Clear()
@@ -571,7 +570,6 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, (*http.Request)(nil), scope.request)
-	assertEqual(t, span, scope.GetSpan())
 	assertEqual(t, 1, len(scope.eventProcessors))
 	assertEqual(t, propagationContext, scope.propagationContextSnapshot())
 }
@@ -676,13 +674,16 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 }
 
 func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
-	previousClient := currentHub.Client()
 	currentClient, err := NewClient(ClientOptions{Dsn: "https://key@sentry.io/1", SendDefaultPII: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	currentHub.BindClient(currentClient)
-	defer currentHub.BindClient(previousClient)
+	previousClient := globalClientSnapshot()
+	setGlobalClient(currentClient)
+	t.Cleanup(func() {
+		setGlobalClient(previousClient)
+		currentClient.Close()
+	})
 
 	scope := NewScope()
 	request := httptest.NewRequest("POST", "http://example.com/test", nil)

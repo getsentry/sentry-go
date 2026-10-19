@@ -15,20 +15,10 @@ import (
 	"github.com/getsentry/sentry-go/internal/httputils"
 )
 
-// Scope holds contextual data for the current scope.
+// Scope holds contextual data for an operation.
 //
-// The scope is an object that can cloned efficiently and stores data that is
-// locally relevant to an event. For instance the scope will hold recorded
-// breadcrumbs and similar information.
-//
-// The scope can be interacted with in two ways. First, the scope is routinely
-// updated with information by functions such as AddBreadcrumb which will modify
-// the current scope. Second, the current scope can be configured through the
-// ConfigureScope function or Hub method of the same name.
-//
-// The scope is meant to be modified but not inspected directly. When preparing
-// an event for reporting, the current client adds information from the current
-// scope into the event.
+// The scope is an object that can be cloned efficiently and stores data that is
+// locally relevant to an event.
 type Scope struct {
 	mu sync.RWMutex
 	// eventProcessors are retained by Clear and inherited by Clone.
@@ -55,8 +45,6 @@ type scopeData struct {
 	requestBody requestBody
 
 	propagationContext PropagationContext
-	// span is the root last attached to this scope, read by the Hub API.
-	span *Span
 }
 
 type requestBody interface {
@@ -351,21 +339,6 @@ func applyStaticSamplingDecision(propagationContext *PropagationContext, client 
 	}
 }
 
-// GetSpan returns the span attached to the current scope. Use [SpanFromContext]
-// for the active span.
-func (scope *Scope) GetSpan() *Span {
-	scope.mu.RLock()
-	defer scope.mu.RUnlock()
-	return scope.span
-}
-
-// SetSpan attaches span to the current scope.
-func (scope *Scope) SetSpan(span *Span) {
-	scope.mu.Lock()
-	defer scope.mu.Unlock()
-	scope.span = span
-}
-
 // Clone returns a copy of the current scope without its last event ID.
 func (scope *Scope) Clone() *Scope {
 	scope.mu.RLock()
@@ -388,7 +361,6 @@ func (scope *Scope) Clone() *Scope {
 	clone.requestBody = scope.requestBody
 	clone.eventProcessors = scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
 	clone.propagationContext = scope.propagationContext.clone()
-	clone.span = scope.span
 	return clone
 }
 
@@ -399,9 +371,7 @@ func (scope *Scope) Clear() {
 	defer scope.mu.Unlock()
 
 	propagationContext := scope.propagationContext
-	span := scope.span
 	scope.scopeData = newScopeData(propagationContext)
-	scope.span = span
 }
 
 // AddEventProcessor adds an event processor to the current scope.

@@ -214,7 +214,6 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	if scope := ScopeFromContext(ctx); scope != nil && !hasParent {
 		scope.keepSamplingDecision(span.TraceID, span.Sampled, span.dynamicSamplingContext)
-		scope.SetSpan(&span)
 	}
 
 	return &span
@@ -1088,25 +1087,6 @@ func ContinueFromHeaders(trace, baggage string) SpanOption {
 		}
 		s.continueTrace(propagation)
 	}
-}
-
-// ContinueTrace continues a trace based on traceparent and baggage values.
-// If the SDK is configured with tracing enabled,
-// this function returns populated SpanOption.
-// In any other cases, it populates the propagation context on the scope.
-func ContinueTrace(hub *Hub, traceparent, baggage string) SpanOption {
-	scope := hub.Scope()
-	propagationContext, _ := PropagationContextFromHeaders(traceparent, baggage)
-	client := hub.Client()
-
-	if !shouldContinueTrace(client, propagationContext.DynamicSamplingContext) {
-		propagationContext = NewPropagationContext()
-		traceparent = ""
-		baggage = ""
-	}
-
-	scope.SetPropagationContext(propagationContext)
-	return ContinueFromHeaders(traceparent, baggage)
 }
 
 // ContinueFromRequest returns a span option that continues a trace from r's
