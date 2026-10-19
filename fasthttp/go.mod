@@ -1,6 +1,6 @@
 module github.com/getsentry/sentry-go/fasthttp
 
-go 1.25.0
+go 1.26.0
 
 replace github.com/getsentry/sentry-go => ../
 
