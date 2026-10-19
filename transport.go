@@ -223,6 +223,9 @@ func (t *SyncTransport) IsRateLimited(category ratelimit.Category) bool {
 func (t *SyncTransport) HasCapacity() bool { return true }
 
 func (t *SyncTransport) SendEnvelopeWithContext(ctx context.Context, envelope *protocol.Envelope) error {
+	ctx, cancel := context.WithTimeout(ctx, t.Timeout)
+	defer cancel()
+
 	if envelope == nil || len(envelope.Items) == 0 {
 		return ErrEmptyEnvelope
 	}
@@ -302,10 +305,13 @@ type AsyncTransport struct {
 	mu     sync.RWMutex
 	limits ratelimit.Map
 
-	done chan struct{}
-	wg   sync.WaitGroup
+	// ctx bounds in-flight requests and is canceled by Close.
+	ctx    context.Context
+	cancel context.CancelFunc
+	done   chan struct{}
+	wg     sync.WaitGroup
 
-	flushRequest chan chan struct{}
+	flushRequest chan flushRequest
 
 	closeMu sync.RWMutex
 
@@ -314,6 +320,11 @@ type AsyncTransport struct {
 
 	startOnce sync.Once
 	closeOnce sync.Once
+}
+
+type flushRequest struct {
+	ctx  context.Context
+	done chan struct{}
 }
 
 func NewAsyncTransport(options TransportOptions) telemetry.Transport {
@@ -344,7 +355,7 @@ func NewAsyncTransport(options TransportOptions) telemetry.Transport {
 	}
 
 	transport.queue = make(chan *protocol.Envelope, transport.QueueSize)
-	transport.flushRequest = make(chan chan struct{})
+	transport.flushRequest = make(chan flushRequest)
 
 	if options.HTTPTransport != nil {
 		transport.transport = options.HTTPTransport
@@ -376,6 +387,7 @@ func (t *AsyncTransport) start() {
 		if t.provider == nil {
 			t.provider = report.NoopProvider()
 		}
+		t.ctx, t.cancel = context.WithCancel(context.Background())
 		t.wg.Add(1)
 		go t.worker()
 	})
@@ -443,16 +455,19 @@ func (t *AsyncTransport) FlushWithContext(ctx context.Context) bool {
 	t.closeMu.RLock()
 	defer t.closeMu.RUnlock()
 
+	if ctx.Err() != nil {
+		return false
+	}
 	flushResponse := make(chan struct{})
 	select {
 	case <-t.done:
 		debuglog.Println("Failed to flush, transport is closed.")
 		return false
-	case t.flushRequest <- flushResponse:
+	case t.flushRequest <- flushRequest{ctx: ctx, done: flushResponse}:
 		select {
 		case <-flushResponse:
 			debuglog.Println("Buffer flushed successfully.")
-			return true
+			return ctx.Err() == nil
 		case <-ctx.Done():
 			debuglog.Println("Failed to flush, buffer timed out.")
 			return false
@@ -465,6 +480,7 @@ func (t *AsyncTransport) FlushWithContext(ctx context.Context) bool {
 
 func (t *AsyncTransport) Close() {
 	t.closeOnce.Do(func() {
+		t.cancel()
 		t.closeMu.Lock()
 		defer t.closeMu.Unlock()
 
@@ -501,12 +517,12 @@ func (t *AsyncTransport) worker() {
 				return
 			}
 			t.sendEnvelopeHTTP(envelope)
-		case flushResponse, open := <-t.flushRequest:
+		case flushRequest, open := <-t.flushRequest:
 			if !open {
 				return
 			}
-			t.drainQueue()
-			close(flushResponse)
+			t.drainQueue(flushRequest.ctx)
+			close(flushRequest.done)
 		}
 	}
 }
@@ -530,7 +546,7 @@ func (t *AsyncTransport) sendClientReport() {
 	envelope := protocol.NewEnvelope(header)
 	envelope.AddItem(item)
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(t.ctx, t.Timeout)
 	defer cancel()
 
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
@@ -549,8 +565,8 @@ func (t *AsyncTransport) sendClientReport() {
 	t.mu.Unlock()
 }
 
-func (t *AsyncTransport) drainQueue() {
-	for {
+func (t *AsyncTransport) drainQueue(ctx context.Context) {
+	for ctx.Err() == nil {
 		select {
 		case envelope, open := <-t.queue:
 			if !open {
@@ -572,7 +588,7 @@ func (t *AsyncTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) bool { //
 	// attach to envelope after rate-limit check
 	t.provider.AttachToEnvelope(envelope)
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(t.ctx, t.Timeout)
 	defer cancel()
 
 	request, err := getSentryRequestFromEnvelope(ctx, t.dsn, envelope)
