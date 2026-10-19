@@ -301,7 +301,7 @@ type Mechanism struct {
 // SetUnhandled indicates that the exception is an unhandled exception, i.e.
 // from a panic.
 func (m *Mechanism) SetUnhandled() {
-	m.Handled = Pointer(false)
+	m.Handled = new(false)
 }
 
 // Exception specifies an error that occurred.
