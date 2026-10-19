@@ -4,6 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
@@ -653,6 +654,7 @@ func TestBufferIsReadyToFlush(t *testing.T) {
 	tests := []struct {
 		name          string
 		category      ratelimit.Category
+		idleTime      time.Duration
 		itemsToAdd    int
 		waitTime      time.Duration
 		expectedReady bool
@@ -673,6 +675,22 @@ func TestBufferIsReadyToFlush(t *testing.T) {
 			waitTime:      0,
 			expectedReady: false,
 			reason:        "batch size of 100 not reached and no timeout",
+		},
+		{
+			name:          "logs - timeout reached",
+			category:      ratelimit.CategoryLog,
+			itemsToAdd:    50,
+			waitTime:      5 * time.Second,
+			expectedReady: true,
+			reason:        "timeout elapsed since the first item",
+		},
+		{
+			name:          "logs - idle time does not count",
+			category:      ratelimit.CategoryLog,
+			idleTime:      10 * time.Second,
+			itemsToAdd:    1,
+			expectedReady: false,
+			reason:        "timeout starts with the first item",
 		},
 		{
 			name:          "error - batch size of 1 reached",
@@ -700,20 +718,21 @@ func TestBufferIsReadyToFlush(t *testing.T) {
 				batchSize = 100
 				timeout = 5 * time.Second
 			}
-			buffer := NewRingBuffer[*testItem](tt.category, 200, OverflowPolicyDropOldest, batchSize, timeout, nil)
+			synctest.Test(t, func(t *testing.T) {
+				buffer := NewRingBuffer[*testItem](tt.category, 200, OverflowPolicyDropOldest, batchSize, timeout, nil)
+				time.Sleep(tt.idleTime)
 
-			for i := 0; i < tt.itemsToAdd; i++ {
-				buffer.Offer(&testItem{id: i, data: "test"})
-			}
+				for i := 0; i < tt.itemsToAdd; i++ {
+					buffer.Offer(&testItem{id: i, data: "test"})
+				}
 
-			if tt.waitTime > 0 {
 				time.Sleep(tt.waitTime)
-			}
 
-			ready := buffer.IsReadyToFlush()
-			if ready != tt.expectedReady {
-				t.Errorf("Expected IsReadyToFlush() to be %v (%s), got %v", tt.expectedReady, tt.reason, ready)
-			}
+				ready := buffer.IsReadyToFlush()
+				if ready != tt.expectedReady {
+					t.Errorf("Expected IsReadyToFlush() to be %v (%s), got %v", tt.expectedReady, tt.reason, ready)
+				}
+			})
 		})
 	}
 }
