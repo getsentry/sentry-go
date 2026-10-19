@@ -30,11 +30,17 @@ func Init(options ClientOptions) error {
 	return nil
 }
 
-// AddBreadcrumb records a new breadcrumb.
+// AddBreadcrumb records a new breadcrumb on the scope carried by ctx. The
+// breadcrumb is dropped when ctx carries no scope.
 //
 // The total number of breadcrumbs that can be recorded are limited by the
 // configuration on the client.
 func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb) {
+	scope := ScopeFromContext(ctx)
+	if scope == nil {
+		debuglog.Println("breadcrumb dropped: ctx carries no scope. Use WithScope to start one.")
+		return
+	}
 	client := ClientFromContext(ctx)
 	limit := client.options.MaxBreadcrumbs
 	switch {
@@ -49,7 +55,7 @@ func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb) {
 			return
 		}
 	}
-	scopeFromContextOrGlobal(ctx).AddBreadcrumb(breadcrumb, limit)
+	scope.AddBreadcrumb(breadcrumb, limit)
 }
 
 // CaptureMessage captures an arbitrary message.
@@ -166,7 +172,12 @@ func FlushWithContext(ctx context.Context) bool {
 	return hub.FlushWithContext(ctx)
 }
 
-// LastEventID returns an ID of last captured event.
+// LastEventID returns the last event ID captured in ctx's scope, or an empty
+// ID when ctx does not carry one.
 func LastEventID(ctx context.Context) EventID {
-	return scopeFromContextOrGlobal(ctx).lastEventIDSnapshot()
+	scope := ScopeFromContext(ctx)
+	if scope == nil {
+		return ""
+	}
+	return scope.lastEventIDSnapshot()
 }
