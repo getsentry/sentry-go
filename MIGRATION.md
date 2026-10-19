@@ -3,13 +3,12 @@
 ## Upgrading to v1
 
 The v1 version of the SDK introduces a new, ergonomic API built around Go's
-`context.Context`. Isolation is now the default: every request gets its own
-scope, so there's no `Hub` to clone and no tags or breadcrumbs leaking between
-goroutines. Linking just works, too. Pass the context you already have, and
-errors, logs, and metrics land on the right trace without any bookkeeping.
-Every framework integration hands you the request's context, so your capture
-code reads the same on net/http, gRPC, Gin, or Fiber. For most code, upgrading
-means passing `ctx` where you already have it.
+`context.Context`. Request isolation now works by default. You pass `context.Context` and
+the SDK uses it to decide which scope and which trace an event belongs to, without the need
+to clone a `Hub`. Linking works through the same context, so that errors, logs and metrics 
+are attached to the request's trace and show up linked in Sentry. v1 also includes transport
+improvements. Telemetry buffers are now always enabled, which moves serialization to the
+background and sends events by priority to limit drops.
 
 ```go
 // Before
@@ -31,8 +30,8 @@ removed and replaced API.
 ### Scopes
 
 `WithScope(ctx)` forks the scope carried by `ctx`, or starts one, and returns a
-context that carries it. Middleware does this for every request. In scripts and
-workers, create a scope and keep passing its context:
+context that carries it. Middlewares do this for every request. For isolated work
+create a scope and keep passing the returned context:
 
 ```go
 ctx, _ := sentry.WithScope(context.Background())
@@ -45,17 +44,14 @@ events, but drops breadcrumbs and has no last event ID.
 
 ### Capturing events
 
-Pass the context first to `CaptureException`, `CaptureMessage`, `CaptureEvent`,
-`CaptureCheckIn`, `AddBreadcrumb`, and `WithMonitor`. Levels and hints are
-capture options:
+The API is now reworked to always require `context.Context` as the first value
+to `CaptureException`, `CaptureMessage`, `CaptureEvent`, `CaptureCheckIn`, `AddBreadcrumb`,
+and `WithMonitor`. Config parameters also become optional. 
 
 ```go
 sentry.CaptureMessage(ctx, "Payment delayed", sentry.WithLevel(sentry.LevelWarning))
 client.CaptureException(ctx, err, sentry.WithEventHint(hint))
 ```
-
-Recover from panics with `defer sentry.Recover(ctx, nil)`. If you already called
-`recover()`, pass its result instead of `nil`.
 
 ### Integrations
 
@@ -70,8 +66,7 @@ sentry.CaptureException(ctx, err)
 
 ### Tracing
 
-Spans travel in the context. Pass `span.Context()` to work that belongs to the
-span:
+Captures now correctly follow the span in context, rather than the span the hub's scope last saw.
 
 ```go
 span := sentry.StartSpan(ctx, "payment.authorize")
@@ -85,7 +80,7 @@ Continue incoming traces with `ContinueFromRequest(r)` or
 ### Logs and metrics
 
 Pass the context to loggers and meters. The Logrus and Zerolog integrations take
-a context and use its client instead of creating one:
+a context and use its client instead of creating one, to align with the other integrations:
 
 ```go
 ctx = sentry.ContextWithClient(ctx, client)
@@ -100,8 +95,9 @@ writer, err := sentryzerolog.New(ctx, writerOptions)
 
 ### Transports
 
-Custom transports send envelopes and flush with a context. Import
-`github.com/getsentry/sentry-go/protocol` and implement:
+Custom transports send envelopes and flush with a context. The new async 
+transport includes priority scheduling, background serialization and flushing
+fixes. Import `github.com/getsentry/sentry-go/protocol` and implement:
 
 ```go
 type Transport interface {
@@ -111,8 +107,6 @@ type Transport interface {
 	Close()
 }
 ```
-
-`sentry.Flush(timeout)` and `client.Flush(timeout)` are unchanged.
 
 ### All changes
 
@@ -204,11 +198,15 @@ type Transport interface {
 | Before | v1 |
 | --- | --- |
 | `Transport.SendEvent(*sentry.Event)` / built-in `SendEventWithContext` | `Transport.SendEnvelope(context.Context, *protocol.Envelope) error` |
-| `Transport.Flush(timeout)` | `Transport.FlushWithContext(ctx)` |
+| `Transport.Flush(timeout)` | Removed; use `FlushWithContext(ctx)` |
 | `HTTPTransport.BufferSize` counts events | `HTTPTransport.BufferSize` counts envelopes |
-| `ClientOptions.DisableTelemetryBuffer` | Removed; the telemetry buffer is always used |
+| `ClientOptions.DisableTelemetryBuffer` | Removed; telemetry is always buffered, including with custom transports |
 
 </details>
+
+## Feedback
+
+We would love to hear your experience while trying out the SDK. You can leave your feedback under [v1 alpha](https://github.com/getsentry/sentry-go/issues/1463).
 
 ## Migrating from raven-go
 
