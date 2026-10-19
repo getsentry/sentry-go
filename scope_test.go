@@ -9,6 +9,7 @@ import (
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 const sharedContextsKey = "sharedContextsKey"
@@ -319,6 +320,15 @@ func TestScopeSetLevelOverrides(t *testing.T) {
 	scope.SetLevel(LevelFatal)
 
 	assertEqual(t, scope.level, LevelFatal)
+}
+
+func TestCopyToEventReleasesReadLockAfterPanic(t *testing.T) {
+	t.Parallel()
+	scope := NewScope()
+	scope.SetContext("test", Context{"value": "scope"})
+	require.Panics(t, func() { scope.ApplyToEvent(nil, nil, NewNoopClient()) })
+	require.True(t, scope.mu.TryLock())
+	scope.mu.Unlock()
 }
 
 func TestAddBreadcrumbAddsBreadcrumb(t *testing.T) {
@@ -639,7 +649,7 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	assertEqual(t, 2, len(processedEvent.Tags), "should merge tags")
 	assertEqual(t, 4, len(processedEvent.Contexts), "should merge contexts")
 	assertEqual(t, event.Contexts[sharedContextsKey], processedEvent.Contexts[sharedContextsKey], "should not override event trace context")
-	assertEqual(t, LevelDebug, processedEvent.Level, "should use event level if set")
+	assertEqual(t, event.Level, processedEvent.Level, "should use event level if set")
 	assertEqual(t, event.User, processedEvent.User, "should use event user if one exists")
 	assertEqual(t, event.Request, processedEvent.Request, "should use event request if one exists")
 	assertEqual(t, event.Fingerprint, processedEvent.Fingerprint, "should use event fingerprints if they exist")
