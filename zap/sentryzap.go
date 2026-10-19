@@ -8,12 +8,16 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/contextkey"
 	"go.uber.org/zap/zapcore"
 )
 
 const (
 	// ZapOrigin is the Sentry origin attribute value for zap logs.
 	ZapOrigin = "auto.log.zap"
+
+	// contextFieldKey is the key of the field created by Context.
+	contextFieldKey = "_sentry_context"
 )
 
 // Ensure SentryCore implements zapcore.Core.
@@ -73,7 +77,7 @@ func NewSentryCore(ctx context.Context, opts Option) *SentryCore {
 
 // Context returns a zapcore.Field that can be used with logger.With() to link
 // traces with the provided context. This allows propagating Sentry trace information
-// from the context to logs without needing to pass a Hub.
+// from the context to logs. It can also be passed to a single log call.
 //
 // Example:
 //
@@ -82,7 +86,7 @@ func NewSentryCore(ctx context.Context, opts Option) *SentryCore {
 //	logger.Info("handling request") // This log will be linked to the trace in requestCtx
 func Context(ctx context.Context) zapcore.Field {
 	return zapcore.Field{
-		Key:       "_sentry_context",
+		Key:       contextFieldKey,
 		Type:      zapcore.SkipType,
 		Interface: ctx,
 	}
@@ -104,7 +108,7 @@ func (c *SentryCore) With(fields []zapcore.Field) zapcore.Core {
 	var filteredFields []zapcore.Field
 
 	for _, field := range fields {
-		if field.Key == "_sentry_context" && field.Type == zapcore.SkipType {
+		if field.Key == contextFieldKey && field.Type == zapcore.SkipType {
 			if ctx, ok := field.Interface.(context.Context); ok {
 				newCtx = ctx
 				continue
@@ -135,7 +139,16 @@ func (c *SentryCore) Check(entry zapcore.Entry, ce *zapcore.CheckedEntry) *zapco
 
 // Write serializes the Entry and any Fields and sends them to Sentry.
 func (c *SentryCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
-	logEntry := c.getLogEntry(c.ctx, entry.Level)
+	ctx := c.ctx
+	for _, field := range fields {
+		if field.Key == contextFieldKey && field.Type == zapcore.SkipType {
+			if fieldCtx, ok := field.Interface.(context.Context); ok {
+				ctx = fieldCtx
+			}
+		}
+	}
+
+	logEntry := c.getLogEntry(ctx, entry.Level)
 	if logEntry == nil {
 		return nil
 	}
@@ -168,12 +181,14 @@ func (c *SentryCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
 
 // Sync flushes any buffered log entries to Sentry.
 func (c *SentryCore) Sync() error {
-	hub := sentry.GetHubFromContext(c.ctx)
-	if hub == nil {
-		hub = sentry.CurrentHub()
+	client := sentry.ClientFromContext(c.logger.GetCtx())
+	if c.ctx != nil {
+		if explicit, ok := c.ctx.Value(contextkey.Client{}).(*sentry.Client); ok {
+			client = explicit
+		}
 	}
-	if ok := hub.Flush(c.option.FlushTimeout); !ok {
-		return fmt.Errorf("failed to flush client: %v", hub.Client())
+	if ok := client.Flush(c.option.FlushTimeout); !ok {
+		return fmt.Errorf("failed to flush client: %v", client)
 	}
 	return nil
 }

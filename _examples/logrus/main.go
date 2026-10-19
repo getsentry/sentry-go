@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -19,34 +20,33 @@ func main() {
 	logger.Level = logrus.DebugLevel
 	logger.Out = os.Stderr
 
-	// send logs on InfoLevel and above
-	logHook, err := sentrylogrus.NewLogHook(
-		[]logrus.Level{
-			logrus.InfoLevel,
-			logrus.ErrorLevel,
-			logrus.FatalLevel,
-			logrus.PanicLevel,
-		},
-		sentry.ClientOptions{
-			Dsn: "your-public-dsn",
-			BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-				if hint.Context != nil {
-					if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
-						// You have access to the original Request
-						fmt.Println(req)
-					}
+	err := sentry.Init(sentry.ClientOptions{
+		Dsn: "your-public-dsn",
+		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+			if hint.Context != nil {
+				if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
+					// You have access to the original Request
+					fmt.Println(req)
 				}
-				fmt.Println(event)
-				return event
-			},
-			// need to have logs enabled
-			Debug:            true,
-			AttachStacktrace: true,
-		})
-
+			}
+			fmt.Println(event)
+			return event
+		},
+		// need to have logs enabled
+		Debug:            true,
+		AttachStacktrace: true,
+	})
 	if err != nil {
 		panic(err)
 	}
+
+	// send logs on InfoLevel and above, using the client configured by sentry.Init
+	logHook := sentrylogrus.NewLogHook(context.Background(), []logrus.Level{
+		logrus.InfoLevel,
+		logrus.ErrorLevel,
+		logrus.FatalLevel,
+		logrus.PanicLevel,
+	})
 	defer logHook.Flush(5 * time.Second)
 	logger.AddHook(logHook)
 
