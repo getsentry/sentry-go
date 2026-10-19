@@ -8,7 +8,7 @@ import (
 )
 
 // The version of the SDK.
-const SDKVersion = "0.50.0"
+const SDKVersion = "1.0.0-alpha.1"
 
 // DefaultFlushTimeout is the default timeout used for flushing events.
 const DefaultFlushTimeout = 2 * time.Second

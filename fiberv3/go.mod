@@ -5,7 +5,7 @@ go 1.26.0
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.50.0
+	github.com/getsentry/sentry-go v1.0.0-alpha.1
 	github.com/gofiber/fiber/v3 v3.3.0
 	github.com/gofiber/utils/v2 v2.0.6
 	github.com/google/go-cmp v0.7.0

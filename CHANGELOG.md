@@ -1,5 +1,88 @@
 # Changelog
 
+## 1.0.0-alpha.1
+
+### Breaking Changes 🛠
+
+- Replace the event-based transports with envelope-based ones. Custom transports need to implement the new `Transport` interface. See the [transport section of the migration guide](https://github.com/getsentry/sentry-go/blob/master/MIGRATION.md#transports) for details. by @giortzisg in [#1427](https://github.com/getsentry/sentry-go/pull/1427)
+  - Custom transports need to implement `SendEnvelope(ctx, envelope)` in place of `SendEvent(event)`, and `FlushWithContext(ctx)` in place of `Flush(timeout)`. The envelope types live in the new public `protocol` package.
+  - The transport `Timeout` now applies to every request, including when a custom `HTTPClient` is set.
+  - `ClientOptions.DisableTelemetryBuffer` is removed. The telemetry buffer is always used.
+  - Transport `BufferSize` now counts envelopes instead of events, and defaults to 1000 instead of 30.
+  ```go
+  // Before
+  func (t *customTransport) SendEvent(event *sentry.Event) {}
+  func (t *customTransport) Flush(timeout time.Duration) bool { return true }
+  
+  // After
+  func (t *customTransport) SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error { return nil }
+  func (t *customTransport) FlushWithContext(ctx context.Context) bool { return true }
+  ```
+- Remove the `Hub` API. Scopes and clients are now carried on `context.Context`, so users need to pass the request or job context to Sentry functions instead of using a hub. See the [migration guide](https://github.com/getsentry/sentry-go/blob/master/MIGRATION.md#upgrading-to-v1) for every replacement. by @giortzisg in [#1407](https://github.com/getsentry/sentry-go/pull/1407)
+  - `CaptureException`, `CaptureMessage`, `CaptureEvent`, `CaptureCheckIn`, `AddBreadcrumb`, `Recover` and `WithMonitor` now take a context as their first argument. Hints and levels are passed as options, such as `sentry.WithEventHint(hint)` and `sentry.WithLevel(level)`.
+  - Use `ctx, scope := sentry.WithScope(ctx)` to isolate data for a request or job, instead of cloning a hub or calling `PushScope`. Use `sentry.GlobalScope()` for application-wide data, instead of `ConfigureScope`.
+  - Use `sentry.ScopeFromContext(ctx)` and `sentry.ClientFromContext(ctx)` to read the current scope and client, and `sentry.ContextWithScope` and `sentry.ContextWithClient` to attach your own, instead of `NewHub` and `SetHubOnContext`.
+  - In Gin, Echo, Iris, Fiber and FastHTTP handlers, call the integration's `GetContext(c)` and pass the result to Sentry functions. `GetHubFromContext`, `SetHubOnContext` and `GetSpanFromContext` are removed.
+  - Use `sentry.ContinueFromHeaders(trace, baggage)` to continue a trace and `sentry.SpanFromContext(ctx)` to read the active span. `ContinueTrace`, `ContinueFromTrace`, `Scope.GetSpan` and `Scope.SetSpan` are removed.
+  - `EventModifier` and the `Client.EventFromMessage`, `EventFromException` and `EventFromCheckIn` helpers are removed. Use `BeforeSend` or an event processor to modify events.
+  - Tags and a level set directly on an event are no longer overwritten by the scope.
+  - `sentry.AddBreadcrumb` and `sentry.LastEventID` need a context that carries a scope. On a bare context such as `context.Background()` the breadcrumb is dropped and the ID is empty. Users should create a scope with `sentry.WithScope` first.
+  - A context that carries neither a scope nor a span, such as `context.Background()`, no longer propagates a trace. `GetTraceparent`, `GetTraceparentW3C` and `GetBaggage` return an empty string for it, outgoing HTTP and gRPC requests made with it carry no trace headers, and each event, log and metric captured with it gets its own trace ID. Requests handled by the middleware and contexts from `sentry.WithScope` are unaffected.
+  ```go
+  // Before: isolate a request
+  hub := sentry.CurrentHub().Clone()
+  hub.Scope().SetTag("route", "checkout")
+  ctx := sentry.SetHubOnContext(r.Context(), hub)
+  hub.CaptureException(err)
+  
+  // After: isolate a request
+  ctx, scope := sentry.WithScope(r.Context())
+  scope.SetTag("route", "checkout")
+  sentry.CaptureException(ctx, err)
+  
+  // Before: use your own client
+  hub := sentry.NewHub(client, sentry.NewScope())
+  ctx := sentry.SetHubOnContext(r.Context(), hub)
+  
+  // After: use your own client
+  ctx := sentry.ContextWithClient(r.Context(), client)
+  
+  // Before, in a Gin handler
+  sentrygin.GetHubFromContext(c).CaptureException(err)
+  
+  // After, in a Gin handler
+  sentry.CaptureException(sentrygin.GetContext(c), err)
+  ```
+- The Logrus and Zerolog integrations now take a `context.Context`. A client can now be attached to a context with `sentry.ContextWithClient`, so the separate client-specific constructors are no longer needed. The integrations now use the client initialized from `sentry.Init`. by @giortzisg in [#1417](https://github.com/getsentry/sentry-go/pull/1417)
+  - Logrus: remove `NewLogHookFromClient`, `Hook.SetHubProvider`, `Hook.SetFallback` and `FallbackFunc`. `NewLogHook` no longer creates a client or returns an error.
+  - Zerolog: remove `Config` and `NewWithHub`. Client options move to `sentry.Init` or `sentry.NewClient`.
+  ```go
+  // Before
+  hook, err := sentrylogrus.NewLogHook(levels, clientOptions)
+  hook := sentrylogrus.NewLogHookFromClient(levels, client)
+  
+  writer, err := sentryzerolog.New(sentryzerolog.Config{ClientOptions: clientOptions, Options: writerOptions})
+  writer, err := sentryzerolog.NewWithHub(hub, writerOptions)
+  
+  // After: uses the client from sentry.Init
+  hook := sentrylogrus.NewLogHook(ctx, levels)
+  writer, err := sentryzerolog.New(ctx, writerOptions)
+  
+  // After: with a dedicated client
+  ctx = sentry.ContextWithClient(ctx, client)
+  hook := sentrylogrus.NewLogHook(ctx, levels)
+  writer, err := sentryzerolog.New(ctx, writerOptions)
+  ```
+- Add support for Go 1.27 and raise the minimum supported Go version to 1.26 by @giortzisg in [#1409](https://github.com/getsentry/sentry-go/pull/1409)
+
+### New Features ✨
+
+- (docs) Add migration guide for v1 by @giortzisg in [#1457](https://github.com/getsentry/sentry-go/pull/1457)
+
+### Internal Changes 🔧
+
+- (deps) Bump golangci-lint to 1.24 by @giortzisg in [#1451](https://github.com/getsentry/sentry-go/pull/1451)
+
 ## 0.50.0
 
 ### Breaking Changes 🛠
