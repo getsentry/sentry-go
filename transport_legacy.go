@@ -8,23 +8,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	httpinternal "github.com/getsentry/sentry-go/internal/http"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
-)
-
-const (
-	defaultBufferSize        = 1000
-	defaultTimeout           = time.Second * 30
-	defaultClientReportsTick = time.Second * 30
 )
 
 // Transport is used by the Client to deliver events to remote server.
@@ -36,23 +28,7 @@ type Transport interface {
 	Close()
 }
 
-func getProxyConfig(options ClientOptions) func(*http.Request) (*url.URL, error) {
-	if options.HTTPSProxy != "" {
-		return func(*http.Request) (*url.URL, error) {
-			return url.Parse(options.HTTPSProxy)
-		}
-	}
-
-	if options.HTTPProxy != "" {
-		return func(*http.Request) (*url.URL, error) {
-			return url.Parse(options.HTTPProxy)
-		}
-	}
-
-	return http.ProxyFromEnvironment
-}
-
-func getTLSConfig(options ClientOptions) *tls.Config {
+func getLegacyTLSConfig(options ClientOptions) *tls.Config {
 	if options.CaCerts != nil {
 		// #nosec G402 -- We should be using `MinVersion: tls.VersionTLS12`,
 		// 				 but we don't want to break peoples code without the major bump.
@@ -301,7 +277,7 @@ func getRequestFromEnvelope(ctx context.Context, dsn *Dsn, envelope *bytes.Buffe
 	request.Header.Set("User-Agent", fmt.Sprintf("%s/%s", sdkName, sdkVersion))
 	request.Header.Set("Content-Type", "application/x-sentry-envelope")
 
-	auth := fmt.Sprintf("Sentry sentry_version=%s, "+
+	auth := fmt.Sprintf("Sentry sentry_version=%d, "+
 		"sentry_client=%s/%s, sentry_key=%s", apiVersion, sdkName, sdkVersion, dsn.GetPublicKey())
 
 	// The key sentry_secret is effectively deprecated and no longer needs to be set.
@@ -373,7 +349,7 @@ type HTTPTransport struct {
 // NewHTTPTransport returns a new pre-configured instance of HTTPTransport.
 func NewHTTPTransport() *HTTPTransport {
 	transport := HTTPTransport{
-		BufferSize: defaultBufferSize,
+		BufferSize: defaultQueueSize,
 		Timeout:    defaultTimeout,
 		done:       make(chan struct{}),
 		limits:     make(ratelimit.Map),
@@ -411,8 +387,8 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		t.transport = options.HTTPTransport
 	} else {
 		t.transport = &http.Transport{
-			Proxy:           getProxyConfig(options),
-			TLSClientConfig: getTLSConfig(options),
+			Proxy:           getProxyConfig(options.HTTPProxy, options.HTTPSProxy),
+			TLSClientConfig: getLegacyTLSConfig(options),
 		}
 	}
 
@@ -751,8 +727,8 @@ func (t *HTTPSyncTransport) Configure(options ClientOptions) {
 		t.transport = options.HTTPTransport
 	} else {
 		t.transport = &http.Transport{
-			Proxy:           getProxyConfig(options),
-			TLSClientConfig: getTLSConfig(options),
+			Proxy:           getProxyConfig(options.HTTPProxy, options.HTTPSProxy),
+			TLSClientConfig: getLegacyTLSConfig(options),
 		}
 	}
 
@@ -904,7 +880,7 @@ type internalAsyncTransportAdapter struct {
 }
 
 func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
-	transportOptions := httpinternal.TransportOptions{
+	transportOptions := TransportOptions{
 		Dsn:           options.Dsn,
 		HTTPClient:    options.HTTPClient,
 		HTTPTransport: options.HTTPTransport,
@@ -921,7 +897,7 @@ func (a *internalAsyncTransportAdapter) Configure(options ClientOptions) {
 		},
 	}
 
-	a.transport = httpinternal.NewAsyncTransport(transportOptions)
+	a.transport = NewAsyncTransport(transportOptions)
 
 	if options.Dsn != "" {
 		dsn, err := protocol.NewDsn(options.Dsn)
