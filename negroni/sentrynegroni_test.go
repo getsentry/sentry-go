@@ -1,8 +1,10 @@
 package sentrynegroni_test
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/sentrytest"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	sentrynegroni "github.com/getsentry/sentry-go/negroni"
 	"github.com/google/go-cmp/cmp"
@@ -81,12 +84,11 @@ func TestIntegration(t *testing.T) {
 			Body:        `{"safe":"value"}`,
 			ContentType: "application/json",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage("post: " + string(body))
+				sentry.CaptureMessage(r.Context(), "post: "+string(body))
 			}),
 
 			WantStatus: http.StatusOK,
@@ -135,8 +137,7 @@ func TestIntegration(t *testing.T) {
 		{
 			Path: "/get",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
-				hub.CaptureMessage("get")
+				sentry.CaptureMessage(r.Context(), "get")
 			}),
 
 			WantStatus: http.StatusOK,
@@ -181,12 +182,11 @@ func TestIntegration(t *testing.T) {
 			Method: "POST",
 			Body:   largePayload,
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
 					t.Error(err)
 				}
-				hub.CaptureMessage(fmt.Sprintf("post: %d KB", len(body)/1024))
+				sentry.CaptureMessage(r.Context(), fmt.Sprintf("post: %d KB", len(body)/1024))
 			}),
 
 			WantStatus: http.StatusOK,
@@ -237,8 +237,7 @@ func TestIntegration(t *testing.T) {
 			Method: "POST",
 			Body:   "client sends, server ignores, SDK doesn't read",
 			Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-				hub := sentry.GetHubFromContext(r.Context())
-				hub.CaptureMessage("body ignored")
+				sentry.CaptureMessage(r.Context(), "body ignored")
 			}),
 
 			WantStatus: http.StatusOK,
@@ -423,5 +422,29 @@ func TestIntegration(t *testing.T) {
 
 	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestPanicHandlerFuncDoesNotReplaceRequest(t *testing.T) {
+	t.Parallel()
+	fixture := sentrytest.NewFixture(t)
+	request := httptest.NewRequest(http.MethodGet, "http://example.com/panic", nil).WithContext(fixture.NewContext(context.Background()))
+	recovery := negroni.NewRecovery()
+	recovery.Logger = log.New(io.Discard, "", 0)
+	recovery.PrintStack = false
+	var info *negroni.PanicInformation
+	recovery.PanicHandlerFunc = func(recovered *negroni.PanicInformation) {
+		info = recovered
+		sentrynegroni.PanicHandlerFunc(info)
+	}
+	recovery.ServeHTTP(httptest.NewRecorder(), request, func(http.ResponseWriter, *http.Request) {
+		panic("test")
+	})
+	if info == nil || info.Request != request {
+		t.Fatal("PanicHandlerFunc did not preserve the recovered request")
+	}
+	fixture.Flush()
+	if got := len(fixture.Events()); got != 1 {
+		t.Fatalf("captured events = %d, want 1", got)
 	}
 }
