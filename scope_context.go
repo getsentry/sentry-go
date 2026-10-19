@@ -56,9 +56,10 @@ func WithScope(ctx context.Context) (context.Context, *Scope) {
 		scope = parent.Clone()
 	} else {
 		scope = NewScope()
-		if span := SpanFromContext(ctx); span != nil {
-			scope.span = span.GetTransaction()
-		}
+	}
+	scope.span = nil
+	if span := SpanFromContext(ctx); span != nil {
+		scope.span = span.GetTransaction()
 	}
 	return ContextWithScope(ctx, scope), scope
 }
