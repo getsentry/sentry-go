@@ -410,6 +410,7 @@ func TestGetBaggage(t *testing.T) {
 				h, _, s := setupHubTest()
 				s.propagationContext.DynamicSamplingContext = DynamicSamplingContext{
 					Entries: map[string]string{"release": "1.0.0", "environment": "production"},
+					Frozen:  true,
 				}
 				return h
 			}(),

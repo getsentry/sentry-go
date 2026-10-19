@@ -280,6 +280,9 @@ func (scope *Scope) SetPropagationContext(propagationContext PropagationContext)
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
+	if !frozenDSCMatchesTrace(propagationContext.DynamicSamplingContext, propagationContext.TraceID) {
+		propagationContext.DynamicSamplingContext = DynamicSamplingContext{Frozen: true}
+	}
 	scope.propagationContext = propagationContext.clone()
 }
 
@@ -314,6 +317,37 @@ func (scope *Scope) keepSamplingDecision(traceID TraceID, sampled Sampled, dsc D
 		entries := maps.Clone(scopeDSC.Entries)
 		entries["sample_rate"] = rate
 		propagation.DynamicSamplingContext.Entries = entries
+	}
+}
+
+func (scope *Scope) propagationContextForPropagation(client *Client) PropagationContext {
+	client = normalizeClient(client)
+	scope.mu.Lock()
+	defer scope.mu.Unlock()
+
+	freezeDynamicSamplingContext(&scope.propagationContext, client)
+	return scope.propagationContext.clone()
+}
+
+// freezeDynamicSamplingContext initializes the sampling metadata of a trace
+// that has not been propagated yet.
+func freezeDynamicSamplingContext(propagationContext *PropagationContext, client *Client) {
+	if !client.IsEnabled() || propagationContext.TraceID == zeroTraceID || propagationContext.DynamicSamplingContext.IsFrozen() {
+		return
+	}
+	applyStaticSamplingDecision(propagationContext, client)
+	dsc := dynamicSamplingContextFromPropagationContext(*propagationContext, client)
+	if client.options.EnableTracing && propagationContext.Sampled == SampledFalse {
+		dsc.Entries["sampled"] = "false"
+	}
+	propagationContext.DynamicSamplingContext = dsc
+}
+
+func applyStaticSamplingDecision(propagationContext *PropagationContext, client *Client) {
+	if client.options.EnableTracing && client.options.TracesSampler == nil && client.options.TracesSampleRate == 0 {
+		if propagationContext.Sampled == SampledUndefined {
+			propagationContext.Sampled = SampledFalse
+		}
 	}
 }
 
@@ -400,7 +434,7 @@ func (scope *Scope) applyToEvent(
 	snapshot, processors := scope.copyToEvent(event, maxBreadcrumbs)
 	applyRequestToEvent(event, client, snapshot.request, snapshot.requestBody)
 	_, explicitTrace := event.Contexts[traceContextKey]
-	applyTraceToEvent(ctx, event, client, snapshot.propagationContext, explicitTrace)
+	applyTraceToEvent(ctx, event, client, scope, snapshot.propagationContext, explicitTrace)
 	return processors
 }
 
@@ -428,14 +462,14 @@ func applyScopesToEvent(
 	if scope == nil {
 		// The global scope's trace is never used.
 		snapshot = globalSnapshot
-		snapshot.propagationContext = NewPropagationContext()
+		snapshot.propagationContext = PropagationContext{}
 	} else if snapshot.request == nil {
 		snapshot.request, snapshot.requestBody = globalSnapshot.request, globalSnapshot.requestBody
 	}
 	applyRequestToEvent(event, client, snapshot.request, snapshot.requestBody)
 
 	_, explicitTrace := event.Contexts[traceContextKey]
-	applyTraceToEvent(ctx, event, client, snapshot.propagationContext, explicitTrace)
+	applyTraceToEvent(ctx, event, client, scope, snapshot.propagationContext, explicitTrace)
 	return globalProcessors, scopeProcessors
 }
 
@@ -494,25 +528,39 @@ func (scope *Scope) copyToEvent(event *Event, maxBreadcrumbs int) (scopeData, []
 	return scope.scopeData, scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
 }
 
-func applyTraceToEvent(ctx context.Context, event *Event, client *Client, propagation PropagationContext, explicit bool) {
+func applyTraceToEvent(ctx context.Context, event *Event, client *Client, scope *Scope, propagation PropagationContext, explicit bool) {
 	if event.Type == transactionType {
 		return
 	}
+	// forPropagation initializes the trace's sampling metadata, on scope when
+	// there is one so that later captures and outgoing requests reuse it.
+	forPropagation := func() PropagationContext {
+		if scope != nil {
+			return scope.propagationContextForPropagation(client)
+		}
+		freezeDynamicSamplingContext(&propagation, normalizeClient(client))
+		return propagation
+	}
 	if !explicit {
-		trace := activeTraceFromContexts(client, ctx).withScope(propagation)
+		trace := activeTraceFromContexts(client, ctx)
+		if scope == nil && trace.traceID == zeroTraceID && trace.span == nil {
+			// Nothing carries a trace, so the event starts its own.
+			propagation = NewPropagationContext()
+		}
+		trace = trace.withScope(propagation)
 		switch {
 		case trace.span != nil:
 			setEventTrace(event, trace.span.traceContext().Map())
 		case trace.traceID == zeroTraceID:
 			return
 		case trace.propagation:
+			propagation = forPropagation()
+			if propagation.TraceID == zeroTraceID {
+				return
+			}
 			setEventTrace(event, propagation.Map())
 			if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() {
-				dsc := propagation.DynamicSamplingContext
-				if !dsc.HasEntries() && !dsc.IsFrozen() {
-					dsc = dynamicSamplingContextFromPropagationContext(propagation, client)
-				}
-				event.sdkMetaData.dsc = dsc
+				event.sdkMetaData.dsc = propagation.DynamicSamplingContext
 			}
 			return
 		default:
@@ -530,8 +578,11 @@ func applyTraceToEvent(ctx context.Context, event *Event, client *Client, propag
 		traceID = id
 	}
 	event.sdkMetaData.dsc = matchingDSC(traceID, propagation, SpanFromContext(ctx))
-	if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() && !propagation.DynamicSamplingContext.IsFrozen() && client.IsEnabled() && propagation.TraceID != zeroTraceID && strings.EqualFold(traceID, propagation.TraceID.String()) {
-		event.sdkMetaData.dsc = dynamicSamplingContextFromPropagationContext(propagation, client)
+	if !event.sdkMetaData.dsc.HasEntries() && !event.sdkMetaData.dsc.IsFrozen() && propagation.TraceID != zeroTraceID && strings.EqualFold(traceID, propagation.TraceID.String()) {
+		// Initialize the selected scope trace's DSC just as for propagation.
+		// Recheck the trace in case the scope changed since the snapshot.
+		propagation = forPropagation()
+		event.sdkMetaData.dsc = matchingDSC(traceID, propagation)
 	}
 }
 
@@ -547,6 +598,9 @@ func matchingDSC(traceID string, propagation PropagationContext, roots ...*Span)
 	}
 	dsc := propagation.DynamicSamplingContext
 	if traceID != "" && strings.EqualFold(traceID, dsc.Entries[traceIDContextKey]) {
+		return dsc
+	}
+	if traceID != "" && dsc.IsFrozen() && dsc.Entries[traceIDContextKey] == "" && strings.EqualFold(traceID, propagation.TraceID.String()) {
 		return dsc
 	}
 	return DynamicSamplingContext{}
@@ -595,43 +649,58 @@ func cloneContext(c Context) Context {
 	return maps.Clone(c)
 }
 
-func (scope *Scope) populateAttrs(attrs map[string]attribute.Value) {
-	if scope == nil {
-		return
+func mergeScopeAttributes(
+	client *Client,
+	scope *Scope,
+	extraCapacity int,
+) map[string]attribute.Value {
+	client = normalizeClient(client)
+	serverAddress := client.options.ServerName
+	if serverAddress == "" {
+		serverAddress = hostname
+	}
+	sdkName := client.GetSDKIdentifier()
+	global := GlobalScope()
+	if scope == global {
+		scope = nil
 	}
 
-	scope.mu.RLock()
-	defer scope.mu.RUnlock()
-
-	// Add user-related attributes
-	if !scope.user.IsEmpty() {
-		if scope.user.ID != "" {
-			attrs["user.id"] = attribute.StringValue(scope.user.ID)
-		}
-		if scope.user.Name != "" {
-			attrs["user.name"] = attribute.StringValue(scope.user.Name)
-		}
-		if scope.user.Email != "" {
-			attrs["user.email"] = attribute.StringValue(scope.user.Email)
+	scopeAttributes := 0
+	if scope != nil {
+		scope.mu.RLock()
+		scopeAttributes = len(scope.attributes)
+		scope.mu.RUnlock()
+	}
+	global.mu.RLock()
+	attrs := make(map[string]attribute.Value, len(global.attributes)+scopeAttributes+extraCapacity+8)
+	setString := func(key, value string) {
+		if value != "" {
+			attrs[key] = attribute.StringValue(value)
 		}
 	}
+	setString("sentry.release", client.options.Release)
+	setString("sentry.environment", client.options.Environment)
+	setString("sentry.server.address", serverAddress)
+	setString("sentry.sdk.name", sdkName)
+	setString("sentry.sdk.version", client.sdkVersion)
+	user := global.user
+	maps.Copy(attrs, global.attributes)
+	global.mu.RUnlock()
 
-	for k, v := range scope.attributes {
-		attrs[k] = v
-	}
-}
-
-// hubFromContexts is a helper to return the first hub found in the given contexts.
-func hubFromContexts(ctxs ...context.Context) *Hub {
-	for _, ctx := range ctxs {
-		if ctx == nil {
-			continue
+	if scope != nil {
+		scope.mu.RLock()
+		if !scope.user.IsEmpty() {
+			user = scope.user
 		}
-		if hub := GetHubFromContext(ctx); hub != nil {
-			return hub
+		maps.Copy(attrs, scope.attributes)
+		scope.mu.RUnlock()
+	}
+	for key, value := range map[string]string{"user.id": user.ID, "user.name": user.Name, "user.email": user.Email} {
+		if _, ok := attrs[key]; !ok {
+			setString(key, value)
 		}
 	}
-	return nil
+	return attrs
 }
 
 type activeTrace struct {
@@ -639,6 +708,7 @@ type activeTrace struct {
 	spanID      SpanID
 	span        *Span
 	propagation bool
+	sampled     Sampled
 }
 
 func activeTraceFromContexts(client *Client, ctxs ...context.Context) activeTrace {
@@ -646,24 +716,30 @@ func activeTraceFromContexts(client *Client, ctxs ...context.Context) activeTrac
 		if ctx == nil {
 			continue
 		}
-		if traceID, spanID, ok := client.externalTraceContextFromContext(ctx); ok {
-			trace := activeTrace{traceID: traceID, spanID: spanID}
+		if traceID, spanID, sampled, ok := client.externalTraceContextFromContext(ctx); ok && traceID != zeroTraceID && spanID != zeroSpanID {
+			trace := activeTrace{traceID: traceID, spanID: spanID, sampled: sampled}
 			if span := SpanFromContext(ctx); span != nil && span.TraceID == traceID && span.SpanID == spanID {
 				trace.span = span
 			}
 			return trace
 		}
 		if span := SpanFromContext(ctx); span != nil {
-			return activeTrace{traceID: span.TraceID, spanID: span.SpanID, span: span}
+			return activeTraceFromSpan(span)
 		}
 	}
 	return activeTrace{}
 }
 
+func activeTraceFromSpan(span *Span) activeTrace {
+	span.mu.RLock()
+	defer span.mu.RUnlock()
+	return activeTrace{traceID: span.TraceID, spanID: span.SpanID, span: span, sampled: span.Sampled}
+}
+
 // withScope supplies the scope fallback without changing an active trace selection.
 func (trace activeTrace) withScope(propagation PropagationContext) activeTrace {
 	if trace.span == nil && trace.traceID == zeroTraceID {
-		trace = activeTrace{traceID: propagation.TraceID, spanID: propagation.SpanID, propagation: true}
+		trace = activeTrace{traceID: propagation.TraceID, spanID: propagation.SpanID, sampled: propagation.Sampled, propagation: true}
 	}
 	return trace
 }
