@@ -449,7 +449,7 @@ func TestCaptureException(t *testing.T) {
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeChained,
 						ExceptionID:      1,
-						ParentID:         Pointer(0),
+						ParentID:         new(0),
 						Source:           MechanismTypeUnwrap,
 						IsExceptionGroup: false,
 					},
@@ -490,7 +490,7 @@ func TestCaptureException(t *testing.T) {
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeChained,
 						ExceptionID:      1,
-						ParentID:         Pointer(0),
+						ParentID:         new(0),
 						Source:           "cause",
 						IsExceptionGroup: false,
 					},
@@ -520,7 +520,7 @@ func TestCaptureException(t *testing.T) {
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeChained,
 						ExceptionID:      1,
-						ParentID:         Pointer(0),
+						ParentID:         new(0),
 						Source:           MechanismTypeUnwrap,
 						IsExceptionGroup: false,
 					},
