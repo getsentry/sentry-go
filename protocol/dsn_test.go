@@ -13,7 +13,6 @@ import (
 type DsnTest struct {
 	in     string
 	dsn    *Dsn   // expected value after parsing
-	url    string // expected Store API URL
 	envURL string // expected Envelope API URL
 }
 
@@ -21,7 +20,7 @@ var dsnTests = map[string]DsnTest{
 	"AllFields": { //nolint:gosec // G101: not real credentials
 		in: "https://public:secret@domain:8888/foo/bar/42",
 		dsn: &Dsn{
-			scheme:    SchemeHTTPS,
+			scheme:    schemeHTTPS,
 			publicKey: "public",
 			secretKey: "secret",
 			host:      "domain",
@@ -29,55 +28,50 @@ var dsnTests = map[string]DsnTest{
 			path:      "/foo/bar",
 			projectID: "42",
 		},
-		url:    "https://domain:8888/foo/bar/api/42/store/",
 		envURL: "https://domain:8888/foo/bar/api/42/envelope/",
 	},
 	"MinimalSecure": {
 		in: "https://public@domain/42",
 		dsn: &Dsn{
-			scheme:    SchemeHTTPS,
+			scheme:    schemeHTTPS,
 			publicKey: "public",
 			host:      "domain",
 			port:      443,
 			projectID: "42",
 		},
-		url:    "https://domain/api/42/store/",
 		envURL: "https://domain/api/42/envelope/",
 	},
 	"MinimalInsecure": {
 		in: "http://public@domain/42",
 		dsn: &Dsn{
-			scheme:    SchemeHTTP,
+			scheme:    schemeHTTP,
 			publicKey: "public",
 			host:      "domain",
 			port:      80,
 			projectID: "42",
 		},
-		url:    "http://domain/api/42/store/",
 		envURL: "http://domain/api/42/envelope/",
 	},
 	"IPv6WithPort": {
 		in: "https://public@[2001:db8::1]:8888/42",
 		dsn: &Dsn{
-			scheme:    SchemeHTTPS,
+			scheme:    schemeHTTPS,
 			publicKey: "public",
 			host:      "2001:db8::1",
 			port:      8888,
 			projectID: "42",
 		},
-		url:    "https://[2001:db8::1]:8888/api/42/store/",
 		envURL: "https://[2001:db8::1]:8888/api/42/envelope/",
 	},
 	"IPv6DefaultPort": {
 		in: "https://public@[::1]/42",
 		dsn: &Dsn{
-			scheme:    SchemeHTTPS,
+			scheme:    schemeHTTPS,
 			publicKey: "public",
 			host:      "::1",
 			port:      443,
 			projectID: "42",
 		},
-		url:    "https://[::1]/api/42/store/",
 		envURL: "https://[::1]/api/42/envelope/",
 	},
 }

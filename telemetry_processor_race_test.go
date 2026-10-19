@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
 )
 
@@ -22,8 +22,8 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 	dsn := &protocol.Dsn{}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError: telemetry.NewRingBuffer[protocol.TelemetryItem](
+	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
+		ratelimit.CategoryError: telemetry.NewRingBuffer[telemetry.Item](
 			ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, report.NoopRecorder(),
 		),
 	}
@@ -83,8 +83,8 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 	dsn := &protocol.Dsn{}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.TelemetryItem](
+	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
+		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[telemetry.Item](
 			ratelimit.CategoryTransaction, 100, telemetry.OverflowPolicyDropOldest, 1, 0, report.NoopRecorder(),
 		),
 	}
