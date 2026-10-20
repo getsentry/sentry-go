@@ -2,6 +2,7 @@ package sentry_test
 
 import (
 	"fmt"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -71,5 +72,26 @@ func TestExtractStacktraceKeepsResolvedRuntimeFrames(t *testing.T) {
 
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("frames mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestExtractStacktraceNamesRuntimeFramesWithoutFunction(t *testing.T) {
+	err := &runtimeFramesError{frames: []runtime.Frame{{
+		PC:   reflect.ValueOf(captureRuntimeFramesError).Pointer(),
+		File: "/src/example.go",
+		Line: 42,
+	}}}
+
+	stacktrace := sentry.ExtractStacktrace(err)
+	if stacktrace == nil || len(stacktrace.Frames) != 1 {
+		t.Fatalf("ExtractStacktrace() = %+v, want one frame", stacktrace)
+	}
+
+	frame := stacktrace.Frames[0]
+	if frame.Module != "github.com/getsentry/sentry-go_test" || frame.Function != "captureRuntimeFramesError" {
+		t.Errorf("frame = %s.%s, want github.com/getsentry/sentry-go_test.captureRuntimeFramesError", frame.Module, frame.Function)
+	}
+	if frame.Lineno != 42 {
+		t.Errorf("Lineno = %d, want 42", frame.Lineno)
 	}
 }

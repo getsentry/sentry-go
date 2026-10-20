@@ -123,7 +123,14 @@ func extractRuntimeFrames(stacktrace reflect.Value) ([]runtime.Frame, bool) {
 
 	frames := make([]runtime.Frame, stacktrace.Len())
 	for i := range frames {
-		frames[len(frames)-1-i] = stacktrace.Index(i).Interface().(runtime.Frame)
+		frame := stacktrace.Index(i).Interface().(runtime.Frame)
+		if frame.Function == "" && frame.PC != 0 {
+			// A frame built by hand may carry only its PC.
+			if fn := runtime.FuncForPC(frame.PC); fn != nil {
+				frame.Function = fn.Name()
+			}
+		}
+		frames[len(frames)-1-i] = frame
 	}
 
 	return frames, true
