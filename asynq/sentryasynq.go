@@ -5,6 +5,7 @@ package sentryasynq
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"reflect"
 	"regexp"
 	"slices"
@@ -94,29 +95,27 @@ func (o Options) excluded(taskType string) bool {
 //
 // Pass the returned task to asynq.Scheduler.Register with the same spec.
 // Options passed to asynq.NewTask cannot be copied to a new task, so a task
-// created with options and without headers is returned unchanged; pass the
-// options to Register instead, or create the task with
-// asynq.NewTaskWithHeaders.
+// created with options is returned unchanged; pass the options to Register
+// instead.
 func WithMonitor(task *asynq.Task, slug, spec string, options Options) *asynq.Task {
+	if hasOptions(task) {
+		debuglog.Printf("sentryasynq: task %q has options, so it cannot be monitored; pass them to Register instead", task.Type())
+		return task
+	}
 	loc := options.Location
 	if loc == nil {
 		loc = time.UTC
 	}
-	headers := map[string]string{slugHeader: slug}
+	headers := maps.Clone(task.Headers())
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+	headers[slugHeader] = slug
+	delete(headers, configHeader)
 	if config := cronspec.MonitorConfig(spec, loc, options.MonitorConfig); config != nil {
 		if b, err := json.Marshal(config); err == nil {
 			headers[configHeader] = string(b)
 		}
-	}
-	if task.Headers() != nil {
-		for k, v := range headers {
-			task.Headers()[k] = v
-		}
-		return task
-	}
-	if hasOptions(task) {
-		debuglog.Printf("sentryasynq: task %q has options, so it cannot be monitored; pass them to Register instead", task.Type())
-		return task
 	}
 	return asynq.NewTaskWithHeaders(task.Type(), task.Payload(), headers)
 }

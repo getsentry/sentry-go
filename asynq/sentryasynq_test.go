@@ -30,7 +30,8 @@ func TestConfigProvider(t *testing.T) {
 		{Cronspec: "@every 1h", Task: asynq.NewTask("tenant:sync", []byte("a"))},
 		{Cronspec: "@every 2h", Task: asynq.NewTask("tenant:sync", []byte("b"))},
 		{Cronspec: "@every 1h", Task: asynq.NewTask("email:digest", nil, asynq.Queue("low"))},
-		{Cronspec: "@every 1h", Task: asynq.NewTaskWithHeaders("audit", nil, map[string]string{"k": "v"}, asynq.Queue("low"))},
+		{Cronspec: "@every 1h", Task: asynq.NewTaskWithHeaders("audit", nil, map[string]string{"k": "v"})},
+		{Cronspec: "@every 1h", Task: asynq.NewTaskWithHeaders("cleanup", nil, map[string]string{"k": "v"}, asynq.Queue("low"))},
 	}, Options{
 		Location:        tokyo,
 		MonitorConfig:   &sentry.MonitorConfig{MaxRuntime: 10},
@@ -55,6 +56,21 @@ func TestConfigProvider(t *testing.T) {
 	assert.Nil(t, headers["email:digest"])
 	assert.Equal(t, "audit", headers["audit"][slugHeader])
 	assert.Equal(t, "v", headers["audit"]["k"])
+	assert.Equal(t, map[string]string{"k": "v"}, headers["cleanup"])
+}
+
+func TestWithMonitorCopiesTask(t *testing.T) {
+	t.Parallel()
+	task := asynq.NewTaskWithHeaders("sync", []byte("p"), map[string]string{"k": "v"})
+	hourly := WithMonitor(task, "sync-hourly", "@every 1h", Options{})
+	daily := WithMonitor(task, "sync-daily", "@daily", Options{})
+
+	assert.Equal(t, map[string]string{"k": "v"}, task.Headers())
+	assert.Equal(t, "sync-hourly", hourly.Headers()[slugHeader])
+	assert.Equal(t, "sync-daily", daily.Headers()[slugHeader])
+	assert.Equal(t, "v", daily.Headers()["k"])
+	assert.Equal(t, []byte("p"), daily.Payload())
+	assert.Empty(t, WithMonitor(task, "sync-fast", "@every 30s", Options{}).Headers()[configHeader])
 }
 
 func TestMiddleware(t *testing.T) {
