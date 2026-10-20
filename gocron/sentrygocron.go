@@ -3,6 +3,7 @@
 package sentrygocron
 
 import (
+	"context"
 	"regexp"
 	"slices"
 	"sync"
@@ -88,7 +89,7 @@ func (m *monitor) JobStarted(job gocron.Job) {
 	if !m.monitored(job) {
 		return
 	}
-	id := sentry.CaptureCheckIn(&sentry.CheckIn{
+	id := sentry.CaptureCheckIn(context.Background(), &sentry.CheckIn{
 		MonitorSlug: slug,
 		Status:      sentry.CheckInStatusInProgress,
 	}, m.monitorConfig(job.Schedule()))
@@ -146,7 +147,7 @@ func (m *monitor) finish(job gocron.Job, status sentry.CheckInStatus) {
 	if r.id != nil {
 		checkIn.ID = *r.id
 	}
-	sentry.CaptureCheckIn(checkIn, nil)
+	sentry.CaptureCheckIn(context.Background(), checkIn, nil)
 }
 
 func (m *monitor) JobCompleted(job gocron.Job) { m.finish(job, sentry.CheckInStatusOK) }

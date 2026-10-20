@@ -7,19 +7,14 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/sentrytest"
 	"github.com/go-co-op/gocron/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSchedulerMonitor(t *testing.T) {
-	transport := &sentry.MockTransport{}
-	client, err := sentry.NewClient(sentry.ClientOptions{Transport: transport})
-	require.NoError(t, err)
-	hub := sentry.CurrentHub()
-	previous := hub.Client()
-	t.Cleanup(func() { hub.BindClient(previous) })
-	hub.BindClient(client)
+	f := sentrytest.NewFixture(t, sentrytest.WithGlobal())
 
 	tokyo, err := time.LoadLocation("Asia/Tokyo")
 	require.NoError(t, err)
@@ -55,11 +50,15 @@ func TestSchedulerMonitor(t *testing.T) {
 	for _, job := range jobs {
 		require.NoError(t, job.RunNow())
 	}
-	require.Eventually(t, func() bool { return len(transport.Events()) >= 6 }, 5*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		f.Flush()
+		return len(f.Events()) >= 6
+	}, 5*time.Second, 10*time.Millisecond)
 	time.Sleep(100 * time.Millisecond)
+	f.Flush()
 
 	bySlug := make(map[string][]*sentry.Event)
-	for _, e := range transport.Events() {
+	for _, e := range f.Events() {
 		bySlug[e.CheckIn.MonitorSlug] = append(bySlug[e.CheckIn.MonitorSlug], e)
 	}
 	require.Len(t, bySlug, 3)
