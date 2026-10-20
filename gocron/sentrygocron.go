@@ -32,7 +32,8 @@ type Options struct {
 
 // NewSchedulerMonitor returns a gocron.SchedulerMonitor that reports every
 // run of the scheduler's jobs as check-ins, using the job name as the monitor
-// slug. Pass it to gocron.WithSchedulerMonitor.
+// slug. Check-ins use the client and scope carried by ctx. Pass it to
+// gocron.WithSchedulerMonitor.
 //
 // The monitor is created or updated with the job's schedule for cron and
 // duration jobs that Sentry can represent. Other jobs send check-ins only.
@@ -41,11 +42,15 @@ type Options struct {
 // Jobs running an anonymous function are not monitored, since that name
 // changes with the code around it. Jobs sharing a name are not monitored,
 // since they would report to the same monitor.
-func NewSchedulerMonitor(options Options) gocron.SchedulerMonitor {
+func NewSchedulerMonitor(ctx context.Context, options Options) gocron.SchedulerMonitor {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if options.Location == nil {
 		options.Location = time.Local
 	}
 	return &monitor{
+		ctx:     ctx,
 		options: options,
 		names:   make(map[string]map[uuid.UUID]bool),
 		runs:    make(map[uuid.UUID][]run),
@@ -61,6 +66,7 @@ type run struct {
 }
 
 type monitor struct {
+	ctx     context.Context
 	options Options
 
 	mu    sync.Mutex
@@ -71,6 +77,9 @@ type monitor struct {
 func (m *monitor) JobRegistered(job gocron.Job) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	for _, ids := range m.names {
+		delete(ids, job.ID())
+	}
 	if m.names[job.Name()] == nil {
 		m.names[job.Name()] = make(map[uuid.UUID]bool)
 	}
@@ -81,7 +90,6 @@ func (m *monitor) JobUnregistered(job gocron.Job) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.names[job.Name()], job.ID())
-	delete(m.runs, job.ID())
 }
 
 func (m *monitor) JobStarted(job gocron.Job) {
@@ -89,7 +97,7 @@ func (m *monitor) JobStarted(job gocron.Job) {
 	if !m.monitored(job) {
 		return
 	}
-	id := sentry.CaptureCheckIn(context.Background(), &sentry.CheckIn{
+	id := sentry.CaptureCheckIn(m.ctx, &sentry.CheckIn{
 		MonitorSlug: slug,
 		Status:      sentry.CheckInStatusInProgress,
 	}, m.monitorConfig(job.Schedule()))
@@ -136,7 +144,11 @@ func (m *monitor) finish(job gocron.Job, status sentry.CheckInStatus) {
 		return
 	}
 	r := runs[0]
-	m.runs[job.ID()] = runs[1:]
+	if len(runs) == 1 {
+		delete(m.runs, job.ID())
+	} else {
+		m.runs[job.ID()] = runs[1:]
+	}
 	m.mu.Unlock()
 
 	checkIn := &sentry.CheckIn{
@@ -147,7 +159,7 @@ func (m *monitor) finish(job gocron.Job, status sentry.CheckInStatus) {
 	if r.id != nil {
 		checkIn.ID = *r.id
 	}
-	sentry.CaptureCheckIn(context.Background(), checkIn, nil)
+	sentry.CaptureCheckIn(m.ctx, checkIn, nil)
 }
 
 func (m *monitor) JobCompleted(job gocron.Job) { m.finish(job, sentry.CheckInStatusOK) }

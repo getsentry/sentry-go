@@ -14,13 +14,13 @@ import (
 )
 
 func TestSchedulerMonitor(t *testing.T) {
-	f := sentrytest.NewFixture(t, sentrytest.WithGlobal())
+	f := sentrytest.NewFixture(t)
 
 	tokyo, err := time.LoadLocation("Asia/Tokyo")
 	require.NoError(t, err)
 	s, err := gocron.NewScheduler(
 		gocron.WithLocation(tokyo),
-		gocron.WithSchedulerMonitor(NewSchedulerMonitor(Options{
+		gocron.WithSchedulerMonitor(NewSchedulerMonitor(f.Context, Options{
 			Location:        tokyo,
 			MonitorConfig:   &sentry.MonitorConfig{MaxRuntime: 10},
 			Exclude:         []string{"excluded"},
@@ -82,4 +82,32 @@ func TestSchedulerMonitor(t *testing.T) {
 	poll := bySlug["poll"]
 	require.Len(t, poll, 2)
 	assert.Nil(t, poll[0].MonitorConfig)
+}
+
+func TestSchedulerMonitorJobRemovedWhileRunning(t *testing.T) {
+	f := sentrytest.NewFixture(t)
+	s, err := gocron.NewScheduler(gocron.WithSchedulerMonitor(NewSchedulerMonitor(f.Context, Options{})))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Shutdown() })
+	s.Start()
+
+	release := make(chan struct{})
+	job, err := s.NewJob(gocron.DurationJob(time.Hour), gocron.NewTask(func() { <-release }), gocron.WithName("slow"))
+	require.NoError(t, err)
+	require.NoError(t, job.RunNow())
+	require.Eventually(t, func() bool {
+		f.Flush()
+		return len(f.Events()) == 1
+	}, 5*time.Second, 10*time.Millisecond)
+
+	require.NoError(t, s.RemoveJob(job.ID()))
+	require.Eventually(t, func() bool { return len(s.Jobs()) == 0 }, 5*time.Second, 10*time.Millisecond)
+	close(release)
+	require.Eventually(t, func() bool {
+		f.Flush()
+		return len(f.Events()) == 2
+	}, 5*time.Second, 10*time.Millisecond)
+	events := f.Events()
+	assert.Equal(t, sentry.CheckInStatusOK, events[1].CheckIn.Status)
+	assert.Equal(t, events[0].CheckIn.ID, events[1].CheckIn.ID)
 }
