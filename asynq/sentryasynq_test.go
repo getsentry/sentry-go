@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/sentrytest"
 	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,14 +17,6 @@ import (
 type provider []*asynq.PeriodicTaskConfig
 
 func (p provider) GetConfigs() ([]*asynq.PeriodicTaskConfig, error) { return p, nil }
-
-func newContext(t *testing.T) (context.Context, *sentry.MockTransport) {
-	transport := &sentry.MockTransport{}
-	client, err := sentry.NewClient(sentry.ClientOptions{Transport: transport})
-	require.NoError(t, err)
-	hub := sentry.NewHub(client, sentry.NewScope())
-	return sentry.SetHubOnContext(context.Background(), hub), transport
-}
 
 func TestConfigProvider(t *testing.T) {
 	t.Parallel()
@@ -66,7 +59,8 @@ func TestConfigProvider(t *testing.T) {
 
 func TestMiddleware(t *testing.T) {
 	t.Parallel()
-	ctx, transport := newContext(t)
+	f := sentrytest.NewFixture(t)
+	ctx := f.Context
 	task := WithMonitor(asynq.NewTask("report:daily", nil), "daily-report", "@every 2h", Options{})
 
 	var ran bool
@@ -78,7 +72,8 @@ func TestMiddleware(t *testing.T) {
 	assert.EqualError(t, err, "failed")
 	assert.True(t, ran)
 
-	events := transport.Events()
+	f.Flush()
+	events := f.Events()
 	require.Len(t, events, 2)
 	assert.Equal(t, "daily-report", events[0].CheckIn.MonitorSlug)
 	assert.Equal(t, sentry.CheckInStatusInProgress, events[0].CheckIn.Status)
@@ -92,7 +87,8 @@ func TestMiddleware(t *testing.T) {
 
 func TestMiddlewareUnmonitored(t *testing.T) {
 	t.Parallel()
-	ctx, transport := newContext(t)
+	f := sentrytest.NewFixture(t)
+	ctx := f.Context
 	handler := Middleware(asynq.HandlerFunc(func(context.Context, *asynq.Task) error { return nil }))
 	require.NoError(t, handler.ProcessTask(ctx, asynq.NewTask("adhoc", nil)))
 	require.NoError(t, handler.ProcessTask(ctx, asynq.NewTaskWithHeaders("bad", nil, map[string]string{
@@ -100,7 +96,8 @@ func TestMiddlewareUnmonitored(t *testing.T) {
 		configHeader: "{",
 	})))
 
-	events := transport.Events()
+	f.Flush()
+	events := f.Events()
 	require.Len(t, events, 2)
 	assert.Equal(t, "bad", events[0].CheckIn.MonitorSlug)
 	assert.Nil(t, events[0].MonitorConfig)

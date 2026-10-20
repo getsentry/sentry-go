@@ -137,11 +137,7 @@ func Middleware(next asynq.Handler) asynq.Handler {
 		if slug == "" {
 			return next.ProcessTask(ctx, task)
 		}
-		hub := sentry.GetHubFromContext(ctx)
-		if hub == nil {
-			hub = sentry.CurrentHub()
-		}
-		return hub.WithMonitor(slug, decodeConfig(task.Headers()[configHeader]), func() error {
+		return sentry.WithMonitor(ctx, slug, decodeConfig(task.Headers()[configHeader]), func() error {
 			return next.ProcessTask(ctx, task)
 		})
 	})
