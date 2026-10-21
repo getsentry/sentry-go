@@ -332,7 +332,13 @@ func (s *Scheduler) sendItem(ctx context.Context, item EnvelopeConvertible, wait
 	envelope, err := item.ToEnvelope(header)
 	if err != nil {
 		debuglog.Printf("error while converting to envelope: %v", err)
-		s.recorder.RecordItem(report.ReasonInternalError, item)
+		if container, ok := item.(ItemContainer); ok {
+			for _, i := range container.items {
+				s.recorder.RecordItem(report.ReasonInternalError, i)
+			}
+		} else {
+			s.recorder.RecordItem(report.ReasonInternalError, item)
+		}
 		return false
 	}
 	s.provider.AttachToEnvelope(envelope)

@@ -15,6 +15,8 @@ func TestCategory_String(t *testing.T) {
 		{CategoryMonitor, "CategoryMonitor"},
 		{CategoryLog, "CategoryLog"},
 		{CategoryTraceMetric, "CategoryTraceMetric"},
+		{CategoryLogByte, "CategoryLogByte"},
+		{CategoryTraceMetricByte, "CategoryTraceMetricByte"},
 		{Category("custom type"), "CategoryCustomType"},
 		{Category("multi word type"), "CategoryMultiWordType"},
 	}
