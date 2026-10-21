@@ -520,19 +520,6 @@ func (e *Event) GetSpanCount() int {
 	return len(e.Spans) + 1
 }
 
-// GetLogByteSize returns the approximate total byte size of all logs in the event. It is used for client
-// reports. Returns 0 for non-log events.
-func (e *Event) GetLogByteSize() int {
-	if e.Type != logEvent.Type {
-		return 0
-	}
-	var size int
-	for i := range e.Logs {
-		size += e.Logs[i].ApproximateSize()
-	}
-	return size
-}
-
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
 // to prevent accidentally storing T when we mean *T.
 // For example, the TraceContext must be stored as *TraceContext to pick up the
@@ -729,27 +716,27 @@ type Log struct {
 	Severity   int                        `json:"severity_number,omitempty"`
 	Body       string                     `json:"body"`
 	Attributes map[string]attribute.Value `json:"attributes,omitempty"`
-
-	// approximateSize is the pre-computed approximate size in bytes.
-	approximateSize int
 }
 
-// ApproximateSize returns the pre-computed approximate serialized size in bytes.
-func (l *Log) ApproximateSize() int {
-	return l.approximateSize
-}
-
-// computeLogSize estimates the serialized JSON size of a log entry.
-func computeLogSize(l *Log) int {
-	// Base overhead: timestamp, trace_id, level, severity, JSON structure
-	size := len(l.Body) + 60
-	for k, v := range l.Attributes {
-		// Key + type/value JSON overhead
-		size += len(k) + 20
-		s := fmt.Sprint(v.AsInterface())
-		size += len(s)
+// byteSize returns the size of the log in bytes, counted as if serialized to JSON without string escaping.
+func (l *Log) byteSize() int {
+	var size jsonObjectSize
+	if !l.Timestamp.IsZero() {
+		size.field("timestamp", jsonTimeSize(l.Timestamp))
 	}
-	return size
+	size.field("trace_id", jsonHexSize(len(l.TraceID)))
+	if l.SpanID != zeroSpanID {
+		size.field("span_id", jsonHexSize(len(l.SpanID)))
+	}
+	size.field("level", jsonStringSize(string(l.Level)))
+	if l.Severity != 0 {
+		size.field("severity_number", jsonIntSize(int64(l.Severity)))
+	}
+	size.field("body", jsonStringSize(l.Body))
+	if len(l.Attributes) > 0 {
+		size.field("attributes", jsonAttributesSize(l.Attributes))
+	}
+	return size.total()
 }
 
 // MakeSerializationSafe is a no-op for Log, all fields are passed from the safe attribute API.
@@ -778,6 +765,28 @@ type Metric struct {
 	Value      MetricValue                `json:"value"`
 	Unit       string                     `json:"unit,omitempty"`
 	Attributes map[string]attribute.Value `json:"attributes,omitempty"`
+}
+
+// byteSize returns the size of the metric in bytes, counted as if serialized to JSON without string escaping.
+func (m *Metric) byteSize() int {
+	var size jsonObjectSize
+	if !m.Timestamp.IsZero() {
+		size.field("timestamp", jsonTimeSize(m.Timestamp))
+	}
+	size.field("trace_id", jsonHexSize(len(m.TraceID)))
+	if m.SpanID != zeroSpanID {
+		size.field("span_id", jsonHexSize(len(m.SpanID)))
+	}
+	size.field("type", jsonStringSize(string(m.Type)))
+	size.field("name", jsonStringSize(m.Name))
+	size.field("value", m.Value.jsonSize())
+	if m.Unit != "" {
+		size.field("unit", jsonStringSize(m.Unit))
+	}
+	if len(m.Attributes) > 0 {
+		size.field("attributes", jsonAttributesSize(m.Attributes))
+	}
+	return size.total()
 }
 
 // MakeSerializationSafe is a no-op for Metric, all fields are passed from the safe attribute API.
@@ -838,6 +847,16 @@ func (v MetricValue) AsInterface() any {
 // MarshalJSON serializes the value as a bare number.
 func (v MetricValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.value.AsInterface())
+}
+
+func (v MetricValue) jsonSize() int {
+	if i, ok := v.Int64(); ok {
+		return jsonIntSize(i)
+	}
+	if f, ok := v.Float64(); ok {
+		return jsonFloatSize(f)
+	}
+	return len("{}")
 }
 
 // MakeSerializationSafe pre-serializes all fields containing user mutable data to json.RawMessage, preventing race

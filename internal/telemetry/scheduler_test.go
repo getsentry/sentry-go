@@ -513,3 +513,25 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 		})
 	}
 }
+
+func TestTelemetrySchedulerRecordsEachBatchedItemOnConversionError(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	recorder := reportpkg.NewAggregator()
+	buffer := NewRingBuffer[Item](ratelimit.CategoryTraceMetric, 10, OverflowPolicyDropOldest, 2, 0, nil)
+	buffers := map[ratelimit.Category]Buffer[Item]{ratelimit.CategoryTraceMetric: buffer}
+	scheduler := NewScheduler(buffers, transport, &protocol.Dsn{}, nil, recorder, recorder)
+
+	buffer.Offer(failingMetric{Name: "first", Value: func() string { return "" }})
+	buffer.Offer(failingMetric{Name: "second", Value: func() string { return "" }})
+	require.True(t, testutils.FlushWithTimeout(scheduler, time.Second))
+
+	envelopes := transport.GetSentEnvelopes()
+	require.Len(t, envelopes, 1)
+	require.Len(t, envelopes[0].Items, 1)
+	require.Equal(t, protocol.EnvelopeItemTypeClientReport, envelopes[0].Items[0].Header.Type)
+	var clientReport reportpkg.ClientReport
+	require.NoError(t, json.Unmarshal(envelopes[0].Items[0].Payload, &clientReport))
+	require.Equal(t, []reportpkg.DiscardedEvent{
+		{Reason: reportpkg.ReasonInternalError, Category: ratelimit.CategoryTraceMetric, Quantity: 2},
+	}, clientReport.DiscardedEvents)
+}
