@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"regexp"
@@ -347,8 +348,7 @@ func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
 		"name": "test",
 	}
 	scope.contexts["custom"] = Context{"key": "value"}
-	hub := NewHub(client, scope)
-	hub.CaptureMessage("test event")
+	client.CaptureMessage(ContextWithScope(context.Background(), scope), "test event")
 
 	events := transport.Events()
 	if len(events) != 1 {
@@ -400,7 +400,7 @@ func TestGlobalTagsIntegration(t *testing.T) {
 
 	event := NewEvent()
 	event.Message = "event message"
-	client.CaptureEvent(event, nil, scope)
+	client.CaptureEvent(ContextWithScope(context.Background(), scope), event)
 
 	assertEqual(t,
 		transport.lastEvent.Tags["foo"],

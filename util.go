@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/protocol"
+	"github.com/getsentry/sentry-go/internal/util"
 	exec "golang.org/x/sys/execabs"
 )
 
 func uuid() string {
-	return protocol.GenerateEventID()
+	return util.GenerateEventID()
 }
 
 func fileExists(fileName string) bool {
@@ -105,29 +105,4 @@ func revisionFromBuildInfo(info *debug.BuildInfo) string {
 	}
 
 	return ""
-}
-
-func Pointer[T any](v T) *T {
-	return &v
-}
-
-// eventIdentifier returns a human-readable identifier for the event to be used in log messages.
-// Format: "<description> [<event-id>]".
-func eventIdentifier(event *Event) string {
-	var description string
-	switch event.Type {
-	case errorType:
-		description = "error"
-	case transactionType:
-		description = "transaction"
-	case checkInType:
-		description = "check-in"
-	case logEvent.Type:
-		description = fmt.Sprintf("%d log events", len(event.Logs))
-	case traceMetricEvent.Type:
-		description = fmt.Sprintf("%d metric events", len(event.Metrics))
-	default:
-		description = fmt.Sprintf("%s event", event.Type)
-	}
-	return fmt.Sprintf("%s [%s]", description, event.EventID)
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -8,7 +9,9 @@ import (
 )
 
 func runTask(monitorSlug string, duration time.Duration, shouldFail bool) {
-	checkinId := sentry.CaptureCheckIn(
+	checkinID := sentry.EventID("")
+	if id := sentry.CaptureCheckIn(
+		context.Background(),
 		&sentry.CheckIn{
 			MonitorSlug: monitorSlug,
 			Status:      sentry.CheckInStatusInProgress,
@@ -18,8 +21,12 @@ func runTask(monitorSlug string, duration time.Duration, shouldFail bool) {
 			MaxRuntime:    2,
 			CheckInMargin: 1,
 		},
-	)
-	task := fmt.Sprintf("Task[monitor_slug=%s,id=%s]", monitorSlug, *checkinId)
+	); id != nil {
+		checkinID = *id
+	} else {
+		fmt.Printf("Task[monitor_slug=%s] was not accepted by Sentry\n", monitorSlug)
+	}
+	task := fmt.Sprintf("Task[monitor_slug=%s,id=%s]", monitorSlug, checkinID)
 	fmt.Printf("Task started: %s\n", task)
 
 	time.Sleep(duration)
@@ -32,8 +39,9 @@ func runTask(monitorSlug string, duration time.Duration, shouldFail bool) {
 	}
 
 	sentry.CaptureCheckIn(
+		context.Background(),
 		&sentry.CheckIn{
-			ID:          *checkinId,
+			ID:          checkinID,
 			MonitorSlug: monitorSlug,
 			Status:      status,
 		},
@@ -46,7 +54,7 @@ func runTask(monitorSlug string, duration time.Duration, shouldFail bool) {
 // sends the in_progress and final check-ins around the job and creates or
 // updates the monitor from the given config.
 func runMonitoredTask(monitorSlug string, duration time.Duration) {
-	err := sentry.WithMonitor(monitorSlug, &sentry.MonitorConfig{
+	err := sentry.WithMonitor(context.Background(), monitorSlug, &sentry.MonitorConfig{
 		Schedule:      sentry.CrontabSchedule("* * * * *"),
 		MaxRuntime:    2,
 		CheckInMargin: 1,

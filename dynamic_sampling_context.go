@@ -39,11 +39,14 @@ func DynamicSamplingContextFromHeader(header []byte) (DynamicSamplingContext, er
 }
 
 func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
-	hub := hubFromContext(span.Context())
-	scope := hub.Scope()
-	client := hub.Client()
+	if span == nil {
+		return DynamicSamplingContext{}
+	}
+	return span.dynamicSamplingContextForPropagation()
+}
 
-	if !client.IsEnabled() || scope == nil {
+func dynamicSamplingContextFromTransaction(span *Span, client *Client) DynamicSamplingContext {
+	if !client.IsEnabled() {
 		return DynamicSamplingContext{
 			Entries: map[string]string{},
 			Frozen:  false,
@@ -55,8 +58,8 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	if traceID := span.TraceID.String(); traceID != "" {
 		entries[traceIDContextKey] = traceID
 	}
-	if sampleRate := span.sampleRate; sampleRate != 0 {
-		entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
+	if client.options.EnableTracing && span.sampleRate >= 0 {
+		entries["sample_rate"] = strconv.FormatFloat(span.sampleRate, 'f', -1, 64)
 	}
 
 	if dsn := client.dsn; dsn != nil {
@@ -75,13 +78,15 @@ func DynamicSamplingContextFromTransaction(span *Span) DynamicSamplingContext {
 	}
 
 	// Only include the transaction name if it's of good quality (not empty and not SourceURL)
-	if span.Source != "" && span.Source != SourceURL {
+	if client.options.EnableTracing && span.Source != "" && span.Source != SourceURL {
 		if span.IsTransaction() {
 			entries["transaction"] = span.Name
 		}
 	}
 
-	entries["sampled"] = strconv.FormatBool(span.Sampled.Bool())
+	if client.options.EnableTracing {
+		entries["sampled"] = strconv.FormatBool(span.Sampled.Bool())
+	}
 
 	return DynamicSamplingContext{Entries: entries, Frozen: true}
 }
@@ -116,28 +121,29 @@ func (d DynamicSamplingContext) String() string {
 	return baggage.String()
 }
 
-// DynamicSamplingContextFromScope Constructs a new DynamicSamplingContext using a scope and client. Accessing
-// fields on the scope are not thread safe, and this function should only be
-// called within scope methods.
+// DynamicSamplingContextFromScope returns the scope's propagation DSC.
+// It is safe for concurrent use and freezes an unfrozen scope DSC on first use.
 func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSamplingContext {
-	entries := map[string]string{}
-
-	if !client.IsEnabled() || scope == nil {
+	if scope == nil || !client.IsEnabled() {
 		return DynamicSamplingContext{
-			Entries: entries,
+			Entries: map[string]string{},
 			Frozen:  false,
 		}
 	}
+	return scope.propagationContextForPropagation(client).DynamicSamplingContext
+}
 
-	propagationContext := scope.propagationContext
-
+func dynamicSamplingContextFromPropagationContext(
+	propagationContext PropagationContext,
+	client *Client,
+) DynamicSamplingContext {
+	entries := map[string]string{}
 	if traceID := propagationContext.TraceID.String(); traceID != "" {
 		entries[traceIDContextKey] = traceID
 	}
-	if sampleRate := client.options.TracesSampleRate; sampleRate != 0 {
-		entries["sample_rate"] = strconv.FormatFloat(sampleRate, 'f', -1, 64)
+	if rate := client.options.TracesSampleRate; client.options.EnableTracing && client.options.TracesSampler == nil && rate >= 0 && rate <= 1 {
+		entries["sample_rate"] = strconv.FormatFloat(rate, 'f', -1, 64)
 	}
-
 	if dsn := client.dsn; dsn != nil {
 		if publicKey := dsn.GetPublicKey(); publicKey != "" {
 			entries["public_key"] = publicKey
@@ -157,4 +163,8 @@ func DynamicSamplingContextFromScope(scope *Scope, client *Client) DynamicSampli
 		Entries: entries,
 		Frozen:  true,
 	}
+}
+
+func frozenDSCMatchesTrace(dsc DynamicSamplingContext, traceID TraceID) bool {
+	return !dsc.IsFrozen() || dsc.Entries[traceIDContextKey] == "" || strings.EqualFold(dsc.Entries[traceIDContextKey], traceID.String())
 }

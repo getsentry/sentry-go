@@ -1,13 +1,14 @@
 package telemetry_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,8 +29,8 @@ func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
 
 	transport := &testutils.MockTelemetryTransport{}
 	processor := telemetry.NewProcessor(
-		map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-			ratelimit.CategoryError: telemetry.NewRingBuffer[protocol.TelemetryItem](
+		map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
+			ratelimit.CategoryError: telemetry.NewRingBuffer[telemetry.Item](
 				ratelimit.CategoryError, 10, telemetry.OverflowPolicyDropOldest, 1, 0, nil,
 			),
 		},
@@ -39,10 +40,11 @@ func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
 			return &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 		},
 		nil,
+		nil,
 	)
 
-	require.True(t, processor.Add(event), "add failed")
-	require.True(t, processor.Flush(testutils.FlushTimeout()), "flush timed out")
+	require.True(t, processor.Add(context.Background(), event), "add failed")
+	require.True(t, testutils.FlushWithTimeout(processor, testutils.FlushTimeout()), "flush timed out")
 	processor.Close(testutils.FlushTimeout())
 
 	envelopes := transport.GetSentEnvelopes()

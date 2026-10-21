@@ -41,21 +41,6 @@ Each lives in its own directory with a separate `go.mod`:
 
 When adding a new integration, mirror an existing one.
 
-### Transport Architecture
-
-**Current: `transport.go` (active)** — `HTTPTransport` is the default implementation of an async transport. `HTTPSyncTransport` is the blocking variant for serverless.
-
-**Next: `internal/telemetry/` + `internal/http/` (not yet enabled)** — Processor/buffer/scheduler architecture. Wired up in `client.go` (`setupTelemetryProcessor`) but **commented out** behind `DisableTelemetryBuffer`. Key parts:
-
-- `internal/telemetry/processor.go` — orchestrator; routes items to category-specific buffers
-- `internal/telemetry/scheduler.go` — weighted round-robin; errors get 5x priority over logs
-- `internal/telemetry/ring_buffer.go` — circular buffer with overflow policies and batch/timeout flushing
-- `internal/telemetry/bucketed_buffer.go` — groups items by trace ID
-- `internal/http/transport.go` — `AsyncTransport` with `HasCapacity()` backpressure
-- `internal/protocol/` — `Envelope`, `TelemetryItem` interfaces; log/metric batch types
-
-The `internalAsyncTransportAdapter` in `transport.go` bridges old `Transport` to new `TelemetryTransport`.
-
 ## Coding Standards
 
 - Follow existing conventions — check neighboring files first
@@ -71,7 +56,7 @@ Test tier preference (use the highest tier that covers what you need):
 
 1. **Integration tests** (default) — Prefer `internal/sentrytest` with `sentrytest.Run` or `sentrytest.NewFixture`, plus real routers / `httptest` requests where needed. Prefer tests that use the public API.
 2. **Context-level tests** — Prefer `sentrytest.NewContext` or `fixture.NewContext(parent)` for tracing / context propagation tests. Prefer `sentrytest.NewFixture` for isolated client + hub setup when no HTTP server is needed.
-3. **Unit tests** (sparingly) — Direct `NewClient` + `MockScope` only for self-contained logic where `sentrytest` would add unnecessary indirection.
+3. **Unit tests** (sparingly) — Direct `NewClient` + `NewScope` only for self-contained logic where `sentrytest` would add unnecessary indirection.
 
 Conventions:
 

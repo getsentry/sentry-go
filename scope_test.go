@@ -9,6 +9,7 @@ import (
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 const sharedContextsKey = "sharedContextsKey"
@@ -180,7 +181,7 @@ func TestScopeRemoveAttributeOnEmptyScope(t *testing.T) {
 	assertEqual(t, make(map[string]attribute.Value), scope.attributes)
 }
 
-func TestScopeRemoveAttributeNotInPopulateAttrs(t *testing.T) {
+func TestScopeRemoveAttribute(t *testing.T) {
 	scope := NewScope()
 	scope.SetAttributes(
 		attribute.String("key.one", "val1"),
@@ -188,13 +189,9 @@ func TestScopeRemoveAttributeNotInPopulateAttrs(t *testing.T) {
 	)
 	scope.RemoveAttribute("key.two")
 
-	attrs := make(map[string]attribute.Value)
-	scope.populateAttrs(attrs)
-
-	if _, ok := attrs["key.two"]; ok {
-		t.Error("removed attribute should not appear in populateAttrs output")
-	}
-	assertEqual(t, attribute.StringValue("val1"), attrs["key.one"])
+	assertEqual(t, map[string]attribute.Value{
+		"key.one": attribute.StringValue("val1"),
+	}, scope.attributes)
 }
 
 func TestScopeRemoveTag(t *testing.T) {
@@ -321,6 +318,15 @@ func TestScopeSetLevelOverrides(t *testing.T) {
 	assertEqual(t, scope.level, LevelFatal)
 }
 
+func TestCopyToEventReleasesReadLockAfterPanic(t *testing.T) {
+	t.Parallel()
+	scope := NewScope()
+	scope.SetContext("test", Context{"value": "scope"})
+	require.Panics(t, func() { scope.ApplyToEvent(nil, nil, NewNoopClient()) })
+	require.True(t, scope.mu.TryLock())
+	scope.mu.Unlock()
+}
+
 func TestAddBreadcrumbAddsBreadcrumb(t *testing.T) {
 	scope := NewScope()
 	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"}, defaultMaxBreadcrumbs)
@@ -412,8 +418,6 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	clone.SetRequest(r1)
 	p1 := NewPropagationContext()
 	clone.SetPropagationContext(p1)
-	s1 := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
-	clone.SetSpan(s1)
 
 	scope.SetTag("foo", "baz")
 	scope.SetContext("foo", Context{"foo": "baz"})
@@ -427,8 +431,6 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	scope.SetRequest(r2)
 	p2 := NewPropagationContext()
 	scope.SetPropagationContext(p2)
-	s2 := &Span{TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")}
-	scope.SetSpan(s2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, clone.contexts)
@@ -440,7 +442,6 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r1, clone.request)
 	assertEqual(t, p1, clone.propagationContext)
-	assertEqual(t, s1, clone.GetSpan())
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -451,7 +452,6 @@ func TestScopeParentChangedInheritance(t *testing.T) {
 	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r2, scope.request)
-	assertEqual(t, s2, scope.GetSpan())
 }
 
 func TestScopeCloneEventProcessorsIsolation(t *testing.T) {
@@ -504,8 +504,6 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	})
 	p1 := NewPropagationContext()
 	scope.SetPropagationContext(p1)
-	s1 := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
-	scope.SetSpan(s1)
 
 	clone := scope.Clone()
 	clone.SetTag("foo", "bar")
@@ -523,8 +521,6 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	})
 	p2 := NewPropagationContext()
 	clone.SetPropagationContext(p2)
-	s2 := &Span{TraceID: TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")}
-	clone.SetSpan(s2)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, clone.contexts)
@@ -542,7 +538,6 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, clone.user)
 	assertEqual(t, r2, clone.request)
 	assertEqual(t, p2, clone.propagationContext)
-	assertEqual(t, s2, clone.GetSpan())
 
 	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
@@ -554,7 +549,6 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	assertEqual(t, User{ID: "bar"}, scope.user)
 	assertEqual(t, r1, scope.request)
 	assertEqual(t, p1, scope.propagationContext)
-	assertEqual(t, s1, scope.GetSpan())
 
 	assertEqual(t, len(scope.eventProcessors), 1)
 	assertEqual(t, len(clone.eventProcessors), 2)
@@ -563,7 +557,6 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 func TestClear(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	propagationContext := scope.propagationContextSnapshot()
-	span := scope.GetSpan()
 	processor := func(event *Event, _ *EventHint) *Event { return event }
 	scope.AddEventProcessor(processor)
 	scope.Clear()
@@ -577,7 +570,6 @@ func TestClear(t *testing.T) {
 	assertEqual(t, []string{}, scope.fingerprint)
 	assertEqual(t, Level(""), scope.level)
 	assertEqual(t, (*http.Request)(nil), scope.request)
-	assertEqual(t, span, scope.GetSpan())
 	assertEqual(t, 1, len(scope.eventProcessors))
 	assertEqual(t, propagationContext, scope.propagationContextSnapshot())
 }
@@ -598,8 +590,6 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetRequest(r)
 	p := NewPropagationContext()
 	scope.SetPropagationContext(p)
-	s := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
-	scope.SetSpan(s)
 
 	assertEqual(t, map[string]string{"foo": "bar"}, scope.tags)
 	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, scope.contexts)
@@ -611,7 +601,6 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, User{ID: "foo"}, scope.user)
 	assertEqual(t, r, scope.request)
 	assertEqual(t, p, scope.propagationContext)
-	assertEqual(t, s, scope.GetSpan())
 }
 
 func TestClearBreadcrumbs(t *testing.T) {
@@ -639,13 +628,17 @@ func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
 	assertEqual(t, 2, len(processedEvent.Tags), "should merge tags")
 	assertEqual(t, 4, len(processedEvent.Contexts), "should merge contexts")
 	assertEqual(t, event.Contexts[sharedContextsKey], processedEvent.Contexts[sharedContextsKey], "should not override event trace context")
-	assertEqual(t, LevelDebug, processedEvent.Level, "should use event level if set")
+	assertEqual(t, event.Level, processedEvent.Level, "should use event level if set")
 	assertEqual(t, event.User, processedEvent.User, "should use event user if one exists")
 	assertEqual(t, event.Request, processedEvent.Request, "should use event request if one exists")
 	assertEqual(t, event.Fingerprint, processedEvent.Fingerprint, "should use event fingerprints if they exist")
 	assertNotEqual(t, scope.user, processedEvent.User, "should not use scope user if event user exists")
 	assertNotEqual(t, scope.request, processedEvent.Request, "should not use scope request if event request exists")
 	assertNotEqual(t, scope.fingerprint, processedEvent.Fingerprint, "should not use scope fingerprint if event fingerprint exists")
+
+	scope.SetContext(traceContextKey, Context{traceIDContextKey: "scope"})
+	event.Contexts[traceContextKey] = Context{traceIDContextKey: "event"}
+	assertEqual(t, event.Contexts[traceContextKey], scope.ApplyToEvent(event, nil, nil).Contexts[traceContextKey], "event trace context takes precedence")
 }
 
 func TestApplyToEventUsingEmptyScope(t *testing.T) {
@@ -676,16 +669,21 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 	assertEqual(t, processedEvent.Fingerprint, scope.fingerprint, "should use scope fingerprint")
 	assertEqual(t, processedEvent.Level, scope.level, "should use scope level")
 	assertEqual(t, processedEvent.Request, NewRequest(scope.request), "should use scope request")
+	processedEvent.Contexts["scopeContextsKey"]["scopeContextKey"] = "changed by transport"
+	assertEqual(t, "scopeContextValue", scope.contexts["scopeContextsKey"]["scopeContextKey"], "event must not own scope context")
 }
 
 func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
-	previousClient := currentHub.Client()
 	currentClient, err := NewClient(ClientOptions{Dsn: "https://key@sentry.io/1", SendDefaultPII: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	currentHub.BindClient(currentClient)
-	defer currentHub.BindClient(previousClient)
+	previousClient := globalClientSnapshot()
+	setGlobalClient(currentClient)
+	t.Cleanup(func() {
+		setGlobalClient(previousClient)
+		currentClient.Close()
+	})
 
 	scope := NewScope()
 	request := httptest.NewRequest("POST", "http://example.com/test", nil)
@@ -892,12 +890,4 @@ func TestScopeSetPropagationContext(t *testing.T) {
 	scope.SetPropagationContext(p)
 
 	assertEqual(t, scope.propagationContext, p)
-}
-
-func TestScopeSetSpan(t *testing.T) {
-	scope := NewScope()
-	s := &Span{TraceID: TraceIDFromHex("bc6d53f15eb88f4320054569b8c553d4")}
-	scope.SetSpan(s)
-
-	assertEqual(t, scope.span, s)
 }

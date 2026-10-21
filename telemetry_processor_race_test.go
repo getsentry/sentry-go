@@ -1,16 +1,17 @@
 package sentry
 
 import (
+	"context"
 	"fmt"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
 )
 
@@ -22,13 +23,13 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 	dsn := &protocol.Dsn{}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError: telemetry.NewRingBuffer[protocol.TelemetryItem](
+	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
+		ratelimit.CategoryError: telemetry.NewRingBuffer[telemetry.Item](
 			ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, report.NoopRecorder(),
 		),
 	}
 
-	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, report.NoopRecorder())
+	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, report.NoopRecorder(), nil)
 	defer proc.Close(2 * time.Second)
 
 	const numEvents = 100
@@ -49,7 +50,7 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 			{Message: "initial breadcrumb", Timestamp: time.Now()},
 		}
 
-		proc.Add(event)
+		proc.Add(context.Background(), event)
 		// Yield to let the scheduler goroutine start processing
 		runtime.Gosched()
 
@@ -75,7 +76,7 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 	}
 
 	wg.Wait()
-	proc.Flush(2 * time.Second)
+	testutils.FlushWithTimeout(proc, 2*time.Second)
 }
 
 func TestTelemetryProcessorRaceSpans(_ *testing.T) {
@@ -83,13 +84,13 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 	dsn := &protocol.Dsn{}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[protocol.TelemetryItem](
+	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
+		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[telemetry.Item](
 			ratelimit.CategoryTransaction, 100, telemetry.OverflowPolicyDropOldest, 1, 0, report.NoopRecorder(),
 		),
 	}
 
-	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, report.NoopRecorder())
+	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, report.NoopRecorder(), nil)
 	defer proc.Close(2 * time.Second)
 
 	const numTransactions = 100
@@ -121,7 +122,7 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 		event.Timestamp = time.Now()
 		event.Spans = children
 
-		proc.Add(event)
+		proc.Add(context.Background(), event)
 		runtime.Gosched()
 
 		wg.Add(1)
@@ -137,5 +138,5 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 	}
 
 	wg.Wait()
-	proc.Flush(2 * time.Second)
+	testutils.FlushWithTimeout(proc, 2*time.Second)
 }

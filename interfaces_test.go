@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -15,10 +16,10 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -278,6 +279,34 @@ func TestNewRequest(t *testing.T) {
 	}
 }
 
+func TestNewRequestUsesContextClient(t *testing.T) {
+	global, err := NewClient(ClientOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	contextual, err := NewClient(ClientOptions{
+		DataCollection: &DataCollection{UserInfo: Set(false)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	previous := globalClientSnapshot()
+	setGlobalClient(global)
+	t.Cleanup(func() {
+		setGlobalClient(previous)
+		global.Close()
+		contextual.Close()
+	})
+
+	r := httptest.NewRequest("GET", "http://example.com/test", nil)
+	r = r.WithContext(ContextWithClient(r.Context(), contextual))
+
+	if got := NewRequest(r).Env; got != nil {
+		t.Fatalf("expected request context client's data collection settings, got %v", got)
+	}
+}
+
 func TestEventMarshalJSON(t *testing.T) {
 	event := NewEvent()
 	event.Spans = []*Span{{
@@ -410,7 +439,7 @@ func TestSetException(t *testing.T) {
 						Type:             "chained",
 						Source:           MechanismTypeUnwrap,
 						ExceptionID:      2,
-						ParentID:         Pointer(1),
+						ParentID:         new(1),
 						IsExceptionGroup: false,
 					},
 				},
@@ -421,7 +450,7 @@ func TestSetException(t *testing.T) {
 						Type:             "chained",
 						Source:           MechanismTypeUnwrap,
 						ExceptionID:      1,
-						ParentID:         Pointer(0),
+						ParentID:         new(0),
 						IsExceptionGroup: false,
 					},
 				},
@@ -468,7 +497,7 @@ func TestSetException(t *testing.T) {
 						Type:             "chained",
 						Source:           MechanismSourceCause,
 						ExceptionID:      2,
-						ParentID:         Pointer(1),
+						ParentID:         new(1),
 						IsExceptionGroup: false,
 					},
 				},
@@ -479,7 +508,7 @@ func TestSetException(t *testing.T) {
 						Type:             "chained",
 						Source:           MechanismTypeUnwrap,
 						ExceptionID:      1,
-						ParentID:         Pointer(0),
+						ParentID:         new(0),
 						IsExceptionGroup: false,
 					},
 				},
@@ -509,7 +538,7 @@ func TestSetException(t *testing.T) {
 						Type:             "chained",
 						Source:           "errors[2]",
 						ExceptionID:      3,
-						ParentID:         Pointer(0),
+						ParentID:         new(0),
 						IsExceptionGroup: false,
 					},
 				},
@@ -520,7 +549,7 @@ func TestSetException(t *testing.T) {
 						Type:             "chained",
 						Source:           "errors[1]",
 						ExceptionID:      2,
-						ParentID:         Pointer(0),
+						ParentID:         new(0),
 						IsExceptionGroup: false,
 					},
 				},
@@ -531,7 +560,7 @@ func TestSetException(t *testing.T) {
 						Type:             "chained",
 						Source:           "errors[0]",
 						ExceptionID:      1,
-						ParentID:         Pointer(0),
+						ParentID:         new(0),
 						IsExceptionGroup: false,
 					},
 				},
@@ -561,7 +590,7 @@ func TestSetException(t *testing.T) {
 						Type:             "chained",
 						Source:           "errors[1]",
 						ExceptionID:      3,
-						ParentID:         Pointer(1),
+						ParentID:         new(1),
 						IsExceptionGroup: false,
 					},
 				},
@@ -572,7 +601,7 @@ func TestSetException(t *testing.T) {
 						Type:             "chained",
 						Source:           "errors[0]",
 						ExceptionID:      2,
-						ParentID:         Pointer(1),
+						ParentID:         new(1),
 						IsExceptionGroup: false,
 					},
 				},
@@ -583,7 +612,7 @@ func TestSetException(t *testing.T) {
 						Type:             "chained",
 						Source:           MechanismTypeUnwrap,
 						ExceptionID:      1,
-						ParentID:         Pointer(0),
+						ParentID:         new(0),
 						IsExceptionGroup: true,
 					},
 				},
@@ -1306,8 +1335,8 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 	dsn := &protocol.Dsn{}
 	sdk := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	buffers := map[ratelimit.Category]telemetry.Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError: telemetry.NewRingBuffer[protocol.TelemetryItem](
+	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
+		ratelimit.CategoryError: telemetry.NewRingBuffer[telemetry.Item](
 			ratelimit.CategoryError,
 			10,
 			telemetry.OverflowPolicyDropOldest,
@@ -1317,7 +1346,7 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 		),
 	}
 
-	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil)
+	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil, nil)
 
 	contexts := map[string]Context{
 		"app": {"version": "1.0"},
@@ -1350,7 +1379,7 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 		User: User{ID: "42", Data: map[string]string{"role": "admin"}},
 	}
 
-	ok := proc.Add(event)
+	ok := proc.Add(context.Background(), event)
 	if !ok {
 		t.Fatal("Add returned false")
 	}

@@ -27,8 +27,7 @@ import (
 )
 
 func sendSignals(ctx context.Context, identifier string, logger sentry.Logger, meter sentry.Meter) {
-	hub := sentry.GetHubFromContext(ctx)
-	hub.CaptureException(errors.New(identifier + " manual error"))
+	sentry.CaptureException(ctx, errors.New(identifier+" manual error"))
 	logger.Info().WithCtx(ctx).Emit(identifier + " linked log")
 	meter.WithCtx(ctx).Count(identifier+".linked.metric", 1)
 	panic(identifier + " panic")
@@ -52,7 +51,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "http"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			handler := sentryhttp.New(sentryhttp.Options{WaitForDelivery: true}).HandleFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -60,7 +59,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			})
 
 			req := httptest.NewRequest(http.MethodGet, "http://example.com/test", nil)
-			req = req.WithContext(sentry.SetHubOnContext(otelCtx, f.Hub))
+			req = req.WithContext(f.NewContext(otelCtx))
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 
 			f.Flush()
@@ -72,13 +71,13 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "gin"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			gin.SetMode(gin.ReleaseMode)
 			router := gin.New()
 			router.Use(func(c *gin.Context) {
-				c.Request = c.Request.WithContext(sentry.SetHubOnContext(otelCtx, f.Hub))
+				c.Request = c.Request.WithContext(f.NewContext(otelCtx))
 				c.Next()
 			})
 			router.Use(sentrygin.New(sentrygin.Options{WaitForDelivery: true}))
@@ -98,14 +97,13 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "echo"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			e := echo.New()
 			e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 				return func(c *echo.Context) error {
-					sentryecho.SetHubOnContext(c, f.Hub)
-					c.SetRequest(c.Request().WithContext(sentry.SetHubOnContext(otelCtx, f.Hub)))
+					c.SetRequest(c.Request().WithContext(f.NewContext(otelCtx)))
 					return next(c)
 				}
 			})
@@ -127,12 +125,12 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "negroni"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			n := negroni.New()
 			n.Use(negroni.HandlerFunc(func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-				next(w, r.WithContext(sentry.SetHubOnContext(otelCtx, f.Hub)))
+				next(w, r.WithContext(f.NewContext(otelCtx)))
 			}))
 			n.Use(sentrynegroni.New(sentrynegroni.Options{WaitForDelivery: true}))
 			n.UseHandler(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
@@ -151,12 +149,12 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 			const identifier = "iris"
-			baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+			baseCtx := f.NewContext(context.Background())
 			logger := sentry.NewLogger(baseCtx)
 			meter := sentry.NewMeter(baseCtx)
 			app := iris.New()
 			app.Use(func(ctx iris.Context) {
-				ctx.ResetRequest(ctx.Request().WithContext(sentry.SetHubOnContext(otelCtx, f.Hub)))
+				ctx.ResetRequest(ctx.Request().WithContext(f.NewContext(otelCtx)))
 				ctx.Next()
 			})
 			app.Use(sentryiris.New(sentryiris.Options{WaitForDelivery: true}))
@@ -182,13 +180,12 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		f := sentrytest.NewFixture(t, otelOpts()...)
 		const identifier = "fiber"
-		baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+		baseCtx := f.NewContext(context.Background())
 		logger := sentry.NewLogger(baseCtx)
 		meter := sentry.NewMeter(baseCtx)
 		app := fiber.New()
 		app.Use(func(c *fiber.Ctx) error {
-			c.SetUserContext(sentry.SetHubOnContext(otelCtx, f.Hub))
-			sentryfiber.SetHubOnContext(c, f.Hub)
+			c.SetUserContext(f.NewContext(otelCtx))
 			return c.Next()
 		})
 		app.Use(sentryfiber.New(sentryfiber.Options{WaitForDelivery: true}))
@@ -213,13 +210,12 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		t.Parallel()
 		f := sentrytest.NewFixture(t, otelOpts()...)
 		const identifier = "fiberv3"
-		baseCtx := sentry.SetHubOnContext(context.Background(), f.Hub)
+		baseCtx := f.NewContext(context.Background())
 		logger := sentry.NewLogger(baseCtx)
 		meter := sentry.NewMeter(baseCtx)
 		app := fiberv3.New()
 		app.Use(func(c fiberv3.Ctx) error {
-			c.SetContext(sentry.SetHubOnContext(otelCtx, f.Hub))
-			sentryfiberv3.SetHubOnContext(c, f.Hub)
+			c.SetContext(f.NewContext(otelCtx))
 			return c.Next()
 		})
 		app.Use(sentryfiberv3.New(sentryfiberv3.Options{WaitForDelivery: true}))
@@ -239,10 +235,26 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		f.Flush()
 		requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
 	})
-}
 
-func TestFastHTTPOTelValidationGap(t *testing.T) {
-	_ = sentryfasthttp.New
-	_ = fasthttp.RequestCtx{}
-	t.Skip("fasthttp does not preserve a standard request context that the OTel integration can resolve automatically today")
+	t.Run("fasthttp", func(t *testing.T) {
+		t.Parallel()
+		sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+			const identifier = "fasthttp"
+			baseCtx := f.NewContext(context.Background())
+			logger := sentry.NewLogger(baseCtx)
+			meter := sentry.NewMeter(baseCtx)
+			handler := sentryfasthttp.New(sentryfasthttp.Options{WaitForDelivery: true}).Handle(func(ctx *fasthttp.RequestCtx) {
+				sendSignals(sentryfasthttp.GetContext(ctx), identifier, logger, meter)
+			})
+
+			ctx := &fasthttp.RequestCtx{}
+			ctx.Request.SetRequestURI("http://example.com/test")
+			ctx.Request.Header.SetMethod(http.MethodGet)
+			sentryfasthttp.SetContext(f.NewContext(otelCtx), ctx)
+			handler(ctx)
+
+			f.Flush()
+			requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+		}, otelOpts()...)
+	})
 }

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 type bwItem struct{ id string }
@@ -31,31 +31,42 @@ func (b bwItem) GetDynamicSamplingContext() map[string]string { return nil }
 func (b bwItem) MakeSerializationSafe()                       {}
 
 func TestBuffer_Add_MissingCategory(t *testing.T) {
-	transport := &testutils.MockTelemetryTransport{}
+	var ctxErr error
+	transport := &testutils.MockTelemetryTransport{SendFunc: func(ctx context.Context, _ *protocol.Envelope) error {
+		ctxErr = ctx.Err()
+		return nil
+	}}
 	dsn := &protocol.Dsn{}
 	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
-	storage := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{}
+	storage := map[ratelimit.Category]Buffer[Item]{}
 
-	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil)
-	ok := b.Add(bwItem{id: "1"})
-	if ok {
-		t.Fatal("expected Add to return false without storage for category")
+	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil, nil)
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if !b.Add(canceled, bwItem{id: "1"}) || transport.GetSendCount() != 1 {
+		t.Fatal("expected items without storage to be submitted inline")
+	}
+	if ctxErr != nil {
+		t.Fatalf("inline send inherited capture cancellation: %v", ctxErr)
 	}
 	b.Close(testutils.FlushTimeout())
+	if b.Add(context.Background(), bwItem{id: "2"}) || transport.GetSendCount() != 1 {
+		t.Fatal("expected inline items after Close to be rejected")
+	}
 }
 
 func TestBuffer_AddAndFlush_Sends(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	dsn := &protocol.Dsn{}
 	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
-	storage := map[ratelimit.Category]Buffer[protocol.TelemetryItem]{
-		ratelimit.CategoryError: NewRingBuffer[protocol.TelemetryItem](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
+	storage := map[ratelimit.Category]Buffer[Item]{
+		ratelimit.CategoryError: NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
 	}
-	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil)
-	if !b.Add(bwItem{id: "1"}) {
+	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil, nil)
+	if !b.Add(context.Background(), bwItem{id: "1"}) {
 		t.Fatal("add failed")
 	}
-	if ok := b.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(b, testutils.FlushTimeout()); !ok {
 		t.Fatal("flush returned false")
 	}
 	if ok := b.FlushWithContext(context.Background()); !ok {

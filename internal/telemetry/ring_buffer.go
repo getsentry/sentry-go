@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/report"
 )
@@ -80,6 +79,10 @@ func (b *RingBuffer[T]) Offer(item T) bool {
 	defer b.mu.Unlock()
 
 	if b.size < b.capacity {
+		if b.size == 0 {
+			// The batch timeout starts with the first buffered item.
+			b.lastFlushTime = time.Now()
+		}
 		b.items[b.tail] = item
 		b.tail = (b.tail + 1) % b.capacity
 		b.size++
@@ -359,7 +362,7 @@ func (b *RingBuffer[T]) PollIfReady() []T {
 }
 
 func (b *RingBuffer[T]) recordDroppedItem(item T) {
-	if ti, ok := any(item).(protocol.TelemetryItem); ok {
+	if ti, ok := any(item).(Item); ok {
 		b.recorder.RecordItem(report.ReasonBufferOverflow, ti)
 	} else {
 		b.recorder.RecordOne(report.ReasonBufferOverflow, b.category)

@@ -1,4 +1,4 @@
-package protocol
+package telemetry
 
 import (
 	"encoding/json"
@@ -6,17 +6,18 @@ import (
 	"fmt"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 var errNoSerializableItems = errors.New("item container contains no serializable items")
 
 type ItemContainer struct {
-	items    []TelemetryItem
+	items    []Item
 	category ratelimit.Category
 }
 
 // NewItemContainer constructs a batched envelope producer from buffered telemetry items.
-func NewItemContainer(category ratelimit.Category, items []TelemetryItem) ItemContainer {
+func NewItemContainer(category ratelimit.Category, items []Item) ItemContainer {
 	return ItemContainer{category: category, items: items}
 }
 
@@ -45,18 +46,18 @@ func (b ItemContainer) marshalPayload() ([]byte, int, error) {
 	return payload, len(items), nil
 }
 
-func (b ItemContainer) newEnvelopeItem(itemCount int, payload []byte) (*EnvelopeItem, error) {
+func (b ItemContainer) newEnvelopeItem(itemCount int, payload []byte) (*protocol.EnvelopeItem, error) {
 	switch b.category {
 	case ratelimit.CategoryLog:
-		return NewLogItem(itemCount, payload), nil
+		return protocol.NewLogItem(itemCount, payload), nil
 	case ratelimit.CategoryTraceMetric:
-		return NewTraceMetricItem(itemCount, payload), nil
+		return protocol.NewTraceMetricItem(itemCount, payload), nil
 	default:
 		return nil, fmt.Errorf("unsupported batched category: %s", b.category)
 	}
 }
 
-func (b ItemContainer) ToEnvelopeItem() (*EnvelopeItem, error) {
+func (b ItemContainer) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	payload, itemCount, err := b.marshalPayload()
 	if err != nil {
 		return nil, err
@@ -68,15 +69,15 @@ func (b ItemContainer) ToEnvelopeItem() (*EnvelopeItem, error) {
 	return b.newEnvelopeItem(itemCount, payload)
 }
 
-func (b ItemContainer) ToEnvelope(header *EnvelopeHeader) (*Envelope, error) {
+func (b ItemContainer) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
 	item, err := b.ToEnvelopeItem()
 	if err != nil {
 		return nil, err
 	}
-	return NewEnvelope(header, item), nil
+	return protocol.NewEnvelope(header, item), nil
 }
 
 func (b ItemContainer) GetCategory() ratelimit.Category            { return b.category }
 func (ItemContainer) GetEventID() string                           { return "" }
-func (ItemContainer) GetSdkInfo() *SdkInfo                         { return nil }
+func (ItemContainer) GetSdkInfo() *protocol.SdkInfo                { return nil }
 func (ItemContainer) GetDynamicSamplingContext() map[string]string { return nil }

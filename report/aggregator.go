@@ -1,13 +1,14 @@
 package report
 
 import (
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/protocol"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/protocol"
 )
 
 // Aggregator collects discarded event outcomes for client reports.
@@ -115,10 +116,21 @@ func (a *Aggregator) RecordForEnvelope(reason DiscardReason, envelope *protocol.
 				a.Record(reason, ratelimit.CategoryLogByte, int64(*item.Header.Length))
 			}
 		case protocol.EnvelopeItemTypeTraceMetric:
-			a.RecordOne(reason, ratelimit.CategoryTraceMetric)
+			if item.Header.ItemCount != nil {
+				a.Record(reason, ratelimit.CategoryTraceMetric, int64(*item.Header.ItemCount))
+			}
 		case protocol.EnvelopeItemTypeCheckIn:
 			a.RecordOne(reason, ratelimit.CategoryMonitor)
-		case protocol.EnvelopeItemTypeAttachment, protocol.EnvelopeItemTypeClientReport:
+		case protocol.EnvelopeItemTypeClientReport:
+			var clientReport ClientReport
+			if err := json.Unmarshal(item.Payload, &clientReport); err != nil {
+				debuglog.Printf("failed to decode client report: %v", err)
+				continue
+			}
+			for _, event := range clientReport.DiscardedEvents {
+				a.Record(event.Reason, event.Category, event.Quantity)
+			}
+		case protocol.EnvelopeItemTypeAttachment:
 			// Skip — not reportable categories
 		}
 	}

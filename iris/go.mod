@@ -1,11 +1,11 @@
 module github.com/getsentry/sentry-go/iris
 
-go 1.25.0
+go 1.26.0
 
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.50.0
+	github.com/getsentry/sentry-go v1.0.0-alpha.1
 	github.com/google/go-cmp v0.7.0
 	github.com/kataras/iris/v12 v12.2.0
 )
@@ -39,7 +39,7 @@ require (
 	github.com/kataras/pio v0.0.13 // indirect
 	github.com/kataras/sitemap v0.0.6 // indirect
 	github.com/kataras/tunnel v0.0.4 // indirect
-	github.com/klauspost/compress v1.18.6 // indirect
+	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mailgun/raymond/v2 v2.0.48 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
@@ -67,11 +67,11 @@ require (
 	github.com/yosssi/ace v0.0.5 // indirect
 	github.com/yudai/gojsondiff v1.0.0 // indirect
 	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect
-	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20240404231335-c0f41cb1a7a0 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect

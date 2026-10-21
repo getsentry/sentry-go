@@ -15,12 +15,6 @@ const (
 	// sdkIdentifier is the identifier of the Echo SDK.
 	sdkIdentifier = "sentry.go.echo"
 
-	// valuesKey is used as a key to store the Sentry Hub instance on the  *echo.Context.
-	valuesKey = "sentry"
-
-	// transactionKey is used as a key to store the Sentry transaction on the *echo.Context.
-	transactionKey = "sentry_transaction"
-
 	// errorKey is used as a key to store the error on the *echo.Context.
 	errorKey = "error"
 )
@@ -57,18 +51,18 @@ func New(options Options) echo.MiddlewareFunc {
 	}).handle
 }
 
+// GetContext returns the context associated with the current request.
+func GetContext(ctx *echo.Context) context.Context {
+	return ctx.Request().Context()
+}
+
 func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx *echo.Context) error {
-		hub := GetHubFromContext(ctx)
-		if hub == nil {
-			hub = sentry.CurrentHub().Clone()
-		}
-
-		if client := hub.Client(); client != nil {
-			client.SetSDKIdentifier(sdkIdentifier)
-		}
-
 		r := ctx.Request()
+		created := sentry.SpanFromContext(r.Context()) == nil
+		requestCtx, scope := sentry.WithScope(r.Context())
+
+		sentry.ClientFromContext(requestCtx).SetSDKIdentifier(sdkIdentifier)
 
 		transactionName := r.URL.Path
 		transactionSource := sentry.SourceURL
@@ -79,46 +73,46 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 
 		options := []sentry.SpanOption{
-			sentry.ContinueTrace(hub, r.Header.Get(sentry.SentryTraceHeader), r.Header.Get(sentry.SentryBaggageHeader)),
+			sentry.ContinueFromRequest(r),
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(transactionSource),
 			sentry.WithSpanOrigin(sentry.SpanOriginEcho),
 		}
 
 		transaction := sentry.StartTransaction(
-			sentry.SetHubOnContext(r.Context(), hub),
+			requestCtx,
 			fmt.Sprintf("%s %s", r.Method, transactionName),
 			options...,
 		)
 
-		transaction.SetData("http.request.method", r.Method)
-
-		defer func() {
-			var status int
-			if resp, err := echo.UnwrapResponse(ctx.Response()); err == nil && resp.Status != 0 {
-				status = resp.Status
-			}
-			if err := ctx.Get(errorKey); err != nil {
-				if coder, ok := err.(echo.HTTPStatusCoder); ok {
-					status = coder.StatusCode()
+		if created {
+			requestCtx = transaction.Context()
+			transaction.SetData("http.request.method", r.Method)
+			defer func() {
+				var status int
+				if resp, err := echo.UnwrapResponse(ctx.Response()); err == nil && resp.Status != 0 {
+					status = resp.Status
 				}
-			}
+				if err := ctx.Get(errorKey); err != nil {
+					if coder, ok := err.(echo.HTTPStatusCoder); ok {
+						status = coder.StatusCode()
+					}
+				}
 
-			if status == 0 {
-				debuglog.Printf("sentryecho: unable to determine HTTP response status code")
-			} else {
-				transaction.Status = sentry.HTTPtoSpanStatus(status)
-				transaction.SetData("http.response.status_code", status)
-			}
-			transaction.Finish()
-		}()
+				if status == 0 {
+					debuglog.Printf("sentryecho: unable to determine HTTP response status code")
+				} else {
+					transaction.Status = sentry.HTTPtoSpanStatus(status)
+					transaction.SetData("http.response.status_code", status)
+				}
+				transaction.Finish()
+			}()
+		}
 
-		hub.Scope().SetRequest(r)
-		ctx.Set(valuesKey, hub)
-		ctx.Set(transactionKey, transaction)
-		r = r.WithContext(transaction.Context())
+		r = r.WithContext(requestCtx)
 		ctx.SetRequest(r)
-		defer h.recoverWithSentry(hub, r)
+		scope.SetRequest(r)
+		defer h.recoverWithSentry(r)
 
 		err := next(ctx)
 		if err != nil {
@@ -130,39 +124,15 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-func (h *handler) recoverWithSentry(hub *sentry.Hub, r *http.Request) {
+func (h *handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
-		eventID := hub.RecoverWithContext(
-			context.WithValue(r.Context(), sentry.RequestContextKey, r),
-			err,
-		)
+		ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
+		eventID := sentry.Recover(ctx, err)
 		if eventID != nil && h.waitForDelivery {
-			hub.Flush(h.timeout)
+			sentry.ClientFromContext(ctx).Flush(h.timeout)
 		}
 		if h.repanic {
 			panic(err)
 		}
 	}
-}
-
-// GetHubFromContext retrieves attached *sentry.Hub instance from *echo.Context.
-func GetHubFromContext(ctx *echo.Context) *sentry.Hub {
-	if hub, ok := ctx.Get(valuesKey).(*sentry.Hub); ok {
-		return hub
-	}
-	return nil
-}
-
-// SetHubOnContext attaches *sentry.Hub instance to *echo.Context.
-func SetHubOnContext(ctx *echo.Context, hub *sentry.Hub) {
-	ctx.Set(valuesKey, hub)
-}
-
-// GetSpanFromContext retrieves attached *sentry.Span instance from *echo.Context.
-// If there is no transaction on *echo.Context, it will return nil.
-func GetSpanFromContext(ctx *echo.Context) *sentry.Span {
-	if span, ok := ctx.Get(transactionKey).(*sentry.Span); ok {
-		return span
-	}
-	return nil
 }

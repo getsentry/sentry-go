@@ -1,11 +1,11 @@
 module github.com/getsentry/sentry-go/fiber
 
-go 1.25.0
+go 1.26.0
 
 replace github.com/getsentry/sentry-go => ../
 
 require (
-	github.com/getsentry/sentry-go v0.50.0
+	github.com/getsentry/sentry-go v1.0.0-alpha.1
 	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/google/go-cmp v0.7.0
 )
@@ -13,7 +13,7 @@ require (
 require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/klauspost/compress v1.18.6 // indirect
+	github.com/klauspost/compress v1.18.7 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
@@ -22,6 +22,6 @@ require (
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.71.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 )

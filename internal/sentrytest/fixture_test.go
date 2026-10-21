@@ -17,16 +17,19 @@ func TestNewSentryFixture_Isolated(t *testing.T) {
 
 	f := NewFixture(t)
 
-	assert.NotNil(t, f.Hub, "hub should not be nil")
+	assert.NotNil(t, f.Scope, "scope should not be nil")
+	assert.NotNil(t, f.Context, "context should not be nil")
 	assert.NotNil(t, f.Client, "client should not be nil")
 	assert.NotNil(t, f.Transport, "transport should not be nil")
-	assert.NotSame(t, sentry.CurrentHub(), f.Hub, "isolated fixture hub should not be the global hub")
+	assert.NotSame(t, sentry.GlobalScope(), f.Scope, "isolated fixture scope should not be the global scope")
 }
 
 func TestNewSentryFixture_Global(t *testing.T) {
 	f := NewFixture(t, WithGlobal())
 
-	assert.Same(t, sentry.CurrentHub(), f.Hub, "global fixture hub should be the current hub")
+	sentry.CaptureMessage(context.Background(), "global")
+	f.Flush()
+	f.AssertEventCount(1)
 	assert.NotNil(t, f.Client, "client should not be nil")
 }
 
@@ -38,10 +41,7 @@ func TestNewSentryFixture_WithClientOptions_Tracing(t *testing.T) {
 		TracesSampleRate: 1.0,
 	}))
 
-	span := sentry.StartTransaction(
-		sentry.SetHubOnContext(t.Context(), f.Hub),
-		"test-transaction",
-	)
+	span := sentry.StartTransaction(f.NewContext(t.Context()), "test-transaction")
 	span.Finish()
 	f.Flush()
 
@@ -59,7 +59,7 @@ func TestNewSentryFixture_WithClientOptions(t *testing.T) {
 		}),
 	)
 
-	f.Hub.CaptureMessage("hello")
+	sentry.CaptureMessage(f.Context, "hello")
 	f.Flush()
 
 	events := f.Events()
@@ -76,7 +76,8 @@ func TestFixture_NewContext(t *testing.T) {
 	ctx := f.NewContext(parent)
 
 	assert.Equal(t, "value", ctx.Value(contextKey{}), "context value")
-	assert.Same(t, f.Hub, sentry.GetHubFromContext(ctx), "context hub")
+	assert.NotNil(t, sentry.ScopeFromContext(ctx), "context scope")
+	assert.Same(t, f.Client, sentry.ClientFromContext(ctx), "context client")
 }
 
 func TestNewContext(t *testing.T) {
@@ -86,7 +87,7 @@ func TestNewContext(t *testing.T) {
 	ctx := NewContext(parent, t)
 
 	assert.Equal(t, "value", ctx.Value(contextKey{}), "context value")
-	assert.NotNil(t, sentry.GetHubFromContext(ctx), "context hub")
+	assert.NotNil(t, sentry.ScopeFromContext(ctx), "context scope")
 }
 
 func TestNewContext_NilParent(t *testing.T) {
@@ -94,7 +95,7 @@ func TestNewContext_NilParent(t *testing.T) {
 
 	ctx := NewContext(nil, t) // nolint: staticcheck // SA1012: passing nil context for the test
 
-	assert.NotNil(t, sentry.GetHubFromContext(ctx), "context hub")
+	assert.NotNil(t, sentry.ScopeFromContext(ctx), "context scope")
 	assert.Nil(t, ctx.Value(contextKey{}), "context value")
 }
 
@@ -105,8 +106,8 @@ func TestSentryFixture_Events_IncludesTransactions(t *testing.T) {
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 	}))
-	ctx := sentry.SetHubOnContext(t.Context(), f.Hub)
-	f.Hub.CaptureMessage("error event")
+	ctx := f.NewContext(t.Context())
+	sentry.CaptureMessage(ctx, "error event")
 	span := sentry.StartTransaction(ctx, "test-tx")
 	span.Finish()
 
@@ -122,8 +123,8 @@ func TestSentryFixture_AssertEventCount(t *testing.T) {
 	t.Parallel()
 
 	f := NewFixture(t)
-	f.Hub.CaptureMessage("one")
-	f.Hub.CaptureMessage("two")
+	sentry.CaptureMessage(f.Context, "one")
+	sentry.CaptureMessage(f.Context, "two")
 
 	f.AssertEventCount(2)
 }
@@ -132,7 +133,7 @@ func TestSentryFixture_DiffEvents(t *testing.T) {
 	t.Parallel()
 
 	f := NewFixture(t)
-	f.Hub.CaptureMessage("hello")
+	sentry.CaptureMessage(f.Context, "hello")
 
 	want := []*sentry.Event{
 		{Message: "hello", Level: sentry.LevelInfo},
@@ -146,7 +147,7 @@ func TestSentryFixture_DiffEvents_WithExtraOpts(t *testing.T) {
 	t.Parallel()
 
 	f := NewFixture(t)
-	f.Hub.CaptureMessage("hello")
+	sentry.CaptureMessage(f.Context, "hello")
 
 	want := []*sentry.Event{
 		{Message: "hello"},
@@ -154,49 +155,6 @@ func TestSentryFixture_DiffEvents_WithExtraOpts(t *testing.T) {
 	if diff := f.DiffEvents(want, cmpopts.IgnoreFields(sentry.Event{}, "Level")); diff != "" {
 		t.Errorf("DiffEvents mismatch (-want +got):\n%s", diff)
 	}
-}
-
-func TestSentryFixture_AssertHubIsolation_Pass(t *testing.T) {
-	t.Parallel()
-
-	f := NewFixture(t)
-	requestHub := f.Hub.Clone()
-
-	f.AssertHubIsolation(requestHub)
-}
-
-func TestSentryFixture_AssertHubIsolation_DetectsNil(t *testing.T) {
-	t.Parallel()
-
-	mock := &testing.T{}
-	f := &Fixture{T: mock, Hub: sentry.CurrentHub().Clone()}
-	f.AssertHubIsolation(nil)
-
-	assert.True(t, mock.Failed(), "AssertHubIsolation should fail when requestHub is nil")
-}
-
-func TestSentryFixture_AssertHubIsolation_DetectsSameHub(t *testing.T) {
-	t.Parallel()
-
-	mock := &testing.T{}
-	f := &Fixture{T: mock, Hub: sentry.CurrentHub().Clone()}
-
-	f.AssertHubIsolation(f.Hub) // same pointer
-
-	assert.True(t, mock.Failed(), "AssertHubIsolation should fail when requestHub is the same pointer")
-}
-
-func TestSentryFixture_AssertHubIsolation_DetectsScopeLeakage(t *testing.T) {
-	t.Parallel()
-
-	// Create a "bad clone" that shares the scope pointer.
-	mock := &testing.T{}
-	f := &Fixture{T: mock, Hub: sentry.CurrentHub().Clone()}
-	badHub := sentry.NewHub(f.Hub.Client(), f.Hub.Scope())
-
-	f.AssertHubIsolation(badHub)
-
-	assert.True(t, mock.Failed(), "AssertHubIsolation should fail when scopes are shared (not cloned)")
 }
 
 func TestDefaultEventCmpOpts(t *testing.T) {
