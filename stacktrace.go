@@ -51,23 +51,32 @@ func NewStacktrace() *Stacktrace {
 func ExtractStacktrace(err error) *Stacktrace {
 	method := extractReflectedStacktraceMethod(err)
 
-	var pcs []uintptr
 	var runtimeFrames []runtime.Frame
 
 	if method.IsValid() {
 		result := method.Call(nil)[0]
-		if frames, ok := extractRuntimeFrames(result); ok {
-			// The error already resolved its frames. Resolving their PCs a
-			// second time would shift them and expand inlined calls twice.
-			runtimeFrames = frames
-		} else {
-			pcs = extractPcs(result)
-		}
-	} else {
-		pcs = extractXErrorsPC(err)
-	}
 
-	if len(pcs) > 0 {
+		if result.Kind() == reflect.Slice && result.Type().Elem() == reflect.TypeOf(runtime.Frame{}) {
+			// The error already resolved its frames (for example samber/oops).
+			// Resolving their PCs a second time would shift the lines and
+			// expand inlined calls twice, so the frames are used as they are.
+			// They come innermost first like runtime.Callers, while
+			// createFrames expects outermost first.
+			runtimeFrames = make([]runtime.Frame, result.Len())
+			for i := range runtimeFrames {
+				frame := result.Index(i).Interface().(runtime.Frame)
+				if frame.Function == "" && frame.PC != 0 {
+					// A frame built by hand may carry only its PC.
+					if fn := runtime.FuncForPC(frame.PC); fn != nil {
+						frame.Function = fn.Name()
+					}
+				}
+				runtimeFrames[len(runtimeFrames)-1-i] = frame
+			}
+		} else if pcs := extractPcs(result); len(pcs) > 0 {
+			runtimeFrames = extractFrames(pcs)
+		}
+	} else if pcs := extractXErrorsPC(err); len(pcs) > 0 {
 		runtimeFrames = extractFrames(pcs)
 	}
 
@@ -111,29 +120,6 @@ func extractReflectedStacktraceMethod(err error) reflect.Value {
 	}
 
 	return reflect.Value{}
-}
-
-// extractRuntimeFrames returns the frames of a stack trace that is already a
-// slice of runtime.Frame, innermost frame first like runtime.Callers, in the
-// order createFrames expects (outermost first).
-func extractRuntimeFrames(stacktrace reflect.Value) ([]runtime.Frame, bool) {
-	if stacktrace.Kind() != reflect.Slice || stacktrace.Type().Elem() != reflect.TypeOf(runtime.Frame{}) {
-		return nil, false
-	}
-
-	frames := make([]runtime.Frame, stacktrace.Len())
-	for i := range frames {
-		frame := stacktrace.Index(i).Interface().(runtime.Frame)
-		if frame.Function == "" && frame.PC != 0 {
-			// A frame built by hand may carry only its PC.
-			if fn := runtime.FuncForPC(frame.PC); fn != nil {
-				frame.Function = fn.Name()
-			}
-		}
-		frames[len(frames)-1-i] = frame
-	}
-
-	return frames, true
 }
 
 func extractPcs(stacktrace reflect.Value) []uintptr {
