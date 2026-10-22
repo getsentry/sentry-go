@@ -2,6 +2,8 @@ package sentry_test
 
 import (
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"testing"
 
 	goErrors "github.com/go-errors/errors"
@@ -59,7 +61,7 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f1",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   18,
+					Lineno:   20,
 					InApp:    true,
 				},
 			},
@@ -69,13 +71,13 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f2",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   22,
+					Lineno:   24,
 					InApp:    true,
 				},
 				{
 					Function: "f1",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   18,
+					Lineno:   20,
 					InApp:    true,
 				},
 			},
@@ -90,7 +92,7 @@ func TestNewStacktrace(t *testing.T) {
 				{
 					Function: "f3",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   25,
+					Lineno:   27,
 					InApp:    true,
 				},
 			},
@@ -118,13 +120,13 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedPkgErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   29,
+					Lineno:   31,
 					InApp:    true,
 				},
 				{
 					Function: "BluePkgErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   33,
+					Lineno:   35,
 					InApp:    true,
 				},
 			},
@@ -135,13 +137,13 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedPingcapErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   37,
+					Lineno:   39,
 					InApp:    true,
 				},
 				{
 					Function: "BluePingcapErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   41,
+					Lineno:   43,
 					InApp:    true,
 				},
 			},
@@ -152,13 +154,51 @@ func TestExtractStacktrace(t *testing.T) {
 				{
 					Function: "RedGoErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   45,
+					Lineno:   47,
 					InApp:    true,
 				},
 				{
 					Function: "BlueGoErrorsRanger",
 					Module:   "github.com/getsentry/sentry-go_test",
-					Lineno:   49,
+					Lineno:   51,
+					InApp:    true,
+				},
+			},
+		}},
+		// Error types, such as samber/oops, that resolve their stack trace when
+		// the error is created and expose it as []runtime.Frame. The frames are
+		// used as they are: resolving their PCs again would shift the lines and
+		// expand inlined calls twice.
+		"runtime.Frame": {RedRuntimeFramesRanger, &sentry.Stacktrace{
+			Frames: []sentry.Frame{
+				{
+					Function: "RedRuntimeFramesRanger",
+					Module:   "github.com/getsentry/sentry-go_test",
+					Lineno:   358,
+					InApp:    true,
+				},
+				{
+					Function: "BlueRuntimeFramesRanger",
+					Module:   "github.com/getsentry/sentry-go_test",
+					Lineno:   362,
+					InApp:    true,
+				},
+			},
+		}},
+		// A frame built by hand may carry only its PC, so its function name
+		// comes from runtime.FuncForPC.
+		"runtime.Frame with only a PC": {PCOnlyRuntimeFramesRanger, &sentry.Stacktrace{
+			Frames: []sentry.Frame{
+				{
+					Function: "RedRuntimeFramesRanger",
+					Module:   "github.com/getsentry/sentry-go_test",
+					Lineno:   358,
+					InApp:    true,
+				},
+				{
+					Function: "BlueRuntimeFramesRanger",
+					Module:   "github.com/getsentry/sentry-go_test",
+					Lineno:   362,
 					InApp:    true,
 				},
 			},
@@ -302,4 +342,50 @@ func stacktraceDiff(x, y *sentry.Stacktrace) string {
 		x, y,
 		cmpopts.IgnoreFields(sentry.Frame{}, "AbsPath", "Filename"),
 	)
+}
+
+// runtimeFramesError mimics error types that expose their resolved stack trace
+// as []runtime.Frame, innermost frame first like runtime.Callers.
+type runtimeFramesError struct {
+	frames []runtime.Frame
+}
+
+func (e *runtimeFramesError) Error() string { return "this is bad from runtimeFramesError" }
+
+func (e *runtimeFramesError) StackFrames() []runtime.Frame { return e.frames }
+
+func RedRuntimeFramesRanger() error {
+	return BlueRuntimeFramesRanger()
+}
+
+func BlueRuntimeFramesRanger() error {
+	return newRuntimeFramesError()
+}
+
+func newRuntimeFramesError() error {
+	pcs := make([]uintptr, 32)
+	n := runtime.Callers(2, pcs)
+	iter := runtime.CallersFrames(pcs[:n])
+
+	var frames []runtime.Frame
+	for {
+		frame, more := iter.Next()
+		frames = append(frames, frame)
+		if !more {
+			break
+		}
+	}
+
+	return &runtimeFramesError{frames: frames}
+}
+
+func PCOnlyRuntimeFramesRanger() error {
+	_, file, _, _ := runtime.Caller(0)
+
+	return &runtimeFramesError{frames: []runtime.Frame{
+		{PC: reflect.ValueOf(BlueRuntimeFramesRanger).Pointer(), File: file, Line: 362},
+		{PC: reflect.ValueOf(RedRuntimeFramesRanger).Pointer(), File: file, Line: 358},
+		// Skipped by compareStacktrace like the anonymous function passed to t.Run.
+		{PC: reflect.ValueOf(PCOnlyRuntimeFramesRanger).Pointer(), File: file, Line: 1},
+	}}
 }
