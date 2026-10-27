@@ -91,7 +91,7 @@ func (a *Aggregator) TakeReport() *ClientReport {
 }
 
 // RecordForEnvelope records client report outcomes for all items in the envelope.
-// It inspects envelope item headers to derive categories, span counts, and log byte sizes.
+// It inspects envelope item headers to derive categories, span counts, and log and metric byte sizes.
 func (a *Aggregator) RecordForEnvelope(reason DiscardReason, envelope *protocol.Envelope) {
 	if a == nil {
 		return
@@ -109,16 +109,9 @@ func (a *Aggregator) RecordForEnvelope(reason DiscardReason, envelope *protocol.
 			spanCount := int64(item.Header.SpanCount)
 			a.Record(reason, ratelimit.CategorySpan, spanCount)
 		case protocol.EnvelopeItemTypeLog:
-			if item.Header.ItemCount != nil {
-				a.Record(reason, ratelimit.CategoryLog, int64(*item.Header.ItemCount))
-			}
-			if item.Header.Length != nil {
-				a.Record(reason, ratelimit.CategoryLogByte, int64(*item.Header.Length))
-			}
+			a.recordBatch(reason, ratelimit.CategoryLog, ratelimit.CategoryLogByte, item)
 		case protocol.EnvelopeItemTypeTraceMetric:
-			if item.Header.ItemCount != nil {
-				a.Record(reason, ratelimit.CategoryTraceMetric, int64(*item.Header.ItemCount))
-			}
+			a.recordBatch(reason, ratelimit.CategoryTraceMetric, ratelimit.CategoryTraceMetricByte, item)
 		case protocol.EnvelopeItemTypeCheckIn:
 			a.RecordOne(reason, ratelimit.CategoryMonitor)
 		case protocol.EnvelopeItemTypeClientReport:
@@ -136,8 +129,16 @@ func (a *Aggregator) RecordForEnvelope(reason DiscardReason, envelope *protocol.
 	}
 }
 
+// recordBatch records the item count and byte size of a log or metric envelope item.
+func (a *Aggregator) recordBatch(reason DiscardReason, category, byteCategory ratelimit.Category, item *protocol.EnvelopeItem) {
+	if item.Header.ItemCount != nil {
+		a.Record(reason, category, int64(*item.Header.ItemCount))
+	}
+	a.Record(reason, byteCategory, int64(len(item.Payload)))
+}
+
 // RecordItem records outcomes for a telemetry item, including supplementary
-// categories (span outcomes for transactions, byte size for logs).
+// categories (span outcomes for transactions).
 func (a *Aggregator) RecordItem(reason DiscardReason, item ReportableItem) {
 	category := item.GetCategory()
 	a.RecordOne(reason, category)
@@ -148,16 +149,6 @@ func (a *Aggregator) RecordItem(reason DiscardReason, item ReportableItem) {
 		if sc, ok := item.(spanCounter); ok {
 			if count := sc.GetSpanCount(); count > 0 {
 				a.Record(reason, ratelimit.CategorySpan, int64(count))
-			}
-		}
-	}
-
-	// Byte size outcomes for logs
-	if category == ratelimit.CategoryLog {
-		type sizer interface{ ApproximateSize() int }
-		if s, ok := item.(sizer); ok {
-			if size := s.ApproximateSize(); size > 0 {
-				a.Record(reason, ratelimit.CategoryLogByte, int64(size))
 			}
 		}
 	}

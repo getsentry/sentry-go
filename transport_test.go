@@ -517,7 +517,7 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 		var requests atomic.Int32
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			requests.Add(1)
-			w.Header().Add("X-Sentry-Rate-Limits", "60:error,60:transaction,60:trace_metric")
+			w.Header().Add("X-Sentry-Rate-Limits", "60:error,60:transaction,60:log_item,60:trace_metric")
 			w.WriteHeader(http.StatusTooManyRequests)
 		}))
 		defer server.Close()
@@ -538,6 +538,8 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 		backoff := func(category ratelimit.Category) report.OutcomeKey {
 			return report.OutcomeKey{Reason: report.ReasonRateLimitBackoff, Category: category}
 		}
+		logPayload := []byte(`{"items":[{"body":"a"},{"body":"b"}]}`)
+		metricPayload := []byte(`{"items":[{"name":"a"},{"name":"b"},{"name":"c"}]}`)
 		tests := []struct {
 			name     string
 			envelope *protocol.Envelope
@@ -545,8 +547,10 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 		}{
 			{"event", testEnvelope(protocol.EnvelopeItemTypeEvent), map[report.OutcomeKey]int64{backoff(ratelimit.CategoryError): 1}},
 			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), map[report.OutcomeKey]int64{backoff(ratelimit.CategoryTransaction): 1}},
-			{"trace metric", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, protocol.NewTraceMetricItem(3, []byte(`{"items":[]}`))),
-				map[report.OutcomeKey]int64{backoff(ratelimit.CategoryTraceMetric): 3}},
+			{"log", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, protocol.NewLogItem(2, logPayload)),
+				map[report.OutcomeKey]int64{backoff(ratelimit.CategoryLog): 2, backoff(ratelimit.CategoryLogByte): int64(len(logPayload))}},
+			{"trace metric", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, protocol.NewTraceMetricItem(3, metricPayload)),
+				map[report.OutcomeKey]int64{backoff(ratelimit.CategoryTraceMetric): 3, backoff(ratelimit.CategoryTraceMetricByte): int64(len(metricPayload))}},
 			{"client report before event", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, pending, testEnvelope(protocol.EnvelopeItemTypeEvent).Items[0]),
 				map[report.OutcomeKey]int64{backoff(ratelimit.CategoryError): 1, {Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError}: 2}},
 			{"check-in", testEnvelope(protocol.EnvelopeItemTypeCheckIn), nil},
