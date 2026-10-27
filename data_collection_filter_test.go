@@ -79,7 +79,7 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 		{
 			name: "custom deny terms are case-insensitive",
 			dataCollection: &DataCollection{
-				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"REQUEST-ID"}},
+				URLQueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList, Terms: []string{"REQUEST-ID"}},
 			},
 			filter: func(t *testing.T, dc DataCollection) map[string]string {
 				t.Helper()
@@ -97,7 +97,7 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 		{
 			name: "allow list is case-insensitive and built-in sensitive keys still scrub",
 			dataCollection: &DataCollection{
-				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"PAGE", "PASSWORD"}},
+				URLQueryParams: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"PAGE", "PASSWORD"}},
 			},
 			filter: func(t *testing.T, dc DataCollection) map[string]string {
 				t.Helper()
@@ -174,7 +174,7 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 		{
 			name: "off mode omits collection",
 			dataCollection: &DataCollection{
-				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionOff},
+				URLQueryParams: &KeyValueCollectionBehavior{Mode: CollectionOff},
 			},
 			filter: func(_ *testing.T, dc DataCollection) map[string]string {
 				return map[string]string{"query": dc.FilterQueryString("page=1")}
@@ -219,7 +219,7 @@ func TestNewClientDataCollectionHTTPBodyFilters(t *testing.T) {
 		{
 			name: "JSON ignores query param allow list",
 			dataCollection: &DataCollection{
-				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"name", "password"}},
+				URLQueryParams: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"name", "password"}},
 			},
 			body:        []byte(`{"id":"123","name":"Jane","password":"secret"}`),
 			contentType: "application/json",
@@ -251,7 +251,7 @@ func TestNewClientDataCollectionHTTPBodyFilters(t *testing.T) {
 		{
 			name: "query params off does not omit parseable body data",
 			dataCollection: &DataCollection{
-				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionOff},
+				URLQueryParams: &KeyValueCollectionBehavior{Mode: CollectionOff},
 			},
 			body:        []byte(`{"name":"Jane","password":"secret"}`),
 			contentType: "application/json",

@@ -930,7 +930,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 		{
 			name: "omits query values when disabled",
 			dataCollection: &sentry.DataCollection{
-				QueryParams: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
+				URLQueryParams: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
 			},
 			requestURL: "https://example.com/foo?page=1&token=secret#readme",
 			wantData: map[string]interface{}{
