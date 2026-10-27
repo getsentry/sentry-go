@@ -85,10 +85,7 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 		return s.originalRoundTripper.RoundTrip(request)
 	}
 
-	dc := sentry.DataCollection{}
-	if clientOptions.DataCollection != nil {
-		dc = *clientOptions.DataCollection
-	}
+	dc := client.GetDataCollection()
 	descriptionURL := url.URL{Scheme: request.URL.Scheme, Host: request.URL.Host, Path: request.URL.Path, RawPath: request.URL.RawPath}
 
 	span := sentry.StartSpan(ctx, "http.client", sentry.WithDescription(fmt.Sprintf("%s %s", request.Method, descriptionURL.String())))
@@ -100,7 +97,7 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	span.SetData("http.request.method", request.Method)
 	span.SetData("server.address", request.URL.Hostname())
 	span.SetData("server.port", request.URL.Port())
-	for key, value := range filterOutgoingRequestHeaders(dc, request.Header) {
+	for key, value := range dc.FilterRequestHeaders(request.Header) {
 		span.SetData("http.request.header."+strings.ToLower(key), value)
 	}
 	if propagate {
@@ -134,7 +131,7 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 		if response.ContentLength >= 0 {
 			span.SetData("http.response.body.size", response.ContentLength)
 		}
-		for key, value := range filterIncomingResponseHeaders(dc, response.Header) {
+		for key, value := range dc.FilterResponseHeaders(response.Header) {
 			span.SetData("http.response.header."+strings.ToLower(key), value)
 		}
 	}
@@ -178,41 +175,4 @@ func addTraceHeaders(ctx context.Context, request *http.Request, propagateTracep
 		request.Header.Set(sentry.TraceparentHeader, traceparent)
 	}
 	return request
-}
-
-func filterOutgoingRequestHeaders(dc sentry.DataCollection, headers http.Header) map[string]string {
-	return dc.FilterRequestHeaders(headerStringMap(headers, dc, "Cookie", dc.FilterCookies))
-}
-
-func filterIncomingResponseHeaders(dc sentry.DataCollection, headers http.Header) map[string]string {
-	return dc.FilterResponseHeaders(headerStringMap(headers, dc, "Set-Cookie", dc.FilterSetCookies))
-}
-
-// headerStringMap flattens HTTP headers into a map. Cookie headers are parsed
-// and filtered through the cookie collection settings via filterCookies
-// before header filtering.
-func headerStringMap(headers http.Header, dc sentry.DataCollection, cookieHeader string, filterCookies func([]string) string) map[string]string {
-	if len(headers) == 0 {
-		return nil
-	}
-
-	m := make(map[string]string, len(headers))
-	for key, values := range headers {
-		if len(values) == 0 {
-			continue
-		}
-
-		value := strings.Join(values, ",")
-		if strings.EqualFold(key, cookieHeader) {
-			if !dc.CollectCookies() {
-				continue
-			}
-			value = filterCookies(values)
-			if value == "" {
-				continue
-			}
-		}
-		m[key] = value
-	}
-	return m
 }

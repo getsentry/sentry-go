@@ -374,7 +374,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	resolvedDataCollection := snapshotDataCollection(options.DataCollection, options.SendDefaultPII)
-	options.DataCollection = cloneDataCollection(&resolvedDataCollection)
+	options.DataCollection = &resolvedDataCollection
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
 	// to GODEBUG). It is not a supported feature: recognized debug options
@@ -584,10 +584,17 @@ func (client *Client) Options() ClientOptions {
 // GetDataCollection returns a copy of the resolved data collection
 // configuration used by the client.
 func (client *Client) GetDataCollection() DataCollection {
+	dc := client.dataCollection()
+	return *cloneDataCollection(&dc)
+}
+
+// dataCollection returns the resolved data collection configuration without
+// copying it. Callers must not modify it.
+func (client *Client) dataCollection() DataCollection {
 	if !client.IsEnabled() || client.options.DataCollection == nil {
 		return DataCollection{}
 	}
-	return *cloneDataCollection(client.options.DataCollection)
+	return *client.options.DataCollection
 }
 
 // CaptureMessage captures an arbitrary message using the scope carried by ctx.
@@ -795,7 +802,7 @@ func (client *Client) eventFromMessage(message string) *Event {
 func (client *Client) eventFromException(exception error) *Event {
 	event := NewEvent()
 	event.SetException(exception, client.options.MaxErrorDepth)
-	client.GetDataCollection().filterURLErrors(event.Exception)
+	client.dataCollection().filterURLErrors(event.Exception)
 
 	return event
 }

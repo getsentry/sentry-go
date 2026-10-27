@@ -1,6 +1,9 @@
 package sentry
 
-import "slices"
+import (
+	"cmp"
+	"slices"
+)
 
 // CollectionMode controls how key-value data (headers, cookies, query params) is collected.
 //
@@ -96,11 +99,7 @@ func cloneKeyValueCollectionBehavior(b *KeyValueCollectionBehavior) *KeyValueCol
 	if b == nil {
 		return nil
 	}
-	cloned := &KeyValueCollectionBehavior{Mode: b.Mode}
-	if b.Terms != nil {
-		cloned.Terms = slices.Clone(b.Terms)
-	}
-	return cloned
+	return &KeyValueCollectionBehavior{Mode: b.Mode, Terms: slices.Clone(b.Terms)}
 }
 
 // cloneHeaderCollectionConfig returns a deep copy of c.
@@ -119,17 +118,14 @@ func cloneDataCollection(dc *DataCollection) *DataCollection {
 	if dc == nil {
 		return nil
 	}
-	cloned := &DataCollection{
+	return &DataCollection{
 		UserInfo:       dc.UserInfo,
 		Cookies:        cloneKeyValueCollectionBehavior(dc.Cookies),
 		HTTPHeaders:    cloneHeaderCollectionConfig(dc.HTTPHeaders),
+		HTTPBodies:     slices.Clone(dc.HTTPBodies),
 		URLQueryParams: cloneKeyValueCollectionBehavior(dc.URLQueryParams),
 		sensitiveTerms: dc.sensitiveTerms,
 	}
-	if dc.HTTPBodies != nil {
-		cloned.HTTPBodies = slices.Clone(dc.HTTPBodies)
-	}
-	return cloned
 }
 
 // allBodyTypes returns all valid body types.
@@ -145,64 +141,29 @@ func allBodyTypes() []BodyType {
 // It handles any unspecified values by applying the defaults. If the given opts are nil, this
 // provides a best-effort snapshot to align with sendDefaultPII for backwards compatibility.
 func snapshotDataCollection(opts *DataCollection, sendDefaultPII bool) DataCollection {
-	if opts == nil {
-		return legacyDataCollection(sendDefaultPII)
+	if opts == nil && !sendDefaultPII {
+		opts = &DataCollection{
+			UserInfo:       Set(false),
+			Cookies:        &KeyValueCollectionBehavior{Mode: CollectionOff},
+			HTTPBodies:     []BodyType{},
+			sensitiveTerms: extendedSensitiveTerms,
+		}
 	}
-	return resolveDataCollection(opts)
-}
 
-func resolveDataCollection(dc *DataCollection) DataCollection {
 	var resolved DataCollection
-	if cloned := cloneDataCollection(dc); cloned != nil {
-		resolved = *cloned
+	if opts != nil {
+		resolved = *cloneDataCollection(opts)
 	}
-
-	if !resolved.UserInfo.IsSet {
-		resolved.UserInfo = Set(true)
-	}
-	if resolved.Cookies == nil {
-		resolved.Cookies = &KeyValueCollectionBehavior{}
-	}
-	if resolved.HTTPHeaders == nil {
-		resolved.HTTPHeaders = &HeaderCollectionConfig{}
-	}
-	if resolved.HTTPHeaders.Request == nil {
-		resolved.HTTPHeaders.Request = &KeyValueCollectionBehavior{}
-	}
-	if resolved.HTTPHeaders.Response == nil {
-		resolved.HTTPHeaders.Response = &KeyValueCollectionBehavior{}
-	}
+	resolved.UserInfo = Set(resolved.UserInfo.Or(true))
+	resolved.Cookies = cmp.Or(resolved.Cookies, &KeyValueCollectionBehavior{})
+	resolved.HTTPHeaders = cmp.Or(resolved.HTTPHeaders, &HeaderCollectionConfig{})
+	resolved.HTTPHeaders.Request = cmp.Or(resolved.HTTPHeaders.Request, &KeyValueCollectionBehavior{})
+	resolved.HTTPHeaders.Response = cmp.Or(resolved.HTTPHeaders.Response, &KeyValueCollectionBehavior{})
+	resolved.URLQueryParams = cmp.Or(resolved.URLQueryParams, &KeyValueCollectionBehavior{})
 	if resolved.HTTPBodies == nil {
 		resolved.HTTPBodies = allBodyTypes()
 	}
-	if resolved.URLQueryParams == nil {
-		resolved.URLQueryParams = &KeyValueCollectionBehavior{}
-	}
 	return resolved
-}
-
-func legacyDataCollection(sendDefaultPII bool) DataCollection {
-	if sendDefaultPII {
-		return resolveDataCollection(&DataCollection{
-			UserInfo:       Set(true),
-			Cookies:        &KeyValueCollectionBehavior{},
-			HTTPHeaders:    &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{}, Response: &KeyValueCollectionBehavior{}},
-			HTTPBodies:     allBodyTypes(),
-			URLQueryParams: &KeyValueCollectionBehavior{},
-		})
-	}
-
-	return resolveDataCollection(&DataCollection{
-		UserInfo:   Set(false),
-		HTTPBodies: []BodyType{},
-		Cookies:    &KeyValueCollectionBehavior{Mode: CollectionOff},
-		HTTPHeaders: &HeaderCollectionConfig{
-			Request:  &KeyValueCollectionBehavior{Mode: CollectionDenyList},
-			Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
-		},
-		URLQueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
-		sensitiveTerms: extendedSensitiveTerms,
-	})
 }
 
 // extendedSensitiveTerms are additional privacy terms that cover

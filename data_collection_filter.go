@@ -1,8 +1,11 @@
 package sentry
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -34,62 +37,68 @@ var defaultSensitiveTerms = []string{
 // filteredValue is the replacement for sensitive values.
 const filteredValue = "[Filtered]"
 
-// filterKeyValues applies a KeyValueCollectionBehavior to a map of key-value
-// pairs. Keys are always preserved and values are replaced with "[Filtered]".
+// filterHeaders flattens headers and applies a KeyValueCollectionBehavior to
+// them. Keys are always preserved and values are replaced with "[Filtered]".
+// Cookie and Set-Cookie values are filtered per cookie.
 //
 // Returns nil when the mode is CollectionOff.
-func (dc DataCollection) filterKeyValues(data map[string]string, behavior *KeyValueCollectionBehavior) map[string]string {
-	if behavior == nil {
-		behavior = &KeyValueCollectionBehavior{}
-	}
-	if behavior.Mode == CollectionOff {
+func (dc DataCollection) filterHeaders(headers http.Header, behavior *KeyValueCollectionBehavior) map[string]string {
+	if behavior != nil && behavior.Mode == CollectionOff {
 		return nil
 	}
-	result := make(map[string]string, len(data))
-	for k, v := range data {
-		if dc.shouldFilterKey(k, behavior) {
-			result[k] = filteredValue
-		} else {
-			result[k] = v
+	result := make(map[string]string, len(headers))
+	for key, values := range headers {
+		var value string
+		switch {
+		case len(values) == 0:
+			continue
+		case strings.EqualFold(key, "Cookie"):
+			if value = dc.FilterCookies(values); value == "" {
+				continue
+			}
+		case strings.EqualFold(key, "Set-Cookie"):
+			if value = dc.FilterSetCookies(values); value == "" {
+				continue
+			}
+		default:
+			value = strings.Join(values, ",")
 		}
+		if dc.shouldFilterKey(key, behavior) {
+			value = filteredValue
+		}
+		result[key] = value
 	}
 	return result
 }
 
-// FilterRequestHeaders applies the configured request-header collection behavior.
-func (dc DataCollection) FilterRequestHeaders(headers map[string]string) map[string]string {
+// FilterRequestHeaders applies the configured request-header and cookie
+// collection behaviors to headers.
+func (dc DataCollection) FilterRequestHeaders(headers http.Header) map[string]string {
 	var behavior *KeyValueCollectionBehavior
 	if dc.HTTPHeaders != nil {
 		behavior = dc.HTTPHeaders.Request
 	}
-	return dc.filterKeyValues(headers, behavior)
+	return dc.filterHeaders(headers, behavior)
 }
 
-// FilterResponseHeaders applies the configured response-header collection behavior.
-func (dc DataCollection) FilterResponseHeaders(headers map[string]string) map[string]string {
+// FilterResponseHeaders applies the configured response-header and cookie
+// collection behaviors to headers.
+func (dc DataCollection) FilterResponseHeaders(headers http.Header) map[string]string {
 	var behavior *KeyValueCollectionBehavior
 	if dc.HTTPHeaders != nil {
 		behavior = dc.HTTPHeaders.Response
 	}
-	return dc.filterKeyValues(headers, behavior)
+	return dc.filterHeaders(headers, behavior)
 }
 
 // CollectHTTPBody reports whether the given body type should be collected.
-func (dc *DataCollection) CollectHTTPBody(bt BodyType) bool {
-	if dc == nil || dc.HTTPBodies == nil {
-		return true
-	}
-	for _, t := range dc.HTTPBodies {
-		if t == bt {
-			return true
-		}
-	}
-	return false
+func (dc DataCollection) CollectHTTPBody(bt BodyType) bool {
+	return dc.HTTPBodies == nil || slices.Contains(dc.HTTPBodies, bt)
 }
 
 // CollectCookies reports whether cookies should be collected.
-func (dc *DataCollection) CollectCookies() bool {
-	return dc == nil || dc.Cookies == nil || dc.Cookies.Mode != CollectionOff
+func (dc DataCollection) CollectCookies() bool {
+	return dc.Cookies == nil || dc.Cookies.Mode != CollectionOff
 }
 
 // CollectQueryParams reports whether query parameters should be collected.
@@ -116,17 +125,15 @@ func (dc DataCollection) FilterURL(u *url.URL) string {
 
 // FilterCookies applies the configured cookie collection behavior.
 func (dc DataCollection) FilterCookies(values []string) string {
+	if !dc.CollectCookies() {
+		return ""
+	}
 	parsed := parseKeyValueStrings(values, ';')
-	if len(parsed) == 0 {
-		return ""
-	}
-	filtered := dc.filterKeyValues(parsed, dc.Cookies)
-	if len(filtered) == 0 {
-		return ""
-	}
-
-	parts := make([]string, 0, len(filtered))
-	for key, value := range filtered {
+	parts := make([]string, 0, len(parsed))
+	for key, value := range parsed {
+		if dc.shouldFilterKey(key, dc.Cookies) {
+			value = filteredValue
+		}
 		parts = append(parts, key+"="+value)
 	}
 	return strings.Join(parts, "; ")
@@ -178,30 +185,66 @@ func (dc DataCollection) FilterHTTPBody(body []byte, contentType string) string 
 	if len(body) == 0 {
 		return ""
 	}
+	contentType = strings.ToLower(contentType)
 
-	if strings.Contains(strings.ToLower(contentType), "application/json") || looksLikeJSON(body) {
-		var value any
-		if err := json.Unmarshal(body, &value); err == nil {
-			filteredJSON := dc.filterJSONValue(value, nil)
-			filtered, err := json.Marshal(filteredJSON)
-			if err == nil {
-				return string(filtered)
-			}
+	if strings.Contains(contentType, "application/json") || looksLikeJSON(body) {
+		if filtered, ok := dc.filterJSONBody(body); ok {
+			return filtered
 		}
 	}
 
-	if strings.Contains(strings.ToLower(contentType), "application/x-www-form-urlencoded") {
-		if _, err := url.ParseQuery(string(body)); err == nil {
-			return dc.filterRawQuery(string(body), nil)
-		}
+	if strings.Contains(contentType, "application/x-www-form-urlencoded") {
+		return dc.filterRawQuery(string(body), nil)
 	}
 
 	return filteredValue
 }
 
 func looksLikeJSON(body []byte) bool {
-	trimmed := strings.TrimSpace(string(body))
-	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
+	body = bytes.TrimLeft(body, " \t\r\n")
+	return len(body) > 0 && (body[0] == '{' || body[0] == '[')
+}
+
+// filterJSONBody filters a JSON body, keeping numbers as written.
+func (dc DataCollection) filterJSONBody(body []byte) (string, bool) {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var value any
+	if err := dec.Decode(&value); err != nil || dec.More() {
+		return "", false
+	}
+
+	var filtered strings.Builder
+	enc := json.NewEncoder(&filtered)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(dc.filterJSON(value, false)); err != nil {
+		return "", false
+	}
+	return strings.TrimSuffix(filtered.String(), "\n"), true
+}
+
+// filterJSON filters a decoded JSON value in place. Scalars that are not
+// object values are filtered.
+func (dc DataCollection) filterJSON(value any, keyed bool) any {
+	switch value := value.(type) {
+	case map[string]any:
+		for key, child := range value {
+			if dc.shouldFilterKey(key, nil) {
+				value[key] = filteredValue
+			} else {
+				value[key] = dc.filterJSON(child, true)
+			}
+		}
+	case []any:
+		for i, child := range value {
+			value[i] = dc.filterJSON(child, keyed)
+		}
+	default:
+		if !keyed {
+			return filteredValue
+		}
+	}
+	return value
 }
 
 func (dc DataCollection) filterRawQuery(rawQuery string, behavior *KeyValueCollectionBehavior) string {
@@ -245,71 +288,33 @@ func (dc DataCollection) filterURLErrors(exceptions []Exception) {
 	}
 }
 
-func (dc DataCollection) filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
-	return dc.filterJSONNode(value, behavior, false)
-}
-
-// filterJSONNode recursively filters a decoded JSON value.
-func (dc DataCollection) filterJSONNode(value any, behavior *KeyValueCollectionBehavior, keyed bool) any {
-	if behavior != nil && behavior.Mode == CollectionOff {
-		return nil
-	}
-
-	switch value := value.(type) {
-	case map[string]any:
-		filtered := make(map[string]any, len(value))
-		for key, child := range value {
-			if dc.shouldFilterKey(key, behavior) {
-				filtered[key] = filteredValue
-			} else {
-				filtered[key] = dc.filterJSONNode(child, behavior, true)
-			}
-		}
-		return filtered
-	case []any:
-		filtered := make([]any, len(value))
-		for i, child := range value {
-			filtered[i] = dc.filterJSONNode(child, behavior, keyed)
-		}
-		return filtered
-	default:
-		if !keyed {
-			return filteredValue
-		}
-		return value
-	}
-}
-
 // shouldFilterKey reports whether a key's value should be redacted under the
 // given behavior. It combines the built-in sensitive terms with the behavior's
 // user-provided terms.
 func (dc DataCollection) shouldFilterKey(key string, behavior *KeyValueCollectionBehavior) bool {
-	if behavior == nil {
-		behavior = &KeyValueCollectionBehavior{}
+	key = strings.ToLower(key)
+	if matchesAnyTerm(key, defaultSensitiveTerms) || matchesAnyTerm(key, dc.sensitiveTerms) {
+		return true
 	}
-
-	sensitive := matchesDenyTerms(key, defaultSensitiveTerms) || matchesDenyTerms(key, dc.sensitiveTerms)
-
+	if behavior == nil {
+		return false
+	}
 	switch behavior.Mode {
 	case CollectionOff:
 		return true
 	case CollectionAllowList:
-		return sensitive || !matchesDenyTerms(key, behavior.Terms)
+		return !matchesAnyTerm(key, behavior.Terms)
 	default:
-		return sensitive || matchesDenyTerms(key, behavior.Terms)
+		return matchesAnyTerm(key, behavior.Terms)
 	}
 }
 
-// matchesDenyTerms reports whether the key (case-insensitive) contains any of
-// the given terms as a substring.
-func matchesDenyTerms(key string, terms []string) bool {
-	lower := strings.ToLower(key)
-	for _, term := range terms {
-		if strings.Contains(lower, strings.ToLower(term)) {
-			return true
-		}
-	}
-	return false
+// matchesAnyTerm reports whether the lowercase key contains any of the terms,
+// ignoring their case.
+func matchesAnyTerm(key string, terms []string) bool {
+	return slices.ContainsFunc(terms, func(term string) bool {
+		return strings.Contains(key, strings.ToLower(term))
+	})
 }
 
 // parseKeyValueStrings splits strings like "a=1; b=2" into a map.

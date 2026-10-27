@@ -5,6 +5,7 @@ package sentrygrpc
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"time"
 
@@ -173,40 +174,11 @@ func setScopeMetadata(scope *sentry.Scope, client *sentry.Client, method string,
 	})
 }
 
-func filterMetadataCookies(dc sentry.DataCollection, key string, values []string) (string, bool) {
-	var cookies string
-	if strings.EqualFold(key, "set-cookie") {
-		cookies = dc.FilterSetCookies(values)
-	} else {
-		cookies = dc.FilterCookies(values)
-	}
-	return cookies, cookies != ""
-}
-
 func metadataToContext(client *sentry.Client, md metadata.MD) map[string]any {
 	if len(md) == 0 {
 		return nil
 	}
-
-	dc := client.GetDataCollection()
-	raw := make(map[string]string, len(md))
-	for key, values := range md {
-		if len(values) == 0 {
-			continue
-		}
-
-		value := strings.Join(values, ",")
-		if strings.EqualFold(key, "cookie") || strings.EqualFold(key, "set-cookie") {
-			var ok bool
-			value, ok = filterMetadataCookies(dc, key, values)
-			if !ok {
-				continue
-			}
-		}
-
-		raw[key] = value
-	}
-	filtered := dc.FilterRequestHeaders(raw)
+	filtered := client.GetDataCollection().FilterRequestHeaders(http.Header(md))
 	if len(filtered) == 0 {
 		return nil
 	}

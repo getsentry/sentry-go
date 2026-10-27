@@ -448,7 +448,7 @@ func applyRequestToEvent(event *Event, client *Client, request *http.Request, bo
 		return
 	}
 	event.Request = newRequest(request, client)
-	dc := client.GetDataCollection()
+	dc := client.dataCollection()
 	if body != nil && !body.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
 		event.Request.Data = dc.FilterHTTPBody(body.Bytes(), request.Header.Get("Content-Type"))
 	}

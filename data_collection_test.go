@@ -144,17 +144,3 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 		t.Errorf("client data collection should be snapshotted (-want +got):\n%s", diff)
 	}
 }
-
-func TestNewClientLegacyDataCollectionSensitiveTerms(t *testing.T) {
-	t.Parallel()
-
-	client, err := NewClient(ClientOptions{Dsn: "https://key@sentry.io/1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got := client.GetDataCollection()
-	if diff := cmp.Diff(extendedSensitiveTerms, got.sensitiveTerms); diff != "" {
-		t.Errorf("sensitiveTerms mismatch (-want +got):\n%s", diff)
-	}
-}

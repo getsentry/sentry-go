@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
@@ -241,24 +241,11 @@ func newRequest(r *http.Request, client *Client) *Request {
 	}
 	url := fmt.Sprintf("%s://%s%s", prot, r.Host, r.URL.Path)
 
-	dc := client.GetDataCollection()
+	dc := client.dataCollection()
 
-	var cookies string
-	headers := make(map[string]string, len(r.Header)+1)
-	if dc.CollectCookies() {
-		cookies = dc.FilterCookies(r.Header.Values("Cookie"))
-		if cookies != "" {
-			headers["Cookie"] = cookies
-		}
-	}
-	for k, v := range r.Header {
-		if strings.EqualFold(k, "Cookie") {
-			continue
-		}
-		headers[k] = strings.Join(v, ",")
-	}
-	headers["Host"] = r.Host
-	headers = dc.FilterRequestHeaders(headers)
+	header := make(http.Header, len(r.Header)+1)
+	maps.Copy(header, r.Header)
+	header["Host"] = []string{r.Host}
 
 	var env map[string]string
 	if dc.UserInfo.Value {
@@ -271,8 +258,8 @@ func newRequest(r *http.Request, client *Client) *Request {
 		URL:         url,
 		Method:      r.Method,
 		QueryString: dc.FilterQueryString(r.URL.RawQuery),
-		Cookies:     cookies,
-		Headers:     headers,
+		Cookies:     dc.FilterCookies(r.Header.Values("Cookie")),
+		Headers:     dc.FilterRequestHeaders(header),
 		Env:         env,
 	}
 }
