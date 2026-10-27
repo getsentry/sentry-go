@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 )
@@ -126,4 +127,35 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 			convertErrorDFS(cause, exceptions, &currentID, MechanismSourceCause, visited, maxErrorDepth, currentDepth+1)
 		}
 	}
+}
+
+// applyMechanism sets mechanism on the outermost exception of the event. The
+// fields linking the exception chain are kept from the existing mechanism, if
+// any. mechanism is copied, so it can be shared between captures.
+func (e *Event) applyMechanism(mechanism *Mechanism) {
+	if mechanism == nil || len(e.Exception) == 0 {
+		return
+	}
+
+	exception := &e.Exception[len(e.Exception)-1]
+	m := *mechanism
+	m.Data = maps.Clone(mechanism.Data)
+	if mechanism.Handled != nil {
+		m.Handled = new(*mechanism.Handled)
+	}
+
+	if existing := exception.Mechanism; existing != nil {
+		m.ExceptionID = existing.ExceptionID
+		m.ParentID = existing.ParentID
+		m.Source = existing.Source
+		m.IsExceptionGroup = existing.IsExceptionGroup
+		if m.Type == "" {
+			m.Type = existing.Type
+		}
+	}
+	if m.Type == "" {
+		m.Type = MechanismTypeGeneric
+	}
+
+	exception.Mechanism = &m
 }
