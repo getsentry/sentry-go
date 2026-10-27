@@ -131,7 +131,9 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	if response != nil {
 		span.Status = sentry.HTTPtoSpanStatus(response.StatusCode)
 		span.SetData("http.response.status_code", response.StatusCode)
-		span.SetData("http.response_content_length", response.ContentLength)
+		if response.ContentLength >= 0 {
+			span.SetData("http.response.body.size", response.ContentLength)
+		}
 		for key, value := range filterIncomingResponseHeaders(dc, response.Header) {
 			span.SetData("http.response.header."+strings.ToLower(key), value)
 		}
