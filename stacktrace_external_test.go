@@ -380,7 +380,8 @@ func newRuntimeFramesError() error {
 }
 
 func PCOnlyRuntimeFramesRanger() error {
-	_, file, _, _ := runtime.Caller(0)
+	pc := reflect.ValueOf(PCOnlyRuntimeFramesRanger).Pointer()
+	file, _ := runtime.FuncForPC(pc).FileLine(pc)
 
 	return &runtimeFramesError{frames: []runtime.Frame{
 		{PC: reflect.ValueOf(BlueRuntimeFramesRanger).Pointer(), File: file, Line: 362},
