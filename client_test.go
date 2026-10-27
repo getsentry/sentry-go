@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -536,6 +537,60 @@ func TestCaptureException(t *testing.T) {
 						Source:           "",
 						IsExceptionGroup: false,
 					},
+				},
+			},
+		},
+		{
+			name: "URLErrorQueryIsFiltered",
+			err:  wrappedError{original: &url.Error{Op: "Post", URL: "http://user@auth/api?token=secret&q=a%20b#frag", Err: errors.New("timeout")}},
+			want: []Exception{
+				{
+					Type:  "*errors.errorString",
+					Value: "timeout",
+					Mechanism: &Mechanism{
+						Type:        MechanismTypeChained,
+						ExceptionID: 2,
+						ParentID:    new(1),
+						Source:      MechanismTypeUnwrap,
+					},
+				},
+				{
+					Type:  "*url.Error",
+					Value: `Post "http://auth/api?token=[Filtered]&q=a%20b": timeout`,
+					Mechanism: &Mechanism{
+						Type:        MechanismTypeChained,
+						ExceptionID: 1,
+						ParentID:    new(0),
+						Source:      MechanismTypeUnwrap,
+					},
+				},
+				{
+					Type:       "sentry.wrappedError",
+					Value:      `wrapped: Post "http://auth/api?token=[Filtered]&q=a%20b": timeout`,
+					Stacktrace: &Stacktrace{},
+					Mechanism:  &Mechanism{Type: MechanismTypeGeneric},
+				},
+			},
+		},
+		{
+			name: "URLErrorUnparseableURLIsFiltered",
+			err:  &url.Error{Op: "parse", URL: "http://user:p@ss@host/%zz?token=secret", Err: url.EscapeError("%zz")},
+			want: []Exception{
+				{
+					Type:  "url.EscapeError",
+					Value: `invalid URL escape "%zz"`,
+					Mechanism: &Mechanism{
+						Type:        MechanismTypeChained,
+						ExceptionID: 1,
+						ParentID:    new(0),
+						Source:      MechanismTypeUnwrap,
+					},
+				},
+				{
+					Type:       "*url.Error",
+					Value:      `parse "[Filtered]": invalid URL escape "%zz"`,
+					Stacktrace: &Stacktrace{},
+					Mechanism:  &Mechanism{Type: MechanismTypeGeneric},
 				},
 			},
 		},

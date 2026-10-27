@@ -795,6 +795,7 @@ func (client *Client) eventFromMessage(message string) *Event {
 func (client *Client) eventFromException(exception error) *Event {
 	event := NewEvent()
 	event.SetException(exception, client.options.MaxErrorDepth)
+	client.GetDataCollection().filterURLErrors(event.Exception)
 
 	return event
 }

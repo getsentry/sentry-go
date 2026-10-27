@@ -3,6 +3,7 @@ package sentry
 import (
 	"encoding/json"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -98,11 +99,7 @@ func (dc DataCollection) CollectQueryParams() bool {
 
 // FilterQueryString applies the configured query-parameter collection behavior.
 func (dc DataCollection) FilterQueryString(rawQuery string) string {
-	if rawQuery == "" {
-		return ""
-	}
-	values, _ := url.ParseQuery(rawQuery)
-	return dc.filterURLValues(values, dc.URLQueryParams)
+	return dc.filterRawQuery(rawQuery, dc.URLQueryParams)
 }
 
 // FilterURL applies query-parameter filtering to u and returns its redacted string form.
@@ -111,8 +108,10 @@ func (dc DataCollection) FilterURL(u *url.URL) string {
 		return ""
 	}
 	filtered := *u
+	filtered.User = nil
 	filtered.RawQuery = dc.FilterQueryString(u.RawQuery)
-	return filtered.Redacted()
+	filtered.Fragment, filtered.RawFragment = "", ""
+	return filtered.String()
 }
 
 // FilterCookies applies the configured cookie collection behavior.
@@ -192,8 +191,8 @@ func (dc DataCollection) FilterHTTPBody(body []byte, contentType string) string 
 	}
 
 	if strings.Contains(strings.ToLower(contentType), "application/x-www-form-urlencoded") {
-		if values, err := url.ParseQuery(string(body)); err == nil {
-			return dc.filterURLValues(values, nil)
+		if _, err := url.ParseQuery(string(body)); err == nil {
+			return dc.filterRawQuery(string(body), nil)
 		}
 	}
 
@@ -205,19 +204,45 @@ func looksLikeJSON(body []byte) bool {
 	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
 }
 
-func (dc DataCollection) filterURLValues(values url.Values, behavior *KeyValueCollectionBehavior) string {
-	if behavior == nil {
-		behavior = &KeyValueCollectionBehavior{}
-	}
-	if behavior.Mode == CollectionOff {
+func (dc DataCollection) filterRawQuery(rawQuery string, behavior *KeyValueCollectionBehavior) string {
+	if rawQuery == "" || (behavior != nil && behavior.Mode == CollectionOff) {
 		return ""
 	}
-	for key := range values {
-		if dc.shouldFilterKey(key, behavior) {
-			values.Set(key, filteredValue)
+	pairs := strings.Split(rawQuery, "&")
+	for i, pair := range pairs {
+		if pair == "" {
+			continue
+		}
+		rawKey, _, _ := strings.Cut(pair, "=")
+		key, err := url.QueryUnescape(rawKey)
+		if err != nil || strings.Contains(pair, ";") || dc.shouldFilterKey(key, behavior) {
+			pairs[i] = rawKey + "=" + filteredValue
 		}
 	}
-	return strings.ReplaceAll(values.Encode(), url.QueryEscape(filteredValue), filteredValue)
+	return strings.Join(pairs, "&")
+}
+
+// filterURLErrors applies query-parameter filtering to the URL of each *url.Error.
+func (dc DataCollection) filterURLErrors(exceptions []Exception) {
+	for _, exception := range exceptions {
+		if exception.Type != "*url.Error" {
+			continue
+		}
+		op, rest, _ := strings.Cut(exception.Value, " ")
+		quoted, err := strconv.QuotedPrefix(rest)
+		if err != nil {
+			continue
+		}
+		rawURL, _ := strconv.Unquote(quoted)
+		filteredURL := filteredValue
+		if u, err := url.Parse(rawURL); err == nil {
+			filteredURL = dc.FilterURL(u)
+		}
+		old, filtered := op+" "+quoted, op+" "+strconv.Quote(filteredURL)
+		for i := range exceptions {
+			exceptions[i].Value = strings.ReplaceAll(exceptions[i].Value, old, filtered)
+		}
+	}
 }
 
 func (dc DataCollection) filterJSONValue(value any, behavior *KeyValueCollectionBehavior) any {
