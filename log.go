@@ -118,7 +118,6 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		Attributes: attrs,
 	}
 	log.TraceID, log.SpanID = resolveTrace(scope, client, ctx, fallbackCtx)
-	log.approximateSize = computeLogSize(log)
 
 	client.captureLog(ctx, log)
 	if client.options.Debug {

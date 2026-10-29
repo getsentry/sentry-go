@@ -183,3 +183,38 @@ func TestClientReports_Integration(t *testing.T) {
 		})
 	}
 }
+
+func TestClientReports_LogAndMetricBytes(t *testing.T) {
+	t.Parallel()
+	var logSize, metricSize int
+	client, err := NewClient(ClientOptions{
+		Dsn:       testDsn,
+		Transport: &NoopTransport{},
+		BeforeSendLog: func(log *Log) *Log {
+			logSize = log.byteSize()
+			return nil
+		},
+		BeforeSendMetric: func(metric *Metric) *Metric {
+			metricSize = metric.byteSize()
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx, _ := WithScope(context.Background())
+	ctx = ContextWithClient(ctx, client)
+	NewLogger(ctx).Info().String("key", "value").Emit("dropped")
+	NewMeter(ctx).Count("dropped", 1)
+
+	require.Positive(t, logSize)
+	require.Positive(t, metricSize)
+	pending := client.reportProvider.TakeReport()
+	require.NotNil(t, pending)
+	require.ElementsMatch(t, []report.DiscardedEvent{
+		{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryLog, Quantity: 1},
+		{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryLogByte, Quantity: int64(logSize)},
+		{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryTraceMetric, Quantity: 1},
+		{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryTraceMetricByte, Quantity: int64(metricSize)},
+	}, pending.DiscardedEvents)
+}

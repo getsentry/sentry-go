@@ -16,15 +16,16 @@ type Category string
 
 // Known rate limit categories that are specified in rate limit headers.
 const (
-	CategoryUnknown     Category = "unknown" // Unknown category should not get rate limited
-	CategoryAll         Category = ""        // Special category for empty categories (applies to all)
-	CategoryError       Category = "error"
-	CategoryTransaction Category = "transaction"
-	CategorySpan        Category = "span"
-	CategoryLog         Category = "log_item"
-	CategoryLogByte     Category = "log_byte"
-	CategoryMonitor     Category = "monitor"
-	CategoryTraceMetric Category = "trace_metric"
+	CategoryUnknown         Category = "unknown" // Unknown category should not get rate limited
+	CategoryAll             Category = ""        // Special category for empty categories (applies to all)
+	CategoryError           Category = "error"
+	CategoryTransaction     Category = "transaction"
+	CategorySpan            Category = "span"
+	CategoryLog             Category = "log_item"
+	CategoryLogByte         Category = "log_byte"
+	CategoryMonitor         Category = "monitor"
+	CategoryTraceMetric     Category = "trace_metric"
+	CategoryTraceMetricByte Category = "trace_metric_byte"
 )
 
 // knownCategories is the set of currently known categories. Other categories
@@ -57,6 +58,8 @@ func (c Category) String() string {
 		return "CategoryMonitor"
 	case CategoryTraceMetric:
 		return "CategoryTraceMetric"
+	case CategoryTraceMetricByte:
+		return "CategoryTraceMetricByte"
 	default:
 		// For unknown categories, use the original formatting logic
 		caser := cases.Title(language.English)

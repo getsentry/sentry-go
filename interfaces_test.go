@@ -7,10 +7,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +23,7 @@ import (
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/protocol"
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -1032,6 +1035,94 @@ func TestMetric_GetterMethods(t *testing.T) {
 	if metric.GetCategory() != ratelimit.CategoryTraceMetric {
 		t.Errorf("GetCategory() = %v, want %v", metric.GetCategory(), ratelimit.CategoryTraceMetric)
 	}
+}
+
+func TestByteSize(t *testing.T) {
+	t.Parallel()
+	ts := time.Date(2026, 10, 21, 12, 30, 45, 123_456_000, time.FixedZone("EEST", 3*60*60))
+	traceID := TraceIDFromHex("d6c4f03650bd47699ec65c84352b6208")
+	spanID := SpanIDFromHex("1234567890123456")
+	attrs := map[string]attribute.Value{
+		"bool":        attribute.BoolValue(false),
+		"int":         attribute.Int64Value(-42),
+		"uint":        attribute.Uint64Value(math.MaxUint64),
+		"float":       attribute.Float64Value(0.25),
+		"large float": attribute.Float64Value(1e21),
+		"string":      attribute.StringValue("value"),
+		"bools":       attribute.BoolSliceValue([]bool{true, false}),
+		"ints":        attribute.Int64SliceValue([]int64{1, 22}),
+		"floats":      attribute.Float64SliceValue([]float64{1.5}),
+		"strings":     attribute.StringSliceValue([]string{"a", "bc"}),
+		"empty":       attribute.StringSliceValue(nil),
+	}
+
+	// full fixtures must set every exported field, so byteSize is checked against newly added fields.
+	tests := []struct {
+		name string
+		full bool
+		item interface{ byteSize() int }
+	}{
+		{"empty log", false, &Log{}},
+		{"log", true, &Log{
+			Timestamp:  ts,
+			TraceID:    traceID,
+			SpanID:     spanID,
+			Level:      LogLevelWarn,
+			Severity:   LogSeverityWarning,
+			Body:       "user 42 logged in",
+			Attributes: attrs,
+		}},
+		{"empty metric", false, &Metric{}},
+		{"counter", true, &Metric{
+			Timestamp:  ts,
+			TraceID:    traceID,
+			SpanID:     spanID,
+			Type:       MetricTypeCounter,
+			Name:       "http.requests",
+			Value:      Int64MetricValue(7),
+			Unit:       "request",
+			Attributes: attrs,
+		}},
+		{"gauge", false, &Metric{
+			Timestamp: ts.UTC(),
+			TraceID:   traceID,
+			Type:      MetricTypeGauge,
+			Name:      "cpu.usage",
+			Value:     Float64MetricValue(0.123456789),
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.full {
+				v := reflect.ValueOf(tt.item).Elem()
+				for i := range v.NumField() {
+					if f := v.Type().Field(i); f.IsExported() {
+						require.False(t, v.Field(i).IsZero(), "fixture must set %s", f.Name)
+					}
+				}
+			}
+			b, err := json.Marshal(tt.item)
+			require.NoError(t, err)
+			require.Equal(t, len(b), tt.item.byteSize(), "serialized: %s", b)
+		})
+	}
+}
+
+func TestByteSizeDoesNotAllocate(t *testing.T) {
+	if testutils.IsRaceTest() {
+		t.Skip("allocation counts are not reliable with the race detector")
+	}
+	attrs := map[string]attribute.Value{
+		"bool":   attribute.BoolValue(true),
+		"int":    attribute.Int64Value(42),
+		"float":  attribute.Float64Value(0.5),
+		"string": attribute.StringValue("value"),
+	}
+	log := &Log{Timestamp: time.Now(), Level: LogLevelInfo, Body: "hello", Attributes: attrs}
+	metric := &Metric{Timestamp: time.Now(), Type: MetricTypeGauge, Name: "gauge", Value: Float64MetricValue(1.5), Attributes: attrs}
+
+	require.Zero(t, testing.AllocsPerRun(100, func() { _ = log.byteSize() }))
+	require.Zero(t, testing.AllocsPerRun(100, func() { _ = metric.byteSize() }))
 }
 
 func TestMakeSerializationSafe(t *testing.T) {

@@ -419,7 +419,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	if !options.DisableClientReports {
 		a := report.NewAggregator()
-		client.reportRecorder = a
+		client.reportRecorder = clientReportRecorder{a}
 		client.reportProvider = a
 	}
 
@@ -660,12 +660,11 @@ func (client *Client) captureLog(ctx context.Context, log *Log) bool {
 	}
 
 	if client.options.BeforeSendLog != nil {
-		approxSize := log.ApproximateSize()
+		dropped := log
 		log = client.options.BeforeSendLog(log)
 		if log == nil {
 			debuglog.Println("Log dropped due to BeforeSendLog callback.")
-			client.reportRecorder.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryLog)
-			client.reportRecorder.Record(report.ReasonBeforeSend, ratelimit.CategoryLogByte, int64(approxSize))
+			client.reportRecorder.RecordItem(report.ReasonBeforeSend, dropped)
 			return false
 		}
 	}
@@ -685,10 +684,11 @@ func (client *Client) captureMetric(ctx context.Context, metric *Metric) bool {
 	}
 
 	if client.options.BeforeSendMetric != nil {
+		dropped := metric
 		metric = client.options.BeforeSendMetric(metric)
 		if metric == nil {
 			debuglog.Println("Metric dropped due to BeforeSendMetric callback.")
-			client.reportRecorder.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryTraceMetric)
+			client.reportRecorder.RecordItem(report.ReasonBeforeSend, dropped)
 			return false
 		}
 	}
