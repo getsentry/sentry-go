@@ -91,8 +91,6 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.fragment":                string(""),
-					"http.query":                   string(""),
 					"http.request.method":          string("GET"),
 					"http.response.status_code":    int(200),
 					"http.response_content_length": int64(0),
@@ -114,15 +112,14 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.fragment":                string("readme"),
-					"http.query":                   string("baz=123"),
+					"http.query":                   string("?baz=123"),
 					"http.request.method":          string("GET"),
 					"http.response.status_code":    int(200),
 					"http.response_content_length": int64(0),
 					"server.address":               string("example.com"),
 					"server.port":                  string("443"),
 				},
-				Description: "GET https://example.com:443/foo/bar?baz=123#readme",
+				Description: "GET https://example.com:443/foo/bar",
 				Op:          "http.client",
 				Origin:      "manual",
 				Sampled:     sentry.SampledTrue,
@@ -137,15 +134,14 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.fragment":                string(""),
-					"http.query":                   string("bar=123&abc=def"),
+					"http.query":                   string("?bar=123&abc=def"),
 					"http.request.method":          string("HEAD"),
 					"http.response.status_code":    int(400),
 					"http.response_content_length": int64(0),
 					"server.address":               string("example.com"),
 					"server.port":                  string("8443"),
 				},
-				Description: "HEAD https://example.com:8443/foo?bar=123&abc=def",
+				Description: "HEAD https://example.com:8443/foo",
 				Op:          "http.client",
 				Origin:      "manual",
 				Sampled:     sentry.SampledTrue,
@@ -159,8 +155,6 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 1024,
 			WantSpan: &sentry.Span{ //nolint:gosec // G101: not real credentials
 				Data: map[string]interface{}{
-					"http.fragment":                     string(""),
-					"http.query":                        string(""),
 					"http.request.method":               string("POST"),
 					"http.request.header.authorization": string("[Filtered]"),
 					"http.response.status_code":         int(200),
@@ -168,7 +162,7 @@ func TestIntegration(t *testing.T) {
 					"server.address":                    string("example.com"),
 					"server.port":                       string("4321"),
 				},
-				Description: "POST https://john:xxxxx@example.com:4321/secret",
+				Description: "POST https://example.com:4321/secret",
 				Op:          "http.client",
 				Origin:      "manual",
 				Sampled:     sentry.SampledTrue,
@@ -181,8 +175,6 @@ func TestIntegration(t *testing.T) {
 			WantError:     true,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.fragment":       string(""),
-					"http.query":          string(""),
 					"http.request.method": string("POST"),
 					"server.address":      string("example.com"),
 					"server.port":         string(""),
@@ -200,8 +192,6 @@ func TestIntegration(t *testing.T) {
 			WantError:     false,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.fragment":                string(""),
-					"http.query":                   string(""),
 					"http.request.method":          string("OPTIONS"),
 					"http.response.status_code":    int(0),
 					"http.response_content_length": int64(0),
@@ -223,15 +213,14 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.fragment":                string("readme"),
-					"http.query":                   string("baz=123"),
+					"http.query":                   string("?baz=123"),
 					"http.request.method":          string("GET"),
 					"http.response.status_code":    int(200),
 					"http.response_content_length": int64(0),
 					"server.address":               string("example.com"),
 					"server.port":                  string(""),
 				},
-				Description: "GET https://example.com/foo/bar?baz=123#readme",
+				Description: "GET https://example.com/foo/bar",
 				Op:          "http.client",
 				Origin:      "manual",
 				Sampled:     sentry.SampledTrue,
@@ -246,15 +235,14 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.fragment":                "readme",
-					"http.query":                   "baz=123",
+					"http.query":                   "?baz=123",
 					"http.request.method":          "GET",
 					"http.response.status_code":    200,
 					"http.response_content_length": int64(0),
 					"server.address":               "example.net",
 					"server.port":                  "",
 				},
-				Description: "GET https://example.net/foo/bar?baz=123#readme",
+				Description: "GET https://example.net/foo/bar",
 				Op:          "http.client",
 				Origin:      "manual",
 				Sampled:     sentry.SampledTrue,
@@ -668,8 +656,6 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 	gotSpan := got[0]
 	wantSpan := &sentry.Span{
 		Data: map[string]interface{}{
-			"http.fragment":                       string(""),
-			"http.query":                          string(""),
 			"http.request.method":                 string("POST"),
 			"http.response.status_code":           int(200),
 			"http.response_content_length":        int64(48),
@@ -913,11 +899,10 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 		wantDesc       string
 	}{
 		{
-			name:       "filters sensitive query values",
-			requestURL: "https://example.com/foo?page=1&token=secret#readme",
+			name:       "filters sensitive query values and drops the fragment",
+			requestURL: "https://example.com/foo?page=1&token=secret#state=1&access_token=secret",
 			wantData: map[string]interface{}{
-				"http.fragment":                       "readme",
-				"http.query":                          "page=1&token=[Filtered]",
+				"http.query":                          "?page=1&token=[Filtered]",
 				"http.request.method":                 "GET",
 				"http.response.status_code":           200,
 				"http.response_content_length":        int64(0),
@@ -925,7 +910,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 				"server.address":                      "example.com",
 				"server.port":                         "",
 			},
-			wantDesc: "GET https://example.com/foo?page=1&token=[Filtered]#readme",
+			wantDesc: "GET https://example.com/foo",
 		},
 		{
 			name: "omits query values when disabled",
@@ -934,7 +919,6 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 			},
 			requestURL: "https://example.com/foo?page=1&token=secret#readme",
 			wantData: map[string]interface{}{
-				"http.fragment":                       "readme",
 				"http.request.method":                 "GET",
 				"http.response.status_code":           200,
 				"http.response_content_length":        int64(0),
@@ -942,7 +926,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 				"server.address":                      "example.com",
 				"server.port":                         "",
 			},
-			wantDesc: "GET https://example.com/foo#readme",
+			wantDesc: "GET https://example.com/foo",
 		},
 	}
 

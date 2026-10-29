@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/getsentry/sentry-go"
@@ -88,15 +89,14 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	if clientOptions.DataCollection != nil {
 		dc = *clientOptions.DataCollection
 	}
-	cleanRequestURL := dc.FilterURL(request.URL)
+	descriptionURL := url.URL{Scheme: request.URL.Scheme, Host: request.URL.Host, Path: request.URL.Path, RawPath: request.URL.RawPath}
 
-	span := sentry.StartSpan(ctx, "http.client", sentry.WithDescription(fmt.Sprintf("%s %s", request.Method, cleanRequestURL)))
+	span := sentry.StartSpan(ctx, "http.client", sentry.WithDescription(fmt.Sprintf("%s %s", request.Method, descriptionURL.String())))
 	defer span.Finish()
 
-	if dc.CollectQueryParams() {
-		span.SetData("http.query", dc.FilterQueryString(request.URL.RawQuery))
+	if query := dc.FilterQueryString(request.URL.RawQuery); query != "" {
+		span.SetData("http.query", "?"+query)
 	}
-	span.SetData("http.fragment", request.URL.Fragment)
 	span.SetData("http.request.method", request.Method)
 	span.SetData("server.address", request.URL.Hostname())
 	span.SetData("server.port", request.URL.Port())

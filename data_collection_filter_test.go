@@ -145,20 +145,18 @@ func TestNewClientDataCollectionKeyValueFilters(t *testing.T) {
 			},
 		},
 		{
-			name: "malformed query preserves successfully parsed parameters",
-			filter: func(t *testing.T, dc DataCollection) map[string]string {
-				t.Helper()
-				got, err := parseQueryString(t, dc.FilterQueryString("safe=ok&token=secret&bad=%ZZ&page=1"))
-				if err != nil {
-					t.Fatal(err)
-				}
-				return got
+			name: "query keeps the original order and encoding",
+			filter: func(_ *testing.T, dc DataCollection) map[string]string {
+				return map[string]string{"query": dc.FilterQueryString("token=abc123&q=a%20b%26c&page=5")}
 			},
-			want: map[string]string{
-				"safe":  "ok",
-				"token": filteredValue,
-				"page":  "1",
+			want: map[string]string{"query": "token=[Filtered]&q=a%20b%26c&page=5"},
+		},
+		{
+			name: "malformed query keeps raw values and filters undecodable keys",
+			filter: func(_ *testing.T, dc DataCollection) map[string]string {
+				return map[string]string{"query": dc.FilterQueryString("safe=ok&token=secret&bad=%ZZ&pa%ZZss=x&a=1;token=x&page=1")}
 			},
+			want: map[string]string{"query": "safe=ok&token=[Filtered]&bad=%ZZ&pa%ZZss=[Filtered]&a=[Filtered]&page=1"},
 		},
 		{
 			name: "cookies are parsed and filtered per cookie name",
