@@ -6,6 +6,8 @@ import (
 	"context"
 	"regexp"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,8 +37,9 @@ type Options struct {
 // slug. Check-ins use the client and scope carried by ctx. Pass it to
 // gocron.WithSchedulerMonitor.
 //
-// The monitor is created or updated with the job's schedule. Only cron and
-// duration jobs whose schedule Sentry can represent are monitored.
+// The monitor is created or updated with the job's schedule. Only cron,
+// duration, daily, weekly and monthly jobs whose schedule Sentry can represent
+// are monitored.
 //
 // Jobs without a name set by gocron.WithName are named after their function.
 // Jobs running an anonymous function are not monitored, since that name
@@ -137,8 +140,63 @@ func (m *monitor) monitorConfig(schedule gocron.JobSchedule) *sentry.MonitorConf
 		return cronspec.MonitorConfig(s.Crontab, m.options.Location, m.options.MonitorConfig)
 	case gocron.DurationJobSchedule:
 		return cronspec.MonitorConfig("@every "+s.Duration.String(), m.options.Location, m.options.MonitorConfig)
+	case gocron.DailyJobSchedule:
+		return m.atTimesConfig(s.Interval, s.AtTimes, "*", "*")
+	case gocron.WeeklyJobSchedule:
+		days := make([]int, len(s.DaysOfWeek))
+		for i, d := range s.DaysOfWeek {
+			days[i] = int(d)
+		}
+		return m.atTimesConfig(s.Interval, s.AtTimes, "*", joinInts(days))
+	case gocron.MonthlyJobSchedule:
+		// Sentry can't express days counted from the end of the month.
+		if len(s.DaysFromEnd) > 0 {
+			return nil
+		}
+		return m.atTimesConfig(s.Interval, s.AtTimes, joinInts(s.Days), "*")
 	}
 	return nil
+}
+
+// atTimesConfig returns nil when no crontab runs at the same times. An
+// interval above 1 counts from when the job was added, which a crontab can't.
+func (m *monitor) atTimesConfig(interval uint, atTimes []time.Time, dayOfMonth, dayOfWeek string) *sentry.MonitorConfig {
+	if interval != 1 || len(atTimes) == 0 || dayOfMonth == "" || dayOfWeek == "" {
+		return nil
+	}
+	var hours, minutes []int
+	pairs := make(map[[2]int]bool)
+	for _, t := range atTimes {
+		if t.Second() != 0 {
+			return nil
+		}
+		hours = append(hours, t.Hour())
+		minutes = append(minutes, t.Minute())
+		pairs[[2]int{t.Hour(), t.Minute()}] = true
+	}
+	hours = sortedUnique(hours)
+	minutes = sortedUnique(minutes)
+	// A crontab runs at every hour and minute pair from its two fields.
+	if len(pairs) != len(hours)*len(minutes) {
+		return nil
+	}
+	spec := strings.Join([]string{joinInts(minutes), joinInts(hours), dayOfMonth, "*", dayOfWeek}, " ")
+	return cronspec.MonitorConfig(spec, m.options.Location, m.options.MonitorConfig)
+}
+
+func sortedUnique(values []int) []int {
+	values = slices.Clone(values)
+	slices.Sort(values)
+	return slices.Compact(values)
+}
+
+func joinInts(values []int) string {
+	values = sortedUnique(values)
+	parts := make([]string, len(values))
+	for i, v := range values {
+		parts[i] = strconv.Itoa(v)
+	}
+	return strings.Join(parts, ",")
 }
 
 func (m *monitor) finish(job gocron.Job, status sentry.CheckInStatus) {

@@ -1,6 +1,7 @@
 package sentrygocron
 
 import (
+	"context"
 	"errors"
 	"regexp"
 	"testing"
@@ -41,6 +42,7 @@ func TestSchedulerMonitor(t *testing.T) {
 		add(gocron.CronJob("0 3 * * *", false), ok, gocron.WithName("nightly")),
 		add(gocron.DurationJob(90*time.Minute), func() error { return errors.New("failed") }, gocron.WithName("sync")),
 		add(gocron.DurationJob(30*time.Second), ok, gocron.WithName("poll")),
+		add(gocron.DailyJob(1, gocron.NewAtTimes(gocron.NewAtTime(4, 30, 0))), ok, gocron.WithName("daily")),
 		add(gocron.DurationJob(time.Hour), ok, gocron.WithName("excluded")),
 		add(gocron.DurationJob(time.Hour), ok, gocron.WithName("tmp-1")),
 		add(gocron.DurationJob(time.Hour), ok),
@@ -52,7 +54,7 @@ func TestSchedulerMonitor(t *testing.T) {
 	}
 	require.Eventually(t, func() bool {
 		f.Flush()
-		return len(f.Events()) >= 4
+		return len(f.Events()) >= 6
 	}, 5*time.Second, 10*time.Millisecond)
 	time.Sleep(100 * time.Millisecond)
 	f.Flush()
@@ -61,7 +63,7 @@ func TestSchedulerMonitor(t *testing.T) {
 	for _, e := range f.Events() {
 		bySlug[e.CheckIn.MonitorSlug] = append(bySlug[e.CheckIn.MonitorSlug], e)
 	}
-	require.Len(t, bySlug, 2)
+	require.Len(t, bySlug, 3)
 
 	nightly := bySlug["nightly"]
 	require.Len(t, nightly, 2)
@@ -79,7 +81,60 @@ func TestSchedulerMonitor(t *testing.T) {
 	assert.Equal(t, sentry.IntervalSchedule(90, sentry.MonitorScheduleUnitMinute), sync[0].MonitorConfig.Schedule)
 	assert.Equal(t, sentry.CheckInStatusError, sync[1].CheckIn.Status)
 
+	daily := bySlug["daily"]
+	require.Len(t, daily, 2)
+	assert.Equal(t, sentry.CrontabSchedule("30 4 * * *"), daily[0].MonitorConfig.Schedule)
+	assert.Equal(t, "Asia/Tokyo", daily[0].MonitorConfig.Timezone)
+
 	assert.Empty(t, bySlug["poll"])
+}
+
+func TestMonitorConfig(t *testing.T) {
+	tokyo, err := time.LoadLocation("Asia/Tokyo")
+	require.NoError(t, err)
+	at := func(hour, minute, second int) time.Time {
+		return time.Date(0, 0, 0, hour, minute, second, 0, tokyo)
+	}
+	m := NewSchedulerMonitor(context.Background(), Options{Location: tokyo}).(*monitor)
+
+	tests := []struct {
+		name     string
+		schedule gocron.JobSchedule
+		want     string
+	}{
+		{"daily", gocron.DailyJobSchedule{Interval: 1, AtTimes: []time.Time{at(3, 0, 0)}}, "0 3 * * *"},
+		{"daily hours", gocron.DailyJobSchedule{Interval: 1, AtTimes: []time.Time{at(9, 15, 0), at(17, 15, 0)}}, "15 9,17 * * *"},
+		{"daily minutes", gocron.DailyJobSchedule{Interval: 1, AtTimes: []time.Time{at(8, 45, 0), at(8, 0, 0)}}, "0,45 8 * * *"},
+		{"daily grid", gocron.DailyJobSchedule{Interval: 1, AtTimes: []time.Time{at(1, 0, 0), at(1, 30, 0), at(2, 0, 0), at(2, 30, 0)}}, "0,30 1,2 * * *"},
+		{"daily duplicate times", gocron.DailyJobSchedule{Interval: 1, AtTimes: []time.Time{at(3, 0, 0), at(3, 0, 0)}}, "0 3 * * *"},
+		{"daily not a grid", gocron.DailyJobSchedule{Interval: 1, AtTimes: []time.Time{at(1, 0, 0), at(2, 30, 0)}}, ""},
+		{"daily seconds", gocron.DailyJobSchedule{Interval: 1, AtTimes: []time.Time{at(3, 0, 10)}}, ""},
+		{"daily interval", gocron.DailyJobSchedule{Interval: 2, AtTimes: []time.Time{at(3, 0, 0)}}, ""},
+		{"daily no times", gocron.DailyJobSchedule{Interval: 1}, ""},
+		{"weekly", gocron.WeeklyJobSchedule{Interval: 1, DaysOfWeek: []time.Weekday{time.Friday, time.Monday}, AtTimes: []time.Time{at(6, 0, 0)}}, "0 6 * * 1,5"},
+		{"weekly sunday", gocron.WeeklyJobSchedule{Interval: 1, DaysOfWeek: []time.Weekday{time.Sunday}, AtTimes: []time.Time{at(0, 0, 0)}}, "0 0 * * 0"},
+		{"weekly interval", gocron.WeeklyJobSchedule{Interval: 2, DaysOfWeek: []time.Weekday{time.Monday}, AtTimes: []time.Time{at(6, 0, 0)}}, ""},
+		{"weekly no days", gocron.WeeklyJobSchedule{Interval: 1, AtTimes: []time.Time{at(6, 0, 0)}}, ""},
+		{"weekly not a grid", gocron.WeeklyJobSchedule{Interval: 1, DaysOfWeek: []time.Weekday{time.Monday}, AtTimes: []time.Time{at(6, 0, 0), at(7, 30, 0)}}, ""},
+		{"monthly", gocron.MonthlyJobSchedule{Interval: 1, Days: []int{15, 1}, AtTimes: []time.Time{at(12, 5, 0)}}, "5 12 1,15 * *"},
+		{"monthly from end", gocron.MonthlyJobSchedule{Interval: 1, Days: []int{1}, DaysFromEnd: []int{-1}, AtTimes: []time.Time{at(12, 0, 0)}}, ""},
+		{"monthly interval", gocron.MonthlyJobSchedule{Interval: 3, Days: []int{1}, AtTimes: []time.Time{at(12, 0, 0)}}, ""},
+		{"monthly seconds", gocron.MonthlyJobSchedule{Interval: 1, Days: []int{1}, AtTimes: []time.Time{at(12, 0, 30)}}, ""},
+		{"random duration", gocron.DurationRandomJobSchedule{Min: time.Minute, Max: time.Hour}, ""},
+		{"one time", gocron.OneTimeJobSchedule{StartAt: []time.Time{time.Now()}}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := m.monitorConfig(tt.schedule)
+			if tt.want == "" {
+				assert.Nil(t, config)
+				return
+			}
+			require.NotNil(t, config)
+			assert.Equal(t, sentry.CrontabSchedule(tt.want), config.Schedule)
+			assert.Equal(t, "Asia/Tokyo", config.Timezone)
+		})
+	}
 }
 
 func TestSchedulerMonitorJobRemovedWhileRunning(t *testing.T) {
