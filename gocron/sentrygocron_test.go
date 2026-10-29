@@ -52,7 +52,7 @@ func TestSchedulerMonitor(t *testing.T) {
 	}
 	require.Eventually(t, func() bool {
 		f.Flush()
-		return len(f.Events()) >= 6
+		return len(f.Events()) >= 4
 	}, 5*time.Second, 10*time.Millisecond)
 	time.Sleep(100 * time.Millisecond)
 	f.Flush()
@@ -61,7 +61,7 @@ func TestSchedulerMonitor(t *testing.T) {
 	for _, e := range f.Events() {
 		bySlug[e.CheckIn.MonitorSlug] = append(bySlug[e.CheckIn.MonitorSlug], e)
 	}
-	require.Len(t, bySlug, 3)
+	require.Len(t, bySlug, 2)
 
 	nightly := bySlug["nightly"]
 	require.Len(t, nightly, 2)
@@ -79,9 +79,7 @@ func TestSchedulerMonitor(t *testing.T) {
 	assert.Equal(t, sentry.IntervalSchedule(90, sentry.MonitorScheduleUnitMinute), sync[0].MonitorConfig.Schedule)
 	assert.Equal(t, sentry.CheckInStatusError, sync[1].CheckIn.Status)
 
-	poll := bySlug["poll"]
-	require.Len(t, poll, 2)
-	assert.Nil(t, poll[0].MonitorConfig)
+	assert.Empty(t, bySlug["poll"])
 }
 
 func TestSchedulerMonitorJobRemovedWhileRunning(t *testing.T) {

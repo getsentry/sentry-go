@@ -35,8 +35,8 @@ type Options struct {
 // slug. Check-ins use the client and scope carried by ctx. Pass it to
 // gocron.WithSchedulerMonitor.
 //
-// The monitor is created or updated with the job's schedule for cron and
-// duration jobs that Sentry can represent. Other jobs send check-ins only.
+// The monitor is created or updated with the job's schedule. Only cron and
+// duration jobs whose schedule Sentry can represent are monitored.
 //
 // Jobs without a name set by gocron.WithName are named after their function.
 // Jobs running an anonymous function are not monitored, since that name
@@ -97,10 +97,15 @@ func (m *monitor) JobStarted(job gocron.Job) {
 	if !m.monitored(job) {
 		return
 	}
+	config := m.monitorConfig(job.Schedule())
+	if config == nil {
+		debuglog.Printf("sentrygocron: job %q has a schedule Sentry can't represent, so it is not monitored", slug)
+		return
+	}
 	id := sentry.CaptureCheckIn(m.ctx, &sentry.CheckIn{
 		MonitorSlug: slug,
 		Status:      sentry.CheckInStatusInProgress,
-	}, m.monitorConfig(job.Schedule()))
+	}, config)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.runs[job.ID()] = append(m.runs[job.ID()], run{slug, id, time.Now()})
