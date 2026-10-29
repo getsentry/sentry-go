@@ -25,13 +25,3 @@ func NewDsn(rawURL string) (*Dsn, error) {
 	}
 	return &Dsn{Dsn: *protocolDsn}, nil
 }
-
-// RequestHeaders returns all the necessary headers that have to be used in the transport when sending events
-// to the /store endpoint.
-//
-// Deprecated: This method shall only be used if you want to implement your own transport that sends events to
-// the /store endpoint. If you're using the transport provided by the SDK, all necessary headers to authenticate
-// against the /envelope endpoint are added automatically.
-func (dsn Dsn) RequestHeaders() map[string]string {
-	return dsn.Dsn.RequestHeaders(SDKVersion)
-}

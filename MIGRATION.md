@@ -212,6 +212,7 @@ type Transport interface {
 | `Hook.SetFallback` and `FallbackFunc` | Removed; logs are sent asynchronously |
 | `sentryzerolog.New(Config{...})` and `NewWithHub(hub, opts)` | `sentryzerolog.New(ctx, opts)` |
 | `sentryzerolog.Config.ClientOptions` | `sentry.Init` or `sentry.NewClient` |
+| `sentry.MockLogEntry` and `sentry.NewMockLogEntry` | Removed; define a fake that implements `sentry.LogEntry` in your tests |
 
 </details>
 
@@ -224,6 +225,7 @@ type Transport interface {
 | `Transport.Flush(timeout)` | Removed; use `FlushWithContext(ctx)` |
 | `HTTPTransport.BufferSize` counts events | `HTTPTransport.BufferSize` counts envelopes |
 | `ClientOptions.DisableTelemetryBuffer` | Removed; telemetry is always buffered, including with custom transports |
+| `Dsn.RequestHeaders()` and `protocol.Dsn.RequestHeaders(sdkVersion)` | Removed; they built `/store` endpoint headers. The SDK transport authenticates against the `/envelope` endpoint automatically |
 
 </details>
 

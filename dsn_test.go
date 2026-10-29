@@ -41,9 +41,6 @@ func TestDsn_Wrapper(t *testing.T) {
 		if dsn.GetAPIURL() == nil {
 			t.Error("GetAPIURL() returned nil")
 		}
-		if dsn.RequestHeaders() == nil {
-			t.Error("RequestHeaders() returned nil")
-		}
 	})
 
 	t.Run("empty DSN struct", func(t *testing.T) {
@@ -60,7 +57,6 @@ func TestDsn_Wrapper(t *testing.T) {
 		_ = dsn.GetPort()
 		_ = dsn.GetPath()
 		_ = dsn.GetAPIURL()
-		_ = dsn.RequestHeaders()
 
 		// If we get here without panicking, the test passes
 		t.Log("All methods executed without panic on empty DSN struct")

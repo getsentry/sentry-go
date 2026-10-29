@@ -1,6 +1,7 @@
 package sentryzap
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ import (
 func TestZapFieldToLogEntry(t *testing.T) {
 	fixedTime := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
 
-	entry := sentry.NewMockLogEntry()
+	entry := newMockLogEntry()
 	fields := []zapcore.Field{
 		zap.Bool("enabled", true),
 		zap.Bool("disabled", false),
@@ -79,20 +80,20 @@ func TestZapFieldToLogEntry(t *testing.T) {
 
 func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	t.Run("nil error is skipped", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Error(nil))
 		_, found := entry.Attributes["error"]
 		assert.False(t, found)
 	})
 
 	t.Run("skip field", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Skip())
 		assert.Empty(t, entry.Attributes)
 	})
 
 	t.Run("reflect type", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Reflect("custom", customStruct{Name: "test", Value: 42}))
 		result, ok := entry.Attributes["custom"].(string)
 		assert.True(t, ok)
@@ -101,7 +102,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("object marshaler", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Object("user", &testObjectMarshaler{name: "john", age: 30}))
 		result, ok := entry.Attributes["user"].(string)
 		assert.True(t, ok)
@@ -110,7 +111,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("array marshaler", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Array("items", &testArrayMarshaler{items: []string{"a", "b", "c"}}))
 		result, ok := entry.Attributes["items"].(string)
 		assert.True(t, ok)
@@ -120,7 +121,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("inline marshaler", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Inline(&testInlineMarshaler{name: "alice", score: 95}))
 		result, ok := entry.Attributes[""].(string)
 		assert.True(t, ok)
@@ -129,7 +130,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("complex64 type", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Complex64("c64", complex(float32(3.14), float32(2.71))))
 		result, ok := entry.Attributes["c64"].(string)
 		assert.True(t, ok)
@@ -138,7 +139,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("complex128 type", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Complex128("c128", complex(3.14159, 2.71828)))
 		result, ok := entry.Attributes["c128"].(string)
 		assert.True(t, ok)
@@ -147,7 +148,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("time full type", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 		fixedTime := time.Date(2024, 1, 15, 10, 30, 45, 0, time.UTC)
 		// Create a TimeFullType field manually
 		field := zapcore.Field{
@@ -162,7 +163,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("namespace type", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 		zapFieldToLogEntry(entry, zap.Namespace("http"))
 		// Namespace fields should be skipped and not add any attributes
 		assert.Empty(t, entry.Attributes)
@@ -207,7 +208,7 @@ func TestTypedNilPointerValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("typed nil "+tt.name, func(t *testing.T) {
-			entry := sentry.NewMockLogEntry()
+			entry := newMockLogEntry()
 			assert.NotPanics(t, func() {
 				zapFieldToLogEntry(entry, tt.field)
 			})
@@ -215,7 +216,7 @@ func TestTypedNilPointerValidation(t *testing.T) {
 	}
 
 	t.Run("non-nil values still work", func(t *testing.T) {
-		entry := sentry.NewMockLogEntry()
+		entry := newMockLogEntry()
 
 		zapFieldToLogEntry(entry, zap.Stringer("s", &testStringer{value: "test"}))
 		assert.Equal(t, "test", entry.Attributes["s"])
@@ -281,3 +282,30 @@ type testError struct {
 func (e *testError) Error() string {
 	return e.msg
 }
+
+// mockLogEntry implements [sentry.LogEntry] and records attributes for assertions.
+type mockLogEntry struct {
+	Attributes map[string]any
+}
+
+func newMockLogEntry() *mockLogEntry {
+	return &mockLogEntry{Attributes: make(map[string]any)}
+}
+
+func (m *mockLogEntry) set(key string, value any) sentry.LogEntry {
+	m.Attributes[key] = value
+	return m
+}
+
+func (m *mockLogEntry) WithCtx(context.Context) sentry.LogEntry            { return m }
+func (m *mockLogEntry) String(k, v string) sentry.LogEntry                 { return m.set(k, v) }
+func (m *mockLogEntry) Int(k string, v int) sentry.LogEntry                { return m.set(k, int64(v)) }
+func (m *mockLogEntry) Int64(k string, v int64) sentry.LogEntry            { return m.set(k, v) }
+func (m *mockLogEntry) Float64(k string, v float64) sentry.LogEntry        { return m.set(k, v) }
+func (m *mockLogEntry) Bool(k string, v bool) sentry.LogEntry              { return m.set(k, v) }
+func (m *mockLogEntry) StringSlice(k string, v []string) sentry.LogEntry   { return m.set(k, v) }
+func (m *mockLogEntry) Int64Slice(k string, v []int64) sentry.LogEntry     { return m.set(k, v) }
+func (m *mockLogEntry) Float64Slice(k string, v []float64) sentry.LogEntry { return m.set(k, v) }
+func (m *mockLogEntry) BoolSlice(k string, v []bool) sentry.LogEntry       { return m.set(k, v) }
+func (m *mockLogEntry) Emit(...any)                                        {}
+func (m *mockLogEntry) Emitf(string, ...any)                               {}
