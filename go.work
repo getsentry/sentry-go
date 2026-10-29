@@ -8,6 +8,7 @@ use (
 	./fasthttp
 	./fiber
 	./fiberv3
+	./gocron
 	./gin
 	./grpc
 	./iris
