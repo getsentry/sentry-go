@@ -199,7 +199,7 @@ func TestNewRequest(t *testing.T) {
 				HTTPHeaders: &HeaderCollectionConfig{
 					Request: &KeyValueCollectionBehavior{Mode: CollectionOff},
 				},
-				QueryParams: &KeyValueCollectionBehavior{Mode: CollectionOff},
+				URLQueryParams: &KeyValueCollectionBehavior{Mode: CollectionOff},
 			},
 			makeReq: func() *http.Request {
 				r := httptest.NewRequest("POST", "/test/?token=abc123&page=5", nil)

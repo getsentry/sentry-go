@@ -81,10 +81,10 @@ type DataCollection struct {
 	// Defaults to collecting all valid body types.
 	HTTPBodies []BodyType
 
-	// QueryParams configures collection of URL query parameters.
+	// URLQueryParams configures collection of URL query parameters.
 	//
 	// Defaults to using the built-in DenyList.
-	QueryParams *KeyValueCollectionBehavior
+	URLQueryParams *KeyValueCollectionBehavior
 
 	// sensitiveTerms is the deny-list used for built-in sensitive-key
 	// scrubbing.
@@ -123,7 +123,7 @@ func cloneDataCollection(dc *DataCollection) *DataCollection {
 		UserInfo:       dc.UserInfo,
 		Cookies:        cloneKeyValueCollectionBehavior(dc.Cookies),
 		HTTPHeaders:    cloneHeaderCollectionConfig(dc.HTTPHeaders),
-		QueryParams:    cloneKeyValueCollectionBehavior(dc.QueryParams),
+		URLQueryParams: cloneKeyValueCollectionBehavior(dc.URLQueryParams),
 		sensitiveTerms: dc.sensitiveTerms,
 	}
 	if dc.HTTPBodies != nil {
@@ -175,8 +175,8 @@ func resolveDataCollection(dc *DataCollection) DataCollection {
 	if resolved.HTTPBodies == nil {
 		resolved.HTTPBodies = allBodyTypes()
 	}
-	if resolved.QueryParams == nil {
-		resolved.QueryParams = &KeyValueCollectionBehavior{}
+	if resolved.URLQueryParams == nil {
+		resolved.URLQueryParams = &KeyValueCollectionBehavior{}
 	}
 	return resolved
 }
@@ -184,11 +184,11 @@ func resolveDataCollection(dc *DataCollection) DataCollection {
 func legacyDataCollection(sendDefaultPII bool) DataCollection {
 	if sendDefaultPII {
 		return resolveDataCollection(&DataCollection{
-			UserInfo:    Set(true),
-			Cookies:     &KeyValueCollectionBehavior{},
-			HTTPHeaders: &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{}, Response: &KeyValueCollectionBehavior{}},
-			HTTPBodies:  allBodyTypes(),
-			QueryParams: &KeyValueCollectionBehavior{},
+			UserInfo:       Set(true),
+			Cookies:        &KeyValueCollectionBehavior{},
+			HTTPHeaders:    &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{}, Response: &KeyValueCollectionBehavior{}},
+			HTTPBodies:     allBodyTypes(),
+			URLQueryParams: &KeyValueCollectionBehavior{},
 		})
 	}
 
@@ -200,7 +200,7 @@ func legacyDataCollection(sendDefaultPII bool) DataCollection {
 			Request:  &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 			Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 		},
-		QueryParams:    &KeyValueCollectionBehavior{Mode: CollectionDenyList},
+		URLQueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 		sensitiveTerms: extendedSensitiveTerms,
 	})
 }

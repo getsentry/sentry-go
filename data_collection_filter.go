@@ -93,7 +93,7 @@ func (dc *DataCollection) CollectCookies() bool {
 
 // CollectQueryParams reports whether query parameters should be collected.
 func (dc DataCollection) CollectQueryParams() bool {
-	return dc.QueryParams == nil || dc.QueryParams.Mode != CollectionOff
+	return dc.URLQueryParams == nil || dc.URLQueryParams.Mode != CollectionOff
 }
 
 // FilterQueryString applies the configured query-parameter collection behavior.
@@ -102,7 +102,7 @@ func (dc DataCollection) FilterQueryString(rawQuery string) string {
 		return ""
 	}
 	values, _ := url.ParseQuery(rawQuery)
-	return dc.filterURLValues(values, dc.QueryParams)
+	return dc.filterURLValues(values, dc.URLQueryParams)
 }
 
 // FilterURL applies query-parameter filtering to u and returns its redacted string form.
