@@ -909,6 +909,7 @@ func (client *Client) prepareEvent(ctx context.Context, event *Event, scope *Sco
 	if opts.level != "" {
 		event.Level = opts.level
 	}
+	event.applyMechanism(opts.mechanism)
 
 	if event.EventID == "" {
 		// TODO set EventID when the event is created, same as in other SDKs. It's necessary for profileTransaction.ID.
