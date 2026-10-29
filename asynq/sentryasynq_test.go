@@ -49,7 +49,7 @@ func TestConfigProvider(t *testing.T) {
 		slugHeader:   "report:daily",
 		configHeader: `{"schedule":{"type":"crontab","value":"0 3 * * *"},"max_runtime":10,"timezone":"Asia/Tokyo"}`,
 	}, headers["report:daily"])
-	assert.Equal(t, map[string]string{slugHeader: "ping"}, headers["ping"])
+	assert.Nil(t, headers["ping"])
 	assert.Nil(t, headers["cache:refresh"])
 	assert.Nil(t, headers["tenant:synca"])
 	assert.Nil(t, headers["tenant:syncb"])

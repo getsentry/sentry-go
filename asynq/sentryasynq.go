@@ -42,7 +42,8 @@ type Options struct {
 //
 // Tasks whose type is shared by other configs are not monitored, since
 // they would report to the same monitor. Use WithMonitor to give them their
-// own slugs.
+// own slugs. Tasks whose schedule Sentry can't represent, such as
+// "@every 30s", are not monitored either.
 func NewConfigProvider(p asynq.PeriodicTaskConfigProvider, options Options) asynq.PeriodicTaskConfigProvider {
 	return configProvider{p, options}
 }
@@ -72,11 +73,22 @@ func (p configProvider) GetConfigs() ([]*asynq.PeriodicTaskConfig, error) {
 			debuglog.Printf("sentryasynq: task type %q is used by more than one periodic task; use WithMonitor to monitor them", taskType)
 			continue
 		}
+		if cronspec.MonitorConfig(c.Cronspec, p.options.location(), nil) == nil {
+			debuglog.Printf("sentryasynq: task type %q has a schedule Sentry can't represent, so it is not monitored", taskType)
+			continue
+		}
 		monitored := *c
 		monitored.Task = WithMonitor(c.Task, taskType, c.Cronspec, p.options)
 		configs[i] = &monitored
 	}
 	return configs, err
+}
+
+func (o Options) location() *time.Location {
+	if o.Location == nil {
+		return time.UTC
+	}
+	return o.Location
 }
 
 func (o Options) excluded(taskType string) bool {
@@ -102,17 +114,13 @@ func WithMonitor(task *asynq.Task, slug, spec string, options Options) *asynq.Ta
 		debuglog.Printf("sentryasynq: task %q has options, so it cannot be monitored; pass them to Register instead", task.Type())
 		return task
 	}
-	loc := options.Location
-	if loc == nil {
-		loc = time.UTC
-	}
 	headers := maps.Clone(task.Headers())
 	if headers == nil {
 		headers = make(map[string]string)
 	}
 	headers[slugHeader] = slug
 	delete(headers, configHeader)
-	if config := cronspec.MonitorConfig(spec, loc, options.MonitorConfig); config != nil {
+	if config := cronspec.MonitorConfig(spec, options.location(), options.MonitorConfig); config != nil {
 		if b, err := json.Marshal(config); err == nil {
 			headers[configHeader] = string(b)
 		}
