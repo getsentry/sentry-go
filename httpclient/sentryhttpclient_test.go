@@ -91,11 +91,11 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.request.method":          string("GET"),
-					"http.response.status_code":    int(200),
-					"http.response_content_length": int64(0),
-					"server.address":               string("example.com"),
-					"server.port":                  string(""),
+					"http.request.method":       string("GET"),
+					"http.response.status_code": int(200),
+					"http.response.body.size":   int64(0),
+					"server.address":            string("example.com"),
+					"server.port":               string(""),
 				},
 				Description: "GET https://example.com/foo",
 				Op:          "http.client",
@@ -112,12 +112,12 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.query":                   string("?baz=123"),
-					"http.request.method":          string("GET"),
-					"http.response.status_code":    int(200),
-					"http.response_content_length": int64(0),
-					"server.address":               string("example.com"),
-					"server.port":                  string("443"),
+					"http.query":                string("?baz=123"),
+					"http.request.method":       string("GET"),
+					"http.response.status_code": int(200),
+					"http.response.body.size":   int64(0),
+					"server.address":            string("example.com"),
+					"server.port":               string("443"),
 				},
 				Description: "GET https://example.com:443/foo/bar",
 				Op:          "http.client",
@@ -134,12 +134,12 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.query":                   string("?bar=123&abc=def"),
-					"http.request.method":          string("HEAD"),
-					"http.response.status_code":    int(400),
-					"http.response_content_length": int64(0),
-					"server.address":               string("example.com"),
-					"server.port":                  string("8443"),
+					"http.query":                string("?bar=123&abc=def"),
+					"http.request.method":       string("HEAD"),
+					"http.response.status_code": int(400),
+					"http.response.body.size":   int64(0),
+					"server.address":            string("example.com"),
+					"server.port":               string("8443"),
 				},
 				Description: "HEAD https://example.com:8443/foo",
 				Op:          "http.client",
@@ -158,7 +158,7 @@ func TestIntegration(t *testing.T) {
 					"http.request.method":               string("POST"),
 					"http.request.header.authorization": string("[Filtered]"),
 					"http.response.status_code":         int(200),
-					"http.response_content_length":      int64(1024),
+					"http.response.body.size":           int64(1024),
 					"server.address":                    string("example.com"),
 					"server.port":                       string("4321"),
 				},
@@ -192,11 +192,11 @@ func TestIntegration(t *testing.T) {
 			WantError:     false,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.request.method":          string("OPTIONS"),
-					"http.response.status_code":    int(0),
-					"http.response_content_length": int64(0),
-					"server.address":               string("example.com"),
-					"server.port":                  string(""),
+					"http.request.method":       string("OPTIONS"),
+					"http.response.status_code": int(0),
+					"http.response.body.size":   int64(0),
+					"server.address":            string("example.com"),
+					"server.port":               string(""),
 				},
 				Description: "OPTIONS https://example.com",
 				Op:          "http.client",
@@ -213,12 +213,12 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.query":                   string("?baz=123"),
-					"http.request.method":          string("GET"),
-					"http.response.status_code":    int(200),
-					"http.response_content_length": int64(0),
-					"server.address":               string("example.com"),
-					"server.port":                  string(""),
+					"http.query":                string("?baz=123"),
+					"http.request.method":       string("GET"),
+					"http.response.status_code": int(200),
+					"http.response.body.size":   int64(0),
+					"server.address":            string("example.com"),
+					"server.port":               string(""),
 				},
 				Description: "GET https://example.com/foo/bar",
 				Op:          "http.client",
@@ -235,12 +235,12 @@ func TestIntegration(t *testing.T) {
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
 				Data: map[string]interface{}{
-					"http.query":                   "?baz=123",
-					"http.request.method":          "GET",
-					"http.response.status_code":    200,
-					"http.response_content_length": int64(0),
-					"server.address":               "example.net",
-					"server.port":                  "",
+					"http.query":                "?baz=123",
+					"http.request.method":       "GET",
+					"http.response.status_code": 200,
+					"http.response.body.size":   int64(0),
+					"server.address":            "example.net",
+					"server.port":               "",
 				},
 				Description: "GET https://example.net/foo/bar",
 				Op:          "http.client",
@@ -362,11 +362,12 @@ func (b *bodyRoundTripper) RoundTrip(request *http.Request) (*http.Response, err
 	for k, v := range b.responseHeaders {
 		header.Set(k, v)
 	}
+	// Unknown length, as for chunked or transparently decompressed responses.
 	return &http.Response{
 		StatusCode:    http.StatusOK,
 		Header:        header,
 		Body:          io.NopCloser(strings.NewReader(b.responseBody)),
-		ContentLength: int64(len(b.responseBody)),
+		ContentLength: -1,
 		Request:       request,
 	}, nil
 }
@@ -389,7 +390,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 				"http.response.header.content-type": "application/json",
 				"http.response.header.set-cookie":   "session=[Filtered]; theme=dark",
 			},
-			wantAbsent: []string{"http.response.body"},
+			wantAbsent: []string{"http.response.body", "http.response.body.size"},
 		},
 		{
 			name: "bodies disabled keeps headers but drops bodies",
@@ -658,7 +659,7 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 		Data: map[string]interface{}{
 			"http.request.method":                 string("POST"),
 			"http.response.status_code":           int(200),
-			"http.response_content_length":        int64(48),
+			"http.response.body.size":             int64(48),
 			"http.response.header.content-length": string("48"),
 			"server.address":                      string("example.com"),
 			"server.port":                         string(""),
@@ -905,7 +906,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 				"http.query":                          "?page=1&token=[Filtered]",
 				"http.request.method":                 "GET",
 				"http.response.status_code":           200,
-				"http.response_content_length":        int64(0),
+				"http.response.body.size":             int64(0),
 				"http.response.header.content-length": "0",
 				"server.address":                      "example.com",
 				"server.port":                         "",
@@ -921,7 +922,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 			wantData: map[string]interface{}{
 				"http.request.method":                 "GET",
 				"http.response.status_code":           200,
-				"http.response_content_length":        int64(0),
+				"http.response.body.size":             int64(0),
 				"http.response.header.content-length": "0",
 				"server.address":                      "example.com",
 				"server.port":                         "",
