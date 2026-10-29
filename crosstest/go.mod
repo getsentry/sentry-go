@@ -37,7 +37,7 @@ require (
 	github.com/gofiber/fiber/v3 v3.3.0
 	github.com/google/go-cmp v0.7.0
 	github.com/kataras/iris/v12 v12.2.0
-	github.com/labstack/echo/v5 v5.2.0
+	github.com/labstack/echo/v5 v5.4.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/negroni/v3 v3.1.1
 	github.com/valyala/fasthttp v1.71.0
@@ -113,7 +113,7 @@ require (
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
-	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
