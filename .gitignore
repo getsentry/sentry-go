@@ -4,6 +4,9 @@ coverage.out
 coverage.html
 .coverage/
 
+# Go workspace checksums
+go.work.sum
+
 # Just my personal way of tracking stuff — Kamil
 FIXME.md
 TODO.md
