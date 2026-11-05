@@ -23,7 +23,7 @@ type Scheduler struct {
 	recorder  report.ClientReportRecorder
 	provider  report.ClientReportProvider
 
-	currentCycle []ratelimit.Priority
+	currentCycle []Priority
 	cyclePos     int
 
 	ctx          context.Context
@@ -57,15 +57,15 @@ func NewScheduler(
 
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118: cancel is stored in s.cancel and called in Shutdown()
 
-	priorityWeights := map[ratelimit.Priority]int{
-		ratelimit.PriorityCritical: 5,
-		ratelimit.PriorityHigh:     4,
-		ratelimit.PriorityMedium:   3,
-		ratelimit.PriorityLow:      2,
-		ratelimit.PriorityLowest:   1,
+	priorityWeights := map[Priority]int{
+		PriorityCritical: 5,
+		PriorityHigh:     4,
+		PriorityMedium:   3,
+		PriorityLow:      2,
+		PriorityLowest:   1,
 	}
 
-	var currentCycle []ratelimit.Priority
+	var currentCycle []Priority
 	for priority, weight := range priorityWeights {
 		hasBuffers := false
 		for _, buffer := range buffers {
