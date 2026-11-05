@@ -45,7 +45,7 @@ const (
 // that is sent to Sentry when the root span is finished.
 //
 // Spans must be started with either StartSpan or Span.StartChild.
-type Span struct { //nolint: maligned // prefer readability over optimal memory layout (see note below *)
+type Span struct {
 	TraceID      TraceID           `json:"trace_id"`
 	SpanID       SpanID            `json:"span_id"`
 	ParentSpanID SpanID            `json:"parent_span_id,omitzero"`
@@ -100,15 +100,6 @@ type TraceParentContext struct {
 	ParentSpanID SpanID
 	Sampled      Sampled
 }
-
-// (*) Note on maligned:
-//
-// We prefer readability over optimal memory layout. If we ever decide to
-// reorder fields, we can use a tool:
-//
-// go run honnef.co/go/tools/cmd/structlayout -json . Span | go run honnef.co/go/tools/cmd/structlayout-optimize
-//
-// Other structs would deserve reordering as well, for example Event.
 
 // TODO: make Span.Tags and Span.Data opaque types (struct{unexported []slice}).
 // An opaque type allows us to add methods and make it more convenient to use

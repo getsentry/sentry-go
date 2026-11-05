@@ -60,7 +60,6 @@ func testEnvelope(itemType protocol.EnvelopeItemType) *protocol.Envelope {
 	}
 }
 
-// nolint:gocyclo
 func TestHTTPTransport_SendEnvelope(t *testing.T) {
 	t.Run("invalid DSN", func(t *testing.T) {
 		transport := NewHTTPTransport()

@@ -14,7 +14,6 @@ type ctxStmt struct {
 func (s *ctxStmt) Close() error  { return nil }
 func (s *ctxStmt) NumInput() int { return -1 }
 
-//nolint:staticcheck // required method on driver.Stmt.
 func (s *ctxStmt) Exec(_ []driver.Value) (driver.Result, error) {
 	if s.drv.fail != nil {
 		return nil, s.drv.fail
@@ -22,7 +21,6 @@ func (s *ctxStmt) Exec(_ []driver.Value) (driver.Result, error) {
 	return fakeResult{}, nil
 }
 
-//nolint:staticcheck // required method on driver.Stmt.
 func (s *ctxStmt) Query(_ []driver.Value) (driver.Rows, error) {
 	if s.drv.fail != nil {
 		return nil, s.drv.fail
@@ -54,7 +52,6 @@ type legacyStmt struct {
 func (s *legacyStmt) Close() error  { return nil }
 func (s *legacyStmt) NumInput() int { return -1 }
 
-//nolint:staticcheck // required method on driver.Stmt.
 func (s *legacyStmt) Exec(_ []driver.Value) (driver.Result, error) {
 	if s.drv.fail != nil {
 		return nil, s.drv.fail
@@ -62,7 +59,6 @@ func (s *legacyStmt) Exec(_ []driver.Value) (driver.Result, error) {
 	return fakeResult{}, nil
 }
 
-//nolint:staticcheck // required method on driver.Stmt.
 func (s *legacyStmt) Query(_ []driver.Value) (driver.Rows, error) {
 	if s.drv.fail != nil {
 		return nil, s.drv.fail
@@ -82,7 +78,6 @@ type minimalStmt struct {
 func (s *minimalStmt) Close() error  { return nil }
 func (s *minimalStmt) NumInput() int { return -1 }
 
-//nolint:staticcheck // required method on driver.Stmt.
 func (s *minimalStmt) Exec(_ []driver.Value) (driver.Result, error) {
 	if s.drv.fail != nil {
 		return nil, s.drv.fail
@@ -90,7 +85,6 @@ func (s *minimalStmt) Exec(_ []driver.Value) (driver.Result, error) {
 	return fakeResult{}, nil
 }
 
-//nolint:staticcheck // required method on driver.Stmt.
 func (s *minimalStmt) Query(_ []driver.Value) (driver.Rows, error) {
 	if s.drv.fail != nil {
 		return nil, s.drv.fail
@@ -107,12 +101,10 @@ type skipStmt struct {
 func (s *skipStmt) Close() error  { return nil }
 func (s *skipStmt) NumInput() int { return -1 }
 
-//nolint:staticcheck // required method on driver.Stmt.
 func (s *skipStmt) Exec(_ []driver.Value) (driver.Result, error) {
 	return fakeResult{}, nil
 }
 
-//nolint:staticcheck // required method on driver.Stmt.
 func (s *skipStmt) Query(_ []driver.Value) (driver.Rows, error) {
 	return &fakeRows{}, nil
 }
