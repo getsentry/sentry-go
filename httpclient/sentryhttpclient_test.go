@@ -153,7 +153,7 @@ func TestIntegration(t *testing.T) {
 			RequestURL:         "https://john:verysecurepassword@example.com:4321/secret",
 			WantStatus:         200,
 			WantResponseLength: 1024,
-			WantSpan: &sentry.Span{ //nolint:gosec // G101: not real credentials
+			WantSpan: &sentry.Span{
 				Data: map[string]any{
 					"http.request.method":               string("POST"),
 					"http.request.header.authorization": string("[Filtered]"),
