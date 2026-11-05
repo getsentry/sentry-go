@@ -4,6 +4,7 @@ package sentryzap
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -94,12 +95,7 @@ func Context(ctx context.Context) zapcore.Field {
 
 // Enabled returns true if the given level is in the configured Level list.
 func (c *SentryCore) Enabled(level zapcore.Level) bool {
-	for _, l := range c.option.Level {
-		if l == level {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.option.Level, level)
 }
 
 // With returns a new Core with the given fields added to the context.

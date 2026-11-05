@@ -146,8 +146,7 @@ func TestNewDsnInvalidInput(t *testing.T) {
 			if err == nil {
 				t.Fatalf("got nil, want error with %q", tt.err)
 			}
-			var dsnParseError *DsnParseError
-			if !errors.As(err, &dsnParseError) {
+			if _, ok := errors.AsType[*DsnParseError](err); !ok {
 				t.Errorf("got %T, want %T", err, (*DsnParseError)(nil))
 			}
 			if !strings.Contains(err.Error(), tt.err) {

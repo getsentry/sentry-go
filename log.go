@@ -63,7 +63,7 @@ func (l *sentryLogger) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, message string, entryAttrs map[string]attribute.Value, format bool, args ...interface{}) {
+func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, message string, entryAttrs map[string]attribute.Value, format bool, args ...any) {
 	if (format && message == "") || (!format && len(args) == 0) {
 		return
 	}
@@ -94,14 +94,10 @@ func (l *sentryLogger) log(ctx context.Context, level LogLevel, severity int, me
 		scope,
 		len(l.attributes)+len(entryAttrs)+parameterAttributes,
 	)
-	for k, v := range l.attributes {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, l.attributes)
 	l.mu.RUnlock()
 
-	for k, v := range entryAttrs {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, entryAttrs)
 
 	if format && len(args) > 0 {
 		attrs["sentry.message.template"] = attribute.StringValue(message)
@@ -292,7 +288,7 @@ func (e *logEntry) Uint64(key string, value uint64) LogEntry {
 	return e
 }
 
-func (e *logEntry) Emit(args ...interface{}) {
+func (e *logEntry) Emit(args ...any) {
 	e.logger.log(e.ctx, e.level, e.severity, "", e.attributes, false, args...)
 
 	if e.level == LogLevelFatal {
@@ -305,7 +301,7 @@ func (e *logEntry) Emit(args ...interface{}) {
 	}
 }
 
-func (e *logEntry) Emitf(format string, args ...interface{}) {
+func (e *logEntry) Emitf(format string, args ...any) {
 	e.logger.log(e.ctx, e.level, e.severity, format, e.attributes, true, args...)
 
 	if e.level == LogLevelFatal {

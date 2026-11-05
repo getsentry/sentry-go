@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
 	"runtime"
@@ -231,9 +232,7 @@ func (ti *globalTagsIntegration) Name() string {
 
 func (ti *globalTagsIntegration) SetupOnce(client *Client) {
 	ti.tags = make(map[string]string, len(client.options.Tags))
-	for k, v := range client.options.Tags {
-		ti.tags[k] = v
-	}
+	maps.Copy(ti.tags, client.options.Tags)
 
 	ti.envTags = loadEnvTags()
 

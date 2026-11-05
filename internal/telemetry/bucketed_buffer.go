@@ -70,10 +70,7 @@ func NewBucketedBuffer[T any](
 		timeout = 0
 	}
 
-	bucketCapacity := capacity / 10
-	if bucketCapacity < 10 {
-		bucketCapacity = 10
-	}
+	bucketCapacity := max(capacity/10, 10)
 
 	return &BucketedBuffer[T]{
 		buckets:        make([]*Bucket[T], bucketCapacity),
@@ -236,10 +233,7 @@ func (b *BucketedBuffer[T]) PollBatch(maxItems int) []T {
 		if bucket == nil {
 			break
 		}
-		n := maxItems - len(res)
-		if n > len(bucket.items) {
-			n = len(bucket.items)
-		}
+		n := min(maxItems-len(res), len(bucket.items))
 		res = append(res, bucket.items[:n]...)
 		bucket.items = bucket.items[n:]
 		b.totalItems -= n

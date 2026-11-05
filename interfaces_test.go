@@ -655,7 +655,7 @@ func TestMechanismMarshalJSON(t *testing.T) {
 		Type:        "some type",
 		Description: "some description",
 		HelpLink:    "some help link",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"some data":         "some value",
 			"some numeric data": 12345,
 		},
@@ -679,7 +679,7 @@ func TestMechanismMarshalJSON_withHandled(t *testing.T) {
 		Type:        "some type",
 		Description: "some description",
 		HelpLink:    "some help link",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"some data":         "some value",
 			"some numeric data": 12345,
 		},
@@ -713,7 +713,7 @@ func TestStructSnapshots(t *testing.T) {
 		StartTime: time.Unix(0, 0).UTC(),
 		EndTime:   time.Unix(5, 0).UTC(),
 		Status:    SpanStatusOK,
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"related_ids":  []uint{12312342, 76572, 4123485},
 			"aws_instance": "ca-central-1",
 		},
@@ -721,7 +721,7 @@ func TestStructSnapshots(t *testing.T) {
 
 	testCases := []struct {
 		testName     string
-		sentryStruct interface{}
+		sentryStruct any
 	}{
 		{
 			testName:     "span",
@@ -751,7 +751,7 @@ func TestStructSnapshots(t *testing.T) {
 				Transaction: "mytransaction",
 				User:        User{ID: "foo"},
 				Breadcrumbs: []*Breadcrumb{{
-					Data: map[string]interface{}{
+					Data: map[string]any{
 						"data_key": "data_val",
 					},
 				}},
@@ -783,7 +783,6 @@ func TestStructSnapshots(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		test := test
 		t.Run(test.testName, func(t *testing.T) {
 			got, err := json.MarshalIndent(test.sentryStruct, "", "    ")
 			if err != nil {
@@ -839,7 +838,7 @@ func TestEvent_ToEnvelopeItem_ErrorOnMarshalFailure(t *testing.T) {
 		Exception: []Exception{{
 			Stacktrace: &Stacktrace{
 				Frames: []Frame{{
-					Vars: map[string]interface{}{
+					Vars: map[string]any{
 						"bad": func() string { return "test" },
 					},
 				}},
@@ -864,7 +863,7 @@ func TestEvent_ToEnvelopeItem_RecoverFromPanic(t *testing.T) {
 		Exception: []Exception{{
 			Stacktrace: &Stacktrace{
 				Frames: []Frame{{
-					Vars: map[string]interface{}{
+					Vars: map[string]any{
 						// json.Marshal will error on a channel value.
 						"bad": make(chan int),
 					},
@@ -1005,7 +1004,7 @@ func TestMetric_MarshalJSON(t *testing.T) {
 				t.Fatalf("MarshalJSON() error = %v", err)
 			}
 
-			var result map[string]interface{}
+			var result map[string]any
 			if err := json.Unmarshal(jsonData, &result); err != nil {
 				t.Fatalf("Failed to unmarshal result: %v", err)
 			}
@@ -1051,7 +1050,7 @@ func TestMakeSerializationSafe(t *testing.T) {
 	t.Run("pre-serializes Breadcrumbs", func(t *testing.T) {
 		event := &Event{
 			Breadcrumbs: []*Breadcrumb{
-				{Message: "test", Data: map[string]interface{}{"key": "value"}},
+				{Message: "test", Data: map[string]any{"key": "value"}},
 			},
 		}
 		event.MakeSerializationSafe()
@@ -1091,11 +1090,11 @@ func TestMakeSerializationSafe(t *testing.T) {
 			t.Fatal("serializedUser should be set")
 		}
 
-		var got map[string]interface{}
+		var got map[string]any
 		if err := json.Unmarshal(event.serializedUser, &got); err != nil {
 			t.Fatalf("invalid serializedUser JSON: %v", err)
 		}
-		gotData, _ := got["data"].(map[string]interface{})
+		gotData, _ := got["data"].(map[string]any)
 		if gotData["role"] != "admin" {
 			t.Errorf("expected role=admin, got %v", gotData["role"])
 		}
@@ -1116,12 +1115,12 @@ func TestMakeSerializationSafe(t *testing.T) {
 			t.Fatalf("marshal failed: %v", err)
 		}
 
-		var got map[string]interface{}
+		var got map[string]any
 		if err := json.Unmarshal(jsonData, &got); err != nil {
 			t.Fatalf("unmarshal failed: %v", err)
 		}
 
-		user, ok := got["user"].(map[string]interface{})
+		user, ok := got["user"].(map[string]any)
 		if !ok {
 			t.Fatalf("expected user field in JSON, got %s", jsonData)
 		}
@@ -1156,12 +1155,12 @@ func TestMakeSerializationSafe(t *testing.T) {
 			t.Fatalf("marshal failed: %v", err)
 		}
 
-		var got map[string]interface{}
+		var got map[string]any
 		if err := json.Unmarshal(jsonData, &got); err != nil {
 			t.Fatalf("unmarshal failed: %v", err)
 		}
 
-		spans, ok := got["spans"].([]interface{})
+		spans, ok := got["spans"].([]any)
 		if !ok || len(spans) != 1 {
 			t.Fatalf("expected one span in JSON, got %s", jsonData)
 		}
@@ -1180,7 +1179,7 @@ func TestMakeSerializationSafe(t *testing.T) {
 				"os": {"name": "linux", "version": "5.4"},
 			},
 			Breadcrumbs: []*Breadcrumb{
-				{Message: "clicked", Data: map[string]interface{}{"target": "button"}},
+				{Message: "clicked", Data: map[string]any{"target": "button"}},
 			},
 			Exception: []Exception{
 				{Type: "RuntimeError", Value: "oops"},
@@ -1205,7 +1204,7 @@ func TestMakeSerializationSafe(t *testing.T) {
 				"os": {"name": "linux", "version": "5.4"},
 			},
 			Breadcrumbs: []*Breadcrumb{
-				{Message: "clicked", Data: map[string]interface{}{"target": "button"}},
+				{Message: "clicked", Data: map[string]any{"target": "button"}},
 			},
 			Exception: []Exception{
 				{Type: "RuntimeError", Value: "oops"},
@@ -1219,7 +1218,7 @@ func TestMakeSerializationSafe(t *testing.T) {
 			t.Fatalf("safe marshal failed: %v", err)
 		}
 
-		var originalMap, safeMap map[string]interface{}
+		var originalMap, safeMap map[string]any
 		if err := json.Unmarshal(originalJSON, &originalMap); err != nil {
 			t.Fatalf("unmarshal original: %v", err)
 		}
@@ -1239,11 +1238,11 @@ func TestMakeSerializationSafe(t *testing.T) {
 func TestMakeSerializationSafe_ConcurrentAccess(t *testing.T) {
 	ctx := Context{
 		"info": "context_value",
-		"nested": map[string]interface{}{
+		"nested": map[string]any{
 			"inner": "data",
 		},
 	}
-	bcData := map[string]interface{}{"bc_key": "bc_value"}
+	bcData := map[string]any{"bc_key": "bc_value"}
 
 	event := &Event{
 		Contexts: map[string]Context{"ctx": ctx},
@@ -1286,7 +1285,7 @@ func TestMakeSerializationSafe_PreventsIndexOutOfRange(t *testing.T) {
 	for i := range n {
 		breadcrumbs[i] = &Breadcrumb{
 			Message: fmt.Sprintf("crumb-%d", i),
-			Data:    map[string]interface{}{"i": i},
+			Data:    map[string]any{"i": i},
 		}
 	}
 
@@ -1351,7 +1350,7 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 	contexts := map[string]Context{
 		"app": {"version": "1.0"},
 	}
-	bcData := map[string]interface{}{"target": "button"}
+	bcData := map[string]any{"target": "button"}
 	mechData := map[string]any{"errno": float64(42)}
 
 	event := &Event{
@@ -1399,12 +1398,12 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 	}
 
 	payload := envelopes[0].Items[0].Payload
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(payload, &body); err != nil {
 		t.Fatalf("invalid JSON payload: %v", err)
 	}
 
-	gotTags, _ := body["tags"].(map[string]interface{})
+	gotTags, _ := body["tags"].(map[string]any)
 	if gotTags["request_id"] != "original-123" {
 		t.Errorf("tags.request_id = %v, want original-123", gotTags["request_id"])
 	}
@@ -1414,30 +1413,30 @@ func TestProcessor_MutationAfterAdd(t *testing.T) {
 	if gotTags["nested"] != "map[deep:value]" {
 		t.Errorf("tags.nested = %v, want map[deep:value]", gotTags["nested"])
 	}
-	gotContexts, _ := body["contexts"].(map[string]interface{})
-	gotApp, _ := gotContexts["app"].(map[string]interface{})
+	gotContexts, _ := body["contexts"].(map[string]any)
+	gotApp, _ := gotContexts["app"].(map[string]any)
 	if gotApp["version"] != "1.0" {
 		t.Errorf("contexts.app.version = %v, want 1.0", gotApp["version"])
 	}
-	gotBreadcrumbs, _ := body["breadcrumbs"].([]interface{})
+	gotBreadcrumbs, _ := body["breadcrumbs"].([]any)
 	if len(gotBreadcrumbs) > 0 {
-		bc0, _ := gotBreadcrumbs[0].(map[string]interface{})
-		bcDataGot, _ := bc0["data"].(map[string]interface{})
+		bc0, _ := gotBreadcrumbs[0].(map[string]any)
+		bcDataGot, _ := bc0["data"].(map[string]any)
 		if bcDataGot["target"] != "button" {
 			t.Errorf("breadcrumb.data.target = %v, want button", bcDataGot["target"])
 		}
 	}
-	gotExceptions, _ := body["exception"].([]interface{})
+	gotExceptions, _ := body["exception"].([]any)
 	if len(gotExceptions) > 0 {
-		exc0, _ := gotExceptions[0].(map[string]interface{})
-		mech, _ := exc0["mechanism"].(map[string]interface{})
-		mechDataGot, _ := mech["data"].(map[string]interface{})
+		exc0, _ := gotExceptions[0].(map[string]any)
+		mech, _ := exc0["mechanism"].(map[string]any)
+		mechDataGot, _ := mech["data"].(map[string]any)
 		if mechDataGot["errno"] != float64(42) {
 			t.Errorf("mechanism.data.errno = %v, want 42", mechDataGot["errno"])
 		}
 	}
-	gotUser, _ := body["user"].(map[string]interface{})
-	gotUserData, _ := gotUser["data"].(map[string]interface{})
+	gotUser, _ := body["user"].(map[string]any)
+	gotUserData, _ := gotUser["data"].(map[string]any)
 	if gotUserData["role"] != "admin" {
 		t.Errorf("user.data.role = %v, want admin", gotUserData["role"])
 	}

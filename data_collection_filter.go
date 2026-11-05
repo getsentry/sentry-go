@@ -3,6 +3,7 @@ package sentry
 import (
 	"encoding/json"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -79,12 +80,7 @@ func (dc *DataCollection) CollectHTTPBody(bt BodyType) bool {
 	if dc == nil || dc.HTTPBodies == nil {
 		return true
 	}
-	for _, t := range dc.HTTPBodies {
-		if t == bt {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(dc.HTTPBodies, bt)
 }
 
 // CollectCookies reports whether cookies should be collected.
@@ -317,7 +313,7 @@ func matchesDenyTerms(key string, terms []string) bool {
 func parseKeyValueStrings(values []string, separator rune) map[string]string {
 	result := make(map[string]string)
 	for _, value := range values {
-		for _, part := range strings.Split(value, string(separator)) {
+		for part := range strings.SplitSeq(value, string(separator)) {
 			part = strings.TrimSpace(part)
 			if part == "" {
 				continue

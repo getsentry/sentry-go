@@ -24,8 +24,8 @@ func (p PropagationContext) clone() PropagationContext {
 	return p
 }
 
-func (p PropagationContext) Map() map[string]interface{} {
-	m := map[string]interface{}{
+func (p PropagationContext) Map() map[string]any {
+	m := map[string]any{
 		traceIDContextKey: p.TraceID,
 		spanIDContextKey:  p.SpanID,
 	}
