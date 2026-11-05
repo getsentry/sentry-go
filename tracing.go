@@ -523,8 +523,8 @@ func (s *Span) doFinish() {
 
 	if !s.Sampled.Bool() {
 		children := s.recorder.children()
-		client.reportRecorder.RecordOne(report.ReasonSampleRate, ratelimit.CategoryTransaction)
-		client.reportRecorder.Record(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
+		client.reports.Record(report.ReasonSampleRate, ratelimit.CategoryTransaction, 1)
+		client.reports.Record(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
 		return
 	}
 	event := s.toEvent()
