@@ -49,7 +49,7 @@ func repeatedSample(sampler TracesSampler, ctx SamplingContext, count int) (obse
 	var n float64
 	for range count {
 		sampleRate := sampler.Sample(ctx)
-		if rng.Float64() < sampleRate {
+		if sample(sampleRate) {
 			n++
 		}
 	}

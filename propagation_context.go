@@ -40,13 +40,9 @@ func (p PropagationContext) Map() map[string]any {
 func NewPropagationContext() PropagationContext {
 	p := PropagationContext{}
 
-	if _, err := rand.Read(p.TraceID[:]); err != nil {
-		panic(err)
-	}
+	rand.Read(p.TraceID[:])
 
-	if _, err := rand.Read(p.SpanID[:]); err != nil {
-		panic(err)
-	}
+	rand.Read(p.SpanID[:])
 
 	return p
 }

@@ -132,10 +132,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		parent: parent,
 	}
 
-	_, err := rand.Read(span.SpanID[:])
-	if err != nil {
-		panic(err)
-	}
+	rand.Read(span.SpanID[:])
 
 	if hasParent {
 		span.TraceID = parent.TraceID
@@ -176,10 +173,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		// [3b]: https://github.com/golang/go/issues/11871#issuecomment-126357889
 		// [4a]: https://en.wikipedia.org/wiki/Universally_unique_identifier#Collisions
 		// [4b]: https://www.wolframalpha.com/input/?i=sqrt%282*2%5E64*ln%281%2F%281-0.5%29%29%29
-		_, err := rand.Read(span.TraceID[:])
-		if err != nil {
-			panic(err)
-		}
+		rand.Read(span.TraceID[:])
 		if scope := ScopeFromContext(ctx); scope != nil && scope != GlobalScope() {
 			// Only a trace continued from upstream is joined; otherwise the root is the head.
 			if propagation := scope.propagationContextSnapshot(); propagation.ParentSpanID != zeroSpanID {
@@ -629,7 +623,7 @@ func (s *Span) sample(client *Client) Sampled {
 			return SampledFalse
 		}
 
-		if rng.Float64() < tracesSamplerSampleRate {
+		if sample(tracesSamplerSampleRate) {
 			return SampledTrue
 		}
 		debuglog.Printf("Dropping transaction: TracesSampler returned rate: %f", tracesSamplerSampleRate)
@@ -662,7 +656,7 @@ func (s *Span) sample(client *Client) Sampled {
 		return SampledFalse
 	}
 
-	if rng.Float64() < sampleRate {
+	if sample(sampleRate) {
 		return SampledTrue
 	}
 

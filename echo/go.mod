@@ -10,7 +10,4 @@ require (
 	github.com/labstack/echo/v5 v5.4.1
 )
 
-require (
-	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
-)
+require golang.org/x/net v0.60.0 // indirect
