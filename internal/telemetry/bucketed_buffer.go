@@ -40,7 +40,7 @@ type BucketedBuffer[T any] struct {
 	category       ratelimit.Category
 	priority       Priority
 	overflowPolicy OverflowPolicy
-	recorder       report.ClientReportRecorder
+	recorder       *report.Aggregator
 	batchSize      int
 	timeout        time.Duration
 	lastFlushTime  time.Time
@@ -58,7 +58,7 @@ func NewBucketedBuffer[T any](
 	overflowPolicy OverflowPolicy,
 	batchSize int,
 	timeout time.Duration,
-	recorder report.ClientReportRecorder,
+	recorder *report.Aggregator,
 ) *BucketedBuffer[T] {
 	if capacity <= 0 {
 		capacity = defaultBucketedCapacity
@@ -68,10 +68,6 @@ func NewBucketedBuffer[T any](
 	}
 	if timeout < 0 {
 		timeout = 0
-	}
-
-	if recorder == nil {
-		recorder = report.NoopRecorder()
 	}
 
 	bucketCapacity := capacity / 10
@@ -413,8 +409,8 @@ func (b *BucketedBuffer[T]) MarkFlushed() {
 
 func (b *BucketedBuffer[T]) recordDroppedItem(item T) {
 	if ti, ok := any(item).(Item); ok {
-		b.recorder.RecordItem(report.ReasonBufferOverflow, ti)
+		ti.DiscardCounts().Record(b.recorder, report.ReasonBufferOverflow)
 	} else {
-		b.recorder.RecordOne(report.ReasonBufferOverflow, b.category)
+		b.recorder.Record(report.ReasonBufferOverflow, b.category, 1)
 	}
 }
