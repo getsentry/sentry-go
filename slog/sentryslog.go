@@ -3,6 +3,7 @@ package sentryslog
 import (
 	"context"
 	"log/slog"
+	"slices"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
@@ -116,12 +117,7 @@ type logHandler struct {
 }
 
 func (h *logHandler) Enabled(_ context.Context, level slog.Level) bool {
-	for _, logLevel := range h.option.LogLevel {
-		if level == logLevel {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(h.option.LogLevel, level)
 }
 
 func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {

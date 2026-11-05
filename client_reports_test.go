@@ -177,7 +177,7 @@ func TestClientReports_Integration(t *testing.T) {
 				mu.Lock()
 				defer mu.Unlock()
 				for _, body := range receivedBodies {
-					for _, line := range bytes.Split(body, []byte("\n")) {
+					for line := range bytes.SplitSeq(body, []byte("\n")) {
 						var candidate report.ClientReport
 						if json.Unmarshal(line, &candidate) == nil && len(candidate.DiscardedEvents) > 0 {
 							got = candidate

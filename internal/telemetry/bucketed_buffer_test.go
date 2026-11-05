@@ -147,7 +147,7 @@ func TestBucketedBufferMetrics(t *testing.T) {
 	if b.OfferedCount() != 0 || b.DroppedCount() != 0 {
 		t.Fatalf("initial metrics not zero")
 	}
-	for i := 0; i < 12; i++ { // exceed capacity to force drops
+	for i := range 12 { // exceed capacity to force drops
 		b.Offer(tbItem{id: i})
 	}
 	if b.OfferedCount() != 12 {
@@ -240,10 +240,10 @@ func TestBucketedBufferConcurrency(t *testing.T) {
 	const per = 50
 	var wg sync.WaitGroup
 	wg.Add(producers)
-	for p := 0; p < producers; p++ {
+	for p := range producers {
 		go func(pid int) {
 			defer wg.Done()
-			for j := 0; j < per; j++ {
+			for j := range per {
 				b.Offer(tbItem{id: pid*per + j})
 			}
 		}(p)

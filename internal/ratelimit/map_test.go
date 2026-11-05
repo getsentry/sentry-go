@@ -92,7 +92,6 @@ func TestFromResponse(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got := fromResponse(tt.response, now)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
@@ -188,7 +187,6 @@ func TestMapDeadlineIsRateLimited(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			for c, want := range tt.want {
 				got := tt.m.Deadline(c)
@@ -258,7 +256,6 @@ func TestMapMerge(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			tt.old.Merge(tt.new)
 			if diff := cmp.Diff(tt.want, tt.old); diff != "" {

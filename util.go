@@ -30,7 +30,7 @@ func monotonicTimeSince(start time.Time) (end time.Time) {
 }
 
 // nolint: unused
-func prettyPrint(data interface{}) {
+func prettyPrint(data any) {
 	dbg, _ := json.MarshalIndent(data, "", "  ")
 	fmt.Println(string(dbg))
 }

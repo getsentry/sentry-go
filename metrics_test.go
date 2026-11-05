@@ -335,7 +335,7 @@ func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
 func Test_Meter_ExceedBatchSize(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 	meter := NewMeter(ctx)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		meter.Count("test.count", 1)
 	}
 
@@ -349,7 +349,7 @@ func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 	meter := NewMeter(ctx)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		meter.Count("test.count", 1)
 	}
 
@@ -365,7 +365,7 @@ func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
 
 	mockTransport.events = nil
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		meter.Count("test.count", 1)
 	}
 
@@ -396,7 +396,7 @@ func Test_batchMeter_Shutdown(t *testing.T) {
 	ctx, _ := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, mockClient)
 	meter := NewMeter(ctx)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		meter.Count("test.count", 1)
 	}
 

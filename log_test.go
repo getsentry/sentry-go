@@ -659,7 +659,7 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		l.Info().Emit("test")
 	}
 
@@ -679,7 +679,7 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 
 	mockTransport.events = nil
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		l.Info().Emit("test")
 	}
 
@@ -710,7 +710,7 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 	ctx, _ := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, mockClient)
 	l := NewLogger(ctx)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		l.Info().WithCtx(ctx).Emit("test")
 	}
 
@@ -775,7 +775,7 @@ func Test_sentryLogger_BeforeSendLog(t *testing.T) {
 func Test_Logger_ExceedBatchSize(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		l.Info().Emit("test")
 	}
 

@@ -45,20 +45,20 @@ const (
 //
 // Spans must be started with either StartSpan or Span.StartChild.
 type Span struct { //nolint: maligned // prefer readability over optimal memory layout (see note below *)
-	TraceID      TraceID                `json:"trace_id"`
-	SpanID       SpanID                 `json:"span_id"`
-	ParentSpanID SpanID                 `json:"parent_span_id,omitzero"`
-	Name         string                 `json:"name,omitempty"`
-	Op           string                 `json:"op,omitempty"`
-	Description  string                 `json:"description,omitempty"`
-	Status       SpanStatus             `json:"status,omitempty"`
-	Tags         map[string]string      `json:"tags,omitempty"`
-	StartTime    time.Time              `json:"start_timestamp,omitzero"`
-	EndTime      time.Time              `json:"timestamp,omitzero"`
-	Data         map[string]interface{} `json:"data,omitempty"`
-	Sampled      Sampled                `json:"-"`
-	Source       TransactionSource      `json:"-"`
-	Origin       SpanOrigin             `json:"origin,omitempty"`
+	TraceID      TraceID           `json:"trace_id"`
+	SpanID       SpanID            `json:"span_id"`
+	ParentSpanID SpanID            `json:"parent_span_id,omitzero"`
+	Name         string            `json:"name,omitempty"`
+	Op           string            `json:"op,omitempty"`
+	Description  string            `json:"description,omitempty"`
+	Status       SpanStatus        `json:"status,omitempty"`
+	Tags         map[string]string `json:"tags,omitempty"`
+	StartTime    time.Time         `json:"start_timestamp,omitzero"`
+	EndTime      time.Time         `json:"timestamp,omitzero"`
+	Data         map[string]any    `json:"data,omitempty"`
+	Sampled      Sampled           `json:"-"`
+	Source       TransactionSource `json:"-"`
+	Origin       SpanOrigin        `json:"origin,omitempty"`
 
 	// mu protects concurrent writes to map fields
 	mu sync.RWMutex
@@ -307,7 +307,7 @@ func (s *Span) SetTag(name, value string) {
 // SetData sets a data on the span. It is recommended to use SetData instead of
 // accessing the data map directly as SetData takes care of initializing the map
 // when necessary.
-func (s *Span) SetData(name string, value interface{}) {
+func (s *Span) SetData(name string, value any) {
 	if value == nil {
 		return
 	}
@@ -316,7 +316,7 @@ func (s *Span) SetData(name string, value interface{}) {
 	defer s.mu.Unlock()
 
 	if s.Data == nil {
-		s.Data = make(map[string]interface{})
+		s.Data = make(map[string]any)
 	}
 	s.Data[name] = value
 }
@@ -942,17 +942,17 @@ func (ss SpanStatus) MarshalJSON() ([]byte, error) {
 // A TraceContext carries information about an ongoing trace and is meant to be
 // stored in Event.Contexts (as *TraceContext).
 type TraceContext struct {
-	TraceID      TraceID                `json:"trace_id"`
-	SpanID       SpanID                 `json:"span_id"`
-	ParentSpanID SpanID                 `json:"parent_span_id,omitzero"`
-	Op           string                 `json:"op,omitempty"`
-	Description  string                 `json:"description,omitempty"`
-	Status       SpanStatus             `json:"status,omitempty"`
-	Data         map[string]interface{} `json:"data,omitempty"`
+	TraceID      TraceID        `json:"trace_id"`
+	SpanID       SpanID         `json:"span_id"`
+	ParentSpanID SpanID         `json:"parent_span_id,omitzero"`
+	Op           string         `json:"op,omitempty"`
+	Description  string         `json:"description,omitempty"`
+	Status       SpanStatus     `json:"status,omitempty"`
+	Data         map[string]any `json:"data,omitempty"`
 }
 
-func (tc TraceContext) Map() map[string]interface{} {
-	m := map[string]interface{}{
+func (tc TraceContext) Map() map[string]any {
+	m := map[string]any{
 		traceIDContextKey: tc.TraceID,
 		spanIDContextKey:  tc.SpanID,
 	}

@@ -87,7 +87,7 @@ type uint64LogEntry interface {
 	Uint64(key string, value uint64) sentry.LogEntry
 }
 
-func logrusFieldToLogEntry(logEntry sentry.LogEntry, key string, value interface{}) sentry.LogEntry {
+func logrusFieldToLogEntry(logEntry sentry.LogEntry, key string, value any) sentry.LogEntry {
 	switch val := value.(type) {
 	case int8:
 		return logEntry.Int64(key, int64(val))
@@ -100,7 +100,7 @@ func logrusFieldToLogEntry(logEntry sentry.LogEntry, key string, value interface
 	case int:
 		return logEntry.Int64(key, int64(val))
 	case uint, uint8, uint16, uint32, uint64:
-		uval := reflect.ValueOf(val).Convert(reflect.TypeOf(uint64(0))).Uint()
+		uval := reflect.ValueOf(val).Convert(reflect.TypeFor[uint64]()).Uint()
 		if e, ok := logEntry.(uint64LogEntry); ok {
 			return e.Uint64(key, uval)
 		}

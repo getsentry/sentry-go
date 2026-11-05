@@ -348,7 +348,7 @@ func TestAddBreadcrumbAppendsBreadcrumb(t *testing.T) {
 
 func TestAddBreadcrumbDefaultLimit(t *testing.T) {
 	scope := NewScope()
-	for i := 0; i < 101; i++ {
+	for range 101 {
 		scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"}, defaultMaxBreadcrumbs)
 	}
 

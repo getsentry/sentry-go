@@ -84,11 +84,11 @@ func testConcurrentLoggerSetAttributes(_ *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for i := 0; i < loggingGoroutines/2; i++ {
+	for i := range loggingGoroutines / 2 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < loggingIterations; j++ {
+			for j := range loggingIterations {
 				attrs := []attribute.Builder{
 					attribute.String(fmt.Sprintf("attr-string-%d", id), fmt.Sprintf("value-%d-%d", id, j)),
 					attribute.Int64(fmt.Sprintf("attr-int-%d", id), int64(id*j)),
@@ -101,11 +101,11 @@ func testConcurrentLoggerSetAttributes(_ *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < loggingGoroutines/2; i++ {
+	for i := range loggingGoroutines / 2 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < loggingIterations; j++ {
+			for j := range loggingIterations {
 				logger.Info().
 					String("worker_id", fmt.Sprintf("%d", id)).
 					Int("iteration", j).
@@ -128,59 +128,49 @@ func testConcurrentLogEmission(_ *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for i := 0; i < loggingGoroutines; i++ {
+	for i := range loggingGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 			logger := NewLogger(ctx)
 
-			for j := 0; j < loggingIterations/5; j++ {
+			for range loggingIterations / 5 {
 				var localWg sync.WaitGroup
 
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
+				localWg.Go(func() {
 					logger.Trace().
 						String("operation", "trace").
 						Int("worker", id).
 						Emitf("Trace message from worker %d", id)
-				}()
+				})
 
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
+				localWg.Go(func() {
 					logger.Debug().
 						String("operation", "debug").
 						Int("worker", id).
 						Emitf("Debug message from worker %d", id)
-				}()
+				})
 
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
+				localWg.Go(func() {
 					logger.Info().
 						String("operation", "info").
 						Int("worker", id).
 						Emitf("Info message from worker %d", id)
-				}()
+				})
 
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
+				localWg.Go(func() {
 					logger.Warn().
 						String("operation", "warn").
 						Int("worker", id).
 						Emitf("Warning message from worker %d", id)
-				}()
+				})
 
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
+				localWg.Go(func() {
 					logger.Error().
 						String("operation", "error").
 						Int("worker", id).
 						Emitf("Error message from worker %d", id)
-				}()
+				})
 
 				localWg.Wait()
 				runtime.Gosched()
@@ -201,33 +191,29 @@ func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for i := 0; i < loggingGoroutines; i++ {
+	for i := range loggingGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < loggingIterations/20; j++ {
+			for j := range loggingIterations / 20 {
 				ctx := context.WithValue(baseCtx, CtxKey(1), id)
 
 				logger := NewLogger(ctx)
 
 				var localWg sync.WaitGroup
 
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
+				localWg.Go(func() {
 					logger.SetAttributes(
 						attribute.String("creation_worker", fmt.Sprintf("%d", id)),
 						attribute.Int64("creation_iteration", int64(j)),
 					)
-				}()
+				})
 
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
+				localWg.Go(func() {
 					logger.Info().
 						String("immediate_usage", "true").
 						Emitf("Logger created and used immediately by worker %d", id)
-				}()
+				})
 
 				localWg.Wait()
 				runtime.Gosched()
@@ -250,11 +236,11 @@ func testConcurrentLogWithSpanOperations(_ *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for i := 0; i < loggingGoroutines; i++ {
+	for i := range loggingGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < loggingIterations/20; j++ {
+			for j := range loggingIterations / 20 {
 				transaction := StartTransaction(ctx, fmt.Sprintf("log-transaction-%d", id))
 				span := transaction.StartChild(fmt.Sprintf("log-span-%d", id))
 
@@ -263,30 +249,24 @@ func testConcurrentLogWithSpanOperations(_ *testing.T) {
 
 				var localWg sync.WaitGroup
 
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
+				localWg.Go(func() {
 					span.SetTag("worker_id", fmt.Sprintf("%d", id))
 					span.SetData("iteration", j)
-				}()
+				})
 
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
+				localWg.Go(func() {
 					logger.SetAttributes(
 						attribute.String("span_operation", span.Op),
 						attribute.String("trace_id", span.TraceID.String()),
 					)
-				}()
+				})
 
-				localWg.Add(1)
-				go func() {
-					defer localWg.Done()
+				localWg.Go(func() {
 					logger.Info().
 						String("span_context", "active").
 						String("span_id", span.SpanID.String()).
 						Emitf("Log within span from worker %d", id)
-				}()
+				})
 
 				localWg.Wait()
 				span.Finish()

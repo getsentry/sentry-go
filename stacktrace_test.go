@@ -172,7 +172,7 @@ func TestEventWithExceptionStacktraceMarshalJSON(t *testing.T) {
 						ContextLine: "contextline",
 						PostContext: []string{"post", "context"},
 						InApp:       true,
-						Vars: map[string]interface{}{
+						Vars: map[string]any{
 							"foostr": "bar",
 							"fooint": 25,
 						},

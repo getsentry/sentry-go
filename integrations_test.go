@@ -318,7 +318,6 @@ func TestExtractModules(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got := extractModules(tt.info)
 			if diff := cmp.Diff(tt.want, got); diff != "" {

@@ -36,7 +36,7 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for i := 0; i < numEvents; i++ {
+	for i := range numEvents {
 		event := NewEvent()
 		event.EventID = EventID(fmt.Sprintf("%032x", i))
 		event.Level = LevelError
@@ -56,7 +56,7 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 		wg.Add(1)
 		go func(ev *Event, idx int) {
 			defer wg.Done()
-			for j := 0; j < numMutations; j++ {
+			for j := range numMutations {
 				// Map writes — "concurrent map read and map write"
 				ev.Contexts[fmt.Sprintf("ctx-%d-%d", idx, j)] = Context{
 					"dynamic": fmt.Sprintf("value-%d", j),
@@ -98,9 +98,9 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 
 	var wg sync.WaitGroup
 
-	for i := 0; i < numTransactions; i++ {
+	for i := range numTransactions {
 		children := make([]*Span, 0, numChildren)
-		for c := 0; c < numChildren; c++ {
+		for c := range numChildren {
 			child := &Span{
 				TraceID:   TraceID{},
 				SpanID:    SpanID{},
@@ -108,7 +108,7 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 				StartTime: time.Now(),
 				EndTime:   time.Now(),
 				Tags:      map[string]string{"initial": "value"},
-				Data:      map[string]interface{}{"initial": "value"},
+				Data:      map[string]any{"initial": "value"},
 			}
 			children = append(children, child)
 		}
@@ -127,7 +127,7 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 		wg.Add(1)
 		go func(spans []*Span, idx int) {
 			defer wg.Done()
-			for j := 0; j < numMutations; j++ {
+			for j := range numMutations {
 				for _, sp := range spans {
 					sp.SetTag(fmt.Sprintf("tag-%d-%d", idx, j), fmt.Sprintf("v-%d", j))
 					sp.SetData(fmt.Sprintf("data-%d-%d", idx, j), j)

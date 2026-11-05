@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"strings"
@@ -56,17 +57,17 @@ type SdkPackage = protocol.SdkPackage
 // plus it could just be map[string]interface{} then.
 
 // BreadcrumbHint contains information that can be associated with a Breadcrumb.
-type BreadcrumbHint map[string]interface{}
+type BreadcrumbHint map[string]any
 
 // Breadcrumb specifies an application event that occurred before a Sentry event.
 // An event may contain one or more breadcrumbs.
 type Breadcrumb struct {
-	Type      string                 `json:"type,omitempty"`
-	Category  string                 `json:"category,omitempty"`
-	Message   string                 `json:"message,omitempty"`
-	Data      map[string]interface{} `json:"data,omitempty"`
-	Level     Level                  `json:"level,omitempty"`
-	Timestamp time.Time              `json:"timestamp,omitzero"`
+	Type      string         `json:"type,omitempty"`
+	Category  string         `json:"category,omitempty"`
+	Message   string         `json:"message,omitempty"`
+	Data      map[string]any `json:"data,omitempty"`
+	Level     Level          `json:"level,omitempty"`
+	Timestamp time.Time      `json:"timestamp,omitzero"`
 }
 
 // TODO: provide constants for known breadcrumb types.
@@ -125,9 +126,9 @@ type LogEntry interface {
 	// Bool adds a bool attribute to the LogEntry.
 	Bool(key string, value bool) LogEntry
 	// Emit emits the LogEntry with the provided arguments.
-	Emit(args ...interface{})
+	Emit(args ...any)
 	// Emitf emits the LogEntry using a format string and arguments.
-	Emitf(format string, args ...interface{})
+	Emitf(format string, args ...any)
 }
 
 // Meter provides an interface for recording metrics.
@@ -357,7 +358,7 @@ type DebugMetaImage struct {
 // An EventID must be 32 characters long, lowercase and not have any dashes.
 type EventID string
 
-type Context = map[string]interface{}
+type Context = map[string]any
 
 // Event is the fundamental data structure that is sent to Sentry.
 type Event struct {
@@ -371,13 +372,13 @@ type Event struct {
 	Message     string             `json:"message,omitempty"`
 	Platform    string             `json:"platform,omitempty"`
 	Release     string             `json:"release,omitempty"`
-	Sdk         SdkInfo            `json:"sdk,omitempty"`
+	Sdk         SdkInfo            `json:"sdk"`
 	ServerName  string             `json:"server_name,omitempty"`
 	Threads     []Thread           `json:"threads,omitempty"`
 	Tags        map[string]string  `json:"tags,omitempty"`
 	Timestamp   time.Time          `json:"timestamp,omitzero"`
 	Transaction string             `json:"transaction,omitempty"`
-	User        User               `json:"user,omitempty"`
+	User        User               `json:"user"`
 	Logger      string             `json:"logger,omitempty"`
 	Modules     map[string]string  `json:"modules,omitempty"`
 	Request     *Request           `json:"request,omitempty"`
@@ -504,9 +505,7 @@ func (e *Event) GetSdkInfo() *protocol.SdkInfo {
 func (e *Event) GetDynamicSamplingContext() map[string]string {
 	trace := make(map[string]string)
 	if dsc := e.sdkMetaData.dsc; dsc.HasEntries() {
-		for k, v := range dsc.Entries {
-			trace[k] = v
-		}
+		maps.Copy(trace, dsc.Entries)
 	}
 	return trace
 }
@@ -690,10 +689,10 @@ type Thread struct {
 
 // EventHint contains information that can be associated with an Event.
 type EventHint struct {
-	Data               interface{}
+	Data               any
 	EventID            string
 	OriginalException  error
-	RecoveredException interface{}
+	RecoveredException any
 	Context            context.Context
 	Request            *http.Request
 	Response           *http.Response
