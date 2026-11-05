@@ -46,7 +46,7 @@ func NewScheduler(
 	sdkInfo func() *protocol.SdkInfo,
 	reports *report.Aggregator,
 ) *Scheduler {
-	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118: cancel is stored in s.cancel and called in Shutdown()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	priorityWeights := map[Priority]int{
 		PriorityCritical: 5,

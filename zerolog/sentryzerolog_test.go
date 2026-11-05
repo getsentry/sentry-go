@@ -79,7 +79,7 @@ func TestNewWithContext(t *testing.T) {
 	})
 	require.Nil(t, err)
 
-	_, err = New(nil, Options{}) // nolint: staticcheck // nil validation
+	_, err = New(nil, Options{}) //nolint:staticcheck // nil validation
 	require.NotNil(t, err)
 }
 
