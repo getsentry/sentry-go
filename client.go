@@ -5,10 +5,10 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -51,33 +51,6 @@ const (
 // error is non-nil, there is nothing to do other than retrying. We choose not
 // to retry for now.
 var hostname, _ = os.Hostname()
-
-// lockedRand is a random number generator safe for concurrent use. Its API is
-// intentionally limited and it is not meant as a full replacement for a
-// rand.Rand.
-type lockedRand struct {
-	mu sync.Mutex
-	r  *rand.Rand
-}
-
-// Float64 returns a pseudo-random number in [0.0,1.0).
-func (r *lockedRand) Float64() float64 {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.r.Float64()
-}
-
-// rng is the internal random number generator.
-//
-// We do not use the global functions from math/rand because, while they are
-// safe for concurrent use, any package in a build could change the seed and
-// affect the generated numbers, for instance making them deterministic. On the
-// other hand, the source returned from rand.NewSource is not safe for
-// concurrent use, so we need to couple its use with a sync.Mutex.
-var rng = &lockedRand{
-	// #nosec G404 -- We are fine using transparent, non-secure value here.
-	r: rand.New(rand.NewSource(time.Now().UnixNano())),
-}
 
 // usageError is used to report to Sentry an SDK usage error.
 //
@@ -382,12 +355,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 	// The intended public is SDK developers. It is orthogonal to
 	// options.Debug, which is also available for SDK users.
 	dbg := strings.Split(os.Getenv("SENTRYGODEBUG"), ",")
-	sort.Strings(dbg)
 	// dbgOpt returns true when the given debug option is enabled, for
 	// example SENTRYGODEBUG=someopt=1.
 	dbgOpt := func(opt string) bool {
-		s := opt + "=1"
-		return dbg[sort.SearchStrings(dbg, s)%len(dbg)] == s
+		return slices.Contains(dbg, opt+"=1")
 	}
 	if dbgOpt("httpdump") || dbgOpt("httptrace") {
 		options.HTTPTransport = &debug.Transport{
@@ -533,8 +504,8 @@ func (client *Client) setupIntegrations() {
 		debuglog.Printf("Integration installed: %s\n", integration.Name())
 	}
 
-	sort.Slice(client.integrations, func(i, j int) bool {
-		return client.integrations[i].Name() < client.integrations[j].Name()
+	slices.SortFunc(client.integrations, func(a, b Integration) int {
+		return strings.Compare(a.Name(), b.Name())
 	})
 }
 
@@ -992,5 +963,5 @@ func (client *Client) integrationAlreadyInstalled(name string) bool {
 // sample returns true with the given probability, which must be in the range
 // [0.0, 1.0].
 func sample(probability float64) bool {
-	return rng.Float64() < probability
+	return rand.Float64() < probability //nolint:gosec // sampling doesn't need crypto randomness
 }

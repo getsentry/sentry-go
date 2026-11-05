@@ -621,7 +621,7 @@ func (s *Span) sample(client *Client) Sampled {
 			return SampledFalse
 		}
 
-		if rng.Float64() < tracesSamplerSampleRate {
+		if sample(tracesSamplerSampleRate) {
 			return SampledTrue
 		}
 		debuglog.Printf("Dropping transaction: TracesSampler returned rate: %f", tracesSamplerSampleRate)
@@ -654,7 +654,7 @@ func (s *Span) sample(client *Client) Sampled {
 		return SampledFalse
 	}
 
-	if rng.Float64() < sampleRate {
+	if sample(sampleRate) {
 		return SampledTrue
 	}
 
