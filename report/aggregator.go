@@ -27,7 +27,7 @@ func NewAggregator() *Aggregator {
 }
 
 // Record records a discarded event outcome.
-func (a *Aggregator) Record(reason DiscardReason, category ratelimit.Category, quantity int64) {
+func (a *Aggregator) Record(reason DiscardReason, category protocol.DataCategory, quantity int64) {
 	if a == nil || quantity <= 0 {
 		return
 	}
@@ -45,7 +45,7 @@ func (a *Aggregator) Record(reason DiscardReason, category ratelimit.Category, q
 }
 
 // RecordOne is a helper method to record one discarded event outcome.
-func (a *Aggregator) RecordOne(reason DiscardReason, category ratelimit.Category) {
+func (a *Aggregator) RecordOne(reason DiscardReason, category protocol.DataCategory) {
 	a.Record(reason, category, 1)
 }
 
