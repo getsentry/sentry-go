@@ -1,16 +1,15 @@
 package sentry
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/util"
-	exec "golang.org/x/sys/execabs"
 )
 
 func uuid() string {
@@ -27,12 +26,6 @@ func fileExists(fileName string) bool {
 // unaffected by changes in the system wall clock.
 func monotonicTimeSince(start time.Time) (end time.Time) {
 	return start.Add(time.Since(start))
-}
-
-//nolint:unused
-func prettyPrint(data any) {
-	dbg, _ := json.MarshalIndent(data, "", "  ")
-	fmt.Println(string(dbg))
 }
 
 // defaultRelease attempts to guess a default release for the currently running
