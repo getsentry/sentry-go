@@ -27,7 +27,7 @@ type Buffer[T any] interface {
 
 	// Category/Priority
 	Category() ratelimit.Category
-	Priority() ratelimit.Priority
+	Priority() Priority
 
 	// Metrics
 	OfferedCount() int64

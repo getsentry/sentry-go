@@ -21,7 +21,7 @@ type RingBuffer[T any] struct {
 	capacity int
 
 	category       ratelimit.Category
-	priority       ratelimit.Priority
+	priority       Priority
 	overflowPolicy OverflowPolicy
 	recorder       report.ClientReportRecorder
 
@@ -57,7 +57,7 @@ func NewRingBuffer[T any](category ratelimit.Category, capacity int, overflowPol
 		items:          make([]T, capacity),
 		capacity:       capacity,
 		category:       category,
-		priority:       category.GetPriority(),
+		priority:       priorityOf(category),
 		overflowPolicy: overflowPolicy,
 		recorder:       recorder,
 		batchSize:      batchSize,
@@ -224,7 +224,7 @@ func (b *RingBuffer[T]) Category() ratelimit.Category {
 	return b.category
 }
 
-func (b *RingBuffer[T]) Priority() ratelimit.Priority {
+func (b *RingBuffer[T]) Priority() Priority {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.priority
@@ -371,7 +371,7 @@ func (b *RingBuffer[T]) recordDroppedItem(item T) {
 
 type BufferMetrics struct {
 	Category      ratelimit.Category `json:"category"`
-	Priority      ratelimit.Priority `json:"priority"`
+	Priority      Priority           `json:"priority"`
 	Capacity      int                `json:"capacity"`
 	Size          int                `json:"size"`
 	Utilization   float64            `json:"utilization"`
