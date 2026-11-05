@@ -77,6 +77,15 @@ func (b ItemContainer) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.En
 	return protocol.NewEnvelope(header, item), nil
 }
 
+// DiscardCounts returns client report counts for a dropped batch, summed over its items.
+func (b ItemContainer) DiscardCounts() DiscardCounts {
+	counts := DiscardCounts{Category: b.category}
+	for _, item := range b.items {
+		counts = counts.Add(item.DiscardCounts())
+	}
+	return counts
+}
+
 func (b ItemContainer) GetCategory() ratelimit.Category            { return b.category }
 func (ItemContainer) GetEventID() string                           { return "" }
 func (ItemContainer) GetSdkInfo() *protocol.SdkInfo                { return nil }

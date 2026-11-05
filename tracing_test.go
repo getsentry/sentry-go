@@ -937,7 +937,7 @@ func TestSampleRatePropagation(t *testing.T) {
 				require.Equal(t, test.want, root.Sampled)
 				root.Finish()
 				require.Empty(t, transport.Events())
-				require.Nil(t, client.reportProvider.TakeReport())
+				require.Nil(t, client.reports.TakeReport())
 			})
 		}
 	})

@@ -12,7 +12,6 @@ import (
 	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/protocol"
-	"github.com/getsentry/sentry-go/report"
 )
 
 // This race is between json.Marshal on the scheduler goroutine and user
@@ -25,11 +24,11 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 
 	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
 		ratelimit.CategoryError: telemetry.NewRingBuffer[telemetry.Item](
-			ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, report.NoopRecorder(),
+			ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, nil,
 		),
 	}
 
-	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, report.NoopRecorder(), nil)
+	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
 	defer proc.Close(2 * time.Second)
 
 	const numEvents = 100
@@ -86,11 +85,11 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 
 	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
 		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[telemetry.Item](
-			ratelimit.CategoryTransaction, 100, telemetry.OverflowPolicyDropOldest, 1, 0, report.NoopRecorder(),
+			ratelimit.CategoryTransaction, 100, telemetry.OverflowPolicyDropOldest, 1, 0, nil,
 		),
 	}
 
-	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, report.NoopRecorder(), nil)
+	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
 	defer proc.Close(2 * time.Second)
 
 	const numTransactions = 100
