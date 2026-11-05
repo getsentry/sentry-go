@@ -30,7 +30,7 @@ func TestPropagationContextMap(t *testing.T) {
 	p := NewPropagationContext()
 	assertEqual(t,
 		p.Map(),
-		map[string]interface{}{
+		map[string]any{
 			"trace_id": p.TraceID,
 			"span_id":  p.SpanID,
 		},
@@ -39,7 +39,7 @@ func TestPropagationContextMap(t *testing.T) {
 	p.ParentSpanID = SpanIDFromHex("b72fa28504b07285")
 	assertEqual(t,
 		p.Map(),
-		map[string]interface{}{
+		map[string]any{
 			"trace_id":       p.TraceID,
 			"span_id":        p.SpanID,
 			"parent_span_id": p.ParentSpanID,
