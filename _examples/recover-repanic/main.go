@@ -43,8 +43,6 @@ func main() {
 	// Set the timeout to the maximum duration the program can afford to wait.
 	defer sentry.Flush(2 * time.Second)
 
-	rand.Seed(time.Now().UnixNano())
-
 	nWorkers := 8
 	var wg sync.WaitGroup
 

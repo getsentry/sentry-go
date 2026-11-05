@@ -1420,7 +1420,7 @@ func BenchmarkProcessEvent(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		c.CaptureEvent(context.Background(), &Event{})
 	}
 }

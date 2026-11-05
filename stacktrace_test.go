@@ -20,7 +20,7 @@ func (StacktraceTestHelper) NewStacktrace() *Stacktrace {
 }
 
 func BenchmarkNewStacktrace(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Trace()
 	}
 }
