@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
+	"net/textproto"
 	"strings"
 	"testing"
 	"time"
@@ -471,5 +473,67 @@ func TestIntegration(t *testing.T) {
 
 	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
 		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestInformationalResponsePreservesFinalStatus(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name    string
+		headers []int
+		status  int
+	}{
+		{"server error", []int{http.StatusEarlyHints}, http.StatusInternalServerError},
+		{"implicit success", []int{http.StatusEarlyHints}, http.StatusOK},
+		{"multiple informational", []int{http.StatusContinue, http.StatusEarlyHints, http.StatusEarlyHints}, http.StatusCreated},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
+				EnableTracing: true, TracesSampleRate: 1,
+			}))
+			handler := sentryhttp.New(sentryhttp.Options{}).HandleFunc(func(w http.ResponseWriter, _ *http.Request) {
+				for _, status := range tt.headers {
+					w.WriteHeader(status)
+				}
+				if tt.status != http.StatusOK {
+					w.WriteHeader(tt.status)
+				}
+				_, err := io.WriteString(w, "body")
+				if err != nil {
+					t.Error(err)
+				}
+			})
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				handler.ServeHTTP(w, r.WithContext(fixture.NewContext(r.Context())))
+			}))
+			defer server.Close()
+
+			var informational []int
+			trace := &httptrace.ClientTrace{Got1xxResponse: func(code int, _ textproto.MIMEHeader) error {
+				informational = append(informational, code)
+				return nil
+			}}
+			request, err := http.NewRequest(http.MethodGet, server.URL, nil)
+			require.NoError(t, err)
+			request = request.WithContext(httptrace.WithClientTrace(request.Context(), trace))
+			response, err := server.Client().Do(request)
+			require.NoError(t, err)
+			defer response.Body.Close()
+			body, err := io.ReadAll(response.Body)
+			require.NoError(t, err)
+			require.Equal(t, "body", string(body))
+			require.Equal(t, tt.headers, informational)
+			require.Equal(t, tt.status, response.StatusCode)
+
+			fixture.Flush()
+			events := fixture.Events()
+			require.Len(t, events, 1)
+			require.Equal(t, "transaction", events[0].Type)
+			traceContext := events[0].Contexts["trace"]
+			require.Equal(t, float64(tt.status), traceContext["data"].(map[string]interface{})["http.response.status_code"])
+			require.Equal(t, sentry.HTTPtoSpanStatus(tt.status).String(), traceContext["status"])
+		})
 	}
 }
