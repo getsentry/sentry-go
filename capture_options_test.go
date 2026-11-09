@@ -60,36 +60,36 @@ func TestWithMechanism(t *testing.T) {
 	t.Parallel()
 	errBase := errors.New("base")
 	for _, test := range []struct {
-		name      string
-		capture   func(ctx context.Context, options ...sentry.CaptureOption)
-		mechanism *sentry.Mechanism
-		want      []*sentry.Mechanism
+		name    string
+		capture func(ctx context.Context, options ...sentry.CaptureOption)
+		options []sentry.CaptureOption
+		want    []*sentry.Mechanism
 	}{
 		{
 			name: "exception",
 			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
 				sentry.CaptureException(ctx, errBase, options...)
 			},
-			mechanism: &sentry.Mechanism{Type: "auto.test", Handled: new(true), Data: map[string]any{"key": "value"}},
-			want:      []*sentry.Mechanism{{Type: "auto.test", Handled: new(true), Data: map[string]any{"key": "value"}}},
+			options: []sentry.CaptureOption{sentry.WithMechanism("auto.test", true)},
+			want:    []*sentry.Mechanism{{Type: "auto.test", Handled: new(true)}},
 		},
 		{
 			name: "recovered panic",
 			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
 				sentry.Recover(ctx, errBase, options...)
 			},
-			mechanism: &sentry.Mechanism{Type: "auto.test", Handled: new(false)},
-			want:      []*sentry.Mechanism{{Type: "auto.test", Handled: new(false)}},
+			options: []sentry.CaptureOption{sentry.WithMechanism("auto.test", false)},
+			want:    []*sentry.Mechanism{{Type: "auto.test", Handled: new(false)}},
 		},
 		{
 			name: "chain keeps chained mechanism and links",
 			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
 				sentry.CaptureException(ctx, fmt.Errorf("wrapped: %w", errBase), options...)
 			},
-			mechanism: &sentry.Mechanism{Type: "auto.test", ExceptionID: 5, ParentID: new(3), Source: "ignored"},
+			options: []sentry.CaptureOption{sentry.WithMechanism("auto.test", true)},
 			want: []*sentry.Mechanism{
 				{Type: sentry.MechanismTypeChained, ExceptionID: 1, ParentID: new(0), Source: sentry.MechanismTypeUnwrap},
-				{Type: "auto.test"},
+				{Type: "auto.test", Handled: new(true)},
 			},
 		},
 		{
@@ -97,10 +97,10 @@ func TestWithMechanism(t *testing.T) {
 			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
 				sentry.CaptureException(ctx, errors.Join(errBase), options...)
 			},
-			mechanism: &sentry.Mechanism{Type: "auto.test"},
+			options: []sentry.CaptureOption{sentry.WithMechanism("auto.test", true)},
 			want: []*sentry.Mechanism{
 				{Type: sentry.MechanismTypeChained, ExceptionID: 1, ParentID: new(0), Source: "errors[0]"},
-				{Type: "auto.test", IsExceptionGroup: true},
+				{Type: "auto.test", Handled: new(true), IsExceptionGroup: true},
 			},
 		},
 		{
@@ -108,30 +108,26 @@ func TestWithMechanism(t *testing.T) {
 			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
 				sentry.CaptureException(ctx, errBase, options...)
 			},
-			mechanism: &sentry.Mechanism{Handled: new(false)},
-			want:      []*sentry.Mechanism{{Type: sentry.MechanismTypeGeneric, Handled: new(false)}},
+			options: []sentry.CaptureOption{sentry.WithMechanism("", false)},
+			want:    []*sentry.Mechanism{{Type: sentry.MechanismTypeGeneric, Handled: new(false)}},
 		},
 		{
-			name: "nil mechanism",
+			name: "default mechanism",
 			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
 				sentry.CaptureException(ctx, errBase, options...)
 			},
-			want: []*sentry.Mechanism{nil},
+			want: []*sentry.Mechanism{{Type: sentry.MechanismTypeGeneric, Handled: new(true)}},
 		},
 		{
 			name: "message is unaffected",
 			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
 				sentry.CaptureMessage(ctx, "message", options...)
 			},
-			mechanism: &sentry.Mechanism{Type: "auto.test"},
+			options: []sentry.CaptureOption{sentry.WithMechanism("auto.test", true)},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			var original sentry.Mechanism
-			if test.mechanism != nil {
-				original = *test.mechanism
-			}
 			var seenByBeforeSend []*sentry.Mechanism
 			fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
 				BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
@@ -141,7 +137,7 @@ func TestWithMechanism(t *testing.T) {
 					return event
 				},
 			}))
-			test.capture(fixture.Context, sentry.WithMechanism(test.mechanism))
+			test.capture(fixture.Context, test.options...)
 			fixture.Flush()
 
 			events := fixture.Events()
@@ -152,28 +148,6 @@ func TestWithMechanism(t *testing.T) {
 			}
 			require.Equal(t, test.want, got)
 			require.Equal(t, test.want, seenByBeforeSend)
-			if test.mechanism != nil {
-				require.Equal(t, original, *test.mechanism, "the supplied mechanism must not be modified")
-			}
 		})
 	}
-}
-
-func TestWithMechanismCopiesSharedMechanism(t *testing.T) {
-	t.Parallel()
-	shared := &sentry.Mechanism{Type: "auto.test", Handled: new(false), Data: map[string]any{"key": "value"}}
-	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
-		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
-			mechanism := event.Exception[len(event.Exception)-1].Mechanism
-			*mechanism.Handled = true
-			mechanism.Data["key"] = "changed"
-			return event
-		},
-	}))
-	sentry.CaptureException(fixture.Context, errors.New("boom"), sentry.WithMechanism(shared))
-	fixture.Flush()
-
-	require.Len(t, fixture.Events(), 1)
-	require.False(t, *shared.Handled)
-	require.Equal(t, map[string]any{"key": "value"}, shared.Data)
 }

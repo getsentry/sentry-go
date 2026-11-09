@@ -2,7 +2,6 @@ package sentry
 
 import (
 	"fmt"
-	"maps"
 	"reflect"
 	"slices"
 )
@@ -46,10 +45,14 @@ func convertErrorToExceptions(err error, maxErrorDepth int) []Exception {
 	}
 	convertErrorDFS(err, &exceptions, nil, "", vis, maxErrorDepth, 0)
 
-	// mechanism type is used for debugging purposes, but since we can't really distinguish the origin of who invoked
-	// captureException, we set it to nil if the error is not chained.
+	// For a single exception the chain-link fields (ExceptionID, ParentID,
+	// Source, IsExceptionGroup) are irrelevant, so replace the DFS-generated
+	// mechanism with a clean default that carries only type and handled.
 	if len(exceptions) == 1 {
-		exceptions[0].Mechanism = nil
+		exceptions[0].Mechanism = &Mechanism{
+			Type:    MechanismTypeGeneric,
+			Handled: new(true),
+		}
 	}
 
 	slices.Reverse(exceptions)
@@ -93,13 +96,17 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 		mechanismType = MechanismTypeChained
 	}
 
-	exception.Mechanism = &Mechanism{
+	mechanism := &Mechanism{
 		Type:             mechanismType,
 		ExceptionID:      currentID,
 		ParentID:         parentID,
 		Source:           source,
 		IsExceptionGroup: isExceptionGroup,
 	}
+	if parentID == nil {
+		mechanism.Handled = new(true)
+	}
+	exception.Mechanism = mechanism
 
 	*exceptions = append(*exceptions, exception)
 
@@ -131,15 +138,16 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 
 // applyMechanism sets mechanism on the outermost exception of the event. The
 // fields linking the exception chain are kept from the existing mechanism, if
-// any. mechanism is copied, so it can be shared between captures.
+// any.
 func (e *Event) applyMechanism(mechanism *Mechanism) {
 	if mechanism == nil || len(e.Exception) == 0 {
 		return
 	}
 
 	exception := &e.Exception[len(e.Exception)-1]
-	m := *mechanism
-	m.Data = maps.Clone(mechanism.Data)
+	m := Mechanism{
+		Type: mechanism.Type,
+	}
 	if mechanism.Handled != nil {
 		m.Handled = new(*mechanism.Handled)
 	}

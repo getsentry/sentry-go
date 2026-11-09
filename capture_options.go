@@ -30,21 +30,21 @@ func WithLevel(level Level) CaptureOption {
 // how the exception was captured and whether it was handled. Integrations use
 // it to report their own mechanism type in place of the default "generic":
 //
-//	sentry.Recover(ctx, recovered, sentry.WithMechanism(&sentry.Mechanism{
-//		Type:    "auto.http.go.gin.middleware",
-//		Handled: new(false),
-//	}))
+//	sentry.Recover(ctx, recovered, sentry.WithMechanism("auto.http.go.gin.middleware", false))
 //
 // The mechanism is applied to the outermost exception of the event, which is
 // the error passed to CaptureException or Recover. Exceptions further down the
 // error chain keep their "chained" mechanism, and the fields linking the chain
-// together (ExceptionID, ParentID, Source and IsExceptionGroup) are kept from
-// the mechanism the SDK generated. An empty Type keeps the generated type, or
-// falls back to "generic". The option has no effect on events without
-// exceptions, such as messages or panics with a non-error value.
-func WithMechanism(mechanism *Mechanism) CaptureOption {
+// together (ExceptionID, ParentID, Source and IsExceptionGroup) are managed by
+// the SDK. An empty mechanismType keeps the generated type, or falls back to
+// "generic". The option has no effect on events without exceptions, such as
+// messages or panics with a non-error value.
+func WithMechanism(mechanismType string, handled bool) CaptureOption {
 	return func(options *captureOptions) {
-		options.mechanism = mechanism
+		options.mechanism = &Mechanism{
+			Type:    mechanismType,
+			Handled: &handled,
+		}
 	}
 }
 
