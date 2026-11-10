@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"math"
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,4 +143,51 @@ func dropVolatile(value any) {
 			dropVolatile(child)
 		}
 	}
+}
+
+type panicsOnMarshal struct{}
+
+func (panicsOnMarshal) MarshalJSON() ([]byte, error) { panic("marshal") }
+
+func TestCaptureWithUnencodableValue(t *testing.T) {
+	t.Parallel()
+	loop := map[string]any{}
+	loop["loop"] = loop
+	tests := []struct {
+		name  string
+		value any
+	}{
+		{"not a number", math.NaN()},
+		{"marshaler that panics", panicsOnMarshal{}},
+		{"map that contains itself", loop},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+				f.Scope.SetContext("custom", sentry.Context{"bad": tt.value, "good": struct{ Value string }{"kept"}})
+				sentry.CaptureMessage(f.Context, "message")
+				f.Flush()
+				envelopes := f.Envelopes()
+				if len(envelopes) != 1 {
+					t.Fatalf("got %d envelopes, want 1", len(envelopes))
+				}
+				payload := string(envelopes[0].Items[0].Payload)
+				if !strings.Contains(payload, `"good":{"Value":"kept"}`) || strings.Contains(payload, `"bad"`) {
+					t.Errorf("payload = %s", payload)
+				}
+			})
+		})
+	}
+}
+
+func TestCaptureAddsModules(t *testing.T) {
+	t.Parallel()
+	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
+		sentry.CaptureMessage(f.Context, "message")
+		f.Flush()
+		if events := f.Events(); len(events) != 1 || len(events[0].Modules) == 0 {
+			t.Errorf("sent events have no modules: %+v", events)
+		}
+	})
 }

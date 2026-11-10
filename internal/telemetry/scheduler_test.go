@@ -50,8 +50,6 @@ func (t *testTelemetryItem) GetCategory() ratelimit.Category {
 	return ratelimit.CategoryError
 }
 
-func (t *testTelemetryItem) MakeSerializationSafe() {}
-
 func (t *testTelemetryItem) DiscardCounts() DiscardCounts { return oneDiscard(t.GetCategory()) }
 
 func transactionCounts(spanCount uint64) DiscardCounts {

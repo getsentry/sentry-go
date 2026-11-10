@@ -129,8 +129,6 @@ type checkInItem struct {
 
 func (c *checkInItem) GetCategory() ratelimit.Category { return ratelimit.CategoryMonitor }
 
-func (c *checkInItem) MakeSerializationSafe() {}
-
 func (c *checkInItem) ToEnvelope() (*protocol.Envelope, error) {
 	payload, err := json.Marshal(c)
 	if err != nil {

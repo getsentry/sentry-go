@@ -25,7 +25,6 @@ func (b bwItem) ToEnvelope() (*protocol.Envelope, error) {
 	return protocol.NewEnvelope(&protocol.EnvelopeHeader{}, item), nil
 }
 func (b bwItem) GetCategory() ratelimit.Category { return ratelimit.CategoryError }
-func (b bwItem) MakeSerializationSafe()          {}
 func (b bwItem) DiscardCounts() DiscardCounts    { return oneDiscard(ratelimit.CategoryError) }
 
 func TestBuffer_Add_MissingCategory(t *testing.T) {
