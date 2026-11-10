@@ -17,6 +17,7 @@ import (
 // MockTransport implements [Transport] for use in tests.
 type MockTransport struct {
 	mu        sync.Mutex
+	envelopes []*protocol.Envelope
 	events    []*Event
 	lastEvent *Event
 }
@@ -31,6 +32,7 @@ func (t *MockTransport) SendEnvelope(_ context.Context, envelope *protocol.Envel
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.envelopes = append(t.envelopes, envelope)
 	for _, item := range envelope.Items {
 		event := decodeMockEvent(item)
 		if event == nil {
@@ -58,6 +60,13 @@ func (t *MockTransport) SendEnvelope(_ context.Context, envelope *protocol.Envel
 	return nil
 }
 func (t *MockTransport) FlushWithContext(_ context.Context) bool { return true }
+
+// Envelopes returns the captured envelopes.
+func (t *MockTransport) Envelopes() []*protocol.Envelope {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return slices.Clone(t.envelopes)
+}
 
 // Events returns captured telemetry decoded from the wire format. Logs and
 // metrics are represented by one Event per batch; client reports are omitted.
