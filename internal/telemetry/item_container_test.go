@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
@@ -9,7 +10,9 @@ import (
 )
 
 func oneDiscard(category ratelimit.Category) DiscardCounts {
-	return DiscardCounts{Category: category, Quantity: 1}
+	var counts DiscardCounts
+	counts[slices.Index(categories[:], category)] = 1
+	return counts
 }
 
 type dummyLog struct{ body string }

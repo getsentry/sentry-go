@@ -104,7 +104,7 @@ func TestClientReports_Integration(t *testing.T) {
 			defer srv.Close()
 
 			dsn := strings.Replace(srv.URL, "//", "//test@", 1) + "/1"
-			var logSize, metricSize int64
+			var logSize, metricSize uint64
 			c, err := NewClient(ClientOptions{
 				Dsn:                  dsn,
 				Transport:            tt.transport,
@@ -148,13 +148,17 @@ func TestClientReports_Integration(t *testing.T) {
 			NewMeter(ctx).Count("drop-me", 1)
 			processorCtx, processorScope := WithScope(ctx)
 			processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
+				event.Spans = nil // only transactions count spans
+				return event
+			})
+			processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 				if event.Message == "processor-drop" {
 					event.Attachments = nil
 					return nil
 				}
 				return event
 			})
-			c.CaptureEvent(processorCtx, &Event{Message: "processor-drop", Attachments: []*Attachment{{Payload: []byte("abc")}}})
+			c.CaptureEvent(processorCtx, &Event{Message: "processor-drop", Spans: []*Span{{}}, Attachments: []*Attachment{{Payload: []byte("abc")}}})
 			if !tt.reportOnly {
 				c.CaptureMessage(ctx, "hi")
 			}
@@ -239,15 +243,15 @@ func TestClientReports_DiscardCounts(t *testing.T) {
 		want telemetry.DiscardCounts
 	}{
 		{"empty log", &Log{},
-			telemetry.DiscardCounts{Category: ratelimit.CategoryLog, Quantity: 1, Bytes: 1}},
+			telemetry.DiscardCounts{telemetry.CountLog: 1, telemetry.CountLogByte: 1}},
 		{"log", &Log{Body: "user logged in", Level: LogLevelInfo, Timestamp: time.Now(), Attributes: attrs},
-			telemetry.DiscardCounts{Category: ratelimit.CategoryLog, Quantity: 1, Bytes: 14 + attrsSize}},
+			telemetry.DiscardCounts{telemetry.CountLog: 1, telemetry.CountLogByte: 14 + attrsSize}},
 		{"metric", &Metric{Name: "http.requests", Type: MetricTypeCounter, Value: Int64MetricValue(7), Attributes: attrs},
-			telemetry.DiscardCounts{Category: ratelimit.CategoryTraceMetric, Quantity: 1, Bytes: 13 + 8 + attrsSize}},
+			telemetry.DiscardCounts{telemetry.CountTraceMetric: 1, telemetry.CountTraceMetricByte: 13 + 8 + attrsSize}},
 		{"transaction", &Event{Type: transactionType, Spans: []*Span{{}, {}}},
-			telemetry.DiscardCounts{Category: ratelimit.CategoryTransaction, Quantity: 1, Spans: 3}},
+			telemetry.DiscardCounts{telemetry.CountTransaction: 1, telemetry.CountSpan: 3}},
 		{"error with attachments", &Event{Attachments: []*Attachment{{Payload: []byte("abc")}, {Payload: []byte("de")}}},
-			telemetry.DiscardCounts{Category: ratelimit.CategoryError, Quantity: 1, Bytes: 5}},
+			telemetry.DiscardCounts{telemetry.CountError: 1, telemetry.CountAttachment: 5}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

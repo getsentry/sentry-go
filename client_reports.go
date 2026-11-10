@@ -2,43 +2,55 @@ package sentry
 
 import (
 	"github.com/getsentry/sentry-go/attribute"
-	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 )
 
 // DiscardCounts returns client report counts for a dropped event.
 func (e *Event) DiscardCounts() telemetry.DiscardCounts {
-	counts := telemetry.DiscardCounts{Category: e.toCategory(), Quantity: 1}
-	if e.Type == transactionType {
-		counts.Spans = int64(len(e.Spans) + 1)
+	var counts telemetry.DiscardCounts
+	switch e.Type {
+	case transactionType:
+		counts = transactionDiscardCounts(uint64(len(e.Spans)))
+	case checkInType:
+		counts[telemetry.CountMonitor] = 1
+	case logEvent.Type:
+		counts[telemetry.CountLog] = 1
+	case traceMetricEvent.Type:
+		counts[telemetry.CountTraceMetric] = 1
+	default:
+		counts[telemetry.CountError] = 1
 	}
 	for _, attachment := range e.Attachments {
-		counts.Bytes += int64(len(attachment.Payload))
+		counts[telemetry.CountAttachment] += uint64(len(attachment.Payload))
 	}
 	return counts
 }
 
+// transactionDiscardCounts returns client report counts for a dropped transaction with the given child spans.
+func transactionDiscardCounts(spans uint64) telemetry.DiscardCounts {
+	return telemetry.DiscardCounts{telemetry.CountTransaction: 1, telemetry.CountSpan: spans + 1}
+}
+
 // DiscardCounts returns client report counts for a dropped log.
 func (l *Log) DiscardCounts() telemetry.DiscardCounts {
-	return telemetry.DiscardCounts{Category: ratelimit.CategoryLog, Quantity: 1, Bytes: byteSize(len(l.Body), l.Attributes)}
+	return telemetry.DiscardCounts{telemetry.CountLog: 1, telemetry.CountLogByte: byteSize(len(l.Body), l.Attributes)}
 }
 
 // DiscardCounts returns client report counts for a dropped metric.
 func (m *Metric) DiscardCounts() telemetry.DiscardCounts {
 	return telemetry.DiscardCounts{
-		Category: ratelimit.CategoryTraceMetric,
-		Quantity: 1,
-		Bytes:    byteSize(len(m.Name)+valueSize(m.Value.value), m.Attributes),
+		telemetry.CountTraceMetric:     1,
+		telemetry.CountTraceMetricByte: byteSize(len(m.Name)+valueSize(m.Value.value), m.Attributes),
 	}
 }
 
 // byteSize returns the byte count of a log or metric, following Relay:
 // https://github.com/getsentry/relay/blob/78ba7825b26af2210029e831897e4c4545292294/relay-event-normalization/src/eap/size.rs#L15-L46
-func byteSize(size int, attributes map[string]attribute.Value) int64 {
+func byteSize(size int, attributes map[string]attribute.Value) uint64 {
 	for key, value := range attributes {
 		size += len(key) + valueSize(value)
 	}
-	return int64(max(size, 1))
+	return uint64(max(size, 1))
 }
 
 // valueSize returns the byte count of an attribute value, following Relay.

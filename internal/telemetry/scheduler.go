@@ -385,7 +385,7 @@ func (s *Scheduler) attachReport(envelope *protocol.Envelope) *report.ClientRepo
 	item, err := r.ToEnvelopeItem()
 	if err != nil {
 		debuglog.Printf("failed to serialize client report: %v", err)
-		return r
+		return nil
 	}
 	envelope.AddItem(item)
 	return r

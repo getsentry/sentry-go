@@ -30,8 +30,8 @@ type outcomeKey struct {
 	Category ratelimit.Category
 }
 
-func takeOutcomes(recorder *report.Aggregator) map[outcomeKey]int64 {
-	outcomes := make(map[outcomeKey]int64)
+func takeOutcomes(recorder *report.Aggregator) map[outcomeKey]uint64 {
+	outcomes := make(map[outcomeKey]uint64)
 	if clientReport := recorder.TakeReport(); clientReport != nil {
 		for _, event := range clientReport.DiscardedEvents {
 			outcomes[outcomeKey{Reason: event.Reason, Category: event.Category}] += event.Quantity
@@ -551,17 +551,17 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 			name     string
 			envelope *protocol.Envelope
 			discard  telemetry.Discard
-			want     map[outcomeKey]int64 // nil when the envelope is sent
+			want     map[outcomeKey]uint64 // nil when the envelope is sent
 		}{
 			{"event", testEnvelope(protocol.EnvelopeItemTypeEvent), telemetry.Discard{Counts: (&Event{}).DiscardCounts()},
-				map[outcomeKey]int64{backoff(ratelimit.CategoryError): 1}},
+				map[outcomeKey]uint64{backoff(ratelimit.CategoryError): 1}},
 			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), telemetry.Discard{Counts: (&Event{Type: transactionType}).DiscardCounts()},
-				map[outcomeKey]int64{backoff(ratelimit.CategoryTransaction): 1, backoff(ratelimit.CategorySpan): 1}},
+				map[outcomeKey]uint64{backoff(ratelimit.CategoryTransaction): 1, backoff(ratelimit.CategorySpan): 1}},
 			{"trace metric", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, protocol.NewTraceMetricItem(3, []byte(`{"items":[]}`))), telemetry.Discard{Counts: metrics.DiscardCounts()},
-				map[outcomeKey]int64{backoff(ratelimit.CategoryTraceMetric): 3, backoff(ratelimit.CategoryTraceMetricByte): 3}},
+				map[outcomeKey]uint64{backoff(ratelimit.CategoryTraceMetric): 3, backoff(ratelimit.CategoryTraceMetricByte): 3}},
 			{"client report before event", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, pending, testEnvelope(protocol.EnvelopeItemTypeEvent).Items[0]),
 				telemetry.Discard{Counts: (&Event{}).DiscardCounts(), Report: clientReport},
-				map[outcomeKey]int64{backoff(ratelimit.CategoryError): 1, {Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError}: 2}},
+				map[outcomeKey]uint64{backoff(ratelimit.CategoryError): 1, {Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError}: 2}},
 			{"check-in", testEnvelope(protocol.EnvelopeItemTypeCheckIn), telemetry.Discard{}, nil},
 		}
 		for _, tt := range tests {
@@ -603,7 +603,7 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 			if err := transport.SendEnvelope(ctx, testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
 				t.Errorf("%s: should not return error, got %v", tt.name, err)
 			}
-			want := map[outcomeKey]int64{{Reason: tt.reason, Category: ratelimit.CategoryError}: 1}
+			want := map[outcomeKey]uint64{{Reason: tt.reason, Category: ratelimit.CategoryError}: 1}
 			if outcomes := takeOutcomes(recorder); fmt.Sprint(outcomes) != fmt.Sprint(want) {
 				t.Errorf("%s: got outcomes %v, want %v", tt.name, outcomes, want)
 			}

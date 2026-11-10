@@ -7,38 +7,47 @@ import (
 	"github.com/getsentry/sentry-go/report"
 )
 
-// DiscardCounts holds client report counts for a dropped item.
-type DiscardCounts struct {
-	Category ratelimit.Category
-	Quantity int64 // of Category
-	Spans    int64 // including the transaction itself
-	Bytes    int64 // log_byte for logs, trace_metric_byte for metrics, attachment bytes for events
+// Indices into DiscardCounts, one per data category.
+const (
+	CountError = iota
+	CountTransaction
+	CountSpan // including the transaction itself
+	CountMonitor
+	CountLog
+	CountLogByte
+	CountTraceMetric
+	CountTraceMetricByte
+	CountAttachment // bytes
+	countCategories
+)
+
+var categories = [countCategories]ratelimit.Category{
+	CountError:           ratelimit.CategoryError,
+	CountTransaction:     ratelimit.CategoryTransaction,
+	CountSpan:            ratelimit.CategorySpan,
+	CountMonitor:         ratelimit.CategoryMonitor,
+	CountLog:             ratelimit.CategoryLog,
+	CountLogByte:         ratelimit.CategoryLogByte,
+	CountTraceMetric:     ratelimit.CategoryTraceMetric,
+	CountTraceMetricByte: ratelimit.CategoryTraceMetricByte,
+	CountAttachment:      ratelimit.CategoryAttachment,
 }
 
-// Add returns c with the counts of other added, keeping c's Category.
+// DiscardCounts holds the client report quantity per data category for a dropped item, indexed by the Count constants.
+type DiscardCounts [countCategories]uint64
+
+// Add returns c with the counts of other added.
 func (c DiscardCounts) Add(other DiscardCounts) DiscardCounts {
-	c.Quantity += other.Quantity
-	c.Spans += other.Spans
-	c.Bytes += other.Bytes
+	for i, quantity := range other {
+		c[i] += quantity
+	}
 	return c
 }
 
 // Record records c as discarded for reason.
 func (c DiscardCounts) Record(reports *report.Aggregator, reason report.DiscardReason) {
-	reports.Record(reason, c.Category, c.Quantity)
-	reports.Record(reason, ratelimit.CategorySpan, c.Spans)
-	reports.Record(reason, byteCategory(c.Category), c.Bytes)
-}
-
-// byteCategory returns the category that counts the bytes of an item in category c.
-func byteCategory(c ratelimit.Category) ratelimit.Category {
-	switch c {
-	case ratelimit.CategoryLog:
-		return ratelimit.CategoryLogByte
-	case ratelimit.CategoryTraceMetric:
-		return ratelimit.CategoryTraceMetricByte
-	default:
-		return ratelimit.CategoryAttachment
+	for i, quantity := range c {
+		reports.Record(reason, categories[i], quantity)
 	}
 }
 

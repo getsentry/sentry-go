@@ -865,7 +865,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 			}
 			// Track spans removed by the callback
 			if droppedSpans := spansBefore - len(event.Spans); droppedSpans > 0 {
-				client.reports.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, int64(droppedSpans))
+				client.reports.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, uint64(droppedSpans))
 			}
 		}
 	case checkInType: // not a default case, since we shouldn't apply BeforeSend on check-in events
@@ -965,8 +965,8 @@ func (client *Client) runEventProcessors(event *Event, hint *EventHint, processo
 			counts.Record(client.reports, report.ReasonEventProcessor)
 			return nil
 		}
-		if droppedSpans := spansBefore - len(event.Spans); droppedSpans > 0 {
-			client.reports.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
+		if droppedSpans := spansBefore - len(event.Spans); event.Type == transactionType && droppedSpans > 0 {
+			client.reports.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, uint64(droppedSpans))
 		}
 	}
 	return event

@@ -13,7 +13,7 @@ func TestAggregatorConcurrentRecordAndTake(t *testing.T) {
 	t.Parallel()
 	const goroutines, perGoroutine = 8, 1000
 	aggregator := NewAggregator()
-	var taken int64
+	var taken uint64
 	take := func() {
 		if report := aggregator.TakeReport(); report != nil {
 			for _, event := range report.DiscardedEvents {
@@ -47,7 +47,7 @@ func TestAggregatorConcurrentRecordAndTake(t *testing.T) {
 	taker.Wait()
 	take()
 
-	if diff := cmp.Diff(int64(goroutines*perGoroutine), taken); diff != "" {
+	if diff := cmp.Diff(uint64(goroutines*perGoroutine), taken); diff != "" {
 		t.Errorf("taken quantity (-want +got):\n%s", diff)
 	}
 }

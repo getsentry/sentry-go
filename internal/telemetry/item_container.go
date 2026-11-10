@@ -79,7 +79,7 @@ func (b ItemContainer) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.En
 
 // DiscardCounts returns client report counts for a dropped batch, summed over its items.
 func (b ItemContainer) DiscardCounts() DiscardCounts {
-	counts := DiscardCounts{Category: b.category}
+	var counts DiscardCounts
 	for _, item := range b.items {
 		counts = counts.Add(item.DiscardCounts())
 	}

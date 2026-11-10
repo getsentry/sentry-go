@@ -69,13 +69,13 @@ func (t *testTelemetryItem) MakeSerializationSafe() {}
 
 func (t *testTelemetryItem) DiscardCounts() DiscardCounts { return oneDiscard(t.GetCategory()) }
 
-func transactionCounts(spanCount int) DiscardCounts {
-	return DiscardCounts{Category: ratelimit.CategoryTransaction, Quantity: 1, Spans: int64(spanCount)}
+func transactionCounts(spanCount uint64) DiscardCounts {
+	return DiscardCounts{CountTransaction: 1, CountSpan: spanCount}
 }
 
 type failingTransactionTelemetryItem struct {
 	testTelemetryItem
-	spanCount int
+	spanCount uint64
 }
 
 func (f *failingTransactionTelemetryItem) ToEnvelope(_ *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
@@ -550,7 +550,7 @@ func TestTelemetrySchedulerAccountsForEveryItem(t *testing.T) {
 	want := []report.DiscardedEvent{{
 		Reason:   report.ReasonBufferOverflow,
 		Category: ratelimit.CategoryError,
-		Quantity: goroutines*perGoroutine - transport.GetSendCount(),
+		Quantity: goroutines*perGoroutine - uint64(len(transport.GetSentEnvelopes())),
 	}}
 	if diff := cmp.Diff(want, dropped.DiscardedEvents); diff != "" {
 		t.Errorf("discarded events (-want +got):\n%s", diff)
