@@ -75,12 +75,11 @@ func TestAddFunc(t *testing.T) {
 	c.Entry(id).Job.Run()
 
 	f.Flush()
-	events := f.Events()
-	require.Len(t, events, 2)
-	assert.Equal(t, sentry.CheckInStatusInProgress, events[0].CheckIn.Status)
-	assert.Equal(t, sentry.CrontabSchedule("0 3 * * *"), events[0].MonitorConfig.Schedule)
-	assert.Equal(t, "UTC", events[0].MonitorConfig.Timezone)
-	assert.Equal(t, sentry.CheckInStatusError, events[1].CheckIn.Status)
+	checkins := f.Transport.CheckIns()
+	require.Len(t, checkins, 2)
+	assert.Equal(t, sentry.CheckInStatusInProgress, checkins[0].Status)
+	assert.JSONEq(t, `{"schedule":{"type":"crontab","value":"0 3 * * *"},"timezone":"UTC"}`, string(checkins[0].MonitorConfig))
+	assert.Equal(t, sentry.CheckInStatusError, checkins[1].Status)
 }
 
 func TestLocalName(t *testing.T) {

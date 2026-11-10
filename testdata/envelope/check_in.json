@@ -13,12 +13,6 @@
           "name": "sentry-go"
         }
       ]
-    },
-    "trace": {
-      "environment": "test",
-      "public_key": "whatever",
-      "release": "app@1.0.0",
-      "sample_rate": "1"
     }
   },
   "items": [
@@ -27,6 +21,9 @@
         "type": "check_in"
       },
       "payload": {
+        "contexts": {
+          "trace": {}
+        },
         "duration": 2,
         "environment": "test",
         "monitor_config": {
@@ -44,14 +41,6 @@
         "release": "app@1.0.0",
         "status": "ok"
       }
-    },
-    {
-      "header": {
-        "content_type": "text/plain",
-        "filename": "log.txt",
-        "type": "attachment"
-      },
-      "payload": "attached"
     }
   ]
 }
