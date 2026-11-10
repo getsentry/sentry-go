@@ -11,7 +11,7 @@ import (
 
 func oneDiscard(category ratelimit.Category) DiscardCounts {
 	var counts DiscardCounts
-	counts[slices.Index(categories[:], category)] = 1
+	counts[slices.Index(ratelimit.CountCategories[:], category)] = 1
 	return counts
 }
 

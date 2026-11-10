@@ -7,34 +7,9 @@ import (
 	"github.com/getsentry/sentry-go/report"
 )
 
-// Indices into DiscardCounts, one per data category.
-const (
-	CountError = iota
-	CountTransaction
-	CountSpan // including the transaction itself
-	CountMonitor
-	CountLog
-	CountLogByte
-	CountTraceMetric
-	CountTraceMetricByte
-	CountAttachment // bytes
-	countCategories
-)
-
-var categories = [countCategories]ratelimit.Category{
-	CountError:           ratelimit.CategoryError,
-	CountTransaction:     ratelimit.CategoryTransaction,
-	CountSpan:            ratelimit.CategorySpan,
-	CountMonitor:         ratelimit.CategoryMonitor,
-	CountLog:             ratelimit.CategoryLog,
-	CountLogByte:         ratelimit.CategoryLogByte,
-	CountTraceMetric:     ratelimit.CategoryTraceMetric,
-	CountTraceMetricByte: ratelimit.CategoryTraceMetricByte,
-	CountAttachment:      ratelimit.CategoryAttachment,
-}
-
-// DiscardCounts holds the client report quantity per data category for a dropped item, indexed by the Count constants.
-type DiscardCounts [countCategories]uint64
+// DiscardCounts holds the client report quantity per data category for a dropped item, indexed like
+// ratelimit.CountCategories.
+type DiscardCounts [len(ratelimit.CountCategories)]uint64
 
 // Add returns c with the counts of other added.
 func (c DiscardCounts) Add(other DiscardCounts) DiscardCounts {
@@ -47,7 +22,7 @@ func (c DiscardCounts) Add(other DiscardCounts) DiscardCounts {
 // Record records c as discarded for reason.
 func (c DiscardCounts) Record(reports *report.Aggregator, reason report.DiscardReason) {
 	for i, quantity := range c {
-		reports.Record(reason, categories[i], quantity)
+		reports.Record(reason, ratelimit.CountCategories[i], quantity)
 	}
 }
 

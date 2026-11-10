@@ -243,15 +243,15 @@ func TestClientReports_DiscardCounts(t *testing.T) {
 		want telemetry.DiscardCounts
 	}{
 		{"empty log", &Log{},
-			telemetry.DiscardCounts{telemetry.CountLog: 1, telemetry.CountLogByte: 1}},
+			telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: 1}},
 		{"log", &Log{Body: "user logged in", Level: LogLevelInfo, Timestamp: time.Now(), Attributes: attrs},
-			telemetry.DiscardCounts{telemetry.CountLog: 1, telemetry.CountLogByte: 14 + attrsSize}},
+			telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: 14 + attrsSize}},
 		{"metric", &Metric{Name: "http.requests", Type: MetricTypeCounter, Value: Int64MetricValue(7), Attributes: attrs},
-			telemetry.DiscardCounts{telemetry.CountTraceMetric: 1, telemetry.CountTraceMetricByte: 13 + 8 + attrsSize}},
+			telemetry.DiscardCounts{ratelimit.CountTraceMetric: 1, ratelimit.CountTraceMetricByte: 13 + 8 + attrsSize}},
 		{"transaction", &Event{Type: transactionType, Spans: []*Span{{}, {}}},
-			telemetry.DiscardCounts{telemetry.CountTransaction: 1, telemetry.CountSpan: 3}},
+			telemetry.DiscardCounts{ratelimit.CountTransaction: 1, ratelimit.CountSpan: 3}},
 		{"error with attachments", &Event{Attachments: []*Attachment{{Payload: []byte("abc")}, {Payload: []byte("de")}}},
-			telemetry.DiscardCounts{telemetry.CountError: 1, telemetry.CountAttachment: 5}},
+			telemetry.DiscardCounts{ratelimit.CountError: 1, ratelimit.CountAttachment: 5}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

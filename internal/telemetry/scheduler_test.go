@@ -70,7 +70,7 @@ func (t *testTelemetryItem) MakeSerializationSafe() {}
 func (t *testTelemetryItem) DiscardCounts() DiscardCounts { return oneDiscard(t.GetCategory()) }
 
 func transactionCounts(spanCount uint64) DiscardCounts {
-	return DiscardCounts{CountTransaction: 1, CountSpan: spanCount}
+	return DiscardCounts{ratelimit.CountTransaction: 1, ratelimit.CountSpan: spanCount}
 }
 
 type failingTransactionTelemetryItem struct {

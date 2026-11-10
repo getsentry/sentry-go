@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"github.com/getsentry/sentry-go/attribute"
+	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/telemetry"
 )
 
@@ -12,35 +13,35 @@ func (e *Event) DiscardCounts() telemetry.DiscardCounts {
 	case transactionType:
 		counts = transactionDiscardCounts(uint64(len(e.Spans)))
 	case checkInType:
-		counts[telemetry.CountMonitor] = 1
+		counts[ratelimit.CountMonitor] = 1
 	case logEvent.Type:
-		counts[telemetry.CountLog] = 1
+		counts[ratelimit.CountLog] = 1
 	case traceMetricEvent.Type:
-		counts[telemetry.CountTraceMetric] = 1
+		counts[ratelimit.CountTraceMetric] = 1
 	default:
-		counts[telemetry.CountError] = 1
+		counts[ratelimit.CountError] = 1
 	}
 	for _, attachment := range e.Attachments {
-		counts[telemetry.CountAttachment] += uint64(len(attachment.Payload))
+		counts[ratelimit.CountAttachment] += uint64(len(attachment.Payload))
 	}
 	return counts
 }
 
 // transactionDiscardCounts returns client report counts for a dropped transaction with the given child spans.
 func transactionDiscardCounts(spans uint64) telemetry.DiscardCounts {
-	return telemetry.DiscardCounts{telemetry.CountTransaction: 1, telemetry.CountSpan: spans + 1}
+	return telemetry.DiscardCounts{ratelimit.CountTransaction: 1, ratelimit.CountSpan: spans + 1}
 }
 
 // DiscardCounts returns client report counts for a dropped log.
 func (l *Log) DiscardCounts() telemetry.DiscardCounts {
-	return telemetry.DiscardCounts{telemetry.CountLog: 1, telemetry.CountLogByte: byteSize(len(l.Body), l.Attributes)}
+	return telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: byteSize(len(l.Body), l.Attributes)}
 }
 
 // DiscardCounts returns client report counts for a dropped metric.
 func (m *Metric) DiscardCounts() telemetry.DiscardCounts {
 	return telemetry.DiscardCounts{
-		telemetry.CountTraceMetric:     1,
-		telemetry.CountTraceMetricByte: byteSize(len(m.Name)+valueSize(m.Value.value), m.Attributes),
+		ratelimit.CountTraceMetric:     1,
+		ratelimit.CountTraceMetricByte: byteSize(len(m.Name)+valueSize(m.Value.value), m.Attributes),
 	}
 }
 

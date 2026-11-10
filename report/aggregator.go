@@ -1,19 +1,31 @@
 package report
 
 import (
-	"sync"
+	"slices"
 	"sync/atomic"
 	"time"
 
+	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/protocol"
 )
+
+var reasons = [...]DiscardReason{
+	ReasonQueueOverflow,
+	ReasonBufferOverflow,
+	ReasonRateLimitBackoff,
+	ReasonBeforeSend,
+	ReasonEventProcessor,
+	ReasonSampleRate,
+	ReasonNetworkError,
+	ReasonSendError,
+	ReasonInternalError,
+}
 
 // Aggregator collects discarded event outcomes for client reports. It is safe for concurrent use, and a nil
 // Aggregator records nothing.
 type Aggregator struct {
-	// outcomes maps outcomeKey to *atomic.Int64. Keys are never deleted, so a concurrent Record can't add to a
-	// counter that is no longer in the map.
-	outcomes sync.Map
+	// outcomes is indexed by the positions in reasons and ratelimit.CountCategories.
+	outcomes [len(reasons)][len(ratelimit.CountCategories)]atomic.Uint64
 }
 
 // NewAggregator creates a new client report Aggregator.
@@ -22,16 +34,15 @@ func NewAggregator() *Aggregator {
 }
 
 // Record records quantity items of category as discarded for reason.
-func (a *Aggregator) Record(reason DiscardReason, category protocol.DataCategory, quantity int64) {
-	if a == nil || quantity <= 0 {
+func (a *Aggregator) Record(reason DiscardReason, category protocol.DataCategory, quantity uint64) {
+	if a == nil || quantity == 0 {
 		return
 	}
-	key := outcomeKey{Reason: reason, Category: category}
-	counter, ok := a.outcomes.Load(key)
-	if !ok {
-		counter, _ = a.outcomes.LoadOrStore(key, new(atomic.Int64))
+	r, c := slices.Index(reasons[:], reason), slices.Index(ratelimit.CountCategories[:], category)
+	if r < 0 || c < 0 {
+		return
 	}
-	counter.(*atomic.Int64).Add(quantity)
+	a.outcomes[r][c].Add(quantity)
 }
 
 // TakeReport atomically takes all accumulated outcomes and returns a ClientReport.
@@ -41,13 +52,13 @@ func (a *Aggregator) TakeReport() *ClientReport {
 	}
 
 	var events []DiscardedEvent
-	a.outcomes.Range(func(key, counter any) bool {
-		if quantity := counter.(*atomic.Int64).Swap(0); quantity > 0 {
-			outcome := key.(outcomeKey)
-			events = append(events, DiscardedEvent{Reason: outcome.Reason, Category: outcome.Category, Quantity: quantity})
+	for r := range a.outcomes {
+		for c := range a.outcomes[r] {
+			if quantity := a.outcomes[r][c].Swap(0); quantity > 0 {
+				events = append(events, DiscardedEvent{Reason: reasons[r], Category: ratelimit.CountCategories[c], Quantity: quantity})
+			}
 		}
-		return true
-	})
+	}
 	if len(events) == 0 {
 		return nil
 	}

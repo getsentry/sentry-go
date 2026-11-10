@@ -20,6 +20,33 @@ const (
 	CategoryAttachment      = protocol.DataCategoryAttachment
 )
 
+// Indices into CountCategories.
+const (
+	CountError = iota
+	CountTransaction
+	CountSpan // including the transaction itself
+	CountMonitor
+	CountLog
+	CountLogByte
+	CountTraceMetric
+	CountTraceMetricByte
+	CountAttachment // bytes
+	countCategories
+)
+
+// CountCategories lists the categories that client reports count.
+var CountCategories = [countCategories]Category{
+	CountError:           CategoryError,
+	CountTransaction:     CategoryTransaction,
+	CountSpan:            CategorySpan,
+	CountMonitor:         CategoryMonitor,
+	CountLog:             CategoryLog,
+	CountLogByte:         CategoryLogByte,
+	CountTraceMetric:     CategoryTraceMetric,
+	CountTraceMetricByte: CategoryTraceMetricByte,
+	CountAttachment:      CategoryAttachment,
+}
+
 // knownCategories is the set of currently known categories. Other categories
 // are ignored for the purpose of rate-limiting.
 var knownCategories = map[Category]struct{}{
