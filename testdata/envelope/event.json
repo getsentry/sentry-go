@@ -1,0 +1,169 @@
+{
+  "header": {
+    "event_id": "624de7e6884a45879c87773c9645e7c0",
+    "sent_at": "2000-01-01T01:00:00+01:00",
+    "dsn": "https://whatever@sentry.io/1337",
+    "sdk": {
+      "name": "sentry.go",
+      "version": "1.0.0-alpha.1",
+      "integrations": [
+        "Environment",
+        "GlobalTags",
+        "IgnoreErrors",
+        "IgnoreTransactions",
+        "Modules"
+      ],
+      "packages": [
+        {
+          "name": "sentry-go",
+          "version": "1.0.0-alpha.1"
+        }
+      ]
+    },
+    "trace": {
+      "environment": "test",
+      "public_key": "whatever",
+      "release": "app@1.0.0",
+      "sample_rate": "1",
+      "sampled": "true",
+      "trace_id": "07d68b0fbd1dab5e1614afdfdd2207b7",
+      "transaction": "GET /orders/:id"
+    }
+  },
+  "items": [
+    {
+      "header": {
+        "type": "event",
+        "length": 1826
+      },
+      "payload": {
+        "environment": "test",
+        "event_id": "624de7e6884a45879c87773c9645e7c0",
+        "fingerprint": [
+          "fingerprint"
+        ],
+        "level": "error",
+        "message": "checkout failed",
+        "transaction": "GET /orders/:id",
+        "platform": "go",
+        "release": "app@1.0.0",
+        "sdk": {
+          "name": "sentry.go",
+          "version": "1.0.0-alpha.1",
+          "integrations": [
+            "Environment",
+            "GlobalTags",
+            "IgnoreErrors",
+            "IgnoreTransactions",
+            "Modules"
+          ],
+          "packages": [
+            {
+              "name": "sentry-go",
+              "version": "1.0.0-alpha.1"
+            }
+          ]
+        },
+        "server_name": "golden",
+        "timestamp": "2000-01-01T01:00:00+01:00",
+        "modules": {
+          "github.com/davecgh/go-spew": "v1.1.2-0.20180830191138-d8f796af33cc",
+          "github.com/getsentry/sentry-go": "(devel)",
+          "github.com/go-errors/errors": "v1.4.2",
+          "github.com/google/go-cmp": "v0.7.0",
+          "github.com/pingcap/errors": "v0.11.4",
+          "github.com/pkg/errors": "v0.9.1",
+          "github.com/pmezard/go-difflib": "v1.0.1-0.20181226105442-5d4384ee4fb2",
+          "github.com/stretchr/testify": "v1.11.1",
+          "go.uber.org/goleak": "v1.3.0",
+          "gopkg.in/yaml.v3": "v3.0.1"
+        },
+        "request": {
+          "url": "http://example.com/orders/7",
+          "method": "GET",
+          "query_string": "page=2",
+          "headers": {
+            "Host": "example.com",
+            "User-Agent": "golden"
+          }
+        },
+        "tags": {
+          "tag": "value"
+        },
+        "contexts": {
+          "custom": {
+            "key": "value",
+            "nested": {
+              "n": 1
+            }
+          },
+          "device": {
+            "arch": "arm64",
+            "num_cpu": 12
+          },
+          "os": {
+            "name": "darwin"
+          },
+          "runtime": {
+            "go_maxprocs": 12,
+            "go_numcgocalls": 0,
+            "go_numroutines": 6,
+            "name": "go",
+            "version": "go1.27.3"
+          },
+          "trace": {
+            "data": {
+              "http.response.status_code": 200
+            },
+            "op": "http.server",
+            "span_id": "4e21be22f1c21fa8",
+            "status": "ok",
+            "trace_id": "07d68b0fbd1dab5e1614afdfdd2207b7"
+          }
+        },
+        "breadcrumbs": [
+          {
+            "category": "auth",
+            "message": "logged in",
+            "data": {
+              "method": "sso"
+            },
+            "timestamp": "2000-01-01T01:00:00+01:00"
+          }
+        ],
+        "exception": [
+          {
+            "type": "*errors.errorString",
+            "value": "boom",
+            "stacktrace": {
+              "frames": [
+                {
+                  "function": "TestEnvelopes.func1",
+                  "module": "github.com/getsentry/sentry-go_test",
+                  "abs_path": "/Users/giannis/Projects/sentry-go/capture_external_test.go",
+                  "lineno": 52,
+                  "in_app": true
+                }
+              ]
+            }
+          }
+        ],
+        "user": {
+          "id": "42",
+          "data": {
+            "plan": "pro"
+          }
+        }
+      }
+    },
+    {
+      "header": {
+        "type": "attachment",
+        "length": 8,
+        "filename": "log.txt",
+        "content_type": "text/plain"
+      },
+      "payload": "attached"
+    }
+  ]
+}
