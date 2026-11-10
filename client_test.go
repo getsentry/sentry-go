@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1770,10 +1769,10 @@ func setupMultiClientEnv(t *testing.T) *multiClientEnv {
 
 func (e *multiClientEnv) resetTransports() {
 	e.transport1.mu.Lock()
-	e.transport1.events = nil
+	e.transport1.events, e.transport1.logs, e.transport1.metrics = nil, nil, nil
 	e.transport1.mu.Unlock()
 	e.transport2.mu.Lock()
-	e.transport2.events = nil
+	e.transport2.events, e.transport2.logs, e.transport2.metrics = nil, nil, nil
 	e.transport2.mu.Unlock()
 }
 
@@ -1812,15 +1811,15 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		NewLogger(e.ctx2).Info().WithCtx(e.ctx2).Emit("log-from-client2")
 		e.flushAll()
 
-		require.Len(t, e.transport1.Events(), 1, "client1 transport should have 1 log event")
-		require.Len(t, e.transport2.Events(), 1, "client2 transport should have 1 log event")
-		require.Len(t, e.transport1.Events()[0].Logs, 1)
-		require.Len(t, e.transport2.Events()[0].Logs, 1)
-		assert.Equal(t, "log-from-client1", e.transport1.Events()[0].Logs[0].Body)
-		assert.Equal(t, "log-from-client2", e.transport2.Events()[0].Logs[0].Body)
-		assert.Equal(t, e.traceID1, e.transport1.Events()[0].Logs[0].TraceID,
+		require.Len(t, e.transport1.LogBatches(), 1, "client1 transport should have 1 log event")
+		require.Len(t, e.transport2.LogBatches(), 1, "client2 transport should have 1 log event")
+		require.Len(t, e.transport1.LogBatches()[0].Logs, 1)
+		require.Len(t, e.transport2.LogBatches()[0].Logs, 1)
+		assert.Equal(t, "log-from-client1", e.transport1.LogBatches()[0].Logs[0].Body)
+		assert.Equal(t, "log-from-client2", e.transport2.LogBatches()[0].Logs[0].Body)
+		assert.Equal(t, e.traceID1, e.transport1.LogBatches()[0].Logs[0].TraceID,
 			"log on client1 should carry scope1's trace ID")
-		assert.Equal(t, e.traceID2, e.transport2.Events()[0].Logs[0].TraceID,
+		assert.Equal(t, e.traceID2, e.transport2.LogBatches()[0].Logs[0].TraceID,
 			"log on client2 should carry scope2's trace ID")
 		e.resetTransports()
 
@@ -1828,12 +1827,12 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		NewMeter(e.ctx2).Count("counter-from-client2", 2)
 		e.flushAll()
 
-		require.Len(t, e.transport1.Events(), 1, "client1 transport should have 1 metric event")
-		require.Len(t, e.transport2.Events(), 1, "client2 transport should have 1 metric event")
-		require.Len(t, e.transport1.Events()[0].Metrics, 1)
-		require.Len(t, e.transport2.Events()[0].Metrics, 1)
-		assert.Equal(t, "counter-from-client1", e.transport1.Events()[0].Metrics[0].Name)
-		assert.Equal(t, "counter-from-client2", e.transport2.Events()[0].Metrics[0].Name)
+		require.Len(t, e.transport1.MetricBatches(), 1, "client1 transport should have 1 metric event")
+		require.Len(t, e.transport2.MetricBatches(), 1, "client2 transport should have 1 metric event")
+		require.Len(t, e.transport1.MetricBatches()[0].Metrics, 1)
+		require.Len(t, e.transport2.MetricBatches()[0].Metrics, 1)
+		assert.Equal(t, "counter-from-client1", e.transport1.MetricBatches()[0].Metrics[0].Name)
+		assert.Equal(t, "counter-from-client2", e.transport2.MetricBatches()[0].Metrics[0].Name)
 	})
 
 	t.Run("signals_respect_emit_context_client", func(t *testing.T) {
@@ -1858,18 +1857,19 @@ func TestClient_MultiClientSetup(t *testing.T) {
 				meter.WithCtx(emitCtx).Count("cross-context-count", 1)
 				e.flushAll()
 
-				assert.Empty(t, e.transport1.Events(), "creation-time client should not receive the signals")
-				events := e.transport2.Events()
-				slices.SortFunc(events, func(a, b *Event) int { return strings.Compare(a.Type, b.Type) })
-				require.Len(t, events, 2, "emit-context client should receive the signals")
-				require.Len(t, events[0].Logs, 1)
-				require.Len(t, events[1].Metrics, 1)
-				assert.Equal(t, "cross-context-log", events[0].Logs[0].Body)
-				assert.Equal(t, "cross-context-count", events[1].Metrics[0].Name)
-				assert.Equal(t, wantTraceID, events[0].Logs[0].TraceID)
-				assert.Equal(t, wantTraceID, events[1].Metrics[0].TraceID)
-				assert.Equal(t, "release-2", events[0].Logs[0].Attributes["sentry.release"].AsString())
-				assert.Equal(t, "release-2", events[1].Metrics[0].Attributes["sentry.release"].AsString())
+				assert.Empty(t, e.transport1.LogBatches(), "creation-time client should not receive the signals")
+				assert.Empty(t, e.transport1.MetricBatches(), "creation-time client should not receive the signals")
+				logs, metrics := e.transport2.LogBatches(), e.transport2.MetricBatches()
+				require.Len(t, logs, 1, "emit-context client should receive the signals")
+				require.Len(t, metrics, 1, "emit-context client should receive the signals")
+				require.Len(t, logs[0].Logs, 1)
+				require.Len(t, metrics[0].Metrics, 1)
+				assert.Equal(t, "cross-context-log", logs[0].Logs[0].Body)
+				assert.Equal(t, "cross-context-count", metrics[0].Metrics[0].Name)
+				assert.Equal(t, wantTraceID, logs[0].Logs[0].TraceID)
+				assert.Equal(t, wantTraceID, metrics[0].Metrics[0].TraceID)
+				assert.Equal(t, "release-2", logs[0].Logs[0].Attributes["sentry.release"].AsString())
+				assert.Equal(t, "release-2", metrics[0].Metrics[0].Attributes["sentry.release"].AsString())
 			})
 		}
 	})
@@ -1886,8 +1886,10 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		NewMeter(e.ctx2).WithCtx(disabledCtx).Count("suppressed", 1)
 		e.flushAll()
 
-		assert.Empty(t, e.transport1.Events())
-		require.Len(t, e.transport2.Events(), 2)
+		assert.Empty(t, e.transport1.LogBatches())
+		assert.Empty(t, e.transport1.MetricBatches())
+		require.Len(t, e.transport2.LogBatches(), 1)
+		require.Len(t, e.transport2.MetricBatches(), 1)
 	})
 
 	t.Run("signals_use_creation_context_as_fallback", func(t *testing.T) {
@@ -1899,12 +1901,13 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		meter.WithCtx(context.TODO()).Count("fallback-context-count", 1)
 		e.flushAll()
 
-		events := e.transport1.Events()
-		slices.SortFunc(events, func(a, b *Event) int { return strings.Compare(a.Type, b.Type) })
-		require.Len(t, events, 2)
-		assert.Empty(t, e.transport2.Events())
-		assert.Equal(t, e.traceID1, events[0].Logs[0].TraceID)
-		assert.Equal(t, e.traceID1, events[1].Metrics[0].TraceID)
+		logs, metrics := e.transport1.LogBatches(), e.transport1.MetricBatches()
+		require.Len(t, logs, 1)
+		require.Len(t, metrics, 1)
+		assert.Empty(t, e.transport2.LogBatches())
+		assert.Empty(t, e.transport2.MetricBatches())
+		assert.Equal(t, e.traceID1, logs[0].Logs[0].TraceID)
+		assert.Equal(t, e.traceID1, metrics[0].Metrics[0].TraceID)
 	})
 	t.Run("explicit client owns the transaction and concurrent DSC", func(t *testing.T) {
 		creator, creatorTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "creator"})

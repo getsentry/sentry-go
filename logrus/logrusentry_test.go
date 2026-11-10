@@ -35,9 +35,10 @@ func TestLogHookUsesEntryContextClient(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	contextFixture.Flush()
+	defaultFixture.Flush()
 
-	assert.Empty(t, defaultFixture.Events())
-	got := contextFixture.Events()
+	assert.Empty(t, defaultFixture.Transport.LogBatches())
+	got := contextFixture.Transport.LogBatches()
 	assert.Equal(t, 1, len(got))
 	assert.Equal(t, 1, len(got[0].Logs))
 	assert.Equal(t, "context log", got[0].Logs[0].Body)
@@ -117,7 +118,7 @@ func TestLogHookAddTags(t *testing.T) {
 
 	hook.Flush(testutils.FlushTimeout())
 
-	got := f.Events()
+	got := f.Transport.LogBatches()
 	assert.Equal(t, 1, len(got))
 	assert.Equal(t, tags["tag1"], got[0].Logs[0].Attributes["tag1"].String())
 	assert.Equal(t, tags["tag2"], got[0].Logs[0].Attributes["tag2"].String())
@@ -195,7 +196,7 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 
 	hook.Flush(testutils.FlushTimeout())
 
-	got := f.Events()
+	got := f.Transport.LogBatches()
 	assert.Equal(t, 1, len(got))
 	if diff := cmp.Diff(wantAttrs, got[0].Logs[0].Attributes,
 		cmp.AllowUnexported(attribute.Value{}),

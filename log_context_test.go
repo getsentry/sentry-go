@@ -40,7 +40,7 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 	span2.Finish()
 
 	Flush(testutils.FlushTimeout())
-	events := transport.Events()
+	events := transport.LogBatches()
 	var logs []struct {
 		message string
 		traceID TraceID
