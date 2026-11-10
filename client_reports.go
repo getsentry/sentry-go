@@ -12,8 +12,6 @@ func (e *Event) DiscardCounts() telemetry.DiscardCounts {
 	switch e.Type {
 	case transactionType:
 		counts = transactionDiscardCounts(uint64(len(e.Spans)))
-	case checkInType:
-		counts[ratelimit.CountMonitor] = 1
 	case logEvent.Type:
 		counts[ratelimit.CountLog] = 1
 	case traceMetricEvent.Type:
@@ -30,6 +28,11 @@ func (e *Event) DiscardCounts() telemetry.DiscardCounts {
 // transactionDiscardCounts returns client report counts for a dropped transaction with the given child spans.
 func transactionDiscardCounts(spans uint64) telemetry.DiscardCounts {
 	return telemetry.DiscardCounts{ratelimit.CountTransaction: 1, ratelimit.CountSpan: spans + 1}
+}
+
+// DiscardCounts returns client report counts for a dropped check-in.
+func (c *checkInItem) DiscardCounts() telemetry.DiscardCounts {
+	return telemetry.DiscardCounts{ratelimit.CountMonitor: 1}
 }
 
 // DiscardCounts returns client report counts for a dropped log.

@@ -248,6 +248,8 @@ func TestClientReports_DiscardCounts(t *testing.T) {
 			telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: 14 + attrsSize}},
 		{"metric", &Metric{Name: "http.requests", Type: MetricTypeCounter, Value: Int64MetricValue(7), Attributes: attrs},
 			telemetry.DiscardCounts{ratelimit.CountTraceMetric: 1, ratelimit.CountTraceMetricByte: 13 + 8 + attrsSize}},
+		{"check-in", &checkInItem{},
+			telemetry.DiscardCounts{ratelimit.CountMonitor: 1}},
 		{"transaction", &Event{Type: transactionType, Spans: []*Span{{}, {}}},
 			telemetry.DiscardCounts{ratelimit.CountTransaction: 1, ratelimit.CountSpan: 3}},
 		{"error with attachments", &Event{Attachments: []*Attachment{{Payload: []byte("abc")}, {Payload: []byte("de")}}},
