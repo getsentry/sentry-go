@@ -17,32 +17,21 @@ import (
 // Modules Integration
 // ================================
 
-type modulesIntegration struct {
-	once    sync.Once
-	modules map[string]string
-}
+type modulesIntegration struct{}
 
 func (mi *modulesIntegration) Name() string {
 	return "Modules"
 }
 
 func (mi *modulesIntegration) SetupOnce(client *Client) {
-	client.AddEventProcessor(mi.processor)
-}
-
-func (mi *modulesIntegration) processor(event *Event, _ *EventHint) *Event {
-	if len(event.Modules) == 0 {
-		mi.once.Do(func() {
-			info, ok := debug.ReadBuildInfo()
-			if !ok {
-				debuglog.Print("The Modules integration is not available in binaries built without module support.")
-				return
-			}
-			mi.modules = extractModules(info)
-		})
-	}
-	event.Modules = mi.modules
-	return event
+	client.modules = sync.OnceValue(func() map[string]string {
+		info, ok := debug.ReadBuildInfo()
+		if !ok {
+			debuglog.Print("The Modules integration is not available in binaries built without module support.")
+			return nil
+		}
+		return extractModules(info)
+	})
 }
 
 func extractModules(info *debug.BuildInfo) map[string]string {

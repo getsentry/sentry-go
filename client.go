@@ -267,6 +267,7 @@ type Client struct {
 	eventProcessors       []EventProcessor
 	integrations          []Integration
 	externalTraceResolver externalContextTraceResolver
+	modules               func() map[string]string // set by the Modules integration
 	sdkIdentifier         string
 	sdkVersion            string
 	// Transport is read-only. Replacing the transport of an existing client is
@@ -802,7 +803,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 	// (errors, messages) are sampled here.
 	if event.Type != transactionType && !sample(client.options.SampleRate) {
 		debuglog.Println("Event dropped due to SampleRate hit.")
-		event.DiscardCounts().Record(client.reports, report.ReasonSampleRate)
+		event.discardCounts().Record(client.reports, report.ReasonSampleRate)
 		return nil
 	}
 
@@ -816,7 +817,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 	switch event.Type {
 	case transactionType:
 		if client.options.BeforeSendTransaction != nil {
-			counts, spansBefore := event.DiscardCounts(), len(event.Spans)
+			counts, spansBefore := event.discardCounts(), len(event.Spans)
 			event = client.options.BeforeSendTransaction(event, hint)
 			if event == nil {
 				debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
@@ -830,7 +831,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 		}
 	default:
 		if client.options.BeforeSend != nil {
-			counts := event.DiscardCounts()
+			counts := event.discardCounts()
 			if event = client.options.BeforeSend(event, hint); event == nil {
 				debuglog.Println("Event dropped due to BeforeSend callback.")
 				counts.Record(client.reports, report.ReasonBeforeSend)
@@ -839,7 +840,11 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 		}
 	}
 
-	if !client.telemetryProcessor.Add(ctx, event) {
+	owned := event.owned()
+	if len(owned.Modules) == 0 && client.modules != nil {
+		owned.Modules = client.modules()
+	}
+	if !client.telemetryProcessor.Add(ctx, eventItem{&owned}) {
 		debuglog.Println("Event dropped: telemetry buffer full or unavailable")
 		return nil
 	}
@@ -917,7 +922,7 @@ func (client *Client) prepareEvent(ctx context.Context, event *Event, scope *Sco
 func (client *Client) runEventProcessors(event *Event, hint *EventHint, processors []EventProcessor) *Event {
 	for _, processor := range processors {
 		id := event.EventID
-		counts, spansBefore := event.DiscardCounts(), len(event.Spans)
+		counts, spansBefore := event.discardCounts(), len(event.Spans)
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by an EventProcessor: %s\n", id)

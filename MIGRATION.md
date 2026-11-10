@@ -165,6 +165,9 @@ type Transport interface {
 | `Recover()` and `RecoverWithContext(ctx)` | `defer sentry.Recover(ctx, nil)` |
 | `EventModifier`, `client.EventFromMessage`, `EventFromException`, `EventFromCheckIn` | Capture methods, scope setters, and `BeforeSend` or event processors |
 | `Event.CheckIn` and `Event.MonitorConfig` | Removed; a check-in is no longer an event. Event processors don't receive check-ins and scope attachments aren't sent with them |
+| `Event.MarshalJSON` and `Span.MarshalJSON` | Removed; `json.Marshal` encodes both by their field tags |
+| `ToEnvelope`, `ToEnvelopeItem`, `GetCategory`, `GetEventID`, `GetSdkInfo`, `GetDynamicSamplingContext`, `MakeSerializationSafe`, and `DiscardCounts` on `Event` | Removed; they were SDK internals |
+| Reading `Event.Modules` in `BeforeSend` or an event processor | Modules are added after the callbacks run; set `Event.Modules` to send your own |
 
 </details>
 

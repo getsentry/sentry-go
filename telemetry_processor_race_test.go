@@ -7,29 +7,14 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/getsentry/sentry-go/internal/ratelimit"
-	"github.com/getsentry/sentry-go/internal/telemetry"
-	"github.com/getsentry/sentry-go/internal/testutils"
-	"github.com/getsentry/sentry-go/protocol"
 )
 
 // This race is between json.Marshal on the scheduler goroutine and user
 // mutations on the calling goroutine. It validates that we don't hold
 // mutable user data on the SDK.
 func TestTelemetryProcessorRace(_ *testing.T) {
-	transport := &testutils.MockTelemetryTransport{}
-	dsn := &protocol.Dsn{}
-	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
-
-	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
-		ratelimit.CategoryError: telemetry.NewRingBuffer[telemetry.Item](
-			ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, nil,
-		),
-	}
-
-	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
-	defer proc.Close(2 * time.Second)
+	// MockTransport would encode on the calling goroutine.
+	client, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &NoopTransport{}})
 
 	const numEvents = 100
 	const numMutations = 500
@@ -49,7 +34,7 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 			{Message: "initial breadcrumb", Timestamp: time.Now()},
 		}
 
-		proc.Add(context.Background(), event)
+		client.CaptureEvent(context.Background(), event)
 		// Yield to let the scheduler goroutine start processing
 		runtime.Gosched()
 
@@ -62,35 +47,19 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 					"dynamic": fmt.Sprintf("value-%d", j),
 				}
 
-				// Slice shrink/grow — "index out of range"
-				ev.Breadcrumbs = append(ev.Breadcrumbs, &Breadcrumb{
-					Message:   fmt.Sprintf("breadcrumb-%d-%d", idx, j),
-					Timestamp: time.Now(),
-				})
-				if j%10 == 0 && len(ev.Breadcrumbs) > 1 {
-					ev.Breadcrumbs = ev.Breadcrumbs[:1]
-				}
+				ev.Breadcrumbs[0].Message = fmt.Sprintf("breadcrumb-%d-%d", idx, j)
 			}
 		}(event, i)
 	}
 
+	// Close before waiting, so that encoding is not ordered after the mutations.
+	client.Close()
 	wg.Wait()
-	testutils.FlushWithTimeout(proc, 2*time.Second)
 }
 
 func TestTelemetryProcessorRaceSpans(_ *testing.T) {
-	transport := &testutils.MockTelemetryTransport{}
-	dsn := &protocol.Dsn{}
-	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
-
-	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
-		ratelimit.CategoryTransaction: telemetry.NewRingBuffer[telemetry.Item](
-			ratelimit.CategoryTransaction, 100, telemetry.OverflowPolicyDropOldest, 1, 0, nil,
-		),
-	}
-
-	proc := telemetry.NewProcessor(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
-	defer proc.Close(2 * time.Second)
+	// MockTransport would encode on the calling goroutine.
+	client, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &NoopTransport{}})
 
 	const numTransactions = 100
 	const numChildren = 4
@@ -121,7 +90,7 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 		event.Timestamp = time.Now()
 		event.Spans = children
 
-		proc.Add(context.Background(), event)
+		client.CaptureEvent(context.Background(), event)
 		runtime.Gosched()
 
 		wg.Add(1)
@@ -136,6 +105,7 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 		}(children, i)
 	}
 
+	// Close before waiting, so that encoding is not ordered after the mutations.
+	client.Close()
 	wg.Wait()
-	testutils.FlushWithTimeout(proc, 2*time.Second)
 }
