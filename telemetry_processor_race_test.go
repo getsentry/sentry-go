@@ -82,15 +82,18 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 			children = append(children, child)
 		}
 
-		event := NewEvent()
-		event.EventID = EventID(fmt.Sprintf("%032x", i))
-		event.Type = transactionType
-		event.Transaction = fmt.Sprintf("tx %d", i)
-		event.StartTime = time.Now()
-		event.Timestamp = time.Now()
-		event.Spans = children
+		tx := &Transaction{
+			EventID:   EventID(fmt.Sprintf("%032x", i)),
+			Name:      fmt.Sprintf("tx %d", i),
+			StartTime: time.Now(),
+			EndTime:   time.Now(),
+			Spans:     children,
+			Tags:      map[string]string{"initial": "value"},
+			Contexts:  map[string]Context{"initial": {"key": "value"}},
+			Request:   &Request{Headers: map[string]string{"initial": "value"}},
+		}
 
-		client.CaptureEvent(context.Background(), event)
+		client.captureTransaction(context.Background(), tx, nil)
 		runtime.Gosched()
 
 		wg.Add(1)
@@ -101,6 +104,10 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 					sp.SetTag(fmt.Sprintf("tag-%d-%d", idx, j), fmt.Sprintf("v-%d", j))
 					sp.SetData(fmt.Sprintf("data-%d-%d", idx, j), j)
 				}
+				key := fmt.Sprintf("key-%d", j)
+				tx.Tags[key] = "value"
+				tx.Contexts[key] = Context{}
+				tx.Request.Headers[key] = "value"
 			}
 		}(children, i)
 	}

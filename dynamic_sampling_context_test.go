@@ -2,6 +2,7 @@ package sentry
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"testing"
 
@@ -305,8 +306,10 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 					root.SetDynamicSamplingContext(DynamicSamplingContext{Entries: map[string]string{"release": "late"}})
 					root.Finish()
 				}
-				for _, event := range transport.Events() {
-					require.Equal(t, want.Entries, event.sdkMetaData.dsc.Entries)
+				for _, envelope := range transport.Envelopes() {
+					if !maps.Equal(want.Entries, envelope.Header.Trace) {
+						t.Errorf("envelope trace = %v, want %v", envelope.Header.Trace, want.Entries)
+					}
 				}
 			})
 		}

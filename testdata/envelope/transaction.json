@@ -29,15 +29,6 @@
         "type": "transaction"
       },
       "payload": {
-        "breadcrumbs": [
-          {
-            "category": "auth",
-            "data": {
-              "method": "sso"
-            },
-            "message": "logged in"
-          }
-        ],
         "contexts": {
           "custom": {
             "key": "value",
@@ -54,10 +45,6 @@
           }
         },
         "environment": "test",
-        "fingerprint": [
-          "fingerprint"
-        ],
-        "level": "info",
         "platform": "go",
         "release": "app@1.0.0",
         "request": {
@@ -113,14 +100,6 @@
           "id": "42"
         }
       }
-    },
-    {
-      "header": {
-        "content_type": "text/plain",
-        "filename": "log.txt",
-        "type": "attachment"
-      },
-      "payload": "attached"
     }
   ]
 }
