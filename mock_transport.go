@@ -20,6 +20,8 @@ type MockTransport struct {
 	events    []*Event
 	lastEvent *Event
 	checkIns  []*MockCheckIn
+	logs      []MockLogBatch
+	metrics   []MockMetricBatch
 }
 
 // MockCheckIn is a check-in captured by [MockTransport], as sent on the wire.
@@ -34,6 +36,16 @@ type MockCheckIn struct {
 	Contexts      map[string]Context `json:"contexts"`
 }
 
+// MockLogBatch is a log envelope item captured by [MockTransport].
+type MockLogBatch struct {
+	Logs []Log
+}
+
+// MockMetricBatch is a metric envelope item captured by [MockTransport].
+type MockMetricBatch struct {
+	Metrics []Metric
+}
+
 // Configure marks delivery as synchronous so captured events are visible immediately.
 func (t *MockTransport) Configure(options ClientOptions) { options.markSyncDelivery() }
 
@@ -46,8 +58,15 @@ func (t *MockTransport) SendEnvelope(_ context.Context, envelope *protocol.Envel
 	defer t.mu.Unlock()
 	t.envelopes = append(t.envelopes, envelope)
 	for _, item := range envelope.Items {
-		if item.Header.Type == protocol.EnvelopeItemTypeCheckIn {
+		switch item.Header.Type {
+		case protocol.EnvelopeItemTypeCheckIn:
 			t.checkIns = append(t.checkIns, mockDecode[*MockCheckIn](item.Payload))
+			continue
+		case protocol.EnvelopeItemTypeLog:
+			t.logs = append(t.logs, MockLogBatch{Logs: decodeMockLogs(item)})
+			continue
+		case protocol.EnvelopeItemTypeTraceMetric:
+			t.metrics = append(t.metrics, MockMetricBatch{Metrics: decodeMockMetrics(item)})
 			continue
 		}
 		event := decodeMockEvent(item)
@@ -84,13 +103,26 @@ func (t *MockTransport) Envelopes() []*protocol.Envelope {
 	return slices.Clone(t.envelopes)
 }
 
-// Events returns captured telemetry decoded from the wire format. Logs and
-// metrics are represented by one Event per batch; client reports are omitted.
+// Events returns captured events and transactions decoded from the wire format.
 // Values in context and extra maps have JSON types, not their original Go types.
 func (t *MockTransport) Events() []*Event {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return slices.Clone(t.events)
+}
+
+// LogBatches returns the logs of each captured log envelope item.
+func (t *MockTransport) LogBatches() []MockLogBatch {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return slices.Clone(t.logs)
+}
+
+// MetricBatches returns the metrics of each captured metric envelope item.
+func (t *MockTransport) MetricBatches() []MockMetricBatch {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return slices.Clone(t.metrics)
 }
 
 // CheckIns returns captured check-ins decoded from the wire format.
@@ -139,46 +171,52 @@ func decodeMockEvent(item *protocol.EnvelopeItem) *Event {
 			}
 			event.Spans = append(event.Spans, &span.Span)
 		}
-	case protocol.EnvelopeItemTypeLog, protocol.EnvelopeItemTypeTraceMetric:
-		payload := mockDecode[struct {
-			Items []json.RawMessage `json:"items"`
-		}](item.Payload)
-		event.Type = string(item.Header.Type)
-		for _, raw := range payload.Items {
-			if item.Header.Type == protocol.EnvelopeItemTypeLog {
-				log := mockDecode[struct {
-					Log
-					TraceID    string                     `json:"trace_id"`
-					SpanID     string                     `json:"span_id"`
-					Attributes map[string]json.RawMessage `json:"attributes"`
-				}](raw)
-				decodeMockID(log.TraceID, log.Log.TraceID[:])
-				decodeMockID(log.SpanID, log.Log.SpanID[:])
-				log.Log.Attributes = decodeMockAttributes(log.Attributes)
-				event.Logs = append(event.Logs, log.Log)
-			} else {
-				metric := mockDecode[struct {
-					Metric
-					TraceID    string                     `json:"trace_id"`
-					SpanID     string                     `json:"span_id"`
-					Value      json.RawMessage            `json:"value"`
-					Attributes map[string]json.RawMessage `json:"attributes"`
-				}](raw)
-				decodeMockID(metric.TraceID, metric.Metric.TraceID[:])
-				decodeMockID(metric.SpanID, metric.Metric.SpanID[:])
-				metric.Metric.Attributes = decodeMockAttributes(metric.Attributes)
-				if metric.Type == MetricTypeCounter {
-					metric.Metric.Value = Int64MetricValue(mockDecode[int64](metric.Value))
-				} else {
-					metric.Metric.Value = Float64MetricValue(mockDecode[float64](metric.Value))
-				}
-				event.Metrics = append(event.Metrics, metric.Metric)
-			}
-		}
 	default:
 		return nil
 	}
 	return event
+}
+
+func decodeMockLogs(item *protocol.EnvelopeItem) []Log {
+	items := mockDecode[struct{ Items []json.RawMessage }](item.Payload).Items
+	logs := make([]Log, 0, len(items))
+	for _, raw := range items {
+		log := mockDecode[struct {
+			Log
+			TraceID    string                     `json:"trace_id"`
+			SpanID     string                     `json:"span_id"`
+			Attributes map[string]json.RawMessage `json:"attributes"`
+		}](raw)
+		decodeMockID(log.TraceID, log.Log.TraceID[:])
+		decodeMockID(log.SpanID, log.Log.SpanID[:])
+		log.Log.Attributes = decodeMockAttributes(log.Attributes)
+		logs = append(logs, log.Log)
+	}
+	return logs
+}
+
+func decodeMockMetrics(item *protocol.EnvelopeItem) []Metric {
+	items := mockDecode[struct{ Items []json.RawMessage }](item.Payload).Items
+	metrics := make([]Metric, 0, len(items))
+	for _, raw := range items {
+		metric := mockDecode[struct {
+			Metric
+			TraceID    string                     `json:"trace_id"`
+			SpanID     string                     `json:"span_id"`
+			Value      json.RawMessage            `json:"value"`
+			Attributes map[string]json.RawMessage `json:"attributes"`
+		}](raw)
+		decodeMockID(metric.TraceID, metric.Metric.TraceID[:])
+		decodeMockID(metric.SpanID, metric.Metric.SpanID[:])
+		metric.Metric.Attributes = decodeMockAttributes(metric.Attributes)
+		if metric.Type == MetricTypeCounter {
+			metric.Metric.Value = Int64MetricValue(mockDecode[int64](metric.Value))
+		} else {
+			metric.Metric.Value = Float64MetricValue(mockDecode[float64](metric.Value))
+		}
+		metrics = append(metrics, metric.Metric)
+	}
+	return metrics
 }
 
 func decodeMockID(value string, dst []byte) {

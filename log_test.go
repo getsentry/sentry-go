@@ -86,7 +86,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 		logFunc    func(ctx context.Context, l Logger)
 		message    string
 		args       any
-		wantEvents []Event
+		wantEvents []MockLogBatch
 	}{
 		{
 			name: "Trace level",
@@ -94,7 +94,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 				l.Trace().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
-			wantEvents: []Event{
+			wantEvents: []MockLogBatch{
 				{
 					Logs: []Log{
 						{
@@ -114,7 +114,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 				l.Debug().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
-			wantEvents: []Event{
+			wantEvents: []MockLogBatch{
 				{
 					Logs: []Log{
 						{
@@ -134,7 +134,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 				l.Info().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
-			wantEvents: []Event{
+			wantEvents: []MockLogBatch{
 				{
 					Logs: []Log{
 						{
@@ -154,7 +154,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 				l.Warn().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
-			wantEvents: []Event{
+			wantEvents: []MockLogBatch{
 				{
 					Logs: []Log{
 						{
@@ -174,7 +174,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 				l.Error().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
 			},
 			message: "param matching: %v and %v",
-			wantEvents: []Event{
+			wantEvents: []MockLogBatch{
 				{
 					Logs: []Log{
 						{
@@ -210,17 +210,16 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 				cmp.AllowUnexported(attribute.Value{}),
 			}
 
-			gotEvents := mockTransport.Events()
+			gotEvents := mockTransport.LogBatches()
 			if len(gotEvents) != len(tt.wantEvents) {
 				t.Fatalf("expected %d events, got %d", len(tt.wantEvents), len(gotEvents))
 			}
 			for i, event := range gotEvents {
-				assertEqual(t, event.Type, logEvent.Type)
 				if diff := cmp.Diff(tt.wantEvents[i].Logs, event.Logs, opts); diff != "" {
 					t.Errorf("Log mismatch (-want +got):\n%s", diff)
 				}
 				// pop used mock event
-				mockTransport.events = nil
+				mockTransport.logs = nil
 			}
 		})
 	}
@@ -285,12 +284,11 @@ func Test_sentryLogger_Write(t *testing.T) {
 	}
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	gotEvents := mockTransport.Events()
+	gotEvents := mockTransport.LogBatches()
 	if len(gotEvents) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(gotEvents))
 	}
 	event := gotEvents[0]
-	assertEqual(t, event.Type, logEvent.Type)
 
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Log{}, "Timestamp"),
@@ -347,7 +345,7 @@ func Test_sentryLogger_EmitPreservesLiteralPercent(t *testing.T) {
 			tt.logFunc(t, ctx, l)
 			flushFromContext(ctx, testutils.FlushTimeout())
 
-			gotEvents := mockTransport.Events()
+			gotEvents := mockTransport.LogBatches()
 			if len(gotEvents) != 1 {
 				t.Fatalf("expected 1 event, got %d", len(gotEvents))
 			}
@@ -372,7 +370,7 @@ func Test_sentryLogger_FlushAttributesAfterSend(t *testing.T) {
 	l.Warn().WithCtx(ctx).Emit(msg)
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	gotEvents := mockTransport.Events()
+	gotEvents := mockTransport.LogBatches()
 	if len(gotEvents) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(gotEvents))
 	}
@@ -402,7 +400,7 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	gotEvents := mockTransport.Events()
+	gotEvents := mockTransport.LogBatches()
 	if len(gotEvents) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(gotEvents))
 	}
@@ -438,7 +436,7 @@ func Test_sentryLogger_AttributePrecedence(t *testing.T) {
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	events := mockTransport.Events()
+	events := mockTransport.LogBatches()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
@@ -493,7 +491,7 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	events := mockTransport.Events()
+	events := mockTransport.LogBatches()
 	if len(events) != 1 {
 		t.Logf("Got %d events instead of 1", len(events))
 		for i, event := range events {
@@ -505,14 +503,14 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 		t.Fatalf("expected 5 logs in first batch, got %d", len(events[0].Logs))
 	}
 
-	mockTransport.events = nil
+	mockTransport.logs = nil
 
 	for range 3 {
 		l.Info().Emit("test")
 	}
 
 	flushFromContext(ctx, testutils.FlushTimeout())
-	events = mockTransport.Events()
+	events = mockTransport.LogBatches()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event after second flush, got %d", len(events))
 	}
@@ -520,10 +518,10 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 		t.Fatalf("expected 3 logs in second batch, got %d", len(events[0].Logs))
 	}
 
-	mockTransport.events = nil
+	mockTransport.logs = nil
 
 	flushFromContext(ctx, testutils.FlushTimeout())
-	events = mockTransport.Events()
+	events = mockTransport.LogBatches()
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events after third flush with no logs, got %d", len(events))
 	}
@@ -544,7 +542,7 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 
 	mockClient.Close()
 
-	events := mockTransport.Events()
+	events := mockTransport.LogBatches()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event after shutdown, got %d", len(events))
 	}
@@ -552,19 +550,19 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 		t.Fatalf("expected 3 logs in shutdown batch, got %d", len(events[0].Logs))
 	}
 
-	mockTransport.events = nil
+	mockTransport.logs = nil
 
 	// Test that shutdown can be called multiple times safely
 	mockClient.Close()
 	mockClient.Close()
 
-	events = mockTransport.Events()
+	events = mockTransport.LogBatches()
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events after multiple shutdowns, got %d", len(events))
 	}
 
 	flushFromContext(ctx, testutils.FlushTimeout())
-	events = mockTransport.Events()
+	events = mockTransport.LogBatches()
 	if len(events) != 0 {
 		t.Fatalf("expected 0 events after flush on shutdown logger, got %d", len(events))
 	}
@@ -578,7 +576,7 @@ func Test_Logger_ExceedBatchSize(t *testing.T) {
 	}
 
 	assert.Eventually(t, func() bool {
-		events := mockTransport.Events()
+		events := mockTransport.LogBatches()
 		return len(events) == 1 && len(events[0].Logs) == 100
 	}, testutils.FlushTimeout(), time.Millisecond, "expected one batch with 100 logs")
 }
@@ -645,7 +643,7 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 	l.Info().Emit("test message with PII")
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	events := mockTransport.Events()
+	events := mockTransport.LogBatches()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
@@ -692,7 +690,7 @@ func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 	loggerOutsideScope.Info().Emit("message without attrs")
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	eventsBeforeScope := mockTransport.Events()
+	eventsBeforeScope := mockTransport.LogBatches()
 	if len(eventsBeforeScope) != 1 {
 		t.Fatalf("expected 1 event before scope attrs, got %d", len(eventsBeforeScope))
 	}
@@ -703,13 +701,13 @@ func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 	assert.NotContains(t, logsBeforeScope[0].Attributes, "key.bool")
 	assert.NotContains(t, logsBeforeScope[0].Attributes, "key.string")
 
-	mockTransport.events = nil
+	mockTransport.logs = nil
 
 	logger := NewLogger(txn.Context())
 	logger.Info().WithCtx(txn.Context()).Emit("message with attrs")
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	eventsAfterScope := mockTransport.Events()
+	eventsAfterScope := mockTransport.LogBatches()
 	if len(eventsAfterScope) != 1 {
 		t.Fatalf("expected 1 event after scope attrs, got %d", len(eventsAfterScope))
 	}
