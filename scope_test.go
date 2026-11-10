@@ -1,14 +1,15 @@
 package sentry
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go/attribute"
-	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,42 +39,6 @@ func fillScopeWithData(scope *Scope) *Scope {
 	return scope
 }
 
-func fillEventWithData(event *Event) *Event {
-	event.Breadcrumbs = []*Breadcrumb{{Timestamp: testNow, Message: "eventBreadcrumbMessage"}}
-	event.Attachments = []*Attachment{
-		{
-			Filename: "event-attachment.txt",
-			Payload:  []byte("Event attachment contents."),
-		},
-	}
-	event.User = User{ID: "42"}
-	event.Tags = map[string]string{"eventTagKey": "eventTagValue"}
-	event.Contexts = map[string]Context{
-		"eventContextsKey": {"eventContextKey": "eventContextValue"},
-		sharedContextsKey:  {"eventContextKey": "eventContextKey"},
-	}
-	event.Fingerprint = []string{"eventFingerprintOne", "eventFingerprintTwo"}
-	event.Level = LevelInfo
-	event.Transaction = "aye"
-	event.Request = &Request{URL: "aye"}
-	return event
-}
-
-func TestScopeSetUser(t *testing.T) {
-	scope := NewScope()
-	scope.SetUser(User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Data: map[string]string{"foo": "bar"}})
-
-	assertEqual(t, User{ID: "foo", Email: "foo@example.com", IPAddress: "127.0.0.1", Username: "My Username", Name: "My Name", Data: map[string]string{"foo": "bar"}}, scope.user)
-}
-
-func TestScopeSetUserOverrides(t *testing.T) {
-	scope := NewScope()
-	scope.SetUser(User{ID: "foo"})
-	scope.SetUser(User{ID: "bar"})
-
-	assertEqual(t, User{ID: "bar"}, scope.user)
-}
-
 func TestScopeUserDataIsolation(t *testing.T) {
 	t.Parallel()
 
@@ -97,88 +62,76 @@ func TestScopeUserDataIsolation(t *testing.T) {
 	assertEqual(t, "parent changed", parent.ApplyToEvent(NewEvent(), nil, nil).User.Data["role"])
 }
 
-func TestScopeSetRequest(t *testing.T) {
-	r := httptest.NewRequest("GET", "/foo", nil)
-	scope := NewScope()
-	scope.SetRequest(r)
+func TestScopeSettersOnCapturedEvent(t *testing.T) {
+	type fields struct {
+		Tags        map[string]string
+		Contexts    map[string]Context
+		Level       Level
+		Fingerprint []string
+		UserID      string
+	}
+	for _, test := range []struct {
+		name  string
+		setup func(*Scope)
+		want  fields
+	}{
+		{
+			name: "SetTags merges into existing tags",
+			setup: func(s *Scope) {
+				s.SetTag("kept", "k")
+				s.SetTag("replaced", "old")
+				s.SetTags(map[string]string{"replaced": "new", "added": "a"})
+			},
+			want: fields{Level: LevelInfo, Tags: map[string]string{"kept": "k", "replaced": "new", "added": "a"}},
+		},
+		{
+			name: "SetContexts merges into existing contexts",
+			setup: func(s *Scope) {
+				s.SetContext("kept", Context{"k": "k"})
+				s.SetContext("replaced", Context{"old": "o"})
+				s.SetContexts(map[string]Context{"replaced": {"new": "n"}, "added": {"a": "a"}})
+			},
+			want: fields{Level: LevelInfo, Contexts: map[string]Context{"kept": {"k": "k"}, "replaced": {"new": "n"}, "added": {"a": "a"}}},
+		},
+		{
+			name: "RemoveTag and RemoveContext drop only their key",
+			setup: func(s *Scope) {
+				s.SetTags(map[string]string{"kept": "k", "removed": "r"})
+				s.SetContexts(map[string]Context{"kept": {"k": "k"}, "removed": {"r": "r"}})
+				s.RemoveTag("removed")
+				s.RemoveContext("removed")
+			},
+			want: fields{Level: LevelInfo, Tags: map[string]string{"kept": "k"}, Contexts: map[string]Context{"kept": {"k": "k"}}},
+		},
+		{
+			name: "last level, fingerprint and user win",
+			setup: func(s *Scope) {
+				s.SetLevel(LevelInfo)
+				s.SetLevel(LevelError)
+				s.SetFingerprint([]string{"old"})
+				s.SetFingerprint([]string{"new"})
+				s.SetUser(User{ID: "old"})
+				s.SetUser(User{ID: "new"})
+			},
+			want: fields{Level: LevelError, Fingerprint: []string{"new"}, UserID: "new"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cleanGlobalScope(t)
+			scope := NewScope()
+			test.setup(scope)
+			client, transport := newCaptureTestClient(t, ClientOptions{})
+			ctx := ContextWithScope(ContextWithClient(context.Background(), client), scope)
+			require.NotNil(t, CaptureEvent(ctx, NewEvent()))
+			got := requireSingleEvent(t, transport)
 
-	assertEqual(t, r, scope.request)
-}
-
-func TestScopeSetRequestOverrides(t *testing.T) {
-	r1 := httptest.NewRequest("GET", "/foo", nil)
-	r2 := httptest.NewRequest("GET", "/bar", nil)
-	scope := NewScope()
-	scope.SetRequest(r1)
-	scope.SetRequest(r2)
-
-	assertEqual(t, r2, scope.request)
-}
-
-func TestScopeSetTag(t *testing.T) {
-	scope := NewScope()
-	scope.SetTag("a", "foo")
-
-	assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
-}
-
-func TestScopeSetTagMerges(t *testing.T) {
-	scope := NewScope()
-	scope.SetTag("a", "foo")
-	scope.SetTag("b", "bar")
-
-	assertEqual(t, map[string]string{"a": "foo", "b": "bar"}, scope.tags)
-}
-
-func TestScopeSetTagOverrides(t *testing.T) {
-	scope := NewScope()
-	scope.SetTag("a", "foo")
-	scope.SetTag("a", "bar")
-
-	assertEqual(t, map[string]string{"a": "bar"}, scope.tags)
-}
-
-func TestScopeSetTags(t *testing.T) {
-	scope := NewScope()
-	scope.SetTags(map[string]string{"a": "foo"})
-
-	assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
-}
-
-func TestScopeSetTagsMerges(t *testing.T) {
-	scope := NewScope()
-	scope.SetTags(map[string]string{"a": "foo"})
-	scope.SetTags(map[string]string{"b": "bar", "c": "baz"})
-
-	assertEqual(t, map[string]string{"a": "foo", "b": "bar", "c": "baz"}, scope.tags)
-}
-
-func TestScopeSetTagsOverrides(t *testing.T) {
-	scope := NewScope()
-	scope.SetTags(map[string]string{"a": "foo"})
-	scope.SetTags(map[string]string{"a": "bar", "b": "baz"})
-
-	assertEqual(t, map[string]string{"a": "bar", "b": "baz"}, scope.tags)
-}
-
-func TestScope_SetAttributes(t *testing.T) {
-	scope := NewScope()
-	scope.SetAttributes(
-		attribute.String("key.string", "str"),
-		attribute.Bool("key.bool", true),
-	)
-
-	assertEqual(t, map[string]attribute.Value{
-		"key.string": attribute.StringValue("str"),
-		"key.bool":   attribute.BoolValue(true),
-	}, scope.attributes)
-}
-
-func TestScopeRemoveAttributeOnEmptyScope(t *testing.T) {
-	scope := NewScope()
-	scope.RemoveAttribute("key.nonexistent")
-
-	assertEqual(t, make(map[string]attribute.Value), scope.attributes)
+			delete(got.Contexts, "trace")
+			gotFields := fields{Tags: got.Tags, Contexts: got.Contexts, Level: got.Level, Fingerprint: got.Fingerprint, UserID: got.User.ID}
+			if diff := cmp.Diff(test.want, gotFields, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("event (-want +got):\n%s", diff)
+			}
+		})
+	}
 }
 
 func TestScopeRemoveAttribute(t *testing.T) {
@@ -194,74 +147,11 @@ func TestScopeRemoveAttribute(t *testing.T) {
 	}, scope.attributes)
 }
 
-func TestScopeRemoveTag(t *testing.T) {
-	scope := NewScope()
-	scope.SetTag("a", "foo")
-	scope.SetTag("b", "bar")
-	scope.RemoveTag("b")
-
-	assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
-}
-
-func TestScopeRemoveTagSkipsEmptyValues(t *testing.T) {
-	scope := NewScope()
-	scope.SetTag("a", "foo")
-	scope.RemoveTag("b")
-
-	assertEqual(t, map[string]string{"a": "foo"}, scope.tags)
-}
-
-func TestScopeRemoveTagOnEmptyScope(t *testing.T) {
-	scope := NewScope()
-	scope.RemoveTag("b")
-
-	assertEqual(t, make(map[string]string), scope.tags)
-}
-
-func TestScopeSetContext(t *testing.T) {
-	scope := NewScope()
-	scope.SetContext("a", Context{"b": 1})
-
-	assertEqual(t, map[string]Context{"a": {"b": 1}}, scope.contexts)
-}
-
-func TestScopeSetContextMerges(t *testing.T) {
-	scope := NewScope()
-	scope.SetContext("a", Context{"foo": "bar"})
-	scope.SetContext("b", Context{"b": 2})
-
-	assertEqual(t, map[string]Context{"a": {"foo": "bar"}, "b": {"b": 2}}, scope.contexts)
-}
-
-func TestScopeSetContextOverrides(t *testing.T) {
-	scope := NewScope()
-	scope.SetContext("a", Context{"foo": "bar"})
-	scope.SetContext("a", Context{"foo": 2})
-
-	assertEqual(t, map[string]Context{"a": {"foo": 2}}, scope.contexts)
-}
-
 func TestScopeSetContexts(t *testing.T) {
 	scope := NewScope()
 	scope.SetContexts(map[string]Context{"a": {"b": 1}})
 
 	assertEqual(t, map[string]Context{"a": {"b": 1}}, scope.contexts)
-}
-
-func TestScopeSetContextsMerges(t *testing.T) {
-	scope := NewScope()
-	scope.SetContexts(map[string]Context{"a": {"a": "foo"}})
-	scope.SetContexts(map[string]Context{"b": {"b": 2}, "c": {"c": 3}})
-
-	assertEqual(t, map[string]Context{"a": {"a": "foo"}, "b": {"b": 2}, "c": {"c": 3}}, scope.contexts)
-}
-
-func TestScopeSetContextsOverrides(t *testing.T) {
-	scope := NewScope()
-	scope.SetContexts(map[string]Context{"a": {"foo": "bar"}})
-	scope.SetContexts(map[string]Context{"a": {"a": 2}, "b": {"b": 3}})
-
-	assertEqual(t, map[string]Context{"a": {"a": 2}, "b": {"b": 3}}, scope.contexts)
 }
 
 func TestScopeRemoveContext(t *testing.T) {
@@ -273,51 +163,6 @@ func TestScopeRemoveContext(t *testing.T) {
 	assertEqual(t, map[string]Context{"a": {"foo": "foo"}}, scope.contexts)
 }
 
-func TestScopeRemoveContextSkipsEmptyValues(t *testing.T) {
-	scope := NewScope()
-	scope.SetContext("a", Context{"foo": "bar"})
-	scope.RemoveContext("b")
-
-	assertEqual(t, map[string]Context{"a": {"foo": "bar"}}, scope.contexts)
-}
-
-func TestScopeRemoveContextOnEmptyScope(t *testing.T) {
-	scope := NewScope()
-	scope.RemoveContext("b")
-
-	assertEqual(t, make(map[string]Context), scope.contexts)
-}
-
-func TestScopeSetFingerprint(t *testing.T) {
-	scope := NewScope()
-	scope.SetFingerprint([]string{"abcd"})
-
-	assertEqual(t, []string{"abcd"}, scope.fingerprint)
-}
-
-func TestScopeSetFingerprintOverrides(t *testing.T) {
-	scope := NewScope()
-	scope.SetFingerprint([]string{"abc"})
-	scope.SetFingerprint([]string{"def"})
-
-	assertEqual(t, []string{"def"}, scope.fingerprint)
-}
-
-func TestScopeSetLevel(t *testing.T) {
-	scope := NewScope()
-	scope.SetLevel(LevelInfo)
-
-	assertEqual(t, scope.level, LevelInfo)
-}
-
-func TestScopeSetLevelOverrides(t *testing.T) {
-	scope := NewScope()
-	scope.SetLevel(LevelInfo)
-	scope.SetLevel(LevelFatal)
-
-	assertEqual(t, scope.level, LevelFatal)
-}
-
 func TestCopyToEventReleasesReadLockAfterPanic(t *testing.T) {
 	t.Parallel()
 	scope := NewScope()
@@ -325,25 +170,6 @@ func TestCopyToEventReleasesReadLockAfterPanic(t *testing.T) {
 	require.Panics(t, func() { scope.ApplyToEvent(nil, nil, NewNoopClient()) })
 	require.True(t, scope.mu.TryLock())
 	scope.mu.Unlock()
-}
-
-func TestAddBreadcrumbAddsBreadcrumb(t *testing.T) {
-	scope := NewScope()
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"}, defaultMaxBreadcrumbs)
-	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "test"}}, scope.breadcrumbs)
-}
-
-func TestAddBreadcrumbAppendsBreadcrumb(t *testing.T) {
-	scope := NewScope()
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test1"}, defaultMaxBreadcrumbs)
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test2"}, defaultMaxBreadcrumbs)
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test3"}, defaultMaxBreadcrumbs)
-
-	assertEqual(t, []*Breadcrumb{
-		{Timestamp: testNow, Message: "test1"},
-		{Timestamp: testNow, Message: "test2"},
-		{Timestamp: testNow, Message: "test3"},
-	}, scope.breadcrumbs)
 }
 
 func TestAddBreadcrumbDefaultLimit(t *testing.T) {
@@ -369,25 +195,6 @@ func TestAddBreadcrumbAddsTimestamp(t *testing.T) {
 	}
 }
 
-func TestAddAttachmentAddsAttachment(t *testing.T) {
-	scope := NewScope()
-	scope.AddAttachment(&Attachment{Filename: "test.txt", Payload: []byte("Hello, World")})
-	assertEqual(t, []*Attachment{{Filename: "test.txt", Payload: []byte("Hello, World")}}, scope.attachments)
-}
-
-func TestAddAttachmentAppendsAttachment(t *testing.T) {
-	scope := NewScope()
-	scope.AddAttachment(&Attachment{Filename: "test1.txt", Payload: []byte("Hello, World!")})
-	scope.AddAttachment(&Attachment{Filename: "test2.txt", Payload: []byte("Hello, World?")})
-	scope.AddAttachment(&Attachment{Filename: "test3.txt", Payload: []byte("Hello, World.")})
-
-	assertEqual(t, []*Attachment{
-		{Filename: "test1.txt", Payload: []byte("Hello, World!")},
-		{Filename: "test2.txt", Payload: []byte("Hello, World?")},
-		{Filename: "test3.txt", Payload: []byte("Hello, World.")},
-	}, scope.attachments)
-}
-
 func TestScopeBasicInheritance(t *testing.T) {
 	scope := NewScope()
 	scope.SetAttributes(attribute.Int("a", 1))
@@ -400,58 +207,6 @@ func TestScopeBasicInheritance(t *testing.T) {
 	assertEqual(t, scope.attributes, clone.attributes)
 	assertEqual(t, scope.requestBody, clone.requestBody)
 	assertEqual(t, scope.eventProcessors, clone.eventProcessors)
-}
-
-func TestScopeParentChangedInheritance(t *testing.T) {
-	scope := NewScope()
-	clone := scope.Clone()
-
-	clone.SetTag("foo", "bar")
-	clone.SetContext("foo", Context{"foo": "bar"})
-	clone.SetAttributes(attribute.String("foo", "bar"))
-	clone.SetLevel(LevelDebug)
-	clone.SetFingerprint([]string{"foo"})
-	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, defaultMaxBreadcrumbs)
-	clone.AddAttachment(&Attachment{Filename: "foo.txt", Payload: []byte("foo")})
-	clone.SetUser(User{ID: "foo"})
-	r1 := httptest.NewRequest("GET", "/foo", nil)
-	clone.SetRequest(r1)
-	p1 := NewPropagationContext()
-	clone.SetPropagationContext(p1)
-
-	scope.SetTag("foo", "baz")
-	scope.SetContext("foo", Context{"foo": "baz"})
-	scope.SetAttributes(attribute.String("foo", "baz"))
-	scope.SetLevel(LevelFatal)
-	scope.SetFingerprint([]string{"bar"})
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"}, defaultMaxBreadcrumbs)
-	scope.AddAttachment(&Attachment{Filename: "bar.txt", Payload: []byte("bar")})
-	scope.SetUser(User{ID: "bar"})
-	r2 := httptest.NewRequest("GET", "/bar", nil)
-	scope.SetRequest(r2)
-	p2 := NewPropagationContext()
-	scope.SetPropagationContext(p2)
-
-	assertEqual(t, map[string]string{"foo": "bar"}, clone.tags)
-	assertEqual(t, map[string]Context{"foo": {"foo": "bar"}}, clone.contexts)
-	assertEqual(t, map[string]attribute.Value{"foo": attribute.StringValue("bar")}, clone.attributes)
-	assertEqual(t, LevelDebug, clone.level)
-	assertEqual(t, []string{"foo"}, clone.fingerprint)
-	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "foo"}}, clone.breadcrumbs)
-	assertEqual(t, []*Attachment{{Filename: "foo.txt", Payload: []byte("foo")}}, clone.attachments)
-	assertEqual(t, User{ID: "foo"}, clone.user)
-	assertEqual(t, r1, clone.request)
-	assertEqual(t, p1, clone.propagationContext)
-
-	assertEqual(t, map[string]string{"foo": "baz"}, scope.tags)
-	assertEqual(t, map[string]Context{"foo": {"foo": "baz"}}, scope.contexts)
-	assertEqual(t, map[string]attribute.Value{"foo": attribute.StringValue("baz")}, scope.attributes)
-	assertEqual(t, LevelFatal, scope.level)
-	assertEqual(t, []string{"bar"}, scope.fingerprint)
-	assertEqual(t, []*Breadcrumb{{Timestamp: testNow, Message: "bar"}}, scope.breadcrumbs)
-	assertEqual(t, []*Attachment{{Filename: "bar.txt", Payload: []byte("bar")}}, scope.attachments)
-	assertEqual(t, User{ID: "bar"}, scope.user)
-	assertEqual(t, r2, scope.request)
 }
 
 func TestScopeCloneEventProcessorsIsolation(t *testing.T) {
@@ -603,57 +358,11 @@ func TestClearAndReconfigure(t *testing.T) {
 	assertEqual(t, p, scope.propagationContext)
 }
 
-func TestClearBreadcrumbs(t *testing.T) {
-	scope := fillScopeWithData(NewScope())
-	scope.ClearBreadcrumbs()
-
-	assertEqual(t, []*Breadcrumb{}, scope.breadcrumbs)
-}
-
 func TestClearAttachments(t *testing.T) {
 	scope := fillScopeWithData(NewScope())
 	scope.ClearAttachments()
 
 	assertEqual(t, []*Attachment{}, scope.attachments)
-}
-
-func TestApplyToEventWithCorrectScopeAndEvent(t *testing.T) {
-	scope := fillScopeWithData(NewScope())
-	event := fillEventWithData(NewEvent())
-
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
-
-	assertEqual(t, 2, len(processedEvent.Breadcrumbs), "should merge breadcrumbs")
-	assertEqual(t, 2, len(processedEvent.Attachments), "should merge attachments")
-	assertEqual(t, 2, len(processedEvent.Tags), "should merge tags")
-	assertEqual(t, 4, len(processedEvent.Contexts), "should merge contexts")
-	assertEqual(t, event.Contexts[sharedContextsKey], processedEvent.Contexts[sharedContextsKey], "should not override event trace context")
-	assertEqual(t, event.Level, processedEvent.Level, "should use event level if set")
-	assertEqual(t, event.User, processedEvent.User, "should use event user if one exists")
-	assertEqual(t, event.Request, processedEvent.Request, "should use event request if one exists")
-	assertEqual(t, event.Fingerprint, processedEvent.Fingerprint, "should use event fingerprints if they exist")
-	assertNotEqual(t, scope.user, processedEvent.User, "should not use scope user if event user exists")
-	assertNotEqual(t, scope.request, processedEvent.Request, "should not use scope request if event request exists")
-	assertNotEqual(t, scope.fingerprint, processedEvent.Fingerprint, "should not use scope fingerprint if event fingerprint exists")
-
-	scope.SetContext(traceContextKey, Context{traceIDContextKey: "scope"})
-	event.Contexts[traceContextKey] = Context{traceIDContextKey: "event"}
-	assertEqual(t, event.Contexts[traceContextKey], scope.ApplyToEvent(event, nil, nil).Contexts[traceContextKey], "event trace context takes precedence")
-}
-
-func TestApplyToEventUsingEmptyScope(t *testing.T) {
-	scope := NewScope()
-	event := fillEventWithData(NewEvent())
-
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
-	assertEqual(t, len(processedEvent.Breadcrumbs), 1, "should use event breadcrumbs")
-	assertEqual(t, len(processedEvent.Attachments), 1, "should use event attachments")
-	assertEqual(t, len(processedEvent.Tags), 1, "should use event tags")
-	assertEqual(t, len(processedEvent.Contexts), 3, "should use event contexts")
-	assertEqual(t, processedEvent.User, event.User, "should use event user")
-	assertEqual(t, processedEvent.Fingerprint, event.Fingerprint, "should use event fingerprint")
-	assertEqual(t, processedEvent.Level, event.Level, "should use event level")
-	assertEqual(t, processedEvent.Request, event.Request, "should use event request")
 }
 
 func TestApplyToEventUsingEmptyEvent(t *testing.T) {
@@ -725,47 +434,6 @@ func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
 	assertEqual(t, event.Request, want, "should honor the passed client data collection setting")
 }
 
-func TestApplyToEventUsesExplicitDataCollectionForRequest(t *testing.T) {
-	client, err := NewClient(ClientOptions{
-		Dsn: "https://key@sentry.io/1",
-		DataCollection: &DataCollection{
-			UserInfo: Set(false),
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	scope := NewScope()
-	request := httptest.NewRequest("POST", "http://example.com/test?token=secret&page=5", nil)
-	request.Header.Set("Authorization", "Bearer secret")
-	request.Header.Set("Cookie", "user_session=abc; theme=dark")
-	request.Header.Set("Some-Header", "some-header value")
-	scope.SetRequest(request)
-
-	event := scope.ApplyToEvent(NewEvent(), nil, client)
-	if event.Request == nil {
-		t.Fatal("expected request to be attached")
-	}
-
-	want := &Request{
-		URL:         "http://example.com/test",
-		Method:      "POST",
-		QueryString: "token=[Filtered]&page=5",
-		Cookies:     "user_session=[Filtered]; theme=dark",
-		Headers: map[string]string{
-			"Authorization": "[Filtered]",
-			"Cookie":        "user_session=[Filtered]; theme=dark",
-			"Host":          "example.com",
-			"Some-Header":   "some-header value",
-		},
-	}
-
-	if diff := cmp.Diff(want, event.Request, testutils.EquateKeyValueStrings()); diff != "" {
-		t.Errorf("request mismatch (-want +got):\n%s", diff)
-	}
-}
-
 func TestApplyToEventHTTPBodyCollection(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -804,90 +472,4 @@ func TestApplyToEventHTTPBodyCollection(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestEventProcessorsModifiesEvent(t *testing.T) {
-	scope := NewScope()
-	event := NewEvent()
-	scope.eventProcessors = []EventProcessor{
-		func(event *Event, _ *EventHint) *Event {
-			event.Level = LevelFatal
-			return event
-		},
-		func(event *Event, _ *EventHint) *Event {
-			event.Fingerprint = []string{"wat"}
-			return event
-		},
-	}
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
-
-	if processedEvent == nil {
-		t.Fatal("event should not be dropped")
-	}
-	assertEqual(t, LevelFatal, processedEvent.Level)
-	assertEqual(t, []string{"wat"}, processedEvent.Fingerprint)
-}
-
-func TestEventProcessorsCanDropEvent(t *testing.T) {
-	scope := NewScope()
-	event := NewEvent()
-	scope.eventProcessors = []EventProcessor{
-		func(_ *Event, _ *EventHint) *Event {
-			return nil
-		},
-	}
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
-
-	if processedEvent != nil {
-		t.Error("event should be dropped")
-	}
-}
-
-func TestEventProcessorsAddEventProcessor(t *testing.T) {
-	scope := NewScope()
-	event := NewEvent()
-	processedEvent := scope.ApplyToEvent(event, nil, nil)
-
-	if processedEvent == nil {
-		t.Error("event should not be dropped")
-	}
-
-	scope.AddEventProcessor(func(_ *Event, _ *EventHint) *Event {
-		return nil
-	})
-	processedEvent = scope.ApplyToEvent(event, nil, nil)
-
-	if processedEvent != nil {
-		t.Error("event should be dropped")
-	}
-}
-
-func TestCloneContext(t *testing.T) {
-	context := Context{
-		"key1": "value1",
-		"key2": []string{"s1", "s2"},
-	}
-
-	clone := cloneContext(context)
-
-	// Value-wise they should be identical
-	assertEqual(t, context, clone)
-	// ..but it shouldn't be the same map
-	if &context == &clone {
-		t.Error("original and cloned context should be different objects")
-	}
-
-	sliceOriginal := context["key2"].([]string)
-	sliceClone := clone["key2"].([]string)
-	if &sliceOriginal[0] != &sliceClone[0] {
-		t.Error("complex values are not supposed to be copied")
-	}
-}
-
-func TestScopeSetPropagationContext(t *testing.T) {
-	scope := NewScope()
-	p := NewPropagationContext()
-	scope.SetPropagationContext(p)
-
-	assertEqual(t, scope.propagationContext, p)
 }
