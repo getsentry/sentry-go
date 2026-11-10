@@ -1,0 +1,57 @@
+{
+  "header": {
+    "dsn": "https://whatever@sentry.io/1337",
+    "sdk": {
+      "integrations": [
+        "GlobalTags",
+        "IgnoreErrors",
+        "IgnoreTransactions"
+      ],
+      "name": "sentry.go",
+      "packages": [
+        {
+          "name": "sentry-go"
+        }
+      ]
+    },
+    "trace": {
+      "environment": "test",
+      "public_key": "whatever",
+      "release": "app@1.0.0",
+      "sample_rate": "1"
+    }
+  },
+  "items": [
+    {
+      "header": {
+        "type": "check_in"
+      },
+      "payload": {
+        "duration": 2,
+        "environment": "test",
+        "monitor_config": {
+          "checkin_margin": 5,
+          "failure_issue_threshold": 2,
+          "max_runtime": 30,
+          "recovery_threshold": 1,
+          "schedule": {
+            "type": "crontab",
+            "value": "0 3 * * *"
+          },
+          "timezone": "UTC"
+        },
+        "monitor_slug": "nightly",
+        "release": "app@1.0.0",
+        "status": "ok"
+      }
+    },
+    {
+      "header": {
+        "content_type": "text/plain",
+        "filename": "log.txt",
+        "type": "attachment"
+      },
+      "payload": "attached"
+    }
+  ]
+}
