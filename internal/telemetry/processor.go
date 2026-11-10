@@ -31,11 +31,7 @@ func NewProcessor(
 }
 
 // Add buffers item if its category has a buffer and otherwise sends it inline.
-//
-// The processor should call MakeSerializationSafe to eliminate any race on user mutable fields,
-// since the serialization happens on a background goroutine.
 func (b *Processor) Add(ctx context.Context, item Item) bool {
-	item.MakeSerializationSafe()
 	if _, buffered := b.scheduler.buffers[item.GetCategory()]; buffered {
 		return b.scheduler.Add(item)
 	}

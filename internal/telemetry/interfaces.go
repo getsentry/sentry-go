@@ -13,10 +13,6 @@ type Item interface {
 	// GetCategory returns the rate limit category for this item.
 	GetCategory() ratelimit.Category
 
-	// MakeSerializationSafe prevents serialization races, by serializing user mutable data on the foreground.
-	// Should be used before passing telemetry to the processor.
-	MakeSerializationSafe()
-
 	// DiscardCounts returns client report counts for a dropped item.
 	DiscardCounts() DiscardCounts
 }

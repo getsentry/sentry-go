@@ -447,9 +447,6 @@ func TestIntegration(t *testing.T) {
 			"Contexts", "EventID", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Tags", "Timestamp",
 			"sdkMetaData",
-			"serializedTags",
-			"serializedContexts", "serializedBreadcrumbs",
-			"serializedException", "serializedUser", "serializationSafe",
 		),
 		cmpopts.IgnoreFields(
 			sentry.Request{},
@@ -474,9 +471,6 @@ func TestIntegration(t *testing.T) {
 			"EventID", "Platform", "Modules",
 			"Release", "Sdk", "ServerName", "Timestamp",
 			"sdkMetaData", "StartTime", "Spans",
-			"serializedTags",
-			"serializedContexts", "serializedBreadcrumbs",
-			"serializedException", "serializedUser", "serializationSafe",
 		),
 		cmpopts.IgnoreFields(
 			sentry.Request{},

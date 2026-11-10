@@ -2,6 +2,7 @@ package sentry_test
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -51,7 +52,9 @@ func TestBaggageBeforeClientBinding(t *testing.T) {
 			require.NotNil(t, sentry.CaptureMessage(ctx, "after client binding"))
 			f.Flush()
 			require.Len(t, f.Events(), 1)
-			require.Equal(t, after.Entries, f.Events()[0].GetDynamicSamplingContext())
+			if got := f.Envelopes()[0].Header.Trace; !maps.Equal(after.Entries, got) {
+				t.Errorf("envelope trace = %v, want %v", got, after.Entries)
+			}
 		})
 	}
 }
