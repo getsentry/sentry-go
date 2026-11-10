@@ -398,7 +398,7 @@ func (scope *Scope) applyToEvent(
 	maxBreadcrumbs int,
 ) []EventProcessor {
 	snapshot, processors := scope.copyToEvent(event, maxBreadcrumbs)
-	applyRequestToEvent(event, client, snapshot.request, snapshot.requestBody)
+	event.Request = mergeRequest(client, snapshot.request, snapshot.requestBody, event.Request)
 	_, explicitTrace := event.Contexts[traceContextKey]
 	applyTraceToEvent(ctx, event, client, scope, snapshot.propagationContext, explicitTrace)
 	return processors
@@ -432,58 +432,36 @@ func applyScopesToEvent(
 	} else if snapshot.request == nil {
 		snapshot.request, snapshot.requestBody = globalSnapshot.request, globalSnapshot.requestBody
 	}
-	applyRequestToEvent(event, client, snapshot.request, snapshot.requestBody)
+	event.Request = mergeRequest(client, snapshot.request, snapshot.requestBody, event.Request)
 
 	_, explicitTrace := event.Contexts[traceContextKey]
 	applyTraceToEvent(ctx, event, client, scope, snapshot.propagationContext, explicitTrace)
 	return globalProcessors, scopeProcessors
 }
 
-func applyRequestToEvent(event *Event, client *Client, request *http.Request, body requestBody) {
-	if event.Request != nil || request == nil {
-		return
+// mergeRequest returns the event's request, or the scope's when the event has none.
+func mergeRequest(client *Client, request *http.Request, body requestBody, event *Request) *Request {
+	if event != nil || request == nil {
+		return event
 	}
-	event.Request = newRequest(request, client)
+	event = newRequest(request, client)
 	dc := client.GetDataCollection()
 	if body != nil && !body.Overflow() && dc.CollectHTTPBody(BodyIncomingRequest) {
-		event.Request.Data = dc.FilterHTTPBody(body.Bytes(), request.Header.Get("Content-Type"))
+		event.Data = dc.FilterHTTPBody(body.Bytes(), request.Header.Get("Content-Type"))
 	}
+	return event
 }
 
 func (scope *Scope) copyToEvent(event *Event, maxBreadcrumbs int) (scopeData, []EventProcessor) {
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
-	if len(scope.tags) > 0 {
-		if event.Tags == nil {
-			event.Tags = make(map[string]string, len(scope.tags))
-		}
-		for key, value := range scope.tags {
-			if _, exists := event.Tags[key]; !exists {
-				event.Tags[key] = value
-			}
-		}
-	}
-	if len(scope.contexts) > 0 {
-		if event.Contexts == nil {
-			event.Contexts = make(map[string]Context, len(scope.contexts))
-		}
-		for key, value := range scope.contexts {
-			if key == traceContextKey && event.Type == transactionType {
-				continue
-			}
-			if _, exists := event.Contexts[key]; !exists {
-				event.Contexts[key] = cloneContext(value)
-			}
-		}
-	}
+	event.Tags = mergeTags(scope.tags, event.Tags)
+	event.Contexts = mergeContexts(scope.contexts, event.Contexts, event.Type == transactionType)
 	// Copy slice-backed scope data while holding the read lock. Snapshotting
 	// only the slice headers would race with concurrent append operations.
 	event.Breadcrumbs = mergeBreadcrumbs(scope.breadcrumbs, event.Breadcrumbs, maxBreadcrumbs)
 	event.Attachments = prependSlice(scope.attachments, event.Attachments)
-	if event.User.IsEmpty() && !scope.user.IsEmpty() {
-		event.User = scope.user
-		event.User.Data = maps.Clone(scope.user.Data)
-	}
+	event.User = mergeUser(scope.user, event.User)
 	if len(event.Fingerprint) == 0 && len(scope.fingerprint) > 0 {
 		event.Fingerprint = slices.Clone(scope.fingerprint)
 	}
@@ -577,6 +555,50 @@ func setEventTrace(event *Event, trace Context) {
 		event.Contexts = make(map[string]Context)
 	}
 	event.Contexts[traceContextKey] = trace
+}
+
+// mergeTags adds the scope tags that the event does not set.
+func mergeTags(scope, event map[string]string) map[string]string {
+	if len(scope) == 0 {
+		return event
+	}
+	if event == nil {
+		event = make(map[string]string, len(scope))
+	}
+	for key, value := range scope {
+		if _, exists := event[key]; !exists {
+			event[key] = value
+		}
+	}
+	return event
+}
+
+// mergeContexts adds copies of the scope contexts that the event does not set.
+func mergeContexts(scope, event map[string]Context, skipTrace bool) map[string]Context {
+	if len(scope) == 0 {
+		return event
+	}
+	if event == nil {
+		event = make(map[string]Context, len(scope))
+	}
+	for key, value := range scope {
+		if key == traceContextKey && skipTrace {
+			continue
+		}
+		if _, exists := event[key]; !exists {
+			event[key] = cloneContext(value)
+		}
+	}
+	return event
+}
+
+// mergeUser returns the event's user, or a copy of the scope's when the event has none.
+func mergeUser(scope, event User) User {
+	if !event.IsEmpty() || scope.IsEmpty() {
+		return event
+	}
+	scope.Data = maps.Clone(scope.Data)
+	return scope
 }
 
 func mergeBreadcrumbs(scope, event []*Breadcrumb, limit int) []*Breadcrumb {
