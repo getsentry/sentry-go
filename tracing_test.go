@@ -1300,26 +1300,25 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 // This is a regression test for https://github.com/getsentry/sentry-go/issues/587
 // Without the "spans can be finished only once" fix, this test will fail
 // when run with race detection ("-race").
-func TestSpanFinishConcurrentlyWithoutRaces(_ *testing.T) {
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1,
-	})
+func TestSpanFinishConcurrentlySendsOnce(t *testing.T) {
+	t.Parallel()
+	client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
+	ctx, _ := WithScope(ContextWithClient(context.Background(), client))
 	transaction := StartTransaction(ctx, "op")
 
-	go func() {
-		for {
-			transaction.Finish()
-		}
-	}()
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Go(func() {
+			for range 100 {
+				transaction.Finish()
+			}
+		})
+	}
+	wg.Wait()
 
-	go func() {
-		for {
-			transaction.Finish()
-		}
-	}()
-
-	time.Sleep(50 * time.Millisecond)
+	if got := len(transport.Events()); got != 1 {
+		t.Fatalf("sent %d events, want 1", got)
+	}
 }
 
 func TestContextPropagationHeaders(t *testing.T) {
