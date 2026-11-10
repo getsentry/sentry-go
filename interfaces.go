@@ -18,7 +18,6 @@ import (
 	"github.com/getsentry/sentry-go/protocol"
 )
 
-const errorType = ""
 const transactionType = "transaction"
 
 // Level marks the severity of the event.
@@ -371,13 +370,6 @@ type Event struct {
 	DebugMeta   *DebugMeta         `json:"debug_meta,omitempty"`
 	Attachments []*Attachment      `json:"-"`
 
-	// The fields below are only relevant for transactions.
-
-	Type            string           `json:"type,omitempty"`
-	StartTime       time.Time        `json:"start_timestamp,omitzero"`
-	Spans           []*Span          `json:"spans,omitempty"`
-	TransactionInfo *TransactionInfo `json:"transaction_info,omitempty"`
-
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
@@ -404,25 +396,15 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 // eventItem is an event as handed to the telemetry processor.
 type eventItem Event
 
-func (e *eventItem) GetCategory() ratelimit.Category { return (*Event)(e).toCategory() }
+func (e *eventItem) GetCategory() ratelimit.Category { return ratelimit.CategoryError }
 
 // ToEnvelope encodes the event and its attachments.
-func (e *eventItem) ToEnvelope(header *protocol.EnvelopeHeader) (envelope *protocol.Envelope, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			envelope, err = nil, fmt.Errorf("panic during event marshaling: %v", r)
-		}
-	}()
-	payload, err := json.Marshal((*Event)(e))
+func (e *eventItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+	item, err := encodeItem(protocol.EnvelopeItemTypeEvent, (*Event)(e))
 	if err != nil {
-		return nil, fmt.Errorf("could not encode event as JSON, skipping delivery: %w", err)
+		return nil, err
 	}
-
-	itemType := protocol.EnvelopeItemTypeEvent
-	if e.Type == transactionType {
-		itemType = protocol.EnvelopeItemTypeTransaction
-	}
-	envelope = protocol.NewEnvelope(header, protocol.NewEnvelopeItem(itemType, payload))
+	envelope := protocol.NewEnvelope(header, item)
 	for _, attachment := range e.Attachments {
 		envelope.AddItem(protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload))
 	}
@@ -444,22 +426,25 @@ func (e *eventItem) GetDynamicSamplingContext() map[string]string {
 	return e.sdkMetaData.dsc.Entries
 }
 
+// encodeItem encodes payload as an envelope item.
+func encodeItem(itemType protocol.EnvelopeItemType, payload any) (item *protocol.EnvelopeItem, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			item, err = nil, fmt.Errorf("panic during event marshaling: %v", r)
+		}
+	}()
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("could not encode event as JSON, skipping delivery: %w", err)
+	}
+	return protocol.NewEnvelopeItem(itemType, encoded), nil
+}
+
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
 // to prevent accidentally storing T when we mean *T.
 // For example, the TraceContext must be stored as *TraceContext to pick up the
 // MarshalJSON method (and avoid copying).
 // type EventContext interface{ EventContext() }
-
-func (e *Event) toCategory() ratelimit.Category {
-	switch e.Type {
-	case errorType:
-		return ratelimit.CategoryError
-	case transactionType:
-		return ratelimit.CategoryTransaction
-	default:
-		return ratelimit.CategoryUnknown
-	}
-}
 
 // NewEvent creates a new Event.
 func NewEvent() *Event {
@@ -468,6 +453,61 @@ func NewEvent() *Event {
 		Tags:     make(map[string]string),
 		Modules:  make(map[string]string),
 	}
+}
+
+// Transaction is a finished root span together with its finished child spans.
+type Transaction struct {
+	EventID         EventID          `json:"event_id,omitempty"`
+	Name            string           `json:"transaction,omitempty"`
+	TransactionInfo *TransactionInfo `json:"transaction_info,omitempty"`
+	StartTime       time.Time        `json:"start_timestamp,omitzero"`
+	EndTime         time.Time        `json:"timestamp,omitzero"`
+	// Trace describes the root span. It is sent as the trace context.
+	Trace       TraceContext       `json:"-"`
+	Spans       []*Span            `json:"spans,omitempty"`
+	Tags        map[string]string  `json:"tags,omitempty"`
+	Contexts    map[string]Context `json:"contexts,omitempty"`
+	Breadcrumbs []*Breadcrumb      `json:"breadcrumbs,omitempty"`
+	User        User               `json:"user,omitzero"`
+	Request     *Request           `json:"request,omitempty"`
+	Release     string             `json:"release,omitempty"`
+	Dist        string             `json:"dist,omitempty"`
+	Environment string             `json:"environment,omitempty"`
+	ServerName  string             `json:"server_name,omitempty"`
+	Platform    string             `json:"platform,omitempty"`
+	Sdk         SdkInfo            `json:"sdk"`
+}
+
+// transactionItem is a transaction as handed to the telemetry processor.
+type transactionItem struct {
+	Transaction
+	Type string `json:"type"`
+	// dsc is the envelope's trace header.
+	dsc map[string]string
+}
+
+// newTransactionItem returns an item that owns a copy of tx.
+func newTransactionItem(tx *Transaction, dsc map[string]string) *transactionItem {
+	item := &transactionItem{Transaction: tx.owned(), Type: transactionType, dsc: maps.Clone(dsc)}
+	if item.Contexts == nil {
+		item.Contexts = make(map[string]Context, 1)
+	}
+	item.Contexts[traceContextKey] = item.Trace.Map()
+	return item
+}
+
+func (t *transactionItem) GetCategory() ratelimit.Category              { return ratelimit.CategoryTransaction }
+func (t *transactionItem) GetEventID() string                           { return string(t.EventID) }
+func (t *transactionItem) GetSdkInfo() *protocol.SdkInfo                { return &t.Sdk }
+func (t *transactionItem) GetDynamicSamplingContext() map[string]string { return t.dsc }
+
+// ToEnvelope encodes the transaction.
+func (t *transactionItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+	item, err := encodeItem(protocol.EnvelopeItemTypeTransaction, t)
+	if err != nil {
+		return nil, err
+	}
+	return protocol.NewEnvelope(header, item), nil
 }
 
 // Thread specifies threads that were running at the time of an event.
@@ -586,19 +626,10 @@ func (v MetricValue) MarshalJSON() ([]byte, error) {
 // except attachment payloads.
 func (e *Event) owned() Event {
 	owned := *e
-	owned.Breadcrumbs = copyEach(e.Breadcrumbs)
-	for _, breadcrumb := range owned.Breadcrumbs {
-		breadcrumb.Data = ownMap(breadcrumb.Data)
-	}
-	if e.Contexts != nil {
-		owned.Contexts = make(map[string]Context, len(e.Contexts))
-		for name, context := range e.Contexts {
-			owned.Contexts[name] = ownMap(context)
-		}
-	}
+	owned.Breadcrumbs = ownBreadcrumbs(e.Breadcrumbs)
+	owned.Contexts = ownContexts(e.Contexts)
 	owned.Fingerprint = slices.Clone(e.Fingerprint)
-	owned.Sdk.Integrations = slices.Clone(e.Sdk.Integrations)
-	owned.Sdk.Packages = slices.Clone(e.Sdk.Packages)
+	owned.Sdk = ownSdk(e.Sdk)
 	owned.Threads = slices.Clone(e.Threads)
 	for i := range owned.Threads {
 		owned.Threads[i].Stacktrace = owned.Threads[i].Stacktrace.owned()
@@ -606,10 +637,7 @@ func (e *Event) owned() Event {
 	owned.Tags = maps.Clone(e.Tags)
 	owned.User.Data = maps.Clone(e.User.Data)
 	owned.Modules = maps.Clone(e.Modules)
-	if owned.Request = copyOf(e.Request); owned.Request != nil {
-		owned.Request.Headers = maps.Clone(owned.Request.Headers)
-		owned.Request.Env = maps.Clone(owned.Request.Env)
-	}
+	owned.Request = ownRequest(e.Request)
 	owned.Exception = slices.Clone(e.Exception)
 	for i := range owned.Exception {
 		exception := &owned.Exception[i]
@@ -626,19 +654,60 @@ func (e *Event) owned() Event {
 	}
 	owned.Attachments = copyEach(e.Attachments)
 	owned.sdkMetaData.dsc.Entries = maps.Clone(e.sdkMetaData.dsc.Entries)
-	if e.Type != transactionType {
-		// Only transactions send their type, start time and spans.
-		owned.Type, owned.StartTime, owned.Spans, owned.TransactionInfo = "", time.Time{}, nil, nil
-		return owned
-	}
-	owned.Spans = make([]*Span, 0, len(e.Spans))
-	for _, span := range e.Spans {
+	return owned
+}
+
+// owned returns a copy of t that shares no memory its caller can still write.
+func (t *Transaction) owned() Transaction {
+	owned := *t
+	owned.TransactionInfo = copyOf(t.TransactionInfo)
+	owned.Trace.Data = ownMap(t.Trace.Data)
+	owned.Spans = make([]*Span, 0, len(t.Spans))
+	for _, span := range t.Spans {
 		if span != nil {
 			owned.Spans = append(owned.Spans, span.detached())
 		}
 	}
-	owned.TransactionInfo = copyOf(e.TransactionInfo)
+	owned.Tags = maps.Clone(t.Tags)
+	owned.Contexts = ownContexts(t.Contexts)
+	owned.Breadcrumbs = ownBreadcrumbs(t.Breadcrumbs)
+	owned.User.Data = maps.Clone(t.User.Data)
+	owned.Request = ownRequest(t.Request)
+	owned.Sdk = ownSdk(t.Sdk)
 	return owned
+}
+
+func ownBreadcrumbs(breadcrumbs []*Breadcrumb) []*Breadcrumb {
+	breadcrumbs = copyEach(breadcrumbs)
+	for _, breadcrumb := range breadcrumbs {
+		breadcrumb.Data = ownMap(breadcrumb.Data)
+	}
+	return breadcrumbs
+}
+
+func ownContexts(contexts map[string]Context) map[string]Context {
+	if contexts == nil {
+		return nil
+	}
+	owned := make(map[string]Context, len(contexts))
+	for name, context := range contexts {
+		owned[name] = ownMap(context)
+	}
+	return owned
+}
+
+func ownRequest(request *Request) *Request {
+	if request = copyOf(request); request != nil {
+		request.Headers = maps.Clone(request.Headers)
+		request.Env = maps.Clone(request.Env)
+	}
+	return request
+}
+
+func ownSdk(sdk SdkInfo) SdkInfo {
+	sdk.Integrations = slices.Clone(sdk.Integrations)
+	sdk.Packages = slices.Clone(sdk.Packages)
+	return sdk
 }
 
 // owned returns a copy of s that shares no memory with it.

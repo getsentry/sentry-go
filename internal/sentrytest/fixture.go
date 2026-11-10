@@ -261,12 +261,16 @@ func (f *Fixture) Envelopes() []*protocol.Envelope {
 	return f.Transport.Envelopes()
 }
 
-// Events returns all captured events, including transactions.
+// Events returns all captured events.
 //
-// TODO: Add typed helper views (errors, transactions, logs, metrics,
-// check-ins).
+// TODO: Add typed helper views (logs, metrics, check-ins).
 func (f *Fixture) Events() []*sentry.Event {
 	return f.Transport.Events()
+}
+
+// Transactions returns all captured transactions.
+func (f *Fixture) Transactions() []*sentry.Transaction {
+	return f.Transport.Transactions()
 }
 
 // AssertEventCount flushes and asserts the number of captured events.

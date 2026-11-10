@@ -1,6 +1,6 @@
 {
   "header": {
-    "event_id": "1484cb1f49a64c0e99dc49ec46e67aa7",
+    "event_id": "f55b5b9fb8104bfa85779cc38a4d2af1",
     "sent_at": "2000-01-01T01:00:00+01:00",
     "dsn": "https://whatever@sentry.io/1337",
     "sdk": {
@@ -26,7 +26,7 @@
       "release": "app@1.0.0",
       "sample_rate": "1",
       "sampled": "true",
-      "trace_id": "07d68b0fbd1dab5e1614afdfdd2207b7",
+      "trace_id": "1c312080bf96590a18290c31882021a8",
       "transaction": "GET /orders/:id"
     }
   },
@@ -34,82 +34,35 @@
     {
       "header": {
         "type": "transaction",
-        "length": 2063
+        "length": 1608
       },
       "payload": {
-        "environment": "test",
-        "event_id": "1484cb1f49a64c0e99dc49ec46e67aa7",
-        "fingerprint": [
-          "fingerprint"
-        ],
-        "level": "info",
-        "platform": "go",
-        "release": "app@1.0.0",
-        "sdk": {
-          "name": "sentry.go",
-          "version": "1.0.0-alpha.1",
-          "integrations": [
-            "Environment",
-            "GlobalTags",
-            "IgnoreErrors",
-            "IgnoreTransactions",
-            "Modules"
-          ],
-          "packages": [
-            {
-              "name": "sentry-go",
-              "version": "1.0.0-alpha.1"
-            }
-          ]
-        },
-        "server_name": "golden",
-        "timestamp": "2000-01-01T01:00:00+01:00",
+        "event_id": "f55b5b9fb8104bfa85779cc38a4d2af1",
         "transaction": "GET /orders/:id",
-        "modules": {
-          "github.com/davecgh/go-spew": "v1.1.2-0.20180830191138-d8f796af33cc",
-          "github.com/getsentry/sentry-go": "(devel)",
-          "github.com/go-errors/errors": "v1.4.2",
-          "github.com/google/go-cmp": "v0.7.0",
-          "github.com/pingcap/errors": "v0.11.4",
-          "github.com/pkg/errors": "v0.9.1",
-          "github.com/pmezard/go-difflib": "v1.0.1-0.20181226105442-5d4384ee4fb2",
-          "github.com/stretchr/testify": "v1.11.1",
-          "go.uber.org/goleak": "v1.3.0",
-          "gopkg.in/yaml.v3": "v3.0.1"
-        },
-        "request": {
-          "url": "http://example.com/orders/7",
-          "method": "GET",
-          "query_string": "page=2",
-          "headers": {
-            "Host": "example.com",
-            "User-Agent": "golden"
-          }
-        },
-        "type": "transaction",
-        "start_timestamp": "2000-01-01T01:00:00+01:00",
-        "spans": [
-          {
-            "trace_id": "07d68b0fbd1dab5e1614afdfdd2207b7",
-            "span_id": "084b9abea09e4011",
-            "parent_span_id": "4e21be22f1c21fa8",
-            "op": "db.query",
-            "description": "SELECT 1",
-            "status": "ok",
-            "start_timestamp": "2000-01-01T01:00:00+01:00",
-            "timestamp": "2000-01-01T01:00:00+01:00",
-            "origin": "auto.http.stdlib",
-            "tags": {
-              "db": "primary"
-            },
-            "data": {
-              "db.system": "postgresql"
-            }
-          }
-        ],
         "transaction_info": {
           "source": "route"
         },
+        "start_timestamp": "2000-01-01T01:00:00+01:00",
+        "timestamp": "2000-01-01T01:00:00+01:00",
+        "spans": [
+          {
+            "trace_id": "1c312080bf96590a18290c31882021a8",
+            "span_id": "91ffe2a6c3ab9716",
+            "parent_span_id": "96608b160ec28f36",
+            "op": "db.query",
+            "description": "SELECT 1",
+            "status": "ok",
+            "tags": {
+              "db": "primary"
+            },
+            "start_timestamp": "2000-01-01T01:00:00+01:00",
+            "timestamp": "2000-01-01T01:00:00+01:00",
+            "data": {
+              "db.system": "postgresql"
+            },
+            "origin": "auto.http.stdlib"
+          }
+        ],
         "tags": {
           "route": "orders",
           "tag": "value"
@@ -140,9 +93,10 @@
               "http.response.status_code": 200
             },
             "op": "http.server",
-            "span_id": "4e21be22f1c21fa8",
+            "origin": "auto.http.stdlib",
+            "span_id": "96608b160ec28f36",
             "status": "ok",
-            "trace_id": "07d68b0fbd1dab5e1614afdfdd2207b7"
+            "trace_id": "1c312080bf96590a18290c31882021a8"
           }
         },
         "breadcrumbs": [
@@ -160,17 +114,39 @@
           "data": {
             "plan": "pro"
           }
-        }
+        },
+        "request": {
+          "url": "http://example.com/orders/7",
+          "method": "GET",
+          "query_string": "page=2",
+          "headers": {
+            "Host": "example.com",
+            "User-Agent": "golden"
+          }
+        },
+        "release": "app@1.0.0",
+        "environment": "test",
+        "server_name": "golden",
+        "platform": "go",
+        "sdk": {
+          "name": "sentry.go",
+          "version": "1.0.0-alpha.1",
+          "integrations": [
+            "Environment",
+            "GlobalTags",
+            "IgnoreErrors",
+            "IgnoreTransactions",
+            "Modules"
+          ],
+          "packages": [
+            {
+              "name": "sentry-go",
+              "version": "1.0.0-alpha.1"
+            }
+          ]
+        },
+        "type": "transaction"
       }
-    },
-    {
-      "header": {
-        "type": "attachment",
-        "length": 8,
-        "filename": "log.txt",
-        "content_type": "text/plain"
-      },
-      "payload": "attached"
     }
   ]
 }

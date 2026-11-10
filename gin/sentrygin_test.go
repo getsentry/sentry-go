@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -32,7 +31,7 @@ func TestIntegration(t *testing.T) {
 		Handler     gin.HandlerFunc
 
 		WantEvent       *sentry.Event
-		WantTransaction *sentry.Event
+		WantTransaction *sentry.Transaction
 	}{
 		{
 			RequestPath: "/panic/1",
@@ -42,10 +41,8 @@ func TestIntegration(t *testing.T) {
 			Handler: func(_ *gin.Context) {
 				panic("test")
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "GET /panic/:id",
+			WantTransaction: &sentry.Transaction{
+				Name: "GET /panic/:id",
 				Request: &sentry.Request{
 					URL:    "/panic/1",
 					Method: "GET",
@@ -55,15 +52,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodGet,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodGet,
+						"http.response.status_code": http.StatusOK,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusOK,
 				}},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelFatal,
@@ -84,10 +79,8 @@ func TestIntegration(t *testing.T) {
 			Method:      "GET",
 			WantStatus:  404,
 			Handler:     nil,
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "GET /404/1",
+			WantTransaction: &sentry.Transaction{
+				Name: "GET /404/1",
 				Request: &sentry.Request{
 					URL:    "/404/1",
 					Method: "GET",
@@ -97,15 +90,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodGet,
-							"http.response.status_code": http.StatusNotFound,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusNotFound,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodGet,
+						"http.response.status_code": http.StatusNotFound,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusNotFound,
 				},
 			},
 			WantEvent: nil,
@@ -125,10 +116,8 @@ func TestIntegration(t *testing.T) {
 				sentry.CaptureMessage(c.Request.Context(), "post: "+string(body))
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "POST /post",
+			WantTransaction: &sentry.Transaction{
+				Name: "POST /post",
 				Request: &sentry.Request{
 					URL:    "/post",
 					Method: "POST",
@@ -141,15 +130,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodPost,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodPost,
+						"http.response.status_code": http.StatusOK,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusOK,
 				}},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -176,10 +163,8 @@ func TestIntegration(t *testing.T) {
 				sentry.CaptureMessage(c.Request.Context(), "get")
 				c.JSON(http.StatusOK, gin.H{"status": "get"})
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "GET /get",
+			WantTransaction: &sentry.Transaction{
+				Name: "GET /get",
 				Request: &sentry.Request{
 					URL:    "/get",
 					Method: "GET",
@@ -189,15 +174,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodGet,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodGet,
+						"http.response.status_code": http.StatusOK,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusOK,
 				}},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -225,10 +208,8 @@ func TestIntegration(t *testing.T) {
 				}
 				sentry.CaptureMessage(c.Request.Context(), fmt.Sprintf("post: %d KB", len(body)/1024))
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "POST /post/large",
+			WantTransaction: &sentry.Transaction{
+				Name: "POST /post/large",
 				Request: &sentry.Request{
 					URL:    "/post/large",
 					Method: "POST",
@@ -239,15 +220,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodPost,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodPost,
+						"http.response.status_code": http.StatusOK,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusOK,
 				}},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -274,10 +253,8 @@ func TestIntegration(t *testing.T) {
 			Handler: func(c *gin.Context) {
 				sentry.CaptureMessage(c.Request.Context(), "body ignored")
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "POST /post/body-ignored",
+			WantTransaction: &sentry.Transaction{
+				Name: "POST /post/body-ignored",
 				Request: &sentry.Request{
 					URL:    "/post/body-ignored",
 					Method: "POST",
@@ -290,15 +267,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodPost,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodPost,
+						"http.response.status_code": http.StatusOK,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusOK,
 				}},
 			WantEvent: &sentry.Event{
 				Level:   sentry.LevelInfo,
@@ -324,10 +299,8 @@ func TestIntegration(t *testing.T) {
 			Handler: func(c *gin.Context) {
 				c.JSON(http.StatusBadRequest, gin.H{"status": "bad_request"})
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "GET /badreq",
+			WantTransaction: &sentry.Transaction{
+				Name: "GET /badreq",
 				Request: &sentry.Request{
 					URL:    "/badreq",
 					Method: "GET",
@@ -337,22 +310,20 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodGet,
-							"http.response.status_code": http.StatusBadRequest,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusInvalidArgument,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodGet,
+						"http.response.status_code": http.StatusBadRequest,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusInvalidArgument,
 				}},
 			WantEvent: nil,
 		},
 	}
 
 	eventsCh := make(chan *sentry.Event, len(tests))
-	transactionsCh := make(chan *sentry.Event, len(tests))
+	transactionsCh := make(chan *sentry.Transaction, len(tests))
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:          true,
 		TracesSampleRate:       1.0,
@@ -362,7 +333,7 @@ func TestIntegration(t *testing.T) {
 			eventsCh <- event
 			return event
 		},
-		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(tx *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			fmt.Println("BeforeSendTransaction")
 			transactionsCh <- tx
 			return tx
@@ -386,7 +357,7 @@ func TestIntegration(t *testing.T) {
 	c.Timeout = time.Second
 
 	var want []*sentry.Event
-	var wanttrans []*sentry.Event
+	var wanttrans []*sentry.Transaction
 	var wantCodes []sentry.SpanStatus
 	for _, tt := range tests {
 		if tt.WantEvent != nil && tt.WantEvent.Request != nil {
@@ -446,28 +417,28 @@ func TestIntegration(t *testing.T) {
 	}
 
 	close(transactionsCh)
-	var gott []*sentry.Event
+	var gott []*sentry.Transaction
 	var statusCodes []sentry.SpanStatus
 	for e := range transactionsCh {
 		gott = append(gott, e)
-		statusCodes = append(statusCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
+		statusCodes = append(statusCodes, e.Trace.Status)
 	}
 
 	optstrans := cmp.Options{
 		cmpopts.IgnoreFields(
-			sentry.Event{},
-			"EventID", "Platform", "Modules",
-			"Release", "Sdk", "ServerName", "Timestamp",
-			"sdkMetaData", "StartTime", "Spans",
+			sentry.Transaction{},
+			"Contexts", "EventID", "Platform",
+			"Release", "Sdk", "ServerName",
+			"StartTime", "EndTime", "Spans",
+		),
+		cmpopts.IgnoreFields(
+			sentry.TraceContext{},
+			"TraceID", "SpanID", "Origin",
 		),
 		cmpopts.IgnoreFields(
 			sentry.Request{},
 			"Env",
 		),
-		cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
-			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
-			return slices.Contains(ignoredCtxEntries, k)
-		}),
 	}
 	if diff := cmp.Diff(wanttrans, gott, optstrans); diff != "" {
 		t.Fatalf("Transaction mismatch (-want +got):\n%s", diff)

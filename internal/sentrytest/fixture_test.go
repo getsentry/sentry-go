@@ -33,23 +33,6 @@ func TestNewSentryFixture_Global(t *testing.T) {
 	assert.NotNil(t, f.Client, "client should not be nil")
 }
 
-func TestNewSentryFixture_WithClientOptions_Tracing(t *testing.T) {
-	t.Parallel()
-
-	f := NewFixture(t, WithClientOptions(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-	}))
-
-	span := sentry.StartTransaction(f.NewContext(t.Context()), "test-transaction")
-	span.Finish()
-	f.Flush()
-
-	events := f.Events()
-	assert.Len(t, events, 1, "event count")
-	assert.Equal(t, "transaction", events[0].Type, "event type")
-}
-
 func TestNewSentryFixture_WithClientOptions(t *testing.T) {
 	t.Parallel()
 
@@ -99,7 +82,7 @@ func TestNewContext_NilParent(t *testing.T) {
 	assert.Nil(t, ctx.Value(contextKey{}), "context value")
 }
 
-func TestSentryFixture_Events_IncludesTransactions(t *testing.T) {
+func TestSentryFixture_Events_ExcludesTransactions(t *testing.T) {
 	t.Parallel()
 
 	f := NewFixture(t, WithClientOptions(sentry.ClientOptions{
@@ -114,9 +97,9 @@ func TestSentryFixture_Events_IncludesTransactions(t *testing.T) {
 	f.Flush()
 
 	events := f.Events()
-	assert.Len(t, events, 2, "event count")
+	assert.Len(t, events, 1, "event count")
 	assert.Equal(t, "error event", events[0].Message, "event message")
-	assert.Equal(t, "transaction", events[1].Type, "event type")
+	assert.Len(t, f.Transactions(), 1, "transaction count")
 }
 
 func TestSentryFixture_AssertEventCount(t *testing.T) {

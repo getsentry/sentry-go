@@ -149,12 +149,8 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 				require.NotNil(t, CaptureMessage(ctx, "scope trace"))
 				require.Equal(t, custom, requireSingleEvent(t, transport).Contexts[traceContextKey])
 				explicit := Context{traceIDContextKey: TraceID{4}.String(), spanIDContextKey: SpanID{4}.String()}
-				for _, eventType := range []string{"", transactionType} {
-					require.NotNil(t, CaptureEvent(ctx, &Event{Type: eventType, Contexts: map[string]Context{traceContextKey: explicit}}))
-				}
-				for _, event := range transport.Events()[1:] {
-					require.Equal(t, explicit, event.Contexts[traceContextKey])
-				}
+				require.NotNil(t, CaptureEvent(ctx, &Event{Contexts: map[string]Context{traceContextKey: explicit}}))
+				require.Equal(t, explicit, transport.Events()[1].Contexts[traceContextKey])
 			})
 		}
 	})

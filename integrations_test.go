@@ -184,48 +184,6 @@ func TestIgnoreErrorsIntegration(t *testing.T) {
 	}
 }
 
-func TestIgnoreTransactionsIntegration(t *testing.T) {
-	iei := ignoreTransactionsIntegration{
-		ignoreTransactions: []*regexp.Regexp{
-			regexp.MustCompile("foo"),
-			regexp.MustCompile("(?i)bar"),
-			regexp.MustCompile("(hello)"),
-		},
-	}
-
-	dropped := &Event{
-		Transaction: "foo",
-	}
-
-	alsoDropped := &Event{
-		Transaction: "Bar",
-	}
-
-	notDropped := &Event{
-		Transaction: "dont",
-	}
-
-	thisDroppedAsWell := &Event{
-		Transaction: "(hello)",
-	}
-
-	if iei.processor(dropped, &EventHint{}) != nil {
-		t.Error("Transaction should be dropped")
-	}
-
-	if iei.processor(alsoDropped, &EventHint{}) != nil {
-		t.Error("Transaction should be dropped")
-	}
-
-	if iei.processor(notDropped, &EventHint{}) == nil {
-		t.Error("Transaction should not be dropped")
-	}
-
-	if iei.processor(thisDroppedAsWell, &EventHint{}) != nil {
-		t.Error("Transaction should be dropped")
-	}
-}
-
 func TestExtractModules(t *testing.T) {
 	tests := []struct {
 		name string
@@ -377,7 +335,9 @@ func TestGlobalTagsIntegration(t *testing.T) {
 
 	transport := &MockTransport{}
 	client, err := NewClient(ClientOptions{
-		Transport: transport,
+		Transport:        transport,
+		EnableTracing:    true,
+		TracesSampleRate: 1,
 		Tags: map[string]string{
 			"foo": "foo_value_client_options",
 			"baz": "baz_value_client_options",
@@ -411,5 +371,12 @@ func TestGlobalTagsIntegration(t *testing.T) {
 		transport.lastEvent.Tags["baz"],
 		"baz_value_client_options",
 		"client options tag present if not overridden by scope and overrides env tag",
+	)
+
+	StartTransaction(ContextWithClient(ContextWithScope(context.Background(), scope), client), "transaction").Finish()
+	assertEqual(t,
+		transport.Transactions()[0].Tags,
+		transport.lastEvent.Tags,
+		"transactions get the same tags as events",
 	)
 }

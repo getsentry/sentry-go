@@ -10,17 +10,18 @@ import (
 func (e *eventItem) DiscardCounts() telemetry.DiscardCounts { return (*Event)(e).discardCounts() }
 
 func (e *Event) discardCounts() telemetry.DiscardCounts {
-	var counts telemetry.DiscardCounts
-	switch e.Type {
-	case transactionType:
-		counts = transactionDiscardCounts(uint64(len(e.Spans)))
-	default:
-		counts[ratelimit.CountError] = 1
-	}
+	counts := telemetry.DiscardCounts{ratelimit.CountError: 1}
 	for _, attachment := range e.Attachments {
 		counts[ratelimit.CountAttachment] += uint64(len(attachment.Payload))
 	}
 	return counts
+}
+
+// DiscardCounts returns client report counts for a dropped transaction.
+func (t *transactionItem) DiscardCounts() telemetry.DiscardCounts { return t.discardCounts() }
+
+func (t *Transaction) discardCounts() telemetry.DiscardCounts {
+	return transactionDiscardCounts(uint64(len(t.Spans)))
 }
 
 // transactionDiscardCounts returns client report counts for a dropped transaction with the given child spans.

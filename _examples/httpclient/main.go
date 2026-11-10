@@ -19,9 +19,9 @@ func main() {
 			fmt.Println(event)
 			return event
 		},
-		BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			fmt.Println(event)
-			return event
+		BeforeSendTransaction: func(transaction *sentry.Transaction, hint *sentry.EventHint) *sentry.Transaction {
+			fmt.Println(transaction)
+			return transaction
 		},
 		Debug: true,
 	})

@@ -100,6 +100,18 @@ sentry.CaptureException(span.Context(), err)
 The integrations continue incoming traces for you. Without an integration, start the
 transaction with `ContinueFromRequest(r)`, or with `ContinueFromHeaders(trace, baggage)`.
 
+A transaction is no longer an `Event`. `BeforeSendTransaction` receives a `Transaction`,
+whose `Trace` field describes the root span, and event processors only run for error events:
+
+```go
+BeforeSendTransaction: func(tx *sentry.Transaction, hint *sentry.EventHint) *sentry.Transaction {
+	if tx.Trace.Op == "http.server" && tx.Name == "GET /health" {
+		return nil
+	}
+	return tx
+},
+```
+
 ### Logs and metrics
 
 Pass the context to loggers and meters. The Logrus and Zerolog integrations take
@@ -201,6 +213,12 @@ type Transport interface {
 | `hub.GetTraceparent()` | `GetTraceparent(ctx)` |
 | `hub.GetTraceparentW3C()` | `GetTraceparentW3C(ctx)` |
 | `hub.GetBaggage()` | `GetBaggage(ctx)` |
+| `BeforeSendTransaction func(*Event, *EventHint) *Event` | `BeforeSendTransaction func(*Transaction, *EventHint) *Transaction` |
+| `Event.Type`, `Event.StartTime`, `Event.Spans`, and `Event.TransactionInfo` | Removed; use `Transaction`, whose root span is `Transaction.Trace` instead of `Contexts["trace"]` |
+| `CaptureEvent` with a transaction event | Removed; finish a root span to send a transaction |
+| Event processors receiving transactions | Event processors only receive error events; use `BeforeSendTransaction` |
+| `IgnoreTransactions` matching error events by `Event.Transaction` | `IgnoreTransactions` only drops transactions |
+| Level, fingerprint, modules, and scope attachments on transactions | No longer sent |
 
 </details>
 

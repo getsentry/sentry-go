@@ -159,6 +159,13 @@ func TestChangesAfterCaptureAreNotSent(t *testing.T) {
 			kept.Store(metric.Name, metric)
 			return metric
 		},
+		BeforeSendTransaction: func(tx *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
+			if tx.Name == "filled transaction" {
+				fill(reflect.ValueOf(tx).Elem())
+				kept.Store("filled transaction", tx)
+			}
+			return tx
+		},
 	}
 	tests := []struct {
 		name    string
@@ -167,9 +174,15 @@ func TestChangesAfterCaptureAreNotSent(t *testing.T) {
 		{"every event field", func(ctx context.Context, _ *sentry.Scope) func() {
 			event := &sentry.Event{}
 			fill(reflect.ValueOf(event).Elem())
-			event.Type = ""
 			sentry.CaptureEvent(ctx, event)
 			return func() { scribble(reflect.ValueOf(event).Elem(), changed) }
+		}},
+		{"every transaction field", func(ctx context.Context, _ *sentry.Scope) func() {
+			sentry.StartTransaction(ctx, "filled transaction").Finish()
+			return func() {
+				tx, _ := kept.Load("filled transaction")
+				scribble(reflect.ValueOf(tx).Elem(), changed)
+			}
 		}},
 		{"scope context", func(ctx context.Context, scope *sentry.Scope) func() {
 			fields := sentry.Context{

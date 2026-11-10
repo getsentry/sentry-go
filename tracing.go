@@ -474,21 +474,23 @@ func (s *Span) doFinish() {
 	if !client.IsEnabled() || !client.options.EnableTracing {
 		return
 	}
-	if s.shouldIgnoreStatusCode(client) {
-		return
+	// A status code in TraceIgnoreStatusCodes makes the transaction unsampled.
+	reason := report.ReasonSampleRate
+	if s.Sampled.Bool() && s.shouldIgnoreStatusCode(client) {
+		reason = report.ReasonEventProcessor
 	}
 
 	if !s.Sampled.Bool() {
 		children := s.recorder.children()
-		transactionDiscardCounts(uint64(len(children))).Record(client.reports, report.ReasonSampleRate)
+		transactionDiscardCounts(uint64(len(children))).Record(client.reports, reason)
 		return
 	}
-	event := s.toEvent()
+	dsc := s.dynamicSamplingContextForPropagation()
 
 	// TODO(tracing): add breadcrumbs
 	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
 
-	client.capture(s.ctx, event, resolveCaptureOptions(s.ctx))
+	client.captureTransaction(s.ctx, s.toTransaction(), dsc.Entries)
 }
 
 // sentryTracePattern matches either
@@ -647,14 +649,9 @@ func (s *Span) applyLocalSampleRate() {
 	}
 }
 
-func (s *Span) toEvent() *Event {
-	dsc := s.dynamicSamplingContextForPropagation()
+func (s *Span) toTransaction() *Transaction {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if !s.IsTransaction() {
-		return nil // only transactions can be transformed into events
-	}
 
 	children := s.recorder.children()
 	finished := make([]*Span, 0, len(children))
@@ -669,11 +666,10 @@ func (s *Span) toEvent() *Event {
 		finished = append(finished, child)
 	}
 
-	contexts := make(map[string]Context, len(s.contexts)+1)
+	contexts := make(map[string]Context, len(s.contexts))
 	for k, v := range s.contexts {
 		contexts[k] = cloneContext(v)
 	}
-	contexts[traceContextKey] = s.traceContextLockFree().Map()
 
 	// Make sure that the transaction source is valid
 	transactionSource := s.Source
@@ -681,19 +677,18 @@ func (s *Span) toEvent() *Event {
 		transactionSource = SourceCustom
 	}
 
-	return &Event{
-		Type:        transactionType,
-		Transaction: s.Name,
-		Contexts:    contexts,
-		Tags:        maps.Clone(s.Tags),
-		Timestamp:   s.EndTime,
-		StartTime:   s.StartTime,
-		Spans:       finished,
+	trace := s.traceContextLockFree()
+	trace.Origin = s.Origin
+	return &Transaction{
+		Name:      s.Name,
+		StartTime: s.StartTime,
+		EndTime:   s.EndTime,
+		Trace:     *trace,
+		Spans:     finished,
+		Tags:      maps.Clone(s.Tags),
+		Contexts:  contexts,
 		TransactionInfo: &TransactionInfo{
 			Source: transactionSource,
-		},
-		sdkMetaData: SDKMetaData{
-			dsc: dsc,
 		},
 	}
 }
@@ -897,6 +892,7 @@ type TraceContext struct {
 	Description  string         `json:"description,omitempty"`
 	Status       SpanStatus     `json:"status,omitempty"`
 	Data         map[string]any `json:"data,omitempty"`
+	Origin       SpanOrigin     `json:"origin,omitempty"`
 }
 
 func (tc TraceContext) Map() map[string]any {
@@ -923,6 +919,10 @@ func (tc TraceContext) Map() map[string]any {
 
 	if len(tc.Data) > 0 {
 		m["data"] = tc.Data
+	}
+
+	if tc.Origin != "" {
+		m["origin"] = tc.Origin
 	}
 
 	return m

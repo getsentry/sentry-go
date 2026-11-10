@@ -117,8 +117,8 @@ func TestClientReports_Integration(t *testing.T) {
 					}
 					return event
 				},
-				BeforeSendTransaction: func(event *Event, _ *EventHint) *Event {
-					event.Spans = nil
+				BeforeSendTransaction: func(tx *Transaction, _ *EventHint) *Transaction {
+					tx.Spans = nil
 					return nil
 				},
 				BeforeSendLog: func(log *Log) *Log {
@@ -143,14 +143,10 @@ func TestClientReports_Integration(t *testing.T) {
 			ctx, _ := WithScope(context.Background())
 			ctx = ContextWithClient(ctx, c)
 			c.CaptureEvent(ctx, &Event{Message: "drop-me", Attachments: []*Attachment{{Payload: []byte("abc")}}})
-			c.CaptureEvent(ctx, &Event{Type: transactionType, Spans: []*Span{{}, {}}})
+			c.captureTransaction(ctx, &Transaction{Spans: []*Span{{}, {}}}, nil)
 			NewLogger(ctx).Info().String("key", "value").Emit("drop-me")
 			NewMeter(ctx).Count("drop-me", 1)
 			processorCtx, processorScope := WithScope(ctx)
-			processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
-				event.Spans = nil // only transactions count spans
-				return event
-			})
 			processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 				if event.Message == "processor-drop" {
 					event.Attachments = nil
@@ -158,7 +154,7 @@ func TestClientReports_Integration(t *testing.T) {
 				}
 				return event
 			})
-			c.CaptureEvent(processorCtx, &Event{Message: "processor-drop", Spans: []*Span{{}}, Attachments: []*Attachment{{Payload: []byte("abc")}}})
+			c.CaptureEvent(processorCtx, &Event{Message: "processor-drop", Attachments: []*Attachment{{Payload: []byte("abc")}}})
 			if !tt.reportOnly {
 				c.CaptureMessage(ctx, "hi")
 			}
@@ -238,27 +234,31 @@ func TestClientReports_DiscardCounts(t *testing.T) {
 	const attrsSize = 5 + 11 + 12 + 13 + 13 + 7 + 20 + 14 + 10
 
 	tests := []struct {
-		name string
-		item telemetry.Item
-		want telemetry.DiscardCounts
+		name     string
+		item     telemetry.Item
+		category ratelimit.Category
+		want     telemetry.DiscardCounts
 	}{
-		{"empty log", (*logItem)(&Log{}),
+		{"empty log", (*logItem)(&Log{}), ratelimit.CategoryLog,
 			telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: 1}},
-		{"log", (*logItem)(&Log{Body: "user logged in", Level: LogLevelInfo, Timestamp: time.Now(), Attributes: attrs}),
+		{"log", (*logItem)(&Log{Body: "user logged in", Level: LogLevelInfo, Timestamp: time.Now(), Attributes: attrs}), ratelimit.CategoryLog,
 			telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: 14 + attrsSize}},
-		{"metric", (*metricItem)(&Metric{Name: "http.requests", Type: MetricTypeCounter, Value: Int64MetricValue(7), Attributes: attrs}),
+		{"metric", (*metricItem)(&Metric{Name: "http.requests", Type: MetricTypeCounter, Value: Int64MetricValue(7), Attributes: attrs}), ratelimit.CategoryTraceMetric,
 			telemetry.DiscardCounts{ratelimit.CountTraceMetric: 1, ratelimit.CountTraceMetricByte: 13 + 8 + attrsSize}},
-		{"check-in", &checkInItem{},
+		{"check-in", &checkInItem{}, ratelimit.CategoryMonitor,
 			telemetry.DiscardCounts{ratelimit.CountMonitor: 1}},
-		{"transaction", (*eventItem)(&Event{Type: transactionType, Spans: []*Span{{}, {}}}),
+		{"transaction", &transactionItem{Transaction: Transaction{Spans: []*Span{{}, {}}}}, ratelimit.CategoryTransaction,
 			telemetry.DiscardCounts{ratelimit.CountTransaction: 1, ratelimit.CountSpan: 3}},
-		{"error with attachments", (*eventItem)(&Event{Attachments: []*Attachment{{Payload: []byte("abc")}, {Payload: []byte("de")}}}),
+		{"error with attachments", (*eventItem)(&Event{Attachments: []*Attachment{{Payload: []byte("abc")}, {Payload: []byte("de")}}}), ratelimit.CategoryError,
 			telemetry.DiscardCounts{ratelimit.CountError: 1, ratelimit.CountAttachment: 5}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if diff := cmp.Diff(tt.want, tt.item.DiscardCounts()); diff != "" {
 				t.Errorf("DiscardCounts() (-want +got):\n%s", diff)
+			}
+			if got := tt.item.GetCategory(); got != tt.category {
+				t.Errorf("GetCategory() = %v, want %v", got, tt.category)
 			}
 		})
 	}

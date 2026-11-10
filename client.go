@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"cmp"
 	"context"
 	"crypto/x509"
 	"fmt"
@@ -157,9 +158,9 @@ type ClientOptions struct {
 	// BeforeSendLong is called before log events are sent to Sentry.
 	// You can use it to mutate the log event or return nil to discard it.
 	BeforeSendLog func(event *Log) *Log
-	// BeforeSendTransaction is called before transaction events are sent to Sentry.
+	// BeforeSendTransaction is called before transactions are sent to Sentry.
 	// Use it to mutate the transaction or return nil to discard the transaction.
-	BeforeSendTransaction func(event *Event, hint *EventHint) *Event
+	BeforeSendTransaction func(transaction *Transaction, hint *EventHint) *Transaction
 	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
 	// BeforeSendMetric is called before metric events are sent to Sentry.
@@ -276,6 +277,7 @@ type Client struct {
 	integrations          []Integration
 	externalTraceResolver externalContextTraceResolver
 	modules               func() map[string]string // set by the Modules integration
+	transactionProcessors []func(*Transaction) *Transaction
 	sdkIdentifier         string
 	sdkVersion            string
 	// Transport is read-only. Replacing the transport of an existing client is
@@ -806,10 +808,7 @@ func (client *Client) GetSDKIdentifier() string {
 }
 
 func (client *Client) capture(ctx context.Context, event *Event, opts captureOptions) *EventID {
-	// Transactions are sampled by options.TracesSampleRate or
-	// options.TracesSampler when they are started. Other events
-	// (errors, messages) are sampled here.
-	if event.Type != transactionType && !sample(client.options.SampleRate) {
+	if !sample(client.options.SampleRate) {
 		debuglog.Println("Event dropped due to SampleRate hit.")
 		event.discardCounts().Record(client.reports, report.ReasonSampleRate)
 		return nil
@@ -820,31 +819,12 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 		return nil
 	}
 
-	// Apply beforeSend* processors
-	hint := opts.hint
-	switch event.Type {
-	case transactionType:
-		if client.options.BeforeSendTransaction != nil {
-			counts, spansBefore := event.discardCounts(), len(event.Spans)
-			event = client.options.BeforeSendTransaction(event, hint)
-			if event == nil {
-				debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
-				counts.Record(client.reports, report.ReasonBeforeSend)
-				return nil
-			}
-			// Track spans removed by the callback
-			if droppedSpans := spansBefore - len(event.Spans); droppedSpans > 0 {
-				client.reports.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, uint64(droppedSpans))
-			}
-		}
-	default:
-		if client.options.BeforeSend != nil {
-			counts := event.discardCounts()
-			if event = client.options.BeforeSend(event, hint); event == nil {
-				debuglog.Println("Event dropped due to BeforeSend callback.")
-				counts.Record(client.reports, report.ReasonBeforeSend)
-				return nil
-			}
+	if client.options.BeforeSend != nil {
+		counts := event.discardCounts()
+		if event = client.options.BeforeSend(event, opts.hint); event == nil {
+			debuglog.Println("Event dropped due to BeforeSend callback.")
+			counts.Record(client.reports, report.ReasonBeforeSend)
+			return nil
 		}
 	}
 
@@ -857,10 +837,49 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 		return nil
 	}
 
-	if scope != nil && event.Type != transactionType {
+	if scope != nil {
 		scope.setLastEventID(event.EventID)
 	}
 	return &event.EventID
+}
+
+// captureTransaction sends tx with dsc as the trace header of its envelope.
+func (client *Client) captureTransaction(ctx context.Context, tx *Transaction, dsc map[string]string) {
+	applyScopesToTransaction(tx, client, ScopeFromContext(ctx))
+
+	tx.EventID = EventID(uuid())
+	tx.ServerName = cmp.Or(client.options.ServerName, hostname)
+	tx.Release = client.options.Release
+	tx.Dist = client.options.Dist
+	tx.Environment = client.options.Environment
+	tx.Platform = "go"
+	tx.Sdk = *client.sdkInfo()
+
+	for _, processor := range client.transactionProcessors {
+		counts := tx.discardCounts()
+		if tx = processor(tx); tx == nil {
+			counts.Record(client.reports, report.ReasonEventProcessor)
+			return
+		}
+	}
+
+	if client.options.BeforeSendTransaction != nil {
+		counts, spansBefore := tx.discardCounts(), len(tx.Spans)
+		tx = client.options.BeforeSendTransaction(tx, &EventHint{Context: ctx})
+		if tx == nil {
+			debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
+			counts.Record(client.reports, report.ReasonBeforeSend)
+			return
+		}
+		// Track spans removed by the callback
+		if droppedSpans := spansBefore - len(tx.Spans); droppedSpans > 0 {
+			client.reports.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, uint64(droppedSpans))
+		}
+	}
+
+	if !client.telemetryProcessor.Add(ctx, newTransactionItem(tx, dsc)) {
+		debuglog.Println("Transaction dropped: telemetry buffer full or unavailable")
+	}
 }
 
 func (client *Client) prepareEvent(ctx context.Context, event *Event, scope *Scope, opts captureOptions) *Event {
@@ -930,15 +949,12 @@ func (client *Client) prepareEvent(ctx context.Context, event *Event, scope *Sco
 func (client *Client) runEventProcessors(event *Event, hint *EventHint, processors []EventProcessor) *Event {
 	for _, processor := range processors {
 		id := event.EventID
-		counts, spansBefore := event.discardCounts(), len(event.Spans)
+		counts := event.discardCounts()
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by an EventProcessor: %s\n", id)
 			counts.Record(client.reports, report.ReasonEventProcessor)
 			return nil
-		}
-		if droppedSpans := spansBefore - len(event.Spans); event.Type == transactionType && droppedSpans > 0 {
-			client.reports.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, uint64(droppedSpans))
 		}
 	}
 	return event
