@@ -483,12 +483,12 @@ func (s *Span) doFinish() {
 		transactionDiscardCounts(uint64(len(children))).Record(client.reports, report.ReasonSampleRate)
 		return
 	}
-	event := s.toEvent()
+	dsc := s.dynamicSamplingContextForPropagation()
 
 	// TODO(tracing): add breadcrumbs
 	// (see https://github.com/getsentry/sentry-python/blob/f6f3525f8812f609/sentry_sdk/tracing.py#L372)
 
-	client.capture(s.ctx, event, resolveCaptureOptions(s.ctx))
+	client.captureTransaction(s.ctx, s.toTransaction(), dsc.Entries)
 }
 
 // sentryTracePattern matches either
@@ -647,14 +647,9 @@ func (s *Span) applyLocalSampleRate() {
 	}
 }
 
-func (s *Span) toEvent() *Event {
-	dsc := s.dynamicSamplingContextForPropagation()
+func (s *Span) toTransaction() *Transaction {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-
-	if !s.IsTransaction() {
-		return nil // only transactions can be transformed into events
-	}
 
 	children := s.recorder.children()
 	finished := make([]*Span, 0, len(children))
@@ -681,19 +676,15 @@ func (s *Span) toEvent() *Event {
 		transactionSource = SourceCustom
 	}
 
-	return &Event{
-		Type:        transactionType,
-		Transaction: s.Name,
-		Contexts:    contexts,
-		Tags:        maps.Clone(s.Tags),
-		Timestamp:   s.EndTime,
-		StartTime:   s.StartTime,
-		Spans:       finished,
+	return &Transaction{
+		Name:      s.Name,
+		StartTime: s.StartTime,
+		EndTime:   s.EndTime,
+		Spans:     finished,
+		Tags:      maps.Clone(s.Tags),
+		Contexts:  contexts,
 		TransactionInfo: &TransactionInfo{
 			Source: transactionSource,
-		},
-		sdkMetaData: SDKMetaData{
-			dsc: dsc,
 		},
 	}
 }

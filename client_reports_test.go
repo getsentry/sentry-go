@@ -69,6 +69,34 @@ func TestClientReports_CustomTransport(t *testing.T) {
 	}
 }
 
+func TestClientReports_TrimmedSpans(t *testing.T) {
+	t.Parallel()
+	transport := &MockTransport{}
+	client, err := NewClient(ClientOptions{
+		Transport: transport,
+		BeforeSendTransaction: func(tx *Transaction, _ *EventHint) *Transaction {
+			tx.Spans = tx.Spans[:1]
+			return tx
+		},
+	})
+	require.NoError(t, err)
+	defer client.Close()
+	client.captureTransaction(context.Background(), &Transaction{Spans: []*Span{{}, {}, {}}}, nil)
+	require.True(t, client.Flush(testutils.FlushTimeout()))
+
+	var got report.ClientReport
+	for _, envelope := range transport.Envelopes() {
+		for _, item := range envelope.Items {
+			if item.Header.Type == protocol.EnvelopeItemTypeClientReport {
+				require.NoError(t, json.Unmarshal(item.Payload, &got))
+			}
+		}
+	}
+	require.Equal(t, []report.DiscardedEvent{
+		{Reason: report.ReasonBeforeSend, Category: ratelimit.CategorySpan, Quantity: 2},
+	}, got.DiscardedEvents)
+}
+
 // TestClientReports_Integration tests that client reports are properly generated
 // and sent when events are dropped for various reasons.
 func TestClientReports_Integration(t *testing.T) {
@@ -117,8 +145,8 @@ func TestClientReports_Integration(t *testing.T) {
 					}
 					return event
 				},
-				BeforeSendTransaction: func(event *Event, _ *EventHint) *Event {
-					event.Spans = nil
+				BeforeSendTransaction: func(tx *Transaction, _ *EventHint) *Transaction {
+					tx.Spans = nil
 					return nil
 				},
 				BeforeSendLog: func(log *Log) *Log {
@@ -143,14 +171,10 @@ func TestClientReports_Integration(t *testing.T) {
 			ctx, _ := WithScope(context.Background())
 			ctx = ContextWithClient(ctx, c)
 			c.CaptureEvent(ctx, &Event{Message: "drop-me", Attachments: []*Attachment{{Payload: []byte("abc")}}})
-			c.CaptureEvent(ctx, &Event{Type: transactionType, Spans: []*Span{{}, {}}})
+			c.captureTransaction(ctx, &Transaction{Spans: []*Span{{}, {}}}, nil)
 			NewLogger(ctx).Info().String("key", "value").Emit("drop-me")
 			NewMeter(ctx).Count("drop-me", 1)
 			processorCtx, processorScope := WithScope(ctx)
-			processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
-				event.Spans = nil // only transactions count spans
-				return event
-			})
 			processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 				if event.Message == "processor-drop" {
 					event.Attachments = nil
@@ -158,7 +182,7 @@ func TestClientReports_Integration(t *testing.T) {
 				}
 				return event
 			})
-			c.CaptureEvent(processorCtx, &Event{Message: "processor-drop", Spans: []*Span{{}}, Attachments: []*Attachment{{Payload: []byte("abc")}}})
+			c.CaptureEvent(processorCtx, &Event{Message: "processor-drop", Attachments: []*Attachment{{Payload: []byte("abc")}}})
 			if !tt.reportOnly {
 				c.CaptureMessage(ctx, "hi")
 			}
@@ -250,7 +274,7 @@ func TestClientReports_DiscardCounts(t *testing.T) {
 			telemetry.DiscardCounts{ratelimit.CountTraceMetric: 1, ratelimit.CountTraceMetricByte: 13 + 8 + attrsSize}},
 		{"check-in", &checkInItem{},
 			telemetry.DiscardCounts{ratelimit.CountMonitor: 1}},
-		{"transaction", eventItem{&Event{Type: transactionType, Spans: []*Span{{}, {}}}},
+		{"transaction", &transactionItem{Transaction: Transaction{Spans: []*Span{{}, {}}}},
 			telemetry.DiscardCounts{ratelimit.CountTransaction: 1, ratelimit.CountSpan: 3}},
 		{"error with attachments", eventItem{&Event{Attachments: []*Attachment{{Payload: []byte("abc")}, {Payload: []byte("de")}}}},
 			telemetry.DiscardCounts{ratelimit.CountError: 1, ratelimit.CountAttachment: 5}},

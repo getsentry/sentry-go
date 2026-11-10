@@ -456,7 +456,7 @@ func (scope *Scope) copyToEvent(event *Event, maxBreadcrumbs int) (scopeData, []
 	scope.mu.RLock()
 	defer scope.mu.RUnlock()
 	event.Tags = mergeTags(scope.tags, event.Tags)
-	event.Contexts = mergeContexts(scope.contexts, event.Contexts, event.Type == transactionType)
+	event.Contexts = mergeContexts(scope.contexts, event.Contexts)
 	// Copy slice-backed scope data while holding the read lock. Snapshotting
 	// only the slice headers would race with concurrent append operations.
 	event.Breadcrumbs = mergeBreadcrumbs(scope.breadcrumbs, event.Breadcrumbs, maxBreadcrumbs)
@@ -473,9 +473,6 @@ func (scope *Scope) copyToEvent(event *Event, maxBreadcrumbs int) (scopeData, []
 }
 
 func applyTraceToEvent(ctx context.Context, event *Event, client *Client, scope *Scope, propagation PropagationContext, explicit bool) {
-	if event.Type == transactionType {
-		return
-	}
 	// forPropagation initializes the trace's sampling metadata, on scope when
 	// there is one so that later captures and outgoing requests reuse it.
 	forPropagation := func() PropagationContext {
@@ -530,6 +527,30 @@ func applyTraceToEvent(ctx context.Context, event *Event, client *Client, scope 
 	}
 }
 
+// applyScopesToTransaction merges the context scope and the global scope into tx,
+// from more specific to less specific.
+func applyScopesToTransaction(tx *Transaction, client *Client, scope *Scope) {
+	var snapshot scopeData
+	global := GlobalScope()
+	if scope != nil && scope != global {
+		snapshot = scope.copyToTransaction(tx)
+	}
+	globalSnapshot := global.copyToTransaction(tx)
+	if snapshot.request == nil {
+		snapshot.request, snapshot.requestBody = globalSnapshot.request, globalSnapshot.requestBody
+	}
+	tx.Request = mergeRequest(client, snapshot.request, snapshot.requestBody, tx.Request)
+}
+
+func (scope *Scope) copyToTransaction(tx *Transaction) scopeData {
+	scope.mu.RLock()
+	defer scope.mu.RUnlock()
+	tx.Tags = mergeTags(scope.tags, tx.Tags)
+	tx.Contexts = mergeContexts(scope.contexts, tx.Contexts)
+	tx.User = mergeUser(scope.user, tx.User)
+	return scope.scopeData
+}
+
 // matchingDSC keeps sampling metadata from the selected trace only.
 func matchingDSC(traceID string, propagation PropagationContext, roots ...*Span) DynamicSamplingContext {
 	for _, root := range roots {
@@ -574,7 +595,7 @@ func mergeTags(scope, event map[string]string) map[string]string {
 }
 
 // mergeContexts adds copies of the scope contexts that the event does not set.
-func mergeContexts(scope, event map[string]Context, skipTrace bool) map[string]Context {
+func mergeContexts(scope, event map[string]Context) map[string]Context {
 	if len(scope) == 0 {
 		return event
 	}
@@ -582,9 +603,6 @@ func mergeContexts(scope, event map[string]Context, skipTrace bool) map[string]C
 		event = make(map[string]Context, len(scope))
 	}
 	for key, value := range scope {
-		if key == traceContextKey && skipTrace {
-			continue
-		}
 		if _, exists := event[key]; !exists {
 			event[key] = cloneContext(value)
 		}

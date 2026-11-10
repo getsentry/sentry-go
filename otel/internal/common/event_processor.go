@@ -17,10 +17,6 @@ func linkTraceContextToErrorEvent(event *sentry.Event, hint *sentry.EventHint) *
 	if hint == nil || hint.Context == nil {
 		return event
 	}
-	if event.Type == "transaction" {
-		return event
-	}
-
 	traceID, spanID, ok := ResolveTraceContext(hint.Context)
 	if !ok {
 		return event

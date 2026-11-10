@@ -104,16 +104,6 @@ func tracingOpts() sentrytest.Option {
 	})
 }
 
-func transactionEvents(f *sentrytest.Fixture) []*sentry.Event {
-	var out []*sentry.Event
-	for _, e := range f.Events() {
-		if e.Type == "transaction" {
-			out = append(out, e)
-		}
-	}
-	return out
-}
-
 func TestIntegration_EmitsQueryAndExecSpans(t *testing.T) {
 	t.Parallel()
 
@@ -138,7 +128,7 @@ func TestIntegration_EmitsQueryAndExecSpans(t *testing.T) {
 
 				f.Flush()
 
-				txns := transactionEvents(f)
+				txns := f.Transactions()
 				require.Len(t, txns, 1)
 				spans := txns[0].Spans
 				require.GreaterOrEqual(t, len(spans), 2,
@@ -213,7 +203,7 @@ func TestIntegration_TransactionSpansParentQueries(t *testing.T) {
 					parent.Finish()
 					f.Flush()
 
-					txns := transactionEvents(f)
+					txns := f.Transactions()
 					require.Len(t, txns, 1)
 
 					var txnSpan, execSpan, querySpan *sentry.Span
@@ -285,7 +275,7 @@ func TestIntegration_TransactionExecObfuscatesPII(t *testing.T) {
 				parent.Finish()
 				f.Flush()
 
-				txns := transactionEvents(f)
+				txns := f.Transactions()
 				require.Len(t, txns, 1)
 
 				for _, span := range txns[0].Spans {
@@ -331,7 +321,7 @@ func TestIntegration_ErrSkipDoesNotDuplicateSpans(t *testing.T) {
 		parent.Finish()
 		f.Flush()
 
-		txns := transactionEvents(f)
+		txns := f.Transactions()
 		require.Len(t, txns, 1)
 		require.Len(t, txns[0].Spans, 2, "ErrSkip fallback must record exactly one span per operation")
 
@@ -414,7 +404,7 @@ func TestIntegration_ErrorStatusPropagates(t *testing.T) {
 				parent.Finish()
 				f.Flush()
 
-				txns := transactionEvents(f)
+				txns := f.Transactions()
 				require.Len(t, txns, 1)
 				require.NotEmpty(t, txns[0].Spans)
 
@@ -447,7 +437,7 @@ func TestIntegration_NoParentSpanEmitsNothing(t *testing.T) {
 		require.NoError(t, err)
 
 		f.Flush()
-		assert.Empty(t, transactionEvents(f),
+		assert.Empty(t, f.Transactions(),
 			"no spans must be captured when ctx has no parent span")
 	}, tracingOpts())
 }

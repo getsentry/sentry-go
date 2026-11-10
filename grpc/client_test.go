@@ -68,9 +68,9 @@ func initMockTransport(t *testing.T) *sentry.MockTransport {
 
 func spanStatusCode(t *testing.T, transport *sentry.MockTransport) int {
 	t.Helper()
-	events := transport.Events()
-	require.Len(t, events, 1)
-	for _, span := range events[0].Spans {
+	transactions := transport.Transactions()
+	require.Len(t, transactions, 1)
+	for _, span := range transactions[0].Spans {
 		if span.Op == "rpc.client" {
 			return int(span.Data["rpc.grpc.status_code"].(float64))
 		}
@@ -245,7 +245,7 @@ func TestUnaryClientInterceptor_PropagatesScopeWithoutSpan(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, test.existing, original.Get(sentry.SentryBaggageHeader))
 			f.Flush()
-			require.Empty(t, f.Events())
+			require.Empty(t, f.Envelopes())
 		})
 	}
 }

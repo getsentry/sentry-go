@@ -59,25 +59,33 @@ func (ei *environmentIntegration) Name() string {
 }
 
 func (ei *environmentIntegration) SetupOnce(client *Client) {
-	client.AddEventProcessor(ei.processor)
+	client.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
+		event.Contexts = withEnvironment(event.Contexts)
+		return event
+	})
+	client.transactionProcessors = append(client.transactionProcessors, func(tx *Transaction) *Transaction {
+		tx.Contexts = withEnvironment(tx.Contexts)
+		return tx
+	})
 }
 
-func (ei *environmentIntegration) processor(event *Event, _ *EventHint) *Event {
+// withEnvironment adds the device, os and runtime contexts to contexts.
+func withEnvironment(contexts map[string]Context) map[string]Context {
 	// Initialize maps as necessary.
 	contextNames := []string{"device", "os", "runtime"}
-	if event.Contexts == nil {
-		event.Contexts = make(map[string]Context, len(contextNames))
+	if contexts == nil {
+		contexts = make(map[string]Context, len(contextNames))
 	}
 	for _, name := range contextNames {
-		if event.Contexts[name] == nil {
-			event.Contexts[name] = make(Context)
+		if contexts[name] == nil {
+			contexts[name] = make(Context)
 		}
 	}
 
 	// Set contextual information preserving existing data. For each context, if
 	// the existing value is not of type map[string]interface{}, then no
 	// additional information is added.
-	if deviceContext, ok := event.Contexts["device"]; ok {
+	if deviceContext, ok := contexts["device"]; ok {
 		if _, ok := deviceContext["arch"]; !ok {
 			deviceContext["arch"] = runtime.GOARCH
 		}
@@ -85,12 +93,12 @@ func (ei *environmentIntegration) processor(event *Event, _ *EventHint) *Event {
 			deviceContext["num_cpu"] = runtime.NumCPU()
 		}
 	}
-	if osContext, ok := event.Contexts["os"]; ok {
+	if osContext, ok := contexts["os"]; ok {
 		if _, ok := osContext["name"]; !ok {
 			osContext["name"] = runtime.GOOS
 		}
 	}
-	if runtimeContext, ok := event.Contexts["runtime"]; ok {
+	if runtimeContext, ok := contexts["runtime"]; ok {
 		if _, ok := runtimeContext["name"]; !ok {
 			runtimeContext["name"] = "go"
 		}
@@ -107,7 +115,7 @@ func (ei *environmentIntegration) processor(event *Event, _ *EventHint) *Event {
 			runtimeContext["go_numcgocalls"] = runtime.NumCgoCall()
 		}
 	}
-	return event
+	return contexts
 }
 
 // ================================
@@ -184,13 +192,13 @@ func (iei *ignoreTransactionsIntegration) Name() string {
 
 func (iei *ignoreTransactionsIntegration) SetupOnce(client *Client) {
 	iei.ignoreTransactions = transformStringsIntoRegexps(client.options.IgnoreTransactions)
-	client.AddEventProcessor(iei.processor)
+	client.transactionProcessors = append(client.transactionProcessors, iei.processor)
 }
 
-func (iei *ignoreTransactionsIntegration) processor(event *Event, _ *EventHint) *Event {
-	suspect := event.Transaction
+func (iei *ignoreTransactionsIntegration) processor(tx *Transaction) *Transaction {
+	suspect := tx.Name
 	if suspect == "" {
-		return event
+		return tx
 	}
 
 	for _, pattern := range iei.ignoreTransactions {
@@ -201,7 +209,7 @@ func (iei *ignoreTransactionsIntegration) processor(event *Event, _ *EventHint) 
 		}
 	}
 
-	return event
+	return tx
 }
 
 // ================================
@@ -226,6 +234,10 @@ func (ti *globalTagsIntegration) SetupOnce(client *Client) {
 	ti.envTags = loadEnvTags()
 
 	client.AddEventProcessor(ti.processor)
+	client.transactionProcessors = append(client.transactionProcessors, func(tx *Transaction) *Transaction {
+		tx.Tags = ti.processor(&Event{Tags: tx.Tags}, nil).Tags
+		return tx
+	})
 }
 
 func (ti *globalTagsIntegration) processor(event *Event, _ *EventHint) *Event {
