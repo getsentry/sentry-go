@@ -1,0 +1,12 @@
+# Mutation testing config for `make mutation` (https://gremlins.dev/latest/usage/configuration/).
+unleash:
+  # Only print mutants no test catches; killed ones are noise in CI logs.
+  output-statuses: lct
+  # The per-mutant timeout scales the coverage run, which is often cached and
+  # far shorter than compiling a mutant; gremlins counts a timeout as killed.
+  timeout-coefficient: 100
+  exclude-files:
+    - ^internal/testutils/
+    - ^internal/sentrytest/
+    - (^|/)mocks?\.go$
+    - mock_transport\.go$

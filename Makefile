@@ -38,6 +38,12 @@ test-race-coverage: $(COVERAGE_DIR) ## Run tests with race detection and coverag
 	$(GO) test -count=1 -timeout $(TIMEOUT)s -race -covermode=$(COVERAGE_MODE) -coverprofile=$(COVERAGE_PROFILE) work
 .PHONY: test-race-coverage
 
+MUTATION_BASE = origin/master
+
+mutation: ## Mutation test Go code changed since MUTATION_BASE, one module at a time
+	.github/scripts/mutation.sh $(MUTATION_BASE)
+.PHONY: mutation
+
 vet: ## Run "go vet" across all workspace modules
 	$(GO) vet work
 .PHONY: vet

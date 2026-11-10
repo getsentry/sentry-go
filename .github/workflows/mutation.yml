@@ -1,0 +1,34 @@
+name: Mutation
+on:
+  pull_request:
+    paths:
+      - "**.go"
+      - .gremlins.yaml
+      - .github/scripts/mutation.sh
+      - .github/workflows/mutation.yml
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  mutation:
+    name: Mutation (changed lines)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # gremlins --diff needs the base branch history.
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27"
+          cache-dependency-path: "**/go.sum"
+      - name: Mutation test changed code
+        run: make mutation MUTATION_BASE="origin/$BASE_REF"
+        env:
+          BASE_REF: ${{ github.base_ref }}
