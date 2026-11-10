@@ -13,15 +13,10 @@ import (
 	"github.com/getsentry/sentry-go/internal/sentrytest"
 )
 
-func checkInEvents(t *testing.T, f *sentrytest.Fixture) []*sentry.Event {
+func checkInEvents(t *testing.T, f *sentrytest.Fixture) []*sentry.MockCheckIn {
 	t.Helper()
 	f.Flush()
-	events := f.Events()
-	for _, event := range events {
-		require.Equal(t, "check_in", event.Type)
-		require.NotNil(t, event.CheckIn)
-	}
-	return events
+	return f.Transport.CheckIns()
 }
 
 func TestWithMonitor(t *testing.T) {
@@ -119,7 +114,7 @@ func TestWithMonitorTrace(t *testing.T) {
 
 		events := checkInEvents(t, f)
 		require.Len(t, events, 4)
-		trace := func(i int) string { return events[i].GetDynamicSamplingContext()["trace_id"] }
+		trace := func(i int) sentry.TraceID { return events[i].TraceID }
 		assert.Equal(t, trace(0), trace(1))
 		assert.Equal(t, trace(2), trace(3))
 		assert.NotEqual(t, trace(0), trace(2))

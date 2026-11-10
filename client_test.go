@@ -905,28 +905,30 @@ func TestCaptureCheckIn(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			client, _, transport := setupClientTest()
+			client.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
+				t.Error("event processor ran for a check-in")
+				return event
+			})
 			client.CaptureCheckIn(context.Background(), tt.checkIn, tt.monitorConfig)
-			capturedEvent := transport.lastEvent
+			checkIns := transport.CheckIns()
 
-			if tt.expectNilEvent && capturedEvent == nil {
-				// Event is nil as expected, nothing else to check
+			if tt.expectNilEvent {
+				if len(checkIns) != 0 {
+					t.Fatalf("got %d check-ins, want none", len(checkIns))
+				}
 				return
 			}
 
-			if capturedEvent == nil {
-				t.Fatal("missing event")
+			if len(checkIns) != 1 {
+				t.Fatalf("got %d check-ins, want 1", len(checkIns))
 			}
 
-			if capturedEvent.Type != checkInType {
-				t.Errorf("Event type mismatch: want %s, got %s", checkInType, capturedEvent.Type)
-			}
-
-			if diff := cmp.Diff(capturedEvent.CheckIn, tt.checkIn); diff != "" {
+			if diff := cmp.Diff(tt.checkIn, &checkIns[0].CheckIn); diff != "" {
 				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
 			}
 
-			if diff := cmp.Diff(capturedEvent.MonitorConfig, tt.monitorConfig); diff != "" {
-				t.Errorf("CheckIn mismatch (-want +got):\n%s", diff)
+			if diff := cmp.Diff(tt.monitorConfig, checkIns[0].MonitorConfig); diff != "" {
+				t.Errorf("MonitorConfig mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

@@ -164,6 +164,7 @@ type Transport interface {
 | `WithMonitor(slug, config, fn)` and `hub.WithMonitor` | `WithMonitor(ctx, slug, config, fn)` |
 | `Recover()` and `RecoverWithContext(ctx)` | `defer sentry.Recover(ctx, nil)` |
 | `EventModifier`, `client.EventFromMessage`, `EventFromException`, `EventFromCheckIn` | Capture methods, scope setters, and `BeforeSend` or event processors |
+| `Event.CheckIn` and `Event.MonitorConfig` | Removed; a check-in is no longer an event. Event processors don't receive check-ins and scope attachments aren't sent with them |
 
 </details>
 

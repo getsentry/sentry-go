@@ -20,6 +20,16 @@ type MockTransport struct {
 	envelopes []*protocol.Envelope
 	events    []*Event
 	lastEvent *Event
+	checkIns  []*MockCheckIn
+}
+
+// MockCheckIn is a check-in captured by [MockTransport].
+type MockCheckIn struct {
+	CheckIn       CheckIn
+	MonitorConfig *MonitorConfig
+	Release       string
+	Environment   string
+	TraceID       TraceID
 }
 
 // Configure marks delivery as synchronous so captured events are visible immediately.
@@ -34,6 +44,10 @@ func (t *MockTransport) SendEnvelope(_ context.Context, envelope *protocol.Envel
 	defer t.mu.Unlock()
 	t.envelopes = append(t.envelopes, envelope)
 	for _, item := range envelope.Items {
+		if item.Header.Type == protocol.EnvelopeItemTypeCheckIn {
+			t.checkIns = append(t.checkIns, decodeMockCheckIn(item))
+			continue
+		}
 		event := decodeMockEvent(item)
 		if event == nil {
 			continue
@@ -77,6 +91,13 @@ func (t *MockTransport) Events() []*Event {
 	return slices.Clone(t.events)
 }
 
+// CheckIns returns captured check-ins decoded from the wire format.
+func (t *MockTransport) CheckIns() []*MockCheckIn {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return slices.Clone(t.checkIns)
+}
+
 func (t *MockTransport) Close() {}
 
 // mockDecode panics on invalid payloads so tests cannot silently ignore them.
@@ -115,30 +136,6 @@ func decodeMockEvent(item *protocol.EnvelopeItem) *Event {
 				}
 			}
 			event.Spans = append(event.Spans, &span.Span)
-		}
-	case protocol.EnvelopeItemTypeCheckIn:
-		payload := mockDecode[struct {
-			serializedCheckIn
-			MonitorConfig json.RawMessage `json:"monitor_config"`
-		}](item.Payload)
-		event.Type, event.Release, event.Environment = checkInType, payload.Release, payload.Environment
-		event.CheckIn = &CheckIn{ID: EventID(payload.CheckInID), MonitorSlug: payload.MonitorSlug, Status: payload.Status, Duration: time.Duration(payload.Duration * float64(time.Second))}
-		if len(payload.MonitorConfig) != 0 && string(payload.MonitorConfig) != "null" {
-			config := mockDecode[struct {
-				MonitorConfig
-				Schedule struct {
-					Type  string
-					Value json.RawMessage
-					Unit  MonitorScheduleUnit
-				} `json:"schedule"`
-			}](payload.MonitorConfig)
-			switch config.Schedule.Type {
-			case "crontab":
-				config.MonitorConfig.Schedule = CrontabSchedule(mockDecode[string](config.Schedule.Value))
-			case "interval":
-				config.MonitorConfig.Schedule = IntervalSchedule(mockDecode[int64](config.Schedule.Value), config.Schedule.Unit)
-			}
-			event.MonitorConfig = &config.MonitorConfig
 		}
 	case protocol.EnvelopeItemTypeLog, protocol.EnvelopeItemTypeTraceMetric:
 		payload := mockDecode[struct {
@@ -180,6 +177,43 @@ func decodeMockEvent(item *protocol.EnvelopeItem) *Event {
 		return nil
 	}
 	return event
+}
+
+func decodeMockCheckIn(item *protocol.EnvelopeItem) *MockCheckIn {
+	payload := mockDecode[struct {
+		checkInItem
+		MonitorConfig json.RawMessage `json:"monitor_config"`
+	}](item.Payload)
+	checkIn := &MockCheckIn{
+		CheckIn: CheckIn{
+			ID:          EventID(payload.CheckInID),
+			MonitorSlug: payload.MonitorSlug,
+			Status:      payload.Status,
+			Duration:    time.Duration(payload.Duration * float64(time.Second)),
+		},
+		Release:     payload.Release,
+		Environment: payload.Environment,
+	}
+	traceID, _ := payload.Contexts[traceContextKey][traceIDContextKey].(string)
+	decodeMockID(traceID, checkIn.TraceID[:])
+	if len(payload.MonitorConfig) != 0 && string(payload.MonitorConfig) != "null" {
+		config := mockDecode[struct {
+			MonitorConfig
+			Schedule struct {
+				Type  string
+				Value json.RawMessage
+				Unit  MonitorScheduleUnit
+			} `json:"schedule"`
+		}](payload.MonitorConfig)
+		switch config.Schedule.Type {
+		case "crontab":
+			config.MonitorConfig.Schedule = CrontabSchedule(mockDecode[string](config.Schedule.Value))
+		case "interval":
+			config.MonitorConfig.Schedule = IntervalSchedule(mockDecode[int64](config.Schedule.Value), config.Schedule.Unit)
+		}
+		checkIn.MonitorConfig = &config.MonitorConfig
+	}
+	return checkIn
 }
 
 func decodeMockID(value string, dst []byte) {
