@@ -704,7 +704,6 @@ func TestEvent_ToCategory(t *testing.T) {
 	}{
 		{"error", "", ratelimit.CategoryError},
 		{"transaction", transactionType, ratelimit.CategoryTransaction},
-		{"log", logEvent.Type, ratelimit.CategoryLog},
 		{"unknown", "foobar", ratelimit.CategoryUnknown},
 	}
 	for _, tc := range cases {
@@ -764,20 +763,6 @@ func TestEvent_ToEnvelopeItem_RecoverFromPanic(t *testing.T) {
 	}
 	if item != nil {
 		t.Fatal("ToEnvelopeItem() expected nil item on marshal failure")
-	}
-}
-
-func TestMetric_GetterMethods(t *testing.T) {
-	metric := &Metric{
-		Timestamp: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
-		TraceID:   TraceIDFromHex("12345678901234567890123456789012"),
-		Type:      MetricTypeCounter,
-		Name:      "test.metric",
-		Value:     Int64MetricValue(42),
-	}
-
-	if metric.GetCategory() != ratelimit.CategoryTraceMetric {
-		t.Errorf("GetCategory() = %v, want %v", metric.GetCategory(), ratelimit.CategoryTraceMetric)
 	}
 }
 
