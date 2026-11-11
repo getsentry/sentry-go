@@ -20,6 +20,16 @@ actions = ["opened", "synchronize", "reopened"]
 draft = false
 
 [[skills]]
+name = "skill-scanner"
+incremental = true
+remote = "getsentry/skills"
+paths = [".agents/**", ".claude/**", "**/SKILL.md", "AGENTS.md", "CLAUDE.md", "agents.toml"]
+
+[[skills.triggers]]
+type = "pull_request"
+actions = ["opened", "synchronize", "reopened"]
+
+[[skills]]
 name = "sdk-review"
 paths = ["**/*.go"]
 ignorePaths = ["**/*_test.go", "**/testdata/**", "_examples/**"]
