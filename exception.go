@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"cmp"
 	"fmt"
 	"reflect"
 	"slices"
@@ -44,16 +45,6 @@ func convertErrorToExceptions(err error, maxErrorDepth int) []Exception {
 		msgs: make(map[string]struct{}),
 	}
 	convertErrorDFS(err, &exceptions, nil, "", vis, maxErrorDepth, 0)
-
-	// For a single exception the chain-link fields (ExceptionID, ParentID,
-	// Source, IsExceptionGroup) are irrelevant, so replace the DFS-generated
-	// mechanism with a clean default that carries only type and handled.
-	if len(exceptions) == 1 {
-		exceptions[0].Mechanism = &Mechanism{
-			Type:    MechanismTypeGeneric,
-			Handled: new(true),
-		}
-	}
 
 	slices.Reverse(exceptions)
 
@@ -145,25 +136,12 @@ func (e *Event) applyMechanism(mechanism *Mechanism) {
 	}
 
 	exception := &e.Exception[len(e.Exception)-1]
-	m := Mechanism{
-		Type: mechanism.Type,
+	var m Mechanism
+	if exception.Mechanism != nil {
+		m = *exception.Mechanism
 	}
-	if mechanism.Handled != nil {
-		m.Handled = new(*mechanism.Handled)
-	}
-
-	if existing := exception.Mechanism; existing != nil {
-		m.ExceptionID = existing.ExceptionID
-		m.ParentID = existing.ParentID
-		m.Source = existing.Source
-		m.IsExceptionGroup = existing.IsExceptionGroup
-		if m.Type == "" {
-			m.Type = existing.Type
-		}
-	}
-	if m.Type == "" {
-		m.Type = MechanismTypeGeneric
-	}
+	m.Type = cmp.Or(mechanism.Type, m.Type, MechanismTypeGeneric)
+	m.Handled = new(*mechanism.Handled)
 
 	exception.Mechanism = &m
 }

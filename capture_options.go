@@ -26,19 +26,7 @@ func WithLevel(level Level) CaptureOption {
 	}
 }
 
-// WithMechanism sets the exception mechanism for a single capture, describing
-// how the exception was captured and whether it was handled. Integrations use
-// it to report their own mechanism type in place of the default "generic":
-//
-//	sentry.Recover(ctx, recovered, sentry.WithMechanism("auto.http.go.gin.middleware", false))
-//
-// The mechanism is applied to the outermost exception of the event, which is
-// the error passed to CaptureException or Recover. Exceptions further down the
-// error chain keep their "chained" mechanism, and the fields linking the chain
-// together (ExceptionID, ParentID, Source and IsExceptionGroup) are managed by
-// the SDK. An empty mechanismType keeps the generated type, or falls back to
-// "generic". The option has no effect on events without exceptions, such as
-// messages or panics with a non-error value.
+// WithMechanism attaches capture related information to the exception.
 func WithMechanism(mechanismType string, handled bool) CaptureOption {
 	return func(options *captureOptions) {
 		options.mechanism = &Mechanism{

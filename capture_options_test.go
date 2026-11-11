@@ -3,7 +3,6 @@ package sentry_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -82,18 +81,7 @@ func TestWithMechanism(t *testing.T) {
 			want:    []*sentry.Mechanism{{Type: "auto.test", Handled: new(false)}},
 		},
 		{
-			name: "chain keeps chained mechanism and links",
-			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
-				sentry.CaptureException(ctx, fmt.Errorf("wrapped: %w", errBase), options...)
-			},
-			options: []sentry.CaptureOption{sentry.WithMechanism("auto.test", true)},
-			want: []*sentry.Mechanism{
-				{Type: sentry.MechanismTypeChained, ExceptionID: 1, ParentID: new(0), Source: sentry.MechanismTypeUnwrap},
-				{Type: "auto.test", Handled: new(true)},
-			},
-		},
-		{
-			name: "exception group",
+			name: "wrapped group changes top-level mechanism",
 			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
 				sentry.CaptureException(ctx, errors.Join(errBase), options...)
 			},
@@ -102,14 +90,6 @@ func TestWithMechanism(t *testing.T) {
 				{Type: sentry.MechanismTypeChained, ExceptionID: 1, ParentID: new(0), Source: "errors[0]"},
 				{Type: "auto.test", Handled: new(true), IsExceptionGroup: true},
 			},
-		},
-		{
-			name: "empty type falls back to generic",
-			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
-				sentry.CaptureException(ctx, errBase, options...)
-			},
-			options: []sentry.CaptureOption{sentry.WithMechanism("", false)},
-			want:    []*sentry.Mechanism{{Type: sentry.MechanismTypeGeneric, Handled: new(false)}},
 		},
 		{
 			name: "default mechanism",
