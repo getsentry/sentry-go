@@ -16,6 +16,7 @@ incremental = true
 [[skills.triggers]]
 type = "pull_request"
 actions = ["opened", "synchronize", "reopened"]
+draft = false
 
 [[skills]]
 name = "sdk-review"
@@ -26,3 +27,4 @@ incremental = true
 [[skills.triggers]]
 type = "pull_request"
 actions = ["opened", "synchronize", "reopened"]
+draft = false
