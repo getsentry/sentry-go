@@ -9,7 +9,7 @@ Review only the changed code. Report a finding only if you can point to the exac
 
 1. **Never break the host app** (high). SDK code that can raise, block, or change the user's behavior: exceptions, return values, signatures, job or request flow.
 2. **Data collected without its gate** (high). Bodies, headers, cookies, user info, `gen_ai` inputs/outputs or DB results recorded without the PII / data-collection option. Header and cookie names match case-insensitively.
-3. **Supported versions** (high). Language, runtime, target or dependency APIs newer than the repo's declared minimum, used without a guard.
+3. **Supported versions** (high). Language, runtime, target or dependency APIs newer than the repo's declared minimum, used without a guard. Minimums come from the `go` line in the root `go.mod` and in each integration's own `go.mod`.
 4. **Public API** (medium). Breaking public changes without a deprecation path, or internals exposed as public API.
 
 ## Do not report (same in every SDK repo)
