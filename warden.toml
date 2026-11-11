@@ -11,6 +11,7 @@ reportOn = "medium"
 
 [[skills]]
 name = "code-review"
+ignorePaths = ["_examples/**"]
 incremental = true
 
 [[skills.triggers]]
