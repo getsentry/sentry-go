@@ -131,6 +131,28 @@ func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *
 	return ClientFromContext(ctx).CaptureEvent(ctx, event, options...)
 }
 
+// Feedback represents user feedback submitted for an event.
+type Feedback struct {
+	EventID  EventID
+	Name     string
+	Email    string
+	Comments string
+}
+
+// CaptureFeedback captures user feedback using the scope and client carried by
+// ctx.
+func CaptureFeedback(ctx context.Context, feedback Feedback) *EventID {
+	event := NewEvent()
+	event.EventID = feedback.EventID
+	event.Type = "feedback"
+	event.User = User{
+		Name:  feedback.Name,
+		Email: feedback.Email,
+	}
+	event.Message = feedback.Comments
+	return CaptureEvent(ctx, event)
+}
+
 // Recover captures a recovered panic value using the scope and client carried
 // by ctx. When recovered is nil, Recover invokes Go's built-in recover and must
 // itself be deferred.
