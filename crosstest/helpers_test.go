@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -148,8 +149,8 @@ func normalizeLinkedSignals(events []*sentry.Event) []linkedSignal {
 		}
 	}
 
-	sort.SliceStable(signals, func(i, j int) bool {
-		return linkedSignalSortKey(signals[i]) < linkedSignalSortKey(signals[j])
+	slices.SortStableFunc(signals, func(a, b linkedSignal) int {
+		return strings.Compare(linkedSignalSortKey(a), linkedSignalSortKey(b))
 	})
 
 	return signals
