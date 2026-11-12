@@ -13,6 +13,14 @@ const (
 	MechanismSourceCause string = "cause"
 )
 
+// WithMechanism returns a CaptureOption that overrides the mechanism attached
+// to the captured exception.
+func WithMechanism(mechanism *Mechanism) CaptureOption {
+	return func(opts *captureOptions) {
+		opts.mechanism = mechanism
+	}
+}
+
 type visited struct {
 	ptrs map[uintptr]struct{}
 	msgs map[string]struct{}
@@ -37,7 +45,7 @@ func (v *visited) seenError(err error) bool {
 	return false
 }
 
-func convertErrorToExceptions(err error, maxErrorDepth int) []Exception {
+func convertErrorToExceptions(err error, maxErrorDepth int, mechanism ...*Mechanism) []Exception {
 	var exceptions []Exception
 	vis := &visited{
 		ptrs: make(map[uintptr]struct{}),
@@ -52,6 +60,10 @@ func convertErrorToExceptions(err error, maxErrorDepth int) []Exception {
 	}
 
 	slices.Reverse(exceptions)
+
+	if len(mechanism) > 0 && mechanism[0] != nil && len(exceptions) > 0 {
+		exceptions[0].Mechanism = mechanism[0]
+	}
 
 	// Add a trace of the current stack to the top level(outermost) error in a chain if
 	// it doesn't have a stack trace yet.
