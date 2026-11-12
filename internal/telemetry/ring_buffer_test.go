@@ -24,7 +24,7 @@ func TestNewRingBuffer(t *testing.T) {
 		if buffer.Category() != ratelimit.CategoryError {
 			t.Errorf("Expected category error, got %s", buffer.Category())
 		}
-		if buffer.Priority() != ratelimit.PriorityCritical {
+		if buffer.Priority() != PriorityCritical {
 			t.Errorf("Expected priority critical, got %s", buffer.Priority())
 		}
 	})
@@ -292,12 +292,12 @@ func TestBufferConcurrency(t *testing.T) {
 func TestBufferDifferentCategories(t *testing.T) {
 	testCases := []struct {
 		category         ratelimit.Category
-		expectedPriority ratelimit.Priority
+		expectedPriority Priority
 	}{
-		{ratelimit.CategoryError, ratelimit.PriorityCritical},
-		{ratelimit.CategoryMonitor, ratelimit.PriorityHigh},
-		{ratelimit.CategoryLog, ratelimit.PriorityLow},
-		{ratelimit.CategoryTransaction, ratelimit.PriorityMedium},
+		{ratelimit.CategoryError, PriorityCritical},
+		{ratelimit.CategoryMonitor, PriorityHigh},
+		{ratelimit.CategoryLog, PriorityLow},
+		{ratelimit.CategoryTransaction, PriorityMedium},
 	}
 
 	for _, tc := range testCases {

@@ -38,7 +38,7 @@ type BucketedBuffer[T any] struct {
 	bucketCount int
 
 	category       ratelimit.Category
-	priority       ratelimit.Priority
+	priority       Priority
 	overflowPolicy OverflowPolicy
 	recorder       report.ClientReportRecorder
 	batchSize      int
@@ -85,7 +85,7 @@ func NewBucketedBuffer[T any](
 		itemCapacity:   capacity,
 		bucketCapacity: bucketCapacity,
 		category:       category,
-		priority:       category.GetPriority(),
+		priority:       priorityOf(category),
 		overflowPolicy: overflowPolicy,
 		recorder:       recorder,
 		batchSize:      batchSize,
@@ -329,7 +329,7 @@ func (b *BucketedBuffer[T]) Category() ratelimit.Category {
 	defer b.mu.RUnlock()
 	return b.category
 }
-func (b *BucketedBuffer[T]) Priority() ratelimit.Priority {
+func (b *BucketedBuffer[T]) Priority() Priority {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.priority

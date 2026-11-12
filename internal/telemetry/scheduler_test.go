@@ -114,9 +114,9 @@ func TestNewTelemetryScheduler(t *testing.T) {
 	mediumCount := 0
 	for _, priority := range scheduler.currentCycle {
 		switch priority {
-		case ratelimit.PriorityCritical:
+		case PriorityCritical:
 			criticalCount++
-		case ratelimit.PriorityMedium:
+		case PriorityMedium:
 			mediumCount++
 		}
 	}
