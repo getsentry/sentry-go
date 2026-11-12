@@ -7,6 +7,7 @@ type CaptureOption func(*captureOptions)
 
 type captureOptions struct {
 	hint         *EventHint
+	mechanism *Mechanism
 	level        Level
 	defaultLevel Level
 }
