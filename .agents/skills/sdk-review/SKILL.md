@@ -3,7 +3,7 @@ name: sdk-review
 description: "Review sentry-go changes for violations of Sentry SDK contracts: host-app safety, data-collection gates, dependency versions, public API, context propagation, flush deadlines, client reports and event types."
 allowed-tools: Read Grep Glob
 ---
-Report a finding only if you can show how the change breaks a user's app, build or data. Name the fix: the gate, guard or deprecation path to add.
+Report a finding only if you can show from the code how the change violates one of the rules below. Name the fix: the gate, guard or deprecation path to add, or the identifier to unexport.
 
 ## Rules
 
