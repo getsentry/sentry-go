@@ -2,6 +2,8 @@ package sentry
 
 import (
 	"context"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
@@ -16,12 +18,47 @@ const DefaultFlushTimeout = 2 * time.Second
 // Init initializes the SDK with options. The returned error is non-nil if
 // options is invalid, for instance if a malformed DSN is provided.
 func Init(options ClientOptions) error {
+	applyEnvironmentVariables(&options)
 	client, err := NewClient(options)
 	if err != nil {
 		return err
 	}
 	setGlobalClient(client)
 	return nil
+}
+
+// applyEnvironmentVariables fills unset options from SENTRY_* environment
+// variables. Explicitly provided options take precedence.
+func applyEnvironmentVariables(options *ClientOptions) {
+	if options.Dsn == "" {
+		options.Dsn = os.Getenv("SENTRY_DSN")
+	}
+	if options.Release == "" {
+		options.Release = os.Getenv("SENTRY_RELEASE")
+	}
+	if options.Environment == "" {
+		options.Environment = os.Getenv("SENTRY_ENVIRONMENT")
+	}
+	if !options.Debug {
+		if v := os.Getenv("SENTRY_DEBUG"); v != "" {
+			options.Debug, _ = strconv.ParseBool(v)
+		}
+	}
+	if options.SampleRate == 0 {
+		if v := os.Getenv("SENTRY_SAMPLE_RATE"); v != "" {
+			if rate, err := strconv.ParseFloat(v, 64); err == nil {
+				options.SampleRate = rate
+			}
+		}
+	}
+	if options.TracesSampleRate == 0 {
+		if v := os.Getenv("SENTRY_TRACES_SAMPLE_RATE"); v != "" {
+			if rate, err := strconv.ParseFloat(v, 64); err == nil {
+				options.TracesSampleRate = rate
+				options.EnableTracing = true
+			}
+		}
+	}
 }
 
 // AddBreadcrumb records a new breadcrumb using the scope and client carried
