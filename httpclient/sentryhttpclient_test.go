@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -859,20 +860,22 @@ func TestRoundTripDoesNotMutateCallerRequest(t *testing.T) {
 	}
 }
 
-func TestDefaults(t *testing.T) {
-	t.Run("Create a regular outgoing HTTP request with default NewSentryRoundTripper", func(t *testing.T) {
-		roundTripper := sentryhttpclient.NewSentryRoundTripper(nil)
-		client := &http.Client{Transport: roundTripper}
+func TestNilTransportUsesDefaultTransport(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	t.Cleanup(server.Close)
 
-		res, err := client.Head("https://sentry.io")
-		if err != nil {
-			t.Error(err)
-		}
-
-		if res != nil && res.Body != nil {
-			res.Body.Close()
-		}
-	})
+	client := &http.Client{Transport: sentryhttpclient.NewSentryRoundTripper(nil)}
+	res, err := client.Head(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusTeapot {
+		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusTeapot)
+	}
 }
 
 func traceparentFromSentryTraceHeader(t *testing.T, sentryTrace string) string {

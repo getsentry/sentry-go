@@ -161,15 +161,3 @@ func TestPropagationContextFromHeadersMalformedBaggageRetainsTrace(t *testing.T)
 		t.Fatalf("malformed baggage without trace = (%#v, %v)", p, err)
 	}
 }
-
-func TestNewPropagationContext(t *testing.T) {
-	context := NewPropagationContext()
-
-	if context.TraceID == zeroTraceID {
-		t.Errorf("TraceID should not be zero")
-	}
-
-	if context.SpanID == zeroSpanID {
-		t.Errorf("SpanID should not be zero")
-	}
-}

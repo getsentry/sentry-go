@@ -16,11 +16,6 @@ func uuid() string {
 	return util.GenerateEventID()
 }
 
-func fileExists(fileName string) bool {
-	_, err := os.Stat(fileName)
-	return err == nil
-}
-
 // monotonicTimeSince replaces uses of time.Now() to take into account the
 // monotonic clock reading stored in start, such that duration = end - start is
 // unaffected by changes in the system wall clock.
