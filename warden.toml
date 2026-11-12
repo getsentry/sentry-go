@@ -5,14 +5,11 @@
 
 version = 1
 
-[defaults]
-failOn = "off"
-reportOn = "medium"
-
 [[skills]]
 name = "code-review"
 ignorePaths = ["_examples/**"]
 incremental = true
+reportOn = "medium"
 
 [[skills.triggers]]
 type = "pull_request"
@@ -22,6 +19,7 @@ draft = false
 [[skills]]
 name = "skill-scanner"
 incremental = true
+reportOn = "medium"
 remote = "getsentry/skills"
 paths = [".agents/**", ".claude/**", "**/SKILL.md", "AGENTS.md", "CLAUDE.md", "agents.toml"]
 
@@ -32,8 +30,9 @@ actions = ["opened", "synchronize", "reopened"]
 [[skills]]
 name = "sdk-review"
 paths = ["**/*.go"]
-ignorePaths = ["**/*_test.go", "**/testdata/**", "_examples/**"]
+ignorePaths = ["**/testdata/**", "_examples/**"]
 incremental = true
+reportOn = "medium"
 
 [[skills.triggers]]
 type = "pull_request"
