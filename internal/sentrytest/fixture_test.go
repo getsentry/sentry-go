@@ -93,7 +93,7 @@ func TestNewContext(t *testing.T) {
 func TestNewContext_NilParent(t *testing.T) {
 	t.Parallel()
 
-	ctx := NewContext(nil, t) // nolint: staticcheck // SA1012: passing nil context for the test
+	ctx := NewContext(nil, t) //nolint:staticcheck // SA1012: passing nil context for the test
 
 	assert.NotNil(t, sentry.ScopeFromContext(ctx), "context scope")
 	assert.Nil(t, ctx.Value(contextKey{}), "context value")
