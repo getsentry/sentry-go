@@ -5,10 +5,10 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/rand/v2"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -51,33 +51,6 @@ const (
 // error is non-nil, there is nothing to do other than retrying. We choose not
 // to retry for now.
 var hostname, _ = os.Hostname()
-
-// lockedRand is a random number generator safe for concurrent use. Its API is
-// intentionally limited and it is not meant as a full replacement for a
-// rand.Rand.
-type lockedRand struct {
-	mu sync.Mutex
-	r  *rand.Rand
-}
-
-// Float64 returns a pseudo-random number in [0.0,1.0).
-func (r *lockedRand) Float64() float64 {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.r.Float64()
-}
-
-// rng is the internal random number generator.
-//
-// We do not use the global functions from math/rand because, while they are
-// safe for concurrent use, any package in a build could change the seed and
-// affect the generated numbers, for instance making them deterministic. On the
-// other hand, the source returned from rand.NewSource is not safe for
-// concurrent use, so we need to couple its use with a sync.Mutex.
-var rng = &lockedRand{
-	// #nosec G404 -- We are fine using transparent, non-secure value here.
-	r: rand.New(rand.NewSource(time.Now().UnixNano())),
-}
 
 // usageError is used to report to Sentry an SDK usage error.
 //
@@ -285,7 +258,7 @@ type ClientOptions struct {
 	TraceIgnoreStatusCodes [][]int
 
 	// recorder carries the client's loss accounting into the built-in transports.
-	recorder report.ClientReportRecorder
+	recorder *report.Aggregator
 	// syncDelivery is set by synchronous transports during Configure, which
 	// wrappers forward, so wrapped transports are detected too.
 	syncDelivery *bool
@@ -308,8 +281,7 @@ type Client struct {
 	Transport          Transport
 	syncDelivery       bool
 	telemetryProcessor *telemetry.Processor
-	reportRecorder     report.ClientReportRecorder
-	reportProvider     report.ClientReportProvider
+	reports            *report.Aggregator
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -383,12 +355,10 @@ func NewClient(options ClientOptions) (*Client, error) {
 	// The intended public is SDK developers. It is orthogonal to
 	// options.Debug, which is also available for SDK users.
 	dbg := strings.Split(os.Getenv("SENTRYGODEBUG"), ",")
-	sort.Strings(dbg)
 	// dbgOpt returns true when the given debug option is enabled, for
 	// example SENTRYGODEBUG=someopt=1.
 	dbgOpt := func(opt string) bool {
-		s := opt + "=1"
-		return dbg[sort.SearchStrings(dbg, s)%len(dbg)] == s
+		return slices.Contains(dbg, opt+"=1")
 	}
 	if dbgOpt("httpdump") || dbgOpt("httptrace") {
 		options.HTTPTransport = &debug.Transport{
@@ -409,18 +379,14 @@ func NewClient(options ClientOptions) (*Client, error) {
 	}
 
 	client := Client{
-		options:        options,
-		dsn:            dsn,
-		sdkIdentifier:  sdkIdentifier,
-		sdkVersion:     SDKVersion,
-		reportRecorder: report.NoopRecorder(),
-		reportProvider: report.NoopProvider(),
+		options:       options,
+		dsn:           dsn,
+		sdkIdentifier: sdkIdentifier,
+		sdkVersion:    SDKVersion,
 	}
 
 	if !options.DisableClientReports {
-		a := report.NewAggregator()
-		client.reportRecorder = a
-		client.reportProvider = a
+		client.reports = report.NewAggregator()
 	}
 
 	client.setupTransport()
@@ -440,11 +406,9 @@ var noopClient = &Client{
 		MaxSpans:               defaultMaxSpans,
 		TraceIgnoreStatusCodes: [][]int{{404}},
 	},
-	sdkIdentifier:  sdkIdentifier,
-	sdkVersion:     SDKVersion,
-	Transport:      new(NoopTransport),
-	reportRecorder: report.NoopRecorder(),
-	reportProvider: report.NoopProvider(),
+	sdkIdentifier: sdkIdentifier,
+	sdkVersion:    SDKVersion,
+	Transport:     new(NoopTransport),
 }
 
 // NewNoopClient returns the shared client that safely discards telemetry.
@@ -472,7 +436,7 @@ func normalizeClient(client *Client) *Client {
 }
 
 func (client *Client) setupTransport() {
-	client.options.recorder = client.reportRecorder
+	client.options.recorder = client.reports
 	opts := client.options
 	opts.syncDelivery = &client.syncDelivery
 	transport := opts.Transport
@@ -501,17 +465,17 @@ func (client *Client) sdkInfo() *protocol.SdkInfo {
 
 func (client *Client) setupTelemetryProcessor() {
 	buffers := map[ratelimit.Category]telemetry.Buffer[telemetry.Item]{
-		ratelimit.CategoryLog:         telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
-		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reportRecorder),
+		ratelimit.CategoryLog:         telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryLog, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reports),
+		ratelimit.CategoryTraceMetric: telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTraceMetric, 10*100, telemetry.OverflowPolicyDropOldest, 100, 5*time.Second, client.reports),
 	}
 	// Synchronous transports send events inline, so these categories get no buffer.
 	if !client.syncDelivery {
-		buffers[ratelimit.CategoryError] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder)
-		buffers[ratelimit.CategoryTransaction] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder)
-		buffers[ratelimit.CategoryMonitor] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reportRecorder)
+		buffers[ratelimit.CategoryError] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryError, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reports)
+		buffers[ratelimit.CategoryTransaction] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryTransaction, 1000, telemetry.OverflowPolicyDropOldest, 1, 0, client.reports)
+		buffers[ratelimit.CategoryMonitor] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reports)
 	}
 
-	client.telemetryProcessor = telemetry.NewProcessor(buffers, client.Transport, client.dsn, client.sdkInfo, client.reportRecorder, client.reportProvider)
+	client.telemetryProcessor = telemetry.NewProcessor(buffers, client.Transport, client.dsn, client.sdkInfo, client.reports)
 }
 
 func (client *Client) setupIntegrations() {
@@ -540,8 +504,8 @@ func (client *Client) setupIntegrations() {
 		debuglog.Printf("Integration installed: %s\n", integration.Name())
 	}
 
-	sort.Slice(client.integrations, func(i, j int) bool {
-		return client.integrations[i].Name() < client.integrations[j].Name()
+	slices.SortFunc(client.integrations, func(a, b Integration) int {
+		return strings.Compare(a.Name(), b.Name())
 	})
 }
 
@@ -660,12 +624,11 @@ func (client *Client) captureLog(ctx context.Context, log *Log) bool {
 	}
 
 	if client.options.BeforeSendLog != nil {
-		approxSize := log.ApproximateSize()
+		counts := log.DiscardCounts()
 		log = client.options.BeforeSendLog(log)
 		if log == nil {
 			debuglog.Println("Log dropped due to BeforeSendLog callback.")
-			client.reportRecorder.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryLog)
-			client.reportRecorder.Record(report.ReasonBeforeSend, ratelimit.CategoryLogByte, int64(approxSize))
+			counts.Record(client.reports, report.ReasonBeforeSend)
 			return false
 		}
 	}
@@ -685,10 +648,11 @@ func (client *Client) captureMetric(ctx context.Context, metric *Metric) bool {
 	}
 
 	if client.options.BeforeSendMetric != nil {
+		counts := metric.DiscardCounts()
 		metric = client.options.BeforeSendMetric(metric)
 		if metric == nil {
 			debuglog.Println("Metric dropped due to BeforeSendMetric callback.")
-			client.reportRecorder.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryTraceMetric)
+			counts.Record(client.reports, report.ReasonBeforeSend)
 			return false
 		}
 	}
@@ -849,7 +813,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 	// (errors, messages) are sampled here. Does not apply to check-ins.
 	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
 		debuglog.Println("Event dropped due to SampleRate hit.")
-		client.reportRecorder.RecordOne(report.ReasonSampleRate, event.toCategory())
+		event.DiscardCounts().Record(client.reports, report.ReasonSampleRate)
 		return nil
 	}
 
@@ -863,25 +827,25 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 	switch event.Type {
 	case transactionType:
 		if client.options.BeforeSendTransaction != nil {
-			spanCountBefore := event.GetSpanCount()
+			counts, spansBefore := event.DiscardCounts(), len(event.Spans)
 			event = client.options.BeforeSendTransaction(event, hint)
 			if event == nil {
 				debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
-				client.reportRecorder.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryTransaction)
-				client.reportRecorder.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, int64(spanCountBefore))
+				counts.Record(client.reports, report.ReasonBeforeSend)
 				return nil
 			}
 			// Track spans removed by the callback
-			if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
-				client.reportRecorder.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, int64(droppedSpans))
+			if droppedSpans := spansBefore - len(event.Spans); droppedSpans > 0 {
+				client.reports.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, uint64(droppedSpans))
 			}
 		}
 	case checkInType: // not a default case, since we shouldn't apply BeforeSend on check-in events
 	default:
 		if client.options.BeforeSend != nil {
+			counts := event.DiscardCounts()
 			if event = client.options.BeforeSend(event, hint); event == nil {
 				debuglog.Println("Event dropped due to BeforeSend callback.")
-				client.reportRecorder.RecordOne(report.ReasonBeforeSend, ratelimit.CategoryError)
+				counts.Record(client.reports, report.ReasonBeforeSend)
 				return nil
 			}
 		}
@@ -965,21 +929,15 @@ func (client *Client) prepareEvent(ctx context.Context, event *Event, scope *Sco
 func (client *Client) runEventProcessors(event *Event, hint *EventHint, processors []EventProcessor) *Event {
 	for _, processor := range processors {
 		id := event.EventID
-		category := event.toCategory()
-		spanCountBefore := event.GetSpanCount()
+		counts, spansBefore := event.DiscardCounts(), len(event.Spans)
 		event = processor(event, hint)
 		if event == nil {
 			debuglog.Printf("Event dropped by an EventProcessor: %s\n", id)
-			client.reportRecorder.RecordOne(report.ReasonEventProcessor, category)
-			if category == ratelimit.CategoryTransaction {
-				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(spanCountBefore))
-			}
+			counts.Record(client.reports, report.ReasonEventProcessor)
 			return nil
 		}
-		if category == ratelimit.CategoryTransaction {
-			if droppedSpans := spanCountBefore - event.GetSpanCount(); droppedSpans > 0 {
-				client.reportRecorder.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, int64(droppedSpans))
-			}
+		if droppedSpans := spansBefore - len(event.Spans); event.Type == transactionType && droppedSpans > 0 {
+			client.reports.Record(report.ReasonEventProcessor, ratelimit.CategorySpan, uint64(droppedSpans))
 		}
 	}
 	return event
@@ -1005,5 +963,5 @@ func (client *Client) integrationAlreadyInstalled(name string) bool {
 // sample returns true with the given probability, which must be in the range
 // [0.0, 1.0].
 func sample(probability float64) bool {
-	return rng.Float64() < probability
+	return rand.Float64() < probability //nolint:gosec // sampling doesn't need crypto randomness
 }

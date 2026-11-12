@@ -260,7 +260,7 @@ func BenchmarkExtractStacktrace(b *testing.B) {
 		RedGoErrorsRanger,
 	}
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		f := fs[i%len(fs)]
 		err := f()
 

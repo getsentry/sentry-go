@@ -136,7 +136,7 @@ func (w *Writer) addBreadcrumb(event *sentry.Event) {
 
 	category := event.Tags["category"]
 
-	data := make(map[string]interface{}, len(event.Tags))
+	data := make(map[string]any, len(event.Tags))
 	for k, v := range event.Tags {
 		data[k] = v
 	}

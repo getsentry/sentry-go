@@ -341,7 +341,7 @@ func TestCaptureMessagePreservesActiveSpanTraceContext(t *testing.T) {
 				traceIDContextKey: transaction.TraceID.String(),
 				spanIDContextKey:  transaction.SpanID.String(),
 				"op":              "http.server",
-				"data":            map[string]interface{}{"http.request.method": http.MethodGet},
+				"data":            map[string]any{"http.request.method": http.MethodGet},
 			}, requireSingleEvent(t, transport).Contexts[traceContextKey])
 		})
 	}
@@ -609,7 +609,6 @@ func TestCaptureException(t *testing.T) {
 
 	for _, grp := range tests {
 		for _, tt := range grp.tests {
-			tt := tt
 			t.Run(grp.name+"/"+tt.name, func(t *testing.T) {
 				client, _, transport := setupClientTest()
 				CaptureException(ContextWithClient(context.Background(), client), tt.err)
@@ -904,7 +903,6 @@ func TestCaptureCheckIn(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			client, _, transport := setupClientTest()
 			client.CaptureCheckIn(context.Background(), tt.checkIn, tt.monitorConfig)
@@ -1201,7 +1199,7 @@ func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
 func TestTraceIgnoreStatusCodes(t *testing.T) {
 	tests := map[string]struct {
 		ignoreStatusCodes [][]int
-		statusCode        interface{}
+		statusCode        any
 		expectDrop        bool
 	}{
 		"Default behavior: ignoreStatusCodes = nil, should drop 404s": {
@@ -1345,7 +1343,6 @@ func TestSampleRate(t *testing.T) {
 		{1.00, 0.0},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(fmt.Sprint(tt.SampleRate), func(t *testing.T) {
 			var (
 				total   uint64
@@ -1353,11 +1350,9 @@ func TestSampleRate(t *testing.T) {
 			)
 			// Call sample from multiple goroutines sharing a client to uncover data races.
 			var wg sync.WaitGroup
-			for i := 0; i < 4; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					for j := 0; j < 10000; j++ {
+			for range 4 {
+				wg.Go(func() {
+					for range 10000 {
 						atomic.AddUint64(&total, 1)
 						s := sample(tt.SampleRate)
 						switch tt.SampleRate {
@@ -1374,7 +1369,7 @@ func TestSampleRate(t *testing.T) {
 							atomic.AddUint64(&sampled, 1)
 						}
 					}
-				}()
+				})
 			}
 			wg.Wait()
 
@@ -1425,14 +1420,14 @@ func BenchmarkProcessEvent(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		c.CaptureEvent(context.Background(), &Event{})
 	}
 }
 
 func TestRecover(t *testing.T) {
 	tests := []struct {
-		v    interface{} // for panic(v)
+		v    any // for panic(v)
 		want *Event
 	}{
 		{
@@ -1479,7 +1474,6 @@ func TestRecover(t *testing.T) {
 		}
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(fmt.Sprintf("Recover/%v", tt.v), func(t *testing.T) {
 			client, scope, transport := setupClientTest()
 			captureCtx := ContextWithClient(ContextWithScope(context.TODO(), scope), client)
@@ -1919,12 +1913,10 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		var wg sync.WaitGroup
 		headers := make(chan string, 16)
 		for range 16 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				headers <- child.ToBaggage()
 				CaptureMessage(child.Context(), "capture")
-			}()
+			})
 		}
 		wg.Wait()
 		close(headers)

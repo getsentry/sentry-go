@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,10 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +55,7 @@ func TestClientReports_CustomTransport(t *testing.T) {
 			client.CaptureMessage(ctx, "drop")
 			require.NotNil(t, client.CaptureMessage(ctx, "send"))
 			client.Flush(testutils.FlushTimeout())
-			pending := client.reportProvider.TakeReport()
+			pending := client.reports.TakeReport()
 			if tt.disabled {
 				require.Nil(t, pending)
 				return
@@ -100,6 +104,7 @@ func TestClientReports_Integration(t *testing.T) {
 			defer srv.Close()
 
 			dsn := strings.Replace(srv.URL, "//", "//test@", 1) + "/1"
+			var logSize, metricSize uint64
 			c, err := NewClient(ClientOptions{
 				Dsn:                  dsn,
 				Transport:            tt.transport,
@@ -107,9 +112,24 @@ func TestClientReports_Integration(t *testing.T) {
 				SampleRate:           1.0,
 				BeforeSend: func(event *Event, _ *EventHint) *Event {
 					if event.Message == "drop-me" {
+						event.Attachments = nil
 						return nil
 					}
 					return event
+				},
+				BeforeSendTransaction: func(event *Event, _ *EventHint) *Event {
+					event.Spans = nil
+					return nil
+				},
+				BeforeSendLog: func(log *Log) *Log {
+					logSize = byteSize(len(log.Body), log.Attributes)
+					log.Attributes = nil
+					return nil
+				},
+				BeforeSendMetric: func(metric *Metric) *Metric {
+					metricSize = byteSize(len(metric.Name)+8, metric.Attributes)
+					metric.Attributes = nil
+					return nil
 				},
 			})
 			require.NoError(t, err)
@@ -121,15 +141,24 @@ func TestClientReports_Integration(t *testing.T) {
 			defer disabled.Close()
 
 			ctx, _ := WithScope(context.Background())
-			c.CaptureMessage(ctx, "drop-me")
+			ctx = ContextWithClient(ctx, c)
+			c.CaptureEvent(ctx, &Event{Message: "drop-me", Attachments: []*Attachment{{Payload: []byte("abc")}}})
+			c.CaptureEvent(ctx, &Event{Type: transactionType, Spans: []*Span{{}, {}}})
+			NewLogger(ctx).Info().String("key", "value").Emit("drop-me")
+			NewMeter(ctx).Count("drop-me", 1)
 			processorCtx, processorScope := WithScope(ctx)
 			processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
+				event.Spans = nil // only transactions count spans
+				return event
+			})
+			processorScope.AddEventProcessor(func(event *Event, _ *EventHint) *Event {
 				if event.Message == "processor-drop" {
+					event.Attachments = nil
 					return nil
 				}
 				return event
 			})
-			c.CaptureMessage(processorCtx, "processor-drop")
+			c.CaptureEvent(processorCtx, &Event{Message: "processor-drop", Spans: []*Span{{}}, Attachments: []*Attachment{{Payload: []byte("abc")}}})
 			if !tt.reportOnly {
 				c.CaptureMessage(ctx, "hi")
 			}
@@ -140,7 +169,7 @@ func TestClientReports_Integration(t *testing.T) {
 				count := len(receivedBodies)
 				mu.Unlock()
 				require.Zero(t, count)
-				require.Nil(t, c.reportProvider.TakeReport())
+				require.Nil(t, c.reports.TakeReport())
 				return
 			}
 			var got report.ClientReport
@@ -148,7 +177,7 @@ func TestClientReports_Integration(t *testing.T) {
 				mu.Lock()
 				defer mu.Unlock()
 				for _, body := range receivedBodies {
-					for _, line := range bytes.Split(body, []byte("\n")) {
+					for line := range bytes.SplitSeq(body, []byte("\n")) {
 						var candidate report.ClientReport
 						if json.Unmarshal(line, &candidate) == nil && len(candidate.DiscardedEvents) > 0 {
 							got = candidate
@@ -164,11 +193,19 @@ func TestClientReports_Integration(t *testing.T) {
 				mu.Unlock()
 				require.Equal(t, 1, count, "flush must not retry failed reports")
 			}
-			pending := c.reportProvider.TakeReport()
+			pending := c.reports.TakeReport()
 			require.False(t, got.Timestamp.IsZero(), "client report missing timestamp")
 			want := []report.DiscardedEvent{
 				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 1},
+				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryAttachment, Quantity: 3},
+				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryTransaction, Quantity: 1},
+				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategorySpan, Quantity: 3},
+				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryLog, Quantity: 1},
+				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryLogByte, Quantity: logSize},
+				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryTraceMetric, Quantity: 1},
+				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryTraceMetricByte, Quantity: metricSize},
 				{Reason: report.ReasonEventProcessor, Category: ratelimit.CategoryError, Quantity: 1},
+				{Reason: report.ReasonEventProcessor, Category: ratelimit.CategoryAttachment, Quantity: 3},
 			}
 			require.ElementsMatch(t, want, got.DiscardedEvents)
 			if tt.status == http.StatusOK {
@@ -179,6 +216,47 @@ func TestClientReports_Integration(t *testing.T) {
 					want = append(want, report.DiscardedEvent{Reason: report.ReasonSendError, Category: ratelimit.CategoryError, Quantity: 1})
 				}
 				require.ElementsMatch(t, want, pending.DiscardedEvents)
+			}
+		})
+	}
+}
+
+// Discard counts follow Relay's size rules.
+func TestClientReports_DiscardCounts(t *testing.T) {
+	t.Parallel()
+	attrs := map[string]attribute.Value{
+		"bool":    attribute.BoolValue(false),                      // 4 + 1
+		"int":     attribute.Int64Value(math.MinInt64),             // 3 + 8
+		"uint":    attribute.Uint64Value(math.MaxUint64),           // 4 + 8
+		"float":   attribute.Float64Value(1e-9),                    // 5 + 8
+		"string":  attribute.StringValue("\"<é>\"\n"),              // 6 + 7, escaped when serialized
+		"bools":   attribute.BoolSliceValue([]bool{true, false}),   // 5 + 2
+		"ints":    attribute.Int64SliceValue([]int64{1, 22}),       // 4 + 16
+		"floats":  attribute.Float64SliceValue([]float64{1.5}),     // 6 + 8
+		"strings": attribute.StringSliceValue([]string{"a", "bc"}), // 7 + 3
+	}
+	const attrsSize = 5 + 11 + 12 + 13 + 13 + 7 + 20 + 14 + 10
+
+	tests := []struct {
+		name string
+		item telemetry.Item
+		want telemetry.DiscardCounts
+	}{
+		{"empty log", &Log{},
+			telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: 1}},
+		{"log", &Log{Body: "user logged in", Level: LogLevelInfo, Timestamp: time.Now(), Attributes: attrs},
+			telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: 14 + attrsSize}},
+		{"metric", &Metric{Name: "http.requests", Type: MetricTypeCounter, Value: Int64MetricValue(7), Attributes: attrs},
+			telemetry.DiscardCounts{ratelimit.CountTraceMetric: 1, ratelimit.CountTraceMetricByte: 13 + 8 + attrsSize}},
+		{"transaction", &Event{Type: transactionType, Spans: []*Span{{}, {}}},
+			telemetry.DiscardCounts{ratelimit.CountTransaction: 1, ratelimit.CountSpan: 3}},
+		{"error with attachments", &Event{Attachments: []*Attachment{{Payload: []byte("abc")}, {Payload: []byte("de")}}},
+			telemetry.DiscardCounts{ratelimit.CountError: 1, ratelimit.CountAttachment: 5}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if diff := cmp.Diff(tt.want, tt.item.DiscardCounts()); diff != "" {
+				t.Errorf("DiscardCounts() (-want +got):\n%s", diff)
 			}
 		})
 	}

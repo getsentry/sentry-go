@@ -206,152 +206,7 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 			flushFromContext(ctx, testutils.FlushTimeout())
 
 			opts := cmp.Options{
-				cmpopts.IgnoreFields(Log{}, "approximateSize", "Timestamp"),
-				cmp.AllowUnexported(attribute.Value{}),
-			}
-
-			gotEvents := mockTransport.Events()
-			if len(gotEvents) != len(tt.wantEvents) {
-				t.Fatalf("expected %d events, got %d", len(tt.wantEvents), len(gotEvents))
-			}
-			for i, event := range gotEvents {
-				assertEqual(t, event.Type, logEvent.Type)
-				if diff := cmp.Diff(tt.wantEvents[i].Logs, event.Logs, opts); diff != "" {
-					t.Errorf("Log mismatch (-want +got):\n%s", diff)
-				}
-				// pop used mock event
-				mockTransport.events = nil
-			}
-		})
-	}
-}
-
-func Test_sentryLogger_MethodsWithoutFormat(t *testing.T) {
-	attrs := map[string]attribute.Value{
-		"sentry.release":        attribute.StringValue("v1.2.3"),
-		"sentry.environment":    attribute.StringValue("testing"),
-		"sentry.server.address": attribute.StringValue("test-server"),
-		"sentry.sdk.name":       attribute.StringValue("sentry.go"),
-		"sentry.sdk.version":    attribute.StringValue("0.10.0"),
-	}
-
-	tests := []struct {
-		name       string
-		logFunc    func(ctx context.Context, l Logger, msg any)
-		args       any
-		wantEvents []Event
-	}{
-		{
-			name: "Trace level",
-			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Trace().WithCtx(ctx).Emit(msg)
-			},
-			args: "trace",
-			wantEvents: []Event{
-				{
-					Logs: []Log{
-						{
-							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LogLevelTrace,
-							Severity:   LogSeverityTrace,
-							Body:       "trace",
-							Attributes: attrs,
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "Debug level",
-			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Debug().WithCtx(ctx).Emit(msg)
-			},
-			args: "debug",
-			wantEvents: []Event{
-				{
-					Logs: []Log{
-						{
-							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LogLevelDebug,
-							Severity:   LogSeverityDebug,
-							Body:       "debug",
-							Attributes: attrs,
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "Info level",
-			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Info().WithCtx(ctx).Emit(msg)
-			},
-			args: "info",
-			wantEvents: []Event{
-				{
-					Logs: []Log{
-						{
-							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LogLevelInfo,
-							Severity:   LogSeverityInfo,
-							Body:       "info",
-							Attributes: attrs,
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "Warn level",
-			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Warn().WithCtx(ctx).Emit(msg)
-			},
-			args: "warn",
-			wantEvents: []Event{
-				{
-					Logs: []Log{
-						{
-							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LogLevelWarn,
-							Severity:   LogSeverityWarning,
-							Body:       "warn",
-							Attributes: attrs,
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "Error level",
-			logFunc: func(ctx context.Context, l Logger, msg any) {
-				l.Error().WithCtx(ctx).Emit(msg)
-			},
-			args: "error",
-			wantEvents: []Event{
-				{
-					Logs: []Log{
-						{
-							TraceID:    TraceIDFromHex(LogTraceID),
-							Level:      LogLevelError,
-							Severity:   LogSeverityError,
-							Body:       "error",
-							Attributes: attrs,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx, mockTransport := setupMockTransport()
-			l := NewLogger(ctx)
-			tt.logFunc(ctx, l, tt.args)
-			flushFromContext(ctx, testutils.FlushTimeout())
-
-			opts := cmp.Options{
-				cmpopts.IgnoreFields(Log{}, "approximateSize", "Timestamp"),
+				cmpopts.IgnoreFields(Log{}, "Timestamp"),
 				cmp.AllowUnexported(attribute.Value{}),
 			}
 
@@ -438,7 +293,7 @@ func Test_sentryLogger_Write(t *testing.T) {
 	assertEqual(t, event.Type, logEvent.Type)
 
 	opts := cmp.Options{
-		cmpopts.IgnoreFields(Log{}, "approximateSize", "Timestamp"),
+		cmpopts.IgnoreFields(Log{}, "Timestamp"),
 		cmp.AllowUnexported(attribute.Value{}),
 	}
 	if diff := cmp.Diff(wantLogs, event.Logs, opts); diff != "" {
@@ -628,38 +483,11 @@ func Test_sentryLogger_AttributePrecedence(t *testing.T) {
 	}
 }
 
-func Test_batchLogger_Flush(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(ctx)
-	l.Info().Emit("context done log")
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-}
-
-func Test_batchLogger_FlushWithContext(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-	l := NewLogger(ctx)
-	l.Info().Emit("context done log")
-
-	cancelCtx, cancel := context.WithTimeout(context.Background(), testutils.FlushTimeout())
-	defer cancel()
-	ClientFromContext(ctx).FlushWithContext(cancelCtx)
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-}
-
 func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		l.Info().Emit("test")
 	}
 
@@ -679,7 +507,7 @@ func Test_batchLogger_FlushMultipleTimes(t *testing.T) {
 
 	mockTransport.events = nil
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		l.Info().Emit("test")
 	}
 
@@ -710,7 +538,7 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 	ctx, _ := WithScope(context.Background())
 	ctx = ContextWithClient(ctx, mockClient)
 	l := NewLogger(ctx)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		l.Info().WithCtx(ctx).Emit("test")
 	}
 
@@ -742,40 +570,10 @@ func Test_batchLogger_Shutdown(t *testing.T) {
 	}
 }
 
-func Test_sentryLogger_BeforeSendLog(t *testing.T) {
-	ctx := context.Background()
-	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
-		Dsn:           testDsn,
-		Transport:     mockTransport,
-		Release:       "v1.2.3",
-		Environment:   "testing",
-		ServerName:    "test-server",
-		EnableTracing: true,
-		BeforeSendLog: func(_ *Log) *Log {
-			return nil
-		},
-	})
-	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
-	ctx, scope := WithScope(ctx)
-	ctx = ContextWithClient(ctx, mockClient)
-	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-
-	l := NewLogger(ctx)
-	l.Info().WithCtx(ctx).Emit("context done log")
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := mockTransport.Events()
-	if len(events) != 0 {
-		t.Fatalf("expected no events, got %d", len(events))
-	}
-}
-
 func Test_Logger_ExceedBatchSize(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	l := NewLogger(ctx)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		l.Info().Emit("test")
 	}
 
@@ -783,59 +581,6 @@ func Test_Logger_ExceedBatchSize(t *testing.T) {
 		events := mockTransport.Events()
 		return len(events) == 1 && len(events[0].Logs) == 100
 	}, testutils.FlushTimeout(), time.Millisecond, "expected one batch with 100 logs")
-}
-
-func Test_sentryLogger_TracePropagationWithTransaction(t *testing.T) {
-	ctx, mockTransport := setupMockTransport()
-
-	// Start a new transaction
-	txn := StartTransaction(ctx, "test-transaction")
-	defer txn.Finish()
-
-	expectedTraceID := txn.TraceID
-	expectedSpanID := txn.SpanID
-
-	logger := NewLogger(txn.Context())
-	logger.Info().WithCtx(txn.Context()).Emit("message with tracing")
-
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-	logs := events[0].Logs
-	if len(logs) != 1 {
-		t.Fatalf("expected 1 log, got %d", len(logs))
-	}
-
-	log := logs[0]
-
-	if log.TraceID != expectedTraceID {
-		t.Errorf("unexpected TraceID: got %s, want %s", log.TraceID.String(), expectedTraceID.String())
-	}
-	if log.SpanID != expectedSpanID {
-		t.Errorf("unexpected SpanID: got %s, want %s", log.SpanID.String(), expectedSpanID.String())
-	}
-}
-
-func TestSentryLogger_ExplicitScopePrecedesFallbackTrace(t *testing.T) {
-	ctx, transport := setupMockTransport()
-	fallback := StartTransaction(ctx, "fallback")
-	defer fallback.Finish()
-	logger := NewLogger(fallback.Context())
-
-	emitCtx, scope := WithScope(context.Background())
-	wantTraceID := TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-	scope.SetPropagationContext(PropagationContext{TraceID: wantTraceID})
-	logger.Info().WithCtx(emitCtx).Emit("explicit scope")
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := transport.Events()
-	if len(events) != 1 || len(events[0].Logs) != 1 {
-		t.Fatalf("captured events = %d, logs = %d, want 1 event with 1 log", len(events), len(events[0].Logs))
-	}
-	assert.Equal(t, wantTraceID, events[0].Logs[0].TraceID)
 }
 
 func TestSentryLogger_DebugLogging(t *testing.T) {

@@ -43,19 +43,15 @@ func main() {
 	// Set the timeout to the maximum duration the program can afford to wait.
 	defer sentry.Flush(2 * time.Second)
 
-	rand.Seed(time.Now().UnixNano())
-
 	nWorkers := 8
 	var wg sync.WaitGroup
 
 	// Run some worker goroutines to simulate work.
-	for i := 0; i < nWorkers; i++ {
-		wg.Add(1)
-		go func() {
+	for range nWorkers {
+		wg.Go(func() {
 			// Note that wg.Done() must be outside of RecoverRepanic, otherwise
 			// it would unblock wg.Wait() before RecoverRepanic is done doing
 			// its job (reporting panic to Sentry).
-			defer wg.Done()
 			RecoverRepanic(func() {
 				// Sleep to simulate some work.
 				//#nosec G404 -- We are fine using transparent, non-secure value here.
@@ -64,7 +60,7 @@ func main() {
 				// panic.
 				fmt.Println(make([]int, 3)[3])
 			})
-		}()
+		})
 	}
 
 	wg.Wait()

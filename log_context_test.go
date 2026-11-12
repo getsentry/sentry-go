@@ -44,6 +44,7 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 	var logs []struct {
 		message string
 		traceID TraceID
+		spanID  SpanID
 	}
 
 	for _, event := range events {
@@ -51,9 +52,11 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 			logs = append(logs, struct {
 				message string
 				traceID TraceID
+				spanID  SpanID
 			}{
 				message: log.Body,
 				traceID: log.TraceID,
+				spanID:  log.SpanID,
 			})
 		}
 	}
@@ -70,5 +73,10 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 	}
 	if logs[2].traceID != traceID2 {
 		t.Errorf("Log 3: expected TraceID %s (request-2), got %s", traceID2, logs[2].traceID)
+	}
+	for i, want := range []SpanID{span1.SpanID, span1.SpanID, span2.SpanID} {
+		if logs[i].spanID != want {
+			t.Errorf("Log %d: expected SpanID %s, got %s", i+1, want, logs[i].spanID)
+		}
 	}
 }

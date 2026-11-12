@@ -171,22 +171,17 @@ type httpSender struct {
 	dsn       *protocol.Dsn
 	client    *http.Client
 	transport http.RoundTripper
-	recorder  report.ClientReportRecorder
+	recorder  *report.Aggregator
 
 	mu     sync.RWMutex
 	limits ratelimit.Map
 }
 
 func newHTTPSender(dsn *protocol.Dsn, options ClientOptions, timeout time.Duration) *httpSender {
-	recorder := options.recorder
-	if recorder == nil {
-		recorder = report.NoopRecorder()
-	}
-
 	sender := &httpSender{
 		limits:   make(ratelimit.Map),
 		dsn:      dsn,
-		recorder: recorder,
+		recorder: options.recorder,
 	}
 
 	if options.HTTPTransport != nil {
@@ -275,7 +270,7 @@ func (t *HTTPSyncTransport) SendEnvelope(ctx context.Context, envelope *protocol
 		t.dsn.GetHost(),
 		t.dsn.GetProjectID(),
 	)
-	t.send(ctx, envelope)
+	t.send(ctx, envelope, telemetry.DiscardFrom(ctx))
 	return nil
 }
 
@@ -295,7 +290,7 @@ func (t *HTTPSyncTransport) FlushWithContext(ctx context.Context) bool {
 type HTTPTransport struct {
 	*httpSender
 
-	queue chan *protocol.Envelope
+	queue chan queuedEnvelope
 
 	// ctx bounds in-flight requests and is canceled by Close.
 	ctx    context.Context
@@ -339,16 +334,13 @@ func (t *HTTPTransport) Configure(options ClientOptions) {
 		debuglog.Printf("Transport is disabled: invalid dsn: %v", err)
 		return
 	}
-	t.queue = make(chan *protocol.Envelope, t.BufferSize)
+	t.queue = make(chan queuedEnvelope, t.BufferSize)
 	t.flushRequest = make(chan flushRequest)
 	t.start()
 }
 
 func (t *HTTPTransport) start() {
 	t.startOnce.Do(func() {
-		if t.recorder == nil {
-			t.recorder = report.NoopRecorder()
-		}
 		t.ctx, t.cancel = context.WithCancel(context.Background())
 		t.wg.Add(1)
 		go t.worker()
@@ -356,7 +348,7 @@ func (t *HTTPTransport) start() {
 }
 
 // SendEnvelope enqueues envelope without waiting for queue space.
-func (t *HTTPTransport) SendEnvelope(_ context.Context, envelope *protocol.Envelope) error {
+func (t *HTTPTransport) SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error {
 	if t.httpSender == nil || t.dsn == nil {
 		return nil
 	}
@@ -373,9 +365,10 @@ func (t *HTTPTransport) SendEnvelope(_ context.Context, envelope *protocol.Envel
 		return ErrInvalidEnvelope
 	}
 
+	discard := telemetry.DiscardFrom(ctx)
 	category := categoryFromEnvelope(envelope)
 	if t.isRateLimited(category) {
-		t.recorder.RecordForEnvelope(report.ReasonRateLimitBackoff, envelope)
+		discard.Record(t.recorder, report.ReasonRateLimitBackoff)
 		return nil
 	}
 
@@ -384,7 +377,7 @@ func (t *HTTPTransport) SendEnvelope(_ context.Context, envelope *protocol.Envel
 	select {
 	case <-t.done:
 		return ErrTransportClosed
-	case t.queue <- envelope:
+	case t.queue <- queuedEnvelope{envelope, discard}:
 		debuglog.Printf(
 			"Sending %s to %s project: %s",
 			identifier,
@@ -455,11 +448,11 @@ func (t *HTTPTransport) worker() {
 		select {
 		case <-t.ctx.Done():
 			return
-		case envelope, open := <-t.queue:
+		case queued, open := <-t.queue:
 			if !open {
 				return
 			}
-			t.sendEnvelopeHTTP(envelope)
+			t.sendEnvelopeHTTP(queued)
 		case flushRequest, open := <-t.flushRequest:
 			if !open {
 				return
@@ -473,34 +466,40 @@ func (t *HTTPTransport) worker() {
 func (t *HTTPTransport) drainQueue(ctx context.Context) {
 	for ctx.Err() == nil && t.ctx.Err() == nil {
 		select {
-		case envelope, open := <-t.queue:
+		case queued, open := <-t.queue:
 			if !open {
 				return
 			}
-			t.sendEnvelopeHTTP(envelope)
+			t.sendEnvelopeHTTP(queued)
 		default:
 			return
 		}
 	}
 }
 
-func (t *HTTPTransport) sendEnvelopeHTTP(envelope *protocol.Envelope) {
+// queuedEnvelope is an accepted envelope and what dropping it discards.
+type queuedEnvelope struct {
+	envelope *protocol.Envelope
+	discard  telemetry.Discard
+}
+
+func (t *HTTPTransport) sendEnvelopeHTTP(queued queuedEnvelope) {
 	ctx, cancel := context.WithTimeout(t.ctx, t.Timeout)
 	defer cancel()
-	t.send(ctx, envelope)
+	t.send(ctx, queued.envelope, queued.discard)
 }
 
 // send records every loss of an accepted envelope.
-func (s *httpSender) send(ctx context.Context, envelope *protocol.Envelope) {
+func (s *httpSender) send(ctx context.Context, envelope *protocol.Envelope, discard telemetry.Discard) {
 	category := categoryFromEnvelope(envelope)
 	if s.isRateLimited(category) {
-		s.recorder.RecordForEnvelope(report.ReasonRateLimitBackoff, envelope)
+		discard.Record(s.recorder, report.ReasonRateLimitBackoff)
 		return
 	}
 	request, err := getSentryRequestFromEnvelope(ctx, s.dsn, envelope)
 	if err != nil {
 		debuglog.Printf("Failed to create request from envelope: %v", err)
-		s.recorder.RecordForEnvelope(report.ReasonInternalError, envelope)
+		discard.Record(s.recorder, report.ReasonInternalError)
 		return
 	}
 
@@ -508,11 +507,11 @@ func (s *httpSender) send(ctx context.Context, envelope *protocol.Envelope) {
 	result, err := util.DoSendRequest(s.client, request, identifier)
 	if err != nil {
 		debuglog.Printf("HTTP request failed: %v", err)
-		s.recorder.RecordForEnvelope(report.ReasonNetworkError, envelope)
+		discard.Record(s.recorder, report.ReasonNetworkError)
 		return
 	}
 	if result.IsSendError() {
-		s.recorder.RecordForEnvelope(report.ReasonSendError, envelope)
+		discard.Record(s.recorder, report.ReasonSendError)
 	}
 
 	s.mu.Lock()

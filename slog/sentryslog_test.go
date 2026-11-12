@@ -185,7 +185,7 @@ func TestSentryHandlerAttrToSentryAttr(t *testing.T) {
 		name          string
 		attr          []any
 		expectedKey   string
-		expectedValue interface{}
+		expectedValue any
 	}{
 		{name: "string", attr: []any{"key1", "value1"}, expectedKey: "key1", expectedValue: "value1"},
 		{name: "int", attr: []any{"key2", 42}, expectedKey: "key2", expectedValue: int64(42)},
@@ -409,14 +409,12 @@ func TestSentryHandlerConcurrentGroupedAttrs(t *testing.T) {
 		With(slog.Group("request", slog.Group("user", slog.String("id", "42"))))
 
 	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 20; j++ {
+	for range 8 {
+		wg.Go(func() {
+			for range 20 {
 				logger.InfoContext(ctx, "concurrent")
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))

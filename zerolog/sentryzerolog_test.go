@@ -79,7 +79,7 @@ func TestNewWithContext(t *testing.T) {
 	})
 	require.Nil(t, err)
 
-	_, err = New(nil, Options{}) // nolint: staticcheck // nil validation
+	_, err = New(nil, Options{}) //nolint:staticcheck // nil validation
 	require.NotNil(t, err)
 }
 
@@ -325,7 +325,7 @@ func TestWriteLevelFatal(t *testing.T) {
 }
 
 func BenchmarkParseLogEvent(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		parseLogEvent(logEventJSON)
 	}
 }
@@ -333,7 +333,7 @@ func BenchmarkParseLogEvent(b *testing.B) {
 func BenchmarkWriteLogEvent(b *testing.B) {
 	w := newTestWriter(b, testConfig{})
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = w.Write(logEventJSON)
 	}
 }
@@ -341,7 +341,7 @@ func BenchmarkWriteLogEvent(b *testing.B) {
 func BenchmarkWriteLogLevelEvent(b *testing.B) {
 	w := newTestWriter(b, testConfig{})
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = w.WriteLevel(zerolog.ErrorLevel, logEventJSON)
 	}
 }

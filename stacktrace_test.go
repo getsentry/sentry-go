@@ -20,7 +20,7 @@ func (StacktraceTestHelper) NewStacktrace() *Stacktrace {
 }
 
 func BenchmarkNewStacktrace(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		Trace()
 	}
 }
@@ -172,7 +172,7 @@ func TestEventWithExceptionStacktraceMarshalJSON(t *testing.T) {
 						ContextLine: "contextline",
 						PostContext: []string{"post", "context"},
 						InApp:       true,
-						Vars: map[string]interface{}{
+						Vars: map[string]any{
 							"foostr": "bar",
 							"fooint": 25,
 						},

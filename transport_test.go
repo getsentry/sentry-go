@@ -18,17 +18,23 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/internal/telemetry"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/protocol"
 	"github.com/getsentry/sentry-go/report"
 	"go.uber.org/goleak"
 )
 
-func takeOutcomes(recorder *report.Aggregator) map[report.OutcomeKey]int64 {
-	outcomes := make(map[report.OutcomeKey]int64)
+type outcomeKey struct {
+	Reason   report.DiscardReason
+	Category ratelimit.Category
+}
+
+func takeOutcomes(recorder *report.Aggregator) map[outcomeKey]uint64 {
+	outcomes := make(map[outcomeKey]uint64)
 	if clientReport := recorder.TakeReport(); clientReport != nil {
 		for _, event := range clientReport.DiscardedEvents {
-			outcomes[report.OutcomeKey{Reason: event.Reason, Category: event.Category}] += event.Quantity
+			outcomes[outcomeKey{Reason: event.Reason, Category: event.Category}] += event.Quantity
 		}
 	}
 	return outcomes
@@ -54,7 +60,6 @@ func testEnvelope(itemType protocol.EnvelopeItemType) *protocol.Envelope {
 	}
 }
 
-// nolint:gocyclo
 func TestHTTPTransport_SendEnvelope(t *testing.T) {
 	t.Run("invalid DSN", func(t *testing.T) {
 		transport := NewHTTPTransport()
@@ -96,9 +101,9 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 			{"nil header", &protocol.Envelope{Items: testEnvelope(protocol.EnvelopeItemTypeEvent).Items}, ErrInvalidEnvelope},
 		}
 
-		var count int64
+		var count atomic.Int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			atomic.AddInt64(&count, 1)
+			count.Add(1)
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -120,15 +125,15 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 		}
 
 		expectedCount := int64(len(tests) - 1) // one invalid envelope
-		if sent := atomic.LoadInt64(&count); sent != expectedCount {
+		if sent := count.Load(); sent != expectedCount {
 			t.Errorf("expected %d sent, got %d", expectedCount, sent)
 		}
 	})
 
 	t.Run("server error", func(t *testing.T) {
-		var requestCount int64
+		var requestCount atomic.Int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			atomic.AddInt64(&requestCount, 1)
+			requestCount.Add(1)
 			status := http.StatusInternalServerError
 			w.WriteHeader(status)
 		}))
@@ -148,15 +153,15 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 			t.Fatal("Flush timed out")
 		}
 
-		if sent := atomic.LoadInt64(&requestCount); sent != 1 {
+		if sent := requestCount.Load(); sent != 1 {
 			t.Errorf("expected 1 request, got %d", sent)
 		}
 	})
 
 	t.Run("rate limiting by category", func(t *testing.T) {
-		var count int64
+		var count atomic.Int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			if atomic.AddInt64(&count, 1) == 1 {
+			if count.Add(1) == 1 {
 				w.Header().Add("X-Sentry-Rate-Limits", "60:error,60:transaction")
 				w.WriteHeader(http.StatusTooManyRequests)
 			} else {
@@ -186,7 +191,7 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 			t.Error("monitor category should not be rate limited")
 		}
 
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 		}
 		if !testutils.FlushWithTimeout(transport, testutils.FlushTimeout()) {
@@ -222,7 +227,7 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 			done:       make(chan struct{}),
 		}
 		// manually set the queue size to simulate overflow
-		transport.queue = make(chan *protocol.Envelope, transport.BufferSize)
+		transport.queue = make(chan queuedEnvelope, transport.BufferSize)
 		transport.flushRequest = make(chan flushRequest)
 		transport.start()
 		defer func() {
@@ -252,9 +257,9 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 	})
 
 	t.Run("FlushMultipleTimes", func(t *testing.T) {
-		var count int64
+		var count atomic.Int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			atomic.AddInt64(&count, 1)
+			count.Add(1)
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -272,14 +277,14 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 			t.Fatal("Flush timed out")
 		}
 
-		initial := atomic.LoadInt64(&count)
-		for i := 0; i < 10; i++ {
+		initial := count.Load()
+		for i := range 10 {
 			if !testutils.FlushWithTimeout(transport, testutils.FlushTimeout()) {
 				t.Fatalf("Flush %d timed out", i)
 			}
 		}
 
-		if got := atomic.LoadInt64(&count); got != initial {
+		if got := count.Load(); got != initial {
 			t.Errorf("expected %d requests after multiple flushes, got %d", initial, got)
 		}
 	})
@@ -532,28 +537,35 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 		_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 		_ = takeOutcomes(recorder)
 
-		pending, _ := (&report.ClientReport{DiscardedEvents: []report.DiscardedEvent{
+		clientReport := &report.ClientReport{DiscardedEvents: []report.DiscardedEvent{
 			{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 2},
-		}}).ToEnvelopeItem()
-		backoff := func(category ratelimit.Category) report.OutcomeKey {
-			return report.OutcomeKey{Reason: report.ReasonRateLimitBackoff, Category: category}
+		}}
+		pending, _ := clientReport.ToEnvelopeItem()
+		metrics := telemetry.NewItemContainer(ratelimit.CategoryTraceMetric, []telemetry.Item{&Metric{}, &Metric{}, &Metric{}})
+		backoff := func(category ratelimit.Category) outcomeKey {
+			return outcomeKey{Reason: report.ReasonRateLimitBackoff, Category: category}
 		}
+		// The scheduler hands the transport what dropping each envelope discards.
 		tests := []struct {
 			name     string
 			envelope *protocol.Envelope
-			want     map[report.OutcomeKey]int64 // nil when the envelope is sent
+			discard  telemetry.Discard
+			want     map[outcomeKey]uint64 // nil when the envelope is sent
 		}{
-			{"event", testEnvelope(protocol.EnvelopeItemTypeEvent), map[report.OutcomeKey]int64{backoff(ratelimit.CategoryError): 1}},
-			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), map[report.OutcomeKey]int64{backoff(ratelimit.CategoryTransaction): 1}},
-			{"trace metric", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, protocol.NewTraceMetricItem(3, []byte(`{"items":[]}`))),
-				map[report.OutcomeKey]int64{backoff(ratelimit.CategoryTraceMetric): 3}},
+			{"event", testEnvelope(protocol.EnvelopeItemTypeEvent), telemetry.Discard{Counts: (&Event{}).DiscardCounts()},
+				map[outcomeKey]uint64{backoff(ratelimit.CategoryError): 1}},
+			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), telemetry.Discard{Counts: (&Event{Type: transactionType}).DiscardCounts()},
+				map[outcomeKey]uint64{backoff(ratelimit.CategoryTransaction): 1, backoff(ratelimit.CategorySpan): 1}},
+			{"trace metric", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, protocol.NewTraceMetricItem(3, []byte(`{"items":[]}`))), telemetry.Discard{Counts: metrics.DiscardCounts()},
+				map[outcomeKey]uint64{backoff(ratelimit.CategoryTraceMetric): 3, backoff(ratelimit.CategoryTraceMetricByte): 3}},
 			{"client report before event", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, pending, testEnvelope(protocol.EnvelopeItemTypeEvent).Items[0]),
-				map[report.OutcomeKey]int64{backoff(ratelimit.CategoryError): 1, {Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError}: 2}},
-			{"check-in", testEnvelope(protocol.EnvelopeItemTypeCheckIn), nil},
+				telemetry.Discard{Counts: (&Event{}).DiscardCounts(), Report: clientReport},
+				map[outcomeKey]uint64{backoff(ratelimit.CategoryError): 1, {Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError}: 2}},
+			{"check-in", testEnvelope(protocol.EnvelopeItemTypeCheckIn), telemetry.Discard{}, nil},
 		}
 		for _, tt := range tests {
 			sent := requests.Load()
-			if err := transport.SendEnvelope(context.Background(), tt.envelope); err != nil {
+			if err := transport.SendEnvelope(telemetry.WithDiscard(context.Background(), tt.discard), tt.envelope); err != nil {
 				t.Errorf("%s: rate limited envelope should return nil, got %v", tt.name, err)
 			}
 			if gotSent := requests.Load() > sent; gotSent != (tt.want == nil) {
@@ -586,10 +598,11 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 			})
 
 			// The transport records losses of accepted envelopes itself.
-			if err := transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
+			ctx := telemetry.WithDiscard(context.Background(), telemetry.Discard{Counts: (&Event{}).DiscardCounts()})
+			if err := transport.SendEnvelope(ctx, testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
 				t.Errorf("%s: should not return error, got %v", tt.name, err)
 			}
-			want := map[report.OutcomeKey]int64{{Reason: tt.reason, Category: ratelimit.CategoryError}: 1}
+			want := map[outcomeKey]uint64{{Reason: tt.reason, Category: ratelimit.CategoryError}: 1}
 			if outcomes := takeOutcomes(recorder); fmt.Sprint(outcomes) != fmt.Sprint(want) {
 				t.Errorf("%s: got outcomes %v, want %v", tt.name, outcomes, want)
 			}
@@ -689,7 +702,7 @@ func TestKeepAlive(t *testing.T) {
 			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 			checkReuse(false)
 
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 				checkReuse(true)
 			}
@@ -699,7 +712,7 @@ func TestKeepAlive(t *testing.T) {
 			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 			checkReuse(true)
 
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 				checkReuse(false)
 			}
@@ -738,14 +751,12 @@ func TestConcurrentAccess(t *testing.T) {
 			}
 
 			var wg sync.WaitGroup
-			for i := 0; i < 10; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					for j := 0; j < 5; j++ {
+			for range 10 {
+				wg.Go(func() {
+					for range 5 {
 						_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 					}
-				}()
+				})
 			}
 			wg.Wait()
 
@@ -759,7 +770,7 @@ func TestTransportConfiguration(t *testing.T) {
 		name     string
 		options  ClientOptions
 		async    bool
-		validate func(*testing.T, interface{})
+		validate func(*testing.T, any)
 	}{
 		{
 			name: "HTTPProxy",
@@ -768,7 +779,7 @@ func TestTransportConfiguration(t *testing.T) {
 				HTTPProxy: "http://proxy:8080",
 			},
 			async: true,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPTransport)
 				httpTransport, ok := transport.transport.(*http.Transport)
 				if !ok {
@@ -795,7 +806,7 @@ func TestTransportConfiguration(t *testing.T) {
 				HTTPSProxy: "https://secure-proxy:8443",
 			},
 			async: true,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPTransport)
 				httpTransport, ok := transport.transport.(*http.Transport)
 				if !ok {
@@ -820,7 +831,7 @@ func TestTransportConfiguration(t *testing.T) {
 				HTTPProxy:     "http://proxy:8080",
 			},
 			async: true,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPTransport)
 				if transport.transport.(*http.Transport).Proxy != nil {
 					t.Error("custom transport should not have proxy from options")
@@ -834,7 +845,7 @@ func TestTransportConfiguration(t *testing.T) {
 				CaCerts: x509.NewCertPool(),
 			},
 			async: false,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPSyncTransport)
 				httpTransport, ok := transport.transport.(*http.Transport)
 				if !ok {
@@ -854,7 +865,7 @@ func TestTransportConfiguration(t *testing.T) {
 				Dsn: "https://key@sentry.io/123",
 			},
 			async: true,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPTransport)
 				if transport.BufferSize != defaultBufferSize {
 					t.Errorf("BufferSize = %d, want %d", transport.BufferSize, defaultBufferSize)
@@ -870,7 +881,7 @@ func TestTransportConfiguration(t *testing.T) {
 				Dsn: "https://key@sentry.io/123",
 			},
 			async: false,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPSyncTransport)
 				if transport.Timeout != defaultTimeout {
 					t.Errorf("Timeout = %v, want %v", transport.Timeout, defaultTimeout)

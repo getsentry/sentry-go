@@ -16,6 +16,9 @@ type Item interface {
 	// MakeSerializationSafe prevents serialization races, by serializing user mutable data on the foreground.
 	// Should be used before passing telemetry to the processor.
 	MakeSerializationSafe()
+
+	// DiscardCounts returns client report counts for a dropped item.
+	DiscardCounts() DiscardCounts
 }
 
 // EnvelopeConvertible represents items that can convert themselves to envelopes.
@@ -34,6 +37,9 @@ type EnvelopeConvertible interface {
 
 	// ToEnvelope converts the item to a Sentry envelope using the provided header.
 	ToEnvelope(*protocol.EnvelopeHeader) (*protocol.Envelope, error)
+
+	// DiscardCounts returns client report counts for a dropped item.
+	DiscardCounts() DiscardCounts
 }
 
 // ErrQueueFull reports that a transport rejected an envelope because its queue is full.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"strings"
@@ -56,17 +57,17 @@ type SdkPackage = protocol.SdkPackage
 // plus it could just be map[string]interface{} then.
 
 // BreadcrumbHint contains information that can be associated with a Breadcrumb.
-type BreadcrumbHint map[string]interface{}
+type BreadcrumbHint map[string]any
 
 // Breadcrumb specifies an application event that occurred before a Sentry event.
 // An event may contain one or more breadcrumbs.
 type Breadcrumb struct {
-	Type      string                 `json:"type,omitempty"`
-	Category  string                 `json:"category,omitempty"`
-	Message   string                 `json:"message,omitempty"`
-	Data      map[string]interface{} `json:"data,omitempty"`
-	Level     Level                  `json:"level,omitempty"`
-	Timestamp time.Time              `json:"timestamp,omitzero"`
+	Type      string         `json:"type,omitempty"`
+	Category  string         `json:"category,omitempty"`
+	Message   string         `json:"message,omitempty"`
+	Data      map[string]any `json:"data,omitempty"`
+	Level     Level          `json:"level,omitempty"`
+	Timestamp time.Time      `json:"timestamp,omitzero"`
 }
 
 // TODO: provide constants for known breadcrumb types.
@@ -125,9 +126,9 @@ type LogEntry interface {
 	// Bool adds a bool attribute to the LogEntry.
 	Bool(key string, value bool) LogEntry
 	// Emit emits the LogEntry with the provided arguments.
-	Emit(args ...interface{})
+	Emit(args ...any)
 	// Emitf emits the LogEntry using a format string and arguments.
-	Emitf(format string, args ...interface{})
+	Emitf(format string, args ...any)
 }
 
 // Meter provides an interface for recording metrics.
@@ -357,7 +358,7 @@ type DebugMetaImage struct {
 // An EventID must be 32 characters long, lowercase and not have any dashes.
 type EventID string
 
-type Context = map[string]interface{}
+type Context = map[string]any
 
 // Event is the fundamental data structure that is sent to Sentry.
 type Event struct {
@@ -371,13 +372,13 @@ type Event struct {
 	Message     string             `json:"message,omitempty"`
 	Platform    string             `json:"platform,omitempty"`
 	Release     string             `json:"release,omitempty"`
-	Sdk         SdkInfo            `json:"sdk,omitempty"`
+	Sdk         SdkInfo            `json:"sdk"`
 	ServerName  string             `json:"server_name,omitempty"`
 	Threads     []Thread           `json:"threads,omitempty"`
 	Tags        map[string]string  `json:"tags,omitempty"`
 	Timestamp   time.Time          `json:"timestamp,omitzero"`
 	Transaction string             `json:"transaction,omitempty"`
-	User        User               `json:"user,omitempty"`
+	User        User               `json:"user"`
 	Logger      string             `json:"logger,omitempty"`
 	Modules     map[string]string  `json:"modules,omitempty"`
 	Request     *Request           `json:"request,omitempty"`
@@ -456,7 +457,7 @@ func (e *Event) ToEnvelopeItem() (item *protocol.EnvelopeItem, err error) {
 
 	switch e.Type {
 	case transactionType:
-		item = protocol.NewTransactionItem(e.GetSpanCount(), eventBody)
+		item = protocol.NewTransactionItem(eventBody)
 	case checkInType:
 		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
 	case logEvent.Type:
@@ -504,33 +505,9 @@ func (e *Event) GetSdkInfo() *protocol.SdkInfo {
 func (e *Event) GetDynamicSamplingContext() map[string]string {
 	trace := make(map[string]string)
 	if dsc := e.sdkMetaData.dsc; dsc.HasEntries() {
-		for k, v := range dsc.Entries {
-			trace[k] = v
-		}
+		maps.Copy(trace, dsc.Entries)
 	}
 	return trace
-}
-
-// GetSpanCount returns the number of spans in the transaction including the transaction itself. It is used for client
-// reports. Returns 0 for non-transaction events.
-func (e *Event) GetSpanCount() int {
-	if e.Type != transactionType {
-		return 0
-	}
-	return len(e.Spans) + 1
-}
-
-// GetLogByteSize returns the approximate total byte size of all logs in the event. It is used for client
-// reports. Returns 0 for non-log events.
-func (e *Event) GetLogByteSize() int {
-	if e.Type != logEvent.Type {
-		return 0
-	}
-	var size int
-	for i := range e.Logs {
-		size += e.Logs[i].ApproximateSize()
-	}
-	return size
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
@@ -712,10 +689,10 @@ type Thread struct {
 
 // EventHint contains information that can be associated with an Event.
 type EventHint struct {
-	Data               interface{}
+	Data               any
 	EventID            string
 	OriginalException  error
-	RecoveredException interface{}
+	RecoveredException any
 	Context            context.Context
 	Request            *http.Request
 	Response           *http.Response
@@ -729,27 +706,6 @@ type Log struct {
 	Severity   int                        `json:"severity_number,omitempty"`
 	Body       string                     `json:"body"`
 	Attributes map[string]attribute.Value `json:"attributes,omitempty"`
-
-	// approximateSize is the pre-computed approximate size in bytes.
-	approximateSize int
-}
-
-// ApproximateSize returns the pre-computed approximate serialized size in bytes.
-func (l *Log) ApproximateSize() int {
-	return l.approximateSize
-}
-
-// computeLogSize estimates the serialized JSON size of a log entry.
-func computeLogSize(l *Log) int {
-	// Base overhead: timestamp, trace_id, level, severity, JSON structure
-	size := len(l.Body) + 60
-	for k, v := range l.Attributes {
-		// Key + type/value JSON overhead
-		size += len(k) + 20
-		s := fmt.Sprint(v.AsInterface())
-		size += len(s)
-	}
-	return size
 }
 
 // MakeSerializationSafe is a no-op for Log, all fields are passed from the safe attribute API.

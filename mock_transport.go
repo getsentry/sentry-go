@@ -147,7 +147,6 @@ func decodeMockEvent(item *protocol.EnvelopeItem) *Event {
 				decodeMockID(log.TraceID, log.Log.TraceID[:])
 				decodeMockID(log.SpanID, log.Log.SpanID[:])
 				log.Log.Attributes = decodeMockAttributes(log.Attributes)
-				log.approximateSize = computeLogSize(&log.Log)
 				event.Logs = append(event.Logs, log.Log)
 			} else {
 				metric := mockDecode[struct {

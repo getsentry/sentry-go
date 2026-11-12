@@ -1,5 +1,7 @@
 package testutils
 
+import "maps"
+
 // MergeMaps merges multiple maps into a single map.
 // If there are duplicate keys, the value from the last map takes precedence.
 //
@@ -7,9 +9,7 @@ package testutils
 func MergeMaps[M ~map[K]V, K comparable, V any](src ...M) M {
 	merged := make(M)
 	for _, m := range src {
-		for k, v := range m {
-			merged[k] = v
-		}
+		maps.Copy(merged, m)
 	}
 	return merged
 }

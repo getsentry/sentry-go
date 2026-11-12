@@ -20,10 +20,9 @@ type Scheduler struct {
 	transport Transport
 	dsn       *protocol.Dsn
 	sdkInfo   func() *protocol.SdkInfo
-	recorder  report.ClientReportRecorder
-	provider  report.ClientReportProvider
+	reports   *report.Aggregator
 
-	currentCycle []ratelimit.Priority
+	currentCycle []Priority
 	cyclePos     int
 
 	ctx          context.Context
@@ -45,27 +44,19 @@ func NewScheduler(
 	transport Transport,
 	dsn *protocol.Dsn,
 	sdkInfo func() *protocol.SdkInfo,
-	recorder report.ClientReportRecorder,
-	provider report.ClientReportProvider,
+	reports *report.Aggregator,
 ) *Scheduler {
-	if recorder == nil {
-		recorder = report.NoopRecorder()
-	}
-	if provider == nil {
-		provider = report.NoopProvider()
-	}
+	ctx, cancel := context.WithCancel(context.Background())
 
-	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118: cancel is stored in s.cancel and called in Shutdown()
-
-	priorityWeights := map[ratelimit.Priority]int{
-		ratelimit.PriorityCritical: 5,
-		ratelimit.PriorityHigh:     4,
-		ratelimit.PriorityMedium:   3,
-		ratelimit.PriorityLow:      2,
-		ratelimit.PriorityLowest:   1,
+	priorityWeights := map[Priority]int{
+		PriorityCritical: 5,
+		PriorityHigh:     4,
+		PriorityMedium:   3,
+		PriorityLow:      2,
+		PriorityLowest:   1,
 	}
 
-	var currentCycle []ratelimit.Priority
+	var currentCycle []Priority
 	for priority, weight := range priorityWeights {
 		hasBuffers := false
 		for _, buffer := range buffers {
@@ -76,7 +67,7 @@ func NewScheduler(
 		}
 
 		if hasBuffers {
-			for i := 0; i < weight; i++ {
+			for range weight {
 				currentCycle = append(currentCycle, priority)
 			}
 		}
@@ -87,8 +78,7 @@ func NewScheduler(
 		transport:    transport,
 		dsn:          dsn,
 		sdkInfo:      sdkInfo,
-		recorder:     recorder,
-		provider:     provider,
+		reports:      reports,
 		currentCycle: currentCycle,
 		ctx:          ctx,
 		cancel:       cancel,
@@ -198,9 +188,7 @@ func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
 func (s *Scheduler) run() {
 	defer s.processingWg.Done()
 
-	s.processingWg.Add(1)
-	go func() {
-		defer s.processingWg.Done()
+	s.processingWg.Go(func() {
 		ticker := time.NewTicker(100 * time.Millisecond)
 		reportTicker := time.NewTicker(clientReportInterval)
 		defer ticker.Stop()
@@ -222,7 +210,7 @@ func (s *Scheduler) run() {
 				return
 			}
 		}
-	}()
+	})
 
 	for {
 		s.mu.Lock()
@@ -332,14 +320,14 @@ func (s *Scheduler) sendItem(ctx context.Context, item EnvelopeConvertible, wait
 	envelope, err := item.ToEnvelope(header)
 	if err != nil {
 		debuglog.Printf("error while converting to envelope: %v", err)
-		s.recorder.RecordItem(report.ReasonInternalError, item)
+		item.DiscardCounts().Record(s.reports, report.ReasonInternalError)
 		return false
 	}
-	s.provider.AttachToEnvelope(envelope)
-	return s.sendEnvelope(ctx, envelope, wait)
+	discard := Discard{Counts: item.DiscardCounts(), Report: s.attachReport(envelope)}
+	return s.sendEnvelope(WithDiscard(ctx, discard), envelope, wait)
 }
 
-// sendEnvelope hands envelope to the transport.
+// sendEnvelope hands envelope to the transport. If the transport rejects it, the Discard carried by ctx is recorded.
 //
 // With wait, a queue-full rejection flushes the transport and retries once.
 func (s *Scheduler) sendEnvelope(ctx context.Context, envelope *protocol.Envelope, wait bool) bool {
@@ -356,7 +344,7 @@ func (s *Scheduler) sendEnvelope(ctx context.Context, envelope *protocol.Envelop
 	if errors.Is(err, ErrQueueFull) {
 		reason = report.ReasonQueueOverflow
 	}
-	s.recorder.RecordForEnvelope(reason, envelope)
+	DiscardFrom(ctx).Record(s.reports, reason)
 	return false
 }
 
@@ -379,9 +367,24 @@ func (s *Scheduler) sendClientReport(ctx context.Context) bool {
 		Dsn:    s.dsn,
 		Sdk:    s.resolveSdkInfo(),
 	})
-	s.provider.AttachToEnvelope(envelope)
+	discard := Discard{Report: s.attachReport(envelope)}
 	if len(envelope.Items) == 0 {
 		return false
 	}
-	return s.sendEnvelope(ctx, envelope, false)
+	return s.sendEnvelope(WithDiscard(ctx, discard), envelope, false)
+}
+
+// attachReport adds the pending client report to envelope and returns it.
+func (s *Scheduler) attachReport(envelope *protocol.Envelope) *report.ClientReport {
+	r := s.reports.TakeReport()
+	if r == nil {
+		return nil
+	}
+	item, err := r.ToEnvelopeItem()
+	if err != nil {
+		debuglog.Printf("failed to serialize client report: %v", err)
+		return nil
+	}
+	envelope.AddItem(item)
+	return r
 }

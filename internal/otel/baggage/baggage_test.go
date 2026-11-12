@@ -20,7 +20,7 @@ package baggage
 import (
 	"fmt"
 	"math/rand"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -562,11 +562,11 @@ func TestBaggageString(t *testing.T) {
 		for i, m := range members {
 			parts := strings.Split(m, propertyDelimiter)
 			if len(parts) > 1 {
-				sort.Strings(parts[1:])
+				slices.Sort(parts[1:])
 				members[i] = strings.Join(parts, propertyDelimiter)
 			}
 		}
-		sort.Strings(members)
+		slices.Sort(members)
 		return strings.Join(members, listDelimiter)
 	}
 
@@ -882,9 +882,8 @@ func BenchmarkNew(b *testing.B) {
 	mem4, _ := NewMember("key4", "val4")
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		benchBaggage, _ = New(mem1, mem2, mem3, mem4)
 	}
 }
@@ -894,7 +893,7 @@ var benchMember Member
 func BenchmarkNewMember(b *testing.B) {
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		benchMember, _ = NewMember("key", "value")
 	}
 }
@@ -902,7 +901,7 @@ func BenchmarkNewMember(b *testing.B) {
 func BenchmarkParse(b *testing.B) {
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		benchBaggage, _ = Parse(`userId=alice,serverNode = DF28 , isProduction = false,hasProp=stuff;propKey;propWValue=value`)
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/getsentry/sentry-go"
 )
 
-func prettyPrint(v interface{}) string {
+func prettyPrint(v any) string {
 	pp, _ := json.MarshalIndent(v, "", "  ")
 	return string(pp)
 }

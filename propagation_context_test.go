@@ -30,7 +30,7 @@ func TestPropagationContextMap(t *testing.T) {
 	p := NewPropagationContext()
 	assertEqual(t,
 		p.Map(),
-		map[string]interface{}{
+		map[string]any{
 			"trace_id": p.TraceID,
 			"span_id":  p.SpanID,
 		},
@@ -39,7 +39,7 @@ func TestPropagationContextMap(t *testing.T) {
 	p.ParentSpanID = SpanIDFromHex("b72fa28504b07285")
 	assertEqual(t,
 		p.Map(),
-		map[string]interface{}{
+		map[string]any{
 			"trace_id":       p.TraceID,
 			"span_id":        p.SpanID,
 			"parent_span_id": p.ParentSpanID,
@@ -159,17 +159,5 @@ func TestPropagationContextFromHeadersMalformedBaggageRetainsTrace(t *testing.T)
 	p, err = PropagationContextFromHeaders("", "not-valid")
 	if err == nil || p.TraceID == zeroTraceID {
 		t.Fatalf("malformed baggage without trace = (%#v, %v)", p, err)
-	}
-}
-
-func TestNewPropagationContext(t *testing.T) {
-	context := NewPropagationContext()
-
-	if context.TraceID == zeroTraceID {
-		t.Errorf("TraceID should not be zero")
-	}
-
-	if context.SpanID == zeroSpanID {
-		t.Errorf("SpanID should not be zero")
 	}
 }

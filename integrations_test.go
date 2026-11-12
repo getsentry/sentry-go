@@ -3,7 +3,6 @@ package sentry
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"regexp"
 	"runtime/debug"
 	"testing"
@@ -318,7 +317,6 @@ func TestExtractModules(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got := extractModules(tt.info)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
@@ -373,12 +371,9 @@ func TestEnvironmentIntegrationDoesNotOverrideExistingContexts(t *testing.T) {
 }
 
 func TestGlobalTagsIntegration(t *testing.T) {
-	os.Setenv("SENTRY_TAGS_foo", "foo_value_env")
-	os.Setenv("SENTRY_TAGS_bar", "bar_value_env")
-	os.Setenv("SENTRY_TAGS_baz", "baz_value_env")
-	defer os.Unsetenv("SENTRY_TAGS_foo")
-	defer os.Unsetenv("SENTRY_TAGS_bar")
-	defer os.Unsetenv("SENTRY_TAGS_baz")
+	t.Setenv("SENTRY_TAGS_foo", "foo_value_env")
+	t.Setenv("SENTRY_TAGS_bar", "bar_value_env")
+	t.Setenv("SENTRY_TAGS_baz", "baz_value_env")
 
 	transport := &MockTransport{}
 	client, err := NewClient(ClientOptions{

@@ -75,12 +75,12 @@ func TestEnvelope_ItemsAndSerialization(t *testing.T) {
 				t.Fatalf("Expected at least 3 lines for %s, got %d", tt.name, len(lines))
 			}
 
-			var envelopeHeader map[string]interface{}
+			var envelopeHeader map[string]any
 			if err := json.Unmarshal([]byte(lines[0]), &envelopeHeader); err != nil {
 				t.Fatalf("Failed to unmarshal envelope header: %v", err)
 			}
 
-			var itemHeader map[string]interface{}
+			var itemHeader map[string]any
 			if err := json.Unmarshal([]byte(lines[1]), &itemHeader); err != nil {
 				t.Fatalf("Failed to unmarshal item header: %v", err)
 			}
