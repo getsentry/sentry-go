@@ -1,0 +1,40 @@
+# Warden Configuration
+# https://github.com/getsentry/warden
+#
+# The org-wide base config already runs security-review on every PR.
+
+version = 1
+
+[[skills]]
+name = "code-review"
+ignorePaths = ["_examples/**"]
+incremental = true
+reportOn = "medium"
+
+[[skills.triggers]]
+type = "pull_request"
+actions = ["opened", "synchronize", "reopened"]
+draft = false
+
+[[skills]]
+name = "skill-scanner"
+incremental = true
+reportOn = "medium"
+remote = "getsentry/skills"
+paths = [".agents/**", ".claude/**", "**/SKILL.md", "AGENTS.md", "CLAUDE.md", "agents.toml"]
+
+[[skills.triggers]]
+type = "pull_request"
+actions = ["opened", "synchronize", "reopened"]
+
+[[skills]]
+name = "sdk-review"
+paths = ["**/*.go"]
+ignorePaths = ["**/testdata/**", "_examples/**"]
+incremental = true
+reportOn = "medium"
+
+[[skills.triggers]]
+type = "pull_request"
+actions = ["opened", "synchronize", "reopened"]
+draft = false
