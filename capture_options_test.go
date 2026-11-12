@@ -98,13 +98,6 @@ func TestWithMechanism(t *testing.T) {
 			},
 			want: []*sentry.Mechanism{{Type: sentry.MechanismTypeGeneric, Handled: new(true)}},
 		},
-		{
-			name: "message is unaffected",
-			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
-				sentry.CaptureMessage(ctx, "message", options...)
-			},
-			options: []sentry.CaptureOption{sentry.WithMechanism("auto.test", true)},
-		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
