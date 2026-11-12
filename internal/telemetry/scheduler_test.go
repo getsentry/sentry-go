@@ -10,12 +10,13 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/protocol"
-	reportpkg "github.com/getsentry/sentry-go/report"
+	"github.com/getsentry/sentry-go/report"
 )
 
 type testTelemetryItem struct {
@@ -66,17 +67,23 @@ func (t *testTelemetryItem) GetDynamicSamplingContext() map[string]string {
 
 func (t *testTelemetryItem) MakeSerializationSafe() {}
 
+func (t *testTelemetryItem) DiscardCounts() DiscardCounts { return oneDiscard(t.GetCategory()) }
+
+func transactionCounts(spanCount uint64) DiscardCounts {
+	return DiscardCounts{ratelimit.CountTransaction: 1, ratelimit.CountSpan: spanCount}
+}
+
 type failingTransactionTelemetryItem struct {
 	testTelemetryItem
-	spanCount int
+	spanCount uint64
 }
 
 func (f *failingTransactionTelemetryItem) ToEnvelope(_ *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
 	return nil, errors.New("boom")
 }
 
-func (f *failingTransactionTelemetryItem) GetSpanCount() int {
-	return f.spanCount
+func (f *failingTransactionTelemetryItem) DiscardCounts() DiscardCounts {
+	return transactionCounts(f.spanCount)
 }
 
 func TestNewTelemetryScheduler(t *testing.T) {
@@ -92,7 +99,7 @@ func TestNewTelemetryScheduler(t *testing.T) {
 		Version: "1.0.0",
 	}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
 
 	if scheduler == nil {
 		t.Fatal("Expected non-nil scheduler")
@@ -215,7 +222,7 @@ func TestTelemetrySchedulerFlush(t *testing.T) {
 			sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
 			buffers := tt.setupBuffers()
-			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
+			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
 
 			tt.addItems(buffers)
 
@@ -258,7 +265,7 @@ func TestTelemetrySchedulerFlushWaitsForInFlightBatch(t *testing.T) {
 				buffer := NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil)
 				scheduler := NewScheduler(map[ratelimit.Category]Buffer[Item]{
 					ratelimit.CategoryError: buffer,
-				}, transport, &protocol.Dsn{}, nil, nil, nil)
+				}, transport, &protocol.Dsn{}, nil, nil)
 				scheduler.Start()
 				resume := sync.OnceFunc(func() { close(resumeSend) })
 				t.Cleanup(func() {
@@ -296,7 +303,7 @@ func TestTelemetrySchedulerFlushAlreadyCanceled(t *testing.T) {
 	t.Parallel()
 
 	transport := &testutils.MockTelemetryTransport{}
-	scheduler := NewScheduler(nil, transport, &protocol.Dsn{}, nil, nil, nil)
+	scheduler := NewScheduler(nil, transport, &protocol.Dsn{}, nil, nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	require.False(t, scheduler.FlushWithContext(ctx))
@@ -314,7 +321,7 @@ func TestTelemetrySchedulerStartStop(t *testing.T) {
 	// no log buffer used in simplified scheduler tests
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
 
 	scheduler.Start()
 	scheduler.Start()
@@ -341,7 +348,7 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 	}
 	sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil, nil)
+	scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, nil)
 
 	scheduler.Start()
 
@@ -367,7 +374,7 @@ func TestTelemetrySchedulerContextCancellation(t *testing.T) {
 func TestTelemetrySchedulerStopFlushesAcceptedItems(t *testing.T) {
 	transport := &testutils.MockTelemetryTransport{}
 	buffer := NewRingBuffer[Item](ratelimit.CategoryLog, 1<<20, OverflowPolicyDropNewest, 1<<20, time.Hour, nil)
-	scheduler := NewScheduler(map[ratelimit.Category]Buffer[Item]{ratelimit.CategoryLog: buffer}, transport, &protocol.Dsn{}, nil, nil, nil)
+	scheduler := NewScheduler(map[ratelimit.Category]Buffer[Item]{ratelimit.CategoryLog: buffer}, transport, &protocol.Dsn{}, nil, nil)
 	scheduler.Start()
 
 	var accepted atomic.Int64
@@ -412,12 +419,12 @@ func TestTelemetrySchedulerClientReportDelivery(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			transport := &testutils.MockTelemetryTransport{}
-			recorder := reportpkg.NewAggregator()
-			want := []reportpkg.DiscardedEvent{{Reason: reportpkg.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 2}}
+			recorder := report.NewAggregator()
+			want := []report.DiscardedEvent{{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 2}}
 			if tt.pending {
-				recorder.Record(reportpkg.ReasonBeforeSend, ratelimit.CategoryError, 2)
+				recorder.Record(report.ReasonBeforeSend, ratelimit.CategoryError, 2)
 			}
-			scheduler := NewScheduler(nil, transport, &protocol.Dsn{}, nil, recorder, recorder)
+			scheduler := NewScheduler(nil, transport, &protocol.Dsn{}, nil, recorder)
 			t.Cleanup(scheduler.cancel)
 
 			var sent bool
@@ -449,7 +456,7 @@ func TestTelemetrySchedulerClientReportDelivery(t *testing.T) {
 			if tt.pending {
 				require.Len(t, items, 1)
 				require.Equal(t, protocol.EnvelopeItemTypeClientReport, items[0].Header.Type)
-				var clientReport reportpkg.ClientReport
+				var clientReport report.ClientReport
 				require.NoError(t, json.Unmarshal(items[0].Payload, &clientReport))
 				require.Equal(t, want, clientReport.DiscardedEvents)
 			} else {
@@ -463,8 +470,10 @@ func TestTelemetrySchedulerClientReportDelivery(t *testing.T) {
 type transactionTelemetryItem struct{ testTelemetryItem }
 
 func (t *transactionTelemetryItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
-	return protocol.NewEnvelope(header, protocol.NewTransactionItem(3, []byte(`{}`))), nil
+	return protocol.NewEnvelope(header, protocol.NewTransactionItem([]byte(`{}`))), nil
 }
+
+func (t *transactionTelemetryItem) DiscardCounts() DiscardCounts { return transactionCounts(3) }
 
 func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T) {
 	transaction := testTelemetryItem{data: "tx", category: ratelimit.CategoryTransaction}
@@ -472,20 +481,20 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 		name   string
 		item   Item
 		err    error
-		reason reportpkg.DiscardReason
+		reason report.DiscardReason
 	}{
-		{"conversion error", &failingTransactionTelemetryItem{testTelemetryItem: transaction, spanCount: 3}, errors.New("report rejected"), reportpkg.ReasonInternalError},
-		{"queue full", &transactionTelemetryItem{transaction}, ErrQueueFull, reportpkg.ReasonQueueOverflow},
-		{"send error", &transactionTelemetryItem{transaction}, errors.New("send failed"), reportpkg.ReasonSendError},
-		{"standalone report queue full", nil, ErrQueueFull, reportpkg.ReasonQueueOverflow},
-		{"standalone report send error", nil, errors.New("send failed"), reportpkg.ReasonSendError},
+		{"conversion error", &failingTransactionTelemetryItem{testTelemetryItem: transaction, spanCount: 3}, errors.New("report rejected"), report.ReasonInternalError},
+		{"queue full", &transactionTelemetryItem{transaction}, ErrQueueFull, report.ReasonQueueOverflow},
+		{"send error", &transactionTelemetryItem{transaction}, errors.New("send failed"), report.ReasonSendError},
+		{"standalone report queue full", nil, ErrQueueFull, report.ReasonQueueOverflow},
+		{"standalone report send error", nil, errors.New("send failed"), report.ReasonSendError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &testutils.MockTelemetryTransport{SendFunc: func(context.Context, *protocol.Envelope) error { return tt.err }}
 			dsn := &protocol.Dsn{}
-			recorder := reportpkg.NewAggregator()
-			recorder.Record(reportpkg.ReasonBeforeSend, ratelimit.CategoryError, 2)
+			recorder := report.NewAggregator()
+			recorder.Record(report.ReasonBeforeSend, ratelimit.CategoryError, 2)
 
 			buffer := NewRingBuffer[Item](ratelimit.CategoryTransaction, 10, OverflowPolicyDropOldest, 1, 0, nil)
 			buffers := map[ratelimit.Category]Buffer[Item]{
@@ -493,7 +502,7 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 			}
 			sdkInfo := &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 
-			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, recorder, recorder)
+			scheduler := NewScheduler(buffers, transport, dsn, func() *protocol.SdkInfo { return sdkInfo }, recorder)
 
 			if tt.item != nil {
 				buffer.Offer(tt.item)
@@ -502,14 +511,48 @@ func TestTelemetrySchedulerRecordsFullDiscardCountsOnEnvelopeError(t *testing.T)
 
 			clientReport := recorder.TakeReport()
 			require.NotNil(t, clientReport)
-			want := []reportpkg.DiscardedEvent{{Reason: reportpkg.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 2}}
+			want := []report.DiscardedEvent{{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 2}}
 			if tt.item != nil {
 				want = append(want,
-					reportpkg.DiscardedEvent{Reason: tt.reason, Category: ratelimit.CategoryTransaction, Quantity: 1},
-					reportpkg.DiscardedEvent{Reason: tt.reason, Category: ratelimit.CategorySpan, Quantity: 3},
+					report.DiscardedEvent{Reason: tt.reason, Category: ratelimit.CategoryTransaction, Quantity: 1},
+					report.DiscardedEvent{Reason: tt.reason, Category: ratelimit.CategorySpan, Quantity: 3},
 				)
 			}
 			require.ElementsMatch(t, want, clientReport.DiscardedEvents)
 		})
+	}
+}
+
+// Every item handed to the scheduler is either sent or recorded as lost exactly once.
+func TestTelemetrySchedulerAccountsForEveryItem(t *testing.T) {
+	transport := &testutils.MockTelemetryTransport{}
+	recorder := report.NewAggregator()
+	buffer := NewRingBuffer[Item](ratelimit.CategoryError, 8, OverflowPolicyDropOldest, 1, 0, recorder)
+	scheduler := NewScheduler(map[ratelimit.Category]Buffer[Item]{ratelimit.CategoryError: buffer}, transport, &protocol.Dsn{}, nil, nil)
+	scheduler.Start()
+
+	const goroutines, perGoroutine = 8, 500
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Go(func() {
+			for range perGoroutine {
+				scheduler.Add(&testTelemetryItem{})
+			}
+		})
+	}
+	wg.Wait()
+	scheduler.Stop(testutils.FlushTimeout())
+
+	dropped := recorder.TakeReport()
+	if dropped == nil {
+		t.Fatal("the buffer should overflow")
+	}
+	want := []report.DiscardedEvent{{
+		Reason:   report.ReasonBufferOverflow,
+		Category: ratelimit.CategoryError,
+		Quantity: goroutines*perGoroutine - uint64(len(transport.GetSentEnvelopes())),
+	}}
+	if diff := cmp.Diff(want, dropped.DiscardedEvents); diff != "" {
+		t.Errorf("discarded events (-want +got):\n%s", diff)
 	}
 }

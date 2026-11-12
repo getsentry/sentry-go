@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/report"
 )
 
@@ -523,8 +522,7 @@ func (s *Span) doFinish() {
 
 	if !s.Sampled.Bool() {
 		children := s.recorder.children()
-		client.reportRecorder.RecordOne(report.ReasonSampleRate, ratelimit.CategoryTransaction)
-		client.reportRecorder.Record(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
+		transactionDiscardCounts(uint64(len(children))).Record(client.reports, report.ReasonSampleRate)
 		return
 	}
 	event := s.toEvent()
