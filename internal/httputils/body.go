@@ -48,10 +48,7 @@ func (b *LimitedBuffer) Write(p []byte) (n int, err error) {
 	if b.overflow {
 		return originalLen, nil
 	}
-	left := b.Capacity - b.Len()
-	if left < 0 {
-		left = 0
-	}
+	left := max(b.Capacity-b.Len(), 0)
 	if len(p) > left {
 		b.overflow = true
 		p = p[:left]

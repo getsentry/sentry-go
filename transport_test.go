@@ -102,9 +102,9 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 			{"nil header", &protocol.Envelope{Items: testEnvelope(protocol.EnvelopeItemTypeEvent).Items}, ErrInvalidEnvelope},
 		}
 
-		var count int64
+		var count atomic.Int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			atomic.AddInt64(&count, 1)
+			count.Add(1)
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -126,15 +126,15 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 		}
 
 		expectedCount := int64(len(tests) - 1) // one invalid envelope
-		if sent := atomic.LoadInt64(&count); sent != expectedCount {
+		if sent := count.Load(); sent != expectedCount {
 			t.Errorf("expected %d sent, got %d", expectedCount, sent)
 		}
 	})
 
 	t.Run("server error", func(t *testing.T) {
-		var requestCount int64
+		var requestCount atomic.Int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			atomic.AddInt64(&requestCount, 1)
+			requestCount.Add(1)
 			status := http.StatusInternalServerError
 			w.WriteHeader(status)
 		}))
@@ -154,15 +154,15 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 			t.Fatal("Flush timed out")
 		}
 
-		if sent := atomic.LoadInt64(&requestCount); sent != 1 {
+		if sent := requestCount.Load(); sent != 1 {
 			t.Errorf("expected 1 request, got %d", sent)
 		}
 	})
 
 	t.Run("rate limiting by category", func(t *testing.T) {
-		var count int64
+		var count atomic.Int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			if atomic.AddInt64(&count, 1) == 1 {
+			if count.Add(1) == 1 {
 				w.Header().Add("X-Sentry-Rate-Limits", "60:error,60:transaction")
 				w.WriteHeader(http.StatusTooManyRequests)
 			} else {
@@ -192,7 +192,7 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 			t.Error("monitor category should not be rate limited")
 		}
 
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 		}
 		if !testutils.FlushWithTimeout(transport, testutils.FlushTimeout()) {
@@ -258,9 +258,9 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 	})
 
 	t.Run("FlushMultipleTimes", func(t *testing.T) {
-		var count int64
+		var count atomic.Int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			atomic.AddInt64(&count, 1)
+			count.Add(1)
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -278,14 +278,14 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 			t.Fatal("Flush timed out")
 		}
 
-		initial := atomic.LoadInt64(&count)
-		for i := 0; i < 10; i++ {
+		initial := count.Load()
+		for i := range 10 {
 			if !testutils.FlushWithTimeout(transport, testutils.FlushTimeout()) {
 				t.Fatalf("Flush %d timed out", i)
 			}
 		}
 
-		if got := atomic.LoadInt64(&count); got != initial {
+		if got := count.Load(); got != initial {
 			t.Errorf("expected %d requests after multiple flushes, got %d", initial, got)
 		}
 	})
@@ -703,7 +703,7 @@ func TestKeepAlive(t *testing.T) {
 			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 			checkReuse(false)
 
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 				checkReuse(true)
 			}
@@ -713,7 +713,7 @@ func TestKeepAlive(t *testing.T) {
 			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 			checkReuse(true)
 
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 				checkReuse(false)
 			}
@@ -752,14 +752,12 @@ func TestConcurrentAccess(t *testing.T) {
 			}
 
 			var wg sync.WaitGroup
-			for i := 0; i < 10; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					for j := 0; j < 5; j++ {
+			for range 10 {
+				wg.Go(func() {
+					for range 5 {
 						_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 					}
-				}()
+				})
 			}
 			wg.Wait()
 
@@ -773,7 +771,7 @@ func TestTransportConfiguration(t *testing.T) {
 		name     string
 		options  ClientOptions
 		async    bool
-		validate func(*testing.T, interface{})
+		validate func(*testing.T, any)
 	}{
 		{
 			name: "HTTPProxy",
@@ -782,7 +780,7 @@ func TestTransportConfiguration(t *testing.T) {
 				HTTPProxy: "http://proxy:8080",
 			},
 			async: true,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPTransport)
 				httpTransport, ok := transport.transport.(*http.Transport)
 				if !ok {
@@ -809,7 +807,7 @@ func TestTransportConfiguration(t *testing.T) {
 				HTTPSProxy: "https://secure-proxy:8443",
 			},
 			async: true,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPTransport)
 				httpTransport, ok := transport.transport.(*http.Transport)
 				if !ok {
@@ -834,7 +832,7 @@ func TestTransportConfiguration(t *testing.T) {
 				HTTPProxy:     "http://proxy:8080",
 			},
 			async: true,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPTransport)
 				if transport.transport.(*http.Transport).Proxy != nil {
 					t.Error("custom transport should not have proxy from options")
@@ -848,7 +846,7 @@ func TestTransportConfiguration(t *testing.T) {
 				CaCerts: x509.NewCertPool(),
 			},
 			async: false,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPSyncTransport)
 				httpTransport, ok := transport.transport.(*http.Transport)
 				if !ok {
@@ -868,7 +866,7 @@ func TestTransportConfiguration(t *testing.T) {
 				Dsn: "https://key@sentry.io/123",
 			},
 			async: true,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPTransport)
 				if transport.BufferSize != defaultBufferSize {
 					t.Errorf("BufferSize = %d, want %d", transport.BufferSize, defaultBufferSize)
@@ -884,7 +882,7 @@ func TestTransportConfiguration(t *testing.T) {
 				Dsn: "https://key@sentry.io/123",
 			},
 			async: false,
-			validate: func(t *testing.T, tr interface{}) {
+			validate: func(t *testing.T, tr any) {
 				transport := tr.(*HTTPSyncTransport)
 				if transport.Timeout != defaultTimeout {
 					t.Errorf("Timeout = %v, want %v", transport.Timeout, defaultTimeout)

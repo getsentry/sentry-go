@@ -76,14 +76,10 @@ func (m *sentryMeter) emit(ctx context.Context, metricType MetricType, name stri
 
 	m.mu.RLock()
 	attrs := mergeScopeAttributes(client, scope, len(m.attributes)+len(options.attributes))
-	for k, v := range m.attributes {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, m.attributes)
 	m.mu.RUnlock()
 
-	for k, v := range options.attributes {
-		attrs[k] = v
-	}
+	maps.Copy(attrs, options.attributes)
 
 	metric := &Metric{
 		Timestamp:  time.Now(),

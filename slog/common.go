@@ -134,8 +134,8 @@ func appendRecordAttrsToAttrs(attrs []slog.Attr, groups []string, record *slog.R
 	output = append(output, attrs...)
 
 	record.Attrs(func(attr slog.Attr) bool {
-		for i := len(groups) - 1; i >= 0; i-- {
-			attr = slog.Group(groups[i], attr)
+		for _, group := range slices.Backward(groups) {
+			attr = slog.Group(group, attr)
 		}
 		output = append(output, attr)
 		return true

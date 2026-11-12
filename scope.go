@@ -208,9 +208,7 @@ func (scope *Scope) SetTags(tags map[string]string) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	for k, v := range tags {
-		scope.tags[k] = v
-	}
+	maps.Copy(scope.tags, tags)
 }
 
 // RemoveTag removes a tag from the current scope.
@@ -234,9 +232,7 @@ func (scope *Scope) SetContexts(contexts map[string]Context) {
 	scope.mu.Lock()
 	defer scope.mu.Unlock()
 
-	for k, v := range contexts {
-		scope.contexts[k] = v
-	}
+	maps.Copy(scope.contexts, contexts)
 }
 
 // RemoveContext removes a context from the current scope.

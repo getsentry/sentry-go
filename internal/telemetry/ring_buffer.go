@@ -146,10 +146,7 @@ func (b *RingBuffer[T]) PollBatch(maxItems int) []T {
 		return nil
 	}
 
-	itemCount := maxItems
-	if itemCount > b.size {
-		itemCount = b.size
-	}
+	itemCount := min(maxItems, b.size)
 
 	result := make([]T, itemCount)
 	var zero T
@@ -338,10 +335,7 @@ func (b *RingBuffer[T]) PollIfReady() []T {
 		return nil
 	}
 
-	itemCount := b.batchSize
-	if itemCount > b.size {
-		itemCount = b.size
-	}
+	itemCount := min(b.batchSize, b.size)
 
 	result := make([]T, itemCount)
 	var zero T

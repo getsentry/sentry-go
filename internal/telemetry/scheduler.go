@@ -67,7 +67,7 @@ func NewScheduler(
 		}
 
 		if hasBuffers {
-			for i := 0; i < weight; i++ {
+			for range weight {
 				currentCycle = append(currentCycle, priority)
 			}
 		}
@@ -188,9 +188,7 @@ func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
 func (s *Scheduler) run() {
 	defer s.processingWg.Done()
 
-	s.processingWg.Add(1)
-	go func() {
-		defer s.processingWg.Done()
+	s.processingWg.Go(func() {
 		ticker := time.NewTicker(100 * time.Millisecond)
 		reportTicker := time.NewTicker(clientReportInterval)
 		defer ticker.Stop()
@@ -212,7 +210,7 @@ func (s *Scheduler) run() {
 				return
 			}
 		}
-	}()
+	})
 
 	for {
 		s.mu.Lock()

@@ -20,7 +20,7 @@ var (
 
 func TestMarshalJSON(t *testing.T) {
 	tests := []struct {
-		in  interface{}
+		in  any
 		out string
 	}{
 		// TODO: eliminate empty struct fields from serialization of empty event.
@@ -32,7 +32,6 @@ func TestMarshalJSON(t *testing.T) {
 		{&Breadcrumb{}, `{}`},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run("", func(t *testing.T) {
 			want := tt.out
 			b, err := json.Marshal(tt.in)
@@ -65,7 +64,6 @@ func TestErrorEventMarshalJSON(t *testing.T) {
 	enc := json.NewEncoder(&buf)
 	enc.SetIndent("", "  ")
 	for i, tt := range tests {
-		i, tt := i, tt
 		t.Run("", func(t *testing.T) {
 			defer buf.Reset()
 			err := enc.Encode(tt)
@@ -105,7 +103,6 @@ func TestTransactionEventMarshalJSON(t *testing.T) {
 	enc := json.NewEncoder(&buf)
 	enc.SetIndent("", "  ")
 	for i, tt := range tests {
-		i, tt := i, tt
 		t.Run("", func(t *testing.T) {
 			defer buf.Reset()
 			err := enc.Encode(tt)
@@ -208,7 +205,6 @@ func TestCheckInEventMarshalJSON(t *testing.T) {
 	enc := json.NewEncoder(&buf)
 	enc.SetIndent("", "  ")
 	for i, tt := range tests {
-		i, tt := i, tt
 		t.Run("", func(t *testing.T) {
 			defer buf.Reset()
 			err := enc.Encode(tt)
@@ -235,7 +231,7 @@ func TestBreadcrumbMarshalJSON(t *testing.T) {
 			Type:     "default",
 			Category: "sentryhttp",
 			Message:  "breadcrumb message",
-			Data: map[string]interface{}{
+			Data: map[string]any{
 				"key": "value",
 			},
 			Level:     LevelInfo,
@@ -243,7 +239,7 @@ func TestBreadcrumbMarshalJSON(t *testing.T) {
 		},
 		// timestamp not in UTC
 		{
-			Data: map[string]interface{}{
+			Data: map[string]any{
 				"key": "value",
 			},
 			Timestamp: goReleaseDate.In(utcMinusTwo),
@@ -257,7 +253,6 @@ func TestBreadcrumbMarshalJSON(t *testing.T) {
 	enc := json.NewEncoder(&buf)
 	enc.SetIndent("", "  ")
 	for i, tt := range tests {
-		i, tt := i, tt
 		t.Run("", func(t *testing.T) {
 			defer buf.Reset()
 			err := enc.Encode(tt)

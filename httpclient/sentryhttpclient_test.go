@@ -90,7 +90,7 @@ func TestIntegration(t *testing.T) {
 			WantStatus:         200,
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"http.request.method":       string("GET"),
 					"http.response.status_code": int(200),
 					"http.response.body.size":   int64(0),
@@ -111,7 +111,7 @@ func TestIntegration(t *testing.T) {
 			WantStatus:         200,
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"http.query":                string("?baz=123"),
 					"http.request.method":       string("GET"),
 					"http.response.status_code": int(200),
@@ -133,7 +133,7 @@ func TestIntegration(t *testing.T) {
 			WantStatus:         400,
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"http.query":                string("?bar=123&abc=def"),
 					"http.request.method":       string("HEAD"),
 					"http.response.status_code": int(400),
@@ -154,7 +154,7 @@ func TestIntegration(t *testing.T) {
 			WantStatus:         200,
 			WantResponseLength: 1024,
 			WantSpan: &sentry.Span{ //nolint:gosec // G101: not real credentials
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"http.request.method":               string("POST"),
 					"http.request.header.authorization": string("[Filtered]"),
 					"http.response.status_code":         int(200),
@@ -174,7 +174,7 @@ func TestIntegration(t *testing.T) {
 			RequestURL:    "https://example.com",
 			WantError:     true,
 			WantSpan: &sentry.Span{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"http.request.method": string("POST"),
 					"server.address":      string("example.com"),
 					"server.port":         string(""),
@@ -191,7 +191,7 @@ func TestIntegration(t *testing.T) {
 			RequestURL:    "https://example.com",
 			WantError:     false,
 			WantSpan: &sentry.Span{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"http.request.method":       string("OPTIONS"),
 					"http.response.status_code": int(0),
 					"http.response.body.size":   int64(0),
@@ -212,7 +212,7 @@ func TestIntegration(t *testing.T) {
 			WantStatus:         200,
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"http.query":                string("?baz=123"),
 					"http.request.method":       string("GET"),
 					"http.response.status_code": int(200),
@@ -234,7 +234,7 @@ func TestIntegration(t *testing.T) {
 			WantStatus:         200,
 			WantResponseLength: 0,
 			WantSpan: &sentry.Span{
-				Data: map[string]interface{}{
+				Data: map[string]any{
 					"http.query":                "?baz=123",
 					"http.request.method":       "GET",
 					"http.response.status_code": 200,
@@ -376,13 +376,13 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 	tests := []struct {
 		name           string
 		dataCollection *sentry.DataCollection
-		wantData       map[string]interface{}
+		wantData       map[string]any
 		wantAbsent     []string
 	}{
 		{
 			name:           "default collects and filters headers and bodies",
 			dataCollection: &sentry.DataCollection{},
-			wantData: map[string]interface{}{
+			wantData: map[string]any{
 				"http.request.header.authorization": "[Filtered]",
 				"http.request.header.cookie":        "session=[Filtered]; theme=dark",
 				"http.request.header.x-custom":      "custom-value",
@@ -397,7 +397,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 			dataCollection: &sentry.DataCollection{
 				HTTPBodies: []sentry.BodyType{},
 			},
-			wantData: map[string]interface{}{
+			wantData: map[string]any{
 				"http.request.header.cookie":        "session=[Filtered]; theme=dark",
 				"http.request.header.x-custom":      "custom-value",
 				"http.response.header.content-type": "application/json",
@@ -413,7 +413,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 					Response: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
 				},
 			},
-			wantData: map[string]interface{}{
+			wantData: map[string]any{
 				"http.request.header.authorization": "[Filtered]",
 				"http.request.header.cookie":        "session=[Filtered]; theme=dark",
 				"http.request.header.x-custom":      "custom-value",
@@ -656,7 +656,7 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 
 	gotSpan := got[0]
 	wantSpan := &sentry.Span{
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"http.request.method":                 string("POST"),
 			"http.response.status_code":           int(200),
 			"http.response.body.size":             int64(48),
@@ -809,7 +809,7 @@ func TestRoundTripDoesNotMutateCallerRequest(t *testing.T) {
 				capture := &captureRoundTripper{}
 				wrapped := sentryhttpclient.NewSentryRoundTripper(capture)
 
-				for i := 0; i < 3; i++ {
+				for range 3 {
 					response, err := wrapped.RoundTrip(request)
 					require.NoError(t, err)
 					response.Body.Close()
@@ -896,13 +896,13 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 		name           string
 		dataCollection *sentry.DataCollection
 		requestURL     string
-		wantData       map[string]interface{}
+		wantData       map[string]any
 		wantDesc       string
 	}{
 		{
 			name:       "filters sensitive query values and drops the fragment",
 			requestURL: "https://example.com/foo?page=1&token=secret#state=1&access_token=secret",
-			wantData: map[string]interface{}{
+			wantData: map[string]any{
 				"http.query":                          "?page=1&token=[Filtered]",
 				"http.request.method":                 "GET",
 				"http.response.status_code":           200,
@@ -919,7 +919,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 				URLQueryParams: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
 			},
 			requestURL: "https://example.com/foo?page=1&token=secret#readme",
-			wantData: map[string]interface{}{
+			wantData: map[string]any{
 				"http.request.method":                 "GET",
 				"http.response.status_code":           200,
 				"http.response.body.size":             int64(0),

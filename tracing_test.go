@@ -60,7 +60,6 @@ func TestSpanStatusMarshalJSON(t *testing.T) {
 		SpanStatusCanceled:         `"cancelled"`,
 	}
 	for s, want := range tests {
-		s, want := s, want
 		t.Run(fmt.Sprintf("SpanStatus(%d)", s), func(t *testing.T) {
 			b, err := json.Marshal(s)
 			if err != nil {
@@ -79,7 +78,7 @@ func TestTraceContextMarshalJSON(t *testing.T) {
 	testMarshalJSONOmitEmptyParentSpanID(t, tc)
 }
 
-func testMarshalJSONOmitEmptyParentSpanID(t *testing.T, v interface{}) {
+func testMarshalJSONOmitEmptyParentSpanID(t *testing.T, v any) {
 	t.Helper()
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -113,7 +112,7 @@ func TestStartSpan(t *testing.T) {
 	sampled := SampledTrue
 	startTime := time.Now()
 	endTime := startTime.Add(3 * time.Second)
-	data := map[string]interface{}{
+	data := map[string]any{
 		"k": "v",
 	}
 	span := StartSpan(ctx, op,
@@ -230,7 +229,7 @@ func TestStartChild(t *testing.T) {
 			"Release", "Sdk", "ServerName", "Timestamp", "StartTime",
 		),
 		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
-		cmpopts.IgnoreMapEntries(func(k string, _ interface{}) bool {
+		cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
 			return k != "trace"
 		}),
 		cmpopts.IgnoreFields(Span{},
@@ -256,7 +255,7 @@ func TestStartTransaction(t *testing.T) {
 	sampled := SampledTrue
 	startTime := time.Now()
 	endTime := startTime.Add(3 * time.Second)
-	data := map[string]interface{}{
+	data := map[string]any{
 		"k": "v",
 	}
 	transaction := StartTransaction(ctx,
@@ -1097,7 +1096,6 @@ func TestParseTraceParentContext(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			traceParentContext, valid := ParseTraceParentContext([]byte(tt.sentryTrace))
 
@@ -1228,7 +1226,7 @@ func TestConcurrentContextAccess(_ *testing.T) {
 	c := make(chan *Span)
 
 	// Start writers
-	for i := 0; i < writersNum; i++ {
+	for range writersNum {
 		go func() {
 			transaction := StartTransaction(ctx, "test")
 			c <- transaction
@@ -1242,7 +1240,6 @@ func TestConcurrentContextAccess(_ *testing.T) {
 	// Start readers
 	go func() {
 		for transaction := range c {
-			transaction := transaction
 			go func() {
 				defer wg.Done()
 				// While finalizing every transaction, scope.Contexts and Event.Contexts fields
@@ -1279,7 +1276,6 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &MockTransport{}
 			ctx := NewTestContext(ClientOptions{
