@@ -23,7 +23,7 @@ Review only the changed code. Report a finding only if you can point to the exac
 
 ## Go rules
 
-5. **Context propagation** (high). An integration that drops the request's hub, scope or span (`context.Background()` or the global hub where a request context exists), or `sentry-trace` / `baggage` that disagree with the span's sampling decision.
+5. **Context propagation** (high). An integration must fork the scope from the incoming request and pass `context.Context` on, calls should reuse `context.Context`, logs and metrics should be linked using `WithCtx` and `sentry-trace` / `baggage` should agree with the span's sampling decision.
 6. **Flush deadline** (high). `Flush` / `FlushWithContext` must bound draining and sending, not only the final transport flush, and return false once the deadline passes. `Close` dropping queued items and rejecting late ones is intended; leaked goroutines are not.
-7. **Client reports** (medium). Dropped items (rate limit, sampling, `BeforeSend`) that aren't recorded, or are recorded under the wrong category. Queue-overflow outcomes are recorded in the scheduler, not the transport, and items rejected after `Close` need none.
-8. **Event types** (medium). Feedback, check-ins, logs or metrics going through error sampling or `BeforeSend`, or losing their type.
+7. **Client reports** (medium). Dropped items (rate limit, sampling, `BeforeSend`) that aren't recorded, or are recorded under the wrong category.
+8. **Event types** (medium). Check-ins, logs or metrics going through error sampling or `BeforeSend`, or losing their type.
