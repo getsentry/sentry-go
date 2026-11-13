@@ -1,6 +1,5 @@
 {
   "header": {
-    "event_id": "b5668da6939f49eaa884e1564d8f98fc",
     "sent_at": "2000-01-01T01:00:00+01:00",
     "dsn": "https://whatever@sentry.io/1337",
     "sdk": {
@@ -19,23 +18,16 @@
           "version": "1.0.0-alpha.1"
         }
       ]
-    },
-    "trace": {
-      "environment": "test",
-      "public_key": "whatever",
-      "release": "app@1.0.0",
-      "sample_rate": "1",
-      "trace_id": "a2cda40f16c88c80bd2e049198cade81"
     }
   },
   "items": [
     {
       "header": {
         "type": "check_in",
-        "length": 267
+        "length": 336
       },
       "payload": {
-        "check_in_id": "36d2f6aef357415ca01f266df04272fd",
+        "check_in_id": "9bd93fc18ffb45339c941f6b8ea2e2fc",
         "monitor_slug": "nightly",
         "status": "ok",
         "duration": 2,
@@ -51,17 +43,13 @@
           "timezone": "UTC",
           "failure_issue_threshold": 2,
           "recovery_threshold": 1
+        },
+        "contexts": {
+          "trace": {
+            "trace_id": "90ae552dc098fa378796c632956f9f38"
+          }
         }
       }
-    },
-    {
-      "header": {
-        "type": "attachment",
-        "length": 8,
-        "filename": "log.txt",
-        "content_type": "text/plain"
-      },
-      "payload": "attached"
     }
   ]
 }

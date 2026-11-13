@@ -1,6 +1,12 @@
 package sentry
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+
+	"github.com/getsentry/sentry-go/internal/ratelimit"
+	"github.com/getsentry/sentry-go/protocol"
+)
 
 type CheckInStatus string
 
@@ -104,9 +110,9 @@ type CheckIn struct {
 	Duration time.Duration `json:"duration,omitempty"`
 }
 
-// serializedCheckIn is used by checkInMarshalJSON method on Event struct.
+// checkInItem is a check-in as it is sent.
 // See https://develop.sentry.dev/sdk/check-ins/
-type serializedCheckIn struct {
+type checkInItem struct {
 	// Check-In ID (unique and client generated).
 	CheckInID string `json:"check_in_id"`
 	// The distinct slug of the monitor.
@@ -114,8 +120,23 @@ type serializedCheckIn struct {
 	// The status of the check-in.
 	Status CheckInStatus `json:"status"`
 	// The duration of the check-in in seconds. Will only take effect if the status is ok or error.
-	Duration      float64        `json:"duration,omitempty"`
-	Release       string         `json:"release,omitempty"`
-	Environment   string         `json:"environment,omitempty"`
-	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
+	Duration      float64            `json:"duration,omitempty"`
+	Release       string             `json:"release,omitempty"`
+	Environment   string             `json:"environment,omitempty"`
+	MonitorConfig *MonitorConfig     `json:"monitor_config,omitempty"`
+	Contexts      map[string]Context `json:"contexts,omitempty"`
+}
+
+func (c *checkInItem) GetCategory() ratelimit.Category              { return ratelimit.CategoryMonitor }
+func (c *checkInItem) GetEventID() string                           { return "" }
+func (c *checkInItem) GetSdkInfo() *protocol.SdkInfo                { return nil }
+func (c *checkInItem) GetDynamicSamplingContext() map[string]string { return nil }
+func (c *checkInItem) MakeSerializationSafe()                       {}
+
+func (c *checkInItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+	payload, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	return protocol.NewEnvelope(header, protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, payload)), nil
 }

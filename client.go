@@ -585,21 +585,35 @@ func (client *Client) CaptureException(ctx context.Context, exception error, opt
 }
 
 // CaptureCheckIn captures a check-in using the scope carried by ctx.
-func (client *Client) CaptureCheckIn(
-	ctx context.Context,
-	checkIn *CheckIn,
-	monitorConfig *MonitorConfig,
-	options ...CaptureOption,
-) *EventID {
-	if !client.IsEnabled() {
+func (client *Client) CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+	if !client.IsEnabled() || checkIn == nil {
 		return nil
 	}
-	event := client.eventFromCheckIn(checkIn, monitorConfig)
-	if event == nil {
-		return nil
+	id := checkIn.ID
+	if id == "" {
+		id = EventID(uuid())
 	}
-	id := event.CheckIn.ID
-	if client.capture(ctx, event, resolveCaptureOptions(ctx, options...)) == nil {
+	item := &checkInItem{
+		CheckInID:   string(id),
+		MonitorSlug: checkIn.MonitorSlug,
+		Status:      checkIn.Status,
+		Duration:    checkIn.Duration.Seconds(),
+		Release:     client.options.Release,
+		Environment: client.options.Environment,
+	}
+	if monitorConfig != nil {
+		config := *monitorConfig
+		item.MonitorConfig = &config
+	}
+	scope := ScopeFromContext(ctx)
+	if scope == GlobalScope() {
+		scope = nil
+	}
+	traceID, _ := resolveTrace(scope, client, ctx)
+	item.Contexts = map[string]Context{traceContextKey: {traceIDContextKey: traceID}}
+
+	if !client.telemetryProcessor.Add(ctx, item) {
+		debuglog.Println("Check-in dropped: telemetry buffer full or unavailable")
 		return nil
 	}
 	return &id
@@ -764,32 +778,6 @@ func (client *Client) eventFromException(exception error) *Event {
 	return event
 }
 
-func (client *Client) eventFromCheckIn(checkIn *CheckIn, monitorConfig *MonitorConfig) *Event {
-	if checkIn == nil {
-		return nil
-	}
-
-	event := NewEvent()
-	event.Type = checkInType
-
-	var checkInID EventID
-	if checkIn.ID == "" {
-		checkInID = EventID(uuid())
-	} else {
-		checkInID = checkIn.ID
-	}
-
-	event.CheckIn = &CheckIn{
-		ID:          checkInID,
-		MonitorSlug: checkIn.MonitorSlug,
-		Status:      checkIn.Status,
-		Duration:    checkIn.Duration,
-	}
-	event.MonitorConfig = monitorConfig
-
-	return event
-}
-
 func (client *Client) SetSDKIdentifier(identifier string) {
 	if !client.IsEnabled() {
 		return
@@ -810,8 +798,8 @@ func (client *Client) GetSDKIdentifier() string {
 func (client *Client) capture(ctx context.Context, event *Event, opts captureOptions) *EventID {
 	// Transactions are sampled by options.TracesSampleRate or
 	// options.TracesSampler when they are started. Other events
-	// (errors, messages) are sampled here. Does not apply to check-ins.
-	if event.Type != transactionType && event.Type != checkInType && !sample(client.options.SampleRate) {
+	// (errors, messages) are sampled here.
+	if event.Type != transactionType && !sample(client.options.SampleRate) {
 		debuglog.Println("Event dropped due to SampleRate hit.")
 		event.DiscardCounts().Record(client.reports, report.ReasonSampleRate)
 		return nil
@@ -839,7 +827,6 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 				client.reports.Record(report.ReasonBeforeSend, ratelimit.CategorySpan, uint64(droppedSpans))
 			}
 		}
-	case checkInType: // not a default case, since we shouldn't apply BeforeSend on check-in events
 	default:
 		if client.options.BeforeSend != nil {
 			counts := event.DiscardCounts()
@@ -856,7 +843,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 		return nil
 	}
 
-	if scope != nil && event.Type != transactionType && event.Type != checkInType {
+	if scope != nil && event.Type != transactionType {
 		scope.setLastEventID(event.EventID)
 	}
 	return &event.EventID

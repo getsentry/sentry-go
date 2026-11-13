@@ -75,7 +75,7 @@ func TestAddFunc(t *testing.T) {
 	c.Entry(id).Job.Run()
 
 	f.Flush()
-	events := f.Events()
+	events := f.Transport.CheckIns()
 	require.Len(t, events, 2)
 	assert.Equal(t, sentry.CheckInStatusInProgress, events[0].CheckIn.Status)
 	assert.Equal(t, sentry.CrontabSchedule("0 3 * * *"), events[0].MonitorConfig.Schedule)
