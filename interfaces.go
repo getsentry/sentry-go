@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -361,7 +363,7 @@ type Event struct {
 	Tags        map[string]string  `json:"tags,omitempty"`
 	Timestamp   time.Time          `json:"timestamp,omitzero"`
 	Transaction string             `json:"transaction,omitempty"`
-	User        User               `json:"user"`
+	User        User               `json:"user,omitzero"`
 	Logger      string             `json:"logger,omitempty"`
 	Modules     map[string]string  `json:"modules,omitempty"`
 	Request     *Request           `json:"request,omitempty"`
@@ -379,14 +381,6 @@ type Event struct {
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
-
-	// Pre-serialized copies of mutable fields, set by MakeSerializationSafe.
-	serializedTags        json.RawMessage
-	serializedContexts    json.RawMessage
-	serializedBreadcrumbs json.RawMessage
-	serializedException   json.RawMessage
-	serializedUser        json.RawMessage
-	serializationSafe     bool
 }
 
 // SetException appends the unwrapped errors to the event's exception list.
@@ -407,73 +401,47 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 	e.Exception = exceptions
 }
 
-// safeMarshal wraps json.Marshal with a recover guard.
-//
-// we shouldn't panic since we already pre serialized all user mutable fields, but using this just to be safe.
-func (e *Event) safeMarshal() (b []byte, err error) {
+// eventItem is an event as handed to the telemetry processor.
+type eventItem Event
+
+func (e *eventItem) GetCategory() ratelimit.Category { return (*Event)(e).toCategory() }
+
+// ToEnvelope encodes the event and its attachments.
+func (e *eventItem) ToEnvelope(header *protocol.EnvelopeHeader) (envelope *protocol.Envelope, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			b = nil
-			err = fmt.Errorf("panic during event marshaling: %v", r)
+			envelope, err = nil, fmt.Errorf("panic during event marshaling: %v", r)
 		}
 	}()
-	return json.Marshal(e)
-}
-
-// ToEnvelopeItem converts the Event to a Sentry envelope item.
-func (e *Event) ToEnvelopeItem() (item *protocol.EnvelopeItem, err error) {
-	eventBody, err := e.safeMarshal()
+	payload, err := json.Marshal((*Event)(e))
 	if err != nil {
 		return nil, fmt.Errorf("could not encode event as JSON, skipping delivery: %w", err)
 	}
 
-	switch e.Type {
-	case transactionType:
-		item = protocol.NewTransactionItem(eventBody)
-	default:
-		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
+	itemType := protocol.EnvelopeItemTypeEvent
+	if e.Type == transactionType {
+		itemType = protocol.EnvelopeItemTypeTransaction
 	}
-
-	return item, nil
-}
-
-// ToEnvelope converts the Event to a Sentry envelope.
-func (e *Event) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
-	item, err := e.ToEnvelopeItem()
-	if err != nil {
-		return nil, err
-	}
-
-	envelope := protocol.NewEnvelope(header, item)
+	envelope = protocol.NewEnvelope(header, protocol.NewEnvelopeItem(itemType, payload))
 	for _, attachment := range e.Attachments {
-		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)
-		envelope.AddItem(attachmentItem)
+		envelope.AddItem(protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload))
 	}
 	return envelope, nil
 }
 
-// GetCategory returns the rate limit category for this event.
-func (e *Event) GetCategory() ratelimit.Category {
-	return e.toCategory()
-}
-
 // GetEventID returns the event ID.
-func (e *Event) GetEventID() string {
+func (e *eventItem) GetEventID() string {
 	return string(e.EventID)
 }
 
 // GetSdkInfo returns SDK information for the envelope header.
-func (e *Event) GetSdkInfo() *protocol.SdkInfo {
+func (e *eventItem) GetSdkInfo() *protocol.SdkInfo {
 	return &e.Sdk
 }
 
 // GetDynamicSamplingContext returns trace context for the envelope header.
-func (e *Event) GetDynamicSamplingContext() map[string]string {
-	trace := make(map[string]string)
-	if dsc := e.sdkMetaData.dsc; dsc.HasEntries() {
-		maps.Copy(trace, dsc.Entries)
-	}
-	return trace
+func (e *eventItem) GetDynamicSamplingContext() map[string]string {
+	return e.sdkMetaData.dsc.Entries
 }
 
 // TODO: Event.Contexts map[string]interface{} => map[string]EventContext,
@@ -481,95 +449,6 @@ func (e *Event) GetDynamicSamplingContext() map[string]string {
 // For example, the TraceContext must be stored as *TraceContext to pick up the
 // MarshalJSON method (and avoid copying).
 // type EventContext interface{ EventContext() }
-
-// MarshalJSON converts the Event struct to JSON.
-func (e *Event) MarshalJSON() ([]byte, error) {
-	return e.defaultMarshalJSON()
-}
-
-func (e *Event) defaultMarshalJSON() ([]byte, error) {
-	// event aliases Event to allow calling json.Marshal without an infinite
-	// loop. It preserves all fields while none of the attached methods.
-	type event Event
-
-	// Use pre-serialized bytes for fields that contain user mutable data.
-	if e.hasPreSerializedFields() {
-		return e.preSerializedMarshalJSON()
-	}
-
-	if e.Type == transactionType {
-		return json.Marshal(struct{ *event }{(*event)(e)})
-	}
-	// errorEvent is like Event with shadowed fields for customizing JSON
-	// marshaling.
-	type errorEvent struct {
-		*event
-
-		// The fields below are not part of error events and only make sense to
-		// be sent for transactions. They shadow the respective fields in Event
-		// and are meant to remain nil, triggering the omitempty behavior.
-
-		Type            json.RawMessage `json:"type,omitempty"`
-		StartTime       json.RawMessage `json:"start_timestamp,omitempty"`
-		Spans           json.RawMessage `json:"spans,omitempty"`
-		TransactionInfo json.RawMessage `json:"transaction_info,omitempty"`
-	}
-
-	x := errorEvent{event: (*event)(e)}
-	return json.Marshal(x)
-}
-
-func (e *Event) hasPreSerializedFields() bool {
-	return e.serializationSafe
-}
-
-// preSerializedMarshalJSON handles marshaling when MakeSerializationSafe has
-// pre-serialized mutable fields. Shadow structs ensure the json.RawMessage
-// bytes are emitted directly, overriding the original fields.
-func (e *Event) preSerializedMarshalJSON() ([]byte, error) {
-	type event Event
-
-	if e.Type == transactionType {
-		type safeTransaction struct {
-			*event
-			Tags        json.RawMessage `json:"tags,omitempty"`
-			Contexts    json.RawMessage `json:"contexts,omitempty"`
-			Breadcrumbs json.RawMessage `json:"breadcrumbs,omitempty"`
-			Exception   json.RawMessage `json:"exception,omitempty"`
-			User        json.RawMessage `json:"user,omitempty"`
-		}
-		return json.Marshal(safeTransaction{
-			event:       (*event)(e),
-			Tags:        e.serializedTags,
-			Contexts:    e.serializedContexts,
-			Breadcrumbs: e.serializedBreadcrumbs,
-			Exception:   e.serializedException,
-			User:        e.serializedUser,
-		})
-	}
-
-	// Error event: also shadow transaction-only fields to exclude them.
-	type safeErrorEvent struct {
-		*event
-		Tags            json.RawMessage `json:"tags,omitempty"`
-		Contexts        json.RawMessage `json:"contexts,omitempty"`
-		Breadcrumbs     json.RawMessage `json:"breadcrumbs,omitempty"`
-		Exception       json.RawMessage `json:"exception,omitempty"`
-		User            json.RawMessage `json:"user,omitempty"`
-		Type            json.RawMessage `json:"type,omitempty"`
-		StartTime       json.RawMessage `json:"start_timestamp,omitempty"`
-		Spans           json.RawMessage `json:"spans,omitempty"`
-		TransactionInfo json.RawMessage `json:"transaction_info,omitempty"`
-	}
-	return json.Marshal(safeErrorEvent{
-		event:       (*event)(e),
-		Tags:        e.serializedTags,
-		Contexts:    e.serializedContexts,
-		Breadcrumbs: e.serializedBreadcrumbs,
-		Exception:   e.serializedException,
-		User:        e.serializedUser,
-	})
-}
 
 func (e *Event) toCategory() ratelimit.Category {
 	switch e.Type {
@@ -624,9 +503,6 @@ type Log struct {
 // logItem is a Log as handed to the telemetry processor.
 type logItem Log
 
-// MakeSerializationSafe is a no-op for Log, all fields are passed from the safe attribute API.
-func (l *logItem) MakeSerializationSafe() {}
-
 func (l *logItem) GetCategory() ratelimit.Category { return ratelimit.CategoryLog }
 
 type MetricType string
@@ -651,9 +527,6 @@ type Metric struct {
 
 // metricItem is a Metric as handed to the telemetry processor.
 type metricItem Metric
-
-// MakeSerializationSafe is a no-op for Metric, all fields are passed from the safe attribute API.
-func (m *metricItem) MakeSerializationSafe() {}
 
 func (m *metricItem) GetCategory() ratelimit.Category { return ratelimit.CategoryTraceMetric }
 
@@ -709,42 +582,173 @@ func (v MetricValue) MarshalJSON() ([]byte, error) {
 	return json.Marshal(v.value.AsInterface())
 }
 
-// MakeSerializationSafe pre-serializes all fields containing user mutable data to json.RawMessage, preventing race
-// conditions when the event is later serialized on a background goroutine.
-func (e *Event) MakeSerializationSafe() {
-	if len(e.Tags) > 0 {
-		if b, err := json.Marshal(e.Tags); err == nil {
-			e.serializedTags = b
+// owned returns a copy of e that shares no memory its caller can still write,
+// except attachment payloads.
+func (e *Event) owned() Event {
+	owned := *e
+	owned.Breadcrumbs = copyEach(e.Breadcrumbs)
+	for _, breadcrumb := range owned.Breadcrumbs {
+		breadcrumb.Data = ownMap(breadcrumb.Data)
+	}
+	if e.Contexts != nil {
+		owned.Contexts = make(map[string]Context, len(e.Contexts))
+		for name, context := range e.Contexts {
+			owned.Contexts[name] = ownMap(context)
 		}
 	}
-
-	if len(e.Contexts) > 0 {
-		if b, err := json.Marshal(e.Contexts); err == nil {
-			e.serializedContexts = b
+	owned.Fingerprint = slices.Clone(e.Fingerprint)
+	owned.Sdk.Integrations = slices.Clone(e.Sdk.Integrations)
+	owned.Sdk.Packages = slices.Clone(e.Sdk.Packages)
+	owned.Threads = slices.Clone(e.Threads)
+	for i := range owned.Threads {
+		owned.Threads[i].Stacktrace = owned.Threads[i].Stacktrace.owned()
+	}
+	owned.Tags = maps.Clone(e.Tags)
+	owned.User.Data = maps.Clone(e.User.Data)
+	owned.Modules = maps.Clone(e.Modules)
+	if owned.Request = copyOf(e.Request); owned.Request != nil {
+		owned.Request.Headers = maps.Clone(owned.Request.Headers)
+		owned.Request.Env = maps.Clone(owned.Request.Env)
+	}
+	owned.Exception = slices.Clone(e.Exception)
+	for i := range owned.Exception {
+		exception := &owned.Exception[i]
+		exception.Stacktrace = exception.Stacktrace.owned()
+		if exception.Mechanism = copyOf(exception.Mechanism); exception.Mechanism != nil {
+			exception.Mechanism.Data = ownMap(exception.Mechanism.Data)
+			exception.Mechanism.Handled = copyOf(exception.Mechanism.Handled)
+			exception.Mechanism.ParentID = copyOf(exception.Mechanism.ParentID)
 		}
 	}
-
-	if len(e.Breadcrumbs) > 0 {
-		if b, err := json.Marshal(e.Breadcrumbs); err == nil {
-			e.serializedBreadcrumbs = b
-		}
+	if owned.DebugMeta = copyOf(e.DebugMeta); owned.DebugMeta != nil {
+		owned.DebugMeta.SdkInfo = copyOf(owned.DebugMeta.SdkInfo)
+		owned.DebugMeta.Images = slices.Clone(owned.DebugMeta.Images)
 	}
-
-	if len(e.Exception) > 0 {
-		if b, err := json.Marshal(e.Exception); err == nil {
-			e.serializedException = b
-		}
+	owned.Attachments = copyEach(e.Attachments)
+	owned.sdkMetaData.dsc.Entries = maps.Clone(e.sdkMetaData.dsc.Entries)
+	if e.Type != transactionType {
+		// Only transactions send their type, start time and spans.
+		owned.Type, owned.StartTime, owned.Spans, owned.TransactionInfo = "", time.Time{}, nil, nil
+		return owned
 	}
-
-	if !e.User.IsEmpty() {
-		if b, err := json.Marshal(e.User); err == nil {
-			e.serializedUser = b
-		}
-	}
-
+	owned.Spans = make([]*Span, 0, len(e.Spans))
 	for _, span := range e.Spans {
-		span.makeSerializationSafe()
+		if span != nil {
+			owned.Spans = append(owned.Spans, span.detached())
+		}
 	}
+	owned.TransactionInfo = copyOf(e.TransactionInfo)
+	return owned
+}
 
-	e.serializationSafe = true
+// owned returns a copy of s that shares no memory with it.
+func (s *Stacktrace) owned() *Stacktrace {
+	if s == nil {
+		return nil
+	}
+	owned := &Stacktrace{Frames: slices.Clone(s.Frames), FramesOmitted: slices.Clone(s.FramesOmitted)}
+	for i := range owned.Frames {
+		frame := &owned.Frames[i]
+		frame.PreContext = slices.Clone(frame.PreContext)
+		frame.PostContext = slices.Clone(frame.PostContext)
+		frame.Vars = ownMap(frame.Vars)
+	}
+	return owned
+}
+
+// copyOf returns a pointer to a copy of *p, or nil.
+func copyOf[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	c := *p
+	return &c
+}
+
+// copyEach returns pointers to copies of the non-nil elements of s.
+func copyEach[T any](s []*T) []*T {
+	if len(s) == 0 {
+		return nil
+	}
+	values := make([]T, 0, len(s))
+	copies := make([]*T, 0, len(s))
+	for _, p := range s {
+		if p != nil {
+			values = append(values, *p)
+			copies = append(copies, &values[len(values)-1])
+		}
+	}
+	return copies
+}
+
+// ownMap returns a copy of m whose values nothing else can write.
+func ownMap(m map[string]any) map[string]any {
+	m = maps.Clone(m)
+	ownValues(m)
+	return m
+}
+
+// ownValues replaces the values of m that something else could still write.
+// It may run a value's own encoder, so no lock must be held, and m must not be shared.
+func ownValues(m map[string]any) {
+	for key, value := range m {
+		if isScalar(value) {
+			continue
+		}
+		if owned, ok := ownValue(value); ok {
+			m[key] = owned
+		} else {
+			debuglog.Printf("Dropping %q: its value cannot be encoded as JSON", key)
+			delete(m, key)
+		}
+	}
+}
+
+// ownValue returns a copy of a container of scalars, and the JSON encoding of any other value.
+func ownValue(value any) (any, bool) {
+	switch value := value.(type) {
+	case map[string]string:
+		return maps.Clone(value), true
+	case []string:
+		return slices.Clone(value), true
+	case map[string]any:
+		scalars := true
+		for _, element := range value {
+			scalars = scalars && isScalar(element)
+		}
+		if scalars {
+			return maps.Clone(value), true
+		}
+	case []any:
+		if !slices.ContainsFunc(value, func(element any) bool { return !isScalar(element) }) {
+			return slices.Clone(value), true
+		}
+	}
+	return encodeValue(value)
+}
+
+// isScalar reports whether value is immutable and always encodes as JSON.
+func isScalar(value any) bool {
+	switch value := value.(type) {
+	case nil, bool, string,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		time.Duration, TraceID, SpanID, SpanStatus:
+		return true
+	case float64:
+		return !math.IsNaN(value) && !math.IsInf(value, 0)
+	case float32:
+		return !math.IsNaN(float64(value)) && !math.IsInf(float64(value), 0)
+	}
+	return false
+}
+
+func encodeValue(value any) (encoded any, ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	raw, err := json.Marshal(value)
+	return json.RawMessage(raw), err == nil
 }

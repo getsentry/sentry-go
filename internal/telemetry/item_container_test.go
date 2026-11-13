@@ -18,7 +18,6 @@ func oneDiscard(category ratelimit.Category) DiscardCounts {
 type dummyLog struct{ body string }
 
 func (dummyLog) GetCategory() ratelimit.Category { return ratelimit.CategoryLog }
-func (dummyLog) MakeSerializationSafe()          {}
 func (dummyLog) DiscardCounts() DiscardCounts    { return oneDiscard(ratelimit.CategoryLog) }
 
 type dummyMetric struct {
@@ -28,7 +27,6 @@ type dummyMetric struct {
 }
 
 func (dummyMetric) GetCategory() ratelimit.Category { return ratelimit.CategoryTraceMetric }
-func (dummyMetric) MakeSerializationSafe()          {}
 func (dummyMetric) DiscardCounts() DiscardCounts {
 	return oneDiscard(ratelimit.CategoryTraceMetric)
 }
@@ -39,7 +37,6 @@ type failingMetric struct {
 }
 
 func (failingMetric) GetCategory() ratelimit.Category { return ratelimit.CategoryTraceMetric }
-func (failingMetric) MakeSerializationSafe()          {}
 func (failingMetric) DiscardCounts() DiscardCounts {
 	return oneDiscard(ratelimit.CategoryTraceMetric)
 }

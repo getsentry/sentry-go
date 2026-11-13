@@ -9,6 +9,7 @@ package sentrytest
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"testing/synctest"
 
@@ -46,6 +47,52 @@ type Option func(*config)
 type config struct {
 	opts   sentry.ClientOptions
 	global bool
+	held   bool
+}
+
+// WithHeldDelivery keeps captured telemetry buffered and unencoded until
+// [Fixture.Flush], as it is while the background worker is busy.
+func WithHeldDelivery() Option {
+	return func(c *config) {
+		c.held = true
+	}
+}
+
+// recorder can hold the delivery of envelopes to the transport.
+type recorder struct {
+	*sentry.MockTransport
+
+	hold    chan struct{}
+	holding chan struct{}
+	holdOne sync.Once
+	release sync.Once
+}
+
+func (r *recorder) Configure(options sentry.ClientOptions) {
+	if r.hold == nil {
+		r.MockTransport.Configure(options)
+	}
+}
+
+func (r *recorder) SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error {
+	if r.hold != nil {
+		held := false
+		r.holdOne.Do(func() {
+			held = true
+			close(r.holding)
+			<-r.hold
+		})
+		if held {
+			return nil
+		}
+	}
+	return r.MockTransport.SendEnvelope(ctx, envelope)
+}
+
+func (r *recorder) stopHolding() {
+	if r.hold != nil {
+		r.release.Do(func() { close(r.hold) })
+	}
 }
 
 // WithGlobal makes the fixture call [sentry.Init] to set the global client
@@ -84,6 +131,8 @@ type Fixture struct {
 
 	// Transport captures all events sent through the client.
 	Transport *sentry.MockTransport
+
+	recorder *recorder
 
 	// useSynctest indicates the fixture is running inside a synctest bubble.
 	useSynctest bool
@@ -127,7 +176,12 @@ func newFixture(t testing.TB, useSynctest bool, opts ...Option) *Fixture {
 	}
 
 	transport := &sentry.MockTransport{}
-	cfg.opts.Transport = transport
+	rec := &recorder{MockTransport: transport}
+	if cfg.held {
+		rec.hold = make(chan struct{})
+		rec.holding = make(chan struct{})
+	}
+	cfg.opts.Transport = rec
 
 	if cfg.opts.Dsn == "" {
 		cfg.opts.Dsn = testDsn
@@ -136,6 +190,7 @@ func newFixture(t testing.TB, useSynctest bool, opts ...Option) *Fixture {
 	f := &Fixture{
 		T:           t,
 		Transport:   transport,
+		recorder:    rec,
 		useSynctest: useSynctest,
 	}
 
@@ -157,7 +212,20 @@ func newFixture(t testing.TB, useSynctest bool, opts ...Option) *Fixture {
 	// Ensure background goroutines (batch processors) are stopped when the test finishes.
 	// This is required for synctest bubbles which will panic if blocked goroutines remain
 	// after the bubble's root goroutine exits.
-	t.Cleanup(func() { f.Client.Close() })
+	t.Cleanup(func() {
+		rec.stopHolding()
+		f.Client.Close()
+	})
+
+	if cfg.held {
+		// The worker sends one envelope at a time, so this one keeps the rest buffered.
+		f.Client.CaptureCheckIn(
+			sentry.ContextWithClient(context.Background(), f.Client),
+			&sentry.CheckIn{MonitorSlug: "sentrytest-held", Status: sentry.CheckInStatusOK},
+			nil,
+		)
+		<-rec.holding
+	}
 
 	return f
 }
@@ -169,6 +237,7 @@ func newFixture(t testing.TB, useSynctest bool, opts ...Option) *Fixture {
 // Outside a bubble it awaits for a real Flush.
 func (f *Fixture) Flush() {
 	f.T.Helper()
+	f.recorder.stopHolding()
 	if f.useSynctest {
 		synctest.Wait()
 	}

@@ -79,10 +79,6 @@ type Span struct {
 	finishOnce sync.Once
 	// explicitSampled is a flag for configuring sampling by using `WithSpanSampled` option.
 	explicitSampled Sampled
-	// Pre-serialized copies of mutable fields, set by MakeSerializationSafe.
-	serializedTags    json.RawMessage
-	serializedData    json.RawMessage
-	serializationSafe bool
 }
 
 // TraceParentContext describes the context of a (remote) parent span.
@@ -231,49 +227,26 @@ func (s *Span) StartChild(operation string, options ...SpanOption) *Span {
 	return StartSpan(s.Context(), operation, options...)
 }
 
-// makeSerializationSafe pre-serializes user mutable fields.
-func (s *Span) makeSerializationSafe() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if len(s.Tags) > 0 {
-		if b, err := json.Marshal(s.Tags); err == nil {
-			s.serializedTags = b
-		}
-	}
-	if len(s.Data) > 0 {
-		if b, err := json.Marshal(s.Data); err == nil {
-			s.serializedData = b
-		}
-	}
-
-	s.serializationSafe = true
-}
-
-// MarshalJSON emits the span using pre-serialized fields if available.
-func (s *Span) MarshalJSON() ([]byte, error) {
+// detached returns a copy of the span's payload that s no longer writes to.
+func (s *Span) detached() *Span {
 	s.mu.RLock()
-	serializationSafe := s.serializationSafe
-	serializedTags := s.serializedTags
-	serializedData := s.serializedData
+	span := &Span{
+		TraceID:      s.TraceID,
+		SpanID:       s.SpanID,
+		ParentSpanID: s.ParentSpanID,
+		Name:         s.Name,
+		Op:           s.Op,
+		Description:  s.Description,
+		Status:       s.Status,
+		Tags:         maps.Clone(s.Tags),
+		StartTime:    s.StartTime,
+		EndTime:      s.EndTime,
+		Data:         maps.Clone(s.Data),
+		Origin:       s.Origin,
+	}
 	s.mu.RUnlock()
-
-	if !serializationSafe {
-		type span Span
-		return json.Marshal((*span)(s))
-	}
-
-	type span Span
-	type safeSpan struct {
-		*span
-		Tags json.RawMessage `json:"tags,omitempty"`
-		Data json.RawMessage `json:"data,omitempty"`
-	}
-	return json.Marshal(safeSpan{
-		span: (*span)(s),
-		Tags: serializedTags,
-		Data: serializedData,
-	})
+	ownValues(span.Data)
+	return span
 }
 
 // SetTag sets a tag on the span. It is recommended to use SetTag instead of
@@ -726,32 +699,22 @@ func (s *Span) toEvent() *Event {
 }
 
 // traceContext returns a TraceContext snapshot for an active span.
-//
-// It needs to clone span Data to avoid holding any user mutable state.
 func (s *Span) traceContext() *TraceContext {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return &TraceContext{
-		TraceID:      s.TraceID,
-		SpanID:       s.SpanID,
-		ParentSpanID: s.ParentSpanID,
-		Op:           s.Op,
-		Data:         maps.Clone(s.Data),
-		Description:  s.Description,
-		Status:       s.Status,
-	}
+	return s.traceContextLockFree()
 }
 
-// traceContextLockFree is the lock-free variant of traceContext.
+// traceContextLockFree is traceContext for a caller that holds the span's lock.
 //
-// This is supposed to be used only when span Finish() was already called.
+// It needs to clone span Data to avoid holding any user mutable state.
 func (s *Span) traceContextLockFree() *TraceContext {
 	return &TraceContext{
 		TraceID:      s.TraceID,
 		SpanID:       s.SpanID,
 		ParentSpanID: s.ParentSpanID,
 		Op:           s.Op,
-		Data:         s.Data,
+		Data:         maps.Clone(s.Data),
 		Description:  s.Description,
 		Status:       s.Status,
 	}

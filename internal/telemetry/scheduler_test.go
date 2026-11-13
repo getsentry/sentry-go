@@ -65,8 +65,6 @@ func (t *testTelemetryItem) GetDynamicSamplingContext() map[string]string {
 	return nil
 }
 
-func (t *testTelemetryItem) MakeSerializationSafe() {}
-
 func (t *testTelemetryItem) DiscardCounts() DiscardCounts { return oneDiscard(t.GetCategory()) }
 
 func transactionCounts(spanCount uint64) DiscardCounts {

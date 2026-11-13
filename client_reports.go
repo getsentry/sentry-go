@@ -7,7 +7,9 @@ import (
 )
 
 // DiscardCounts returns client report counts for a dropped event.
-func (e *Event) DiscardCounts() telemetry.DiscardCounts {
+func (e *eventItem) DiscardCounts() telemetry.DiscardCounts { return (*Event)(e).discardCounts() }
+
+func (e *Event) discardCounts() telemetry.DiscardCounts {
 	var counts telemetry.DiscardCounts
 	switch e.Type {
 	case transactionType:

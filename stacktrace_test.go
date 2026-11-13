@@ -197,7 +197,7 @@ func TestEventWithExceptionStacktraceMarshalJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := `{"sdk":{},"user":{},` +
+	want := `{"sdk":{},` +
 		`"exception":[{"stacktrace":{"frames":[` +
 		`{"function":"gofunc",` +
 		`"symbol":"gosym",` +

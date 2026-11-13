@@ -164,7 +164,7 @@ func TestStartSpan(t *testing.T) {
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
 		),
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
 		cmpopts.EquateEmpty(),
 	}
 	if diff := cmp.Diff(want, events[0], opts); diff != "" {
@@ -240,7 +240,7 @@ func TestStartTransaction(t *testing.T) {
 			"Contexts", "EventID", "Level", "Platform",
 			"Release", "Sdk", "ServerName", "Modules",
 		),
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
+		cmpopts.IgnoreFields(Event{}, "sdkMetaData"),
 		cmpopts.EquateEmpty(),
 	}
 	if diff := cmp.Diff(want, events[0], opts); diff != "" {
@@ -499,7 +499,7 @@ func TestContinueFromHeaders(t *testing.T) {
 
 			if diff := cmp.Diff(tt.wantSpan, s, cmp.Options{
 				cmp.AllowUnexported(Span{}),
-				cmpopts.IgnoreFields(Span{}, "ctx", "mu", "finishOnce", "serializationSafe"),
+				cmpopts.IgnoreFields(Span{}, "ctx", "mu", "finishOnce"),
 			}); diff != "" {
 				t.Fatalf("Expected no difference on spans, got: %s", diff)
 			}

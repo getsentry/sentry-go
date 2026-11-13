@@ -250,9 +250,9 @@ func TestClientReports_DiscardCounts(t *testing.T) {
 			telemetry.DiscardCounts{ratelimit.CountTraceMetric: 1, ratelimit.CountTraceMetricByte: 13 + 8 + attrsSize}},
 		{"check-in", &checkInItem{},
 			telemetry.DiscardCounts{ratelimit.CountMonitor: 1}},
-		{"transaction", &Event{Type: transactionType, Spans: []*Span{{}, {}}},
+		{"transaction", (*eventItem)(&Event{Type: transactionType, Spans: []*Span{{}, {}}}),
 			telemetry.DiscardCounts{ratelimit.CountTransaction: 1, ratelimit.CountSpan: 3}},
-		{"error with attachments", &Event{Attachments: []*Attachment{{Payload: []byte("abc")}, {Payload: []byte("de")}}},
+		{"error with attachments", (*eventItem)(&Event{Attachments: []*Attachment{{Payload: []byte("abc")}, {Payload: []byte("de")}}}),
 			telemetry.DiscardCounts{ratelimit.CountError: 1, ratelimit.CountAttachment: 5}},
 	}
 	for _, tt := range tests {
