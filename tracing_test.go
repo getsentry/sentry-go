@@ -51,6 +51,92 @@ func TestSpanMarshalJSON(t *testing.T) {
 	testMarshalJSONOmitEmptyParentSpanID(t, s)
 }
 
+func TestTransactionEventJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+	event := &Event{
+		Type:        transactionType,
+		Transaction: "background job",
+		StartTime:   time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		Timestamp:   time.Date(2026, 1, 2, 3, 4, 6, 0, time.UTC),
+		Spans: []*Span{{
+			TraceID:      TraceIDFromHex("0123456789abcdef0123456789abcdef"),
+			SpanID:       SpanIDFromHex("0123456789abcdef"),
+			ParentSpanID: SpanIDFromHex("fedcba9876543210"),
+			Op:           "db.query",
+			Status:       SpanStatusOK,
+			StartTime:    time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+			EndTime:      time.Date(2026, 1, 2, 3, 4, 6, 0, time.UTC),
+			Tags:         map[string]string{"database": "jobs"},
+			Data:         map[string]any{"db.system": "postgresql"},
+		}},
+	}
+	encoded, err := json.Marshal(event)
+	require.NoError(t, err)
+	var restored Event
+	require.NoError(t, json.Unmarshal(encoded, &restored))
+	reencoded, err := json.Marshal(&restored)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(encoded), string(reencoded))
+}
+
+func TestTraceIdentifiersUnmarshalJSON(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		value  string
+		target func() any
+	}{
+		{"trace ID", "0123456789abcdef0123456789abcdef", func() any { return new(TraceID) }},
+		{"span ID", "0123456789abcdef", func() any { return new(SpanID) }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for _, input := range []string{test.value, strings.ToUpper(test.value)} {
+				target := test.target()
+				encoded, err := json.Marshal(input)
+				require.NoError(t, err)
+				require.NoError(t, json.Unmarshal(encoded, target))
+				got, err := json.Marshal(target)
+				require.NoError(t, err)
+				assert.JSONEq(t, `"`+test.value+`"`, string(got))
+			}
+			for _, input := range []string{"", test.value[:len(test.value)-1], test.value + "0", test.value + "00", "z" + test.value[1:]} {
+				t.Run(input, func(t *testing.T) {
+					target := test.target()
+					valid, err := json.Marshal(test.value)
+					require.NoError(t, err)
+					require.NoError(t, json.Unmarshal(valid, target))
+					invalid, err := json.Marshal(input)
+					require.NoError(t, err)
+					require.Error(t, json.Unmarshal(invalid, target))
+					got, err := json.Marshal(target)
+					require.NoError(t, err)
+					assert.JSONEq(t, string(valid), string(got), "invalid input must not partially overwrite the ID")
+				})
+			}
+		})
+	}
+}
+
+func TestSpanStatusUnmarshalJSON(t *testing.T) {
+	t.Parallel()
+	for status := SpanStatusUndefined; status < maxSpanStatus; status++ {
+		t.Run(status.String(), func(t *testing.T) {
+			encoded, err := json.Marshal(status)
+			require.NoError(t, err)
+			restored := SpanStatusInternalError
+			require.NoError(t, json.Unmarshal(encoded, &restored))
+			assert.Equal(t, status, restored)
+		})
+	}
+	for _, input := range []string{`"not_a_status"`, `123`, `true`, `{}`, `[]`, `"unterminated`} {
+		t.Run(input, func(t *testing.T) {
+			status := SpanStatusOK
+			require.Error(t, json.Unmarshal([]byte(input), &status))
+			assert.Equal(t, SpanStatusOK, status)
+		})
+	}
+}
+
 func TestSpanStatusMarshalJSON(t *testing.T) {
 	tests := map[SpanStatus]string{
 		SpanStatus(42):             `null`,
