@@ -1,0 +1,75 @@
+{
+  "header": {
+    "sent_at": "2000-01-01T01:00:00+01:00",
+    "dsn": "https://whatever@sentry.io/1337",
+    "sdk": {
+      "name": "sentry.go",
+      "version": "1.0.0-alpha.1",
+      "integrations": [
+        "Environment",
+        "GlobalTags",
+        "IgnoreErrors",
+        "IgnoreTransactions",
+        "Modules"
+      ],
+      "packages": [
+        {
+          "name": "sentry-go",
+          "version": "1.0.0-alpha.1"
+        }
+      ]
+    }
+  },
+  "items": [
+    {
+      "header": {
+        "type": "trace_metric",
+        "length": 540,
+        "content_type": "application/vnd.sentry.items.trace-metric+json",
+        "item_count": 1
+      },
+      "payload": {
+        "items": [
+          {
+            "timestamp": "2000-01-01T01:00:00+01:00",
+            "trace_id": "a2cda40f16c88c80bd2e049198cade81",
+            "type": "counter",
+            "name": "orders",
+            "value": 1,
+            "unit": "order",
+            "attributes": {
+              "key": {
+                "value": "value",
+                "type": "string"
+              },
+              "sentry.environment": {
+                "value": "test",
+                "type": "string"
+              },
+              "sentry.release": {
+                "value": "app@1.0.0",
+                "type": "string"
+              },
+              "sentry.sdk.name": {
+                "value": "sentry.go",
+                "type": "string"
+              },
+              "sentry.sdk.version": {
+                "value": "1.0.0-alpha.1",
+                "type": "string"
+              },
+              "sentry.server.address": {
+                "value": "golden",
+                "type": "string"
+              },
+              "user.id": {
+                "value": "42",
+                "type": "string"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -696,116 +694,6 @@ func TestMechanismMarshalJSON_withHandled(t *testing.T) {
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestStructSnapshots(t *testing.T) {
-	testSpan := &Span{
-		TraceID:      TraceIDFromHex("d6c4f03650bd47699ec65c84352b6208"),
-		SpanID:       SpanIDFromHex("1cc4b26ab9094ef0"),
-		ParentSpanID: SpanIDFromHex("442bd97bbe564317"),
-		Description:  `SELECT * FROM user WHERE "user"."id" = {id}`,
-		Op:           "db.sql",
-		Tags: map[string]string{
-			"function_name":  "get_users",
-			"status_message": "MYSQL OK",
-		},
-		StartTime: time.Unix(0, 0).UTC(),
-		EndTime:   time.Unix(5, 0).UTC(),
-		Status:    SpanStatusOK,
-		Data: map[string]any{
-			"related_ids":  []uint{12312342, 76572, 4123485},
-			"aws_instance": "ca-central-1",
-		},
-	}
-
-	testCases := []struct {
-		testName     string
-		sentryStruct any
-	}{
-		{
-			testName:     "span",
-			sentryStruct: testSpan,
-		},
-		{
-			testName: "error_event",
-			sentryStruct: &Event{
-				Message:     "event message",
-				Environment: "production",
-				EventID:     EventID("0123456789abcdef"),
-				Fingerprint: []string{"abcd"},
-				Level:       LevelError,
-				Platform:    "myplatform",
-				Release:     "myrelease",
-				Sdk: SdkInfo{
-					Name:         "sentry.go",
-					Version:      "0.0.1",
-					Integrations: []string{"gin", "iris"},
-					Packages: []SdkPackage{{
-						Name:    "sentry-go",
-						Version: "0.0.1",
-					}},
-				},
-				ServerName:  "myhost",
-				Timestamp:   time.Unix(5, 0).UTC(),
-				Transaction: "mytransaction",
-				User:        User{ID: "foo"},
-				Breadcrumbs: []*Breadcrumb{{
-					Data: map[string]any{
-						"data_key": "data_val",
-					},
-				}},
-				Contexts: map[string]Context{
-					"context_key": {
-						"context_key": "context_val",
-					},
-				},
-			},
-		},
-		{
-			testName: "transaction_event",
-			sentryStruct: &Event{
-				Type:      transactionType,
-				Spans:     []*Span{testSpan},
-				StartTime: time.Unix(3, 0).UTC(),
-				Timestamp: time.Unix(5, 0).UTC(),
-				Contexts: map[string]Context{
-					"trace": TraceContext{
-						TraceID:     TraceIDFromHex("90d57511038845dcb4164a70fc3a7fdb"),
-						SpanID:      SpanIDFromHex("f7f3fd754a9040eb"),
-						Op:          "http.GET",
-						Description: "description",
-						Status:      SpanStatusOK,
-					}.Map(),
-				},
-			},
-		},
-	}
-
-	for _, test := range testCases {
-		t.Run(test.testName, func(t *testing.T) {
-			got, err := json.MarshalIndent(test.sentryStruct, "", "    ")
-			if err != nil {
-				t.Error(err)
-			}
-
-			golden := filepath.Join(".", "testdata", fmt.Sprintf("%s.golden", test.testName))
-			if *update {
-				err := os.WriteFile(golden, got, 0600)
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			want, err := os.ReadFile(golden)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if diff := cmp.Diff(want, got); diff != "" {
-				t.Errorf("struct %s mismatch (-want +got):\n%s", test.testName, diff)
-			}
-		})
 	}
 }
 

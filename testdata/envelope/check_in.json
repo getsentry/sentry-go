@@ -1,0 +1,67 @@
+{
+  "header": {
+    "event_id": "b5668da6939f49eaa884e1564d8f98fc",
+    "sent_at": "2000-01-01T01:00:00+01:00",
+    "dsn": "https://whatever@sentry.io/1337",
+    "sdk": {
+      "name": "sentry.go",
+      "version": "1.0.0-alpha.1",
+      "integrations": [
+        "Environment",
+        "GlobalTags",
+        "IgnoreErrors",
+        "IgnoreTransactions",
+        "Modules"
+      ],
+      "packages": [
+        {
+          "name": "sentry-go",
+          "version": "1.0.0-alpha.1"
+        }
+      ]
+    },
+    "trace": {
+      "environment": "test",
+      "public_key": "whatever",
+      "release": "app@1.0.0",
+      "sample_rate": "1",
+      "trace_id": "a2cda40f16c88c80bd2e049198cade81"
+    }
+  },
+  "items": [
+    {
+      "header": {
+        "type": "check_in",
+        "length": 267
+      },
+      "payload": {
+        "check_in_id": "36d2f6aef357415ca01f266df04272fd",
+        "monitor_slug": "nightly",
+        "status": "ok",
+        "duration": 2,
+        "release": "app@1.0.0",
+        "environment": "test",
+        "monitor_config": {
+          "schedule": {
+            "type": "crontab",
+            "value": "0 3 * * *"
+          },
+          "checkin_margin": 5,
+          "max_runtime": 30,
+          "timezone": "UTC",
+          "failure_issue_threshold": 2,
+          "recovery_threshold": 1
+        }
+      }
+    },
+    {
+      "header": {
+        "type": "attachment",
+        "length": 8,
+        "filename": "log.txt",
+        "content_type": "text/plain"
+      },
+      "payload": "attached"
+    }
+  ]
+}
