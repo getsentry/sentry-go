@@ -213,6 +213,8 @@ type Transport interface {
 | `Hook.SetFallback` and `FallbackFunc` | Removed; logs are sent asynchronously |
 | `sentryzerolog.New(Config{...})` and `NewWithHub(hub, opts)` | `sentryzerolog.New(ctx, opts)` |
 | `sentryzerolog.Config.ClientOptions` | `sentry.Init` or `sentry.NewClient` |
+| `Event.Logs` and `Event.Metrics` | Removed; logs and metrics are no longer events |
+| `GetCategory` and `MakeSerializationSafe` on `Log` and `Metric` | Removed; they were SDK internals |
 
 </details>
 

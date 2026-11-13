@@ -242,11 +242,11 @@ func TestClientReports_DiscardCounts(t *testing.T) {
 		item telemetry.Item
 		want telemetry.DiscardCounts
 	}{
-		{"empty log", &Log{},
+		{"empty log", (*logItem)(&Log{}),
 			telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: 1}},
-		{"log", &Log{Body: "user logged in", Level: LogLevelInfo, Timestamp: time.Now(), Attributes: attrs},
+		{"log", (*logItem)(&Log{Body: "user logged in", Level: LogLevelInfo, Timestamp: time.Now(), Attributes: attrs}),
 			telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: 14 + attrsSize}},
-		{"metric", &Metric{Name: "http.requests", Type: MetricTypeCounter, Value: Int64MetricValue(7), Attributes: attrs},
+		{"metric", (*metricItem)(&Metric{Name: "http.requests", Type: MetricTypeCounter, Value: Int64MetricValue(7), Attributes: attrs}),
 			telemetry.DiscardCounts{ratelimit.CountTraceMetric: 1, ratelimit.CountTraceMetricByte: 13 + 8 + attrsSize}},
 		{"check-in", &checkInItem{},
 			telemetry.DiscardCounts{ratelimit.CountMonitor: 1}},

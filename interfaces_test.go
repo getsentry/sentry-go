@@ -705,7 +705,6 @@ func TestEvent_ToCategory(t *testing.T) {
 	}{
 		{"error", "", ratelimit.CategoryError},
 		{"transaction", transactionType, ratelimit.CategoryTransaction},
-		{"log", logEvent.Type, ratelimit.CategoryLog},
 		{"unknown", "foobar", ratelimit.CategoryUnknown},
 	}
 	for _, tc := range cases {
@@ -829,8 +828,8 @@ func TestLog_ToEnvelopeItem_And_Getters(t *testing.T) {
 		t.Fatalf("unexpected attribute k2: %+v", payload.Attributes["k2"])
 	}
 
-	if l.GetCategory() != ratelimit.CategoryLog {
-		t.Fatalf("unexpected category: %v", l.GetCategory())
+	if category := (*logItem)(l).GetCategory(); category != ratelimit.CategoryLog {
+		t.Fatalf("unexpected category: %v", category)
 	}
 }
 
@@ -915,8 +914,8 @@ func TestMetric_GetterMethods(t *testing.T) {
 		Value:     Int64MetricValue(42),
 	}
 
-	if metric.GetCategory() != ratelimit.CategoryTraceMetric {
-		t.Errorf("GetCategory() = %v, want %v", metric.GetCategory(), ratelimit.CategoryTraceMetric)
+	if category := (*metricItem)(metric).GetCategory(); category != ratelimit.CategoryTraceMetric {
+		t.Errorf("GetCategory() = %v, want %v", category, ratelimit.CategoryTraceMetric)
 	}
 }
 

@@ -19,22 +19,6 @@ import (
 const errorType = ""
 const transactionType = "transaction"
 
-var logEvent = struct {
-	Type        string
-	ContentType string
-}{
-	"log",
-	"application/vnd.sentry.items.log+json",
-}
-
-var traceMetricEvent = struct {
-	Type        string
-	ContentType string
-}{
-	"trace_metric",
-	"application/vnd.sentry.items.trace-metric+json",
-}
-
 // Level marks the severity of the event.
 type Level string
 
@@ -392,12 +376,6 @@ type Event struct {
 	Spans           []*Span          `json:"spans,omitempty"`
 	TransactionInfo *TransactionInfo `json:"transaction_info,omitempty"`
 
-	// The fields below are only relevant for logs
-	Logs []Log `json:"-"`
-
-	// The fields below are only relevant for metrics
-	Metrics []Metric `json:"-"`
-
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
@@ -452,10 +430,6 @@ func (e *Event) ToEnvelopeItem() (item *protocol.EnvelopeItem, err error) {
 	switch e.Type {
 	case transactionType:
 		item = protocol.NewTransactionItem(eventBody)
-	case logEvent.Type:
-		item = protocol.NewLogItem(len(e.Logs), eventBody)
-	case traceMetricEvent.Type:
-		item = protocol.NewTraceMetricItem(len(e.Metrics), eventBody)
 	default:
 		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeEvent, eventBody)
 	}
@@ -526,25 +500,6 @@ func (e *Event) defaultMarshalJSON() ([]byte, error) {
 	if e.Type == transactionType {
 		return json.Marshal(struct{ *event }{(*event)(e)})
 	}
-	// metrics and logs should be serialized under the same `items` json field.
-	if e.Type == logEvent.Type {
-		type logEvent struct {
-			*event
-			Items []Log           `json:"items,omitempty"`
-			Type  json.RawMessage `json:"type,omitempty"`
-		}
-		return json.Marshal(logEvent{event: (*event)(e), Items: e.Logs})
-	}
-
-	if e.Type == traceMetricEvent.Type {
-		type metricEvent struct {
-			*event
-			Items []Metric        `json:"items,omitempty"`
-			Type  json.RawMessage `json:"type,omitempty"`
-		}
-		return json.Marshal(metricEvent{event: (*event)(e), Items: e.Metrics})
-	}
-
 	// errorEvent is like Event with shadowed fields for customizing JSON
 	// marshaling.
 	type errorEvent struct {
@@ -622,10 +577,6 @@ func (e *Event) toCategory() ratelimit.Category {
 		return ratelimit.CategoryError
 	case transactionType:
 		return ratelimit.CategoryTransaction
-	case logEvent.Type:
-		return ratelimit.CategoryLog
-	case traceMetricEvent.Type:
-		return ratelimit.CategoryTraceMetric
 	default:
 		return ratelimit.CategoryUnknown
 	}
@@ -670,13 +621,13 @@ type Log struct {
 	Attributes map[string]attribute.Value `json:"attributes,omitempty"`
 }
 
-// MakeSerializationSafe is a no-op for Log, all fields are passed from the safe attribute API.
-func (l *Log) MakeSerializationSafe() {}
+// logItem is a Log as handed to the telemetry processor.
+type logItem Log
 
-// GetCategory returns the rate limit category for logs.
-func (l *Log) GetCategory() ratelimit.Category {
-	return ratelimit.CategoryLog
-}
+// MakeSerializationSafe is a no-op for Log, all fields are passed from the safe attribute API.
+func (l *logItem) MakeSerializationSafe() {}
+
+func (l *logItem) GetCategory() ratelimit.Category { return ratelimit.CategoryLog }
 
 type MetricType string
 
@@ -698,13 +649,13 @@ type Metric struct {
 	Attributes map[string]attribute.Value `json:"attributes,omitempty"`
 }
 
-// MakeSerializationSafe is a no-op for Metric, all fields are passed from the safe attribute API.
-func (m *Metric) MakeSerializationSafe() {}
+// metricItem is a Metric as handed to the telemetry processor.
+type metricItem Metric
 
-// GetCategory returns the rate limit category for metrics.
-func (m *Metric) GetCategory() ratelimit.Category {
-	return ratelimit.CategoryTraceMetric
-}
+// MakeSerializationSafe is a no-op for Metric, all fields are passed from the safe attribute API.
+func (m *metricItem) MakeSerializationSafe() {}
+
+func (m *metricItem) GetCategory() ratelimit.Category { return ratelimit.CategoryTraceMetric }
 
 // MetricValue stores metric values with full precision.
 // It supports int64 (for counters) and float64 (for gauges and distributions).

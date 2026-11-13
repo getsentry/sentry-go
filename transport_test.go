@@ -541,7 +541,7 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 			{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 2},
 		}}
 		pending, _ := clientReport.ToEnvelopeItem()
-		metrics := telemetry.NewItemContainer(ratelimit.CategoryTraceMetric, []telemetry.Item{&Metric{}, &Metric{}, &Metric{}})
+		metrics := telemetry.NewItemContainer(ratelimit.CategoryTraceMetric, []telemetry.Item{(*metricItem)(&Metric{}), (*metricItem)(&Metric{}), (*metricItem)(&Metric{})})
 		backoff := func(category ratelimit.Category) outcomeKey {
 			return outcomeKey{Reason: report.ReasonRateLimitBackoff, Category: category}
 		}

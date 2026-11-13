@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
+	"maps"
 	"math/rand/v2"
 	"net/http"
 	"os"
@@ -638,16 +639,20 @@ func (client *Client) captureLog(ctx context.Context, log *Log) bool {
 	}
 
 	if client.options.BeforeSendLog != nil {
-		counts := log.DiscardCounts()
+		counts := (*logItem)(log).DiscardCounts()
 		log = client.options.BeforeSendLog(log)
 		if log == nil {
 			debuglog.Println("Log dropped due to BeforeSendLog callback.")
 			counts.Record(client.reports, report.ReasonBeforeSend)
 			return false
 		}
+		// The callback may keep log.
+		sent := *log
+		sent.Attributes = maps.Clone(log.Attributes)
+		log = &sent
 	}
 
-	if !client.IsEnabled() || !client.telemetryProcessor.Add(ctx, log) {
+	if !client.IsEnabled() || !client.telemetryProcessor.Add(ctx, (*logItem)(log)) {
 		debuglog.Print("Dropping log: telemetry buffer full or category missing")
 		// Note: processor tracks client report
 		return false
@@ -662,16 +667,20 @@ func (client *Client) captureMetric(ctx context.Context, metric *Metric) bool {
 	}
 
 	if client.options.BeforeSendMetric != nil {
-		counts := metric.DiscardCounts()
+		counts := (*metricItem)(metric).DiscardCounts()
 		metric = client.options.BeforeSendMetric(metric)
 		if metric == nil {
 			debuglog.Println("Metric dropped due to BeforeSendMetric callback.")
 			counts.Record(client.reports, report.ReasonBeforeSend)
 			return false
 		}
+		// The callback may keep metric.
+		sent := *metric
+		sent.Attributes = maps.Clone(metric.Attributes)
+		metric = &sent
 	}
 
-	if !client.IsEnabled() || !client.telemetryProcessor.Add(ctx, metric) {
+	if !client.IsEnabled() || !client.telemetryProcessor.Add(ctx, (*metricItem)(metric)) {
 		debuglog.Printf("Dropping metric: telemetry buffer full or category missing")
 		// Note: processor tracks client report
 		return false

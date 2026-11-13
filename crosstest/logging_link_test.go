@@ -25,7 +25,7 @@ func TestLogrusLogHookLinksOTelTrace(t *testing.T) {
 		logger.WithContext(context.WithValue(otelCtx, noopContextKey{}, "noop")).Info("logrus linked log")
 
 		f.Flush()
-		requireLinked(t, f.Events(), linkedLogEvent(traceID, spanID, "logrus linked log"))
+		requireLinked(t, f, linkedLogEvent(traceID, spanID, "logrus linked log"))
 	}, otelOpts()...)
 }
 
@@ -40,7 +40,7 @@ func TestSlogLinksOTelTrace(t *testing.T) {
 		logger.InfoContext(f.NewContext(otelCtx), "slog linked log")
 
 		f.Flush()
-		requireLinked(t, f.Events(), linkedLogEvent(traceID, spanID, "slog linked log"))
+		requireLinked(t, f, linkedLogEvent(traceID, spanID, "slog linked log"))
 	}, otelOpts()...)
 }
 
@@ -53,6 +53,6 @@ func TestZapLinksOTelTrace(t *testing.T) {
 		logger.Info("zap linked log")
 
 		f.Flush()
-		requireLinked(t, f.Events(), linkedLogEvent(traceID, spanID, "zap linked log"))
+		requireLinked(t, f, linkedLogEvent(traceID, spanID, "zap linked log"))
 	}, otelOpts()...)
 }

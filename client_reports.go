@@ -12,10 +12,6 @@ func (e *Event) DiscardCounts() telemetry.DiscardCounts {
 	switch e.Type {
 	case transactionType:
 		counts = transactionDiscardCounts(uint64(len(e.Spans)))
-	case logEvent.Type:
-		counts[ratelimit.CountLog] = 1
-	case traceMetricEvent.Type:
-		counts[ratelimit.CountTraceMetric] = 1
 	default:
 		counts[ratelimit.CountError] = 1
 	}
@@ -36,12 +32,12 @@ func (c *checkInItem) DiscardCounts() telemetry.DiscardCounts {
 }
 
 // DiscardCounts returns client report counts for a dropped log.
-func (l *Log) DiscardCounts() telemetry.DiscardCounts {
+func (l *logItem) DiscardCounts() telemetry.DiscardCounts {
 	return telemetry.DiscardCounts{ratelimit.CountLog: 1, ratelimit.CountLogByte: byteSize(len(l.Body), l.Attributes)}
 }
 
 // DiscardCounts returns client report counts for a dropped metric.
-func (m *Metric) DiscardCounts() telemetry.DiscardCounts {
+func (m *metricItem) DiscardCounts() telemetry.DiscardCounts {
 	return telemetry.DiscardCounts{
 		ratelimit.CountTraceMetric:     1,
 		ratelimit.CountTraceMetricByte: byteSize(len(m.Name)+valueSize(m.Value.value), m.Attributes),

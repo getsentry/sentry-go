@@ -36,6 +36,6 @@ func TestGRPCServerLinksManualErrorsLogsMetricsAndPanicsToOTel(t *testing.T) {
 		}
 
 		f.Flush()
-		requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+		requireRequestSignalsLinked(t, f, traceID, spanID, identifier)
 	}, otelOpts()...)
 }

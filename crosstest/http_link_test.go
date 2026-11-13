@@ -33,9 +33,9 @@ func sendSignals(ctx context.Context, identifier string, logger sentry.Logger, m
 	panic(identifier + " panic")
 }
 
-func requireRequestSignalsLinked(t *testing.T, events []*sentry.Event, traceID sentry.TraceID, spanID sentry.SpanID, identifier string) {
+func requireRequestSignalsLinked(t *testing.T, f *sentrytest.Fixture, traceID sentry.TraceID, spanID sentry.SpanID, identifier string) {
 	t.Helper()
-	requireLinked(t, events,
+	requireLinked(t, f,
 		linkedErrorEvent(traceID, spanID, identifier+" manual error"),
 		linkedErrorEvent(traceID, spanID, identifier+" panic"),
 		linkedLogEvent(traceID, spanID, identifier+" linked log"),
@@ -63,7 +63,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			handler.ServeHTTP(httptest.NewRecorder(), req)
 
 			f.Flush()
-			requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+			requireRequestSignalsLinked(t, f, traceID, spanID, identifier)
 		}, otelOpts()...)
 	})
 
@@ -89,7 +89,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			router.ServeHTTP(httptest.NewRecorder(), req)
 
 			f.Flush()
-			requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+			requireRequestSignalsLinked(t, f, traceID, spanID, identifier)
 		}, otelOpts()...)
 	})
 
@@ -117,7 +117,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			e.ServeHTTP(httptest.NewRecorder(), req)
 
 			f.Flush()
-			requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+			requireRequestSignalsLinked(t, f, traceID, spanID, identifier)
 		}, otelOpts()...)
 	})
 
@@ -141,7 +141,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			n.ServeHTTP(httptest.NewRecorder(), req)
 
 			f.Flush()
-			requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+			requireRequestSignalsLinked(t, f, traceID, spanID, identifier)
 		}, otelOpts()...)
 	})
 
@@ -169,7 +169,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			app.ServeHTTP(httptest.NewRecorder(), req)
 
 			f.Flush()
-			requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+			requireRequestSignalsLinked(t, f, traceID, spanID, identifier)
 		}, otelOpts()...)
 	})
 
@@ -203,7 +203,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		defer resp.Body.Close()
 
 		f.Flush()
-		requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+		requireRequestSignalsLinked(t, f, traceID, spanID, identifier)
 	})
 
 	t.Run("fiberv3", func(t *testing.T) {
@@ -233,7 +233,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 		defer resp.Body.Close()
 
 		f.Flush()
-		requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+		requireRequestSignalsLinked(t, f, traceID, spanID, identifier)
 	})
 
 	t.Run("fasthttp", func(t *testing.T) {
@@ -254,7 +254,7 @@ func TestHTTPFamilyIntegrationsLinkManualErrorsLogsMetricsAndPanicsToOTel(t *tes
 			handler(ctx)
 
 			f.Flush()
-			requireRequestSignalsLinked(t, f.Events(), traceID, spanID, identifier)
+			requireRequestSignalsLinked(t, f, traceID, spanID, identifier)
 		}, otelOpts()...)
 	})
 }
