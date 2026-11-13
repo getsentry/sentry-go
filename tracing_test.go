@@ -99,7 +99,7 @@ func TestTraceIdentifiersUnmarshalJSON(t *testing.T) {
 				require.NoError(t, err)
 				assert.JSONEq(t, `"`+test.value+`"`, string(got))
 			}
-			for _, input := range []string{"", test.value[:len(test.value)-1], test.value + "0", test.value + "00", "z" + test.value[1:]} {
+			for _, input := range []string{"", test.value[:len(test.value)-1], test.value + "0", test.value + "00", "z" + test.value[1:], strings.Repeat("0", len(test.value)-1) + "z"} {
 				t.Run(input, func(t *testing.T) {
 					target := test.target()
 					valid, err := json.Marshal(test.value)
