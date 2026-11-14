@@ -1,6 +1,8 @@
 package sentry_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -49,6 +51,76 @@ func TestAddBreadcrumbHint(t *testing.T) {
 			} else {
 				require.Len(t, events[0].Breadcrumbs, 1)
 			}
+		})
+	}
+}
+
+func TestWithMechanism(t *testing.T) {
+	t.Parallel()
+	errBase := errors.New("base")
+	for _, test := range []struct {
+		name    string
+		capture func(ctx context.Context, options ...sentry.CaptureOption)
+		options []sentry.CaptureOption
+		want    []*sentry.Mechanism
+	}{
+		{
+			name: "exception",
+			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
+				sentry.CaptureException(ctx, errBase, options...)
+			},
+			options: []sentry.CaptureOption{sentry.WithMechanism("auto.test", true)},
+			want:    []*sentry.Mechanism{{Type: "auto.test", Handled: new(true)}},
+		},
+		{
+			name: "recovered panic",
+			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
+				sentry.Recover(ctx, errBase, options...)
+			},
+			options: []sentry.CaptureOption{sentry.WithMechanism("auto.test", false)},
+			want:    []*sentry.Mechanism{{Type: "auto.test", Handled: new(false)}},
+		},
+		{
+			name: "wrapped group changes top-level mechanism",
+			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
+				sentry.CaptureException(ctx, errors.Join(errBase), options...)
+			},
+			options: []sentry.CaptureOption{sentry.WithMechanism("auto.test", true)},
+			want: []*sentry.Mechanism{
+				{Type: sentry.MechanismTypeChained, ExceptionID: 1, ParentID: new(0), Source: "errors[0]"},
+				{Type: "auto.test", Handled: new(true), IsExceptionGroup: true},
+			},
+		},
+		{
+			name: "default mechanism",
+			capture: func(ctx context.Context, options ...sentry.CaptureOption) {
+				sentry.CaptureException(ctx, errBase, options...)
+			},
+			want: []*sentry.Mechanism{{Type: sentry.MechanismTypeGeneric, Handled: new(true)}},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var seenByBeforeSend []*sentry.Mechanism
+			fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
+				BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+					for _, exception := range event.Exception {
+						seenByBeforeSend = append(seenByBeforeSend, exception.Mechanism)
+					}
+					return event
+				},
+			}))
+			test.capture(fixture.Context, test.options...)
+			fixture.Flush()
+
+			events := fixture.Events()
+			require.Len(t, events, 1)
+			var got []*sentry.Mechanism
+			for _, exception := range events[0].Exception {
+				got = append(got, exception.Mechanism)
+			}
+			require.Equal(t, test.want, got)
+			require.Equal(t, test.want, seenByBeforeSend)
 		})
 	}
 }

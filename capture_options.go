@@ -7,6 +7,7 @@ type CaptureOption func(*captureOptions)
 
 type captureOptions struct {
 	hint         *EventHint
+	mechanism    *Mechanism
 	level        Level
 	defaultLevel Level
 }
@@ -22,6 +23,16 @@ func WithEventHint(hint *EventHint) CaptureOption {
 func WithLevel(level Level) CaptureOption {
 	return func(options *captureOptions) {
 		options.level = level
+	}
+}
+
+// WithMechanism attaches capture related information to the exception.
+func WithMechanism(mechanismType string, handled bool) CaptureOption {
+	return func(options *captureOptions) {
+		options.mechanism = &Mechanism{
+			Type:    mechanismType,
+			Handled: &handled,
+		}
 	}
 }
 

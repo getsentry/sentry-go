@@ -1,6 +1,7 @@
 package sentry
 
 import (
+	"cmp"
 	"fmt"
 	"reflect"
 	"slices"
@@ -45,12 +46,6 @@ func convertErrorToExceptions(err error, maxErrorDepth int) []Exception {
 	}
 	convertErrorDFS(err, &exceptions, nil, "", vis, maxErrorDepth, 0)
 
-	// mechanism type is used for debugging purposes, but since we can't really distinguish the origin of who invoked
-	// captureException, we set it to nil if the error is not chained.
-	if len(exceptions) == 1 {
-		exceptions[0].Mechanism = nil
-	}
-
 	slices.Reverse(exceptions)
 
 	// Add a trace of the current stack to the top level(outermost) error in a chain if
@@ -92,13 +87,17 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 		mechanismType = MechanismTypeChained
 	}
 
-	exception.Mechanism = &Mechanism{
+	mechanism := &Mechanism{
 		Type:             mechanismType,
 		ExceptionID:      currentID,
 		ParentID:         parentID,
 		Source:           source,
 		IsExceptionGroup: isExceptionGroup,
 	}
+	if parentID == nil {
+		mechanism.Handled = new(true)
+	}
+	exception.Mechanism = mechanism
 
 	*exceptions = append(*exceptions, exception)
 
@@ -126,4 +125,23 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 			convertErrorDFS(cause, exceptions, &currentID, MechanismSourceCause, visited, maxErrorDepth, currentDepth+1)
 		}
 	}
+}
+
+// applyMechanism sets mechanism on the outermost exception of the event. The
+// fields linking the exception chain are kept from the existing mechanism, if
+// any.
+func (e *Event) applyMechanism(mechanism *Mechanism) {
+	if mechanism == nil || len(e.Exception) == 0 {
+		return
+	}
+
+	exception := &e.Exception[len(e.Exception)-1]
+	var m Mechanism
+	if exception.Mechanism != nil {
+		m = *exception.Mechanism
+	}
+	m.Type = cmp.Or(mechanism.Type, m.Type, MechanismTypeGeneric)
+	m.Handled = new(*mechanism.Handled)
+
+	exception.Mechanism = &m
 }
