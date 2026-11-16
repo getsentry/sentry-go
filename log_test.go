@@ -188,6 +188,26 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "Fatal level",
+			logFunc: func(ctx context.Context, l Logger) {
+				l.Fatal().WithCtx(ctx).Emitf("param matching: %v and %v", "param1", "param2")
+			},
+			message: "param matching: %v and %v",
+			wantEvents: []MockLogBatch{
+				{
+					Logs: []Log{
+						{
+							TraceID:    TraceIDFromHex(LogTraceID),
+							Level:      LogLevelFatal,
+							Severity:   LogSeverityFatal,
+							Body:       "param matching: param1 and param2",
+							Attributes: attrs,
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -223,34 +243,6 @@ func Test_sentryLogger_MethodsWithFormat(t *testing.T) {
 			}
 		})
 	}
-}
-
-func Test_sentryLogger_Panic(t *testing.T) {
-	t.Run("logger.Panic", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("expected panic, but code did not panic")
-			} else {
-				t.Logf("recovered panic: %v", r)
-			}
-		}()
-		ctx, _ := setupMockTransport()
-		l := NewLogger(ctx)
-		l.Panic().Emit("panic message") // This should panic
-	})
-
-	t.Run("logger.Panicf", func(t *testing.T) {
-		defer func() {
-			if r := recover(); r == nil {
-				t.Errorf("expected panic, but code did not panic")
-			} else {
-				t.Logf("recovered panic: %v", r)
-			}
-		}()
-		ctx, _ := setupMockTransport()
-		l := NewLogger(ctx)
-		l.Panic().Emitf("panic message") // This should panic
-	})
 }
 
 func Test_sentryLogger_Write(t *testing.T) {

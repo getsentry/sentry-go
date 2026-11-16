@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -40,13 +39,11 @@ type sentryLogger struct {
 }
 
 type logEntry struct {
-	logger      *sentryLogger
-	ctx         context.Context
-	level       LogLevel
-	severity    int
-	attributes  map[string]attribute.Value
-	shouldPanic bool
-	shouldFatal bool
+	logger     *sentryLogger
+	ctx        context.Context
+	level      LogLevel
+	severity   int
+	attributes map[string]attribute.Value
 }
 
 // NewLogger returns a Logger that emits logs to Sentry.
@@ -189,28 +186,6 @@ func (l *sentryLogger) Error() LogEntry {
 
 func (l *sentryLogger) Fatal() LogEntry {
 	return &logEntry{
-		logger:      l,
-		ctx:         l.ctx,
-		level:       LogLevelFatal,
-		severity:    LogSeverityFatal,
-		attributes:  make(map[string]attribute.Value),
-		shouldFatal: true,
-	}
-}
-
-func (l *sentryLogger) Panic() LogEntry {
-	return &logEntry{
-		logger:      l,
-		ctx:         l.ctx,
-		level:       LogLevelFatal,
-		severity:    LogSeverityFatal,
-		attributes:  make(map[string]attribute.Value),
-		shouldPanic: true,
-	}
-}
-
-func (l *sentryLogger) LFatal() LogEntry {
-	return &logEntry{
 		logger:     l,
 		ctx:        l.ctx,
 		level:      LogLevelFatal,
@@ -225,13 +200,11 @@ func (l *sentryLogger) GetCtx() context.Context {
 
 func (e *logEntry) WithCtx(ctx context.Context) LogEntry {
 	return &logEntry{
-		logger:      e.logger,
-		ctx:         ctx,
-		level:       e.level,
-		severity:    e.severity,
-		attributes:  maps.Clone(e.attributes),
-		shouldPanic: e.shouldPanic,
-		shouldFatal: e.shouldFatal,
+		logger:     e.logger,
+		ctx:        ctx,
+		level:      e.level,
+		severity:   e.severity,
+		attributes: maps.Clone(e.attributes),
 	}
 }
 
@@ -290,27 +263,8 @@ func (e *logEntry) Uint64(key string, value uint64) LogEntry {
 
 func (e *logEntry) Emit(args ...any) {
 	e.logger.log(e.ctx, e.level, e.severity, "", e.attributes, false, args...)
-
-	if e.level == LogLevelFatal {
-		if e.shouldPanic {
-			panic(fmt.Sprint(args...))
-		}
-		if e.shouldFatal {
-			os.Exit(1)
-		}
-	}
 }
 
 func (e *logEntry) Emitf(format string, args ...any) {
 	e.logger.log(e.ctx, e.level, e.severity, format, e.attributes, true, args...)
-
-	if e.level == LogLevelFatal {
-		if e.shouldPanic {
-			formattedMessage := fmt.Sprintf(format, args...)
-			panic(formattedMessage)
-		}
-		if e.shouldFatal {
-			os.Exit(1)
-		}
-	}
 }
