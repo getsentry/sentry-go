@@ -13,6 +13,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/util"
 )
 
 const (
@@ -132,8 +133,8 @@ func (h *handler) handle(ctx fiber.Ctx) error {
 func (h *handler) recoverWithSentry(requestCtx context.Context) {
 	if err := recover(); err != nil {
 		eventID := sentry.Recover(requestCtx, err)
-		if eventID != nil && h.waitForDelivery {
-			sentry.ClientFromContext(requestCtx).Flush(h.timeout)
+		if eventID != "" && h.waitForDelivery {
+			util.FlushWithTimeout(sentry.ClientFromContext(requestCtx), h.timeout)
 		}
 		if h.repanic {
 			panic(err)

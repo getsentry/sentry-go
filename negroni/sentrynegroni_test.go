@@ -337,7 +337,7 @@ func TestIntegration(t *testing.T) {
 		res.Body.Close()
 	}
 
-	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(eventsCh)

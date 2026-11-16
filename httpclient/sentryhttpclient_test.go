@@ -297,7 +297,7 @@ func TestIntegration(t *testing.T) {
 		span.Finish()
 	}
 
-	if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentryClient, testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(spansCh)
@@ -483,7 +483,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 			}
 
 			span.Finish()
-			if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
+			if ok := testutils.FlushWithTimeout(sentryClient, testutils.FlushTimeout()); !ok {
 				t.Fatal("sentry.Flush timed out")
 			}
 			close(spansCh)
@@ -563,7 +563,7 @@ func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
 	response.Body.Close()
 
 	span.Finish()
-	if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentryClient, testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(spansCh)
@@ -636,7 +636,7 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 	require.Contains(t, response.Request.Header.Get(sentry.SentryBaggageHeader), "sentry-trace_id=")
 	span.Finish()
 
-	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(spansCh)
@@ -715,7 +715,7 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 
 	response.Body.Close()
 
-	if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentryClient, testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(spansCh)
@@ -965,7 +965,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 			response.Body.Close()
 			span.Finish()
 
-			if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
+			if ok := testutils.FlushWithTimeout(sentryClient, testutils.FlushTimeout()); !ok {
 				t.Fatal("sentry.Flush timed out")
 			}
 			close(spansCh)

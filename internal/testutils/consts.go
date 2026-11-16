@@ -1,9 +1,10 @@
 package testutils
 
 import (
-	"context"
 	"os"
 	"time"
+
+	"github.com/getsentry/sentry-go/internal/util"
 )
 
 func IsCI() bool {
@@ -20,8 +21,4 @@ func FlushTimeout() time.Duration {
 }
 
 // FlushWithTimeout flushes f, waiting for at most timeout.
-func FlushWithTimeout(f interface{ FlushWithContext(context.Context) bool }, timeout time.Duration) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return f.FlushWithContext(ctx)
-}
+var FlushWithTimeout = util.FlushWithTimeout

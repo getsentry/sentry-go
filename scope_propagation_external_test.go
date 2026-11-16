@@ -49,7 +49,7 @@ func TestBaggageBeforeClientBinding(t *testing.T) {
 				require.Equal(t, "enabled", after.Entries["release"])
 			}
 			require.Equal(t, trace, sentry.GetTraceparent(ctx))
-			require.NotNil(t, sentry.CaptureMessage(ctx, "after client binding"))
+			require.NotEmpty(t, sentry.CaptureMessage(ctx, "after client binding"))
 			f.Flush()
 			require.Len(t, f.Events(), 1)
 			if got := f.Envelopes()[0].Header.Trace; !maps.Equal(after.Entries, got) {

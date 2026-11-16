@@ -42,10 +42,10 @@ type Transport interface {
 	// A nil error does not guarantee delivery. Implementations must return
 	// promptly once ctx is done.
 	SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error
-	// FlushWithContext waits for pending delivery attempts until ctx is canceled.
+	// Flush waits for pending delivery attempts until ctx is canceled.
 	// It must return false if ctx is done before they complete, including
 	// attempts that SendEnvelope made inline with the same ctx.
-	FlushWithContext(ctx context.Context) bool
+	Flush(ctx context.Context) bool
 	// Close releases transport resources.
 	Close()
 }
@@ -239,11 +239,11 @@ func (t *HTTPSyncTransport) SendEnvelope(ctx context.Context, envelope *protocol
 	return nil
 }
 
-// FlushWithContext reports whether ctx is still live.
+// Flush reports whether ctx is still live.
 //
 // Sends block on the sync transport, so when ctx deadline is reached, it
 // indicates that Flush did not succeed.
-func (t *HTTPSyncTransport) FlushWithContext(ctx context.Context) bool {
+func (t *HTTPSyncTransport) Flush(ctx context.Context) bool {
 	return ctx.Err() == nil
 }
 
@@ -355,7 +355,7 @@ func (t *HTTPTransport) SendEnvelope(ctx context.Context, envelope *protocol.Env
 	}
 }
 
-func (t *HTTPTransport) FlushWithContext(ctx context.Context) bool {
+func (t *HTTPTransport) Flush(ctx context.Context) bool {
 	if t.httpSender == nil || t.dsn == nil {
 		return true
 	}
@@ -510,7 +510,7 @@ func (t *noopTransport) SendEnvelope(_ context.Context, _ *protocol.Envelope) er
 	return nil
 }
 
-func (t *noopTransport) FlushWithContext(_ context.Context) bool {
+func (t *noopTransport) Flush(_ context.Context) bool {
 	return true
 }
 

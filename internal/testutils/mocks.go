@@ -32,7 +32,7 @@ func (m *MockTelemetryTransport) SendEnvelope(ctx context.Context, envelope *pro
 	return nil
 }
 
-func (m *MockTelemetryTransport) FlushWithContext(_ context.Context) bool {
+func (m *MockTelemetryTransport) Flush(_ context.Context) bool {
 	return true
 }
 

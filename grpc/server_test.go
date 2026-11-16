@@ -31,7 +31,7 @@ type flushCountingTransport struct {
 	flushes atomic.Int32
 }
 
-func (t *flushCountingTransport) FlushWithContext(context.Context) bool {
+func (t *flushCountingTransport) Flush(context.Context) bool {
 	t.flushes.Add(1)
 	return true
 }
@@ -72,7 +72,7 @@ func TestUnaryServerInterceptor(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	sentry.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 
 	transactions := transport.Transactions()
 	require.Len(t, transactions, 1)
@@ -120,7 +120,7 @@ func TestUnaryServerInterceptor_ContinuesIncomingTrace(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	sentry.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 	transactions := transport.Transactions()
 	require.Len(t, transactions, 1)
 	assert.Equal(t, traceID, transactions[0].Trace.TraceID.String())
@@ -180,7 +180,7 @@ func TestUnaryServerInterceptor_ScrubsSensitiveMetadata(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	sentry.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 
 	transactions := transport.Transactions()
 	require.Len(t, transactions, 1)
@@ -252,7 +252,7 @@ func TestUnaryServerInterceptor_Panic(t *testing.T) {
 			if tc.wantFlush {
 				assert.Positive(t, transport.flushes.Load())
 			}
-			sentry.Flush(testutils.FlushTimeout())
+			testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 			require.NotNil(t, <-eventsCh)
 
 			if tc.wantRepanic {
@@ -289,7 +289,7 @@ func TestServerInterceptors_MapStatus(t *testing.T) {
 					func(any, grpc.ServerStream) error { return rpcErr })
 			}
 			assert.ErrorIs(t, err, rpcErr)
-			sentry.Flush(testutils.FlushTimeout())
+			testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 
 			transactions := transport.Transactions()
 			require.Len(t, transactions, 1)
@@ -319,7 +319,7 @@ func TestStreamServerInterceptor(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	sentry.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 
 	transactions := transport.Transactions()
 	require.Len(t, transactions, 1)
@@ -386,7 +386,7 @@ func TestStreamServerInterceptor_Panic(t *testing.T) {
 				})
 			}()
 
-			sentry.Flush(testutils.FlushTimeout())
+			testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 			require.NotNil(t, <-eventsCh)
 
 			if tc.wantRepanic {

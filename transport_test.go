@@ -288,7 +288,7 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 	})
 }
 
-func TestHTTPTransport_FlushWithContext(t *testing.T) {
+func TestHTTPTransport_Flush(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -304,8 +304,8 @@ func TestHTTPTransport_FlushWithContext(t *testing.T) {
 		_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 
 		ctx := context.Background()
-		if !transport.FlushWithContext(ctx) {
-			t.Error("FlushWithContext should succeed")
+		if !transport.Flush(ctx) {
+			t.Error("Flush should succeed")
 		}
 	})
 
@@ -331,8 +331,8 @@ func TestHTTPTransport_FlushWithContext(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
 
-		if transport.FlushWithContext(ctx) {
-			t.Error("FlushWithContext should timeout")
+		if transport.Flush(ctx) {
+			t.Error("Flush should timeout")
 		}
 	})
 
@@ -341,8 +341,8 @@ func TestHTTPTransport_FlushWithContext(t *testing.T) {
 		transport.Configure(ClientOptions{Dsn: "https://key@sentry.io/123"})
 		transport.Close()
 
-		if transport.FlushWithContext(context.Background()) {
-			t.Error("FlushWithContext should fail for a closed transport")
+		if transport.Flush(context.Background()) {
+			t.Error("Flush should fail for a closed transport")
 		}
 	})
 }
@@ -419,8 +419,8 @@ func TestHTTPTransportDeadlines(t *testing.T) {
 			if elapsed := time.Since(start); elapsed != time.Second {
 				t.Errorf("request took %v, want %v", elapsed, time.Second)
 			}
-			if transport.FlushWithContext(ctx) {
-				t.Error("FlushWithContext should fail after the send reached the deadline")
+			if transport.Flush(ctx) {
+				t.Error("Flush should fail after the send reached the deadline")
 			}
 		})
 	})
@@ -454,8 +454,8 @@ func TestHTTPTransportDeadlines(t *testing.T) {
 			transport.Configure(options)
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			if transport.FlushWithContext(ctx) {
-				t.Error("FlushWithContext should fail for a canceled context")
+			if transport.Flush(ctx) {
+				t.Error("Flush should fail for a canceled context")
 			}
 			_ = transport.SendEnvelope(context.Background(), testEnvelope(protocol.EnvelopeItemTypeEvent))
 			if testutils.FlushWithTimeout(transport, time.Second) {
@@ -612,14 +612,14 @@ func TestHTTPSyncTransport_Flush(t *testing.T) {
 	transport := NewHTTPSyncTransport()
 	transport.Configure(ClientOptions{})
 
-	if !transport.FlushWithContext(context.Background()) {
-		t.Error("FlushWithContext should succeed for a live context")
+	if !transport.Flush(context.Background()) {
+		t.Error("Flush should succeed for a live context")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if transport.FlushWithContext(ctx) {
-		t.Error("FlushWithContext should fail for a canceled context")
+	if transport.Flush(ctx) {
+		t.Error("Flush should fail for a canceled context")
 	}
 }
 

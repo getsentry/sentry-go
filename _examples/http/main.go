@@ -83,7 +83,11 @@ func run() error {
 	}
 	// Flush buffered events before the program terminates.
 	// Set the timeout to the maximum duration the program can afford to wait.
-	defer sentry.Flush(2 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	// Main HTTP handler, renders an HTML page with a random image.
 	//
@@ -160,7 +164,7 @@ func run() error {
 
 		if err != nil {
 			log.Printf("[%q] %s", r.URL.Path, err)
-			sentry.CaptureException(ctx, err)
+			sentry.CaptureError(ctx, err)
 			code := http.StatusInternalServerError
 			http.Error(w, http.StatusText(code), code)
 			return

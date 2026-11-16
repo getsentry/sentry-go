@@ -72,7 +72,7 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentryhttp` attaches a request-specific `*sentry.Scope` and transaction to the request context. Pass `r.Context()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event.
+`sentryhttp` attaches a request-specific `*sentry.Scope` and transaction to the request context. Pass `r.Context()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureError` so request data, custom scope data, and trace information are applied to the event.
 Use `sentry.ScopeFromContext(r.Context())` when you need to add data that should be available to captures made during the request.
 
 **Keep in mind that the request scope won't be available in middleware attached before `sentryhttp`!**

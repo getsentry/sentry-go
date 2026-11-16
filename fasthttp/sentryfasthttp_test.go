@@ -258,7 +258,7 @@ func TestIntegration(t *testing.T) {
 			Path:   "/post/error-handler",
 			Method: "POST",
 			Handler: func(ctx *fasthttp.RequestCtx) {
-				sentry.CaptureException(sentryfasthttp.GetContext(ctx), exception)
+				sentry.CaptureError(sentryfasthttp.GetContext(ctx), exception)
 			},
 			WantStatus: 200,
 			WantEvent: &sentry.Event{
@@ -372,7 +372,7 @@ func TestIntegration(t *testing.T) {
 		}
 	}
 
-	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 

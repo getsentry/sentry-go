@@ -113,7 +113,7 @@ func (s *Scheduler) Stop(timeout time.Duration) {
 		s.closed = true
 		s.mu.Unlock()
 
-		s.FlushWithContext(ctx)
+		s.Flush(ctx)
 
 		// Cancel under s.mu
 		s.mu.Lock()
@@ -165,7 +165,7 @@ func (s *Scheduler) Add(item Item) bool {
 	return accepted
 }
 
-func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
+func (s *Scheduler) Flush(ctx context.Context) bool {
 	select {
 	case s.processing <- struct{}{}:
 		defer func() { <-s.processing }()
@@ -176,11 +176,11 @@ func (s *Scheduler) FlushWithContext(ctx context.Context) bool {
 	if !s.flushBuffers(ctx) {
 		return false
 	}
-	if !s.transport.FlushWithContext(ctx) {
+	if !s.transport.Flush(ctx) {
 		return false
 	}
 	if s.sendClientReport(ctx) {
-		return s.transport.FlushWithContext(ctx)
+		return s.transport.Flush(ctx)
 	}
 	return true
 }
@@ -332,7 +332,7 @@ func (s *Scheduler) sendItem(ctx context.Context, item EnvelopeConvertible, wait
 // With wait, a queue-full rejection flushes the transport and retries once.
 func (s *Scheduler) sendEnvelope(ctx context.Context, envelope *protocol.Envelope, wait bool) bool {
 	err := s.transport.SendEnvelope(ctx, envelope)
-	if wait && errors.Is(err, ErrQueueFull) && s.transport.FlushWithContext(ctx) {
+	if wait && errors.Is(err, ErrQueueFull) && s.transport.Flush(ctx) {
 		err = s.transport.SendEnvelope(ctx, envelope)
 	}
 	if err == nil {

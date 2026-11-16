@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -25,7 +26,11 @@ func main() {
 		log.Fatalf("sentry.Init: %s", err)
 	}
 
-	defer sentry.Flush(2 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	// Create a Sentry-instrumented HTTP handler
 	sentryHandler := sentryhttp.New(sentryhttp.Options{})

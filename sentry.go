@@ -40,19 +40,27 @@ func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb, options ...Bread
 
 // CaptureMessage captures an arbitrary message using the scope and client
 // carried by ctx.
-func CaptureMessage(ctx context.Context, message string, options ...CaptureOption) *EventID {
+func CaptureMessage(ctx context.Context, message string, options ...CaptureOption) EventID {
 	return ClientFromContext(ctx).CaptureMessage(ctx, message, options...)
+}
+
+// CaptureError captures an error using the scope and client carried by
+// ctx.
+func CaptureError(ctx context.Context, err error, options ...CaptureOption) EventID {
+	return ClientFromContext(ctx).CaptureError(ctx, err, options...)
 }
 
 // CaptureException captures an error using the scope and client carried by
 // ctx.
-func CaptureException(ctx context.Context, exception error, options ...CaptureOption) *EventID {
-	return ClientFromContext(ctx).CaptureException(ctx, exception, options...)
+//
+// Deprecated: Use [CaptureError].
+func CaptureException(ctx context.Context, exception error, options ...CaptureOption) EventID {
+	return CaptureError(ctx, exception, options...)
 }
 
 // CaptureCheckIn captures a (cron) monitor check-in using the scope and client
 // carried by ctx.
-func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) EventID {
 	return ClientFromContext(ctx).CaptureCheckIn(ctx, checkIn, monitorConfig)
 }
 
@@ -78,12 +86,10 @@ func WithMonitor(ctx context.Context, monitorSlug string, monitorConfig *Monitor
 	status := CheckInStatusError
 	defer func() {
 		checkIn := &CheckIn{
+			ID:          checkInID,
 			MonitorSlug: monitorSlug,
 			Status:      status,
 			Duration:    time.Since(start),
-		}
-		if checkInID != nil {
-			checkIn.ID = *checkInID
 		}
 		CaptureCheckIn(ctx, checkIn, nil)
 	}()
@@ -98,56 +104,39 @@ func WithMonitor(ctx context.Context, monitorSlug string, monitorConfig *Monitor
 // CaptureEvent captures an event using the scope and client carried by ctx.
 //
 // The event must already be assembled. Typically code would instead use
-// the utility methods like CaptureException. The return value is the
-// event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
-func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *EventID {
+// the utility methods like CaptureError. The return value is the
+// event ID. In case Sentry is disabled or event was dropped, the return value is empty.
+func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) EventID {
 	return ClientFromContext(ctx).CaptureEvent(ctx, event, options...)
 }
 
 // Recover captures a recovered panic value using the scope and client carried
 // by ctx. When recovered is nil, Recover invokes Go's built-in recover and must
 // itself be deferred.
-func Recover(ctx context.Context, recovered any, options ...CaptureOption) *EventID {
+func Recover(ctx context.Context, recovered any, options ...CaptureOption) EventID {
 	if recovered == nil {
 		recovered = recover()
 	}
 	if recovered == nil {
-		return nil
+		return ""
 	}
 	return ClientFromContext(ctx).capturePanic(ctx, recovered, options...)
 }
 
-// Flush waits until the underlying Transport sends any buffered events to the
-// Sentry server, blocking for at most the given timeout. It returns false if
-// capture is disabled or the timeout was reached. In the latter case, some
-// events may not have been sent.
-//
-// Flush should be called before terminating the program to avoid
-// unintentionally dropping events.
-//
-// Do not call Flush indiscriminately after every call to CaptureEvent,
-// CaptureException or CaptureMessage. Instead, to have the SDK send events over
-// the network synchronously, configure it to use the HTTPSyncTransport in the
-// call to Init.
-func Flush(timeout time.Duration) bool {
-	return ClientFromContext(context.Background()).Flush(timeout)
-}
-
-// FlushWithContext waits until the underlying Transport sends any buffered events
+// Flush waits until the underlying Transport sends any buffered events
 // to the Sentry server, blocking for at most the duration specified by the
 // context. It returns false if capture is disabled or the context is canceled
 // before the events are sent. In the latter case, some events may not be
 // delivered.
 //
-// FlushWithContext should be called before terminating the program to ensure no
+// Flush should be called before terminating the program to ensure no
 // events are unintentionally dropped.
 //
-// Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
-// CaptureException, or CaptureMessage. To send events synchronously over the network,
+// Avoid calling Flush indiscriminately after each call to CaptureEvent,
+// CaptureError, or CaptureMessage. To send events synchronously over the network,
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
-
-func FlushWithContext(ctx context.Context) bool {
-	return ClientFromContext(ctx).FlushWithContext(ctx)
+func Flush(ctx context.Context) bool {
+	return ClientFromContext(ctx).Flush(ctx)
 }
 
 // LastEventID returns the last event ID captured in ctx's scope, or an empty

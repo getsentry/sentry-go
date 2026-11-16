@@ -72,7 +72,7 @@ Timeout time.Duration
 
 ## Usage
 
-`sentryfasthttp` stores a request-specific standard Go context containing a `*sentry.Scope` and transaction on `fasthttp.RequestCtx`. Pass `sentryfasthttp.GetContext(ctx)` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event.
+`sentryfasthttp` stores a request-specific standard Go context containing a `*sentry.Scope` and transaction on `fasthttp.RequestCtx`. Pass `sentryfasthttp.GetContext(ctx)` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureError` so request data, custom scope data, and trace information are applied to the event.
 Use `sentry.ScopeFromContext(sentryfasthttp.GetContext(ctx))` when you need to add data that should be available to captures made during the request.
 
 **Keep in mind that the request scope won't be available in middleware attached before `sentryfasthttp`!**

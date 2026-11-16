@@ -44,7 +44,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer sentry.Flush(5 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	ctx := context.Background()
 	handler := sentryslog.Option{

@@ -1,6 +1,7 @@
 package sentryecho_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -404,7 +405,7 @@ func TestIntegration(t *testing.T) {
 		}
 	}
 
-	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(eventsCh)
@@ -509,7 +510,7 @@ func TestRequestContextState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 }
@@ -547,7 +548,7 @@ func TestUnwrapResponseError(t *testing.T) {
 		t.Errorf("expected 200, got %d", res.StatusCode)
 	}
 
-	if !sentry.Flush(testutils.FlushTimeout()) {
+	if !testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout()) {
 		t.Fatal("Flush timed out")
 	}
 	tx := <-ch

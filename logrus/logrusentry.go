@@ -36,12 +36,8 @@ type Hook interface {
 	// Fire sends entry to Sentry as an event.
 	Fire(entry *logrus.Entry) error
 	// Flush waits until the underlying Sentry transport sends any buffered events.
-	Flush(timeout time.Duration) bool
-	// FlushWithContext waits for the underlying Sentry transport to send any buffered
-	// events, blocking until the context's deadline is reached or the context is canceled.
-	// It returns false if the context is canceled or its deadline expires before the events
-	// are sent, meaning some events may not have been sent.
-	FlushWithContext(ctx context.Context) bool
+	// It returns false if ctx is done first.
+	Flush(ctx context.Context) bool
 }
 
 type logHook struct {
@@ -168,12 +164,8 @@ func (h *logHook) Levels() []logrus.Level {
 	return h.levels
 }
 
-func (h *logHook) Flush(timeout time.Duration) bool {
-	return sentry.ClientFromContext(h.ctx).Flush(timeout)
-}
-
-func (h *logHook) FlushWithContext(ctx context.Context) bool {
-	return sentry.ClientFromContext(h.ctx).FlushWithContext(ctx)
+func (h *logHook) Flush(ctx context.Context) bool {
+	return sentry.ClientFromContext(h.ctx).Flush(ctx)
 }
 
 // NewLogHook initializes a new Logrus hook which sends logs at the given levels

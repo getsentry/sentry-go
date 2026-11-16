@@ -153,7 +153,7 @@ func TestSentryCore_Write(t *testing.T) {
 	err := core.Write(entry, fields)
 	assert.NoError(t, err)
 
-	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 	events := mockTransport.LogBatches()
 	require.Equal(t, 1, len(events))
@@ -195,7 +195,7 @@ func TestSentryCore_WriteWithAccumulatedFields(t *testing.T) {
 	err := coreWithFields.Write(entry, additionalFields)
 	assert.NoError(t, err)
 
-	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 	events := mockTransport.LogBatches()
 	require.Equal(t, 1, len(events))
@@ -234,7 +234,7 @@ func TestSentryCore_WriteWithCaller(t *testing.T) {
 	err := core.Write(entry, nil)
 	assert.NoError(t, err)
 
-	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 	events := mockTransport.LogBatches()
 	require.Equal(t, 1, len(events))
@@ -271,7 +271,7 @@ func TestSentryCore_WriteWithLoggerName(t *testing.T) {
 	err := core.Write(entry, nil)
 	assert.NoError(t, err)
 
-	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 	events := mockTransport.LogBatches()
 	require.Equal(t, 1, len(events))
@@ -300,7 +300,7 @@ func TestSentryCore_WriteWithStack(t *testing.T) {
 	err := core.Write(entry, nil)
 	assert.NoError(t, err)
 
-	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 	events := mockTransport.LogBatches()
 	require.Equal(t, 1, len(events))
@@ -362,7 +362,7 @@ func TestSentryCore_LogLevels(t *testing.T) {
 			err := core.Write(entry, nil)
 			assert.NoError(t, err)
 
-			sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+			testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 			events := mockTransport.LogBatches()
 			require.Equal(t, 1, len(events))
@@ -388,7 +388,7 @@ func TestSentryCore_Origin(t *testing.T) {
 	err := core.Write(entry, nil)
 	assert.NoError(t, err)
 
-	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 	events := mockTransport.LogBatches()
 	require.Equal(t, 1, len(events))
@@ -410,7 +410,7 @@ func TestSentryCore_Integration(t *testing.T) {
 	logger.Info("user logged in", zap.String("user_id", "123"), zap.String("ip", "192.168.1.1"))
 	logger.Warn("high memory usage", zap.Float64("usage_percent", 85.5))
 
-	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 	events := mockTransport.LogBatches()
 	require.Equal(t, 1, len(events))
@@ -453,7 +453,7 @@ func TestSentryCore_IntegrationWithTee(t *testing.T) {
 	logger.Warn("warning message")
 	logger.Error("error message")
 
-	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 	events := mockTransport.LogBatches()
 	require.Equal(t, 1, len(events))
@@ -476,7 +476,7 @@ func TestSentryCore_IntegrationWithSugaredLogger(t *testing.T) {
 		"status", 200,
 	)
 
-	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 	events := mockTransport.LogBatches()
 	require.Equal(t, 1, len(events))
@@ -605,6 +605,6 @@ func TestSentryCore_ContextFieldInLogger(t *testing.T) {
 	noopLogger := zap.New(NewSentryCore(ctx, Option{Level: []zapcore.Level{zapcore.InfoLevel}, FlushTimeout: testutils.FlushTimeout()})).With(Context(noop))
 	noopLogger.Info("suppressed")
 	require.Error(t, noopLogger.Sync())
-	sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 	require.Len(t, mockTransport.LogBatches(), 2)
 }

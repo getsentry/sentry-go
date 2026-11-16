@@ -49,8 +49,8 @@ type Transport interface {
 	// the envelope is rejected.
 	SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error
 
-	// FlushWithContext waits for all pending envelopes to be sent.
-	FlushWithContext(ctx context.Context) bool
+	// Flush waits for all pending envelopes to be sent.
+	Flush(ctx context.Context) bool
 
 	// Close shuts down the transport gracefully
 	Close()

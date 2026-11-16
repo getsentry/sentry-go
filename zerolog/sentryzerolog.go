@@ -9,6 +9,7 @@ import (
 
 	"github.com/buger/jsonparser"
 	sentry "github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/rs/zerolog"
 )
 
@@ -178,7 +179,7 @@ func (w *Writer) Write(data []byte) (int, error) {
 	sentry.CaptureEvent(w.ctx, event)
 	// should flush before os.Exit
 	if event.Level == sentry.LevelFatal {
-		sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout)
+		util.FlushWithTimeout(sentry.ClientFromContext(w.ctx), w.flushTimeout)
 	}
 
 	return n, nil
@@ -206,7 +207,7 @@ func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (int, error) {
 	sentry.CaptureEvent(w.ctx, event)
 	// should flush before os.Exit
 	if event.Level == sentry.LevelFatal {
-		sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout)
+		util.FlushWithTimeout(sentry.ClientFromContext(w.ctx), w.flushTimeout)
 	}
 
 	return n, nil
@@ -215,7 +216,7 @@ func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (int, error) {
 // Close forces client to flush all pending events.
 // Can be useful before application exits.
 func (w *Writer) Close() error {
-	if ok := sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout); !ok {
+	if ok := util.FlushWithTimeout(sentry.ClientFromContext(w.ctx), w.flushTimeout); !ok {
 		return ErrFlushTimeout
 	}
 	return nil

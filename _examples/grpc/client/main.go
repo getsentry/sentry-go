@@ -27,7 +27,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("sentry.Init: %s", err)
 	}
-	defer sentry.Flush(2 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	// Create a connection to the gRPC server with Sentry interceptors
 	conn, err := grpc.NewClient(
@@ -70,7 +74,7 @@ func unaryExample(client examplepb.ExampleServiceClient) {
 	res, err := client.UnaryExample(ctx, req)
 	if err != nil {
 		fmt.Printf("Unary Call Error: %v\n", err)
-		sentry.CaptureException(ctx, err)
+		sentry.CaptureError(ctx, err)
 		return
 	}
 
@@ -90,7 +94,7 @@ func streamExample(client examplepb.ExampleServiceClient) {
 	stream, err := client.StreamExample(ctx)
 	if err != nil {
 		fmt.Printf("Failed to establish stream: %v\n", err)
-		sentry.CaptureException(ctx, err)
+		sentry.CaptureError(ctx, err)
 		return
 	}
 
@@ -100,7 +104,7 @@ func streamExample(client examplepb.ExampleServiceClient) {
 		err := stream.Send(&examplepb.ExampleRequest{Message: msg})
 		if err != nil {
 			fmt.Printf("Stream Send Error: %v\n", err)
-			sentry.CaptureException(ctx, err)
+			sentry.CaptureError(ctx, err)
 			return
 		}
 	}
@@ -114,7 +118,7 @@ func streamExample(client examplepb.ExampleServiceClient) {
 		if err != nil {
 			if err != io.EOF {
 				fmt.Printf("Stream Recv Error: %v\n", err)
-				sentry.CaptureException(ctx, err)
+				sentry.CaptureError(ctx, err)
 			}
 			break
 		}

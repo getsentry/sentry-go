@@ -39,7 +39,7 @@ func TestAddBreadcrumbHint(t *testing.T) {
 				},
 			}))
 			sentry.AddBreadcrumb(fixture.Context, &sentry.Breadcrumb{Message: "crumb"}, test.options...)
-			require.NotNil(t, sentry.CaptureMessage(fixture.Context, "event"))
+			require.NotEmpty(t, sentry.CaptureMessage(fixture.Context, "event"))
 			fixture.Flush()
 			require.Equal(t, test.want, gotHint)
 			events := fixture.Events()

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -105,8 +106,8 @@ func (h *handler) recoverWithSentry(r *http.Request) {
 		if !isBrokenPipeError(err) {
 			ctx := r.Context()
 			eventID := sentry.Recover(ctx, err)
-			if eventID != nil && h.waitForDelivery {
-				sentry.ClientFromContext(ctx).Flush(h.timeout)
+			if eventID != "" && h.waitForDelivery {
+				util.FlushWithTimeout(sentry.ClientFromContext(ctx), h.timeout)
 			}
 		}
 		if h.repanic {
