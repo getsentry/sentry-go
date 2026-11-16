@@ -140,11 +140,13 @@ func load(dir string) (survivors map[location][]mutant, caught int, found bool, 
 	return survivors, caught, len(paths) > 0, nil
 }
 
-// change is one distinct edit that survived on a line. Different mutators can
-// make the same edit, such as ARITHMETIC_BASE and INVERT_NEGATIVES on -n.
-type change struct {
-	edit    string
-	covered bool
+// row is one surviving mutant in the table. Mutators that make the same edit,
+// such as ARITHMETIC_BASE and INVERT_NEGATIVES on -n, share a row.
+type row struct {
+	loc      location
+	kinds    []string
+	replaced string
+	covered  bool
 }
 
 func render(survivors map[location][]mutant, caught int, sha, run string) (string, error) {
@@ -160,8 +162,7 @@ func render(survivors map[location][]mutant, caught int, sha, run string) (strin
 	})
 
 	sources := map[string][]byte{}
-	changes := map[location][]change{}
-	total := 0
+	var rows []row
 	for _, loc := range locs {
 		src, ok := sources[loc.path]
 		if !ok {
@@ -173,116 +174,106 @@ func render(survivors map[location][]mutant, caught int, sha, run string) (strin
 		}
 		ms := survivors[loc]
 		slices.SortFunc(ms, func(a, b mutant) int { return strings.Compare(a.kind, b.kind) })
+		first := len(rows)
 		for _, m := range ms {
-			c := change{describe(m, src, loc.line), m.covered}
-			if !slices.Contains(changes[loc], c) {
-				changes[loc] = append(changes[loc], c)
-				total++
+			replaced := replace(m, src, loc.line)
+			i := slices.IndexFunc(rows[first:], func(r row) bool { return r.replaced == replaced && r.covered == m.covered })
+			if replaced != "" && i >= 0 {
+				rows[first+i].kinds = append(rows[first+i].kinds, m.kind)
+				continue
 			}
+			rows = append(rows, row{loc, []string{m.kind}, replaced, m.covered})
 		}
 	}
 
 	var b strings.Builder
-	b.WriteString(marker + "\n## Mutation testing\n\n")
-	if total == 0 {
-		switch caught {
-		case 0:
-			b.WriteString("Nothing on the lines this PR touches can be mutated.\n")
-		case 1:
-			b.WriteString("The 1 change on lines this PR touches is caught by the tests.\n")
-		default:
-			fmt.Fprintf(&b, "All %d changes on lines this PR touches are caught by the tests.\n", caught)
-		}
-		footer(&b, sha, run)
+	b.WriteString(marker + "\n")
+	if len(rows) > 0 {
+		b.WriteString(survivorsMarker + "\n")
+	}
+	b.WriteString("Mutation testing breaks the lines a PR changes on purpose, one mutation at a time, and checks that a test fails each time. A mutant that survives the tests, or that no test runs, only warns.")
+	if run != "" {
+		fmt.Fprintf(&b, " [Full report](%s)", run)
+	}
+	b.WriteString("\n\n")
+
+	switch total := caught + len(rows); {
+	case total == 0:
+		b.WriteString("### No mutants on the changed lines\n")
 		return b.String(), nil
+	case total == 1 && len(rows) == 0:
+		b.WriteString("### Tests caught the 1 mutant on the changed lines\n")
+		return b.String(), nil
+	case len(rows) == 0:
+		fmt.Fprintf(&b, "### Tests caught all %d mutants on the changed lines\n", total)
+		return b.String(), nil
+	default:
+		fmt.Fprintf(&b, "### Tests caught %d of %d mutants on the changed lines\n\n", caught, total)
 	}
 
-	b.WriteString(survivorsMarker + "\n")
-	fmt.Fprintf(&b, "The tests did not catch %s on lines this PR touches.", plural(total, "change"))
-	if caught > 0 {
-		fmt.Fprintf(&b, " %s caught.", plural(caught, "other change was", "other changes were"))
+	b.WriteString("| Location | Mutation | Replaced with | Status |\n|---|---|---|---|\n")
+	for _, r := range rows {
+		names := make([]string, len(r.kinds))
+		for i, k := range r.kinds {
+			names[i] = name(k)
+		}
+		replaced := "—"
+		if r.replaced != "" {
+			replaced = code(r.replaced)
+		}
+		status := "Not covered"
+		if r.covered {
+			status = "Survived"
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", link(r.loc, sha), strings.Join(names, ", "), replaced, status)
 	}
-	b.WriteString("\n")
-
-	for _, loc := range locs {
-		writeLocation(&b, loc, changes[loc], survivors[loc][0].kind, sources[loc.path], sha)
-	}
-
-	b.WriteString("\n<details><summary>What this means</summary>\n\n")
-	b.WriteString("Each change is a small edit to the code, like flipping a comparison, that a test should fail on.\n\n")
-	b.WriteString("- **not caught**: tests run the line, but no assertion depends on it.\n")
-	b.WriteString("- **not run**: no test executes the line.\n\n")
-	b.WriteString("Run locally with `make mutation MUTATION_BASE=origin/<base-branch>`.\n</details>\n")
-	footer(&b, sha, run)
 	return b.String(), nil
 }
 
-func writeLocation(b *strings.Builder, loc location, changes []change, kind string, src []byte, sha string) {
-	name := fmt.Sprintf("%s:%d", loc.path, loc.line)
-	if repo := os.Getenv("GITHUB_REPOSITORY"); repo != "" && sha != "" {
-		server := os.Getenv("GITHUB_SERVER_URL")
-		if server == "" {
-			server = "https://github.com"
-		}
-		name = fmt.Sprintf("[`%s`](%s/%s/blob/%s/%s#L%d)", name, server, repo, sha, loc.path, loc.line)
-	} else {
-		name = "`" + name + "`"
+// link renders a location, linked to sha when the repository is known.
+func link(loc location, sha string) string {
+	text := code(fmt.Sprintf("%s:%d", loc.path, loc.line))
+	repo := os.Getenv("GITHUB_REPOSITORY")
+	if repo == "" || sha == "" {
+		return text
 	}
-	fmt.Fprintf(b, "\n### %s\n\n", name)
-
-	if code := sourceLine(src, loc.line); code != "" {
-		fmt.Fprintf(b, "```go\n%s\n```\n\n", code)
+	server := os.Getenv("GITHUB_SERVER_URL")
+	if server == "" {
+		server = "https://github.com"
 	}
-
-	b.WriteString("| Change | Result |\n| --- | --- |\n")
-	covered := false
-	for _, c := range changes {
-		result := "not run"
-		if c.covered {
-			result = "not caught"
-			covered = true
-		}
-		fmt.Fprintf(b, "| %s | %s |\n", c.edit, result)
-	}
-	b.WriteString("\n")
-	if covered {
-		b.WriteString(hint(kind))
-	} else {
-		b.WriteString("No test runs this line. Add one that does and asserts on its result.")
-	}
-	b.WriteString("\n")
+	return fmt.Sprintf("[%s](%s/%s/blob/%s/%s#L%d)", text, server, repo, sha, loc.path, loc.line)
 }
 
-// describe prints a mutant as the exact edit, such as `>` → `>=`.
-func describe(m mutant, src []byte, line int) string {
+// replace returns the source line with the mutant applied, or "" when the
+// mutated token is unknown.
+func replace(m mutant, src []byte, line int) string {
+	lines := strings.Split(string(src), "\n")
+	if line < 1 || line > len(lines) {
+		return ""
+	}
 	tok := tokenAt(src, line, m.column)
-	if to, ok := mutations[m.kind][tok]; ok {
-		return fmt.Sprintf("%s → %s", cell(tok.String()), cell(to.String()))
+	to, ok := mutations[m.kind][tok]
+	text, start := lines[line-1], m.column-1
+	if !ok || start+len(tok.String()) > len(text) {
+		return ""
 	}
-	if tok.IsOperator() || tok.IsKeyword() {
-		return fmt.Sprintf("%s (%s)", cell(tok.String()), strings.ToLower(m.kind))
-	}
-	return strings.ToLower(m.kind)
+	return strings.TrimSpace(text[:start] + to.String() + text[start+len(tok.String()):])
 }
 
-// hint says what kind of test catches mutants of the given type.
-func hint(kind string) string {
-	switch kind {
-	case "CONDITIONALS_BOUNDARY", "CONDITIONALS_NEGATION":
-		return "Tests run this line, but none fail when the comparison changes. Add cases exactly at the boundary and on each side of it, and assert on what each one does."
-	case "ARITHMETIC_BASE":
-		return "Tests run this line, but none check the computed value. Assert on the exact result."
-	case "INCREMENT_DECREMENT":
-		return "Tests run this line, but none check the counter. Assert on the resulting count or index."
-	case "INVERT_NEGATIVES":
-		return "Tests run this line, but none check the sign. Assert on the exact result."
-	case "INVERT_LOGICAL":
-		return "Tests run this line, but none fail when the condition changes. Add a case where only one side of it is true."
-	case "INVERT_LOOPCTRL":
-		return "Tests run this line, but none check what the loop does next. Assert on the iterations after this one."
-	default:
-		return "Tests run this line, but none fail when it changes. Add an assertion that depends on its result."
+// name turns a gremlins mutant type, such as CONDITIONALS_BOUNDARY, into
+// "Conditionals boundary".
+func name(kind string) string {
+	s := strings.ToLower(strings.ReplaceAll(kind, "_", " "))
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// code formats s as inline code in a Markdown table cell.
+func code(s string) string {
+	s = strings.ReplaceAll(s, "|", `\|`)
+	if strings.Contains(s, "`") {
+		return "`` " + s + " ``"
 	}
+	return "`" + s + "`"
 }
 
 // tokenAt returns the token at the 1-based line and column of src.
@@ -301,43 +292,6 @@ func tokenAt(src []byte, line, column int) token.Token {
 		} else if p.Line > line {
 			return token.ILLEGAL
 		}
-	}
-}
-
-func sourceLine(src []byte, line int) string {
-	lines := strings.Split(string(src), "\n")
-	if line < 1 || line > len(lines) {
-		return ""
-	}
-	return strings.TrimSpace(lines[line-1])
-}
-
-// cell formats code for a Markdown table cell, where | must be escaped.
-func cell(code string) string {
-	return "`" + strings.ReplaceAll(code, "|", `\|`) + "`"
-}
-
-func plural(n int, forms ...string) string {
-	one, many := forms[0], forms[0]+"s"
-	if len(forms) > 1 {
-		many = forms[1]
-	}
-	if n == 1 {
-		return "1 " + one
-	}
-	return fmt.Sprintf("%d %s", n, many)
-}
-
-func footer(b *strings.Builder, sha, run string) {
-	var parts []string
-	if sha != "" {
-		parts = append(parts, "Commit "+sha[:min(len(sha), 7)])
-	}
-	if run != "" {
-		parts = append(parts, fmt.Sprintf("[run log](%s)", run))
-	}
-	if len(parts) > 0 {
-		fmt.Fprintf(b, "\n<sub>%s</sub>\n", strings.Join(parts, " · "))
 	}
 }
 
