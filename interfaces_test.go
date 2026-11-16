@@ -423,7 +423,10 @@ func TestSetException(t *testing.T) {
 					Value:      "simple error",
 					Type:       "*errors.errorString",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
-					Mechanism:  nil,
+					Mechanism: &Mechanism{
+						Type:    MechanismTypeGeneric,
+						Handled: new(true),
+					},
 				},
 			},
 		},
@@ -460,6 +463,7 @@ func TestSetException(t *testing.T) {
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
+						Handled:          new(true),
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,
@@ -478,7 +482,10 @@ func TestSetException(t *testing.T) {
 					Value:      "custom error message",
 					Type:       "*sentry.customError",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
-					Mechanism:  nil,
+					Mechanism: &Mechanism{
+						Type:    MechanismTypeGeneric,
+						Handled: new(true),
+					},
 				},
 			},
 		},
@@ -518,6 +525,7 @@ func TestSetException(t *testing.T) {
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
+						Handled:          new(true),
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,
@@ -570,6 +578,7 @@ func TestSetException(t *testing.T) {
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
+						Handled:          new(true),
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,
@@ -622,6 +631,7 @@ func TestSetException(t *testing.T) {
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
+						Handled:          new(true),
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,

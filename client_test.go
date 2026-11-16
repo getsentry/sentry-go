@@ -357,6 +357,10 @@ func TestCaptureMessageEmptyString(t *testing.T) {
 				Type:       "sentry.usageError",
 				Value:      "CaptureMessage called with empty message",
 				Stacktrace: &Stacktrace{},
+				Mechanism: &Mechanism{
+					Type:    MechanismTypeGeneric,
+					Handled: new(true),
+				},
 			},
 		},
 	}
@@ -422,6 +426,10 @@ func TestCaptureException(t *testing.T) {
 					Type:       "sentry.usageError",
 					Value:      "CaptureException called with nil error",
 					Stacktrace: &Stacktrace{},
+					Mechanism: &Mechanism{
+						Type:    MechanismTypeGeneric,
+						Handled: new(true),
+					},
 				},
 			},
 		},
@@ -433,6 +441,10 @@ func TestCaptureException(t *testing.T) {
 					Type:       "*errors.errorString",
 					Value:      "custom error",
 					Stacktrace: &Stacktrace{},
+					Mechanism: &Mechanism{
+						Type:    MechanismTypeGeneric,
+						Handled: new(true),
+					},
 				},
 			},
 		},
@@ -461,6 +473,7 @@ func TestCaptureException(t *testing.T) {
 					Stacktrace: &Stacktrace{},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeGeneric,
+						Handled:          new(true),
 						ExceptionID:      0,
 						ParentID:         nil,
 						Source:           "",
@@ -477,6 +490,10 @@ func TestCaptureException(t *testing.T) {
 					Type:       "*sentry.customErrWithCause",
 					Value:      "err",
 					Stacktrace: &Stacktrace{},
+					Mechanism: &Mechanism{
+						Type:    MechanismTypeGeneric,
+						Handled: new(true),
+					},
 				},
 			},
 		},
@@ -502,6 +519,7 @@ func TestCaptureException(t *testing.T) {
 					Stacktrace: &Stacktrace{},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeGeneric,
+						Handled:          new(true),
 						ExceptionID:      0,
 						ParentID:         nil,
 						Source:           "",
@@ -532,6 +550,7 @@ func TestCaptureException(t *testing.T) {
 					Stacktrace: &Stacktrace{},
 					Mechanism: &Mechanism{
 						Type:             MechanismTypeGeneric,
+						Handled:          new(true),
 						ExceptionID:      0,
 						ParentID:         nil,
 						Source:           "",
@@ -568,7 +587,7 @@ func TestCaptureException(t *testing.T) {
 					Type:       "sentry.wrappedError",
 					Value:      `wrapped: Post "http://auth/api?token=[Filtered]&q=a%20b": timeout`,
 					Stacktrace: &Stacktrace{},
-					Mechanism:  &Mechanism{Type: MechanismTypeGeneric},
+					Mechanism:  &Mechanism{Type: MechanismTypeGeneric, Handled: new(true)},
 				},
 			},
 		},
@@ -590,7 +609,7 @@ func TestCaptureException(t *testing.T) {
 					Type:       "*url.Error",
 					Value:      `parse "[Filtered]": invalid URL escape "%zz"`,
 					Stacktrace: &Stacktrace{},
-					Mechanism:  &Mechanism{Type: MechanismTypeGeneric},
+					Mechanism:  &Mechanism{Type: MechanismTypeGeneric, Handled: new(true)},
 				},
 			},
 		},
@@ -687,6 +706,10 @@ func TestCaptureEventNil(t *testing.T) {
 				Type:       "sentry.usageError",
 				Value:      "CaptureEvent called with nil event",
 				Stacktrace: &Stacktrace{},
+				Mechanism: &Mechanism{
+					Type:    MechanismTypeGeneric,
+					Handled: new(true),
+				},
 			},
 		},
 	}
@@ -1438,6 +1461,10 @@ func TestRecover(t *testing.T) {
 						Type:       "*errors.errorString",
 						Value:      "panic error",
 						Stacktrace: &Stacktrace{},
+						Mechanism: &Mechanism{
+							Type:    MechanismTypeGeneric,
+							Handled: new(true),
+						},
 					},
 				},
 			},

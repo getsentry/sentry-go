@@ -1,6 +1,7 @@
 package sentry_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -51,4 +52,33 @@ func TestAddBreadcrumbHint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWithMechanism(t *testing.T) {
+	t.Parallel()
+	errBase := errors.New("base")
+	var seenByBeforeSend []*sentry.Mechanism
+	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
+		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			for _, exception := range event.Exception {
+				seenByBeforeSend = append(seenByBeforeSend, exception.Mechanism)
+			}
+			return event
+		},
+	}))
+	sentry.CaptureException(fixture.Context, errors.Join(errBase), sentry.WithMechanism("auto.test", true))
+	fixture.Flush()
+
+	events := fixture.Events()
+	require.Len(t, events, 1)
+	var got []*sentry.Mechanism
+	for _, exception := range events[0].Exception {
+		got = append(got, exception.Mechanism)
+	}
+	want := []*sentry.Mechanism{
+		{Type: sentry.MechanismTypeChained, ExceptionID: 1, ParentID: new(0), Source: "errors[0]"},
+		{Type: "auto.test", Handled: new(true), IsExceptionGroup: true},
+	}
+	require.Equal(t, want, got)
+	require.Equal(t, want, seenByBeforeSend)
 }

@@ -28,6 +28,10 @@ func TestConvertErrorToExceptions(t *testing.T) {
 					Value:      "single error",
 					Type:       "*errors.errorString",
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
+					Mechanism: &Mechanism{
+						Type:    MechanismTypeGeneric,
+						Handled: new(true),
+					},
 				},
 			},
 		},
@@ -64,6 +68,7 @@ func TestConvertErrorToExceptions(t *testing.T) {
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
+						Handled:          new(true),
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,
@@ -116,6 +121,7 @@ func TestConvertErrorToExceptions(t *testing.T) {
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
+						Handled:          new(true),
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,
@@ -219,6 +225,7 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
+						Handled:          new(true),
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,
@@ -277,6 +284,7 @@ func TestExceptionGroupsWithAggregateError(t *testing.T) {
 					Stacktrace: &Stacktrace{Frames: []Frame{}},
 					Mechanism: &Mechanism{
 						Type:             "generic",
+						Handled:          new(true),
 						Source:           "",
 						ExceptionID:      0,
 						ParentID:         nil,

@@ -346,6 +346,10 @@ func TestIntegration(t *testing.T) {
 					{
 						Value: exception.Error(),
 						Type:  reflect.TypeOf(exception).String(),
+						Mechanism: &sentry.Mechanism{
+							Type:    "generic",
+							Handled: new(true),
+						},
 					},
 				},
 				Request: &sentry.Request{
