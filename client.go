@@ -559,6 +559,9 @@ func (client *Client) CaptureMessage(ctx context.Context, message string, option
 	if !client.IsEnabled() {
 		return nil
 	}
+	if len(message) > 8192 {
+		debuglog.Println("CaptureMessage called with a long message.")
+	}
 	opts := resolveCaptureOptions(ctx, options...)
 	opts.defaultLevel = LevelInfo
 	if message == "" {
@@ -964,4 +967,9 @@ func (client *Client) integrationAlreadyInstalled(name string) bool {
 // [0.0, 1.0].
 func sample(probability float64) bool {
 	return rand.Float64() < probability //nolint:gosec // sampling doesn't need crypto randomness
+}
+
+func tmpUncovered(n int) int {
+	n++
+	return -n
 }
