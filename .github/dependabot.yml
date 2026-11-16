@@ -5,3 +5,34 @@ updates:
   schedule: 
     interval: monthly
   open-pull-requests-limit: 10
+# Go modules: security updates only. `open-pull-requests-limit: 0` keeps
+# version updates off; the group makes Dependabot open one PR per security
+# update across all go.work modules instead of one PR per directory.
+- package-ecosystem: "gomod"
+  directories:
+    - "/"
+    - "/cron"
+    - "/crosstest"
+    - "/echo"
+    - "/fasthttp"
+    - "/fiber"
+    - "/fiberv3"
+    - "/gin"
+    - "/grpc"
+    - "/iris"
+    - "/logrus"
+    - "/negroni"
+    - "/otel"
+    - "/otel/otlp"
+    - "/slog"
+    - "/sql"
+    - "/zap"
+    - "/zerolog"
+  schedule:
+    interval: monthly
+  open-pull-requests-limit: 0
+  groups:
+    go-security:
+      applies-to: security-updates
+      patterns:
+        - "*"
