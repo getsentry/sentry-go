@@ -30,7 +30,7 @@ actions = ["opened", "synchronize", "reopened"]
 [[skills]]
 name = "sdk-review"
 paths = ["**/*.go"]
-ignorePaths = ["**/testdata/**", "_examples/**"]
+ignorePaths = ["**/testdata/**", "**/*_test.go", "_examples/**"]
 incremental = true
 reportOn = "medium"
 
