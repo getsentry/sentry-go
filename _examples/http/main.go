@@ -254,14 +254,11 @@ func NewImage(ctx context.Context, width, height int, seed []byte) image.Image {
 	return img
 }
 
-// configureLoggers configures the standard logger and the logger used by the
-// Sentry SDK.
+// configureLoggers configures the standard logger.
 //
 // The only reason to change logger configuration in this example is aesthetics.
 func configureLoggers() {
 	logFlags := log.Ldate | log.Ltime
-	sentry.DebugLogger.SetPrefix("[sentry sdk]   ")
-	sentry.DebugLogger.SetFlags(logFlags)
 	log.SetPrefix("[http example] ")
 	log.SetFlags(logFlags)
 }

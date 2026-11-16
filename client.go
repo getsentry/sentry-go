@@ -54,10 +54,6 @@ const (
 // to retry for now.
 var hostname, _ = os.Hostname()
 
-// DebugLogger is an instance of log.Logger that is used to provide debug information about running Sentry Client
-// can be enabled by either using debuglog.SetOutput directly or with Debug client option.
-var DebugLogger = debuglog.GetLogger()
-
 // EventProcessor is a function that processes an event.
 // Event processors are used to change an event before it is sent to Sentry.
 type EventProcessor func(event *Event, hint *EventHint) *Event
@@ -68,18 +64,6 @@ type EventProcessor func(event *Event, hint *EventHint) *Event
 // needing the otel dependency on the root package.
 type externalContextTraceResolver interface {
 	ResolveTraceContext(context.Context) (TraceID, SpanID, Sampled, bool)
-}
-
-var globalEventProcessors []EventProcessor
-
-// AddGlobalEventProcessor adds processor to the global list of event
-// processors. Global event processors apply to all events.
-//
-// AddGlobalEventProcessor is deprecated. Most users will prefer to initialize
-// the SDK with Init and provide a ClientOptions.BeforeSend function or use
-// Scope.AddEventProcessor instead.
-func AddGlobalEventProcessor(processor EventProcessor) {
-	globalEventProcessors = append(globalEventProcessors, processor)
 }
 
 // Integration allows for registering a functions that modify or discard captured events.
@@ -272,12 +256,10 @@ type Client struct {
 	transactionProcessors []func(*Transaction) *Transaction
 	sdkIdentifier         string
 	sdkVersion            string
-	// Transport is read-only. Replacing the transport of an existing client is
-	// not supported, create a new client instead.
-	Transport          Transport
-	syncDelivery       bool
-	telemetryProcessor *telemetry.Processor
-	reports            *report.Aggregator
+	transport             Transport
+	syncDelivery          bool
+	telemetryProcessor    *telemetry.Processor
+	reports               *report.Aggregator
 }
 
 // NewClient creates and returns an instance of Client configured using
@@ -404,7 +386,7 @@ var noopClient = &Client{
 	},
 	sdkIdentifier: sdkIdentifier,
 	sdkVersion:    SDKVersion,
-	Transport:     new(NoopTransport),
+	transport:     new(noopTransport),
 }
 
 // NewNoopClient returns the shared client that safely discards telemetry.
@@ -438,13 +420,13 @@ func (client *Client) setupTransport() {
 	transport := opts.Transport
 	if transport == nil {
 		if opts.Dsn == "" {
-			transport = NewNoopTransport()
+			transport = newNoopTransport()
 		} else {
 			transport = NewHTTPTransport()
 		}
 	}
 	transport.Configure(opts)
-	client.Transport = transport
+	client.transport = transport
 }
 
 func (client *Client) sdkInfo() *protocol.SdkInfo {
@@ -471,7 +453,7 @@ func (client *Client) setupTelemetryProcessor() {
 		buffers[ratelimit.CategoryMonitor] = telemetry.NewRingBuffer[telemetry.Item](ratelimit.CategoryMonitor, 100, telemetry.OverflowPolicyDropOldest, 1, 0, client.reports)
 	}
 
-	client.telemetryProcessor = telemetry.NewProcessor(buffers, client.Transport, client.dsn, client.sdkInfo, client.reports)
+	client.telemetryProcessor = telemetry.NewProcessor(buffers, client.transport, client.dsn, client.sdkInfo, client.reports)
 }
 
 func (client *Client) setupIntegrations() {
@@ -756,7 +738,7 @@ func (client *Client) Close() {
 		return
 	}
 	client.telemetryProcessor.Close(5 * time.Second)
-	client.Transport.Close()
+	client.transport.Close()
 }
 
 func (client *Client) eventFromMessage(message string) *Event {
@@ -932,10 +914,7 @@ func (client *Client) prepareEvent(ctx context.Context, event *Event, scope *Sco
 	if event = client.runEventProcessors(event, opts.hint, scopeProcessors); event == nil {
 		return nil
 	}
-	if event = client.runEventProcessors(event, opts.hint, client.eventProcessors); event == nil {
-		return nil
-	}
-	return client.runEventProcessors(event, opts.hint, globalEventProcessors)
+	return client.runEventProcessors(event, opts.hint, client.eventProcessors)
 }
 
 func (client *Client) runEventProcessors(event *Event, hint *EventHint, processors []EventProcessor) *Event {
