@@ -10,14 +10,14 @@ func TestNewClientDataCollection(t *testing.T) {
 	t.Parallel()
 
 	specDefaults := DataCollection{
-		UserInfo:       Set(true),
+		UserInfo:       new(true),
 		Cookies:        &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 		HTTPHeaders:    &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
 		HTTPBodies:     allBodyTypes(),
 		URLQueryParams: &KeyValueCollectionBehavior{Mode: CollectionDenyList},
 	}
 	legacyPrivacyDefaults := DataCollection{
-		UserInfo:       Set(false),
+		UserInfo:       new(false),
 		Cookies:        &KeyValueCollectionBehavior{Mode: CollectionOff},
 		HTTPHeaders:    &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
 		HTTPBodies:     []BodyType{},
@@ -39,15 +39,7 @@ func TestNewClientDataCollection(t *testing.T) {
 			want: specDefaults,
 		},
 		{
-			name: "nil config with SendDefaultPII true applies spec defaults",
-			options: ClientOptions{
-				Dsn:            "https://key@sentry.io/1",
-				SendDefaultPII: true,
-			},
-			want: specDefaults,
-		},
-		{
-			name: "nil config with SendDefaultPII false applies legacy privacy compatibility",
+			name: "nil config collects no user-identifying data",
 			options: ClientOptions{
 				Dsn: "https://key@sentry.io/1",
 			},
@@ -70,15 +62,14 @@ func TestNewClientDataCollection(t *testing.T) {
 			options: ClientOptions{
 				Dsn: "https://key@sentry.io/1",
 				DataCollection: &DataCollection{
-					UserInfo:    Set(false),
+					UserInfo:    new(false),
 					Cookies:     &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}},
 					HTTPHeaders: &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"x-request-id"}}},
 					HTTPBodies:  []BodyType{},
 				},
-				SendDefaultPII: true,
 			},
 			want: DataCollection{
-				UserInfo:       Set(false),
+				UserInfo:       new(false),
 				Cookies:        &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}},
 				HTTPHeaders:    &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"x-request-id"}}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
 				HTTPBodies:     []BodyType{},
@@ -107,7 +98,7 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 	t.Parallel()
 
 	input := &DataCollection{
-		UserInfo:   Set(false),
+		UserInfo:   new(false),
 		Cookies:    &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}},
 		HTTPBodies: []BodyType{BodyIncomingRequest},
 	}
@@ -119,13 +110,13 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	input.UserInfo = Set(true)
+	input.UserInfo = new(true)
 	input.Cookies.Mode = CollectionOff
 	input.Cookies.Terms[0] = "changed"
 	input.HTTPBodies[0] = BodyIncomingResponse
 
 	returned := client.GetDataCollection()
-	returned.UserInfo = Set(true)
+	returned.UserInfo = new(true)
 	returned.Cookies.Mode = CollectionOff
 	returned.Cookies.Terms[0] = "changed"
 	returned.HTTPHeaders.Request.Mode = CollectionAllowList
@@ -133,7 +124,7 @@ func TestNewClientDataCollectionSnapshotting(t *testing.T) {
 	returned.URLQueryParams.Mode = CollectionOff
 
 	want := DataCollection{
-		UserInfo:       Set(false),
+		UserInfo:       new(false),
 		Cookies:        &KeyValueCollectionBehavior{Mode: CollectionAllowList, Terms: []string{"session_id"}},
 		HTTPHeaders:    &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{Mode: CollectionDenyList}, Response: &KeyValueCollectionBehavior{Mode: CollectionDenyList}},
 		HTTPBodies:     []BodyType{BodyIncomingRequest},

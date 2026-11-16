@@ -34,7 +34,7 @@ func Example_transportWithHooks() {
 		// Either set your DSN here or set the SENTRY_DSN environment variable.
 		Dsn:   "",
 		Debug: true,
-		HTTPTransport: &TransportWithHooks{
+		HTTPClient: &http.Client{Transport: &TransportWithHooks{
 			RoundTripper: http.DefaultTransport,
 			Before: func(req *http.Request) error {
 				if b, err := httputil.DumpRequestOut(req, true); err != nil {
@@ -52,7 +52,7 @@ func Example_transportWithHooks() {
 				}
 				return resp, err
 			},
-		},
+		}},
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "sentry.Init: %s\n", err)

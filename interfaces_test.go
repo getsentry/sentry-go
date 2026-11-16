@@ -121,7 +121,7 @@ func TestNewRequest(t *testing.T) {
 		},
 		{
 			name: "user info disabled omits env",
-			dc:   &DataCollection{UserInfo: Set(false)},
+			dc:   &DataCollection{UserInfo: new(false)},
 			makeReq: func() *http.Request {
 				r := httptest.NewRequest("POST", "/test/?token=abc123&page=5", nil)
 				r.Header.Add("Authorization", "Bearer 1234567890")
@@ -185,7 +185,7 @@ func TestNewRequest(t *testing.T) {
 		{
 			name: "off modes omit categories entirely",
 			dc: &DataCollection{
-				UserInfo: Set(false),
+				UserInfo: new(false),
 				Cookies:  &KeyValueCollectionBehavior{Mode: CollectionOff},
 				HTTPHeaders: &HeaderCollectionConfig{
 					Request: &KeyValueCollectionBehavior{Mode: CollectionOff},
@@ -276,7 +276,7 @@ func TestNewRequestUsesContextClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	contextual, err := NewClient(ClientOptions{
-		DataCollection: &DataCollection{UserInfo: Set(false)},
+		DataCollection: &DataCollection{UserInfo: new(false)},
 	})
 	if err != nil {
 		t.Fatal(err)

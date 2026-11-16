@@ -73,9 +73,35 @@ func newScopeData(propagationContext PropagationContext) scopeData {
 	}
 }
 
-// AddBreadcrumb adds new breadcrumb to the current scope
-// and optionally throws the old one if limit is reached.
-func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
+// AddBreadcrumb adds breadcrumb to the scope, applying the BeforeBreadcrumb
+// and MaxBreadcrumbs options of the client set by Init.
+func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, options ...BreadcrumbOption) {
+	scope.addBreadcrumb(normalizeClient(globalClientSnapshot()), breadcrumb, options)
+}
+
+func (scope *Scope) addBreadcrumb(client *Client, breadcrumb *Breadcrumb, options []BreadcrumbOption) {
+	limit := client.options.MaxBreadcrumbs
+	switch {
+	case limit < 0:
+		return
+	case limit == 0:
+		limit = defaultMaxBreadcrumbs
+	}
+	if client.options.BeforeBreadcrumb != nil {
+		resolved := breadcrumbOptions{}
+		for _, option := range options {
+			if option != nil {
+				option(&resolved)
+			}
+		}
+		if resolved.hint == nil {
+			resolved.hint = BreadcrumbHint{}
+		}
+		if breadcrumb = client.options.BeforeBreadcrumb(breadcrumb, resolved.hint); breadcrumb == nil {
+			debuglog.Println("breadcrumb dropped due to BeforeBreadcrumb callback.")
+			return
+		}
+	}
 	if breadcrumb.Timestamp.IsZero() {
 		breadcrumb.Timestamp = time.Now()
 	}
@@ -85,7 +111,7 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 
 	scope.breadcrumbs = append(scope.breadcrumbs, breadcrumb)
 	if len(scope.breadcrumbs) > limit {
-		scope.breadcrumbs = scope.breadcrumbs[1 : limit+1]
+		scope.breadcrumbs = scope.breadcrumbs[len(scope.breadcrumbs)-limit:]
 	}
 }
 
@@ -400,6 +426,7 @@ func applyScopesToEvent(
 	event *Event,
 	client *Client,
 	scope *Scope,
+	hint *EventHint,
 	maxBreadcrumbs int,
 ) (globalProcessors, scopeProcessors []EventProcessor) {
 	global := GlobalScope()
@@ -422,6 +449,9 @@ func applyScopesToEvent(
 		snapshot.request, snapshot.requestBody = globalSnapshot.request, globalSnapshot.requestBody
 	}
 	event.Request = mergeRequest(client, snapshot.request, snapshot.requestBody, event.Request)
+	if hint.Request == nil {
+		hint.Request = snapshot.request
+	}
 
 	_, explicitTrace := event.Contexts[traceContextKey]
 	applyTraceToEvent(ctx, event, client, scope, snapshot.propagationContext, explicitTrace)
@@ -518,7 +548,7 @@ func applyTraceToEvent(ctx context.Context, event *Event, client *Client, scope 
 
 // applyScopesToTransaction merges the context scope and the global scope into tx,
 // from more specific to less specific.
-func applyScopesToTransaction(tx *Transaction, client *Client, scope *Scope) {
+func applyScopesToTransaction(tx *Transaction, client *Client, scope *Scope) *http.Request {
 	var snapshot scopeData
 	global := GlobalScope()
 	if scope != nil && scope != global {
@@ -529,6 +559,7 @@ func applyScopesToTransaction(tx *Transaction, client *Client, scope *Scope) {
 		snapshot.request, snapshot.requestBody = globalSnapshot.request, globalSnapshot.requestBody
 	}
 	tx.Request = mergeRequest(client, snapshot.request, snapshot.requestBody, tx.Request)
+	return snapshot.request
 }
 
 func (scope *Scope) copyToTransaction(tx *Transaction) scopeData {

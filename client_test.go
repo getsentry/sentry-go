@@ -301,7 +301,10 @@ func TestCaptureMessageCopiesHintAndUsesContext(t *testing.T) {
 		},
 	})
 	captureCtx = ContextWithClient(captureCtx, client)
-	captureCtx = ContextWithScope(captureCtx, NewScope())
+	scope := NewScope()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	scope.SetRequest(request)
+	captureCtx = ContextWithScope(captureCtx, scope)
 	require.NotNil(t, CaptureMessage(captureCtx, "message", WithEventHint(provided)))
 
 	require.NotNil(t, received)
@@ -309,6 +312,9 @@ func TestCaptureMessageCopiesHintAndUsesContext(t *testing.T) {
 	assert.Equal(t, "data", received.Data)
 	assert.Equal(t, "provided", received.Context.Value(key{}))
 	assert.Same(t, providedCtx, provided.Context)
+	if received.Request != request || provided.Request != nil {
+		t.Errorf("received.Request = %p, provided.Request = %p; want the scope's request %p on the received hint only", received.Request, provided.Request, request)
+	}
 
 	require.NotNil(t, CaptureMessage(captureCtx, "message with inferred hint context", WithEventHint(&EventHint{})))
 	assert.Equal(t, "capture", received.Context.Value(key{}))
@@ -1020,6 +1026,7 @@ func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
 
 func TestBeforeSendTransactionIsCalled(t *testing.T) {
 	transport := &MockTransport{}
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
@@ -1028,8 +1035,9 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 			t.Error("beforeSend should not be called")
 			return event
 		},
-		BeforeSendTransaction: func(tx *Transaction, _ *EventHint) *Transaction {
+		BeforeSendTransaction: func(tx *Transaction, hint *EventHint) *Transaction {
 			assertEqual(t, tx.Name, "Foo")
+			assert.Same(t, request, hint.Request)
 			return &Transaction{Name: "Bar", Trace: tx.Trace}
 		},
 	})
@@ -1039,6 +1047,7 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 	}
 	ClientFromContext(ctx).AddEventProcessor(processor)
 	ScopeFromContext(ctx).AddEventProcessor(processor)
+	ScopeFromContext(ctx).SetRequest(request)
 
 	transaction := StartTransaction(ctx,
 		"Foo",
@@ -1604,10 +1613,6 @@ func TestClientSetsUpTransport(t *testing.T) {
 						<-release
 						return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 					})},
-					HTTPTransport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
-						t.Error("HTTPClient must take precedence over HTTPTransport")
-						return nil, errors.New("unexpected request")
-					}),
 				})
 				require.NoError(t, err)
 				defer func() { unblock(); client.Close() }()

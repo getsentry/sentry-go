@@ -160,6 +160,7 @@ type Transport interface {
 | `hub.BindClient(client)` | `ctx = sentry.ContextWithClient(ctx, client)` |
 | `LastEventID()` or `hub.LastEventID()` | `LastEventID(ctx)` |
 | `hub.Flush(timeout)` or `hub.FlushWithContext(ctx)` | `ClientFromContext(ctx).Flush(timeout)` or `FlushWithContext(ctx)` |
+| `scope.AddBreadcrumb(breadcrumb, limit)` | `scope.AddBreadcrumb(breadcrumb, options...)`; it now applies `BeforeBreadcrumb` and `MaxBreadcrumbs` of the client set by `Init` |
 
 </details>
 
@@ -173,7 +174,7 @@ type Transport interface {
 | `hub.CaptureEventWithHint(event, hint)` | `CaptureEvent(ctx, event, sentry.WithEventHint(hint))` |
 | `client.CaptureException(err, hint, scope)` and the other client capture methods | `client.CaptureException(ctx, err, sentry.WithEventHint(hint))`, with `ContextWithScope(ctx, scope)` |
 | Breadcrumb hint argument | `AddBreadcrumb(ctx, breadcrumb, sentry.WithBreadcrumbHint(hint))` |
-| `WithMonitor(slug, config, fn)` and `hub.WithMonitor` | `WithMonitor(ctx, slug, config, fn)` |
+| `WithMonitor(slug, config, fn)` and `hub.WithMonitor` | `WithMonitor(ctx, slug, config, fn)`, where `fn` is `func(ctx context.Context) error` and receives the job's scope; `sentrycron.AddFunc` takes the same callback |
 | `Recover()` and `RecoverWithContext(ctx)` | `defer sentry.Recover(ctx, nil)` |
 | `EventModifier`, `client.EventFromMessage`, `EventFromException`, `EventFromCheckIn` | Capture methods, scope setters, and `BeforeSend` or event processors |
 | `Event.CheckIn` and `Event.MonitorConfig` | Removed; a check-in is no longer an event. Event processors don't receive check-ins and scope attachments aren't sent with them |
@@ -184,6 +185,9 @@ type Transport interface {
 | `DebugLogger` | `ClientOptions.Debug` and `ClientOptions.DebugWriter`. The variable exposed the SDK's internal logger, which the two options already configure |
 | `EventHint.EventID` | Removed. The SDK never read it, so setting it had no effect; set `Event.EventID` to choose an ID |
 | `NewFrame`, `ExtractStacktrace`, `Mechanism.SetUnhandled`, `Scope.ApplyToEvent`, `SDKMetaData` | Removed. They were steps of the SDK's own capture path that nothing outside the package called. Use `NewStacktrace()`, `Event.SetException`, and the `Mechanism.Handled` field |
+| `*BreadcrumbHint` in `BeforeBreadcrumb` | `BreadcrumbHint` by value, as it is already a map |
+| A `func(*Span)` passed as a `SpanOption` | `SpanOption` is sealed; use the `With...` and `ContinueFrom...` constructors and set other span fields after `StartSpan` |
+| `hint.Context.Value(sentry.RequestContextKey)` in `BeforeSend` or `BeforeSendTransaction` | `hint.Request`, set on every capture whose scope has a request. For FastHTTP and Fiber it is the converted `*http.Request` |
 
 </details>
 
@@ -243,6 +247,17 @@ type Transport interface {
 | `sentryzerolog.Config.ClientOptions` | `sentry.Init` or `sentry.NewClient` |
 | `Event.Logs` and `Event.Metrics` | Removed; logs and metrics are no longer events |
 | `GetCategory` and `MakeSerializationSafe` on `Log` and `Metric` | Removed; they were SDK internals |
+
+</details>
+
+<details>
+<summary>Options</summary>
+
+| Before | v1 |
+| --- | --- |
+| `DataCollection{UserInfo: sentry.Set(false)}` | `DataCollection{UserInfo: new(false)}`; `Option` and `Set` are removed |
+| `ClientOptions.SendDefaultPII: true` | `DataCollection: &sentry.DataCollection{}`; leaving `DataCollection` unset collects no user-identifying data |
+| `ClientOptions.HTTPTransport`, `HTTPProxy`, `HTTPSProxy`, and `CaCerts` | Removed; set `ClientOptions.HTTPClient`. The default client still reads `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` |
 
 </details>
 

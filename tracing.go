@@ -179,7 +179,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 
 	// Apply options to override defaults.
 	for _, option := range options {
-		option(&span)
+		option.applySpan(&span)
 	}
 
 	span.Sampled = span.sample(client)
@@ -952,8 +952,12 @@ func (s Sampled) Bool() bool {
 	return s == SampledTrue
 }
 
-// A SpanOption is a function that can modify the properties of a span.
-type SpanOption func(s *Span)
+// A SpanOption configures a span when it starts.
+type SpanOption interface{ applySpan(*Span) }
+
+type spanOptionFunc func(s *Span)
+
+func (f spanOptionFunc) applySpan(s *Span) { f(s) }
 
 // WithTransactionName option sets the name of the current transaction.
 //
@@ -961,23 +965,23 @@ type SpanOption func(s *Span)
 // starting a span affects the span tree as a whole, potentially overwriting a
 // name set previously.
 func WithTransactionName(name string) SpanOption {
-	return func(s *Span) {
+	return spanOptionFunc(func(s *Span) {
 		s.Name = name
-	}
+	})
 }
 
 // WithDescription sets the description of a span.
 func WithDescription(description string) SpanOption {
-	return func(s *Span) {
+	return spanOptionFunc(func(s *Span) {
 		s.Description = description
-	}
+	})
 }
 
 // WithOpName sets the operation name for a given span.
 func WithOpName(name string) SpanOption {
-	return func(s *Span) {
+	return spanOptionFunc(func(s *Span) {
 		s.Op = name
-	}
+	})
 }
 
 // WithTransactionSource sets the source of the transaction name.
@@ -986,29 +990,29 @@ func WithOpName(name string) SpanOption {
 // by the spec https://develop.sentry.dev/sdk/event-payloads/transaction/#transaction-annotations),
 // it will be corrected to "custom" eventually, before the transaction is sent.
 func WithTransactionSource(source TransactionSource) SpanOption {
-	return func(s *Span) {
+	return spanOptionFunc(func(s *Span) {
 		s.Source = source
-	}
+	})
 }
 
 // WithSpanSampled updates the sampling flag for a given span.
 func WithSpanSampled(sampled Sampled) SpanOption {
-	return func(s *Span) {
+	return spanOptionFunc(func(s *Span) {
 		s.explicitSampled = sampled
-	}
+	})
 }
 
 // WithSpanOrigin sets the origin of the span.
 func WithSpanOrigin(origin SpanOrigin) SpanOption {
-	return func(s *Span) {
+	return spanOptionFunc(func(s *Span) {
 		s.Origin = origin
-	}
+	})
 }
 
 // ContinueFromHeaders returns a span option that continues a trace from the
 // sentry-trace and baggage header values.
 func ContinueFromHeaders(trace, baggage string) SpanOption {
-	return func(s *Span) {
+	return spanOptionFunc(func(s *Span) {
 		if s.parent != nil {
 			return
 		}
@@ -1027,7 +1031,7 @@ func ContinueFromHeaders(trace, baggage string) SpanOption {
 			scope.SetPropagationContext(propagation)
 		}
 		s.continueTrace(propagation)
-	}
+	})
 }
 
 // ContinueFromRequest returns a span option that continues a trace from r's

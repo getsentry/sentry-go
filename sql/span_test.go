@@ -45,7 +45,7 @@ func TestStartSpan_SpanData(t *testing.T) {
 		assert.Equal(t, 5432, span.Data["server.port"])
 		assert.Equal(t, "10.0.0.1", span.Data["server.socket.address"])
 		assert.Equal(t, 5433, span.Data["server.socket.port"])
-		// db.user is absent — SendDefaultPII is off.
+		// db.user is absent — user info is not collected.
 		assert.Nil(t, span.Data["db.user"])
 	})
 }

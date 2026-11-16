@@ -3,7 +3,6 @@
 package sentryhttp
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -131,7 +130,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 
 func (h *Handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
-		ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
+		ctx := r.Context()
 		eventID := sentry.Recover(ctx, err)
 		if eventID != nil && h.waitForDelivery {
 			sentry.ClientFromContext(ctx).Flush(h.timeout)

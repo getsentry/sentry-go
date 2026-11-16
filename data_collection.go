@@ -63,7 +63,7 @@ type DataCollection struct {
 	//
 	// This does NOT gate data explicitly set via Scope.SetUser(); that is
 	// always attached. Defaults to true.
-	UserInfo Option[bool]
+	UserInfo *bool
 
 	// Cookies configures collection of HTTP cookies.
 	//
@@ -120,7 +120,7 @@ func cloneDataCollection(dc *DataCollection) *DataCollection {
 		return nil
 	}
 	cloned := &DataCollection{
-		UserInfo:       dc.UserInfo,
+		UserInfo:       copyOf(dc.UserInfo),
 		Cookies:        cloneKeyValueCollectionBehavior(dc.Cookies),
 		HTTPHeaders:    cloneHeaderCollectionConfig(dc.HTTPHeaders),
 		URLQueryParams: cloneKeyValueCollectionBehavior(dc.URLQueryParams),
@@ -142,11 +142,11 @@ func allBodyTypes() []BodyType {
 }
 
 // snapshotDataCollection builds a fully-populated DataCollection based on given options.
-// It handles any unspecified values by applying the defaults. If the given opts are nil, this
-// provides a best-effort snapshot to align with sendDefaultPII for backwards compatibility.
-func snapshotDataCollection(opts *DataCollection, sendDefaultPII bool) DataCollection {
+// It handles any unspecified values by applying the defaults. If the given opts are nil, no
+// user-identifying data is collected.
+func snapshotDataCollection(opts *DataCollection) DataCollection {
 	if opts == nil {
-		return legacyDataCollection(sendDefaultPII)
+		return restrictedDataCollection()
 	}
 	return resolveDataCollection(opts)
 }
@@ -157,8 +157,8 @@ func resolveDataCollection(dc *DataCollection) DataCollection {
 		resolved = *cloned
 	}
 
-	if !resolved.UserInfo.IsSet {
-		resolved.UserInfo = Set(true)
+	if resolved.UserInfo == nil {
+		resolved.UserInfo = new(true)
 	}
 	if resolved.Cookies == nil {
 		resolved.Cookies = &KeyValueCollectionBehavior{}
@@ -181,19 +181,9 @@ func resolveDataCollection(dc *DataCollection) DataCollection {
 	return resolved
 }
 
-func legacyDataCollection(sendDefaultPII bool) DataCollection {
-	if sendDefaultPII {
-		return resolveDataCollection(&DataCollection{
-			UserInfo:       Set(true),
-			Cookies:        &KeyValueCollectionBehavior{},
-			HTTPHeaders:    &HeaderCollectionConfig{Request: &KeyValueCollectionBehavior{}, Response: &KeyValueCollectionBehavior{}},
-			HTTPBodies:     allBodyTypes(),
-			URLQueryParams: &KeyValueCollectionBehavior{},
-		})
-	}
-
+func restrictedDataCollection() DataCollection {
 	return resolveDataCollection(&DataCollection{
-		UserInfo:   Set(false),
+		UserInfo:   new(false),
 		HTTPBodies: []BodyType{},
 		Cookies:    &KeyValueCollectionBehavior{Mode: CollectionOff},
 		HTTPHeaders: &HeaderCollectionConfig{
@@ -206,8 +196,8 @@ func legacyDataCollection(sendDefaultPII bool) DataCollection {
 }
 
 // extendedSensitiveTerms are additional privacy terms that cover
-// user-identifying data such as IP forwarding headers and user IDs. Used for
-// backwards compatibility with SendDefaultPII=false.
+// user-identifying data such as IP forwarding headers and user IDs. Used when
+// DataCollection is not configured.
 var extendedSensitiveTerms = []string{
 	"forwarded",
 	"-ip",
