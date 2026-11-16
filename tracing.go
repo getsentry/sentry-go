@@ -794,6 +794,19 @@ func (id TraceID) MarshalText() ([]byte, error) {
 	return id.Hex(), nil
 }
 
+// UnmarshalText decodes a hexadecimal TraceID.
+func (id *TraceID) UnmarshalText(text []byte) error {
+	var decoded TraceID
+	if len(text) != hex.EncodedLen(len(decoded)) {
+		return fmt.Errorf("sentry: invalid TraceID length: %d", len(text))
+	}
+	if _, err := hex.Decode(decoded[:], text); err != nil {
+		return err
+	}
+	*id = decoded
+	return nil
+}
+
 // SpanID identifies a span.
 type SpanID [8]byte
 
@@ -809,6 +822,19 @@ func (id SpanID) String() string {
 
 func (id SpanID) MarshalText() ([]byte, error) {
 	return id.Hex(), nil
+}
+
+// UnmarshalText decodes a hexadecimal SpanID.
+func (id *SpanID) UnmarshalText(text []byte) error {
+	var decoded SpanID
+	if len(text) != hex.EncodedLen(len(decoded)) {
+		return fmt.Errorf("sentry: invalid SpanID length: %d", len(text))
+	}
+	if _, err := hex.Decode(decoded[:], text); err != nil {
+		return err
+	}
+	*id = decoded
+	return nil
 }
 
 // Zero values of TraceID and SpanID used for comparisons.
@@ -922,6 +948,21 @@ func (ss SpanStatus) MarshalJSON() ([]byte, error) {
 		return []byte("null"), nil
 	}
 	return json.Marshal(s)
+}
+
+// UnmarshalJSON decodes a span status string or null for an undefined status.
+func (ss *SpanStatus) UnmarshalJSON(data []byte) error {
+	var status string
+	if err := json.Unmarshal(data, &status); err != nil {
+		return err
+	}
+	for value, name := range spanStatuses {
+		if status == name {
+			*ss = SpanStatus(value)
+			return nil
+		}
+	}
+	return fmt.Errorf("sentry: invalid span status %q", status)
 }
 
 // A TraceContext carries information about an ongoing trace and is meant to be
