@@ -1,6 +1,10 @@
-package sentry
+package traceutils
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/getsentry/sentry-go/internal/testutils"
+)
 
 func TestMergeBaggage(t *testing.T) {
 	t.Run("both empty", func(t *testing.T) {
@@ -19,7 +23,7 @@ func TestMergeBaggage(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		assertBaggageStringsEqual(t, got, "sentry-trace_id=123,sentry-sampled=true")
+		testutils.AssertBaggageStringsEqual(t, got, "sentry-trace_id=123,sentry-sampled=true")
 	})
 
 	t.Run("empty sentry returns existing baggage", func(t *testing.T) {
@@ -28,7 +32,7 @@ func TestMergeBaggage(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		assertBaggageStringsEqual(t, got, "othervendor=bla")
+		testutils.AssertBaggageStringsEqual(t, got, "othervendor=bla")
 	})
 
 	t.Run("preserves third party members", func(t *testing.T) {
@@ -37,7 +41,7 @@ func TestMergeBaggage(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		assertBaggageStringsEqual(t, got, "othervendor=bla,sentry-trace_id=123,sentry-sampled=true")
+		testutils.AssertBaggageStringsEqual(t, got, "othervendor=bla,sentry-trace_id=123,sentry-sampled=true")
 	})
 
 	t.Run("sentry members override existing members", func(t *testing.T) {
@@ -49,7 +53,7 @@ func TestMergeBaggage(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		assertBaggageStringsEqual(t, got, "othervendor=bla,sentry-trace_id=new,sentry-sampled=true")
+		testutils.AssertBaggageStringsEqual(t, got, "othervendor=bla,sentry-trace_id=new,sentry-sampled=true")
 	})
 
 	t.Run("empty generated baggage removes stale Sentry members", func(t *testing.T) {
@@ -57,7 +61,7 @@ func TestMergeBaggage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		assertBaggageStringsEqual(t, got, "othervendor=bla")
+		testutils.AssertBaggageStringsEqual(t, got, "othervendor=bla")
 	})
 
 	t.Run("invalid existing returns sentry baggage", func(t *testing.T) {
@@ -66,7 +70,7 @@ func TestMergeBaggage(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		assertBaggageStringsEqual(t, got, "sentry-trace_id=123,sentry-sampled=true")
+		testutils.AssertBaggageStringsEqual(t, got, "sentry-trace_id=123,sentry-sampled=true")
 	})
 
 	t.Run("invalid sentry returns empty and error", func(t *testing.T) {
