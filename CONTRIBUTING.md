@@ -85,3 +85,13 @@ Use `make` to format, lint, vet, and test changes.
 
 - The PR title becomes the changelog entry, and its [conventional commit](https://develop.sentry.dev/engineering-practices/commit-messages/#type) type (`feat:`, `fix:`, `ref:`, ...) decides the section and the version bump. Write the title for users reading the changelog.
 - To use different text, add a `### Changelog Entry` section to the PR description. It replaces the title and can hold several bullets. See [custom changelog entries](https://getsentry.github.io/craft/configuration/#custom-changelog-entries-from-pr-descriptions).
+
+## Versioning Policy
+
+This project follows [semver](https://semver.org/), with the following additions:
+
+- All modules in this repository are released together and share the same version number.
+
+- We follow Go's [release policy](https://go.dev/doc/devel/release#policy) and support the two most recent Go releases. Raising the minimum Go version is not considered a breaking change.
+
+- Security fixes, including dependency updates that address a vulnerability, are not considered breaking.

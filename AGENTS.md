@@ -1,6 +1,6 @@
 # Go SDK
 
-You MUST read and follow `CONTRIBUTING.md` before starting any task. The rules below apply in addition to it.
+You MUST read and follow `CONTRIBUTING.md` before making code changes in this repository. The rules below apply in addition to it.
 
 ## Public API
 
