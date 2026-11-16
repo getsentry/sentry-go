@@ -4,7 +4,7 @@
 #
 # Usage: mutation.sh [base-ref] [results-dir]
 # With results-dir, each module's gremlins JSON results go to
-# results-dir/<module>/gremlins.json, for mutation-report.sh.
+# results-dir/<module>/gremlins.json, for mutation-report.go.
 set -eu
 
 base=${1:-origin/master}

@@ -4,7 +4,7 @@ on:
     paths:
       - "**.go"
       - .gremlins.yaml
-      - .github/scripts/mutation*.sh
+      - .github/scripts/mutation*
       - .github/workflows/mutation.yml
 permissions:
   contents: read
@@ -25,6 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Test the PR head, so that reported lines match the links to it.
+          ref: ${{ github.event.pull_request.head.sha }}
           # gremlins --diff needs the base branch history.
           fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -36,7 +38,10 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
       - name: Report surviving mutants
-        run: .github/scripts/mutation-report.sh "$RUNNER_TEMP/mutation" "$RUNNER_TEMP/mutation-report.md"
+        run: go run .github/scripts/mutation-report.go -results "$RUNNER_TEMP/mutation" -out "$RUNNER_TEMP/mutation-report.md" -sha "$HEAD_SHA" -run "$RUN_URL"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       # The token of a pull request from a fork cannot comment; the job summary still has the report.
       - name: Comment on pull request
         if: github.event.pull_request.head.repo.full_name == github.repository
