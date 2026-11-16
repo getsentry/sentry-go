@@ -31,6 +31,8 @@ process:
      other possible solutions that were considered and discarded.
    - Be your own first reviewer. Make sure your code compiles and passes the
      existing tests.
+   - Keep a PR to one change. Unrelated fixes and behavior changes go in a
+     follow-up.
 
 [new-issue]: https://github.com/getsentry/sentry-go/issues/new/choose
 [commit-guide]: https://develop.sentry.dev/code-review/#commit-guidelines
@@ -40,59 +42,56 @@ Please also read through our [SDK Development docs](https://develop.sentry.dev/s
 It contains information about SDK features, expected payloads and best practices for
 contributing to Sentry SDKs.
 
+## AI Use
+
+You are welcome to use whatever tools you prefer for making a contribution. However, any changes you propose have to be reviewed and tested by you, a human, before you submit a pull request for the Sentry team to review. Pull requests that we consider low effort will be closed without review. For example, we won't review visibly AI-generated PRs from an agent instructed to look for and "fix" open issues in the repo.
+
+## Security
+
+Do not open public issues or pull requests for known or suspected security vulnerabilities. Follow the private reporting process in our [security policy](.github/SECURITY.md).
+
 ## Community
 
 The public-facing channels for support and development of Sentry SDKs can be found on [Discord](https://discord.gg/Ww9hbqr).
 
+## Guidelines
+
+The SDK runs inside its users' applications. The following guidelines apply to every change.
+
+- Preserve host-application safety. The SDK must not panic, and must not block or perform expensive work on the caller's goroutine.
+- Treat values passed to the SDK as shared with the caller. Callers may modify them after the call, so copy what the SDK retains. A shallow copy of maps or `any` values is not sufficient.
+- Preserve compliance with the [SDK Development docs](https://develop.sentry.dev/sdk/). Where the specification is silent, align with the behavior of other Sentry SDKs before introducing new behavior.
+- Be conservative on hot paths. Avoid unnecessary allocations, reflection, serialization, and blocking in the capture, log, and metric paths. Compare benchmarks with `benchstat` when changing them.
+- Do not send data that may contain PII unless the user has opted in. When in doubt, omit it.
+- Do not emit inaccurate telemetry. If a value cannot be measured correctly, skip it.
+- Keep each integration in its own module, modeled on an existing integration, and register it in `go.work` and `.craft.yml`.
+- Prefer minimal, concise changes over broad refactors or speculative cleanups.
+
 ## Testing
 
-```console
-$ go test
-```
+- Write tests with `internal/sentrytest` and exercise the public API.
+- Prefer table-driven tests. Add a case to an existing table before writing a new test function.
+- Compare values with `cmp.Diff`. Do not use testify in new tests. It is being phased out so that the dependency can be removed.
+- For a bug fix, add a failing test that reproduces the bug before changing production code.
+- Tests must pass with the race detector enabled, because the SDK is used concurrently.
 
-### Watch mode
+## Verification
 
-Use: https://github.com/cespare/reflex
+Use `make` to format, lint, vet, and test changes.
 
-```console
-$ reflex -g '*.go' -d "none" -- sh -c 'printf "\n"; go test'
-```
+## Changelog
 
-### With data race detection
+[`craft`](https://github.com/getsentry/craft) generates `CHANGELOG.md` from merged PRs, so don't edit it by hand.
 
-```console
-$ go test -race
-```
+- The PR title becomes the changelog entry, and its [conventional commit](https://develop.sentry.dev/engineering-practices/commit-messages/#type) type (`feat:`, `fix:`, `ref:`, ...) decides the section and the version bump. Write the title for users reading the changelog.
+- To use different text, add a `### Changelog Entry` section to the PR description. It replaces the title and can hold several bullets. See [custom changelog entries](https://getsentry.github.io/craft/configuration/#custom-changelog-entries-from-pr-descriptions).
 
-### Coverage
+## Versioning Policy
 
-```console
-$ go test -race -coverprofile=coverage.txt -covermode=atomic && go tool cover -html coverage.txt
-```
+This project follows [semver](https://semver.org/), with the following additions:
 
-## Linting
+- All modules in this repository are released together and share the same version number.
 
-Lint with [`golangci-lint`](https://github.com/golangci/golangci-lint):
+- We follow Go's [release policy](https://go.dev/doc/devel/release#policy) and support the two most recent Go releases. Raising the minimum Go version is not considered a breaking change.
 
-```console
-$ golangci-lint run
-```
-
-## Release
-
-1. Update `CHANGELOG.md` with new version in `vX.X.X` format title and list of changes.
-
-   The command below can be used to get a list of changes since the last tag, with the format used in `CHANGELOG.md`:
-
-   ```console
-   $ git log --no-merges --format=%s $(git describe --abbrev=0).. | sed 's/^/- /'
-   ```
-
-2. Commit with `misc: vX.X.X changelog` commit message and push to `master`.
-
-3. Let [`craft`](https://github.com/getsentry/craft) do the rest:
-
-   ```console
-   $ craft prepare X.X.X
-   $ craft publish X.X.X
-   ```
+- Security fixes, including dependency updates that address a vulnerability, are not considered breaking.
