@@ -141,9 +141,9 @@ func (h *logHook) Fire(entry *logrus.Entry) error {
 	case logrus.ErrorLevel:
 		logEntry = h.logger.Error().WithCtx(ctx)
 	case logrus.FatalLevel:
-		logEntry = h.logger.LFatal().WithCtx(ctx)
+		logEntry = h.logger.Fatal().WithCtx(ctx)
 	case logrus.PanicLevel:
-		logEntry = h.logger.LFatal().WithCtx(ctx)
+		logEntry = h.logger.Fatal().WithCtx(ctx)
 	default:
 		debuglog.Printf("Invalid logrus logging level: %v. Dropping log.", entry.Level)
 		return errors.New("invalid log level")

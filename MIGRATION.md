@@ -247,6 +247,7 @@ type Transport interface {
 | `sentryzerolog.Config.ClientOptions` | `sentry.Init` or `sentry.NewClient` |
 | `Event.Logs` and `Event.Metrics` | Removed; logs and metrics are no longer events |
 | `GetCategory` and `MakeSerializationSafe` on `Log` and `Metric` | Removed; they were SDK internals |
+| `Logger.Fatal()` exiting the process, `Logger.Panic()`, `Logger.LFatal()` | `Fatal()` only sets the level; `Panic` and `LFatal` are removed. Call `os.Exit` or `panic` yourself after `sentry.Flush` |
 
 </details>
 
