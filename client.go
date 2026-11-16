@@ -973,3 +973,5 @@ func tmpUncovered(n int) int {
 	n++
 	return -n
 }
+
+var _ = tmpUncovered
