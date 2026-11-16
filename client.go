@@ -52,14 +52,6 @@ const (
 // to retry for now.
 var hostname, _ = os.Hostname()
 
-// usageError is used to report to Sentry an SDK usage error.
-//
-// It is not exported because it is never returned by any function or method in
-// the exported API.
-type usageError struct {
-	error
-}
-
 // DebugLogger is an instance of log.Logger that is used to provide debug information about running Sentry Client
 // can be enabled by either using debuglog.SetOutput directly or with Debug client option.
 var DebugLogger = debuglog.GetLogger()
@@ -559,12 +551,12 @@ func (client *Client) CaptureMessage(ctx context.Context, message string, option
 	if !client.IsEnabled() {
 		return nil
 	}
+	if message == "" {
+		debuglog.Println("CaptureMessage called with empty message, nothing captured.")
+		return nil
+	}
 	opts := resolveCaptureOptions(ctx, options...)
 	opts.defaultLevel = LevelInfo
-	if message == "" {
-		err := usageError{fmt.Errorf("%s called with empty message", callerFunctionName())}
-		return client.capture(ctx, client.eventFromException(err), opts)
-	}
 	return client.capture(ctx, client.eventFromMessage(message), opts)
 }
 
@@ -573,14 +565,15 @@ func (client *Client) CaptureException(ctx context.Context, exception error, opt
 	if !client.IsEnabled() {
 		return nil
 	}
+	if exception == nil {
+		debuglog.Println("CaptureException called with nil error, nothing captured.")
+		return nil
+	}
 	opts := resolveCaptureOptions(ctx, options...)
 	if opts.hint.OriginalException == nil {
 		opts.hint.OriginalException = exception
 	}
 	opts.defaultLevel = LevelError
-	if exception == nil {
-		exception = usageError{fmt.Errorf("%s called with nil error", callerFunctionName())}
-	}
 	return client.capture(ctx, client.eventFromException(exception), opts)
 }
 
@@ -610,12 +603,11 @@ func (client *Client) CaptureEvent(ctx context.Context, event *Event, options ..
 	if !client.IsEnabled() {
 		return nil
 	}
-	opts := resolveCaptureOptions(ctx, options...)
 	if event == nil {
-		event = client.eventFromException(usageError{fmt.Errorf("%s called with nil event", callerFunctionName())})
-		opts.defaultLevel = LevelError
+		debuglog.Println("CaptureEvent called with nil event, nothing captured.")
+		return nil
 	}
-	return client.capture(ctx, event, opts)
+	return client.capture(ctx, event, resolveCaptureOptions(ctx, options...))
 }
 
 func (client *Client) captureLog(ctx context.Context, log *Log) bool {

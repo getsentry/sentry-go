@@ -350,28 +350,11 @@ func TestCaptureMessagePreservesActiveSpanTraceContext(t *testing.T) {
 func TestCaptureMessageEmptyString(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
-	CaptureMessage(ctx, "")
-	want := &Event{
-		Exception: []Exception{
-			{
-				Type:       "sentry.usageError",
-				Value:      "CaptureMessage called with empty message",
-				Stacktrace: &Stacktrace{},
-			},
-		},
+	if diff := cmp.Diff((*EventID)(nil), CaptureMessage(ctx, "")); diff != "" {
+		t.Errorf("event ID (-want +got):\n%s", diff)
 	}
-	got := transport.lastEvent
-	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
-		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
-			return &Event{
-				Exception: e.Exception,
-			}
-		}),
-	}
-
-	if diff := cmp.Diff(want, got, opts); diff != "" {
-		t.Errorf("(-want +got):\n%s", diff)
+	if diff := cmp.Diff(0, len(transport.Events())); diff != "" {
+		t.Errorf("event count (-want +got):\n%s", diff)
 	}
 }
 
@@ -412,19 +395,19 @@ type captureExceptionTest struct {
 	want []Exception
 }
 
+func TestCaptureExceptionNil(t *testing.T) {
+	client, scope, transport := setupClientTest()
+	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
+	if diff := cmp.Diff((*EventID)(nil), CaptureException(ctx, nil)); diff != "" {
+		t.Errorf("event ID (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(0, len(transport.Events())); diff != "" {
+		t.Errorf("event count (-want +got):\n%s", diff)
+	}
+}
+
 func TestCaptureException(t *testing.T) {
 	basicTests := []captureExceptionTest{
-		{
-			name: "NilError",
-			err:  nil,
-			want: []Exception{
-				{
-					Type:       "sentry.usageError",
-					Value:      "CaptureException called with nil error",
-					Stacktrace: &Stacktrace{},
-				},
-			},
-		},
 		{
 			name: "SimpleError",
 			err:  errors.New("custom error"),
@@ -680,28 +663,11 @@ func TestCaptureEventShouldSendEventWithMessage(t *testing.T) {
 func TestCaptureEventNil(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
-	CaptureEvent(ctx, nil)
-	want := &Event{
-		Exception: []Exception{
-			{
-				Type:       "sentry.usageError",
-				Value:      "CaptureEvent called with nil event",
-				Stacktrace: &Stacktrace{},
-			},
-		},
+	if diff := cmp.Diff((*EventID)(nil), CaptureEvent(ctx, nil)); diff != "" {
+		t.Errorf("event ID (-want +got):\n%s", diff)
 	}
-	got := transport.lastEvent
-	assert.Equal(t, LevelError, got.Level)
-	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
-		cmp.Transformer("SimplifiedEvent", func(e *Event) *Event {
-			return &Event{
-				Exception: e.Exception,
-			}
-		}),
-	}
-	if diff := cmp.Diff(want, got, opts); diff != "" {
-		t.Errorf("(-want +got):\n%s", diff)
+	if diff := cmp.Diff(0, len(transport.Events())); diff != "" {
+		t.Errorf("event count (-want +got):\n%s", diff)
 	}
 }
 
