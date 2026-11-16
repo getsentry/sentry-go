@@ -649,7 +649,7 @@ func TestMechanismMarshalJSON_withHandled(t *testing.T) {
 			"some numeric data": 12345,
 		},
 	}
-	mechanism.SetUnhandled()
+	mechanism.Handled = new(false)
 
 	got, err := json.Marshal(mechanism)
 	if err != nil {

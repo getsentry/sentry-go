@@ -39,7 +39,7 @@ func TestClientReports_CustomTransport(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client, err := NewClient(ClientOptions{
 				DisableClientReports: tt.disabled,
-				Transport: &wrappedTransport{Transport: &NoopTransport{}, send: func(context.Context, *protocol.Envelope) error {
+				Transport: &wrappedTransport{Transport: &noopTransport{}, send: func(context.Context, *protocol.Envelope) error {
 					return tt.err
 				}},
 				BeforeSend: func(event *Event, _ *EventHint) *Event {

@@ -14,7 +14,7 @@ import (
 // mutable user data on the SDK.
 func TestTelemetryProcessorRace(_ *testing.T) {
 	// MockTransport would encode on the calling goroutine.
-	client, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &NoopTransport{}})
+	client, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &noopTransport{}})
 
 	const numEvents = 100
 	const numMutations = 500
@@ -59,7 +59,7 @@ func TestTelemetryProcessorRace(_ *testing.T) {
 
 func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 	// MockTransport would encode on the calling goroutine.
-	client, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &NoopTransport{}})
+	client, _ := NewClient(ClientOptions{Dsn: testDsn, Transport: &noopTransport{}})
 
 	const numTransactions = 100
 	const numChildren = 4

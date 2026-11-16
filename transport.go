@@ -529,26 +529,26 @@ func (s *httpSender) isRateLimited(category ratelimit.Category) bool {
 	return limited
 }
 
-// NoopTransport is a transport implementation that drops all events.
+// noopTransport is a transport implementation that drops all events.
 // Used internally when an empty or invalid DSN is provided.
-type NoopTransport struct{}
+type noopTransport struct{}
 
-func NewNoopTransport() *NoopTransport {
-	debuglog.Println("Transport initialized with invalid DSN. Using NoopTransport. No events will be delivered.")
-	return &NoopTransport{}
+func newNoopTransport() *noopTransport {
+	debuglog.Println("Transport initialized with invalid DSN. Using a no-op transport. No events will be delivered.")
+	return &noopTransport{}
 }
 
-func (t *NoopTransport) Configure(_ ClientOptions) {}
+func (t *noopTransport) Configure(_ ClientOptions) {}
 
-func (t *NoopTransport) SendEnvelope(_ context.Context, _ *protocol.Envelope) error {
-	debuglog.Println("Envelope dropped due to NoopTransport usage.")
+func (t *noopTransport) SendEnvelope(_ context.Context, _ *protocol.Envelope) error {
+	debuglog.Println("Envelope dropped by the no-op transport.")
 	return nil
 }
 
-func (t *NoopTransport) FlushWithContext(_ context.Context) bool {
+func (t *noopTransport) FlushWithContext(_ context.Context) bool {
 	return true
 }
 
-func (t *NoopTransport) Close() {
+func (t *noopTransport) Close() {
 	// Nothing to close
 }
