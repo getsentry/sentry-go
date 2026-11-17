@@ -32,7 +32,19 @@ export GIT_CONFIG_COUNT=2 \
 
 # Files never mutated, relative to the module. gremlins replaces, rather than
 # extends, the exclude-files in .gremlins.yaml when any are passed as flags.
-excludes='^\.github/ ^internal/testutils/ ^internal/sentrytest/ (^|/)mocks?\.go$ mock_transport\.go$'
+excludes='^\.github/ ^_examples/ ^internal/testutils/ ^internal/sentrytest/ (^|/)mocks?\.go$ mock_transport\.go$'
+
+# gremlins tests each mutant in a copy of the module, where the relative replace
+# directives of a nested module point nowhere, so every mutant fails to build
+# and counts as killed. The go.work written below goes along with the copy.
+gowork=
+cleanup() {
+	if [ -n "$gowork" ]; then
+		rm -f "$gowork" "$gowork.sum"
+		gowork=
+	fi
+}
+trap cleanup EXIT
 
 # nested prints the modules nested in module $1, relative to it, one per line.
 nested() {
@@ -77,7 +89,20 @@ for mod in $modules; do
 		set -- "$@" --output "$results/$mod/gremlins.json"
 	fi
 
+	if [ "$mod" != . ]; then
+		gowork=$root/$mod/go.work
+		{
+			go mod edit -json "$mod/go.mod" | jq -r '"go \(.Go)", "use ."'
+			# Go only spots the modules nested in a replacement directory when its path is clean.
+			go mod edit -json "$mod/go.mod" | jq -r '.Replace[]? | select(.New.Version == null) | "\(.Old.Path) \(.New.Path)"' |
+				while read -r path dir; do
+					echo "replace $path => $(cd "$mod/$dir" && pwd)"
+				done
+		} >"$gowork"
+	fi
+
 	printf '>>> %s\n' "$mod"
 	(cd "$mod" && go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 unleash \
 		--config "$root/.gremlins.yaml" --diff "$base" "$@" .)
+	cleanup
 done

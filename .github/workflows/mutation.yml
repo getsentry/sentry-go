@@ -34,9 +34,13 @@ jobs:
           go-version: "1.27"
           cache-dependency-path: "**/go.sum"
       - name: Mutation test changed code
-        run: make mutation MUTATION_BASE="origin/$BASE_REF" MUTATION_RESULTS="$RUNNER_TEMP/mutation"
+        # github.base_ref of a stacked PR is the trunk, not the branch the PR targets.
+        run: |
+          base=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefName --jq .baseRefName)
+          make mutation MUTATION_BASE="origin/$base" MUTATION_RESULTS="$RUNNER_TEMP/mutation"
         env:
-          BASE_REF: ${{ github.base_ref }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
       - name: Report surviving mutants
         run: go run .github/scripts/mutation-report.go -results "$RUNNER_TEMP/mutation" -out "$RUNNER_TEMP/mutation-report.md" -sha "$HEAD_SHA" -run "$RUN_URL"
         env:
