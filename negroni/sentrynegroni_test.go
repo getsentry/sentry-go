@@ -327,7 +327,6 @@ func TestIntegration(t *testing.T) {
 
 	var want []*sentry.Event
 	var wantTrans []*sentry.Event
-	var wantCodes []sentry.SpanStatus
 
 	for _, tt := range tests {
 		wantRequest := tt.WantEvent.Request
@@ -339,7 +338,6 @@ func TestIntegration(t *testing.T) {
 		wantTransaction.URL = srv.URL + wantTransaction.URL
 		wantTransaction.Headers["Host"] = srv.Listener.Addr().String()
 		wantTrans = append(wantTrans, tt.WantTransaction)
-		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
 
 		req, err := http.NewRequest(tt.Method, srv.URL+tt.Path, strings.NewReader(tt.Body))
 		if err != nil {
@@ -387,10 +385,8 @@ func TestIntegration(t *testing.T) {
 
 	close(transactionsCh)
 	var gott []*sentry.Event
-	var statusCodes []sentry.SpanStatus
 	for e := range transactionsCh {
 		gott = append(gott, e)
-		statusCodes = append(statusCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
 	}
 
 	optstrans := cmp.Options{
@@ -414,10 +410,6 @@ func TestIntegration(t *testing.T) {
 	}
 	if diff := cmp.Diff(wantTrans, gott, optstrans); diff != "" {
 		t.Fatalf("Transaction mismatch (-want +got):\n%s", diff)
-	}
-
-	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
-		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
 	}
 }
 

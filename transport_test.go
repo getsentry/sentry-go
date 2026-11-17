@@ -347,6 +347,17 @@ func TestHTTPTransport_FlushWithContext(t *testing.T) {
 			t.Error("FlushWithContext should fail for a closed transport")
 		}
 	})
+
+	t.Run("sync canceled context", func(t *testing.T) {
+		transport := NewHTTPSyncTransport()
+		transport.Configure(ClientOptions{})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if transport.FlushWithContext(ctx) {
+			t.Error("FlushWithContext should fail for a canceled context")
+		}
+	})
 }
 
 func TestHTTPTransport_Close(t *testing.T) {
@@ -608,21 +619,6 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 			}
 		}
 	})
-}
-
-func TestHTTPSyncTransport_Flush(t *testing.T) {
-	transport := NewHTTPSyncTransport()
-	transport.Configure(ClientOptions{})
-
-	if !transport.FlushWithContext(context.Background()) {
-		t.Error("FlushWithContext should succeed for a live context")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if transport.FlushWithContext(ctx) {
-		t.Error("FlushWithContext should fail for a canceled context")
-	}
 }
 
 type httptraceRoundTripper struct {

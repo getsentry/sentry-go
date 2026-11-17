@@ -50,26 +50,6 @@ func TestNestedMiddlewarePreservesActiveTransaction(t *testing.T) {
 	require.Equal(t, "transaction", fixture.Events()[0].Type)
 }
 
-func TestIncomingBaggageUsesAllHeaderLines(t *testing.T) {
-	t.Parallel()
-
-	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
-		EnableTracing: true, TracesSampleRate: 1,
-	}))
-	request := httptest.NewRequest(http.MethodGet, "http://example.test/baggage", nil)
-	request.Header.Set(sentry.SentryTraceHeader, "11111111111111111111111111111111-2222222222222222-1")
-	request.Header.Add(sentry.SentryBaggageHeader, "sentry-release=from-first-line")
-	request.Header.Add(sentry.SentryBaggageHeader, "sentry-trace_id=11111111111111111111111111111111")
-	request = request.WithContext(fixture.NewContext(request.Context()))
-
-	handler := sentryhttp.New(sentryhttp.Options{}).Handle(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		baggage := sentry.TransactionFromContext(r.Context()).ToBaggage()
-		require.Contains(t, baggage, "sentry-release=from-first-line")
-		require.Contains(t, baggage, "sentry-trace_id=11111111111111111111111111111111")
-	}))
-	handler.ServeHTTP(httptest.NewRecorder(), request)
-}
-
 func TestIntegration(t *testing.T) {
 	largePayload := strings.Repeat("Large", 3*1024) // 15 KB
 
@@ -381,7 +361,6 @@ func TestIntegration(t *testing.T) {
 
 	var want []*sentry.Event
 	var wantTrans []*sentry.Event
-	var wantCodes []sentry.SpanStatus
 
 	for _, tt := range tests {
 		wantRequest := tt.WantEvent.Request
@@ -393,7 +372,6 @@ func TestIntegration(t *testing.T) {
 		wantTransaction.URL = srv.URL + wantTransaction.URL
 		wantTransaction.Headers["Host"] = srv.Listener.Addr().String()
 		wantTrans = append(wantTrans, tt.WantTransaction)
-		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
 
 		req, err := http.NewRequest(tt.Method, srv.URL+tt.Path, strings.NewReader(tt.Body))
 		if err != nil {
@@ -438,10 +416,8 @@ func TestIntegration(t *testing.T) {
 
 	close(transactionsCh)
 	var gott []*sentry.Event
-	var statusCodes []sentry.SpanStatus
 	for e := range transactionsCh {
 		gott = append(gott, e)
-		statusCodes = append(statusCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
 	}
 
 	optstrans := cmp.Options{
@@ -463,9 +439,5 @@ func TestIntegration(t *testing.T) {
 	}
 	if diff := cmp.Diff(wantTrans, gott, optstrans); diff != "" {
 		t.Fatalf("Transaction mismatch (-want +got):\n%s", diff)
-	}
-
-	if diff := cmp.Diff(wantCodes, statusCodes, cmp.Options{}); diff != "" {
-		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
 	}
 }

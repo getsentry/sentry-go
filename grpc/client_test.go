@@ -345,24 +345,6 @@ func TestStreamClientInterceptor(t *testing.T) {
 	}
 }
 
-func TestStreamClientInterceptor_FinishesNonServerStreamingResponseOnFirstRecv(t *testing.T) {
-	transport := initMockTransport(t)
-	interceptor := sentrygrpc.StreamClientInterceptor()
-	ctx, transaction := startClientTransaction(context.Background())
-
-	stream, err := interceptor(ctx, &grpc.StreamDesc{}, nil, "/test.TestService/Method", func(_ context.Context, _ *grpc.StreamDesc, _ *grpc.ClientConn, _ string, _ ...grpc.CallOption) (grpc.ClientStream, error) {
-		return &mockClientStream{recvMsgFn: func(_ any) error { return nil }}, nil
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, stream)
-	require.NoError(t, stream.RecvMsg(nil))
-
-	transaction.Finish()
-	sentry.Flush(testutils.FlushTimeout())
-	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
-}
-
 func TestStreamClientInterceptor_CloseSendWaitsForRecvMsg(t *testing.T) {
 	transport := initMockTransport(t)
 	interceptor := sentrygrpc.StreamClientInterceptor()

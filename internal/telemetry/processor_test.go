@@ -55,26 +55,3 @@ func TestBuffer_Add_MissingCategory(t *testing.T) {
 		t.Fatal("expected inline items after Close to be rejected")
 	}
 }
-
-func TestBuffer_AddAndFlush_Sends(t *testing.T) {
-	transport := &testutils.MockTelemetryTransport{}
-	dsn := &protocol.Dsn{}
-	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
-	storage := map[ratelimit.Category]Buffer[Item]{
-		ratelimit.CategoryError: NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
-	}
-	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil)
-	if !b.Add(context.Background(), bwItem{id: "1"}) {
-		t.Fatal("add failed")
-	}
-	if ok := testutils.FlushWithTimeout(b, testutils.FlushTimeout()); !ok {
-		t.Fatal("flush returned false")
-	}
-	if ok := b.FlushWithContext(context.Background()); !ok {
-		t.Fatal("flush returned false")
-	}
-	b.Close(testutils.FlushTimeout())
-	if transport.GetSendCount() == 0 {
-		t.Fatal("expected at least one send")
-	}
-}

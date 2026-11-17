@@ -421,7 +421,7 @@ func TestSentryLogger_LogEntryAttributes(t *testing.T) {
 func Test_sentryLogger_AttributePrecedence(t *testing.T) {
 	ctx, mockTransport := setupMockTransport()
 	scope := ScopeFromContext(ctx)
-	scope.SetUser(User{ID: "user456", Name: "TestUser"})
+	scope.SetUser(User{ID: "user456", Name: "TestUser", Email: "test@example.com"})
 	scope.SetAttributes(
 		attribute.String("key", "scope-value"),
 		attribute.String("sentry.sdk.name", "scope-sdk"),
@@ -476,6 +476,10 @@ func Test_sentryLogger_AttributePrecedence(t *testing.T) {
 
 	if val := attrs["user.name"]; val.AsString() != "scope-name" {
 		t.Errorf("expected user.name=scope-name, got %v", val.AsString())
+	}
+
+	if val := attrs["user.email"]; val.AsString() != "test@example.com" {
+		t.Errorf("expected user.email=test@example.com, got %v", val.AsString())
 	}
 
 	if _, ok := attrs["sentry.sdk.name"]; !ok {
@@ -616,64 +620,6 @@ func TestSentryLogger_DebugLogging(t *testing.T) {
 			assertEqual(t, strings.Contains(got, tt.message), true)
 			assertEqual(t, strings.Contains(got, "%!"), false)
 		})
-	}
-}
-
-func Test_sentryLogger_UserAttributes(t *testing.T) {
-	ctx := context.Background()
-	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
-		Dsn:           testDsn,
-		Transport:     mockTransport,
-		Release:       "v1.2.3",
-		Environment:   "testing",
-		ServerName:    "test-server",
-		EnableTracing: true,
-	})
-	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
-	ctx, scope := WithScope(ctx)
-	ctx = ContextWithClient(ctx, mockClient)
-	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-	scope.SetUser(User{
-		ID:    "user123",
-		Name:  "Test User",
-		Email: "test@example.com",
-	})
-
-	l := NewLogger(ctx)
-	l.Info().Emit("test message with PII")
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-
-	logs := events[0].Logs
-	if len(logs) != 1 {
-		t.Fatalf("expected 1 log, got %d", len(logs))
-	}
-
-	log := logs[0]
-	attrs := log.Attributes
-
-	if val, ok := attrs["user.id"]; !ok {
-		t.Error("missing user.id attribute")
-	} else if val.AsString() != "user123" {
-		t.Errorf("unexpected user.id: got %v, want %v", val.AsString(), "user123")
-	}
-
-	if val, ok := attrs["user.name"]; !ok {
-		t.Error("missing user.name attribute")
-	} else if val.AsString() != "Test User" {
-		t.Errorf("unexpected user.name: got %v, want %v", val.AsString(), "Test User")
-	}
-
-	if val, ok := attrs["user.email"]; !ok {
-		t.Error("missing user.email attribute")
-	} else if val.AsString() != "test@example.com" {
-		t.Errorf("unexpected user.email: got %v, want %v", val.AsString(), "test@example.com")
 	}
 }
 

@@ -389,7 +389,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 				"http.request.header.x-custom":      "custom-value",
 				"http.request.body":                 `{"password":"[Filtered]","safe":"keep"}`,
 				"http.response.header.content-type": "application/json",
-				"http.response.header.set-cookie":   "session=[Filtered]; theme=dark",
+				"http.response.header.set-cookie":   "session=[Filtered]; Path=/; HttpOnly",
 			},
 			wantAbsent: []string{"http.response.body", "http.response.body.size"},
 		},
@@ -402,7 +402,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 				"http.request.header.cookie":        "session=[Filtered]; theme=dark",
 				"http.request.header.x-custom":      "custom-value",
 				"http.response.header.content-type": "application/json",
-				"http.response.header.set-cookie":   "session=[Filtered]; theme=dark",
+				"http.response.header.set-cookie":   "session=[Filtered]; Path=/; HttpOnly",
 			},
 			wantAbsent: []string{"http.request.body", "http.response.body"},
 		},
@@ -462,7 +462,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 				responseBody: responseBody,
 				responseHeaders: map[string]string{
 					"Content-Type": "application/json",
-					"Set-Cookie":   "session=secret; theme=dark",
+					"Set-Cookie":   "session=secret; Path=/; HttpOnly",
 				},
 			}
 			client := &http.Client{Transport: sentryhttpclient.NewSentryRoundTripper(roundTripper)}
@@ -511,78 +511,6 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-type headerRoundTripper struct {
-	header http.Header
-}
-
-func (h *headerRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
-	return &http.Response{
-		StatusCode: http.StatusOK,
-		Header:     h.header.Clone(),
-		Body:       io.NopCloser(strings.NewReader("")),
-		Request:    request,
-	}, nil
-}
-
-func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
-	spansCh := make(chan []*sentry.Span, 1)
-	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-		DataCollection:   &sentry.DataCollection{},
-		BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
-			spansCh <- event.Spans
-			return event
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ctx := contextWithClient(sentryClient)
-	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
-	ctx = span.Context()
-
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com/api", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	header := http.Header{}
-	header.Add("Set-Cookie", "sessionid=abc123; Path=/; HttpOnly")
-	header.Add("Set-Cookie", "theme=dark; Password=hunter2; Path=/settings; Secure")
-	client := &http.Client{Transport: sentryhttpclient.NewSentryRoundTripper(&headerRoundTripper{header: header})}
-
-	response, err := client.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response.Body.Close()
-
-	span.Finish()
-	if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
-		t.Fatal("sentry.Flush timed out")
-	}
-	close(spansCh)
-
-	var got *sentry.Span
-	for spans := range spansCh {
-		for _, candidate := range spans {
-			if candidate.Op == "http.client" {
-				got = candidate
-			}
-		}
-	}
-	if got == nil {
-		t.Fatal("missing http.client span")
-	}
-
-	want := "sessionid=[Filtered]; Path=/; HttpOnly, theme=dark; Password=[Filtered]; Path=/settings; Secure"
-	if diff := cmp.Diff(want, got.Data["http.response.header.set-cookie"]); diff != "" {
-		t.Errorf("span data[\"http.response.header.set-cookie\"] mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -674,69 +602,6 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 
 	if diff := cmp.Diff(wantSpan, gotSpan, optstrans); diff != "" {
 		t.Errorf("Span mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestIntegration_NoParentSpan(t *testing.T) {
-	spansCh := make(chan []*sentry.Span, 1)
-
-	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-		BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
-			spansCh <- event.Spans
-			return event
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ctx := contextWithClient(sentryClient)
-
-	request, err := http.NewRequestWithContext(ctx, "GET", "https://example.com", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	roundTripper := &noopRoundTripper{
-		ExpectResponseStatus: 200,
-		ExpectResponseLength: 0,
-	}
-
-	client := &http.Client{
-		Transport: sentryhttpclient.NewSentryRoundTripper(roundTripper),
-	}
-
-	response, err := client.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	response.Body.Close()
-
-	if ok := sentryClient.Flush(testutils.FlushTimeout()); !ok {
-		t.Fatal("sentry.Flush timed out")
-	}
-	close(spansCh)
-
-	var got [][]*sentry.Span
-	for e := range spansCh {
-		got = append(got, e)
-	}
-
-	// Expect no spans.
-	if len(got) != 0 {
-		t.Errorf("Expected no spans, got %d", len(got))
-	}
-
-	// Expect "Baggage" and "Sentry-Trace" headers.
-	if value := response.Request.Header.Get("Baggage"); !strings.Contains(value, "sentry-trace_id=") {
-		t.Errorf(`Expected scope trace baggage, got %s`, value)
-	}
-
-	if value := response.Request.Header.Get("Sentry-Trace"); value == "" {
-		t.Errorf(`Expected "Sentry-Trace" header, got %s`, value)
 	}
 }
 

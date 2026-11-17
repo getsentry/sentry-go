@@ -61,7 +61,12 @@ func summarizeTx(tx *sentry.Event) txSummary {
 func TestUnaryServerInterceptor(t *testing.T) {
 	transport := initMockTransport(t)
 	interceptor := sentrygrpc.UnaryServerInterceptor(sentrygrpc.ServerOptions{})
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-request-id", "req-123"))
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
+		"authorization", "Bearer secret-token",
+		"x-api-key", "top-secret",
+		"cookie", "session=secret",
+		"x-request-id", "req-123",
+	))
 
 	_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{
 		FullMethod: "/test.TestService/Method",
@@ -87,10 +92,15 @@ func TestUnaryServerInterceptor(t *testing.T) {
 			"rpc.grpc.status_code": float64(codes.OK),
 		},
 		GRPC: map[string]any{
-			"method":   "test.TestService/Method",
-			"metadata": map[string]any{"x-request-id": "req-123"},
+			"method": "test.TestService/Method",
+			"metadata": map[string]any{
+				"authorization": "[Filtered]",
+				"cookie":        "session=[Filtered]",
+				"x-api-key":     "[Filtered]",
+				"x-request-id":  "req-123",
+			},
 		},
-	}, summarizeTx(events[0])); diff != "" {
+	}, summarizeTx(events[0]), testutils.EquateKeyValueStrings()); diff != "" {
 		t.Errorf("transaction mismatch (-want +got):\n%s", diff)
 	}
 }
@@ -162,43 +172,6 @@ func TestUnaryServerInterceptor_RequestIsolation(t *testing.T) {
 		})
 		return requestCtx, nil, err
 	})
-}
-
-func TestUnaryServerInterceptor_ScrubsSensitiveMetadata(t *testing.T) {
-	transport := initMockTransport(t)
-	interceptor := sentrygrpc.UnaryServerInterceptor(sentrygrpc.ServerOptions{})
-	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs(
-		"authorization", "Bearer secret-token",
-		"x-api-key", "top-secret",
-		"cookie", "session=secret",
-		"x-request-id", "req-123",
-	))
-
-	_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{
-		FullMethod: "/test.TestService/Method",
-	}, func(_ context.Context, _ any) (any, error) {
-		return struct{}{}, nil
-	})
-
-	require.NoError(t, err)
-	sentry.Flush(testutils.FlushTimeout())
-
-	events := transport.Events()
-	require.Len(t, events, 1)
-	grpcContext := events[0].Contexts["grpc"]
-	metadataContext, ok := grpcContext["metadata"].(map[string]any)
-	require.True(t, ok)
-	if diff := cmp.Diff(
-		map[string]any{
-			"authorization": "[Filtered]",
-			"cookie":        "session=[Filtered]",
-			"x-api-key":     "[Filtered]",
-			"x-request-id":  "req-123",
-		}, metadataContext,
-		testutils.EquateKeyValueStrings(),
-	); diff != "" {
-		t.Fatalf("span data mismatch (-want +got):\n%s", diff)
-	}
 }
 
 func TestUnaryServerInterceptor_Panic(t *testing.T) {

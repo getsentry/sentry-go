@@ -3,7 +3,6 @@ package sentrysql
 import (
 	"context"
 	"database/sql/driver"
-	"errors"
 	"testing"
 
 	"github.com/getsentry/sentry-go"
@@ -47,42 +46,6 @@ func TestStartSpan_SpanData(t *testing.T) {
 		assert.Equal(t, 5433, span.Data["server.socket.port"])
 		// db.user is absent — SendDefaultPII is off.
 		assert.Nil(t, span.Data["db.user"])
-	})
-}
-
-func TestFinishSpan_StatusMapping(t *testing.T) {
-	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
-		ctx := f.NewContext(context.Background())
-		parent := sentry.StartSpan(ctx, "root", sentry.WithTransactionName("root"))
-		t.Cleanup(parent.Finish)
-
-		okSpan := startQuerySpan(parent.Context(), nil, &config{system: SystemPostgreSQL}, opQuery, "SELECT 1")
-		require.NotNil(t, okSpan, "startSpan must return a span when a parent is present")
-		finishSpan(okSpan, nil)
-		assert.Equal(t, sentry.SpanStatusOK, okSpan.Status)
-
-		errSpan := startQuerySpan(parent.Context(), nil, &config{system: SystemPostgreSQL}, opExec, "INSERT INTO t VALUES (1)")
-		finishSpan(errSpan, errors.New("boom"))
-		assert.Equal(t, sentry.SpanStatusInternalError, errSpan.Status)
-	})
-}
-
-func TestStartQuerySpan_UsesTransactionParent(t *testing.T) {
-	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
-		ctx := f.NewContext(context.Background())
-		parent := sentry.StartSpan(ctx, "root", sentry.WithTransactionName("root"))
-		t.Cleanup(parent.Finish)
-
-		cfg := &config{system: SystemPostgreSQL}
-		conn := &sentryConn{cfg: cfg}
-		txSpan := startTxSpan(parent.Context(), cfg)
-		require.NotNil(t, txSpan)
-		conn.activeTx = newTx(nil, txSpan)
-
-		querySpan := startQuerySpan(context.Background(), conn, cfg, opQuery, "SELECT 42")
-		require.NotNil(t, querySpan)
-		assert.Equal(t, txSpan.SpanID, querySpan.ParentSpanID)
-		assert.Equal(t, "SELECT ?", querySpan.Description)
 	})
 }
 

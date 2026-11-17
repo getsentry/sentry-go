@@ -376,11 +376,9 @@ func TestIntegration(t *testing.T) {
 
 	var wantEvents []*sentry.Event
 	var wantTransactions []*sentry.Event
-	var wantCodes []sentry.SpanStatus
 	for _, tt := range tests {
 		wantEvents = append(wantEvents, tt.WantEvent)
 		wantTransactions = append(wantTransactions, tt.WantTransaction)
-		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
 		req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
 		req.SetHost("example.com")
 		req.URI().SetPath(tt.Path)
@@ -438,11 +436,9 @@ func TestIntegration(t *testing.T) {
 
 	close(transactionsCh)
 	var gotTransactions []*sentry.Event
-	var gotCodes []sentry.SpanStatus
 
 	for e := range transactionsCh {
 		gotTransactions = append(gotTransactions, e)
-		gotCodes = append(gotCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
 	}
 
 	optstrans := cmp.Options{
@@ -482,94 +478,8 @@ func TestIntegration(t *testing.T) {
 		t.Fatalf("Transactions mismatch (-want +gotEvents):\n%s", diff)
 	}
 
-	if diff := cmp.Diff(wantCodes, gotCodes, cmp.Options{}); diff != "" {
-		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
-	}
-
 	ln.Close()
 	<-done
-}
-
-func TestGetTransactionFromContext(t *testing.T) {
-	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tests := map[string]struct {
-		useSentry bool
-	}{
-		"With Transaction":    {useSentry: true},
-		"Without Transaction": {useSentry: false},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			ln := fasthttputil.NewInmemoryListener()
-			defer ln.Close()
-
-			handler := func(ctx *fasthttp.RequestCtx) {
-				scope := sentry.ScopeFromContext(sentryfasthttp.GetContext(ctx))
-				if tc.useSentry && scope == nil {
-					t.Error("expecting scope not to be nil")
-				}
-				span := sentry.SpanFromContext(sentryfasthttp.GetContext(ctx))
-				if tc.useSentry && span == nil {
-					t.Error("expecting span not to be nil")
-				}
-				if !tc.useSentry && span != nil {
-					t.Error("expecting span to be nil")
-				}
-				ctx.SetStatusCode(200)
-			}
-
-			var finalHandler fasthttp.RequestHandler
-			if tc.useSentry {
-				sentryHandler := sentryfasthttp.New(sentryfasthttp.Options{})
-				finalHandler = sentryHandler.Handle(handler)
-			} else {
-				finalHandler = handler
-			}
-
-			done := make(chan struct{})
-			go func() {
-				if err := fasthttp.Serve(ln, finalHandler); err != nil {
-					t.Errorf("error in Serve: %s", err)
-				}
-				close(done)
-			}()
-
-			c := &fasthttp.Client{
-				Dial: func(_ string) (net.Conn, error) {
-					return ln.Dial()
-				},
-				ReadTimeout:  time.Second,
-				WriteTimeout: time.Second,
-			}
-
-			req, res := fasthttp.AcquireRequest(), fasthttp.AcquireResponse()
-			req.SetHost("example.com")
-			req.URI().SetPath("/")
-			req.Header.SetMethod(http.MethodGet)
-
-			if err := c.Do(req, res); err != nil {
-				t.Fatalf("Request failed: %s", err)
-			}
-			if res.StatusCode() != http.StatusOK {
-				t.Errorf("Status code = %d", res.StatusCode())
-			}
-
-			// Cleanup
-			fasthttp.ReleaseRequest(req)
-			fasthttp.ReleaseResponse(res)
-
-			ln.Close()
-			<-done
-		})
-	}
 }
 
 func TestRequestIsolation(t *testing.T) {

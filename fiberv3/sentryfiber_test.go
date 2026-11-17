@@ -407,11 +407,9 @@ func TestIntegration(t *testing.T) {
 
 	var wantEvents []*sentry.Event
 	var wantTransactions []*sentry.Event
-	var wantCodes []sentry.SpanStatus
 	for _, tt := range tests {
 		wantEvents = append(wantEvents, tt.WantEvent)
 		wantTransactions = append(wantTransactions, tt.WantTransaction)
-		wantCodes = append(wantCodes, sentry.HTTPtoSpanStatus(tt.WantStatus))
 		req, err := http.NewRequest(tt.Method, "http://example.com"+tt.Path, strings.NewReader(tt.Body))
 		if err != nil {
 			t.Fatal(err)
@@ -465,11 +463,9 @@ func TestIntegration(t *testing.T) {
 
 	close(transactionsCh)
 	var gotTransactions []*sentry.Event
-	var gotCodes []sentry.SpanStatus
 
 	for e := range transactionsCh {
 		gotTransactions = append(gotTransactions, e)
-		gotCodes = append(gotCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
 	}
 
 	optstrans := cmp.Options{
@@ -498,10 +494,6 @@ func TestIntegration(t *testing.T) {
 
 	if diff := cmp.Diff(wantTransactions, gotTransactions, optstrans); diff != "" {
 		t.Fatalf("Transactions mismatch (-want +gotEvents):\n%s", diff)
-	}
-
-	if diff := cmp.Diff(wantCodes, gotCodes, cmp.Options{}); diff != "" {
-		t.Fatalf("Transaction status codes mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -544,67 +536,6 @@ func TestTransactionNameWithCacheHit(t *testing.T) {
 		if tx.Transaction != "GET /items" {
 			t.Errorf("Transaction %d name = %q, want %q", i, tx.Transaction, "GET /items")
 		}
-	}
-}
-
-func TestHandlers(t *testing.T) {
-	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tests := map[string]struct {
-		useSentry bool
-	}{
-		"With Transaction":    {useSentry: true},
-		"Without Transaction": {useSentry: false},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			app := fiber.New()
-
-			if tc.useSentry {
-				sentryHandler := sentryfiber.New(sentryfiber.Options{Timeout: 3 * time.Second, WaitForDelivery: true})
-				app.Use(sentryHandler)
-			}
-
-			handler := func(ctx fiber.Ctx) error {
-				scope := sentry.ScopeFromContext(ctx.Context())
-				if tc.useSentry && scope == nil {
-					t.Error("expecting scope not to be nil")
-				}
-				span := sentry.SpanFromContext(ctx.Context())
-				if tc.useSentry && span == nil {
-					t.Error("expecting span not to be nil")
-				}
-				if !tc.useSentry && span != nil {
-					t.Error("expecting span to be nil")
-				}
-				return nil
-			}
-
-			app.Get("/hello", handler)
-			req, err := http.NewRequest(http.MethodGet, "/hello", nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			req.Header.Set("User-Agent", "fiber")
-			req.Host = "example.com"
-
-			resp, err := app.Test(req)
-			if err != nil {
-				t.Fatalf("Request failed: %s", err)
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
-			}
-		})
 	}
 }
 

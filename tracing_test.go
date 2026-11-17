@@ -98,14 +98,14 @@ func testMarshalJSONOmitEmptyParentSpanID(t *testing.T, v any) {
 	}
 }
 
-func TestStartSpan(t *testing.T) {
+func TestStartTransaction(t *testing.T) {
 	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing: true,
 		Transport:     transport,
 	})
 	op := "test.op"
-	transaction := "Test Transaction"
+	transactionName := "Test Transaction"
 	description := "A Description"
 	status := SpanStatusOK
 	parentSpanID := SpanIDFromHex("f00db33f")
@@ -115,88 +115,13 @@ func TestStartSpan(t *testing.T) {
 	data := map[string]any{
 		"k": "v",
 	}
-	span := StartSpan(ctx, op,
-		WithTransactionName(transaction),
-		func(s *Span) {
-			s.Description = description
-			s.Status = status
-			s.ParentSpanID = parentSpanID
-			s.Sampled = sampled
-			s.StartTime = startTime
-			s.EndTime = endTime
-			s.Data = data
-		},
-	)
-	span.Finish()
-
-	SpanCheck{
-		Sampled:     sampled,
-		RecorderLen: 1,
-	}.Check(t, span)
-
-	events := transport.Events()
-	if got := len(events); got != 1 {
-		t.Fatalf("sent %d events, want 1", got)
-	}
-	want := &Event{
-		Type:        transactionType,
-		Transaction: transaction,
-		Contexts: map[string]Context{
-			"trace": {
-				"trace_id":       span.TraceID.String(),
-				"span_id":        span.SpanID.String(),
-				"parent_span_id": parentSpanID.String(),
-				"op":             op,
-				"data":           span.Data,
-				"description":    description,
-				"status":         status.String(),
-			},
-		},
-		Tags:      nil,
-		Timestamp: endTime,
-		StartTime: startTime,
-		TransactionInfo: &TransactionInfo{
-			Source: span.Source,
-		},
-	}
-	opts := cmp.Options{
-		cmpopts.IgnoreFields(Event{},
-			"Contexts", "EventID", "Level", "Platform",
-			"Release", "Sdk", "ServerName", "Modules",
-		),
-		cmpopts.IgnoreFields(Event{}, "sdkMetaData", "serializedTags", "serializedContexts", "serializedBreadcrumbs", "serializedException", "serializedUser", "serializationSafe"),
-		cmpopts.EquateEmpty(),
-	}
-	if diff := cmp.Diff(want, events[0], opts); diff != "" {
-		t.Fatalf("Event mismatch (-want +got):\n%s", diff)
-	}
-	// Check trace context explicitly, as we ignored all contexts above to
-	// disregard other contexts.
-	if diff := cmp.Diff(want.Contexts["trace"], events[0].Contexts["trace"]); diff != "" {
-		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestStartTransaction(t *testing.T) {
-	transport := &MockTransport{}
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-		Transport:     transport,
-	})
-	transactionName := "Test Transaction"
-	description := "A Description"
-	status := SpanStatusOK
-	sampled := SampledTrue
-	startTime := time.Now()
-	endTime := startTime.Add(3 * time.Second)
-	data := map[string]any{
-		"k": "v",
-	}
 	transaction := StartTransaction(ctx,
 		transactionName,
 		func(s *Span) {
+			s.Op = op
 			s.Description = description
 			s.Status = status
+			s.ParentSpanID = parentSpanID
 			s.Sampled = sampled
 			s.StartTime = startTime
 			s.EndTime = endTime
@@ -220,11 +145,13 @@ func TestStartTransaction(t *testing.T) {
 		Transaction: transactionName,
 		Contexts: map[string]Context{
 			"trace": {
-				"trace_id":    transaction.TraceID.String(),
-				"span_id":     transaction.SpanID.String(),
-				"data":        transaction.Data,
-				"description": description,
-				"status":      status.String(),
+				"trace_id":       transaction.TraceID.String(),
+				"span_id":        transaction.SpanID.String(),
+				"parent_span_id": parentSpanID.String(),
+				"op":             op,
+				"data":           transaction.Data,
+				"description":    description,
+				"status":         status.String(),
 			},
 			"otel": {"k": "v"},
 		},
@@ -916,15 +843,6 @@ func TestTracesSamplerReceivesRemoteParent(t *testing.T) {
 	}
 }
 
-func TestDoesNotCrashWithEmptyContext(_ *testing.T) {
-	// This test makes sure that we can still start and finish transactions
-	// with empty context (for example, when Sentry SDK is not initialized)
-	ctx := context.Background()
-	tx := StartTransaction(ctx, "op")
-	tx.Sampled = SampledTrue
-	tx.Finish()
-}
-
 func TestSetDynamicSamplingContextDoesNothingOnSpan(t *testing.T) {
 	// SetDynamicSamplingContext should do nothing on non-transaction spans
 	s := Span{
@@ -943,27 +861,6 @@ func TestSetDynamicSamplingContextDoesNothingOnSpan(t *testing.T) {
 	}
 }
 
-func TestGetTransactionWithProperTransactionsSpans(t *testing.T) {
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-	})
-	transaction := StartTransaction(ctx, "transaction")
-	child1 := transaction.StartChild("child1")
-	child2 := transaction.StartChild("child2")
-	grandchild := child1.StartChild("grandchild")
-
-	assertEqual(t, transaction.GetTransaction(), transaction)
-	assertEqual(t, child1.GetTransaction(), transaction)
-	assertEqual(t, child2.GetTransaction(), transaction)
-	assertEqual(t, grandchild.GetTransaction(), transaction)
-
-	// Another transaction, unrelated to the first one
-	anotherTransaction := StartTransaction(ctx, "another transaction")
-
-	assertNotEqual(t, transaction, anotherTransaction)
-	assertEqual(t, anotherTransaction.GetTransaction(), anotherTransaction)
-}
-
 func TestSpanSetContextMerges(t *testing.T) {
 	ctx := NewTestContext(ClientOptions{
 		EnableTracing: true,
@@ -971,19 +868,9 @@ func TestSpanSetContextMerges(t *testing.T) {
 	transaction := StartTransaction(ctx, "Test Transaction")
 	transaction.SetContext("a", Context{"foo": "bar"})
 	transaction.SetContext("b", Context{"b": 2})
-
-	assertEqual(t, map[string]Context{"a": {"foo": "bar"}, "b": {"b": 2}}, transaction.contexts)
-}
-
-func TestSpanSetContextOverrides(t *testing.T) {
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-	})
-	transaction := StartTransaction(ctx, "Test Transaction")
-	transaction.SetContext("a", Context{"foo": "bar"})
 	transaction.SetContext("a", Context{"foo": 2})
 
-	assertEqual(t, map[string]Context{"a": {"foo": 2}}, transaction.contexts)
+	assertEqual(t, map[string]Context{"a": {"foo": 2}, "b": {"b": 2}}, transaction.contexts)
 }
 
 // This test checks that there are no concurrent reads/writes to

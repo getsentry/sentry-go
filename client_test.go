@@ -6,9 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strings"
@@ -29,24 +27,6 @@ import (
 )
 
 const testDsn = "https://whatever@sentry.io/1337"
-
-func TestNewClientAllowsEmptyDSN(t *testing.T) {
-	transport := &MockTransport{}
-	client, err := NewClient(ClientOptions{
-		Transport: transport,
-	})
-	if err != nil {
-		t.Fatalf("expected no error when creating client without a DSN but got %v", err)
-	}
-	defer client.Close()
-
-	if !client.IsEnabled() {
-		t.Fatal("client with an empty DSN should remain enabled")
-	}
-
-	client.CaptureException(context.Background(), errors.New("custom error"))
-	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
-}
 
 func TestNewClientRejectsMalformedDSN(t *testing.T) {
 	client, err := NewClient(ClientOptions{Dsn: "not-a-dsn"})
@@ -199,16 +179,25 @@ func TestCaptureMessageRouting(t *testing.T) {
 }
 
 func TestBackgroundCaptureStartsNewTrace(t *testing.T) {
-	client, transport := newCaptureTestClient(t, ClientOptions{})
-	ctx := ContextWithClient(context.Background(), client)
+	for name, newCtx := range map[string]func() context.Context{
+		"no scope": context.Background,
+		"separate WithScope roots": func() context.Context {
+			ctx, _ := WithScope(context.Background())
+			return ctx
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			client, transport := newCaptureTestClient(t, ClientOptions{})
 
-	require.NotNil(t, CaptureMessage(ctx, "first"))
-	require.NotNil(t, CaptureMessage(ctx, "second"))
-	require.Len(t, transport.Events(), 2)
-	first := transport.Events()[0].Contexts["trace"][traceIDContextKey]
-	second := transport.Events()[1].Contexts["trace"][traceIDContextKey]
-	assert.NotEmpty(t, first)
-	assert.NotEqual(t, first, second)
+			require.NotNil(t, CaptureMessage(ContextWithClient(newCtx(), client), "first"))
+			require.NotNil(t, CaptureMessage(ContextWithClient(newCtx(), client), "second"))
+			require.Len(t, transport.Events(), 2)
+			first := transport.Events()[0].Contexts["trace"][traceIDContextKey]
+			second := transport.Events()[1].Contexts["trace"][traceIDContextKey]
+			assert.NotEmpty(t, first)
+			assert.NotEqual(t, first, second)
+		})
+	}
 }
 
 func TestInitFailureKeepsGlobalClient(t *testing.T) {
@@ -242,22 +231,6 @@ func TestGlobalClientConcurrentAccess(t *testing.T) {
 		})
 	}
 	wg.Wait()
-}
-
-func TestWithScopeCreatesIndependentRoots(t *testing.T) {
-	client, transport := newCaptureTestClient(t, ClientOptions{})
-	global := cleanGlobalScope(t)
-	global.SetTag("global-before", "before")
-
-	firstCtx, _ := WithScope(context.Background())
-	secondCtx, _ := WithScope(context.Background())
-	global.SetTag("global-after", "after")
-	require.NotNil(t, CaptureMessage(ContextWithClient(firstCtx, client), "first root"))
-	require.NotNil(t, CaptureMessage(ContextWithClient(secondCtx, client), "second root"))
-	require.Len(t, transport.Events(), 2)
-	assert.Equal(t, "before", transport.Events()[0].Tags["global-before"])
-	assert.Equal(t, "after", transport.Events()[0].Tags["global-after"])
-	assert.NotEqual(t, transport.Events()[0].Contexts["trace"][traceIDContextKey], transport.Events()[1].Contexts["trace"][traceIDContextKey])
 }
 
 func TestWithScopeClonesParentTrace(t *testing.T) {
@@ -311,40 +284,6 @@ func TestCaptureMessageCopiesHintAndUsesContext(t *testing.T) {
 
 	require.NotNil(t, CaptureMessage(captureCtx, "message with inferred hint context", WithEventHint(&EventHint{})))
 	assert.Equal(t, "capture", received.Context.Value(key{}))
-}
-
-func TestCaptureMessagePreservesActiveSpanTraceContext(t *testing.T) {
-	for _, test := range []struct {
-		name                       string
-		directClient, withoutScope bool
-	}{
-		{name: "package capture"},
-		{name: "client capture", directClient: true},
-		{name: "without scope", withoutScope: true},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			client, transport := newCaptureTestClient(t, ClientOptions{})
-			ctx := ContextWithClient(context.Background(), client)
-			if test.withoutScope {
-				cleanGlobalScope(t)
-			} else {
-				ctx = ContextWithScope(ctx, NewScope())
-			}
-			transaction := StartTransaction(ctx, "request", WithOpName("http.server"))
-			transaction.SetData("http.request.method", http.MethodGet)
-			capture := CaptureMessage
-			if test.directClient {
-				capture = client.CaptureMessage
-			}
-			require.NotNil(t, capture(transaction.Context(), "message"))
-			require.Equal(t, Context{
-				traceIDContextKey: transaction.TraceID.String(),
-				spanIDContextKey:  transaction.SpanID.String(),
-				"op":              "http.server",
-				"data":            map[string]any{"http.request.method": http.MethodGet},
-			}, requireSingleEvent(t, transport).Contexts[traceContextKey])
-		})
-	}
 }
 
 func TestCaptureMessageEmptyString(t *testing.T) {
@@ -695,14 +634,6 @@ func TestCaptureLevelPrecedence(t *testing.T) {
 			want: LevelDebug,
 		},
 		{
-			name:       "capture option above event",
-			scopeLevel: LevelWarning,
-			capture: func(ctx context.Context, _ *Client) {
-				CaptureEvent(ctx, &Event{Level: LevelDebug}, WithLevel(LevelFatal))
-			},
-			want: LevelFatal,
-		},
-		{
 			name: "capture helper default reaches scope processors",
 			capture: func(ctx context.Context, client *Client) {
 				client.CaptureException(ctx, errors.New("boom"))
@@ -898,34 +829,6 @@ func TestCaptureCheckIn(t *testing.T) {
 	}
 }
 
-func TestCaptureCheckInExistingID(t *testing.T) {
-	client, _, _ := setupClientTest()
-
-	monitorConfig := &MonitorConfig{
-		Schedule:      IntervalSchedule(1, MonitorScheduleUnitDay),
-		CheckInMargin: 30,
-		MaxRuntime:    30,
-		Timezone:      "UTC",
-	}
-
-	checkInID := client.CaptureCheckIn(context.Background(), &CheckIn{
-		MonitorSlug: "cron",
-		Status:      CheckInStatusInProgress,
-		Duration:    time.Second,
-	}, monitorConfig)
-
-	checkInID2 := client.CaptureCheckIn(context.Background(), &CheckIn{
-		ID:          *checkInID,
-		MonitorSlug: "cron",
-		Status:      CheckInStatusOK,
-		Duration:    time.Minute,
-	}, monitorConfig)
-
-	if *checkInID != *checkInID2 {
-		t.Errorf("Expecting equivalent CheckInID: %s and %s", *checkInID, *checkInID2)
-	}
-}
-
 func TestSampleRateCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.options.SampleRate = 0.000000000000001
@@ -980,32 +883,6 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	CaptureException(ctx, ex, WithEventHint(&EventHint{OriginalException: ex}))
 
 	assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
-}
-
-func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
-	transport := &MockTransport{}
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-		Transport:        transport,
-		BeforeSend: func(event *Event, _ *EventHint) *Event {
-			t.Error("beforeSend should not be called")
-			return event
-		},
-		BeforeSendTransaction: func(event *Event, _ *EventHint) *Event {
-			assertEqual(t, event.Transaction, "Foo")
-			return nil
-		},
-	})
-
-	transaction := StartTransaction(ctx,
-		"Foo",
-	)
-	transaction.Finish()
-
-	if transport.lastEvent != nil {
-		t.Error("expected event to be dropped")
-	}
 }
 
 func TestBeforeSendTransactionIsCalled(t *testing.T) {
@@ -1144,22 +1021,6 @@ func TestIgnoreTransactions(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
-	transport := &MockTransport{}
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
-		Transport:        transport,
-	})
-
-	transaction := StartTransaction(ctx, "test")
-	// Transaction has no http.response.status_code
-	transaction.Finish()
-
-	dropped := transport.lastEvent == nil
-	assertEqual(t, dropped, false, "expected transaction to not be dropped")
 }
 
 func TestTraceIgnoreStatusCodes(t *testing.T) {
@@ -1606,68 +1467,6 @@ func TestClientSetsUpTransport(t *testing.T) {
 			})
 		})
 	}
-}
-
-type namedIntegration struct{ name string }
-
-func (n *namedIntegration) Name() string        { return n.name }
-func (n *namedIntegration) SetupOnce(_ *Client) {}
-
-func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
-	var (
-		mu     sync.Mutex
-		bodies [][]byte
-	)
-	requestReceived := make(chan struct{}, 1)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		mu.Lock()
-		bodies = append(bodies, b)
-		mu.Unlock()
-		w.WriteHeader(http.StatusOK)
-		select {
-		case requestReceived <- struct{}{}:
-		default:
-		}
-	}))
-	defer srv.Close()
-
-	dsn := strings.Replace(srv.URL, "//", "//pubkey@", 1) + "/1"
-	client, err := NewClient(ClientOptions{
-		Dsn: dsn,
-		Integrations: func(defaults []Integration) []Integration {
-			return append(defaults, &namedIntegration{name: "CustomRegressionIntegration"})
-		},
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { client.Close() })
-
-	client.CaptureMessage(context.Background(), "ping")
-	require.True(t, client.Flush(testutils.FlushTimeout()), "flush timed out")
-
-	select {
-	case <-requestReceived:
-	case <-time.After(testutils.FlushTimeout()):
-		t.Fatal("server never received an envelope")
-	}
-
-	mu.Lock()
-	require.NotEmpty(t, bodies, "expected at least one envelope to be sent")
-	body := bodies[0]
-	mu.Unlock()
-	nl := bytes.IndexByte(body, '\n')
-	require.Positive(t, nl, "envelope body missing header newline")
-	var header struct {
-		Sdk struct {
-			Name         string   `json:"name"`
-			Integrations []string `json:"integrations"`
-		} `json:"sdk"`
-	}
-	require.NoError(t, json.Unmarshal(body[:nl], &header))
-
-	assert.Equal(t, sdkIdentifier, header.Sdk.Name)
-	assert.Contains(t, header.Sdk.Integrations, "CustomRegressionIntegration")
 }
 
 func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {

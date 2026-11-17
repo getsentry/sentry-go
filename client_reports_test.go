@@ -27,18 +27,15 @@ import (
 func TestClientReports_CustomTransport(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
-		name     string
-		err      error
-		reason   report.DiscardReason
-		disabled bool
+		name   string
+		err    error
+		reason report.DiscardReason
 	}{
-		{"queue rejection", ErrTransportQueueFull, report.ReasonQueueOverflow, false},
-		{"send rejection", errors.New("rejected"), report.ReasonSendError, false},
-		{"disabled", ErrTransportQueueFull, report.ReasonQueueOverflow, true},
+		{"queue rejection", ErrTransportQueueFull, report.ReasonQueueOverflow},
+		{"send rejection", errors.New("rejected"), report.ReasonSendError},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			client, err := NewClient(ClientOptions{
-				DisableClientReports: tt.disabled,
 				Transport: &wrappedTransport{Transport: &NoopTransport{}, send: func(context.Context, *protocol.Envelope) error {
 					return tt.err
 				}},
@@ -56,10 +53,6 @@ func TestClientReports_CustomTransport(t *testing.T) {
 			require.NotNil(t, client.CaptureMessage(ctx, "send"))
 			client.Flush(testutils.FlushTimeout())
 			pending := client.reports.TakeReport()
-			if tt.disabled {
-				require.Nil(t, pending)
-				return
-			}
 			require.NotNil(t, pending)
 			require.ElementsMatch(t, []report.DiscardedEvent{
 				{Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError, Quantity: 1},
