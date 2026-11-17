@@ -86,7 +86,4 @@ func (b ItemContainer) DiscardCounts() DiscardCounts {
 	return counts
 }
 
-func (b ItemContainer) GetCategory() ratelimit.Category            { return b.category }
-func (ItemContainer) GetEventID() string                           { return "" }
-func (ItemContainer) GetSdkInfo() *protocol.SdkInfo                { return nil }
-func (ItemContainer) GetDynamicSamplingContext() map[string]string { return nil }
+func (b ItemContainer) GetCategory() ratelimit.Category { return b.category }

@@ -393,26 +393,12 @@ func (e eventItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelo
 	if err != nil {
 		return nil, err
 	}
+	header.EventID, header.Sdk, header.Trace = string(e.EventID), &e.Sdk, e.sdkMetaData.dsc.Entries
 	envelope := protocol.NewEnvelope(header, item)
 	for _, attachment := range e.Attachments {
 		envelope.AddItem(protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload))
 	}
 	return envelope, nil
-}
-
-// GetEventID returns the event ID.
-func (e eventItem) GetEventID() string {
-	return string(e.EventID)
-}
-
-// GetSdkInfo returns SDK information for the envelope header.
-func (e eventItem) GetSdkInfo() *protocol.SdkInfo {
-	return &e.Sdk
-}
-
-// GetDynamicSamplingContext returns trace context for the envelope header.
-func (e eventItem) GetDynamicSamplingContext() map[string]string {
-	return e.sdkMetaData.dsc.Entries
 }
 
 // encodeItem encodes payload as an envelope item.
@@ -484,10 +470,7 @@ func newTransactionItem(tx *Transaction, dsc map[string]string) *transactionItem
 	return item
 }
 
-func (t *transactionItem) GetCategory() ratelimit.Category              { return ratelimit.CategoryTransaction }
-func (t *transactionItem) GetEventID() string                           { return string(t.EventID) }
-func (t *transactionItem) GetSdkInfo() *protocol.SdkInfo                { return &t.Sdk }
-func (t *transactionItem) GetDynamicSamplingContext() map[string]string { return t.dsc }
+func (t *transactionItem) GetCategory() ratelimit.Category { return ratelimit.CategoryTransaction }
 
 // ToEnvelope encodes the transaction.
 func (t *transactionItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
@@ -495,6 +478,7 @@ func (t *transactionItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol
 	if err != nil {
 		return nil, err
 	}
+	header.EventID, header.Sdk, header.Trace = string(t.EventID), &t.Sdk, t.dsc
 	return protocol.NewEnvelope(header, item), nil
 }
 

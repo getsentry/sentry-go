@@ -50,21 +50,6 @@ func (t *testTelemetryItem) GetCategory() ratelimit.Category {
 	return ratelimit.CategoryError
 }
 
-func (t *testTelemetryItem) GetEventID() string {
-	return t.data
-}
-
-func (t *testTelemetryItem) GetSdkInfo() *protocol.SdkInfo {
-	return &protocol.SdkInfo{
-		Name:    "test",
-		Version: "1.0.0",
-	}
-}
-
-func (t *testTelemetryItem) GetDynamicSamplingContext() map[string]string {
-	return nil
-}
-
 func (t *testTelemetryItem) DiscardCounts() DiscardCounts { return oneDiscard(t.GetCategory()) }
 
 func transactionCounts(spanCount uint64) DiscardCounts {

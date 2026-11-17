@@ -95,15 +95,6 @@ func TestItemContainer_ToEnvelopeItem_And_Getters(t *testing.T) {
 			if container.GetCategory() != tt.category {
 				t.Fatal("category mismatch")
 			}
-			if container.GetEventID() != "" {
-				t.Fatal("event id should be empty")
-			}
-			if container.GetSdkInfo() != nil {
-				t.Fatal("sdk info should be nil")
-			}
-			if container.GetDynamicSamplingContext() != nil {
-				t.Fatal("dsc should be nil")
-			}
 		})
 	}
 }
