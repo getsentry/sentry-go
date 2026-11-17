@@ -50,12 +50,11 @@ func setupMockTransport() (context.Context, *MockTransport) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
-		Dsn:           testDsn,
-		Transport:     mockTransport,
-		Release:       "v1.2.3",
-		Environment:   "testing",
-		ServerName:    "test-server",
-		EnableTracing: true,
+		Dsn:         testDsn,
+		Transport:   mockTransport,
+		Release:     "v1.2.3",
+		Environment: "testing",
+		ServerName:  "test-server",
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
@@ -613,12 +612,11 @@ func Test_sentryLogger_UserAttributes(t *testing.T) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
-		Dsn:           testDsn,
-		Transport:     mockTransport,
-		Release:       "v1.2.3",
-		Environment:   "testing",
-		ServerName:    "test-server",
-		EnableTracing: true,
+		Dsn:         testDsn,
+		Transport:   mockTransport,
+		Release:     "v1.2.3",
+		Environment: "testing",
+		ServerName:  "test-server",
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"
@@ -675,7 +673,7 @@ func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 		attribute.String("key.string", "str"),
 		attribute.Bool("key.bool", true),
 	)
-	_, txn := StartSpan(scopedCtx, "test-transaction")
+	txnCtx, txn := StartSpan(scopedCtx, "test-transaction")
 	defer txn.Finish()
 
 	loggerOutsideScope := NewLogger(ctx)
@@ -695,8 +693,8 @@ func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 
 	mockTransport.logs = nil
 
-	logger := NewLogger(txn.Context())
-	logger.Info().WithCtx(txn.Context()).Emit("message with attrs")
+	logger := NewLogger(txnCtx)
+	logger.Info().WithCtx(txnCtx).Emit("message with attrs")
 	flushFromContext(ctx, testutils.FlushTimeout())
 
 	eventsAfterScope := mockTransport.LogBatches()

@@ -22,7 +22,7 @@ func startQuerySpan(ctx context.Context, conn *sentryConn, cfg *config, op, quer
 		description = cfg.obfuscateQuery(query)
 	}
 
-	span := startSpan(ctx, cfg, spanParent(ctx, conn), op, description)
+	_, span := startSpan(spanParent(ctx, conn), cfg, op, description)
 	if span != nil {
 		span.SetData("db.query.text", description)
 	}
@@ -37,30 +37,31 @@ func startQuerySpan(ctx context.Context, conn *sentryConn, cfg *config, op, quer
 	return span
 }
 
-func startTxSpan(ctx context.Context, cfg *config) *sentry.Span {
-	return startSpan(ctx, cfg, sentry.SpanFromContext(ctx), opTransaction, "transaction")
+func startTxSpan(ctx context.Context, cfg *config) (context.Context, *sentry.Span) {
+	return startSpan(ctx, cfg, opTransaction, "transaction")
 }
 
-func startSpan(ctx context.Context, cfg *config, parent *sentry.Span, op, description string) *sentry.Span {
-	if parent == nil {
-		return nil
+func startSpan(ctx context.Context, cfg *config, op, description string) (context.Context, *sentry.Span) {
+	if sentry.SpanFromContext(ctx) == nil {
+		return ctx, nil
 	}
 
-	_, span := sentry.StartSpan(parent.Context(), description,
+	ctx, span := sentry.StartSpan(ctx, description,
 		sentry.WithOp(op),
 		sentry.WithSpanOrigin(SpanOrigin),
 	)
 	setSQLData(ctx, span, cfg)
-	return span
+	return ctx, span
 }
 
-func spanParent(ctx context.Context, conn *sentryConn) *sentry.Span {
+// spanParent returns the context of the transaction open on conn, or ctx.
+func spanParent(ctx context.Context, conn *sentryConn) context.Context {
 	if conn != nil {
-		if txSpan := conn.txSpanOrNil(); txSpan != nil {
-			return txSpan
+		if txCtx := conn.txContextOrNil(); txCtx != nil {
+			return txCtx
 		}
 	}
-	return sentry.SpanFromContext(ctx)
+	return ctx
 }
 
 func setSQLData(_ context.Context, span *sentry.Span, cfg *config) {

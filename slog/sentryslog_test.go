@@ -250,10 +250,10 @@ func TestSentryHandlerAttrFromContext(t *testing.T) {
 
 func TestSentryHandlerPreservesConfiguredActiveSpan(t *testing.T) {
 	ctx, mockTransport := newMockTransport(t)
-	_, span := sentry.StartSpan(ctx, "configured-operation")
+	spanCtx, span := sentry.StartSpan(ctx, "configured-operation")
 	defer span.Finish()
 
-	handler := Option{LogLevel: []slog.Level{slog.LevelInfo}}.NewSentryHandler(span.Context())
+	handler := Option{LogLevel: []slog.Level{slog.LevelInfo}}.NewSentryHandler(spanCtx)
 	logger := slog.New(handler)
 	logger.Info("configured span log")
 	require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))

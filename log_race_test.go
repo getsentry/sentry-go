@@ -227,8 +227,7 @@ func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 func testConcurrentLogWithSpanOperations(_ *testing.T) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:              testDsn,
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		Transport:        &MockTransport{},
 	})
 	ctx, _ := WithScope(context.Background())
@@ -241,10 +240,9 @@ func testConcurrentLogWithSpanOperations(_ *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := range loggingIterations / 20 {
-				_, transaction := StartSpan(ctx, fmt.Sprintf("log-transaction-%d", id))
-				_, span := StartSpan(transaction.Context(), fmt.Sprintf("log-span-%d", id))
+				transactionCtx, transaction := StartSpan(ctx, fmt.Sprintf("log-transaction-%d", id))
+				spanCtx, span := StartSpan(transactionCtx, fmt.Sprintf("log-span-%d", id))
 
-				spanCtx := span.Context()
 				logger := NewLogger(spanCtx)
 
 				var localWg sync.WaitGroup

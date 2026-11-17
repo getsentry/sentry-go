@@ -255,8 +255,7 @@ func TestIntegration(t *testing.T) {
 	spansCh := make(chan []*sentry.Span, len(tests))
 
 	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			spansCh <- event.Spans
 			return event
@@ -268,8 +267,8 @@ func TestIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		ctx := contextWithClient(sentryClient)
-		_, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
-		ctx = span.Context()
+		spanCtx, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
+		ctx = spanCtx
 
 		request, err := http.NewRequestWithContext(ctx, tt.RequestMethod, tt.RequestURL, nil)
 		if err != nil && !tt.WantError {
@@ -431,8 +430,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			spansCh := make(chan []*sentry.Span, 1)
 			sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-				EnableTracing:    true,
-				TracesSampleRate: 1.0,
+				TracesSampleRate: new(1.0),
 				DataCollection:   tt.dataCollection,
 				BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 					spansCh <- event.Spans
@@ -444,8 +442,8 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 			}
 
 			ctx := contextWithClient(sentryClient)
-			_, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
-			ctx = span.Context()
+			spanCtx, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
+			ctx = spanCtx
 
 			request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://example.com/api",
 				strings.NewReader(`{"password":"secret","safe":"keep"}`))
@@ -530,8 +528,7 @@ func (h *headerRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
 	spansCh := make(chan []*sentry.Span, 1)
 	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		DataCollection:   &sentry.DataCollection{},
 		BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			spansCh <- event.Spans
@@ -543,8 +540,8 @@ func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
 	}
 
 	ctx := contextWithClient(sentryClient)
-	_, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
-	ctx = span.Context()
+	spanCtx, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
+	ctx = spanCtx
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com/api", nil)
 	if err != nil {
@@ -590,10 +587,9 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 	spansCh := make(chan []*sentry.Span, 1)
 
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:           true,
 		TracePropagationTargets: []string{"example.com"},
 		PropagateTraceparent:    true,
-		TracesSampleRate:        1.0,
+		TracesSampleRate:        new(1.0),
 		BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			spansCh <- event.Spans
 			return event
@@ -604,8 +600,8 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
-	ctx = span.Context()
+	spanCtx, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
+	ctx = spanCtx
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://example.com", nil)
 	if err != nil {
@@ -681,8 +677,7 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 	spansCh := make(chan []*sentry.Span, 1)
 
 	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			spansCh <- event.Spans
 			return event
@@ -755,9 +750,9 @@ func TestIntegration_ResolvesPropagationOptionsFromRequestContext(t *testing.T) 
 			f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
 				TracePropagationTargets: []string{test.target}, PropagateTraceparent: true, Release: "new",
 			}))
-			_, span := sentry.StartSpan(f.NewContext(context.Background()), "test")
+			spanCtx, span := sentry.StartSpan(f.NewContext(context.Background()), "test")
 			defer span.Finish()
-			request, err := http.NewRequestWithContext(span.Context(), http.MethodGet, "https://example.com", nil)
+			request, err := http.NewRequestWithContext(spanCtx, http.MethodGet, "https://example.com", nil)
 			require.NoError(t, err)
 			const existing = "othervendor=value,sentry-release=old"
 			request.Header.Set(sentry.SentryBaggageHeader, existing)
@@ -796,9 +791,9 @@ func TestRoundTripDoesNotMutateCallerRequest(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			sentrytest.Run(t, func(t *testing.T, fixture *sentrytest.Fixture) {
-				_, transaction := sentry.StartSpan(fixture.NewContext(context.Background()), "test")
+				transactionCtx, transaction := sentry.StartSpan(fixture.NewContext(context.Background()), "test")
 				type requestContextKey struct{}
-				requestCtx, cancel := context.WithCancel(context.WithValue(transaction.Context(), requestContextKey{}, "request value"))
+				requestCtx, cancel := context.WithCancel(context.WithValue(transactionCtx, requestContextKey{}, "request value"))
 				defer cancel()
 				request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, "https://example.com/foo", strings.NewReader(`{"key":"value"}`))
 				require.NoError(t, err)
@@ -850,8 +845,7 @@ func TestRoundTripDoesNotMutateCallerRequest(t *testing.T) {
 					assert.Equal(t, "http.client", span.Op)
 				}
 			}, sentrytest.WithClientOptions(sentry.ClientOptions{
-				EnableTracing:           true,
-				TracesSampleRate:        1.0,
+				TracesSampleRate:        new(1.0),
 				TracePropagationTargets: []string{test.target},
 				PropagateTraceparent:    true,
 			}))
@@ -937,8 +931,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			spansCh := make(chan []*sentry.Span, 1)
 			sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-				EnableTracing:    true,
-				TracesSampleRate: 1.0,
+				TracesSampleRate: new(1.0),
 				DataCollection:   tt.dataCollection,
 				BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 					spansCh <- event.Spans
@@ -950,8 +943,8 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 			}
 
 			ctx := contextWithClient(sentryClient)
-			_, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
-			ctx = span.Context()
+			spanCtx, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
+			ctx = spanCtx
 
 			request, err := http.NewRequestWithContext(ctx, http.MethodGet, tt.requestURL, nil)
 			if err != nil {
@@ -1095,8 +1088,7 @@ func TestTracePropagationTargets(t *testing.T) {
 				} {
 					t.Run(fmt.Sprintf("%s/client=%t/parent=%t/traceparent=%t", tt.name, clientTargets, parentSpan, propagateTraceparent), func(t *testing.T) {
 						opts := sentry.ClientOptions{
-							EnableTracing:        true,
-							TracesSampleRate:     1,
+							TracesSampleRate:     new(1.0),
 							PropagateTraceparent: propagateTraceparent,
 						}
 						var tracerOptions []sentryhttpclient.SentryRoundTripTracerOption
@@ -1113,8 +1105,7 @@ func TestTracePropagationTargets(t *testing.T) {
 						ctx := fixture.NewContext(context.Background())
 						var transaction *sentry.Span
 						if parentSpan {
-							_, transaction = sentry.StartSpan(ctx, "outgoing request")
-							ctx = transaction.Context()
+							ctx, transaction = sentry.StartSpan(ctx, "outgoing request")
 						}
 						request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com/foo", nil)
 						require.NoError(t, err)

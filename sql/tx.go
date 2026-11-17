@@ -1,6 +1,7 @@
 package sentrysql
 
 import (
+	"context"
 	"database/sql/driver"
 	"sync/atomic"
 
@@ -8,14 +9,15 @@ import (
 )
 
 // sentryTx wraps a driver.Tx. It also holds the current active span of
-// the transaction. On Commit/Rollback the span is set to nil.
+// the transaction and the context carrying it. On Commit/Rollback the span is set to nil.
 type sentryTx struct {
 	tx   driver.Tx
+	ctx  context.Context
 	span atomic.Pointer[sentry.Span]
 }
 
-func newTx(tx driver.Tx, span *sentry.Span) *sentryTx {
-	t := &sentryTx{tx: tx}
+func newTx(ctx context.Context, tx driver.Tx, span *sentry.Span) *sentryTx {
+	t := &sentryTx{tx: tx, ctx: ctx}
 	t.span.Store(span)
 	return t
 }
@@ -34,12 +36,12 @@ func (t *sentryTx) Rollback() error {
 	return err
 }
 
-// spanOrNil returns the transaction span of an active transaction or nil.
-func (t *sentryTx) spanOrNil() *sentry.Span {
-	if t == nil {
+// contextOrNil returns the context of an active transaction span or nil.
+func (t *sentryTx) contextOrNil() context.Context {
+	if t == nil || t.span.Load() == nil {
 		return nil
 	}
-	return t.span.Load()
+	return t.ctx
 }
 
 func (t *sentryTx) finish(err error, status sentry.SpanStatus) {

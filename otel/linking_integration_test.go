@@ -19,9 +19,9 @@ func TestExternalSamplingPropagation(t *testing.T) {
 		ids := traceID.String() + "-" + spanID.String()
 		for _, native := range []bool{false, true} {
 			if native {
-				_, root := sentry.StartSpan(ctx, "native")
+				rootCtx, root := sentry.StartSpan(ctx, "native")
 				defer root.Finish()
-				ctx = root.Context()
+				ctx = rootCtx
 			}
 			for _, test := range []struct {
 				name   string
@@ -38,8 +38,7 @@ func TestExternalSamplingPropagation(t *testing.T) {
 				assert.Equal(t, "00-"+ids+test.w3c, sentry.GetTraceparentW3C(linked), "native=%t sampled=%s", native, test.name)
 			}
 		}
-	}, sentrytest.WithClientOptions(sentry.ClientOptions{
-		EnableTracing: true, TracesSampleRate: 1,
+	}, sentrytest.WithClientOptions(sentry.ClientOptions{TracesSampleRate: new(1.0),
 		Integrations: func(in []sentry.Integration) []sentry.Integration {
 			return append(in, sentryotel.NewOtelIntegration())
 		},

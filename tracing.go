@@ -96,13 +96,6 @@ type TraceParentContext struct {
 	Sampled      Sampled
 }
 
-// TODO: make Span.Tags and Span.Data opaque types (struct{unexported []slice}).
-// An opaque type allows us to add methods and make it more convenient to use
-// than maps, because maps require careful nil checks to use properly or rely on
-// explicit initialization for every span, even when there might be no
-// tags/data. For Span.Data, must gracefully handle values that cannot be
-// marshaled into JSON (see transport.go:getRequestBodyFromEvent).
-
 // StartSpan starts a span and returns a context carrying it. The span is a
 // child of the span carried by ctx, if any. For a root span, name is the
 // transaction name; for a child span, it is the description.
@@ -217,9 +210,6 @@ func (s *Span) continueTrace(propagation PropagationContext) {
 func (s *Span) Finish() {
 	s.finishOnce.Do(s.doFinish)
 }
-
-// Context returns the context containing the span.
-func (s *Span) Context() context.Context { return s.ctx }
 
 // detached returns a copy of the span's payload that s no longer writes to.
 func (s *Span) detached() *Span {
@@ -380,24 +370,6 @@ func (s *Span) dynamicSamplingContextForPropagation() DynamicSamplingContext {
 	}
 }
 
-// SetDynamicSamplingContext sets the given dynamic sampling context on the
-// current transaction. Once the DSC has been propagated or sent, it is frozen
-// and later calls leave it unchanged. The supplied entries are copied.
-func (s *Span) SetDynamicSamplingContext(dsc DynamicSamplingContext) {
-	if !s.IsTransaction() {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.dynamicSamplingContext.IsFrozen() {
-		return
-	}
-	if !frozenDSCMatchesTrace(dsc, s.TraceID) {
-		dsc = DynamicSamplingContext{Frozen: true}
-	}
-	s.dynamicSamplingContext = DynamicSamplingContext{Entries: maps.Clone(dsc.Entries), Frozen: dsc.Frozen}
-}
-
 // shouldIgnoreStatusCode checks if the transaction should be ignored based on HTTP status code.
 func (s *Span) shouldIgnoreStatusCode(client *Client) bool {
 	if !s.IsTransaction() {
@@ -465,7 +437,7 @@ func (s *Span) doFinish() {
 	}
 
 	client := ClientFromContext(s.ctx)
-	if !client.IsEnabled() || !client.options.EnableTracing {
+	if !client.IsEnabled() || !client.options.tracingEnabled() {
 		return
 	}
 	if s.shouldIgnoreStatusCode(client) {
@@ -537,8 +509,8 @@ func (s *Span) sample(client *Client) Sampled {
 	}
 	// https://develop.sentry.dev/sdk/performance/#sampling
 	// #1 tracing is not enabled.
-	if !clientOptions.EnableTracing {
-		debuglog.Printf("Dropping transaction: EnableTracing is set to %t", clientOptions.EnableTracing)
+	if !clientOptions.tracingEnabled() {
+		debuglog.Printf("Dropping transaction: tracing is disabled")
 		return s.Sampled
 	}
 
@@ -606,7 +578,7 @@ func (s *Span) sample(client *Client) Sampled {
 	}
 
 	// #5 use TracesSampleRate from ClientOptions.
-	sampleRate := clientOptions.TracesSampleRate
+	sampleRate := *clientOptions.TracesSampleRate
 	s.sampleRate = sampleRate
 	s.applyLocalSampleRate()
 	if sampleRate < 0.0 || sampleRate > 1.0 {

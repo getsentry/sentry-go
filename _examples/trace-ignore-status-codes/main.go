@@ -16,8 +16,7 @@ func main() {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn:              "", // Replace with your DSN
 		Debug:            true,
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		// Configure which HTTP status codes should not be traced
 		// Each element can be a single code {code} or a range {min, max}
 		TraceIgnoreStatusCodes: [][]int{{404}, {500, 599}}, // Ignore 404 and server errors 500-599

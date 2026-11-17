@@ -87,10 +87,9 @@ type ClientOptions struct {
 	// 0.0 is treated as if it was 1.0. To drop all events, set the DSN to the
 	// empty string.
 	SampleRate float64
-	// Enable performance tracing.
-	EnableTracing bool
-	// The sample rate for sampling traces in the range [0.0, 1.0].
-	TracesSampleRate float64
+	// The sample rate for sampling traces in the range [0.0, 1.0]. Tracing is
+	// enabled when this or TracesSampler is set.
+	TracesSampleRate *float64
 	// Used to customize the sampling of traces, overrides TracesSampleRate.
 	TracesSampler TracesSampler
 	// Control with URLs trace propagation should be enabled. Does not support regex patterns.
@@ -220,6 +219,10 @@ type ClientOptions struct {
 	// syncDelivery is set by synchronous transports during Configure, which
 	// wrappers forward, so wrapped transports are detected too.
 	syncDelivery *bool
+}
+
+func (o *ClientOptions) tracingEnabled() bool {
+	return o.TracesSampleRate != nil || o.TracesSampler != nil
 }
 
 // Client processes telemetry captured through the SDK.
