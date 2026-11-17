@@ -5,8 +5,5 @@ unleash:
   # The per-mutant timeout scales the coverage run, which is often cached and
   # far shorter than compiling a mutant; gremlins counts a timeout as killed.
   timeout-coefficient: 100
-  exclude-files:
-    - ^internal/testutils/
-    - ^internal/sentrytest/
-    - (^|/)mocks?\.go$
-    - mock_transport\.go$
+  # exclude-files is set in .github/scripts/mutation.sh: gremlins drops this
+  # list when the script passes any --exclude-files flag.
