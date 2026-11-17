@@ -5,5 +5,11 @@ unleash:
   # The per-mutant timeout scales the coverage run, which is often cached and
   # far shorter than compiling a mutant; gremlins counts a timeout as killed.
   timeout-coefficient: 100
+  # Run all of a module's tests for each mutant. Per package, gremlins misses
+  # kills by tests in other packages, and runs the root package's tests for
+  # http/ and httpclient/, whose package names differ from their directories.
+  integration: true
+  # Count a line as covered when a test in any package of the module runs it.
+  coverpkg: ./...
   # exclude-files is set in .github/scripts/mutation.sh: gremlins drops this
   # list when the script passes any --exclude-files flag.
