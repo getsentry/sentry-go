@@ -175,7 +175,7 @@ func (w *Writer) Write(data []byte) (int, error) {
 		return n, nil
 	}
 
-	sentry.CaptureEvent(w.ctx, event)
+	sentry.CaptureEvent(w.ctx, event, sentry.WithMechanism("auto.logging.go.zerolog", true))
 	// should flush before os.Exit
 	if event.Level == sentry.LevelFatal {
 		sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout)
@@ -203,7 +203,7 @@ func (w *Writer) WriteLevel(level zerolog.Level, p []byte) (int, error) {
 		return n, nil
 	}
 
-	sentry.CaptureEvent(w.ctx, event)
+	sentry.CaptureEvent(w.ctx, event, sentry.WithMechanism("auto.logging.go.zerolog", true))
 	// should flush before os.Exit
 	if event.Level == sentry.LevelFatal {
 		sentry.ClientFromContext(w.ctx).Flush(w.flushTimeout)

@@ -127,7 +127,7 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 func (h *handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
 		ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
-		eventID := sentry.Recover(ctx, err)
+		eventID := sentry.Recover(ctx, err, sentry.WithMechanism("auto.http.go.echo", false))
 		if eventID != nil && h.waitForDelivery {
 			sentry.ClientFromContext(ctx).Flush(h.timeout)
 		}

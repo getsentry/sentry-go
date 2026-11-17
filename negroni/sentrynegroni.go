@@ -88,7 +88,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 func (h *handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
 		ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
-		eventID := sentry.Recover(ctx, err)
+		eventID := sentry.Recover(ctx, err, sentry.WithMechanism("auto.http.go.negroni", false))
 		if eventID != nil && h.waitForDelivery {
 			sentry.ClientFromContext(ctx).Flush(h.timeout)
 		}
@@ -105,5 +105,5 @@ func PanicHandlerFunc(info *negroni.PanicInformation) {
 	request := info.Request.WithContext(ctx)
 	scope.SetRequest(request)
 	ctx = context.WithValue(ctx, sentry.RequestContextKey, request)
-	sentry.Recover(ctx, info.RecoveredPanic)
+	sentry.Recover(ctx, info.RecoveredPanic, sentry.WithMechanism("auto.http.go.negroni", false))
 }

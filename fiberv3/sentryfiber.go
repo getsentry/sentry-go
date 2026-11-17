@@ -132,7 +132,7 @@ func (h *handler) handle(ctx fiber.Ctx) error {
 func (h *handler) recoverWithSentry(requestCtx context.Context, ctx fiber.Ctx) {
 	if err := recover(); err != nil {
 		requestCtx = context.WithValue(requestCtx, sentry.RequestContextKey, ctx)
-		eventID := sentry.Recover(requestCtx, err)
+		eventID := sentry.Recover(requestCtx, err, sentry.WithMechanism("auto.http.go.fiber", false))
 		if eventID != nil && h.waitForDelivery {
 			sentry.ClientFromContext(requestCtx).Flush(h.timeout)
 		}

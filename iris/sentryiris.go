@@ -95,7 +95,7 @@ func (h *handler) handle(ctx iris.Context) {
 func (h *handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
 		ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
-		eventID := sentry.Recover(ctx, err)
+		eventID := sentry.Recover(ctx, err, sentry.WithMechanism("auto.http.go.iris", false))
 		if eventID != nil && h.waitForDelivery {
 			sentry.ClientFromContext(ctx).Flush(h.timeout)
 		}

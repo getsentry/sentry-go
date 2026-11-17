@@ -40,7 +40,7 @@ func (o *ServerOptions) setDefaults() {
 
 func recoverWithSentry(ctx context.Context, o ServerOptions, onRecover func()) {
 	if r := recover(); r != nil {
-		eventID := sentry.Recover(ctx, r)
+		eventID := sentry.Recover(ctx, r, sentry.WithMechanism("auto.grpc.go.grpc", false))
 
 		if onRecover != nil {
 			onRecover()

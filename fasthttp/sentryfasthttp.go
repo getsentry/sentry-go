@@ -128,7 +128,7 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 func (h *Handler) recoverWithSentry(requestCtx context.Context, ctx *fasthttp.RequestCtx, cancel context.CancelFunc) {
 	if err := recover(); err != nil {
 		requestCtx = context.WithValue(requestCtx, sentry.RequestContextKey, ctx)
-		eventID := sentry.Recover(requestCtx, err)
+		eventID := sentry.Recover(requestCtx, err, sentry.WithMechanism("auto.http.go.fasthttp", false))
 		if eventID != nil && h.waitForDelivery {
 			sentry.ClientFromContext(requestCtx).Flush(h.timeout)
 		}

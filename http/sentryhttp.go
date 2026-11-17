@@ -132,7 +132,7 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 func (h *Handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
 		ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
-		eventID := sentry.Recover(ctx, err)
+		eventID := sentry.Recover(ctx, err, sentry.WithMechanism("auto.http.go.net/http", false))
 		if eventID != nil && h.waitForDelivery {
 			sentry.ClientFromContext(ctx).Flush(h.timeout)
 		}
