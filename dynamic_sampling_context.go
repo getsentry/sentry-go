@@ -58,7 +58,7 @@ func dynamicSamplingContextFromTransaction(span *Span, client *Client) DynamicSa
 	if traceID := span.TraceID.String(); traceID != "" {
 		entries[traceIDContextKey] = traceID
 	}
-	if client.options.EnableTracing && span.sampleRate >= 0 {
+	if client.options.tracingEnabled() && span.sampleRate >= 0 {
 		entries["sample_rate"] = strconv.FormatFloat(span.sampleRate, 'f', -1, 64)
 	}
 
@@ -78,13 +78,13 @@ func dynamicSamplingContextFromTransaction(span *Span, client *Client) DynamicSa
 	}
 
 	// Only include the transaction name if it's of good quality (not empty and not SourceURL)
-	if client.options.EnableTracing && span.Source != "" && span.Source != SourceURL {
+	if client.options.tracingEnabled() && span.Source != "" && span.Source != SourceURL {
 		if span.IsTransaction() {
 			entries["transaction"] = span.Name
 		}
 	}
 
-	if client.options.EnableTracing {
+	if client.options.tracingEnabled() {
 		entries["sampled"] = strconv.FormatBool(span.Sampled.Bool())
 	}
 
@@ -141,8 +141,8 @@ func dynamicSamplingContextFromPropagationContext(
 	if traceID := propagationContext.TraceID.String(); traceID != "" {
 		entries[traceIDContextKey] = traceID
 	}
-	if rate := client.options.TracesSampleRate; client.options.EnableTracing && client.options.TracesSampler == nil && rate >= 0 && rate <= 1 {
-		entries["sample_rate"] = strconv.FormatFloat(rate, 'f', -1, 64)
+	if rate := client.options.TracesSampleRate; rate != nil && client.options.TracesSampler == nil && *rate >= 0 && *rate <= 1 {
+		entries["sample_rate"] = strconv.FormatFloat(*rate, 'f', -1, 64)
 	}
 	if dsn := client.dsn; dsn != nil {
 		if publicKey := dsn.GetPublicKey(); publicKey != "" {

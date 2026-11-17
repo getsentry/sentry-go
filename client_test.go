@@ -937,7 +937,7 @@ func TestCaptureCheckInExistingID(t *testing.T) {
 
 func TestSampleRateCanDropEvent(t *testing.T) {
 	client, scope, transport := setupClientTest()
-	client.options.SampleRate = 0.000000000000001
+	client.options.SampleRate = new(0.0)
 
 	client.CaptureMessage(ContextWithScope(context.Background(), scope), "Foo")
 
@@ -994,8 +994,7 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
 	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		Transport:        transport,
 		BeforeSend: func(event *Event, _ *EventHint) *Event {
 			t.Error("beforeSend should not be called")
@@ -1021,8 +1020,7 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 	transport := &MockTransport{}
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	ctx := NewTestContext(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		Transport:        transport,
 		BeforeSend: func(event *Event, _ *EventHint) *Event {
 			t.Error("beforeSend should not be called")
@@ -1145,8 +1143,7 @@ func TestIgnoreTransactions(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			transport := &MockTransport{}
 			ctx := NewTestContext(ClientOptions{
-				EnableTracing:      true,
-				TracesSampleRate:   1.0,
+				TracesSampleRate:   new(1.0),
 				Transport:          transport,
 				IgnoreTransactions: tt.ignoreTransactions,
 			})
@@ -1177,8 +1174,7 @@ func TestIgnoreTransactions(t *testing.T) {
 func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
 	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		Transport:        transport,
 	})
 
@@ -1282,8 +1278,7 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			transport := &MockTransport{}
 			ctx := NewTestContext(ClientOptions{
-				EnableTracing:          true,
-				TracesSampleRate:       1.0,
+				TracesSampleRate:       new(1.0),
 				Transport:              transport,
 				TraceIgnoreStatusCodes: tt.ignoreStatusCodes,
 			})
@@ -1408,7 +1403,7 @@ func TestClientOptions_OrgIDShouldOverrideParsed(t *testing.T) {
 
 func BenchmarkProcessEvent(b *testing.B) {
 	c, err := NewClient(ClientOptions{
-		SampleRate: 0.25,
+		SampleRate: new(0.25),
 		Transport:  &MockTransport{},
 	})
 	if err != nil {
@@ -1902,8 +1897,8 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		assert.Equal(t, e.traceID1, metrics[0].Metrics[0].TraceID)
 	})
 	t.Run("explicit client owns the transaction and concurrent DSC", func(t *testing.T) {
-		creator, creatorTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "creator"})
-		override, overrideTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "override"})
+		creator, creatorTransport := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(1.0), Release: "creator"})
+		override, overrideTransport := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(1.0), Release: "override"})
 		ctx, _ := WithScope(ContextWithClient(context.Background(), creator))
 		rootCtx, root := StartSpan(ctx, "root")
 		childCtx, child := StartSpan(ContextWithClient(rootCtx, override), "child")
@@ -1939,8 +1934,7 @@ func TestClient_MultiClientSetup(t *testing.T) {
 			setGlobalClient(previousClient)
 		})
 		initClient := func(release string, transport *MockTransport) {
-			require.NoError(t, Init(ClientOptions{
-				EnableTracing: true, TracesSampleRate: 1, Release: release,
+			require.NoError(t, Init(ClientOptions{TracesSampleRate: new(1.0), Release: release,
 				Transport: transport, Integrations: func([]Integration) []Integration { return nil },
 			}))
 			t.Cleanup(globalClientSnapshot().Close)

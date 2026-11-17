@@ -227,8 +227,7 @@ func testConcurrentLoggerCreationAndUsage(_ *testing.T) {
 func testConcurrentLogWithSpanOperations(_ *testing.T) {
 	client, _ := NewClient(ClientOptions{
 		Dsn:              testDsn,
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		Transport:        &MockTransport{},
 	})
 	ctx, _ := WithScope(context.Background())

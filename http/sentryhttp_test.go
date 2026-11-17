@@ -26,9 +26,7 @@ type contextKey struct{}
 func TestNestedMiddlewarePreservesActiveTransaction(t *testing.T) {
 	t.Parallel()
 
-	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
-		EnableTracing: true, TracesSampleRate: 1,
-	}))
+	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{TracesSampleRate: new(1.0)}))
 	outerCtx, outer := sentry.StartSpan(fixture.NewContext(context.Background()), "outer")
 	childCtx, child := sentry.StartSpan(outerCtx, "child")
 	key := contextKey{}
@@ -53,9 +51,7 @@ func TestNestedMiddlewarePreservesActiveTransaction(t *testing.T) {
 func TestIncomingBaggageUsesAllHeaderLines(t *testing.T) {
 	t.Parallel()
 
-	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
-		EnableTracing: true, TracesSampleRate: 1,
-	}))
+	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{TracesSampleRate: new(1.0)}))
 	request := httptest.NewRequest(http.MethodGet, "http://example.test/baggage", nil)
 	request.Header.Set(sentry.SentryTraceHeader, "11111111111111111111111111111111-2222222222222222-1")
 	request.Header.Add(sentry.SentryBaggageHeader, "sentry-release=from-first-line")
@@ -321,8 +317,7 @@ func TestIntegration(t *testing.T) {
 	eventsCh := make(chan *sentry.Event, len(tests))
 	transactionsCh := make(chan *sentry.Transaction, len(tests))
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		DataCollection:   &sentry.DataCollection{},
 		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
@@ -463,9 +458,7 @@ func TestInformationalResponsePreservesFinalStatus(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
-				EnableTracing: true, TracesSampleRate: 1,
-			}))
+			fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{TracesSampleRate: new(1.0)}))
 			handler := sentryhttp.New(sentryhttp.Options{}).HandleFunc(func(w http.ResponseWriter, _ *http.Request) {
 				for _, status := range tt.headers {
 					w.WriteHeader(status)

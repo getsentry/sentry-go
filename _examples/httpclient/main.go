@@ -13,8 +13,7 @@ import (
 func main() {
 	_ = sentry.Init(sentry.ClientOptions{
 		Dsn:              "",
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			fmt.Println(event)
 			return event

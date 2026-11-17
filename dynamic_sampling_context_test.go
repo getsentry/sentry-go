@@ -84,8 +84,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 		{
 			input: func() *Span {
 				ctx := NewTestContext(ClientOptions{
-					EnableTracing:    true,
-					TracesSampleRate: 1.0,
+					TracesSampleRate: new(1.0),
 					Dsn:              "http://public@example.com/sentry/1",
 					Release:          "1.0.0",
 					Environment:      "test",
@@ -111,8 +110,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 		{
 			input: func() *Span {
 				ctx := NewTestContext(ClientOptions{
-					EnableTracing:    true,
-					TracesSampleRate: 0.0,
+					TracesSampleRate: new(0.0),
 					Dsn:              "http://public@example.com/sentry/1",
 					Release:          "1.0.0",
 				})
@@ -189,10 +187,10 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				Frozen: true,
 			},
 		},
-		"enabled static rate": {options: &ClientOptions{EnableTracing: true, TracesSampleRate: 0.25}, wantRate: "0.25"},
-		"tracing disabled":    {options: &ClientOptions{TracesSampleRate: 0.25}},
-		"custom sampler":      {options: &ClientOptions{EnableTracing: true, TracesSampleRate: 0.25, TracesSampler: func(SamplingContext) float64 { t.Error("scope-only DSC called a sampler"); return 1 }}},
-		"invalid static rate": {options: &ClientOptions{EnableTracing: true, TracesSampleRate: -1}},
+		"enabled static rate": {options: &ClientOptions{TracesSampleRate: new(1.0)}, wantRate: "1"},
+		"tracing disabled":    {options: &ClientOptions{}},
+		"custom sampler":      {options: &ClientOptions{TracesSampleRate: new(0.25), TracesSampler: func(SamplingContext) float64 { t.Error("scope-only DSC called a sampler"); return 1 }}},
+		"invalid static rate": {options: &ClientOptions{TracesSampleRate: new(-1.0)}},
 		"Nil client": {
 			scope: &Scope{
 				scopeData: scopeData{
@@ -239,7 +237,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 	t.Run("first export freezes DSC across clients and clones", func(t *testing.T) {
 		for _, boundary := range []string{"baggage", "event"} {
 			t.Run(boundary, func(t *testing.T) {
-				creator, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, Release: "creator"})
+				creator, _ := newCaptureTestClient(t, ClientOptions{Release: "creator"})
 				ctx, scope := WithScope(ContextWithClient(context.Background(), creator))
 				if boundary == "baggage" {
 					_ = GetBaggage(ctx)
@@ -273,7 +271,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 			{name: "scope matching", matching: true},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
+				client, transport := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(1.0)})
 				ctx, scope := WithScope(ContextWithClient(context.Background(), client))
 				propagation := scope.propagationContextSnapshot()
 				traceID := propagation.TraceID

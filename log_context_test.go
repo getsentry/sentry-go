@@ -11,8 +11,7 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 	transport := &MockTransport{}
 	err := Init(ClientOptions{
 		Dsn:              testDsn,
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		Transport:        transport,
 	})
 	if err != nil {

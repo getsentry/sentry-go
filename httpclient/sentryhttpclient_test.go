@@ -255,8 +255,7 @@ func TestIntegration(t *testing.T) {
 	spansCh := make(chan []*sentry.Span, len(tests))
 
 	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			spansCh <- event.Spans
 			return event
@@ -431,8 +430,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			spansCh := make(chan []*sentry.Span, 1)
 			sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-				EnableTracing:    true,
-				TracesSampleRate: 1.0,
+				TracesSampleRate: new(1.0),
 				DataCollection:   tt.dataCollection,
 				BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 					spansCh <- event.Spans
@@ -530,8 +528,7 @@ func (h *headerRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
 	spansCh := make(chan []*sentry.Span, 1)
 	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		DataCollection:   &sentry.DataCollection{},
 		BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			spansCh <- event.Spans
@@ -590,10 +587,9 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 	spansCh := make(chan []*sentry.Span, 1)
 
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:           true,
 		TracePropagationTargets: []string{"example.com"},
 		PropagateTraceparent:    true,
-		TracesSampleRate:        1.0,
+		TracesSampleRate:        new(1.0),
 		BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			spansCh <- event.Spans
 			return event
@@ -681,8 +677,7 @@ func TestIntegration_NoParentSpan(t *testing.T) {
 	spansCh := make(chan []*sentry.Span, 1)
 
 	sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			spansCh <- event.Spans
 			return event
@@ -850,8 +845,7 @@ func TestRoundTripDoesNotMutateCallerRequest(t *testing.T) {
 					assert.Equal(t, "http.client", span.Op)
 				}
 			}, sentrytest.WithClientOptions(sentry.ClientOptions{
-				EnableTracing:           true,
-				TracesSampleRate:        1.0,
+				TracesSampleRate:        new(1.0),
 				TracePropagationTargets: []string{test.target},
 				PropagateTraceparent:    true,
 			}))
@@ -937,8 +931,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			spansCh := make(chan []*sentry.Span, 1)
 			sentryClient, err := sentry.NewClient(sentry.ClientOptions{
-				EnableTracing:    true,
-				TracesSampleRate: 1.0,
+				TracesSampleRate: new(1.0),
 				DataCollection:   tt.dataCollection,
 				BeforeSendTransaction: func(event *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 					spansCh <- event.Spans
@@ -1095,8 +1088,7 @@ func TestTracePropagationTargets(t *testing.T) {
 				} {
 					t.Run(fmt.Sprintf("%s/client=%t/parent=%t/traceparent=%t", tt.name, clientTargets, parentSpan, propagateTraceparent), func(t *testing.T) {
 						opts := sentry.ClientOptions{
-							EnableTracing:        true,
-							TracesSampleRate:     1,
+							TracesSampleRate:     new(1.0),
 							PropagateTraceparent: propagateTraceparent,
 						}
 						var tracerOptions []sentryhttpclient.SentryRoundTripTracerOption

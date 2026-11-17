@@ -60,8 +60,7 @@ func initMockTransport(t *testing.T) *sentry.MockTransport {
 	require.NoError(t, sentry.Init(sentry.ClientOptions{
 		Transport:        transport,
 		DataCollection:   &sentry.DataCollection{},
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 	}))
 	return transport
 }
@@ -440,7 +439,6 @@ func TestStreamClientInterceptor_FinishesOnContextCancellation(t *testing.T) {
 		fixture.Flush()
 		assert.Equal(t, int(codes.Canceled), spanStatusCode(t, fixture.Transport))
 	}, sentrytest.WithClientOptions(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 	}))
 }

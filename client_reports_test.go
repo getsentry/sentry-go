@@ -137,7 +137,7 @@ func TestClientReports_Integration(t *testing.T) {
 				Dsn:                  dsn,
 				Transport:            tt.transport,
 				DisableClientReports: tt.disabled,
-				SampleRate:           1.0,
+				SampleRate:           new(1.0),
 				BeforeSend: func(event *Event, _ *EventHint) *Event {
 					if event.Message == "drop-me" {
 						event.Attachments = nil

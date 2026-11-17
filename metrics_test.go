@@ -16,12 +16,11 @@ func setupMetricsTest() (context.Context, *MockTransport) {
 	ctx := context.Background()
 	mockTransport := &MockTransport{}
 	mockClient, _ := NewClient(ClientOptions{
-		Dsn:           testDsn,
-		Transport:     mockTransport,
-		Release:       "v1.2.3",
-		Environment:   "testing",
-		ServerName:    "test-server",
-		EnableTracing: true,
+		Dsn:         testDsn,
+		Transport:   mockTransport,
+		Release:     "v1.2.3",
+		Environment: "testing",
+		ServerName:  "test-server",
 	})
 	mockClient.sdkIdentifier = "sentry.go"
 	mockClient.sdkVersion = "0.10.0"

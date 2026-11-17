@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -101,8 +100,8 @@ func testMarshalJSONOmitEmptyParentSpanID(t *testing.T, v any) {
 func TestStartSpan(t *testing.T) {
 	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-		Transport:     transport,
+		TracesSampleRate: new(0.0),
+		Transport:        transport,
 	})
 	op := "test.op"
 	transaction := "Test Transaction"
@@ -178,9 +177,7 @@ func TestStartSpan(t *testing.T) {
 }
 
 func TestSetTag(t *testing.T) {
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-	})
+	ctx := NewTestContext(ClientOptions{})
 	_, span := StartSpan(ctx, "Test Span")
 	span.SetTag("key", "value")
 
@@ -190,9 +187,7 @@ func TestSetTag(t *testing.T) {
 }
 
 func TestSetData(t *testing.T) {
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-	})
+	ctx := NewTestContext(ClientOptions{})
 	_, span := StartSpan(ctx, "Test Span")
 	span.SetData("key", "value")
 	span.SetData("key.nil", nil)
@@ -410,11 +405,8 @@ func TestSpanFromContextWithoutSpan(t *testing.T) {
 func TestDoubleSampling(t *testing.T) {
 	transport := &MockTransport{}
 	ctx := NewTestContext(ClientOptions{
-		// A SampleRate set to 0.0 will be transformed to 1.0,
-		// hence we're using math.SmallestNonzeroFloat64.
-		SampleRate:       math.SmallestNonzeroFloat64,
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		SampleRate:       new(0.0),
+		TracesSampleRate: new(1.0),
 		Transport:        transport,
 	})
 	_, span := StartSpan(ctx, "name", WithOpName("op"))
@@ -438,9 +430,7 @@ func TestSample(t *testing.T) {
 	var span *Span
 
 	// tracing is disabled
-	ctx = NewTestContext(ClientOptions{
-		EnableTracing: false,
-	})
+	ctx = NewTestContext(ClientOptions{})
 	_, span = StartSpan(ctx, "name", WithOpName("op"))
 	if got := span.Sampled; got != SampledUndefined {
 		t.Fatalf("got %s, want %s", got, SampledUndefined)
@@ -448,8 +438,7 @@ func TestSample(t *testing.T) {
 
 	// explicit sampling decision
 	ctx = NewTestContext(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 0.0,
+		TracesSampleRate: new(0.0),
 	})
 	_, span = StartSpan(ctx, "name", WithOpName("op"), WithSpanSampled(SampledTrue))
 	if got := span.explicitSampled; got != SampledTrue {
@@ -458,7 +447,6 @@ func TestSample(t *testing.T) {
 
 	// traces sampler
 	ctx = NewTestContext(ClientOptions{
-		EnableTracing: true,
 		TracesSampler: func(_ SamplingContext) float64 {
 			return 1.0
 		},
@@ -470,8 +458,7 @@ func TestSample(t *testing.T) {
 
 	// parent sampling decision
 	ctx = NewTestContext(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 	})
 	ctx, _ = StartSpan(ctx, "name", WithOpName("op"))
 	_, childSpan := StartSpan(ctx, "child")
@@ -481,8 +468,7 @@ func TestSample(t *testing.T) {
 
 	// traces sample rate
 	ctx = NewTestContext(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 	})
 	_, span = StartSpan(ctx, "name", WithOpName("op"))
 	if got := span.Sampled; got != SampledTrue {
@@ -500,10 +486,8 @@ func TestSampleRatePropagation(t *testing.T) {
 		expectedBaggageEntries []string
 	}{
 		{
-			name: "Tracing disabled",
-			clientOptions: ClientOptions{
-				EnableTracing: false,
-			},
+			name:                   "Tracing disabled",
+			clientOptions:          ClientOptions{},
 			traceHeader:            "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
 			baggageHeader:          "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=true,sentry-sample_rate=1",
 			expectedRate:           0.0,
@@ -512,7 +496,7 @@ func TestSampleRatePropagation(t *testing.T) {
 		{
 			name: "Inherit from parent - sampled flag = 1",
 			clientOptions: ClientOptions{
-				EnableTracing: true,
+				TracesSampleRate: new(0.0),
 			},
 			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
 			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=true,sentry-sample_rate=1",
@@ -526,7 +510,7 @@ func TestSampleRatePropagation(t *testing.T) {
 		{
 			name: "Inherit from parent - sampled flag = 0",
 			clientOptions: ClientOptions{
-				EnableTracing: true,
+				TracesSampleRate: new(0.0),
 			},
 			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
 			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=false,sentry-sample_rate=0.0",
@@ -540,7 +524,7 @@ func TestSampleRatePropagation(t *testing.T) {
 		{
 			name: "Inherit from parent - defer sampled flag",
 			clientOptions: ClientOptions{
-				EnableTracing: true,
+				TracesSampleRate: new(0.0),
 			},
 			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963",
 			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
@@ -553,7 +537,6 @@ func TestSampleRatePropagation(t *testing.T) {
 		{
 			name: "TracesSampler with sampled flag = 1",
 			clientOptions: ClientOptions{
-				EnableTracing: true,
 				TracesSampler: func(_ SamplingContext) float64 {
 					return 0.8
 				},
@@ -570,7 +553,6 @@ func TestSampleRatePropagation(t *testing.T) {
 		{
 			name: "TracesSampler with sampled flag = 0",
 			clientOptions: ClientOptions{
-				EnableTracing: true,
 				TracesSampler: func(_ SamplingContext) float64 {
 					return 0.8
 				},
@@ -587,7 +569,6 @@ func TestSampleRatePropagation(t *testing.T) {
 		{
 			name: "TracesSampler - defer sampled flag",
 			clientOptions: ClientOptions{
-				EnableTracing: true,
 				TracesSampler: func(_ SamplingContext) float64 {
 					return 0.8
 				},
@@ -603,8 +584,7 @@ func TestSampleRatePropagation(t *testing.T) {
 		{
 			name: "TracesSampleRate with sampled flag = 1",
 			clientOptions: ClientOptions{
-				EnableTracing:    true,
-				TracesSampleRate: 0.4,
+				TracesSampleRate: new(0.4),
 			},
 			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-1",
 			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=true,sentry-sample_rate=1",
@@ -618,8 +598,7 @@ func TestSampleRatePropagation(t *testing.T) {
 		{
 			name: "TracesSampleRate with sampled flag = 0",
 			clientOptions: ClientOptions{
-				EnableTracing:    true,
-				TracesSampleRate: 0.4,
+				TracesSampleRate: new(0.4),
 			},
 			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963-0",
 			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba,sentry-sampled=false,sentry-sample_rate=0.0",
@@ -633,8 +612,7 @@ func TestSampleRatePropagation(t *testing.T) {
 		{
 			name: "TracesSampleRate - defer sampled flag",
 			clientOptions: ClientOptions{
-				EnableTracing:    true,
-				TracesSampleRate: 0.4,
+				TracesSampleRate: new(0.4),
 			},
 			traceHeader:   "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963",
 			baggageHeader: "sentry-trace_id=423d7a0fb16128c8503f067d8447caba",
@@ -650,7 +628,6 @@ func TestSampleRatePropagation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &MockTransport{}
 			ctx := NewTestContext(ClientOptions{
-				EnableTracing:    tt.clientOptions.EnableTracing,
 				TracesSampler:    tt.clientOptions.TracesSampler,
 				TracesSampleRate: tt.clientOptions.TracesSampleRate,
 				Transport:        transport,
@@ -685,7 +662,7 @@ func TestSampleRatePropagation(t *testing.T) {
 			{name: "frozen empty baggage", option: ContinueFromHeaders("11111111111111111111111111111111-2222222222222222-1", "")},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "scope-release"})
+				client, transport := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(1.0), Release: "scope-release"})
 				ctx, _ := WithScope(ContextWithClient(context.Background(), client))
 				options := []SpanOption{}
 				if test.option != nil {
@@ -717,7 +694,7 @@ func TestSampleRatePropagation(t *testing.T) {
 			{name: "fresh", want: SampledUndefined},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: false})
+				client, transport := newCaptureTestClient(t, ClientOptions{})
 				ctx, _ := WithScope(ContextWithClient(context.Background(), client))
 				_, root := StartSpan(ctx, "disabled", ContinueFromHeaders(test.header, ""))
 				require.Equal(t, test.want, root.Sampled)
@@ -729,8 +706,8 @@ func TestSampleRatePropagation(t *testing.T) {
 	})
 
 	t.Run("child inherits the parent decision across client changes", func(t *testing.T) {
-		enabled, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
-		disabled, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: false})
+		enabled, _ := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(1.0)})
+		disabled, _ := newCaptureTestClient(t, ClientOptions{})
 		ctx, _ := WithScope(ContextWithClient(context.Background(), enabled))
 		rootCtx, _ := StartSpan(ctx, "root")
 		_, child := StartSpan(ContextWithClient(rootCtx, disabled), "child", WithSpanSampled(SampledFalse))
@@ -786,7 +763,6 @@ func TestTracesSamplerReceivesRemoteParent(t *testing.T) {
 
 			var gotCtx SamplingContext
 			ctx := NewTestContext(ClientOptions{
-				EnableTracing: true,
 				TracesSampler: func(samplingContext SamplingContext) float64 {
 					gotCtx = samplingContext
 					return 1.0
@@ -812,9 +788,7 @@ func TestDoesNotCrashWithEmptyContext(_ *testing.T) {
 }
 
 func TestGetTransactionWithProperTransactionsSpans(t *testing.T) {
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-	})
+	ctx := NewTestContext(ClientOptions{})
 	transactionCtx, transaction := StartSpan(ctx, "transaction")
 	child1Ctx, child1 := StartSpan(transactionCtx, "child1")
 	_, child2 := StartSpan(transactionCtx, "child2")
@@ -833,9 +807,7 @@ func TestGetTransactionWithProperTransactionsSpans(t *testing.T) {
 }
 
 func TestSpanSetContextMerges(t *testing.T) {
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-	})
+	ctx := NewTestContext(ClientOptions{})
 	_, transaction := StartSpan(ctx, "Test Transaction")
 	transaction.SetContext("a", Context{"foo": "bar"})
 	transaction.SetContext("b", Context{"b": 2})
@@ -844,9 +816,7 @@ func TestSpanSetContextMerges(t *testing.T) {
 }
 
 func TestSpanSetContextOverrides(t *testing.T) {
-	ctx := NewTestContext(ClientOptions{
-		EnableTracing: true,
-	})
+	ctx := NewTestContext(ClientOptions{})
 	_, transaction := StartSpan(ctx, "Test Transaction")
 	transaction.SetContext("a", Context{"foo": "bar"})
 	transaction.SetContext("a", Context{"foo": 2})
@@ -859,8 +829,7 @@ func TestSpanSetContextOverrides(t *testing.T) {
 // See https://github.com/getsentry/sentry-go/issues/570 for more details.
 func TestConcurrentContextAccess(_ *testing.T) {
 	ctx := NewTestContext(ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1,
+		TracesSampleRate: new(1.0),
 	})
 	scope := ScopeFromContext(ctx)
 
@@ -923,8 +892,7 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			transport := &MockTransport{}
 			ctx := NewTestContext(ClientOptions{
-				EnableTracing:    true,
-				TracesSampleRate: 1.0,
+				TracesSampleRate: new(1.0),
 				Transport:        transport,
 			})
 			_, transaction := StartSpan(
@@ -946,7 +914,7 @@ func TestAdjustingTransactionSourceBeforeSending(t *testing.T) {
 // when run with race detection ("-race").
 func TestSpanFinishConcurrentlySendsOnce(t *testing.T) {
 	t.Parallel()
-	client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
+	client, transport := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(1.0)})
 	ctx, _ := WithScope(ContextWithClient(context.Background(), client))
 	_, transaction := StartSpan(ctx, "op")
 
@@ -975,7 +943,7 @@ func TestContextPropagationHeaders(t *testing.T) {
 	})
 
 	t.Run("scope propagation context", func(t *testing.T) {
-		client, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true})
+		client, _ := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(0.0)})
 		traceID := TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 		spanID := SpanIDFromHex("bbbbbbbbbbbbbbbb")
 		for _, test := range []struct {
@@ -1019,8 +987,8 @@ func TestContextPropagationHeaders(t *testing.T) {
 	})
 
 	t.Run("static zero sample rate", func(t *testing.T) {
-		creator, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, Release: "creator"})
-		replacement, replacementTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, Release: "replacement"})
+		creator, _ := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(0.0), Release: "creator"})
+		replacement, replacementTransport := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(0.0), Release: "replacement"})
 		ctx, scope := WithScope(ContextWithClient(context.Background(), creator))
 
 		require.Equal(t, SampledUndefined, scope.propagationContextSnapshot().Sampled)
@@ -1059,19 +1027,18 @@ func TestContextPropagationHeaders(t *testing.T) {
 	})
 
 	for _, test := range []struct {
-		name          string
-		release       string
-		enableTracing bool
-		wantSampled   Sampled
+		name             string
+		release          string
+		tracesSampleRate *float64
+		wantSampled      Sampled
 	}{
-		{name: "disabled tracing", release: "disabled-tracing", enableTracing: false, wantSampled: SampledUndefined},
-		{name: "custom client", release: "custom-client", enableTracing: true, wantSampled: SampledTrue},
+		{name: "disabled tracing", release: "disabled-tracing", wantSampled: SampledUndefined},
+		{name: "custom client", release: "custom-client", tracesSampleRate: new(1.0), wantSampled: SampledTrue},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			client, err := NewClient(ClientOptions{
 				Dsn:              testDsn,
-				EnableTracing:    test.enableTracing,
-				TracesSampleRate: 1,
+				TracesSampleRate: test.tracesSampleRate,
 				Release:          test.release,
 				Transport:        &MockTransport{},
 			})
@@ -1120,8 +1087,7 @@ func TestStrictTraceContinuation(t *testing.T) {
 			transport := &MockTransport{}
 			ctx := NewTestContext(ClientOptions{
 				Dsn:                     testDsn,
-				EnableTracing:           true,
-				TracesSampleRate:        1.0,
+				TracesSampleRate:        new(1.0),
 				Transport:               transport,
 				StrictTraceContinuation: tt.strict,
 				OrgID:                   tt.sdkOrgID,
@@ -1207,7 +1173,7 @@ func TestRootSpanScopeTrace(t *testing.T) {
 		{name: "continued trace", propagation: &continued},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
+			client, transport := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(1.0)})
 			ctx, scope := WithScope(ContextWithClient(context.Background(), client))
 			if test.propagation != nil {
 				scope.SetPropagationContext(*test.propagation)
@@ -1242,7 +1208,7 @@ func TestScopeKeepsContinuedSampleRate(t *testing.T) {
 		{name: "upstream rate", baggage: baggage + ",sentry-sample_rate=0.5", want: "0.5"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 0.25})
+			client, transport := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(0.25)})
 			ctx, _ := WithScope(ContextWithClient(context.Background(), client))
 			_, root := StartSpan(ctx, "root", ContinueFromHeaders(trace, test.baggage))
 			defer root.Finish()
@@ -1256,7 +1222,7 @@ func TestScopeKeepsContinuedSampleRate(t *testing.T) {
 }
 
 func TestRootSpansContinuingScopeShareSampling(t *testing.T) {
-	client, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 0.5})
+	client, _ := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(0.5)})
 	ctx, scope := WithScope(ContextWithClient(context.Background(), client))
 	propagation, err := PropagationContextFromHeaders("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb", "sentry-trace_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,sentry-public_key=upstream")
 	require.NoError(t, err)

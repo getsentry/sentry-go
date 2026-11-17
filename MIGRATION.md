@@ -268,6 +268,8 @@ type Transport interface {
 | `DataCollection{UserInfo: sentry.Set(false)}` | `DataCollection{UserInfo: new(false)}`; `Option` and `Set` are removed |
 | `ClientOptions.SendDefaultPII: true` | `DataCollection: &sentry.DataCollection{}`; leaving `DataCollection` unset collects no user-identifying data |
 | `ClientOptions.HTTPTransport`, `HTTPProxy`, `HTTPSProxy`, and `CaCerts` | Removed; set `ClientOptions.HTTPClient`. The default client still reads `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` |
+| `EnableTracing: true, TracesSampleRate: 0.5` | `TracesSampleRate: new(0.5)`. Setting `TracesSampleRate` or `TracesSampler` enables tracing, so a rate no longer does nothing without a second flag |
+| `SampleRate: 0.5` | `SampleRate: new(0.5)`. Unset still sends every event, and `new(0.0)` now drops them all instead of being treated as 1.0 |
 
 </details>
 

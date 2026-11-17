@@ -341,8 +341,7 @@ func TestGlobalTagsIntegration(t *testing.T) {
 	transport := &MockTransport{}
 	client, err := NewClient(ClientOptions{
 		Transport:        transport,
-		EnableTracing:    true,
-		TracesSampleRate: 1,
+		TracesSampleRate: new(1.0),
 		Tags: map[string]string{
 			"foo": "foo_value_client_options",
 			"baz": "baz_value_client_options",

@@ -38,8 +38,7 @@ func fixedOTelContext() (context.Context, sentry.TraceID, sentry.SpanID) {
 func otelOpts() []sentrytest.Option {
 	return []sentrytest.Option{
 		sentrytest.WithClientOptions(sentry.ClientOptions{
-			EnableTracing:    true,
-			TracesSampleRate: 1.0,
+			TracesSampleRate: new(1.0),
 			Integrations: func(integrations []sentry.Integration) []sentry.Integration {
 				return append(integrations, sentryotel.NewOtelIntegration())
 			},

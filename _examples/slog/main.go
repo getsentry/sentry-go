@@ -14,8 +14,7 @@ import (
 
 func main() {
 	err := sentry.Init(sentry.ClientOptions{
-		Dsn:           "",
-		EnableTracing: false,
+		Dsn: "",
 	})
 	if err != nil {
 		log.Fatal(err)
