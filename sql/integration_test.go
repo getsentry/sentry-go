@@ -113,8 +113,7 @@ func TestIntegration_EmitsQueryAndExecSpans(t *testing.T) {
 				db := shape.newDB(t)
 
 				ctx := f.NewContext(context.Background())
-				parent := sentry.StartSpan(ctx, "root",
-					sentry.WithTransactionName("root"))
+				_, parent := sentry.StartSpan(ctx, "root")
 				ctx = parent.Context()
 
 				_, err := db.ExecContext(ctx, "INSERT INTO t VALUES (1)")
@@ -185,8 +184,7 @@ func TestIntegration_TransactionSpansParentQueries(t *testing.T) {
 					db := shape.newDB(t)
 
 					ctx := f.NewContext(context.Background())
-					parent := sentry.StartSpan(ctx, "root",
-						sentry.WithTransactionName("root"))
+					_, parent := sentry.StartSpan(ctx, "root")
 					ctx = parent.Context()
 
 					tx, err := db.BeginTx(ctx, nil)
@@ -262,8 +260,7 @@ func TestIntegration_TransactionExecObfuscatesPII(t *testing.T) {
 				db := shape.newDB(t)
 
 				ctx := f.NewContext(context.Background())
-				parent := sentry.StartSpan(ctx, "root",
-					sentry.WithTransactionName("root"))
+				_, parent := sentry.StartSpan(ctx, "root")
 
 				tx, err := db.BeginTx(parent.Context(), nil)
 				require.NoError(t, err)
@@ -307,8 +304,7 @@ func TestIntegration_ErrSkipDoesNotDuplicateSpans(t *testing.T) {
 		t.Cleanup(func() { _ = db.Close() })
 
 		ctx := f.NewContext(context.Background())
-		parent := sentry.StartSpan(ctx, "root",
-			sentry.WithTransactionName("root"))
+		_, parent := sentry.StartSpan(ctx, "root")
 		ctx = parent.Context()
 
 		_, err = db.ExecContext(ctx, "INSERT INTO t VALUES (1)")
@@ -393,8 +389,7 @@ func TestIntegration_ErrorStatusPropagates(t *testing.T) {
 				t.Cleanup(func() { _ = db.Close() })
 
 				ctx := f.NewContext(context.Background())
-				parent := sentry.StartSpan(ctx, "root",
-					sentry.WithTransactionName("root"))
+				_, parent := sentry.StartSpan(ctx, "root")
 				ctx = parent.Context()
 
 				_, err = db.ExecContext(ctx, "INSERT INTO t VALUES (1)")

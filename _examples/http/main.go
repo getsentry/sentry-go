@@ -115,7 +115,7 @@ func run() error {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			span := sentry.StartSpan(ctx, "template.execute")
+			_, span := sentry.StartSpan(ctx, "template.execute")
 			defer span.Finish()
 			err := t.Execute(w, time.Now().UnixNano())
 			if err != nil {
@@ -125,7 +125,7 @@ func run() error {
 		}()
 		go func() {
 			defer wg.Done()
-			span := sentry.StartSpan(ctx, "sleep")
+			_, span := sentry.StartSpan(ctx, "sleep")
 			defer span.Finish()
 			// For demonstration only, ensure homepage loading takes
 			// at least 40ms.
@@ -154,11 +154,11 @@ func run() error {
 
 		q := r.URL.Query().Get("q")
 
-		span := sentry.StartSpan(ctx, "NewImage")
-		img := NewImage(span.Context(), 128, 128, []byte(q))
+		spanCtx, span := sentry.StartSpan(ctx, "NewImage")
+		img := NewImage(spanCtx, 128, 128, []byte(q))
 		span.Finish()
 
-		span = sentry.StartSpan(ctx, "png.Encode")
+		_, span = sentry.StartSpan(ctx, "png.Encode")
 		err := png.Encode(w, img)
 		span.Finish()
 
@@ -217,13 +217,13 @@ img {
 // NewImage uses the context to create spans that measure the performance of its
 // internal parts.
 func NewImage(ctx context.Context, width, height int, seed []byte) image.Image {
-	span := sentry.StartSpan(ctx, "sha256")
+	_, span := sentry.StartSpan(ctx, "sha256")
 	b := sha256.Sum256(seed)
 	span.Finish()
 
 	img := image.NewGray(image.Rect(0, 0, width, height))
 
-	span = sentry.StartSpan(ctx, "img")
+	_, span = sentry.StartSpan(ctx, "img")
 	defer span.Finish()
 	for i := 0; i < len(img.Pix); i += len(b) {
 		select {

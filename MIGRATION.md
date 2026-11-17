@@ -88,13 +88,13 @@ The appendix lists how to get the request's context for every integration.
 Starting a span no longer changes the scope. Previously, `StartSpan` stored the span
 on the hub's scope, and any later capture through that hub was linked to it, even
 from another goroutine. Now an event is linked only to the span carried by the
-context you pass, so pass `span.Context()` instead of the context you started the
-span from:
+context you pass, so pass the context `StartSpan` returns instead of the context you
+started the span from:
 
 ```go
-span := sentry.StartSpan(ctx, "payment.authorize")
+ctx, span := sentry.StartSpan(ctx, "authorize payment", sentry.WithOp("payment.authorize"))
 defer span.Finish()
-sentry.CaptureError(span.Context(), err)
+sentry.CaptureError(ctx, err)
 ```
 
 The integrations continue incoming traces for you. Without an integration, start the
@@ -218,8 +218,13 @@ type Transport interface {
 
 | Before | v1 |
 | --- | --- |
+| `StartSpan(ctx, op, opts...) *Span` | `ctx, span := StartSpan(ctx, name, WithOp(op))`. The name is the transaction name of a root span and the description of a child, and the returned context carries the span |
+| `StartTransaction(ctx, name, opts...)` | `StartSpan(ctx, name, opts...)`. `StartTransaction` returned the transaction already in `ctx` and ignored the options, so finishing it sent the integration's transaction early; `StartSpan` starts a child instead |
+| `span.StartChild(op, opts...)` | `StartSpan(ctx, name, WithOp(op))` with the context returned for the parent; it duplicated `StartSpan` |
+| `WithTransactionName(name)` and `WithDescription(description)` | Pass the name to `StartSpan` |
+| `WithOpName(op)` | `WithOp(op)`, named after the field it sets |
 | `scope.GetSpan()` or an integration's `GetSpanFromContext(c)` | `SpanFromContext(ctx)`, or `TransactionFromContext(ctx)` for the root |
-| `scope.SetSpan(span)` | Pass `span.Context()` to subsequent calls |
+| `scope.SetSpan(span)` | Pass the context returned by `StartSpan` to subsequent calls |
 | `ContinueTrace(hub, trace, baggage)` | `ContinueFromHeaders(trace, baggage)` |
 | `ContinueFromTrace(trace)` | `ContinueFromHeaders(trace, "")` |
 | `hub.GetTraceparent()` | `GetTraceparent(ctx)` |

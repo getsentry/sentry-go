@@ -675,7 +675,7 @@ func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 		attribute.String("key.string", "str"),
 		attribute.Bool("key.bool", true),
 	)
-	txn := StartTransaction(scopedCtx, "test-transaction")
+	_, txn := StartSpan(scopedCtx, "test-transaction")
 	defer txn.Finish()
 
 	loggerOutsideScope := NewLogger(ctx)

@@ -126,8 +126,8 @@ func TestUnaryServerInterceptor_ContinuesIncomingTrace(t *testing.T) {
 	assert.Equal(t, traceID, transactions[0].Trace.TraceID.String())
 	t.Run("reuses an active child without finishing its root", func(t *testing.T) {
 		f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{EnableTracing: true, TracesSampleRate: 1}))
-		outer := sentry.StartTransaction(f.NewContext(context.Background()), "gateway")
-		child := sentry.StartSpan(outer.Context(), "gateway.grpc")
+		_, outer := sentry.StartSpan(f.NewContext(context.Background()), "gateway")
+		_, child := sentry.StartSpan(outer.Context(), "gateway.grpc")
 		type key struct{}
 		ctx := context.WithValue(child.Context(), key{}, "preserved")
 		_, err := interceptor(ctx, nil, &grpc.UnaryServerInfo{FullMethod: "/test.TestService/Method"}, func(ctx context.Context, _ any) (any, error) {

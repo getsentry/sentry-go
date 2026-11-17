@@ -96,18 +96,18 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 
 		options := []sentry.SpanOption{
 			sentry.ContinueFromRequest(r),
-			sentry.WithOpName("http.server"),
+			sentry.WithOp("http.server"),
 			sentry.WithTransactionSource(sentry.SourceURL),
 			sentry.WithSpanOrigin(sentry.SpanOriginFastHTTP),
 		}
 
-		transaction := sentry.StartTransaction(
-			requestCtx,
-			fmt.Sprintf("%s %s", r.Method, string(ctx.Path())),
-			options...,
-		)
+		var transaction *sentry.Span
 		if created {
-			requestCtx = transaction.Context()
+			requestCtx, transaction = sentry.StartSpan(
+				requestCtx,
+				fmt.Sprintf("%s %s", r.Method, string(ctx.Path())),
+				options...,
+			)
 			transaction.SetData("http.request.method", r.Method)
 			defer func() {
 				status := ctx.Response.StatusCode()

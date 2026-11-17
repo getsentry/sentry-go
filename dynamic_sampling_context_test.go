@@ -90,7 +90,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 					Release:          "1.0.0",
 					Environment:      "test",
 				})
-				txn := StartTransaction(ctx, "name", WithTransactionSource(SourceCustom))
+				_, txn := StartSpan(ctx, "name", WithTransactionSource(SourceCustom))
 				txn.TraceID = TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")
 				return txn
 			}(),
@@ -116,7 +116,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 					Dsn:              "http://public@example.com/sentry/1",
 					Release:          "1.0.0",
 				})
-				txn := StartTransaction(ctx, "name", WithTransactionSource(SourceURL))
+				_, txn := StartSpan(ctx, "name", WithTransactionSource(SourceURL))
 				txn.TraceID = TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")
 				return txn
 			}(),
@@ -135,7 +135,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 		{
 			input: func() *Span {
 				ctx := context.Background()
-				tx := StartTransaction(ctx, "op")
+				_, tx := StartSpan(ctx, "op")
 				return tx
 			}(),
 			want: DynamicSamplingContext{
@@ -281,7 +281,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				traceID := propagation.TraceID
 				var root *Span
 				if test.native {
-					root = StartTransaction(ctx, "frozen")
+					_, root = StartSpan(ctx, "frozen")
 					ctx, traceID = root.Context(), root.TraceID
 				}
 				if !test.matching {

@@ -337,7 +337,7 @@ func TestCaptureMessagePreservesActiveSpanTraceContext(t *testing.T) {
 			} else {
 				ctx = ContextWithScope(ctx, NewScope())
 			}
-			transaction := StartTransaction(ctx, "request", WithOpName("http.server"))
+			_, transaction := StartSpan(ctx, "request", WithOp("http.server"))
 			transaction.SetData("http.request.method", http.MethodGet)
 			capture := CaptureMessage
 			if test.directClient {
@@ -1007,7 +1007,7 @@ func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
 		},
 	})
 
-	transaction := StartTransaction(ctx,
+	_, transaction := StartSpan(ctx,
 		"Foo",
 	)
 	transaction.Finish()
@@ -1042,7 +1042,7 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 	ScopeFromContext(ctx).AddEventProcessor(processor)
 	ScopeFromContext(ctx).SetRequest(request)
 
-	transaction := StartTransaction(ctx,
+	_, transaction := StartSpan(ctx,
 		"Foo",
 	)
 	transaction.Finish()
@@ -1151,7 +1151,7 @@ func TestIgnoreTransactions(t *testing.T) {
 				IgnoreTransactions: tt.ignoreTransactions,
 			})
 
-			transaction := StartTransaction(ctx,
+			_, transaction := StartSpan(ctx,
 				tt.transaction,
 			)
 			transaction.Finish()
@@ -1182,7 +1182,7 @@ func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
 		Transport:        transport,
 	})
 
-	transaction := StartTransaction(ctx, "test")
+	_, transaction := StartSpan(ctx, "test")
 	// Transaction has no http.response.status_code
 	transaction.Finish()
 
@@ -1288,8 +1288,8 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 				TraceIgnoreStatusCodes: tt.ignoreStatusCodes,
 			})
 
-			transaction := StartTransaction(ctx, "test")
-			child := transaction.StartChild("child")
+			_, transaction := StartSpan(ctx, "test")
+			_, child := StartSpan(transaction.Context(), "child")
 			child.Finish()
 			firstExportAfterFinish := name == "404 in ignore range" || name == "Single status code as single-element slice"
 			var baggage string
@@ -1905,8 +1905,8 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		creator, creatorTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "creator"})
 		override, overrideTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "override"})
 		ctx, _ := WithScope(ContextWithClient(context.Background(), creator))
-		root := StartTransaction(ctx, "root")
-		child := StartSpan(ContextWithClient(root.Context(), override), "child")
+		_, root := StartSpan(ctx, "root")
+		_, child := StartSpan(ContextWithClient(root.Context(), override), "child")
 		var wg sync.WaitGroup
 		headers := make(chan string, 16)
 		for range 16 {
@@ -1948,7 +1948,7 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		first, second := &MockTransport{}, &MockTransport{}
 		initClient("first", first)
 		ctx := ContextWithScope(context.Background(), NewScope())
-		root := StartTransaction(ctx, "unbound")
+		_, root := StartSpan(ctx, "unbound")
 		frozen := root.ToBaggage()
 		require.Contains(t, frozen, "sentry-release=first")
 		frozenDSC, err := DynamicSamplingContextFromHeader([]byte(frozen))

@@ -56,10 +56,10 @@ func startClientSpan(ctx context.Context, method string) (context.Context, *sent
 	}
 
 	name, service, rpcMethod := parseGRPCMethod(method)
-	span := sentry.StartSpan(
+	ctx, span := sentry.StartSpan(
 		ctx,
-		defaultClientOperationName,
-		sentry.WithDescription(name),
+		name,
+		sentry.WithOp(defaultClientOperationName),
 		sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
 	)
 	if service != "" {
@@ -70,7 +70,7 @@ func startClientSpan(ctx context.Context, method string) (context.Context, *sent
 	}
 	span.SetData("rpc.system", "grpc")
 
-	ctx = createOrUpdateMetadata(span.Context())
+	ctx = createOrUpdateMetadata(ctx)
 	return ctx, span
 }
 

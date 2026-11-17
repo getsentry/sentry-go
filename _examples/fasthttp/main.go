@@ -15,7 +15,7 @@ func enhanceSentryEvent(handler fasthttp.RequestHandler) fasthttp.RequestHandler
 		sentry.ScopeFromContext(requestCtx).SetTag("someRandomTag", "maybeYouNeedIt")
 
 		expensiveThing := func(ctx context.Context) error {
-			span := sentry.StartSpan(ctx, "expensive_thing")
+			_, span := sentry.StartSpan(ctx, "expensive_thing")
 			defer span.Finish()
 			// do resource intensive thing
 			return nil

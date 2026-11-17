@@ -14,7 +14,7 @@ func Example() {
 	router.Use(sentryecho.New(sentryecho.Options{}))
 	router.GET("/", func(c *echo.Context) error {
 		expensiveThing := func(ctx context.Context) error {
-			span := sentry.StartSpan(ctx, "expensive_thing")
+			_, span := sentry.StartSpan(ctx, "expensive_thing")
 			defer span.Finish()
 			// do resource intensive thing
 			return nil

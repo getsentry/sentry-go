@@ -497,7 +497,7 @@ func TestSentryCore_IntegrationWithSugaredLogger(t *testing.T) {
 func TestSentryCore_ContextField(t *testing.T) {
 	ctx, _ := newMockTransport()
 
-	span := sentry.StartSpan(ctx, "test.operation")
+	_, span := sentry.StartSpan(ctx, "test.operation")
 	newCtx := span.Context()
 	defer span.Finish()
 
@@ -515,7 +515,7 @@ func TestSentryCore_ContextField(t *testing.T) {
 
 func TestSentryCore_ContextFieldWithOtherFields(t *testing.T) {
 	ctx, _ := newMockTransport()
-	span := sentry.StartSpan(ctx, "test.operation")
+	_, span := sentry.StartSpan(ctx, "test.operation")
 	newCtx := span.Context()
 	defer span.Finish()
 
@@ -540,7 +540,7 @@ func TestSentryCore_ContextFieldPerCall(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 
 	requestCtx, _ := sentry.WithScope(ctx)
-	span := sentry.StartTransaction(requestCtx, "test-transaction")
+	_, span := sentry.StartSpan(requestCtx, "test-transaction")
 	defer span.Finish()
 
 	logger := zap.New(NewSentryCore(ctx, Option{
@@ -570,7 +570,7 @@ func TestSentryCore_ContextFieldPerCall(t *testing.T) {
 func TestSentryCore_ContextFieldInLogger(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 
-	span := sentry.StartTransaction(ctx, "test-transaction")
+	_, span := sentry.StartSpan(ctx, "test-transaction")
 	txnCtx := span.Context()
 	defer span.Finish()
 
