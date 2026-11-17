@@ -80,14 +80,14 @@ func (h *handler) handle(next echo.HandlerFunc) echo.HandlerFunc {
 			sentry.WithSpanOrigin(sentry.SpanOriginEcho),
 		}
 
-		transaction := sentry.StartTransaction(
-			requestCtx,
-			fmt.Sprintf("%s %s", r.Method, transactionName),
-			options...,
-		)
+		var transaction *sentry.Span
 
 		if created {
-			requestCtx = transaction.Context()
+			requestCtx, transaction = sentry.StartSpan(
+				requestCtx,
+				fmt.Sprintf("%s %s", r.Method, transactionName),
+				options...,
+			)
 			transaction.SetData("http.request.method", r.Method)
 			defer func() {
 				var status int

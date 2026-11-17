@@ -14,7 +14,7 @@ func Example() {
 	app.Use(sentryiris.New(sentryiris.Options{}))
 	app.Get("/", func(ctx iris.Context) {
 		expensiveThing := func(ctx context.Context) {
-			span := sentry.StartSpan(ctx, "expensive_thing")
+			_, span := sentry.StartSpan(ctx, "expensive_thing")
 			defer span.Finish()
 			// do resource intensive thing
 		}

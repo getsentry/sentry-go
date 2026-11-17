@@ -21,8 +21,8 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 	defer testutils.FlushWithTimeout(ClientFromContext(context.Background()), testutils.FlushTimeout())
 
 	ctx1, _ := WithScope(context.Background())
-	span1 := StartTransaction(ctx1, "request-1")
-	ctx1 = span1.Context()
+	span1Ctx, span1 := StartSpan(ctx1, "request-1")
+	ctx1 = span1Ctx
 	traceID1 := span1.TraceID
 
 	logger := NewLogger(ctx1)
@@ -31,8 +31,8 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 	span1.Finish()
 
 	ctx2, _ := WithScope(context.Background())
-	span2 := StartTransaction(ctx2, "request-2")
-	ctx2 = span2.Context()
+	span2Ctx, span2 := StartSpan(ctx2, "request-2")
+	ctx2 = span2Ctx
 	traceID2 := span2.TraceID
 
 	logger.Info().Emit("Log from request-1 logger during request-2")

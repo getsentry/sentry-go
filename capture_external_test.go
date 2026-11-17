@@ -35,7 +35,7 @@ func TestEnvelopes(t *testing.T) {
 		request.Header.Set("User-Agent", "golden")
 		scope.SetRequest(request)
 
-		root := sentry.StartTransaction(ctx, "GET /orders/:id",
+		rootCtx, root := sentry.StartSpan(ctx, "GET /orders/:id",
 			sentry.WithOpName("http.server"),
 			sentry.WithTransactionSource(sentry.SourceRoute),
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
@@ -43,7 +43,7 @@ func TestEnvelopes(t *testing.T) {
 		root.SetTag("route", "orders")
 		root.SetData("http.response.status_code", 200)
 		root.Status = sentry.SpanStatusOK
-		child := root.StartChild("db.query", sentry.WithDescription("SELECT 1"))
+		_, child := sentry.StartSpan(rootCtx, "SELECT 1", sentry.WithOpName("db.query"))
 		child.SetTag("db", "primary")
 		child.SetData("db.system", "postgresql")
 		child.Status = sentry.SpanStatusOK
@@ -54,7 +54,7 @@ func TestEnvelopes(t *testing.T) {
 		event.Transaction = "GET /orders/:id"
 		event.SetException(errors.New("boom"), 1)
 		event.Exception[0].Stacktrace = &sentry.Stacktrace{Frames: []sentry.Frame{{Function: "checkout", Module: "shop", Filename: "shop.go", Lineno: 7, InApp: true}}}
-		sentry.CaptureEvent(root.Context(), event)
+		sentry.CaptureEvent(rootCtx, event)
 		root.Finish()
 
 		sentry.CaptureCheckIn(ctx,

@@ -291,14 +291,14 @@ func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 
 	// Start a new transaction
-	txn := StartTransaction(ctx, "test-transaction")
+	txnCtx, txn := StartSpan(ctx, "test-transaction")
 	defer txn.Finish()
 
 	expectedTraceID := txn.TraceID
 	expectedSpanID := txn.SpanID
 
 	meter := NewMeter(ctx)
-	meter.WithCtx(txn.Context()).Count("test.count", 42)
+	meter.WithCtx(txnCtx).Count("test.count", 42)
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
@@ -324,9 +324,9 @@ func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
 func TestSentryMeter_ExplicitScopePrecedesFallbackTrace(t *testing.T) {
 	t.Parallel()
 	ctx, transport := setupMetricsTest()
-	fallback := StartTransaction(ctx, "fallback")
+	fallbackCtx, fallback := StartSpan(ctx, "fallback")
 	defer fallback.Finish()
-	meter := NewMeter(fallback.Context())
+	meter := NewMeter(fallbackCtx)
 	emitCtx, scope := WithScope(context.Background())
 	wantTraceID := TraceIDFromHex("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	wantSpanID := SpanIDFromHex("bbbbbbbbbbbbbbbb")

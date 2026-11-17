@@ -378,7 +378,8 @@ func TestGlobalTagsIntegration(t *testing.T) {
 		"client options tag present if not overridden by scope and overrides env tag",
 	)
 
-	StartTransaction(ContextWithClient(ContextWithScope(context.Background(), scope), client), "transaction").Finish()
+	_, transaction := StartSpan(ContextWithClient(ContextWithScope(context.Background(), scope), client), "transaction")
+	transaction.Finish()
 	assertEqual(t,
 		transport.Transactions()[0].Tags,
 		transport.lastEvent.Tags,

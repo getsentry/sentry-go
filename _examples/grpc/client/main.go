@@ -58,9 +58,8 @@ func main() {
 }
 
 func unaryExample(client examplepb.ExampleServiceClient) {
-	transaction := sentry.StartTransaction(context.Background(), "unaryExample")
+	ctx, transaction := sentry.StartSpan(context.Background(), "unaryExample")
 	defer transaction.Finish()
-	ctx := transaction.Context()
 
 	// Add metadata to the context
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
@@ -82,9 +81,8 @@ func unaryExample(client examplepb.ExampleServiceClient) {
 }
 
 func streamExample(client examplepb.ExampleServiceClient) {
-	transaction := sentry.StartTransaction(context.Background(), "streamExample")
+	ctx, transaction := sentry.StartSpan(context.Background(), "streamExample")
 	defer transaction.Finish()
-	ctx := transaction.Context()
 
 	// Add metadata to the context
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(

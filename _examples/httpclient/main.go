@@ -39,8 +39,7 @@ func main() {
 }
 
 func getExamplePage(ctx context.Context, httpClient *http.Client) error {
-	span := sentry.StartSpan(ctx, "getExamplePage")
-	ctx = span.Context()
+	ctx, span := sentry.StartSpan(ctx, "getExamplePage")
 	defer span.Finish()
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)

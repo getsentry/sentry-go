@@ -80,8 +80,8 @@ func spanStatusCode(t *testing.T, transport *sentry.MockTransport) int {
 }
 
 func startClientTransaction(base context.Context) (context.Context, *sentry.Span) {
-	transaction := sentry.StartTransaction(base, "test client transaction")
-	return transaction.Context(), transaction
+	transactionCtx, transaction := sentry.StartSpan(base, "test client transaction")
+	return transactionCtx, transaction
 }
 
 func requireUnaryClientBaggagePropagation(
@@ -220,7 +220,8 @@ func TestUnaryClientInterceptor_PropagatesScopeWithoutSpan(t *testing.T) {
 			f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{Release: "scope-release"}))
 			ctx := f.NewContext(context.Background())
 			if test.continued {
-				sentry.StartTransaction(ctx, "incoming", sentry.ContinueFromHeaders("11111111111111111111111111111111-2222222222222222-1", test.incoming)).Finish()
+				_, transaction := sentry.StartSpan(ctx, "incoming", sentry.ContinueFromHeaders("11111111111111111111111111111111-2222222222222222-1", test.incoming))
+				transaction.Finish()
 			}
 			wantTrace := sentry.GetTraceparent(ctx)
 			require.NotEmpty(t, wantTrace)

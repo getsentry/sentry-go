@@ -101,13 +101,13 @@ func (h *handler) handle(ctx fiber.Ctx) error {
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),
 	}
 
-	transaction := sentry.StartTransaction(
-		requestCtx,
-		fmt.Sprintf("%s %s", r.Method, transactionName),
-		options...,
-	)
+	var transaction *sentry.Span
 	if created {
-		requestCtx = transaction.Context()
+		requestCtx, transaction = sentry.StartSpan(
+			requestCtx,
+			fmt.Sprintf("%s %s", r.Method, transactionName),
+			options...,
+		)
 		transaction.SetData("http.request.method", r.Method)
 		defer func() {
 			if routePath := ctx.Route().Path; routePath != "" && !ctx.IsMiddleware() {

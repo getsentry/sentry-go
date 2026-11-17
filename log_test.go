@@ -675,7 +675,7 @@ func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 		attribute.String("key.string", "str"),
 		attribute.Bool("key.bool", true),
 	)
-	txn := StartTransaction(scopedCtx, "test-transaction")
+	txnCtx, txn := StartSpan(scopedCtx, "test-transaction")
 	defer txn.Finish()
 
 	loggerOutsideScope := NewLogger(ctx)
@@ -695,8 +695,8 @@ func TestSentryLogger_ScopeSetAttributesNoLeak(t *testing.T) {
 
 	mockTransport.logs = nil
 
-	logger := NewLogger(txn.Context())
-	logger.Info().WithCtx(txn.Context()).Emit("message with attrs")
+	logger := NewLogger(txnCtx)
+	logger.Info().WithCtx(txnCtx).Emit("message with attrs")
 	flushFromContext(ctx, testutils.FlushTimeout())
 
 	eventsAfterScope := mockTransport.LogBatches()
