@@ -211,7 +211,7 @@ func TestUnaryClientInterceptor_PropagatesScopeWithoutSpan(t *testing.T) {
 	}{
 		{name: "generated", existing: []string{"othervendor=value", "sentry-release=old,sentry-extra=stale"}},
 		{name: "frozen empty", continued: true, existing: []string{"othervendor=value", "sentry-release=old,sentry-extra=stale"}, want: "othervendor=value"},
-		{name: "frozen baggage without trace ID", continued: true, existing: []string{"othervendor=value", "sentry-release=old,sentry-extra=stale"}, incoming: "sentry-public_key=upstream", want: "sentry-public_key=upstream,othervendor=value"},
+		{name: "frozen baggage without trace ID", continued: true, existing: []string{"othervendor=value", "sentry-release=old,sentry-extra=stale"}, incoming: "sentry-sample_rand=0.5", want: "sentry-sample_rand=0.5,othervendor=value"},
 		{name: "frozen empty with malformed baggage", continued: true, existing: []string{"not-valid"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {

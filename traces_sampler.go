@@ -13,6 +13,6 @@ type SamplingContext struct {
 	ParentSampleRate *float64
 }
 
-// The TracesSample type is an adapter to allow the use of ordinary
-// functions as a TracesSampler.
+// A TracesSampler returns the sample rate for a root span. To keep a
+// continued trace complete, return ParentSampleRate when it is set.
 type TracesSampler func(ctx SamplingContext) float64

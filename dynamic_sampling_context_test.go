@@ -97,6 +97,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 				Frozen: true,
 				Entries: map[string]string{
 					"sample_rate": "1",
+					"sample_rand": "0.299075",
 					"trace_id":    "d49d9bf66f13450b81f65bc51cf49c03",
 					"public_key":  "public",
 					"release":     "1.0.0",
@@ -125,6 +126,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 					"public_key":  "public",
 					"release":     "1.0.0",
 					"sample_rate": "0",
+					"sample_rand": "0.299075",
 					"sampled":     "false",
 				},
 			},
@@ -183,6 +185,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 					"public_key":  "public",
 					"release":     "1.0.0",
 					"environment": "production",
+					"sample_rand": "0.299075",
 				},
 				Frozen: true,
 			},
@@ -222,7 +225,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				tt.scope = tests["Valid input"].scope.Clone()
 				tt.scope.SetPropagationContext(PropagationContext{TraceID: TraceID{1}, SpanID: SpanID{1}})
 				tt.client = &Client{options: *tt.options}
-				tt.expected = DynamicSamplingContext{Frozen: true, Entries: map[string]string{traceIDContextKey: (TraceID{1}).String()}}
+				tt.expected = DynamicSamplingContext{Frozen: true, Entries: map[string]string{traceIDContextKey: (TraceID{1}).String(), sampleRandKey: "0.000000"}}
 				if tt.wantRate != "" {
 					tt.expected.Entries["sample_rate"] = tt.wantRate
 				}
