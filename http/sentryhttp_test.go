@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"net/http/httptrace"
 	"net/textproto"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -115,15 +114,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodGet,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodGet,
+						"http.response.status_code": http.StatusOK,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusOK,
 				},
 			},
 		},
@@ -170,15 +167,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodPost,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodPost,
+						"http.response.status_code": http.StatusOK,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusOK,
 				},
 			},
 		},
@@ -212,15 +207,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodGet,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodGet,
+						"http.response.status_code": http.StatusOK,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusOK,
 				},
 			},
 		},
@@ -266,15 +259,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodPost,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodPost,
+						"http.response.status_code": http.StatusOK,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusOK,
 				},
 			},
 		},
@@ -316,15 +307,13 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
-				Contexts: map[string]sentry.Context{
-					"trace": sentry.TraceContext{
-						Data: map[string]any{
-							"http.request.method":       http.MethodPost,
-							"http.response.status_code": http.StatusOK,
-						},
-						Op:     "http.server",
-						Status: sentry.SpanStatusOK,
-					}.Map(),
+				Trace: sentry.TraceContext{
+					Data: map[string]any{
+						"http.request.method":       http.MethodPost,
+						"http.response.status_code": http.StatusOK,
+					},
+					Op:     "http.server",
+					Status: sentry.SpanStatusOK,
 				}},
 		},
 	}
@@ -432,24 +421,24 @@ func TestIntegration(t *testing.T) {
 	var statusCodes []sentry.SpanStatus
 	for e := range transactionsCh {
 		gott = append(gott, e)
-		statusCodes = append(statusCodes, e.Contexts["trace"]["status"].(sentry.SpanStatus))
+		statusCodes = append(statusCodes, e.Trace.Status)
 	}
 
 	optstrans := cmp.Options{
 		cmpopts.IgnoreFields(
 			sentry.Transaction{},
-			"EventID", "Platform",
-			"Release", "Sdk", "ServerName", "EndTime",
-			"StartTime", "Spans",
+			"Contexts", "EventID", "Platform",
+			"Release", "Sdk", "ServerName",
+			"StartTime", "EndTime", "Spans",
+		),
+		cmpopts.IgnoreFields(
+			sentry.TraceContext{},
+			"TraceID", "SpanID", "Origin",
 		),
 		cmpopts.IgnoreFields(
 			sentry.Request{},
 			"Env",
 		),
-		cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
-			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
-			return slices.Contains(ignoredCtxEntries, k)
-		}),
 	}
 	if diff := cmp.Diff(wantTrans, gott, optstrans); diff != "" {
 		t.Fatalf("Transaction mismatch (-want +got):\n%s", diff)
@@ -514,9 +503,9 @@ func TestInformationalResponsePreservesFinalStatus(t *testing.T) {
 			fixture.Flush()
 			transactions := fixture.Transactions()
 			require.Len(t, transactions, 1)
-			traceContext := transactions[0].Contexts["trace"]
-			require.Equal(t, float64(tt.status), traceContext["data"].(map[string]interface{})["http.response.status_code"])
-			require.Equal(t, sentry.HTTPtoSpanStatus(tt.status).String(), traceContext["status"])
+			traceContext := transactions[0].Trace
+			require.Equal(t, float64(tt.status), traceContext.Data["http.response.status_code"])
+			require.Equal(t, sentry.HTTPtoSpanStatus(tt.status), traceContext.Status)
 		})
 	}
 }

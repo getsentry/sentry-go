@@ -61,7 +61,15 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 	}
 
 	t.Run("transaction", func(t *testing.T) {
-		client, transport := newCaptureTestClient(t, ClientOptions{})
+		ctx, scope := WithScope(ctx)
+		scope.SetContext(traceContextKey, Context{"source": "scope"})
+		var seen map[string]Context
+		client, transport := newCaptureTestClient(t, ClientOptions{
+			BeforeSendTransaction: func(tx *Transaction, _ *EventHint) *Transaction {
+				seen = tx.Contexts
+				return tx
+			},
+		})
 		client.captureTransaction(ContextWithClient(ctx, client), &Transaction{
 			Tags:     map[string]string{"event": "event", "shared": "event"},
 			Contexts: map[string]Context{"shared": {"source": "event"}},
@@ -72,10 +80,11 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 			User:     User{ID: "current"},
 		}
 		if diff := cmp.Diff(want, transport.Transactions()[0],
-			cmpopts.IgnoreFields(Transaction{}, "EventID", "Sdk", "Platform", "Release", "ServerName"),
+			cmpopts.IgnoreFields(Transaction{}, "EventID", "Sdk", "Platform", "Release", "ServerName", "Trace"),
 		); diff != "" {
 			t.Error(diff)
 		}
+		require.NotContains(t, seen, traceContextKey)
 	})
 
 	t.Run("scope DSC follows matching trace and event DSC", func(t *testing.T) {

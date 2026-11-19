@@ -41,6 +41,7 @@
               "http.response.status_code": 200
             },
             "op": "http.server",
+            "origin": "auto.http.stdlib",
             "status": "ok"
           }
         },

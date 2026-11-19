@@ -48,9 +48,9 @@ type txSummary struct {
 func summarizeTx(tx *sentry.Transaction) txSummary {
 	s := txSummary{
 		Name:   tx.Name,
-		Op:     tx.Contexts["trace"]["op"].(string),
-		Status: tx.Contexts["trace"]["status"].(string),
-		Data:   tx.Contexts["trace"]["data"].(map[string]any),
+		Op:     tx.Trace.Op,
+		Status: tx.Trace.Status.String(),
+		Data:   tx.Trace.Data,
 	}
 	if g, ok := tx.Contexts["grpc"]; ok {
 		s.GRPC = g
@@ -123,7 +123,7 @@ func TestUnaryServerInterceptor_ContinuesIncomingTrace(t *testing.T) {
 	sentry.Flush(testutils.FlushTimeout())
 	transactions := transport.Transactions()
 	require.Len(t, transactions, 1)
-	assert.Equal(t, traceID, transactions[0].Contexts["trace"]["trace_id"])
+	assert.Equal(t, traceID, transactions[0].Trace.TraceID.String())
 	t.Run("reuses an active child without finishing its root", func(t *testing.T) {
 		f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{EnableTracing: true, TracesSampleRate: 1}))
 		outer := sentry.StartTransaction(f.NewContext(context.Background()), "gateway")
