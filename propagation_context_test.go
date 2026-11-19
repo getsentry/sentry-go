@@ -60,7 +60,7 @@ func TestPropagationContextFromHeaders(t *testing.T) {
 				TraceID:      TraceIDFromHex("abcdef0123456789abcdef0123456789"),
 				ParentSpanID: SpanIDFromHex("2222222222222222"),
 				DynamicSamplingContext: DynamicSamplingContext{Frozen: true, Entries: map[string]string{
-					"trace_id": "ABCDEF0123456789ABCDEF0123456789", "release": "upstream",
+					"trace_id": "ABCDEF0123456789ABCDEF0123456789", "release": "upstream", "sample_rand": "0.441289",
 				}},
 			},
 		},
@@ -109,6 +109,7 @@ func TestPropagationContextFromHeaders(t *testing.T) {
 					Frozen: true,
 					Entries: map[string]string{
 						"public_key":  "public",
+						"sample_rand": "0.375700",
 						"sample_rate": "1",
 						"trace_id":    "bc6d53f15eb88f4320054569b8c553d4",
 					},

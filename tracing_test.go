@@ -339,6 +339,7 @@ func TestContinueFromHeaders(t *testing.T) {
 					Frozen: true,
 					Entries: map[string]string{
 						"public_key":  "public",
+						"sample_rand": "0.375700",
 						"sample_rate": "1",
 						"trace_id":    "bc6d53f15eb88f4320054569b8c553d4",
 					},
@@ -1272,4 +1273,37 @@ func TestContinueFromRequestHeaders(t *testing.T) {
 			require.Contains(t, baggage, "sentry-public_key=upstream")
 		})
 	}
+}
+
+func TestSampleRand(t *testing.T) {
+	const trace = "423d7a0fb16128c8503f067d8447caba-d9246d56c61fc963"
+	const baggage = "sentry-trace_id=423d7a0fb16128c8503f067d8447caba"
+	for _, test := range []struct {
+		name, trace, baggage string
+		rate                 float64
+		want                 string
+		sampled              Sampled
+	}{
+		{"propagated below rate", trace, baggage + ",sentry-sample_rand=0.5", 0.6, "0.5", SampledTrue},
+		{"propagated at rate", trace, baggage + ",sentry-sample_rand=0.5", 0.5, "0.5", SampledFalse},
+		{"out of range is replaced", trace, baggage + ",sentry-sample_rand=1", 0.75, "0.747450", SampledTrue},
+		{"missing without decision", trace, baggage + ",sentry-sample_rate=0.25", 0.5, "0.747450", SampledFalse},
+		{"missing with sampled upstream", trace + "-1", baggage + ",sentry-sample_rate=0.25", 0.25, "0.247450", SampledTrue},
+		{"missing with unsampled upstream", trace + "-0", baggage + ",sentry-sample_rate=0.8", 0.8, "0.947450", SampledFalse},
+		{"upstream rate cannot give its decision", trace + "-1", baggage + ",sentry-sample_rate=0", 0.5, "0.747450", SampledFalse},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := NewTestContext(ClientOptions{TracesSampler: func(SamplingContext) float64 { return test.rate }})
+			_, root := StartSpan(ctx, "root", ContinueFromHeaders(test.trace, test.baggage))
+			require.Equal(t, test.want, root.dynamicSamplingContextForPropagation().Entries[sampleRandKey])
+			require.Equal(t, test.sampled, root.Sampled)
+		})
+	}
+}
+
+func TestInvalidSamplerRateIsNotPropagated(t *testing.T) {
+	ctx := NewTestContext(ClientOptions{TracesSampler: func(SamplingContext) float64 { return 1.5 }})
+	_, root := StartSpan(ctx, "root")
+	require.Equal(t, SampledFalse, root.Sampled)
+	require.NotContains(t, root.dynamicSamplingContextForPropagation().Entries, "sample_rate")
 }

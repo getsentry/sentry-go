@@ -125,7 +125,7 @@ func envelopeJSON(envelope *protocol.Envelope) []byte {
 var volatile = []string{
 	"timestamp", "start_timestamp", "sent_at",
 	"event_id", "trace_id", "span_id", "parent_span_id", "check_in_id",
-	"length", "version", "sentry.sdk.version",
+	"length", "version", "sentry.sdk.version", "sample_rand",
 }
 
 func dropVolatile(value any) {

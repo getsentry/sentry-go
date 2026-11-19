@@ -557,7 +557,7 @@ func (s *Span) sample(client *Client) Sampled {
 			return SampledFalse
 		}
 
-		if sample(tracesSamplerSampleRate) {
+		if sampleRand(s.TraceID, s.dynamicSamplingContext) < tracesSamplerSampleRate {
 			return SampledTrue
 		}
 		debuglog.Printf("Dropping transaction: TracesSampler returned rate: %f", tracesSamplerSampleRate)
@@ -590,7 +590,7 @@ func (s *Span) sample(client *Client) Sampled {
 		return SampledFalse
 	}
 
-	if sample(sampleRate) {
+	if sampleRand(s.TraceID, s.dynamicSamplingContext) < sampleRate {
 		return SampledTrue
 	}
 
@@ -1003,6 +1003,8 @@ func parseIncomingTrace(traceHeader, baggageHeader string) (TraceParentContext, 
 	dsc.Frozen = true
 	if !dsc.HasEntries() {
 		dsc.Entries = nil
+	} else {
+		backfillSampleRand(trace, dsc)
 	}
 	return trace, dsc, true, err
 }

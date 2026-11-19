@@ -994,7 +994,7 @@ func TestFrozenBaggageReplacesPreviousTrace(t *testing.T) {
 		want     string
 	}{
 		{name: "third-party members", existing: []string{"othervendor=value", "sentry-release=old,sentry-trace_id=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,sentry-extra=stale"}, want: "othervendor=value"},
-		{name: "frozen baggage without trace ID", existing: []string{"othervendor=value", "sentry-release=old,sentry-extra=stale"}, incoming: "sentry-public_key=upstream", want: "sentry-public_key=upstream,othervendor=value"},
+		{name: "frozen baggage without trace ID", existing: []string{"othervendor=value", "sentry-release=old,sentry-extra=stale"}, incoming: "sentry-sample_rand=0.5", want: "sentry-sample_rand=0.5,othervendor=value"},
 		{name: "malformed baggage", existing: []string{"not-valid"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
