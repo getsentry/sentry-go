@@ -140,16 +140,15 @@ func TestStartSpan(t *testing.T) {
 	}
 	want := &Transaction{
 		Name: transaction,
-		Contexts: map[string]Context{
-			"trace": {
-				"trace_id":       span.TraceID.String(),
-				"span_id":        span.SpanID.String(),
-				"parent_span_id": parentSpanID.String(),
-				"op":             op,
-				"data":           span.Data,
-				"description":    description,
-				"status":         status.String(),
-			},
+		Trace: TraceContext{
+			TraceID:      span.TraceID,
+			SpanID:       span.SpanID,
+			ParentSpanID: parentSpanID,
+			Op:           op,
+			Data:         span.Data,
+			Description:  description,
+			Status:       status,
+			Origin:       SpanOriginManual,
 		},
 		Tags:      nil,
 		EndTime:   endTime,
@@ -167,11 +166,6 @@ func TestStartSpan(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, transactions[0], opts); diff != "" {
 		t.Fatalf("Transaction mismatch (-want +got):\n%s", diff)
-	}
-	// Check trace context explicitly, as we ignored all contexts above to
-	// disregard other contexts.
-	if diff := cmp.Diff(want.Contexts["trace"], transactions[0].Contexts["trace"]); diff != "" {
-		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -215,16 +209,15 @@ func TestStartTransaction(t *testing.T) {
 	}
 	want := &Transaction{
 		Name: transactionName,
-		Contexts: map[string]Context{
-			"trace": {
-				"trace_id":    transaction.TraceID.String(),
-				"span_id":     transaction.SpanID.String(),
-				"data":        transaction.Data,
-				"description": description,
-				"status":      status.String(),
-			},
-			"otel": {"k": "v"},
+		Trace: TraceContext{
+			TraceID:     transaction.TraceID,
+			SpanID:      transaction.SpanID,
+			Data:        transaction.Data,
+			Description: description,
+			Status:      status,
+			Origin:      SpanOriginManual,
 		},
+		Contexts:  map[string]Context{"otel": {"k": "v"}},
 		Tags:      nil,
 		EndTime:   endTime,
 		StartTime: startTime,
@@ -234,18 +227,16 @@ func TestStartTransaction(t *testing.T) {
 	}
 	opts := cmp.Options{
 		cmpopts.IgnoreFields(Transaction{},
-			"Contexts", "EventID", "Platform",
+			"EventID", "Platform",
 			"Release", "Sdk", "ServerName",
 		),
+		cmpopts.IgnoreMapEntries(func(k string, _ Context) bool {
+			return k != "otel"
+		}),
 		cmpopts.EquateEmpty(),
 	}
 	if diff := cmp.Diff(want, transactions[0], opts); diff != "" {
 		t.Fatalf("Transaction mismatch (-want +got):\n%s", diff)
-	}
-	// Check trace context explicitly, as we ignored all contexts above to
-	// disregard other contexts.
-	if diff := cmp.Diff(want.Contexts["trace"], transactions[0].Contexts["trace"]); diff != "" {
-		t.Fatalf("TraceContext mismatch (-want +got):\n%s", diff)
 	}
 }
 

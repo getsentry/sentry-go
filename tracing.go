@@ -664,11 +664,10 @@ func (s *Span) toTransaction() *Transaction {
 		finished = append(finished, child)
 	}
 
-	contexts := make(map[string]Context, len(s.contexts)+1)
+	contexts := make(map[string]Context, len(s.contexts))
 	for k, v := range s.contexts {
 		contexts[k] = cloneContext(v)
 	}
-	contexts[traceContextKey] = s.traceContextLockFree().Map()
 
 	// Make sure that the transaction source is valid
 	transactionSource := s.Source
@@ -676,10 +675,13 @@ func (s *Span) toTransaction() *Transaction {
 		transactionSource = SourceCustom
 	}
 
+	trace := s.traceContextLockFree()
+	trace.Origin = s.Origin
 	return &Transaction{
 		Name:      s.Name,
 		StartTime: s.StartTime,
 		EndTime:   s.EndTime,
+		Trace:     *trace,
 		Spans:     finished,
 		Tags:      maps.Clone(s.Tags),
 		Contexts:  contexts,
@@ -888,6 +890,7 @@ type TraceContext struct {
 	Description  string         `json:"description,omitempty"`
 	Status       SpanStatus     `json:"status,omitempty"`
 	Data         map[string]any `json:"data,omitempty"`
+	Origin       SpanOrigin     `json:"origin,omitempty"`
 }
 
 func (tc TraceContext) Map() map[string]any {
@@ -914,6 +917,10 @@ func (tc TraceContext) Map() map[string]any {
 
 	if len(tc.Data) > 0 {
 		m["data"] = tc.Data
+	}
+
+	if tc.Origin != "" {
+		m["origin"] = tc.Origin
 	}
 
 	return m

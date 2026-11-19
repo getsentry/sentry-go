@@ -457,22 +457,24 @@ func NewEvent() *Event {
 
 // Transaction is a finished root span together with its finished child spans.
 type Transaction struct {
-	EventID         EventID            `json:"event_id,omitempty"`
-	Name            string             `json:"transaction,omitempty"`
-	TransactionInfo *TransactionInfo   `json:"transaction_info,omitempty"`
-	StartTime       time.Time          `json:"start_timestamp,omitzero"`
-	EndTime         time.Time          `json:"timestamp,omitzero"`
-	Spans           []*Span            `json:"spans,omitempty"`
-	Tags            map[string]string  `json:"tags,omitempty"`
-	Contexts        map[string]Context `json:"contexts,omitempty"`
-	User            User               `json:"user,omitzero"`
-	Request         *Request           `json:"request,omitempty"`
-	Release         string             `json:"release,omitempty"`
-	Dist            string             `json:"dist,omitempty"`
-	Environment     string             `json:"environment,omitempty"`
-	ServerName      string             `json:"server_name,omitempty"`
-	Platform        string             `json:"platform,omitempty"`
-	Sdk             SdkInfo            `json:"sdk"`
+	EventID         EventID          `json:"event_id,omitempty"`
+	Name            string           `json:"transaction,omitempty"`
+	TransactionInfo *TransactionInfo `json:"transaction_info,omitempty"`
+	StartTime       time.Time        `json:"start_timestamp,omitzero"`
+	EndTime         time.Time        `json:"timestamp,omitzero"`
+	// Trace describes the root span. It is sent as the trace context.
+	Trace       TraceContext       `json:"-"`
+	Spans       []*Span            `json:"spans,omitempty"`
+	Tags        map[string]string  `json:"tags,omitempty"`
+	Contexts    map[string]Context `json:"contexts,omitempty"`
+	User        User               `json:"user,omitzero"`
+	Request     *Request           `json:"request,omitempty"`
+	Release     string             `json:"release,omitempty"`
+	Dist        string             `json:"dist,omitempty"`
+	Environment string             `json:"environment,omitempty"`
+	ServerName  string             `json:"server_name,omitempty"`
+	Platform    string             `json:"platform,omitempty"`
+	Sdk         SdkInfo            `json:"sdk"`
 }
 
 // transactionItem is a transaction as handed to the telemetry processor.
@@ -485,7 +487,12 @@ type transactionItem struct {
 
 // newTransactionItem returns an item that owns a copy of tx.
 func newTransactionItem(tx *Transaction, dsc map[string]string) *transactionItem {
-	return &transactionItem{Transaction: tx.owned(), Type: transactionType, dsc: maps.Clone(dsc)}
+	item := &transactionItem{Transaction: tx.owned(), Type: transactionType, dsc: maps.Clone(dsc)}
+	if item.Contexts == nil {
+		item.Contexts = make(map[string]Context, 1)
+	}
+	item.Contexts[traceContextKey] = item.Trace.Map()
+	return item
 }
 
 func (t *transactionItem) GetCategory() ratelimit.Category              { return ratelimit.CategoryTransaction }
@@ -656,6 +663,7 @@ func (e *Event) owned() Event {
 func (t *Transaction) owned() Transaction {
 	owned := *t
 	owned.TransactionInfo = copyOf(t.TransactionInfo)
+	owned.Trace.Data = ownMap(t.Trace.Data)
 	owned.Spans = make([]*Span, 0, len(t.Spans))
 	for _, span := range t.Spans {
 		if span != nil {

@@ -1030,7 +1030,7 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 		},
 		BeforeSendTransaction: func(tx *Transaction, _ *EventHint) *Transaction {
 			assertEqual(t, tx.Name, "Foo")
-			return &Transaction{Name: "Bar", Contexts: tx.Contexts}
+			return &Transaction{Name: "Bar", Trace: tx.Trace}
 		},
 	})
 	processor := func(event *Event, _ *EventHint) *Event {
@@ -1048,7 +1048,7 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 	sent := transport.Transactions()[0]
 	assertEqual(t, sent.Name, "Bar")
 	// Make sure it's the same span
-	assertEqual(t, sent.Contexts["trace"]["span_id"], transaction.SpanID.String())
+	assertEqual(t, sent.Trace.SpanID, transaction.SpanID)
 	assertEqual(t, transport.Envelopes()[0].Header.Trace["trace_id"], transaction.TraceID.String())
 }
 
