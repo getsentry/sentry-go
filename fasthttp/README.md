@@ -124,11 +124,9 @@ if err := fasthttp.ListenAndServe(":3000", sentryHandler.Handle(fastHTTPHandler)
 sentry.Init(sentry.ClientOptions{
 	Dsn: "your-public-dsn",
 	BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-		if hint.Context != nil {
-			if ctx, ok := hint.Context.Value(sentry.RequestContextKey).(*fasthttp.RequestCtx); ok {
-				// You have access to the original Context if it panicked
-				fmt.Println(string(ctx.Request.Host()))
-			}
+		if hint.Request != nil {
+			// You have access to the request
+			fmt.Println(hint.Request.Host)
 		}
 		return event
 	},

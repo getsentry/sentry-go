@@ -103,7 +103,7 @@ func (h *handler) handle(c *gin.Context) {
 func (h *handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
 		if !isBrokenPipeError(err) {
-			ctx := context.WithValue(r.Context(), sentry.RequestContextKey, r)
+			ctx := r.Context()
 			eventID := sentry.Recover(ctx, err)
 			if eventID != nil && h.waitForDelivery {
 				sentry.ClientFromContext(ctx).Flush(h.timeout)

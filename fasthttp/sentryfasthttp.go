@@ -119,15 +119,14 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 
 		scope.SetRequest(r)
 		scope.SetRequestBody(bytes.Clone(ctx.Request.Body()))
-		defer h.recoverWithSentry(requestCtx, ctx, cancel)
+		defer h.recoverWithSentry(requestCtx, cancel)
 
 		handler(ctx)
 	}
 }
 
-func (h *Handler) recoverWithSentry(requestCtx context.Context, ctx *fasthttp.RequestCtx, cancel context.CancelFunc) {
+func (h *Handler) recoverWithSentry(requestCtx context.Context, cancel context.CancelFunc) {
 	if err := recover(); err != nil {
-		requestCtx = context.WithValue(requestCtx, sentry.RequestContextKey, ctx)
 		eventID := sentry.Recover(requestCtx, err)
 		if eventID != nil && h.waitForDelivery {
 			sentry.ClientFromContext(requestCtx).Flush(h.timeout)

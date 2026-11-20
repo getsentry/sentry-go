@@ -121,10 +121,8 @@ log.Fatal(app.Start(":3000"))
 sentry.Init(sentry.ClientOptions{
     Dsn: "your-public-dsn",
     BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-        if hint.Context != nil {
-            if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
-                // You have access to the original Request here
-            }
+        if hint.Request != nil {
+            // You have access to the original Request here
         }
 
         return event

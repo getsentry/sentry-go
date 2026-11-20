@@ -35,30 +35,7 @@ func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb, options ...Bread
 		debuglog.Println("breadcrumb dropped: ctx carries no scope. Use WithScope to start one.")
 		return
 	}
-	client := ClientFromContext(ctx)
-	limit := client.options.MaxBreadcrumbs
-	switch {
-	case limit < 0:
-		return
-	case limit == 0:
-		limit = defaultMaxBreadcrumbs
-	}
-	if client.options.BeforeBreadcrumb != nil {
-		resolved := breadcrumbOptions{}
-		for _, option := range options {
-			if option != nil {
-				option(&resolved)
-			}
-		}
-		if resolved.hint == nil {
-			resolved.hint = &BreadcrumbHint{}
-		}
-		if breadcrumb = client.options.BeforeBreadcrumb(breadcrumb, resolved.hint); breadcrumb == nil {
-			debuglog.Println("breadcrumb dropped due to BeforeBreadcrumb callback.")
-			return
-		}
-	}
-	scope.AddBreadcrumb(breadcrumb, limit)
+	scope.addBreadcrumb(ClientFromContext(ctx), breadcrumb, options)
 }
 
 // CaptureMessage captures an arbitrary message using the scope and client
@@ -81,6 +58,7 @@ func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *Monito
 
 // WithMonitor runs fn and reports its outcome as check-ins for the cron
 // monitor identified by monitorSlug, using the scope and client carried by ctx.
+// fn receives a context with its own scope.
 //
 // An in_progress check-in carrying monitorConfig is sent before fn runs. When
 // monitorConfig is not nil, Sentry creates the monitor if it does not exist,
@@ -89,7 +67,7 @@ func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *Monito
 // duration. If fn panics, an error check-in is sent and the panic continues.
 //
 // The error returned by fn is returned unchanged.
-func WithMonitor(ctx context.Context, monitorSlug string, monitorConfig *MonitorConfig, fn func() error) error {
+func WithMonitor(ctx context.Context, monitorSlug string, monitorConfig *MonitorConfig, fn func(ctx context.Context) error) error {
 	ctx, _ = WithScope(ctx)
 	checkInID := CaptureCheckIn(ctx, &CheckIn{
 		MonitorSlug: monitorSlug,
@@ -110,7 +88,7 @@ func WithMonitor(ctx context.Context, monitorSlug string, monitorConfig *Monitor
 		CaptureCheckIn(ctx, checkIn, nil)
 	}()
 
-	err := fn()
+	err := fn(ctx)
 	if err == nil {
 		status = CheckInStatusOK
 	}

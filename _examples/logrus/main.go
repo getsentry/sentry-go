@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"time"
 
@@ -23,11 +22,9 @@ func main() {
 	err := sentry.Init(sentry.ClientOptions{
 		Dsn: "your-public-dsn",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			if hint.Context != nil {
-				if req, ok := hint.Context.Value(sentry.RequestContextKey).(*http.Request); ok {
-					// You have access to the original Request
-					fmt.Println(req)
-				}
+			if hint.Request != nil {
+				// You have access to the original Request
+				fmt.Println(hint.Request)
 			}
 			fmt.Println(event)
 			return event

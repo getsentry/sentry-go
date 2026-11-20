@@ -17,21 +17,21 @@ func TestAddBreadcrumbHint(t *testing.T) {
 		write   bool
 		want    sentry.BreadcrumbHint
 	}{
-		{name: "supplied", options: []sentry.BreadcrumbOption{sentry.WithBreadcrumbHint(&sentry.BreadcrumbHint{"source": "user"}), nil}, want: sentry.BreadcrumbHint{"source": "user"}},
+		{name: "supplied", options: []sentry.BreadcrumbOption{sentry.WithBreadcrumbHint(sentry.BreadcrumbHint{"source": "user"}), nil}, want: sentry.BreadcrumbHint{"source": "user"}},
 		{name: "default", write: true, want: sentry.BreadcrumbHint{"callback": "wrote"}},
 		{name: "nil hint", options: []sentry.BreadcrumbOption{sentry.WithBreadcrumbHint(nil)}, write: true, want: sentry.BreadcrumbHint{"callback": "wrote"}},
-		{name: "dropped", options: []sentry.BreadcrumbOption{sentry.WithBreadcrumbHint(&sentry.BreadcrumbHint{"source": "user"})}, drop: true, want: sentry.BreadcrumbHint{"source": "user"}},
+		{name: "dropped", options: []sentry.BreadcrumbOption{sentry.WithBreadcrumbHint(sentry.BreadcrumbHint{"source": "user"})}, drop: true, want: sentry.BreadcrumbHint{"source": "user"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			var gotHint sentry.BreadcrumbHint
 			fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
-				BeforeBreadcrumb: func(breadcrumb *sentry.Breadcrumb, hint *sentry.BreadcrumbHint) *sentry.Breadcrumb {
+				BeforeBreadcrumb: func(breadcrumb *sentry.Breadcrumb, hint sentry.BreadcrumbHint) *sentry.Breadcrumb {
 					require.NotNil(t, hint)
 					if test.write {
-						(*hint)["callback"] = "wrote"
+						hint["callback"] = "wrote"
 					}
-					gotHint = *hint
+					gotHint = hint
 					if test.drop {
 						return nil
 					}

@@ -19,7 +19,7 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 	global.SetUser(User{ID: "global"})
 	global.SetFingerprint([]string{"global"})
 	global.SetLevel(LevelWarning)
-	global.AddBreadcrumb(&Breadcrumb{Message: "global"}, defaultMaxBreadcrumbs)
+	global.AddBreadcrumb(&Breadcrumb{Message: "global"})
 	global.AddAttachment(&Attachment{Filename: "global.txt"})
 
 	ctx, current := WithScope(context.Background())
@@ -28,7 +28,7 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 	current.SetUser(User{ID: "current"})
 	current.SetFingerprint([]string{"current"})
 	current.SetLevel(LevelError)
-	current.AddBreadcrumb(&Breadcrumb{Message: "current"}, defaultMaxBreadcrumbs)
+	current.AddBreadcrumb(&Breadcrumb{Message: "current"})
 	current.AddAttachment(&Attachment{Filename: "current.txt"})
 
 	event := &Event{
@@ -186,12 +186,12 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 func TestCaptureObservesCurrentScopeContents(t *testing.T) {
 	global := cleanGlobalScope(t)
 	global.SetTag("tag", "global")
-	global.AddBreadcrumb(&Breadcrumb{Message: "global"}, defaultMaxBreadcrumbs)
+	global.AddBreadcrumb(&Breadcrumb{Message: "global"})
 
 	populated := func() *Scope {
 		scope := NewScope()
 		scope.SetTag("tag", "current")
-		scope.AddBreadcrumb(&Breadcrumb{Message: "current"}, defaultMaxBreadcrumbs)
+		scope.AddBreadcrumb(&Breadcrumb{Message: "current"})
 		return scope
 	}
 
@@ -231,11 +231,11 @@ func TestCaptureObservesCurrentScopeContents(t *testing.T) {
 
 func TestCaptureBreadcrumbOrderAndLimit(t *testing.T) {
 	global := cleanGlobalScope(t)
-	global.AddBreadcrumb(&Breadcrumb{Message: "global-1", Timestamp: testNow.Add(4 * time.Hour)}, defaultMaxBreadcrumbs)
-	global.AddBreadcrumb(&Breadcrumb{Message: "global-2", Timestamp: testNow.Add(3 * time.Hour)}, defaultMaxBreadcrumbs)
+	global.AddBreadcrumb(&Breadcrumb{Message: "global-1", Timestamp: testNow.Add(4 * time.Hour)})
+	global.AddBreadcrumb(&Breadcrumb{Message: "global-2", Timestamp: testNow.Add(3 * time.Hour)})
 
 	ctx, current := WithScope(context.Background())
-	current.AddBreadcrumb(&Breadcrumb{Message: "current", Timestamp: testNow.Add(2 * time.Hour)}, defaultMaxBreadcrumbs)
+	current.AddBreadcrumb(&Breadcrumb{Message: "current", Timestamp: testNow.Add(2 * time.Hour)})
 
 	for _, test := range []struct {
 		name  string
