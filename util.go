@@ -37,6 +37,9 @@ func defaultRelease() (release string) {
 		"GAE_DEPLOYMENT_ID",
 		"GITHUB_SHA",             // GitHub Actions - https://help.github.com/en/actions
 		"COMMIT_REF",             // Netlify - https://docs.netlify.com/
+		"RENDER_GIT_COMMIT",      // Render - https://render.com/docs/environment-variables
+		"RAILWAY_GIT_COMMIT_SHA", // Railway - https://docs.railway.com/reference/variables
+		"FC_GIT_COMMIT_SHA",      // Flightcontrol - https://www.flightcontrol.dev/docs/guides/flightcontrol/environment-variables
 		"VERCEL_GIT_COMMIT_SHA",  // Vercel - https://vercel.com/
 		"ZEIT_GITHUB_COMMIT_SHA", // Zeit (now known as Vercel)
 		"ZEIT_GITLAB_COMMIT_SHA",
