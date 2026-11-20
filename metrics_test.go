@@ -291,7 +291,7 @@ func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 
 	// Start a new transaction
-	txn := StartTransaction(ctx, "test-transaction")
+	_, txn := StartSpan(ctx, "test-transaction")
 	defer txn.Finish()
 
 	expectedTraceID := txn.TraceID
@@ -324,7 +324,7 @@ func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
 func TestSentryMeter_ExplicitScopePrecedesFallbackTrace(t *testing.T) {
 	t.Parallel()
 	ctx, transport := setupMetricsTest()
-	fallback := StartTransaction(ctx, "fallback")
+	_, fallback := StartSpan(ctx, "fallback")
 	defer fallback.Finish()
 	meter := NewMeter(fallback.Context())
 	emitCtx, scope := WithScope(context.Background())

@@ -268,7 +268,7 @@ func TestIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		ctx := contextWithClient(sentryClient)
-		span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+		_, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
 		ctx = span.Context()
 
 		request, err := http.NewRequestWithContext(ctx, tt.RequestMethod, tt.RequestURL, nil)
@@ -444,7 +444,7 @@ func TestDataCollectionCollectsHeadersAndBodies(t *testing.T) {
 			}
 
 			ctx := contextWithClient(sentryClient)
-			span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+			_, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
 			ctx = span.Context()
 
 			request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://example.com/api",
@@ -543,7 +543,7 @@ func TestSetCookieResponseHeadersPreserveAttributes(t *testing.T) {
 	}
 
 	ctx := contextWithClient(sentryClient)
-	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+	_, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
 	ctx = span.Context()
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com/api", nil)
@@ -604,7 +604,7 @@ func TestIntegration_GlobalClientOptions(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+	_, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
 	ctx = span.Context()
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://example.com", nil)
@@ -755,7 +755,7 @@ func TestIntegration_ResolvesPropagationOptionsFromRequestContext(t *testing.T) 
 			f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
 				TracePropagationTargets: []string{test.target}, PropagateTraceparent: true, Release: "new",
 			}))
-			span := sentry.StartSpan(f.NewContext(context.Background()), "test")
+			_, span := sentry.StartSpan(f.NewContext(context.Background()), "test")
 			defer span.Finish()
 			request, err := http.NewRequestWithContext(span.Context(), http.MethodGet, "https://example.com", nil)
 			require.NoError(t, err)
@@ -796,7 +796,7 @@ func TestRoundTripDoesNotMutateCallerRequest(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			sentrytest.Run(t, func(t *testing.T, fixture *sentrytest.Fixture) {
-				transaction := sentry.StartTransaction(fixture.NewContext(context.Background()), "test")
+				_, transaction := sentry.StartSpan(fixture.NewContext(context.Background()), "test")
 				type requestContextKey struct{}
 				requestCtx, cancel := context.WithCancel(context.WithValue(transaction.Context(), requestContextKey{}, "request value"))
 				defer cancel()
@@ -950,7 +950,7 @@ func TestDataCollectionFiltersQuerySpanData(t *testing.T) {
 			}
 
 			ctx := contextWithClient(sentryClient)
-			span := sentry.StartSpan(ctx, "fake_parent", sentry.WithTransactionName("Fake Parent"))
+			_, span := sentry.StartSpan(ctx, "Fake Parent", sentry.WithOp("fake_parent"))
 			ctx = span.Context()
 
 			request, err := http.NewRequestWithContext(ctx, http.MethodGet, tt.requestURL, nil)
@@ -1008,7 +1008,8 @@ func TestFrozenBaggageReplacesPreviousTrace(t *testing.T) {
 			t.Parallel()
 			f := sentrytest.NewFixture(t)
 			ctx := f.NewContext(context.Background())
-			sentry.StartTransaction(ctx, "incoming", sentry.ContinueFromHeaders("11111111111111111111111111111111-2222222222222222-1", test.incoming)).Finish()
+			_, transaction := sentry.StartSpan(ctx, "incoming", sentry.ContinueFromHeaders("11111111111111111111111111111111-2222222222222222-1", test.incoming))
+			transaction.Finish()
 			request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com", nil)
 			require.NoError(t, err)
 			for _, value := range test.existing {
@@ -1112,7 +1113,7 @@ func TestTracePropagationTargets(t *testing.T) {
 						ctx := fixture.NewContext(context.Background())
 						var transaction *sentry.Span
 						if parentSpan {
-							transaction = sentry.StartTransaction(ctx, "outgoing request")
+							_, transaction = sentry.StartSpan(ctx, "outgoing request")
 							ctx = transaction.Context()
 						}
 						request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://example.com/foo", nil)

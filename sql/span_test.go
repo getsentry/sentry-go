@@ -21,7 +21,7 @@ func TestStartSpan_NoParentReturnsNil(t *testing.T) {
 func TestStartSpan_SpanData(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		ctx := f.NewContext(context.Background())
-		parent := sentry.StartSpan(ctx, "root", sentry.WithTransactionName("root"))
+		_, parent := sentry.StartSpan(ctx, "root")
 		t.Cleanup(parent.Finish)
 
 		cfg := &config{
@@ -53,7 +53,7 @@ func TestStartSpan_SpanData(t *testing.T) {
 func TestFinishSpan_StatusMapping(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		ctx := f.NewContext(context.Background())
-		parent := sentry.StartSpan(ctx, "root", sentry.WithTransactionName("root"))
+		_, parent := sentry.StartSpan(ctx, "root")
 		t.Cleanup(parent.Finish)
 
 		okSpan := startQuerySpan(parent.Context(), nil, &config{system: SystemPostgreSQL}, opQuery, "SELECT 1")
@@ -70,7 +70,7 @@ func TestFinishSpan_StatusMapping(t *testing.T) {
 func TestStartQuerySpan_UsesTransactionParent(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		ctx := f.NewContext(context.Background())
-		parent := sentry.StartSpan(ctx, "root", sentry.WithTransactionName("root"))
+		_, parent := sentry.StartSpan(ctx, "root")
 		t.Cleanup(parent.Finish)
 
 		cfg := &config{system: SystemPostgreSQL}
@@ -112,7 +112,7 @@ func TestBeginClearsActiveTxSpan(t *testing.T) {
 func TestSentryTxFinishClearsConnSpan(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		ctx := f.NewContext(context.Background())
-		parent := sentry.StartSpan(ctx, "root", sentry.WithTransactionName("root"))
+		_, parent := sentry.StartSpan(ctx, "root")
 		t.Cleanup(parent.Finish)
 
 		cfg := &config{system: SystemPostgreSQL}

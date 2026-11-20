@@ -43,7 +43,7 @@ const (
 // structure of timed operations. The span tree makes up a transaction event
 // that is sent to Sentry when the root span is finished.
 //
-// Spans must be started with either StartSpan or Span.StartChild.
+// Spans must be started with StartSpan.
 type Span struct {
 	TraceID      TraceID           `json:"trace_id"`
 	SpanID       SpanID            `json:"span_id"`
@@ -103,8 +103,9 @@ type TraceParentContext struct {
 // tags/data. For Span.Data, must gracefully handle values that cannot be
 // marshaled into JSON (see transport.go:getRequestBodyFromEvent).
 
-// StartSpan starts a new span to describe an operation. The new span will be a
-// child of the last span stored in ctx, if any.
+// StartSpan starts a span and returns a context carrying it. The span is a
+// child of the span carried by ctx, if any. For a root span, name is the
+// transaction name; for a child span, it is the description.
 //
 // One or more options can be used to modify the span properties. Typically one
 // option as a function literal is enough. Combining multiple options can be
@@ -113,13 +114,12 @@ type TraceParentContext struct {
 // Caller should call the Finish method on the span to mark its end. Finishing a
 // root span sends the span and all of its children, recursively, as a
 // transaction to Sentry.
-func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Span {
+func StartSpan(ctx context.Context, name string, options ...SpanOption) (context.Context, *Span) {
 	parent, hasParent := ctx.Value(spanContextKey{}).(*Span)
 	client := ClientFromContext(ctx)
 	var span Span
 	span = Span{
 		// defaults
-		Op:        operation,
 		StartTime: time.Now(),
 		Sampled:   SampledUndefined,
 
@@ -130,10 +130,12 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 	rand.Read(span.SpanID[:])
 
 	if hasParent {
+		span.Description = name
 		span.TraceID = parent.TraceID
 		span.ParentSpanID = parent.SpanID
 		span.Origin = parent.Origin
 	} else {
+		span.Name = name
 		// Only set the Source if this is a transaction
 		span.Source = SourceCustom
 		span.Origin = SpanOriginManual
@@ -196,7 +198,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		scope.keepSamplingDecision(span.TraceID, span.Sampled, span.dynamicSamplingContext)
 	}
 
-	return &span
+	return span.ctx, &span
 }
 
 // continueTrace makes a root span part of the trace described by propagation.
@@ -218,14 +220,6 @@ func (s *Span) Finish() {
 
 // Context returns the context containing the span.
 func (s *Span) Context() context.Context { return s.ctx }
-
-// StartChild starts a new child span.
-//
-// The call span.StartChild(operation, options...) is a shortcut for
-// StartSpan(span.Context(), operation, options...).
-func (s *Span) StartChild(operation string, options ...SpanOption) *Span {
-	return StartSpan(s.Context(), operation, options...)
-}
 
 // detached returns a copy of the span's payload that s no longer writes to.
 func (s *Span) detached() *Span {
@@ -305,7 +299,7 @@ func (s *Span) GetTransaction() *Span {
 	spanRecorder := s.spanRecorder()
 	if spanRecorder == nil {
 		// This probably means that the Span was created manually (not via
-		// StartTransaction/StartSpan or StartChild).
+		// StartSpan).
 		// Return "nil" to indicate that it's not a normal situation.
 		return nil
 	}
@@ -548,9 +542,9 @@ func (s *Span) sample(client *Client) Sampled {
 		return s.Sampled
 	}
 
-	// #2 explicit sampling decision via StartSpan/StartTransaction options.
+	// #2 explicit sampling decision via StartSpan options.
 	if s.explicitSampled != SampledUndefined {
-		debuglog.Printf("Using explicit sampling decision from StartSpan/StartTransaction: %v", s.explicitSampled)
+		debuglog.Printf("Using explicit sampling decision from StartSpan: %v", s.explicitSampled)
 		switch s.explicitSampled {
 		case SampledTrue:
 			s.sampleRate = 1.0
@@ -959,28 +953,10 @@ type spanOptionFunc func(s *Span)
 
 func (f spanOptionFunc) applySpan(s *Span) { f(s) }
 
-// WithTransactionName option sets the name of the current transaction.
-//
-// A span tree has a single transaction name, therefore using this option when
-// starting a span affects the span tree as a whole, potentially overwriting a
-// name set previously.
-func WithTransactionName(name string) SpanOption {
+// WithOp sets the operation of a span.
+func WithOp(op string) SpanOption {
 	return spanOptionFunc(func(s *Span) {
-		s.Name = name
-	})
-}
-
-// WithDescription sets the description of a span.
-func WithDescription(description string) SpanOption {
-	return spanOptionFunc(func(s *Span) {
-		s.Description = description
-	})
-}
-
-// WithOpName sets the operation name for a given span.
-func WithOpName(name string) SpanOption {
-	return spanOptionFunc(func(s *Span) {
-		s.Op = name
+		s.Op = op
 	})
 }
 
@@ -1135,26 +1111,6 @@ func SpanFromContext(ctx context.Context) *Span {
 		return span
 	}
 	return nil
-}
-
-// StartTransaction will create a transaction (root span) if there's no existing
-// transaction in the context otherwise, it will return the existing transaction.
-// An existing transaction is returned unchanged; options are ignored.
-func StartTransaction(ctx context.Context, name string, options ...SpanOption) *Span {
-	currentTransaction, exists := ctx.Value(spanContextKey{}).(*Span)
-	if exists {
-		if transaction := currentTransaction.GetTransaction(); transaction != nil {
-			return transaction
-		}
-		return currentTransaction
-	}
-
-	options = append(options, WithTransactionName(name))
-	return StartSpan(
-		ctx,
-		"",
-		options...,
-	)
 }
 
 // HTTPtoSpanStatus converts an HTTP status code to a SpanStatus.

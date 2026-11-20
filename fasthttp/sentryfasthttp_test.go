@@ -564,7 +564,7 @@ func TestRequestIsolation(t *testing.T) {
 
 	ctx, scope := sentry.WithScope(context.Background())
 	scope.SetTag("parent", "injected")
-	parent := sentry.StartTransaction(sentry.ContextWithClient(ctx, sentry.NewNoopClient()), "injected")
+	_, parent := sentry.StartSpan(sentry.ContextWithClient(ctx, sentry.NewNoopClient()), "injected")
 	defer parent.Finish()
 	sentryfasthttp.SetContext(parent.Context(), reused)
 	handler(reused)

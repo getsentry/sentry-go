@@ -94,18 +94,18 @@ func (h *Handler) handle(handler http.Handler) http.HandlerFunc {
 		}
 		options := []sentry.SpanOption{
 			sentry.ContinueFromRequest(r),
-			sentry.WithOpName("http.server"),
+			sentry.WithOp("http.server"),
 			sentry.WithTransactionSource(transactionSource),
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
 		}
 
-		transaction := sentry.StartTransaction(ctx,
-			traceutils.GetHTTPSpanName(r),
-			options...,
-		)
+		var transaction *sentry.Span
 		rw := httputils.NewWrapResponseWriter(w, r.ProtoMajor)
 		if created {
-			ctx = transaction.Context()
+			ctx, transaction = sentry.StartSpan(ctx,
+				traceutils.GetHTTPSpanName(r),
+				options...,
+			)
 			transaction.SetData("http.request.method", r.Method)
 			defer func() {
 				// r.Pattern is populated by ServeMux after routing, so we

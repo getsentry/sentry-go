@@ -35,15 +35,15 @@ func TestEnvelopes(t *testing.T) {
 		request.Header.Set("User-Agent", "golden")
 		scope.SetRequest(request)
 
-		root := sentry.StartTransaction(ctx, "GET /orders/:id",
-			sentry.WithOpName("http.server"),
+		_, root := sentry.StartSpan(ctx, "GET /orders/:id",
+			sentry.WithOp("http.server"),
 			sentry.WithTransactionSource(sentry.SourceRoute),
 			sentry.WithSpanOrigin(sentry.SpanOriginStdLib),
 		)
 		root.SetTag("route", "orders")
 		root.SetData("http.response.status_code", 200)
 		root.Status = sentry.SpanStatusOK
-		child := root.StartChild("db.query", sentry.WithDescription("SELECT 1"))
+		_, child := sentry.StartSpan(root.Context(), "SELECT 1", sentry.WithOp("db.query"))
 		child.SetTag("db", "primary")
 		child.SetData("db.system", "postgresql")
 		child.Status = sentry.SpanStatusOK

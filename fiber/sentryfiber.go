@@ -96,18 +96,18 @@ func (h *handler) handle(ctx *fiber.Ctx) error {
 
 	options := []sentry.SpanOption{
 		sentry.ContinueFromRequest(r),
-		sentry.WithOpName("http.server"),
+		sentry.WithOp("http.server"),
 		sentry.WithTransactionSource(transactionSource),
 		sentry.WithSpanOrigin(sentry.SpanOriginFiber),
 	}
 
-	transaction := sentry.StartTransaction(
-		requestCtx,
-		fmt.Sprintf("%s %s", r.Method, transactionName),
-		options...,
-	)
+	var transaction *sentry.Span
 	if created {
-		requestCtx = transaction.Context()
+		requestCtx, transaction = sentry.StartSpan(
+			requestCtx,
+			fmt.Sprintf("%s %s", r.Method, transactionName),
+			options...,
+		)
 		transaction.SetData("http.request.method", r.Method)
 		defer func() {
 			// Fiber v2 does not expose whether ctx.Route() originates from a middleware. We keep the

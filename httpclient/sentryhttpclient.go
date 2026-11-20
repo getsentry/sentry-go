@@ -91,7 +91,7 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 	}
 	descriptionURL := url.URL{Scheme: request.URL.Scheme, Host: request.URL.Host, Path: request.URL.Path, RawPath: request.URL.RawPath}
 
-	span := sentry.StartSpan(ctx, "http.client", sentry.WithDescription(fmt.Sprintf("%s %s", request.Method, descriptionURL.String())))
+	ctx, span := sentry.StartSpan(ctx, fmt.Sprintf("%s %s", request.Method, descriptionURL.String()), sentry.WithOp("http.client"))
 	defer span.Finish()
 
 	if query := dc.FilterQueryString(request.URL.RawQuery); query != "" {
@@ -104,9 +104,9 @@ func (s *SentryRoundTripper) RoundTrip(request *http.Request) (*http.Response, e
 		span.SetData("http.request.header."+strings.ToLower(key), value)
 	}
 	if propagate {
-		request = addTraceHeaders(span.Context(), request, clientOptions.PropagateTraceparent)
+		request = addTraceHeaders(ctx, request, clientOptions.PropagateTraceparent)
 	} else {
-		request = request.WithContext(span.Context())
+		request = request.WithContext(ctx)
 	}
 
 	var requestBody *httputils.LimitedBuffer

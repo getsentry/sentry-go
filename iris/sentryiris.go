@@ -63,21 +63,21 @@ func (h *handler) handle(ctx iris.Context) {
 
 	options := []sentry.SpanOption{
 		sentry.ContinueFromRequest(r),
-		sentry.WithOpName("http.server"),
+		sentry.WithOp("http.server"),
 		sentry.WithTransactionSource(sentry.SourceRoute),
 		sentry.WithSpanOrigin(sentry.SpanOriginIris),
 	}
 
 	currentRoute := ctx.GetCurrentRoute()
 
-	transaction := sentry.StartTransaction(
-		requestCtx,
-		fmt.Sprintf("%s %s", currentRoute.Method(), currentRoute.Path()),
-		options...,
-	)
+	var transaction *sentry.Span
 
 	if created {
-		requestCtx = transaction.Context()
+		requestCtx, transaction = sentry.StartSpan(
+			requestCtx,
+			fmt.Sprintf("%s %s", currentRoute.Method(), currentRoute.Path()),
+			options...,
+		)
 		transaction.SetData("http.request.method", r.Method)
 		defer func() {
 			transaction.SetData("http.response.status_code", ctx.GetStatusCode())

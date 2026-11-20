@@ -91,7 +91,7 @@ func TestSentryFixture_Events_ExcludesTransactions(t *testing.T) {
 	}))
 	ctx := f.NewContext(t.Context())
 	sentry.CaptureMessage(ctx, "error event")
-	span := sentry.StartTransaction(ctx, "test-tx")
+	_, span := sentry.StartSpan(ctx, "test-tx")
 	span.Finish()
 
 	f.Flush()

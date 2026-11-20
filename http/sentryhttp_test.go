@@ -27,8 +27,8 @@ func TestNestedMiddlewarePreservesActiveTransaction(t *testing.T) {
 	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
 		EnableTracing: true, TracesSampleRate: 1,
 	}))
-	outer := sentry.StartTransaction(fixture.NewContext(context.Background()), "outer")
-	child := sentry.StartSpan(outer.Context(), "child")
+	_, outer := sentry.StartSpan(fixture.NewContext(context.Background()), "outer")
+	_, child := sentry.StartSpan(outer.Context(), "child")
 	key := contextKey{}
 	request := httptest.NewRequest(http.MethodGet, "http://example.test/nested", nil)
 	request = request.WithContext(context.WithValue(child.Context(), key, "preserved"))
