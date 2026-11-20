@@ -1,0 +1,126 @@
+{
+  "header": {
+    "dsn": "https://whatever@sentry.io/1337",
+    "sdk": {
+      "integrations": [
+        "GlobalTags",
+        "IgnoreErrors",
+        "IgnoreTransactions"
+      ],
+      "name": "sentry.go",
+      "packages": [
+        {
+          "name": "sentry-go"
+        }
+      ]
+    },
+    "trace": {
+      "environment": "test",
+      "public_key": "whatever",
+      "release": "app@1.0.0",
+      "sample_rate": "1",
+      "sampled": "true",
+      "transaction": "GET /orders/:id"
+    }
+  },
+  "items": [
+    {
+      "header": {
+        "type": "transaction"
+      },
+      "payload": {
+        "breadcrumbs": [
+          {
+            "category": "auth",
+            "data": {
+              "method": "sso"
+            },
+            "message": "logged in"
+          }
+        ],
+        "contexts": {
+          "custom": {
+            "key": "value",
+            "nested": {
+              "n": 1
+            }
+          },
+          "trace": {
+            "data": {
+              "http.response.status_code": 200
+            },
+            "op": "http.server",
+            "status": "ok"
+          }
+        },
+        "environment": "test",
+        "fingerprint": [
+          "fingerprint"
+        ],
+        "level": "info",
+        "platform": "go",
+        "release": "app@1.0.0",
+        "request": {
+          "headers": {
+            "Host": "example.com",
+            "User-Agent": "golden"
+          },
+          "method": "GET",
+          "query_string": "page=2",
+          "url": "http://example.com/orders/7"
+        },
+        "sdk": {
+          "integrations": [
+            "GlobalTags",
+            "IgnoreErrors",
+            "IgnoreTransactions"
+          ],
+          "name": "sentry.go",
+          "packages": [
+            {
+              "name": "sentry-go"
+            }
+          ]
+        },
+        "server_name": "golden",
+        "spans": [
+          {
+            "data": {
+              "db.system": "postgresql"
+            },
+            "description": "SELECT 1",
+            "op": "db.query",
+            "origin": "auto.http.stdlib",
+            "status": "ok",
+            "tags": {
+              "db": "primary"
+            }
+          }
+        ],
+        "tags": {
+          "route": "orders",
+          "tag": "value"
+        },
+        "transaction": "GET /orders/:id",
+        "transaction_info": {
+          "source": "route"
+        },
+        "type": "transaction",
+        "user": {
+          "data": {
+            "plan": "pro"
+          },
+          "id": "42"
+        }
+      }
+    },
+    {
+      "header": {
+        "content_type": "text/plain",
+        "filename": "log.txt",
+        "type": "attachment"
+      },
+      "payload": "attached"
+    }
+  ]
+}
