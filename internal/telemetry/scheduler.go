@@ -306,22 +306,15 @@ func (s *Scheduler) envelopeConvertibles(category ratelimit.Category, items []It
 
 // sendItem converts the item to an envelope and attaches pending client reports.
 func (s *Scheduler) sendItem(ctx context.Context, item EnvelopeConvertible, wait bool) bool {
-	header := &protocol.EnvelopeHeader{
-		EventID: item.GetEventID(),
-		SentAt:  time.Now(),
-		Dsn:     s.dsn,
-		Trace:   item.GetDynamicSamplingContext(),
-		Sdk:     item.GetSdkInfo(),
-	}
-	if header.Sdk == nil {
-		header.Sdk = s.resolveSdkInfo()
-	}
-
+	header := &protocol.EnvelopeHeader{SentAt: time.Now(), Dsn: s.dsn}
 	envelope, err := item.ToEnvelope(header)
 	if err != nil {
 		debuglog.Printf("error while converting to envelope: %v", err)
 		item.DiscardCounts().Record(s.reports, report.ReasonInternalError)
 		return false
+	}
+	if header.Sdk == nil {
+		header.Sdk = s.resolveSdkInfo()
 	}
 	discard := Discard{Counts: item.DiscardCounts(), Report: s.attachReport(envelope)}
 	return s.sendEnvelope(WithDiscard(ctx, discard), envelope, wait)

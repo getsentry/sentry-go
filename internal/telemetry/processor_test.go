@@ -24,11 +24,8 @@ func (b bwItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope,
 	}
 	return protocol.NewEnvelope(header, item), nil
 }
-func (b bwItem) GetCategory() ratelimit.Category              { return ratelimit.CategoryError }
-func (b bwItem) GetEventID() string                           { return b.id }
-func (b bwItem) GetSdkInfo() *protocol.SdkInfo                { return &protocol.SdkInfo{Name: "t", Version: "1"} }
-func (b bwItem) GetDynamicSamplingContext() map[string]string { return nil }
-func (b bwItem) DiscardCounts() DiscardCounts                 { return oneDiscard(ratelimit.CategoryError) }
+func (b bwItem) GetCategory() ratelimit.Category { return ratelimit.CategoryError }
+func (b bwItem) DiscardCounts() DiscardCounts    { return oneDiscard(ratelimit.CategoryError) }
 
 func TestBuffer_Add_MissingCategory(t *testing.T) {
 	var ctxErr error
