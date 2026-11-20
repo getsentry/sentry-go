@@ -219,6 +219,7 @@ type Transport interface {
 | Event processors receiving transactions | Event processors only receive error events; use `BeforeSendTransaction` |
 | `IgnoreTransactions` matching error events by `Event.Transaction` | `IgnoreTransactions` only drops transactions |
 | Level, fingerprint, modules, breadcrumbs, and scope attachments on transactions | No longer sent |
+| `MergeBaggage` | Removed; it was an SDK internal |
 
 </details>
 

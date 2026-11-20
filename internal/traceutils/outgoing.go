@@ -25,7 +25,7 @@ func OutgoingHeaders(ctx context.Context, existing string, withTraceparent bool)
 		}
 	}
 	if existing != "" {
-		baggage, _ = sentry.MergeBaggage(existing, baggage)
+		baggage, _ = MergeBaggage(existing, baggage)
 	}
 	if withTraceparent {
 		flags := "00"
