@@ -91,6 +91,7 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 			Tags:      map[string]string{"initial": "value"},
 			Contexts:  map[string]Context{"initial": {"key": "value"}},
 			Request:   &Request{Headers: map[string]string{"initial": "value"}},
+			Trace:     TraceContext{Data: map[string]any{"initial": "value"}},
 		}
 
 		client.captureTransaction(context.Background(), tx, nil)
@@ -108,6 +109,7 @@ func TestTelemetryProcessorRaceSpans(_ *testing.T) {
 				tx.Tags[key] = "value"
 				tx.Contexts[key] = Context{}
 				tx.Request.Headers[key] = "value"
+				tx.Trace.Data[key] = j
 			}
 		}(children, i)
 	}

@@ -547,6 +547,8 @@ func (scope *Scope) copyToTransaction(tx *Transaction) scopeData {
 	defer scope.mu.RUnlock()
 	tx.Tags = mergeTags(scope.tags, tx.Tags)
 	tx.Contexts = mergeContexts(scope.contexts, tx.Contexts)
+	// The trace context of a transaction is its root span.
+	delete(tx.Contexts, traceContextKey)
 	tx.User = mergeUser(scope.user, tx.User)
 	return scope.scopeData
 }
