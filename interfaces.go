@@ -18,7 +18,6 @@ import (
 
 const errorType = ""
 const transactionType = "transaction"
-const checkInType = "check_in"
 
 var logEvent = struct {
 	Type        string
@@ -393,11 +392,6 @@ type Event struct {
 	Spans           []*Span          `json:"spans,omitempty"`
 	TransactionInfo *TransactionInfo `json:"transaction_info,omitempty"`
 
-	// The fields below are only relevant for crons/check ins
-
-	CheckIn       *CheckIn       `json:"check_in,omitempty"`
-	MonitorConfig *MonitorConfig `json:"monitor_config,omitempty"`
-
 	// The fields below are only relevant for logs
 	Logs []Log `json:"-"`
 
@@ -458,8 +452,6 @@ func (e *Event) ToEnvelopeItem() (item *protocol.EnvelopeItem, err error) {
 	switch e.Type {
 	case transactionType:
 		item = protocol.NewTransactionItem(eventBody)
-	case checkInType:
-		item = protocol.NewEnvelopeItem(protocol.EnvelopeItemTypeCheckIn, eventBody)
 	case logEvent.Type:
 		item = protocol.NewLogItem(len(e.Logs), eventBody)
 	case traceMetricEvent.Type:
@@ -518,9 +510,6 @@ func (e *Event) GetDynamicSamplingContext() map[string]string {
 
 // MarshalJSON converts the Event struct to JSON.
 func (e *Event) MarshalJSON() ([]byte, error) {
-	if e.Type == checkInType {
-		return e.checkInMarshalJSON()
-	}
 	return e.defaultMarshalJSON()
 }
 
@@ -627,31 +616,6 @@ func (e *Event) preSerializedMarshalJSON() ([]byte, error) {
 	})
 }
 
-func (e *Event) checkInMarshalJSON() ([]byte, error) {
-	checkIn := serializedCheckIn{
-		CheckInID:     string(e.CheckIn.ID),
-		MonitorSlug:   e.CheckIn.MonitorSlug,
-		Status:        e.CheckIn.Status,
-		Duration:      e.CheckIn.Duration.Seconds(),
-		Release:       e.Release,
-		Environment:   e.Environment,
-		MonitorConfig: nil,
-	}
-
-	if e.MonitorConfig != nil {
-		checkIn.MonitorConfig = &MonitorConfig{
-			Schedule:              e.MonitorConfig.Schedule,
-			CheckInMargin:         e.MonitorConfig.CheckInMargin,
-			MaxRuntime:            e.MonitorConfig.MaxRuntime,
-			Timezone:              e.MonitorConfig.Timezone,
-			FailureIssueThreshold: e.MonitorConfig.FailureIssueThreshold,
-			RecoveryThreshold:     e.MonitorConfig.RecoveryThreshold,
-		}
-	}
-
-	return json.Marshal(checkIn)
-}
-
 func (e *Event) toCategory() ratelimit.Category {
 	switch e.Type {
 	case errorType:
@@ -660,8 +624,6 @@ func (e *Event) toCategory() ratelimit.Category {
 		return ratelimit.CategoryTransaction
 	case logEvent.Type:
 		return ratelimit.CategoryLog
-	case checkInType:
-		return ratelimit.CategoryMonitor
 	case traceMetricEvent.Type:
 		return ratelimit.CategoryTraceMetric
 	default:

@@ -75,13 +75,8 @@ func CaptureException(ctx context.Context, exception error, options ...CaptureOp
 
 // CaptureCheckIn captures a (cron) monitor check-in using the scope and client
 // carried by ctx.
-func CaptureCheckIn(
-	ctx context.Context,
-	checkIn *CheckIn,
-	monitorConfig *MonitorConfig,
-	options ...CaptureOption,
-) *EventID {
-	return ClientFromContext(ctx).CaptureCheckIn(ctx, checkIn, monitorConfig, options...)
+func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+	return ClientFromContext(ctx).CaptureCheckIn(ctx, checkIn, monitorConfig)
 }
 
 // WithMonitor runs fn and reports its outcome as check-ins for the cron

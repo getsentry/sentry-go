@@ -2,6 +2,7 @@ package sentry_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -13,15 +14,10 @@ import (
 	"github.com/getsentry/sentry-go/internal/sentrytest"
 )
 
-func checkInEvents(t *testing.T, f *sentrytest.Fixture) []*sentry.Event {
+func checkInEvents(t *testing.T, f *sentrytest.Fixture) []*sentry.MockCheckIn {
 	t.Helper()
 	f.Flush()
-	events := f.Events()
-	for _, event := range events {
-		require.Equal(t, "check_in", event.Type)
-		require.NotNil(t, event.CheckIn)
-	}
-	return events
+	return f.Transport.CheckIns()
 }
 
 func TestWithMonitor(t *testing.T) {
@@ -75,15 +71,19 @@ func TestWithMonitor(t *testing.T) {
 				require.Len(t, events, 2)
 
 				start, end := events[0], events[1]
-				assert.Equal(t, "my-job", start.CheckIn.MonitorSlug)
-				assert.Equal(t, sentry.CheckInStatusInProgress, start.CheckIn.Status)
-				assert.Zero(t, start.CheckIn.Duration)
-				assert.Equal(t, tt.monitorConfig, start.MonitorConfig)
+				assert.Equal(t, "my-job", start.MonitorSlug)
+				assert.Equal(t, sentry.CheckInStatusInProgress, start.Status)
+				assert.Zero(t, start.Duration)
+				var wantConfig json.RawMessage
+				if tt.monitorConfig != nil {
+					wantConfig, _ = json.Marshal(tt.monitorConfig)
+				}
+				assert.Equal(t, wantConfig, start.MonitorConfig)
 
-				assert.Equal(t, start.CheckIn.ID, end.CheckIn.ID)
-				assert.Equal(t, "my-job", end.CheckIn.MonitorSlug)
-				assert.Equal(t, tt.wantStatus, end.CheckIn.Status)
-				assert.Equal(t, 3*time.Second, end.CheckIn.Duration)
+				assert.Equal(t, start.ID, end.ID)
+				assert.Equal(t, "my-job", end.MonitorSlug)
+				assert.Equal(t, tt.wantStatus, end.Status)
+				assert.Equal(t, 3.0, end.Duration)
 				assert.Nil(t, end.MonitorConfig)
 			})
 		})
@@ -102,10 +102,10 @@ func TestWithMonitorPanic(t *testing.T) {
 
 		events := checkInEvents(t, f)
 		require.Len(t, events, 2)
-		assert.Equal(t, sentry.CheckInStatusInProgress, events[0].CheckIn.Status)
-		assert.Equal(t, events[0].CheckIn.ID, events[1].CheckIn.ID)
-		assert.Equal(t, sentry.CheckInStatusError, events[1].CheckIn.Status)
-		assert.Equal(t, time.Second, events[1].CheckIn.Duration)
+		assert.Equal(t, sentry.CheckInStatusInProgress, events[0].Status)
+		assert.Equal(t, events[0].ID, events[1].ID)
+		assert.Equal(t, sentry.CheckInStatusError, events[1].Status)
+		assert.Equal(t, 1.0, events[1].Duration)
 	})
 }
 
@@ -119,9 +119,12 @@ func TestWithMonitorTrace(t *testing.T) {
 
 		events := checkInEvents(t, f)
 		require.Len(t, events, 4)
-		trace := func(i int) string { return events[i].GetDynamicSamplingContext()["trace_id"] }
+		trace := func(i int) any { return events[i].Contexts["trace"]["trace_id"] }
 		assert.Equal(t, trace(0), trace(1))
 		assert.Equal(t, trace(2), trace(3))
 		assert.NotEqual(t, trace(0), trace(2))
+		for _, event := range events {
+			assert.NotEmpty(t, event.Contexts["trace"]["span_id"])
+		}
 	})
 }
