@@ -1,0 +1,55 @@
+name: Mutation
+on:
+  pull_request:
+    paths:
+      - "**.go"
+      - .gremlins.yaml
+      - .github/scripts/mutation*
+      - .github/workflows/mutation.yml
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  mutation:
+    name: Mutation (changed lines)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Test the PR head, so that reported lines match the links to it.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # gremlins --diff needs the base branch history.
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27"
+          cache-dependency-path: "**/go.sum"
+      - name: Mutation test changed code
+        # github.base_ref of a stacked PR is the trunk, not the branch the PR targets.
+        run: |
+          base=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefName --jq .baseRefName)
+          make mutation MUTATION_BASE="origin/$base" MUTATION_RESULTS="$RUNNER_TEMP/mutation"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+      - name: Report surviving mutants
+        run: go run .github/scripts/mutation-report.go -results "$RUNNER_TEMP/mutation" -out "$RUNNER_TEMP/mutation-report.md" -sha "$HEAD_SHA" -run "$RUN_URL"
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # The token of a pull request from a fork cannot comment; the job summary still has the report.
+      - name: Comment on pull request
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        run: .github/scripts/mutation-comment.sh "$RUNNER_TEMP/mutation-report.md"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
