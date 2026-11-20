@@ -43,14 +43,14 @@ func Test_sentryMeter_Methods(t *testing.T) {
 	tests := []struct {
 		name        string
 		metricsFunc func(ctx context.Context, m Meter)
-		wantEvents  []Event
+		wantEvents  []MockMetricBatch
 	}{
 		{
 			name: "count",
 			metricsFunc: func(_ context.Context, m Meter) {
 				m.Count("test.count", 5, WithAttributes(attribute.String("key.string", "value")))
 			},
-			wantEvents: []Event{
+			wantEvents: []MockMetricBatch{
 				{
 					Metrics: []Metric{
 						{
@@ -72,7 +72,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			metricsFunc: func(_ context.Context, m Meter) {
 				m.Distribution("test.distribution", 3.14, WithUnit("ms"), WithAttributes(attribute.Int("key.int", 42)))
 			},
-			wantEvents: []Event{
+			wantEvents: []MockMetricBatch{
 				{
 					Metrics: []Metric{
 						{
@@ -94,7 +94,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			metricsFunc: func(_ context.Context, m Meter) {
 				m.Gauge("test.gauge", 2.71, WithUnit("requests"), WithAttributes(attribute.Float64("key.float", 1.618)))
 			},
-			wantEvents: []Event{
+			wantEvents: []MockMetricBatch{
 				{
 					Metrics: []Metric{
 						{
@@ -116,7 +116,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			metricsFunc: func(_ context.Context, m Meter) {
 				m.Count("test.zero.count", 0, WithAttributes(attribute.String("key.string", "value")))
 			},
-			wantEvents: []Event{
+			wantEvents: []MockMetricBatch{
 				{
 					Metrics: []Metric{
 						{
@@ -138,7 +138,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			metricsFunc: func(_ context.Context, m Meter) {
 				m.Distribution("test.zero.distribution", 0, WithUnit("bytes"), WithAttributes(attribute.String("key.string", "value")))
 			},
-			wantEvents: []Event{
+			wantEvents: []MockMetricBatch{
 				{
 					Metrics: []Metric{
 						{
@@ -160,7 +160,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			metricsFunc: func(_ context.Context, m Meter) {
 				m.Gauge("test.zero.gauge", 0, WithUnit("connections"), WithAttributes(attribute.String("key.string", "value")))
 			},
-			wantEvents: []Event{
+			wantEvents: []MockMetricBatch{
 				{
 					Metrics: []Metric{
 						{
@@ -182,7 +182,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			metricsFunc: func(_ context.Context, m Meter) {
 				m.Count("test.negative.count", -10, WithAttributes(attribute.String("key.string", "value")))
 			},
-			wantEvents: []Event{
+			wantEvents: []MockMetricBatch{
 				{
 					Metrics: []Metric{
 						{
@@ -204,7 +204,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			metricsFunc: func(_ context.Context, m Meter) {
 				m.Distribution("test.negative.distribution", -2.5, WithUnit("ms"), WithAttributes(attribute.String("key.string", "value")))
 			},
-			wantEvents: []Event{
+			wantEvents: []MockMetricBatch{
 				{
 					Metrics: []Metric{
 						{
@@ -226,7 +226,7 @@ func Test_sentryMeter_Methods(t *testing.T) {
 			metricsFunc: func(_ context.Context, m Meter) {
 				m.Gauge("test.negative.gauge", -5, WithUnit("connections"), WithAttributes(attribute.String("key.string", "value")))
 			},
-			wantEvents: []Event{
+			wantEvents: []MockMetricBatch{
 				{
 					Metrics: []Metric{
 						{
@@ -259,17 +259,16 @@ func Test_sentryMeter_Methods(t *testing.T) {
 				cmp.AllowUnexported(attribute.Value{}),
 			}
 
-			gotEvents := mockTransport.Events()
+			gotEvents := mockTransport.MetricBatches()
 			if len(gotEvents) != len(tt.wantEvents) {
 				t.Fatalf("got %d events, want %d", len(gotEvents), len(tt.wantEvents))
 			}
 
 			for i, event := range gotEvents {
-				assertEqual(t, event.Type, traceMetricEvent.Type)
 				if diff := cmp.Diff(tt.wantEvents[i].Metrics, event.Metrics, opts); diff != "" {
 					t.Errorf("event[%d] Metrics mismatch (-want +got):\n%s", i, diff)
 				}
-				mockTransport.events = nil
+				mockTransport.metrics = nil
 			}
 		})
 	}
@@ -283,7 +282,7 @@ func Test_Meter_ExceedBatchSize(t *testing.T) {
 	}
 
 	assert.Eventually(t, func() bool {
-		events := mockTransport.Events()
+		events := mockTransport.MetricBatches()
 		return len(events) == 1 && len(events[0].Metrics) == 100
 	}, testutils.FlushTimeout(), time.Millisecond, "expected one batch with 100 metrics")
 }
@@ -303,7 +302,7 @@ func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	events := mockTransport.Events()
+	events := mockTransport.MetricBatches()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
@@ -334,7 +333,7 @@ func TestSentryMeter_ExplicitScopePrecedesFallbackTrace(t *testing.T) {
 	scope.SetPropagationContext(PropagationContext{TraceID: wantTraceID, SpanID: wantSpanID})
 	meter.WithCtx(emitCtx).Count("explicit.scope", 1)
 	flushFromContext(ctx, testutils.FlushTimeout())
-	events := transport.Events()
+	events := transport.MetricBatches()
 	if len(events) != 1 || len(events[0].Metrics) != 1 {
 		t.Fatalf("captured events = %d, want one metric event", len(events))
 	}
@@ -356,7 +355,7 @@ func Test_sentryMeter_SetAttributes(t *testing.T) {
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	gotEvents := mockTransport.Events()
+	gotEvents := mockTransport.MetricBatches()
 	if len(gotEvents) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(gotEvents))
 	}
@@ -396,7 +395,7 @@ func Test_sentryMeter_AttributePrecedence(t *testing.T) {
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	events := mockTransport.Events()
+	events := mockTransport.MetricBatches()
 	if len(events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(events))
 	}
@@ -447,7 +446,7 @@ func Test_sentryMeter_EmptyName(t *testing.T) {
 
 	flushFromContext(ctx, testutils.FlushTimeout())
 
-	events := mockTransport.Events()
+	events := mockTransport.MetricBatches()
 	if len(events) != 0 {
 		t.Fatalf("expected no events with empty name, got %d", len(events))
 	}

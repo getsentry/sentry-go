@@ -181,7 +181,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 		)
 		sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
 
-		events := mockTransport.Events()
+		events := mockTransport.LogBatches()
 		require.Equal(t, 1, len(events))
 		require.NotEmpty(t, events[0].Logs)
 

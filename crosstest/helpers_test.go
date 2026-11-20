@@ -47,40 +47,22 @@ func otelOpts() []sentrytest.Option {
 	}
 }
 
-func linkedErrorEvent(traceID sentry.TraceID, spanID sentry.SpanID, message string) *sentry.Event {
-	return &sentry.Event{
-		Contexts: map[string]sentry.Context{
-			"trace": sentry.TraceContext{
-				TraceID: traceID,
-				SpanID:  spanID,
-			}.Map(),
-		},
-		Exception: []sentry.Exception{{
-			Value: message,
-		}},
-	}
+func linkedErrorEvent(traceID sentry.TraceID, spanID sentry.SpanID, message string) linkedSignal {
+	return linkedSignal{Kind: "event", TraceID: traceID.String(), SpanID: spanID.String(), Message: message}
 }
 
-func linkedLogEvent(traceID sentry.TraceID, spanID sentry.SpanID, body string) *sentry.Event {
-	return &sentry.Event{
-		Logs: []sentry.Log{{
-			TraceID: traceID,
-			SpanID:  spanID,
-			Level:   sentry.LogLevelInfo,
-			Body:    body,
-		}},
-	}
+func linkedLogEvent(traceID sentry.TraceID, spanID sentry.SpanID, body string) linkedSignal {
+	return linkedSignal{Kind: "log", TraceID: traceID.String(), SpanID: spanID.String(), Level: sentry.LogLevelInfo, Message: body}
 }
 
-func linkedMetricEvent(traceID sentry.TraceID, spanID sentry.SpanID, name string, value int64) *sentry.Event {
-	return &sentry.Event{
-		Metrics: []sentry.Metric{{
-			TraceID: traceID,
-			SpanID:  spanID,
-			Type:    sentry.MetricTypeCounter,
-			Name:    name,
-			Value:   sentry.Int64MetricValue(value),
-		}},
+func linkedMetricEvent(traceID sentry.TraceID, spanID sentry.SpanID, name string, value int64) linkedSignal {
+	return linkedSignal{
+		Kind:       "metric",
+		TraceID:    traceID.String(),
+		SpanID:     spanID.String(),
+		MetricType: sentry.MetricTypeCounter,
+		Name:       name,
+		Value:      fmt.Sprint(value),
 	}
 }
 
@@ -95,23 +77,19 @@ type linkedSignal struct {
 	Value      string
 }
 
-func requireLinked(t *testing.T, got []*sentry.Event, want ...*sentry.Event) {
+func requireLinked(t *testing.T, f *sentrytest.Fixture, want ...linkedSignal) {
 	t.Helper()
 
-	diff := cmp.Diff(normalizeLinkedSignals(want), normalizeLinkedSignals(got))
+	diff := cmp.Diff(sortLinkedSignals(want), sortLinkedSignals(linkedSignals(f)))
 	if diff != "" {
 		t.Fatalf("linked payload mismatch (-want +got):\n%s", diff)
 	}
 }
 
-func normalizeLinkedSignals(events []*sentry.Event) []linkedSignal {
-	signals := make([]linkedSignal, 0, len(events))
+func linkedSignals(f *sentrytest.Fixture) []linkedSignal {
+	var signals []linkedSignal
 
-	for _, event := range events {
-		if event == nil {
-			continue
-		}
-
+	for _, event := range f.Events() {
 		traceID, spanID := linkedTraceContext(event)
 
 		message := event.Message
@@ -126,8 +104,10 @@ func normalizeLinkedSignals(events []*sentry.Event) []linkedSignal {
 				Message: message,
 			})
 		}
+	}
 
-		for _, log := range event.Logs {
+	for _, batch := range f.Transport.LogBatches() {
+		for _, log := range batch.Logs {
 			signals = append(signals, linkedSignal{
 				Kind:    "log",
 				TraceID: log.TraceID.String(),
@@ -136,8 +116,10 @@ func normalizeLinkedSignals(events []*sentry.Event) []linkedSignal {
 				Message: log.Body,
 			})
 		}
+	}
 
-		for _, metric := range event.Metrics {
+	for _, batch := range f.Transport.MetricBatches() {
+		for _, metric := range batch.Metrics {
 			signals = append(signals, linkedSignal{
 				Kind:       "metric",
 				TraceID:    metric.TraceID.String(),
@@ -149,18 +131,17 @@ func normalizeLinkedSignals(events []*sentry.Event) []linkedSignal {
 		}
 	}
 
+	return signals
+}
+
+func sortLinkedSignals(signals []linkedSignal) []linkedSignal {
 	slices.SortStableFunc(signals, func(a, b linkedSignal) int {
 		return strings.Compare(linkedSignalSortKey(a), linkedSignalSortKey(b))
 	})
-
 	return signals
 }
 
 func linkedTraceContext(event *sentry.Event) (string, string) {
-	if event == nil {
-		return "", ""
-	}
-
 	traceCtx, ok := event.Contexts["trace"]
 	if !ok {
 		return "", ""
