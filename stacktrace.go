@@ -47,8 +47,8 @@ func NewStacktrace() *Stacktrace {
 // Use of reflection allows us to not have a hard dependency on any given
 // package, so we don't have to import it.
 
-// ExtractStacktrace creates a new Stacktrace based on the given error.
-func ExtractStacktrace(err error) *Stacktrace {
+// extractStacktrace creates a new Stacktrace based on the given error.
+func extractStacktrace(err error) *Stacktrace {
 	method := extractReflectedStacktraceMethod(err)
 
 	var pcs []uintptr
@@ -189,18 +189,6 @@ type Frame struct {
 	ImageAddr       string `json:"image_addr,omitempty"`
 	Platform        string `json:"platform,omitempty"`
 	StackStart      bool   `json:"stack_start,omitempty"`
-}
-
-// NewFrame assembles a stacktrace frame out of runtime.Frame.
-func NewFrame(f runtime.Frame) Frame {
-	function := f.Function
-	var pkg string
-
-	if function != "" {
-		pkg, function = splitQualifiedFunctionName(function)
-	}
-
-	return newFrame(pkg, function, f.File, f.Line)
 }
 
 // Like filepath.IsAbs() but doesn't care what platform you run this on.

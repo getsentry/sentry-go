@@ -180,6 +180,10 @@ type Transport interface {
 | `Event.MarshalJSON` and `Span.MarshalJSON` | Removed; `json.Marshal` encodes both by their field tags |
 | `ToEnvelope`, `ToEnvelopeItem`, `GetCategory`, `GetEventID`, `GetSdkInfo`, `GetDynamicSamplingContext`, `MakeSerializationSafe`, and `DiscardCounts` on `Event` | Removed; they were SDK internals |
 | Reading `Event.Modules` in `BeforeSend` or an event processor | Modules are added after the callbacks run; set `Event.Modules` to send your own |
+| `AddGlobalEventProcessor(processor)` | `GlobalScope().AddEventProcessor(processor)` |
+| `DebugLogger` | `ClientOptions.Debug` and `ClientOptions.DebugWriter`. The variable exposed the SDK's internal logger, which the two options already configure |
+| `EventHint.EventID` | Removed. The SDK never read it, so setting it had no effect; set `Event.EventID` to choose an ID |
+| `NewFrame`, `ExtractStacktrace`, `Mechanism.SetUnhandled`, `Scope.ApplyToEvent`, `SDKMetaData` | Removed. They were steps of the SDK's own capture path that nothing outside the package called. Use `NewStacktrace()`, `Event.SetException`, and the `Mechanism.Handled` field |
 
 </details>
 
@@ -219,6 +223,8 @@ type Transport interface {
 | Event processors receiving transactions | Event processors only receive error events; use `BeforeSendTransaction` |
 | `IgnoreTransactions` matching error events by `Event.Transaction` | `IgnoreTransactions` only drops transactions |
 | Level, fingerprint, modules, breadcrumbs, and scope attachments on transactions | No longer sent |
+| `TracesSampler.Sample(ctx)` | Call the sampler. |
+| `SamplingContext.Parent` | Use `ParentSampled` and `ParentSampleRate` for the upstream decision |
 | `MergeBaggage` | Removed; it was an SDK internal |
 
 </details>
@@ -249,6 +255,8 @@ type Transport interface {
 | `Transport.Flush(timeout)` | Removed; use `FlushWithContext(ctx)` |
 | `HTTPTransport.BufferSize` counts events | `HTTPTransport.BufferSize` counts envelopes |
 | `ClientOptions.DisableTelemetryBuffer` | Removed; telemetry is always buffered, including with custom transports |
+| `NoopTransport`, `NewNoopTransport`, and the `Client.Transport` field | Removed. The transport of a client cannot be replaced after creation, so the field was read-only in practice; use `NewNoopClient()` to disable sending |
+| `sentry.Dsn`, `sentry.NewDsn`, `sentry.DsnParseError` | `protocol.Dsn`, `protocol.NewDsn`, `protocol.DsnParseError`. Custom transports already import `protocol` for `Envelope`, so the root copies were a second name for the same type. `dsn.RequestHeaders()` becomes `dsn.RequestHeaders(sentry.SDKVersion)` |
 
 </details>
 

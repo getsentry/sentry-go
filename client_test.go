@@ -1548,7 +1548,7 @@ func TestClientRoutesEventsByDelivery(t *testing.T) {
 		buffered bool
 	}{
 		{"wrapped async is buffered", NewHTTPTransport(), true},
-		{"custom transport is buffered", &NoopTransport{}, true},
+		{"custom transport is buffered", &noopTransport{}, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -1709,7 +1709,7 @@ func TestClient_SetupTelemetryBuffer_NoDSN(t *testing.T) {
 	if client.telemetryProcessor == nil {
 		t.Fatal("expected telemetryProcessor to not be nil when DSN is missing")
 	}
-	require.IsType(t, &NoopTransport{}, client.Transport)
+	require.IsType(t, &noopTransport{}, client.transport)
 	t.Cleanup(client.Close)
 }
 

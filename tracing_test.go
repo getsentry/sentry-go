@@ -890,7 +890,6 @@ func TestTracesSamplerReceivesRemoteParent(t *testing.T) {
 			txn := StartTransaction(ctx, "test-txn", ContinueFromHeaders(tt.traceHeader, tt.baggageHeader))
 			txn.Finish()
 
-			assert.Nil(t, gotCtx.Parent, "SamplingContext.Parent should be nil for remote parent")
 			assert.Equal(t, tt.wantParentSampled, gotCtx.ParentSampled)
 			assert.Equal(t, tt.wantParentSampleRate, gotCtx.ParentSampleRate)
 		})

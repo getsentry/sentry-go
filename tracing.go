@@ -563,9 +563,7 @@ func (s *Span) sample(client *Client) Sampled {
 	// #3 use TracesSampler from ClientOptions.
 	sampler := clientOptions.TracesSampler
 	parentSampled := SampledUndefined
-	if s.parent != nil {
-		parentSampled = s.parent.Sampled
-	} else if s.ParentSpanID != zeroSpanID {
+	if s.ParentSpanID != zeroSpanID {
 		parentSampled = s.Sampled
 	}
 	var parentSampleRate *float64
@@ -576,13 +574,12 @@ func (s *Span) sample(client *Client) Sampled {
 	}
 	samplingContext := SamplingContext{
 		Span:             s,
-		Parent:           s.parent,
 		ParentSampled:    parentSampled,
 		ParentSampleRate: parentSampleRate,
 	}
 
 	if sampler != nil {
-		tracesSamplerSampleRate := sampler.Sample(samplingContext)
+		tracesSamplerSampleRate := sampler(samplingContext)
 		s.sampleRate = tracesSamplerSampleRate
 		s.applyLocalSampleRate()
 		if tracesSamplerSampleRate < 0.0 || tracesSamplerSampleRate > 1.0 {
