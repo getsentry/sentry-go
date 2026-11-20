@@ -15,13 +15,14 @@ import (
 
 // MockTransport implements [Transport] for use in tests.
 type MockTransport struct {
-	mu        sync.Mutex
-	envelopes []*protocol.Envelope
-	events    []*Event
-	lastEvent *Event
-	checkIns  []*MockCheckIn
-	logs      []MockLogBatch
-	metrics   []MockMetricBatch
+	mu           sync.Mutex
+	envelopes    []*protocol.Envelope
+	events       []*Event
+	lastEvent    *Event
+	transactions []*Transaction
+	checkIns     []*MockCheckIn
+	logs         []MockLogBatch
+	metrics      []MockMetricBatch
 }
 
 // MockCheckIn is a check-in captured by [MockTransport], as sent on the wire.
@@ -59,6 +60,9 @@ func (t *MockTransport) SendEnvelope(_ context.Context, envelope *protocol.Envel
 	t.envelopes = append(t.envelopes, envelope)
 	for _, item := range envelope.Items {
 		switch item.Header.Type {
+		case protocol.EnvelopeItemTypeTransaction:
+			t.transactions = append(t.transactions, decodeMockTransaction(item))
+			continue
 		case protocol.EnvelopeItemTypeCheckIn:
 			t.checkIns = append(t.checkIns, mockDecode[*MockCheckIn](item.Payload))
 			continue
@@ -103,12 +107,20 @@ func (t *MockTransport) Envelopes() []*protocol.Envelope {
 	return slices.Clone(t.envelopes)
 }
 
-// Events returns captured events and transactions decoded from the wire format.
+// Events returns captured events decoded from the wire format.
 // Values in context and extra maps have JSON types, not their original Go types.
 func (t *MockTransport) Events() []*Event {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return slices.Clone(t.events)
+}
+
+// Transactions returns captured transactions decoded from the wire format.
+// Values in context and data maps have JSON types, not their original Go types.
+func (t *MockTransport) Transactions() []*Transaction {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return slices.Clone(t.transactions)
 }
 
 // LogBatches returns the logs of each captured log envelope item.
@@ -144,37 +156,38 @@ func mockDecode[T any](raw []byte) T {
 }
 
 func decodeMockEvent(item *protocol.EnvelopeItem) *Event {
-	event := &Event{}
-	switch item.Header.Type {
-	case protocol.EnvelopeItemTypeEvent, protocol.EnvelopeItemTypeTransaction:
-		payload := mockDecode[struct {
-			Event
-			Spans []struct {
-				Span
-				TraceID      string `json:"trace_id"`
-				SpanID       string `json:"span_id"`
-				ParentSpanID string `json:"parent_span_id"`
-				Status       string `json:"status"`
-			} `json:"spans"`
-		}](item.Payload)
-		event = &payload.Event
-		for i := range payload.Spans {
-			span := &payload.Spans[i]
-			decodeMockID(span.TraceID, span.Span.TraceID[:])
-			decodeMockID(span.SpanID, span.Span.SpanID[:])
-			decodeMockID(span.ParentSpanID, span.Span.ParentSpanID[:])
-			for status, name := range spanStatuses {
-				if name == span.Status {
-					span.Span.Status = SpanStatus(status)
-					break
-				}
-			}
-			event.Spans = append(event.Spans, &span.Span)
-		}
-	default:
+	if item.Header.Type != protocol.EnvelopeItemTypeEvent {
 		return nil
 	}
-	return event
+	return mockDecode[*Event](item.Payload)
+}
+
+func decodeMockTransaction(item *protocol.EnvelopeItem) *Transaction {
+	payload := mockDecode[struct {
+		Transaction
+		Spans []struct {
+			Span
+			TraceID      string `json:"trace_id"`
+			SpanID       string `json:"span_id"`
+			ParentSpanID string `json:"parent_span_id"`
+			Status       string `json:"status"`
+		} `json:"spans"`
+	}](item.Payload)
+	tx := &payload.Transaction
+	for i := range payload.Spans {
+		span := &payload.Spans[i]
+		decodeMockID(span.TraceID, span.Span.TraceID[:])
+		decodeMockID(span.SpanID, span.Span.SpanID[:])
+		decodeMockID(span.ParentSpanID, span.Span.ParentSpanID[:])
+		for status, name := range spanStatuses {
+			if name == span.Status {
+				span.Span.Status = SpanStatus(status)
+				break
+			}
+		}
+		tx.Spans = append(tx.Spans, &span.Span)
+	}
+	return tx
 }
 
 func decodeMockLogs(item *protocol.EnvelopeItem) []Log {

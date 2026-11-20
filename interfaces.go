@@ -18,7 +18,6 @@ import (
 	"github.com/getsentry/sentry-go/protocol"
 )
 
-const errorType = ""
 const transactionType = "transaction"
 
 // Level marks the severity of the event.
@@ -371,13 +370,6 @@ type Event struct {
 	DebugMeta   *DebugMeta         `json:"debug_meta,omitempty"`
 	Attachments []*Attachment      `json:"-"`
 
-	// The fields below are only relevant for transactions.
-
-	Type            string           `json:"type,omitempty"`
-	StartTime       time.Time        `json:"start_timestamp,omitzero"`
-	Spans           []*Span          `json:"spans,omitempty"`
-	TransactionInfo *TransactionInfo `json:"transaction_info,omitempty"`
-
 	// The fields below are not part of the final JSON payload.
 
 	sdkMetaData SDKMetaData
@@ -404,15 +396,11 @@ func (e *Event) SetException(exception error, maxErrorDepth int) {
 // eventItem adds the telemetry item methods to an Event without exporting them on Event.
 type eventItem struct{ *Event }
 
-func (e eventItem) GetCategory() ratelimit.Category { return e.toCategory() }
+func (e eventItem) GetCategory() ratelimit.Category { return ratelimit.CategoryError }
 
 // ToEnvelope encodes the event and its attachments.
 func (e eventItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
-	itemType := protocol.EnvelopeItemTypeEvent
-	if e.Type == transactionType {
-		itemType = protocol.EnvelopeItemTypeTransaction
-	}
-	item, err := encodeItem(itemType, e.Event)
+	item, err := encodeItem(protocol.EnvelopeItemTypeEvent, e.Event)
 	if err != nil {
 		return nil, err
 	}
@@ -458,17 +446,6 @@ func encodeItem(itemType protocol.EnvelopeItemType, payload any) (item *protocol
 // MarshalJSON method (and avoid copying).
 // type EventContext interface{ EventContext() }
 
-func (e *Event) toCategory() ratelimit.Category {
-	switch e.Type {
-	case errorType:
-		return ratelimit.CategoryError
-	case transactionType:
-		return ratelimit.CategoryTransaction
-	default:
-		return ratelimit.CategoryUnknown
-	}
-}
-
 // NewEvent creates a new Event.
 func NewEvent() *Event {
 	return &Event{
@@ -476,6 +453,53 @@ func NewEvent() *Event {
 		Tags:     make(map[string]string),
 		Modules:  make(map[string]string),
 	}
+}
+
+// Transaction is a finished root span together with its finished child spans.
+type Transaction struct {
+	EventID         EventID            `json:"event_id,omitempty"`
+	Name            string             `json:"transaction,omitempty"`
+	TransactionInfo *TransactionInfo   `json:"transaction_info,omitempty"`
+	StartTime       time.Time          `json:"start_timestamp,omitzero"`
+	EndTime         time.Time          `json:"timestamp,omitzero"`
+	Spans           []*Span            `json:"spans,omitempty"`
+	Tags            map[string]string  `json:"tags,omitempty"`
+	Contexts        map[string]Context `json:"contexts,omitempty"`
+	User            User               `json:"user,omitzero"`
+	Request         *Request           `json:"request,omitempty"`
+	Release         string             `json:"release,omitempty"`
+	Dist            string             `json:"dist,omitempty"`
+	Environment     string             `json:"environment,omitempty"`
+	ServerName      string             `json:"server_name,omitempty"`
+	Platform        string             `json:"platform,omitempty"`
+	Sdk             SdkInfo            `json:"sdk"`
+}
+
+// transactionItem is a transaction as handed to the telemetry processor.
+type transactionItem struct {
+	Transaction
+	Type string `json:"type"`
+	// dsc is the envelope's trace header.
+	dsc map[string]string
+}
+
+// newTransactionItem returns an item that owns a copy of tx.
+func newTransactionItem(tx *Transaction, dsc map[string]string) *transactionItem {
+	return &transactionItem{Transaction: tx.owned(), Type: transactionType, dsc: maps.Clone(dsc)}
+}
+
+func (t *transactionItem) GetCategory() ratelimit.Category              { return ratelimit.CategoryTransaction }
+func (t *transactionItem) GetEventID() string                           { return string(t.EventID) }
+func (t *transactionItem) GetSdkInfo() *protocol.SdkInfo                { return &t.Sdk }
+func (t *transactionItem) GetDynamicSamplingContext() map[string]string { return t.dsc }
+
+// ToEnvelope encodes the transaction.
+func (t *transactionItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+	item, err := encodeItem(protocol.EnvelopeItemTypeTransaction, t)
+	if err != nil {
+		return nil, err
+	}
+	return protocol.NewEnvelope(header, item), nil
 }
 
 // Thread specifies threads that were running at the time of an event.
@@ -625,18 +649,24 @@ func (e *Event) owned() Event {
 	}
 	owned.Attachments = copyEach(e.Attachments)
 	owned.sdkMetaData.dsc.Entries = maps.Clone(e.sdkMetaData.dsc.Entries)
-	if e.Type != transactionType {
-		// Only transactions send their type, start time and spans.
-		owned.Type, owned.StartTime, owned.Spans, owned.TransactionInfo = "", time.Time{}, nil, nil
-		return owned
-	}
-	owned.Spans = make([]*Span, 0, len(e.Spans))
-	for _, span := range e.Spans {
+	return owned
+}
+
+// owned returns a copy of t that shares no memory its caller can still write.
+func (t *Transaction) owned() Transaction {
+	owned := *t
+	owned.TransactionInfo = copyOf(t.TransactionInfo)
+	owned.Spans = make([]*Span, 0, len(t.Spans))
+	for _, span := range t.Spans {
 		if span != nil {
 			owned.Spans = append(owned.Spans, span.detached())
 		}
 	}
-	owned.TransactionInfo = copyOf(e.TransactionInfo)
+	owned.Tags = maps.Clone(t.Tags)
+	owned.Contexts = ownContexts(t.Contexts)
+	owned.User.Data = maps.Clone(t.User.Data)
+	owned.Request = ownRequest(t.Request)
+	owned.Sdk = ownSdk(t.Sdk)
 	return owned
 }
 

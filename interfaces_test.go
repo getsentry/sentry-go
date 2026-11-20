@@ -9,9 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/google/go-cmp/cmp"
 )
@@ -297,33 +295,6 @@ func TestNewRequestUsesContextClient(t *testing.T) {
 
 	if got := NewRequest(r).Env; got != nil {
 		t.Fatalf("expected request context client's data collection settings, got %v", got)
-	}
-}
-
-func TestEventMarshalJSON(t *testing.T) {
-	event := NewEvent()
-	event.Spans = []*Span{{
-		TraceID:      TraceIDFromHex("d6c4f03650bd47699ec65c84352b6208"),
-		SpanID:       SpanIDFromHex("1cc4b26ab9094ef0"),
-		ParentSpanID: SpanIDFromHex("442bd97bbe564317"),
-		StartTime:    time.Unix(8, 0).UTC(),
-		EndTime:      time.Unix(10, 0).UTC(),
-		Status:       SpanStatusOK,
-	}}
-	event.StartTime = time.Unix(7, 0).UTC()
-	event.Timestamp = time.Unix(14, 0).UTC()
-
-	owned := event.owned()
-	got, err := json.Marshal(&owned)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Non-transaction event should not have fields Spans and StartTime
-	want := `{"sdk":{},"timestamp":"1970-01-01T00:00:14Z"}`
-
-	if diff := cmp.Diff(want, string(got)); diff != "" {
-		t.Errorf("Event mismatch (-want +got):\n%s", diff)
 	}
 }
 
@@ -690,26 +661,5 @@ func TestMechanismMarshalJSON_withHandled(t *testing.T) {
 
 	if diff := cmp.Diff(want, string(got)); diff != "" {
 		t.Errorf("Event mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestEvent_ToCategory(t *testing.T) {
-	cases := []struct {
-		name      string
-		eventType string
-		want      ratelimit.Category
-	}{
-		{"error", "", ratelimit.CategoryError},
-		{"transaction", transactionType, ratelimit.CategoryTransaction},
-		{"unknown", "foobar", ratelimit.CategoryUnknown},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			e := &Event{Type: tc.eventType}
-			got := e.toCategory()
-			if got != tc.want {
-				t.Errorf("Type %q: got %v, want %v", tc.eventType, got, tc.want)
-			}
-		})
 	}
 }

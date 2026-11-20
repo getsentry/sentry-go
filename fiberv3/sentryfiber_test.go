@@ -24,7 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
-func wantFiberTransaction(routePath, requestURL, method, body string, status int) *sentry.Event {
+func wantFiberTransaction(routePath, requestURL, method, body string, status int) *sentry.Transaction {
 	headers := map[string]string{
 		"Host":       "example.com",
 		"User-Agent": "fiber",
@@ -36,10 +36,8 @@ func wantFiberTransaction(routePath, requestURL, method, body string, status int
 		headers["Content-Type"] = "application/json"
 	}
 
-	return &sentry.Event{
-		Level:       sentry.LevelInfo,
-		Type:        "transaction",
-		Transaction: fmt.Sprintf("%s %s", method, routePath),
+	return &sentry.Transaction{
+		Name: fmt.Sprintf("%s %s", method, routePath),
 		Request: &sentry.Request{
 			URL:     "http://example.com" + requestURL,
 			Method:  method,
@@ -116,7 +114,7 @@ func TestIntegration(t *testing.T) {
 		ContentType     string
 		WantStatus      int
 		WantEvent       *sentry.Event
-		WantTransaction *sentry.Event
+		WantTransaction *sentry.Transaction
 	}{
 		{
 			Path:       "/panic",
@@ -134,10 +132,8 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "GET /panic",
+			WantTransaction: &sentry.Transaction{
+				Name: "GET /panic",
 				Request: &sentry.Request{
 					URL:    "http://example.com/panic",
 					Method: http.MethodGet,
@@ -199,10 +195,8 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "GET /get",
+			WantTransaction: &sentry.Transaction{
+				Name: "GET /get",
 				Request: &sentry.Request{
 					URL:    "http://example.com/get",
 					Method: http.MethodGet,
@@ -240,10 +234,8 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "GET /get/:id",
+			WantTransaction: &sentry.Transaction{
+				Name: "GET /get/:id",
 				Request: &sentry.Request{
 					URL:    "http://example.com/get/123",
 					Method: http.MethodGet,
@@ -284,10 +276,8 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "POST /post/large",
+			WantTransaction: &sentry.Transaction{
+				Name: "POST /post/large",
 				Request: &sentry.Request{
 					URL:    "http://example.com/post/large",
 					Method: http.MethodPost,
@@ -358,10 +348,8 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "POST /post/error-handler",
+			WantTransaction: &sentry.Transaction{
+				Name: "POST /post/error-handler",
 				Request: &sentry.Request{
 					URL:    "http://example.com/post/error-handler",
 					Method: http.MethodPost,
@@ -387,7 +375,7 @@ func TestIntegration(t *testing.T) {
 	}
 
 	eventsCh := make(chan *sentry.Event, len(tests))
-	transactionsCh := make(chan *sentry.Event, len(tests))
+	transactionsCh := make(chan *sentry.Transaction, len(tests))
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
@@ -396,7 +384,7 @@ func TestIntegration(t *testing.T) {
 			eventsCh <- event
 			return event
 		},
-		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(tx *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			transactionsCh <- tx
 			return tx
 		},
@@ -406,7 +394,7 @@ func TestIntegration(t *testing.T) {
 	}
 
 	var wantEvents []*sentry.Event
-	var wantTransactions []*sentry.Event
+	var wantTransactions []*sentry.Transaction
 	var wantCodes []sentry.SpanStatus
 	for _, tt := range tests {
 		wantEvents = append(wantEvents, tt.WantEvent)
@@ -461,7 +449,7 @@ func TestIntegration(t *testing.T) {
 	}
 
 	close(transactionsCh)
-	var gotTransactions []*sentry.Event
+	var gotTransactions []*sentry.Transaction
 	var gotCodes []sentry.SpanStatus
 
 	for e := range transactionsCh {
@@ -471,10 +459,10 @@ func TestIntegration(t *testing.T) {
 
 	optstrans := cmp.Options{
 		cmpopts.IgnoreFields(
-			sentry.Event{},
-			"EventID", "Platform", "Modules",
-			"Release", "Sdk", "ServerName", "Timestamp",
-			"sdkMetaData", "StartTime", "Spans",
+			sentry.Transaction{},
+			"EventID", "Platform",
+			"Release", "Sdk", "ServerName", "EndTime",
+			"StartTime", "Spans",
 		),
 		cmpopts.IgnoreFields(
 			sentry.Request{},
@@ -500,11 +488,11 @@ func TestIntegration(t *testing.T) {
 }
 
 func TestTransactionNameWithCacheHit(t *testing.T) {
-	transactions := make(chan *sentry.Event, 2)
+	transactions := make(chan *sentry.Transaction, 2)
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
-		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(tx *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			transactions <- tx
 			return tx
 		},
@@ -535,8 +523,8 @@ func TestTransactionNameWithCacheHit(t *testing.T) {
 
 	for i := range 2 {
 		tx := <-transactions
-		if tx.Transaction != "GET /items" {
-			t.Errorf("Transaction %d name = %q, want %q", i, tx.Transaction, "GET /items")
+		if tx.Name != "GET /items" {
+			t.Errorf("Transaction %d name = %q, want %q", i, tx.Name, "GET /items")
 		}
 	}
 }

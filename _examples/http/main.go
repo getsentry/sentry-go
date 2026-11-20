@@ -53,16 +53,16 @@ func run() error {
 			log.Printf("BeforeSend event [%s]", event.EventID)
 			return event
 		},
-		BeforeSendTransaction: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			// Here you can inspect/modify transaction events before they are sent.
-			// Returning nil drops the event.
-			if strings.Contains(event.Message, "test-transaction") {
+		BeforeSendTransaction: func(transaction *sentry.Transaction, hint *sentry.EventHint) *sentry.Transaction {
+			// Here you can inspect/modify transactions before they are sent.
+			// Returning nil drops the transaction.
+			if strings.Contains(transaction.Name, "test-transaction") {
 				// Drop the transaction
 				return nil
 			}
-			event.Message += " [example]"
-			log.Printf("BeforeSendTransaction event [%s]", event.EventID)
-			return event
+			transaction.Name += " [example]"
+			log.Printf("BeforeSendTransaction transaction [%s]", transaction.EventID)
+			return transaction
 		},
 		// Enable tracing
 		EnableTracing: true,
