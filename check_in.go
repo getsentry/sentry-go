@@ -131,7 +131,6 @@ func (c *checkInItem) GetCategory() ratelimit.Category              { return rat
 func (c *checkInItem) GetEventID() string                           { return "" }
 func (c *checkInItem) GetSdkInfo() *protocol.SdkInfo                { return nil }
 func (c *checkInItem) GetDynamicSamplingContext() map[string]string { return nil }
-func (c *checkInItem) MakeSerializationSafe()                       {}
 
 func (c *checkInItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
 	payload, err := json.Marshal(c)

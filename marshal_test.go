@@ -24,10 +24,8 @@ func TestMarshalJSON(t *testing.T) {
 		out string
 	}{
 		// TODO: eliminate empty struct fields from serialization of empty event.
-		// Only *Event implements json.Marshaler.
-		// {Event{}, `{"sdk":{},"user":{}}`},
-		{&Event{}, `{"sdk":{},"user":{}}`},
-		{&Event{Type: transactionType}, `{"sdk":{},"user":{},"type":"transaction"}`},
+		{&Event{}, `{"sdk":{}}`},
+		{&Event{Type: transactionType}, `{"sdk":{},"type":"transaction"}`},
 		// Only *Breadcrumb implements json.Marshaler.
 		// {Breadcrumb{}, `{}`},
 		{&Breadcrumb{}, `{}`},

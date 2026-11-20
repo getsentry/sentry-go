@@ -28,7 +28,6 @@ func (b bwItem) GetCategory() ratelimit.Category              { return ratelimit
 func (b bwItem) GetEventID() string                           { return b.id }
 func (b bwItem) GetSdkInfo() *protocol.SdkInfo                { return &protocol.SdkInfo{Name: "t", Version: "1"} }
 func (b bwItem) GetDynamicSamplingContext() map[string]string { return nil }
-func (b bwItem) MakeSerializationSafe()                       {}
 func (b bwItem) DiscardCounts() DiscardCounts                 { return oneDiscard(ratelimit.CategoryError) }
 
 func TestBuffer_Add_MissingCategory(t *testing.T) {

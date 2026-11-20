@@ -552,14 +552,14 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 			discard  telemetry.Discard
 			want     map[outcomeKey]uint64 // nil when the envelope is sent
 		}{
-			{"event", testEnvelope(protocol.EnvelopeItemTypeEvent), telemetry.Discard{Counts: (&Event{}).DiscardCounts()},
+			{"event", testEnvelope(protocol.EnvelopeItemTypeEvent), telemetry.Discard{Counts: (&Event{}).discardCounts()},
 				map[outcomeKey]uint64{backoff(ratelimit.CategoryError): 1}},
-			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), telemetry.Discard{Counts: (&Event{Type: transactionType}).DiscardCounts()},
+			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), telemetry.Discard{Counts: (&Event{Type: transactionType}).discardCounts()},
 				map[outcomeKey]uint64{backoff(ratelimit.CategoryTransaction): 1, backoff(ratelimit.CategorySpan): 1}},
 			{"trace metric", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, protocol.NewTraceMetricItem(3, []byte(`{"items":[]}`))), telemetry.Discard{Counts: metrics.DiscardCounts()},
 				map[outcomeKey]uint64{backoff(ratelimit.CategoryTraceMetric): 3, backoff(ratelimit.CategoryTraceMetricByte): 3}},
 			{"client report before event", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, pending, testEnvelope(protocol.EnvelopeItemTypeEvent).Items[0]),
-				telemetry.Discard{Counts: (&Event{}).DiscardCounts(), Report: clientReport},
+				telemetry.Discard{Counts: (&Event{}).discardCounts(), Report: clientReport},
 				map[outcomeKey]uint64{backoff(ratelimit.CategoryError): 1, {Reason: report.ReasonBeforeSend, Category: ratelimit.CategoryError}: 2}},
 			{"check-in", testEnvelope(protocol.EnvelopeItemTypeCheckIn), telemetry.Discard{}, nil},
 		}
@@ -598,7 +598,7 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 			})
 
 			// The transport records losses of accepted envelopes itself.
-			ctx := telemetry.WithDiscard(context.Background(), telemetry.Discard{Counts: (&Event{}).DiscardCounts()})
+			ctx := telemetry.WithDiscard(context.Background(), telemetry.Discard{Counts: (&Event{}).discardCounts()})
 			if err := transport.SendEnvelope(ctx, testEnvelope(protocol.EnvelopeItemTypeEvent)); err != nil {
 				t.Errorf("%s: should not return error, got %v", tt.name, err)
 			}
