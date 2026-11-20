@@ -513,40 +513,47 @@ func (client *Client) GetDataCollection() DataCollection {
 }
 
 // CaptureMessage captures an arbitrary message using the scope carried by ctx.
-func (client *Client) CaptureMessage(ctx context.Context, message string, options ...CaptureOption) *EventID {
+func (client *Client) CaptureMessage(ctx context.Context, message string, options ...CaptureOption) EventID {
 	if !client.IsEnabled() {
-		return nil
+		return ""
 	}
 	if message == "" {
 		debuglog.Println("CaptureMessage called with empty message, nothing captured.")
-		return nil
+		return ""
 	}
 	opts := resolveCaptureOptions(ctx, options...)
 	opts.defaultLevel = LevelInfo
 	return client.capture(ctx, client.eventFromMessage(message), opts)
 }
 
-// CaptureException captures an error using the scope carried by ctx.
-func (client *Client) CaptureException(ctx context.Context, exception error, options ...CaptureOption) *EventID {
+// CaptureError captures an error using the scope carried by ctx.
+func (client *Client) CaptureError(ctx context.Context, err error, options ...CaptureOption) EventID {
 	if !client.IsEnabled() {
-		return nil
+		return ""
 	}
-	if exception == nil {
-		debuglog.Println("CaptureException called with nil error, nothing captured.")
-		return nil
+	if err == nil {
+		debuglog.Println("CaptureError called with nil error, nothing captured.")
+		return ""
 	}
 	opts := resolveCaptureOptions(ctx, options...)
-	if opts.hint.OriginalException == nil {
-		opts.hint.OriginalException = exception
+	if opts.hint.OriginalError == nil {
+		opts.hint.OriginalError = err
 	}
 	opts.defaultLevel = LevelError
-	return client.capture(ctx, client.eventFromException(exception), opts)
+	return client.capture(ctx, client.eventFromException(err), opts)
+}
+
+// CaptureException captures an error using the scope carried by ctx.
+//
+// Deprecated: Use [Client.CaptureError].
+func (client *Client) CaptureException(ctx context.Context, exception error, options ...CaptureOption) EventID {
+	return client.CaptureError(ctx, exception, options...)
 }
 
 // CaptureCheckIn captures a check-in using the scope carried by ctx.
-func (client *Client) CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+func (client *Client) CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) EventID {
 	if !client.IsEnabled() || checkIn == nil {
-		return nil
+		return ""
 	}
 	id := checkIn.ID
 	if id == "" {
@@ -573,19 +580,19 @@ func (client *Client) CaptureCheckIn(ctx context.Context, checkIn *CheckIn, moni
 
 	if !client.telemetryProcessor.Add(ctx, item) {
 		debuglog.Println("Check-in dropped: telemetry buffer full or unavailable")
-		return nil
+		return ""
 	}
-	return &id
+	return id
 }
 
 // CaptureEvent captures an event using the scope carried by ctx.
-func (client *Client) CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *EventID {
+func (client *Client) CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) EventID {
 	if !client.IsEnabled() {
-		return nil
+		return ""
 	}
 	if event == nil {
 		debuglog.Println("CaptureEvent called with nil event, nothing captured.")
-		return nil
+		return ""
 	}
 	return client.capture(ctx, event, resolveCaptureOptions(ctx, options...))
 }
@@ -646,14 +653,14 @@ func (client *Client) captureMetric(ctx context.Context, metric *Metric) bool {
 	return true
 }
 
-func (client *Client) capturePanic(ctx context.Context, recovered any, options ...CaptureOption) *EventID {
+func (client *Client) capturePanic(ctx context.Context, recovered any, options ...CaptureOption) EventID {
 	if recovered == nil || !client.IsEnabled() {
-		return nil
+		return ""
 	}
 
 	opts := resolveCaptureOptions(ctx, options...)
-	if opts.hint.RecoveredException == nil {
-		opts.hint.RecoveredException = recovered
+	if opts.hint.RecoveredPanic == nil {
+		opts.hint.RecoveredPanic = recovered
 	}
 
 	var event *Event
@@ -669,44 +676,23 @@ func (client *Client) capturePanic(ctx context.Context, recovered any, options .
 	return client.capture(ctx, event, opts)
 }
 
-// Flush waits until the underlying Transport sends any buffered events to the
-// Sentry server, blocking for at most the given timeout. It returns false if
-// the client is disabled or the timeout was reached. In the latter case, some
-// events may not have been sent.
-//
-// Flush should be called before terminating the program to avoid
-// unintentionally dropping events.
-//
-// Do not call Flush indiscriminately after every call to CaptureEvent,
-// CaptureException or CaptureMessage. Instead, to have the SDK send events over
-// the network synchronously, configure it to use the HTTPSyncTransport in the
-// call to Init.
-func (client *Client) Flush(timeout time.Duration) bool {
-	if !client.IsEnabled() {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return client.FlushWithContext(ctx)
-}
-
-// FlushWithContext waits until the underlying Transport sends any buffered events
+// Flush waits until the underlying Transport sends any buffered events
 // to the Sentry server, blocking for at most the duration specified by the
 // context. It returns false if the client is disabled or the context is
 // canceled before the events are sent. In the latter case, some events may not
 // be delivered.
 //
-// FlushWithContext should be called before terminating the program to ensure no
+// Flush should be called before terminating the program to ensure no
 // events are unintentionally dropped.
 //
-// Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
-// CaptureException, or CaptureMessage. To send events synchronously over the network,
+// Avoid calling Flush indiscriminately after each call to CaptureEvent,
+// CaptureError, or CaptureMessage. To send events synchronously over the network,
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
-func (client *Client) FlushWithContext(ctx context.Context) bool {
+func (client *Client) Flush(ctx context.Context) bool {
 	if !client.IsEnabled() {
 		return false
 	}
-	return client.telemetryProcessor.FlushWithContext(ctx)
+	return client.telemetryProcessor.Flush(ctx)
 }
 
 // Close clean up underlying Transport resources.
@@ -761,16 +747,16 @@ func (client *Client) GetSDKIdentifier() string {
 	return client.sdkIdentifier
 }
 
-func (client *Client) capture(ctx context.Context, event *Event, opts captureOptions) *EventID {
+func (client *Client) capture(ctx context.Context, event *Event, opts captureOptions) EventID {
 	if !sample(client.options.SampleRate) {
 		debuglog.Println("Event dropped due to SampleRate hit.")
 		event.discardCounts().Record(client.reports, report.ReasonSampleRate)
-		return nil
+		return ""
 	}
 
 	scope := ScopeFromContext(ctx)
 	if event = client.prepareEvent(ctx, event, scope, opts); event == nil {
-		return nil
+		return ""
 	}
 
 	if client.options.BeforeSend != nil {
@@ -778,7 +764,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 		if event = client.options.BeforeSend(event, opts.hint); event == nil {
 			debuglog.Println("Event dropped due to BeforeSend callback.")
 			counts.Record(client.reports, report.ReasonBeforeSend)
-			return nil
+			return ""
 		}
 	}
 
@@ -788,13 +774,13 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 	}
 	if !client.telemetryProcessor.Add(ctx, eventItem{&owned}) {
 		debuglog.Println("Event dropped: telemetry buffer full or unavailable")
-		return nil
+		return ""
 	}
 
 	if scope != nil {
 		scope.setLastEventID(event.EventID)
 	}
-	return &event.EventID
+	return event.EventID
 }
 
 // captureTransaction sends tx with dsc as the trace header of its envelope.

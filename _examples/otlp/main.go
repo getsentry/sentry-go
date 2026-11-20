@@ -38,7 +38,11 @@ func main() {
 	}); err != nil {
 		log.Fatalf("sentry.Init: %v", err)
 	}
-	defer sentry.Flush(2 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	ctx := context.Background()
 	// Direct-to-Sentry setup:
@@ -64,7 +68,7 @@ func main() {
 		ctx, span := otel.Tracer("example-service").Start(r.Context(), "GET /demo")
 		defer span.End()
 
-		sentry.CaptureException(ctx, errors.New("demo handler failure"))
+		sentry.CaptureError(ctx, errors.New("demo handler failure"))
 
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("captured an error and linked it to the active trace\n"))

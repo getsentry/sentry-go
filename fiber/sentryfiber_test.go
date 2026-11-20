@@ -66,7 +66,7 @@ func TestIntegration(t *testing.T) {
 			if err := requestCtx.Err(); err != nil {
 				t.Errorf("request context in error handler: %v", err)
 			}
-			sentry.CaptureException(requestCtx, e)
+			sentry.CaptureError(requestCtx, e)
 			return nil
 		},
 	})
@@ -406,7 +406,7 @@ func TestIntegration(t *testing.T) {
 		}
 	}
 
-	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 

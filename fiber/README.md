@@ -71,7 +71,7 @@ Timeout time.Duration
 
 ## Usage
 
-`sentryfiber` attaches a request-specific `*sentry.Scope` and transaction to Fiber's user context. Pass `ctx.UserContext()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event. In outer middleware or a custom error handler, use `sentryfiber.GetContext(ctx)` after the Sentry middleware has returned.
+`sentryfiber` attaches a request-specific `*sentry.Scope` and transaction to Fiber's user context. Pass `ctx.UserContext()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureError` so request data, custom scope data, and trace information are applied to the event. In outer middleware or a custom error handler, use `sentryfiber.GetContext(ctx)` after the Sentry middleware has returned.
 Use `sentry.ScopeFromContext(ctx.UserContext())` when you need to add data that should be available to captures made during the request.
 
 **Keep in mind that the request scope won't be available in middleware attached before `sentryfiber`!**

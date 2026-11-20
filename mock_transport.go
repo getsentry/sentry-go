@@ -98,7 +98,7 @@ func (t *MockTransport) SendEnvelope(_ context.Context, envelope *protocol.Envel
 	}
 	return nil
 }
-func (t *MockTransport) FlushWithContext(_ context.Context) bool { return true }
+func (t *MockTransport) Flush(_ context.Context) bool { return true }
 
 // Envelopes returns the captured envelopes.
 func (t *MockTransport) Envelopes() []*protocol.Envelope {

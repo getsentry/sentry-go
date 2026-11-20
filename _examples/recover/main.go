@@ -69,5 +69,7 @@ func main() {
 		fooMsg()
 	}()
 
-	sentry.Flush(time.Second * 5)
+	flushCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	sentry.Flush(flushCtx)
+	cancel()
 }

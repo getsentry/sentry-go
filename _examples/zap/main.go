@@ -19,7 +19,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer sentry.Flush(2 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	// Create the Sentry core
 	ctx := context.Background()

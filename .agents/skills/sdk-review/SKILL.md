@@ -12,7 +12,7 @@ Report a finding only if you can show from the code how the change violates one 
 3. **Dependency versions** (high). Third-party dependency APIs newer than the version the module's own `go.mod` requires. CI builds every module through `go.work`, so a newer version that another module requires can hide the gap.
 4. **Public API** (medium). Breaking public changes without a deprecation path, or internals exposed as public API.
 5. **Context propagation** (high). An integration must fork the scope from the incoming request and pass `context.Context` on, calls should reuse `context.Context`, logs and metrics should be linked using `WithCtx` and `sentry-trace` / `baggage` should agree with the span's sampling decision.
-6. **Flush deadline** (high). `Flush` / `FlushWithContext` must bound draining and sending, not only the final transport flush, and return false once the deadline passes. `Close` dropping queued items and rejecting late ones is intended; leaked goroutines are not.
+6. **Flush deadline** (high). `Flush` must bound draining and sending, not only the final transport flush, and return false once the deadline passes. `Close` dropping queued items and rejecting late ones is intended; leaked goroutines are not.
 7. **Client reports** (medium). Dropped items (rate limit, sampling, `BeforeSend`) that aren't recorded, or are recorded under the wrong category.
 8. **Event types** (medium). Check-ins, logs or metrics going through error sampling or `BeforeSend`, or losing their type.
 

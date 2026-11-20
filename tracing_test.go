@@ -513,8 +513,8 @@ func TestDoubleSampling(t *testing.T) {
 	})
 	span := StartSpan(ctx, "op", WithTransactionName("name"))
 
-	// CaptureException should not send any event because of SampleRate.
-	CaptureException(ctx, errors.New("ignored"))
+	// CaptureError should not send any event because of SampleRate.
+	CaptureError(ctx, errors.New("ignored"))
 	if got := len(transport.Events()); got != 0 {
 		t.Fatalf("got %d events, want 0", got)
 	}
@@ -787,9 +787,9 @@ func TestSampleRatePropagation(t *testing.T) {
 				}
 				root := StartTransaction(ctx, "root", options...)
 				want := root.dynamicSamplingContextForPropagation()
-				require.NotNil(t, CaptureMessage(root.Context(), "before"))
+				require.NotEmpty(t, CaptureMessage(root.Context(), "before"))
 				root.Finish()
-				require.NotNil(t, CaptureMessage(root.Context(), "after"))
+				require.NotEmpty(t, CaptureMessage(root.Context(), "after"))
 				events := transport.Events()
 				require.Len(t, events, 2)
 				for _, event := range events {
@@ -1145,7 +1145,7 @@ func TestContextPropagationHeaders(t *testing.T) {
 		require.Contains(t, baggage, "sentry-release=replacement")
 		require.Contains(t, baggage, "sentry-sampled=false")
 		require.Contains(t, baggage, "sentry-sample_rate=0")
-		require.NotNil(t, CaptureMessage(ctx, "static zero"))
+		require.NotEmpty(t, CaptureMessage(ctx, "static zero"))
 		dsc := requireSingleEvent(t, replacementTransport).sdkMetaData.dsc
 		require.Equal(t, SampledFalse, scope.propagationContextSnapshot().Sampled)
 		require.Equal(t, "false", dsc.Entries["sampled"])
@@ -1327,7 +1327,7 @@ func TestRootSpanScopeTrace(t *testing.T) {
 			want := scope.propagationContextSnapshot()
 
 			root := StartTransaction(ctx, "root")
-			require.NotNil(t, CaptureMessage(ctx, "spanless"))
+			require.NotEmpty(t, CaptureMessage(ctx, "spanless"))
 			root.Finish()
 
 			require.Equal(t, SampledTrue, root.Sampled)
@@ -1358,7 +1358,7 @@ func TestScopeKeepsContinuedSampleRate(t *testing.T) {
 			ctx, _ := WithScope(ContextWithClient(context.Background(), client))
 			root := StartTransaction(ctx, "root", ContinueFromHeaders(trace, test.baggage))
 			defer root.Finish()
-			require.NotNil(t, CaptureMessage(ctx, "spanless"))
+			require.NotEmpty(t, CaptureMessage(ctx, "spanless"))
 
 			want := root.dynamicSamplingContextForPropagation().Entries
 			require.Equal(t, test.want, want["sample_rate"])

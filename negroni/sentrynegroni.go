@@ -7,6 +7,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/httputils"
 	"github.com/getsentry/sentry-go/internal/traceutils"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/urfave/negroni/v3"
 )
 
@@ -88,8 +89,8 @@ func (h *handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
 		ctx := r.Context()
 		eventID := sentry.Recover(ctx, err)
-		if eventID != nil && h.waitForDelivery {
-			sentry.ClientFromContext(ctx).Flush(h.timeout)
+		if eventID != "" && h.waitForDelivery {
+			util.FlushWithTimeout(sentry.ClientFromContext(ctx), h.timeout)
 		}
 		if h.repanic {
 			panic(err)

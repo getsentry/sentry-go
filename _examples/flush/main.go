@@ -25,7 +25,10 @@ func main() {
 
 	fmt.Println("=> Flushing transport buffer")
 
-	if sentry.Flush(time.Second * 2) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+	defer cancel()
+
+	if sentry.Flush(ctx) {
 		fmt.Println("=> All queued events delivered!")
 	} else {
 		fmt.Println("=> Flush timeout reached")

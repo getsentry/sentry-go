@@ -45,7 +45,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer sentry.Flush(2 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2 * time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	// Configure Sentry Zerolog Writer
 	writer, err := sentryzerolog.New(context.Background(), sentryzerolog.Options{
@@ -84,4 +88,4 @@ The `sentryzerolog.Options` struct allows you to configure the following:
 
 ## Notes
 
-- Always call `Flush` or `FlushWithContext` to ensure all events are sent to Sentry before program termination
+- Always call `Flush` to ensure all events are sent to Sentry before program termination

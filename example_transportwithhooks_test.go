@@ -58,7 +58,11 @@ func Example_transportWithHooks() {
 		fmt.Fprintf(os.Stderr, "sentry.Init: %s\n", err)
 		os.Exit(1)
 	}
-	defer sentry.Flush(2 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	sentry.CaptureMessage(context.Background(), "test")
 }

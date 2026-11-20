@@ -28,7 +28,7 @@ func (t *devNullTransport) SendEnvelope(_ context.Context, _ *protocol.Envelope)
 	return nil
 }
 
-func (t *devNullTransport) FlushWithContext(ctx context.Context) bool {
+func (t *devNullTransport) Flush(ctx context.Context) bool {
 	return true
 }
 
@@ -66,7 +66,7 @@ func (ee ExtractExtra) Name() string {
 
 func (ee ExtractExtra) SetupOnce(client *sentry.Client) {
 	client.AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-		if ex, ok := hint.OriginalException.(CustomComplexError); ok {
+		if ex, ok := hint.OriginalError.(CustomComplexError); ok {
 			addErrorContext(event, ex.GimmeMoreData())
 		}
 
@@ -81,7 +81,7 @@ func main() {
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			// Solution 1 (use beforeSend, which will be applied to
 			// error events and is usually application specific):
-			if ex, ok := hint.OriginalException.(CustomComplexError); ok {
+			if ex, ok := hint.OriginalError.(CustomComplexError); ok {
 				addErrorContext(event, ex.GimmeMoreData())
 			}
 
@@ -103,7 +103,7 @@ func main() {
 
 	// Solution 3 (use a global scope event processor for all events):
 	sentry.GlobalScope().AddEventProcessor(func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-		if ex, ok := hint.OriginalException.(CustomComplexError); ok {
+		if ex, ok := hint.OriginalError.(CustomComplexError); ok {
 			addErrorContext(event, ex.GimmeMoreData())
 		}
 
@@ -117,5 +117,5 @@ func main() {
 		},
 	}
 
-	sentry.CaptureException(context.Background(), errWithExtra)
+	sentry.CaptureError(context.Background(), errWithExtra)
 }
