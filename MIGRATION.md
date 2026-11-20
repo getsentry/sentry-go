@@ -220,6 +220,8 @@ type Transport interface {
 | --- | --- |
 | `StartSpan(ctx, op, opts...) *Span` | `ctx, span := StartSpan(ctx, name, WithOp(op))`. The name is the transaction name of a root span and the description of a child, and the returned context carries the span |
 | `StartTransaction(ctx, name, opts...)` | `StartSpan(ctx, name, opts...)`. `StartTransaction` returned the transaction already in `ctx` and ignored the options, so finishing it sent the integration's transaction early; `StartSpan` starts a child instead |
+| `span.Context()` | The context returned by `StartSpan`, which is the same context |
+| `span.SetDynamicSamplingContext(dsc)` | Removed; `ContinueFromHeaders` and `ContinueFromRequest` set it from the incoming trace |
 | `span.StartChild(op, opts...)` | `StartSpan(ctx, name, WithOp(op))` with the context returned for the parent; it duplicated `StartSpan` |
 | `WithTransactionName(name)` and `WithDescription(description)` | Pass the name to `StartSpan` |
 | `WithOpName(op)` | `WithOp(op)`, named after the field it sets |
@@ -269,6 +271,7 @@ type Transport interface {
 | `DataCollection{UserInfo: sentry.Set(false)}` | `DataCollection{UserInfo: new(false)}`; `Option` and `Set` are removed |
 | `ClientOptions.SendDefaultPII: true` | `DataCollection: &sentry.DataCollection{}`; leaving `DataCollection` unset collects no user-identifying data |
 | `ClientOptions.HTTPTransport`, `HTTPProxy`, `HTTPSProxy`, and `CaCerts` | Removed; set `ClientOptions.HTTPClient`. The default client still reads `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` |
+| `EnableTracing: true, TracesSampleRate: 0.5` | `TracesSampleRate: new(0.5)`. Setting `TracesSampleRate` or `TracesSampler` enables tracing, so a rate no longer does nothing without a second flag |
 
 </details>
 

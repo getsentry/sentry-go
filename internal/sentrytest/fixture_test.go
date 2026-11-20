@@ -86,8 +86,7 @@ func TestSentryFixture_Events_ExcludesTransactions(t *testing.T) {
 	t.Parallel()
 
 	f := NewFixture(t, WithClientOptions(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 	}))
 	ctx := f.NewContext(t.Context())
 	sentry.CaptureMessage(ctx, "error event")

@@ -64,10 +64,8 @@ func run() error {
 			log.Printf("BeforeSendTransaction transaction [%s]", transaction.EventID)
 			return transaction
 		},
-		// Enable tracing
-		EnableTracing: true,
-		// Specify either a TracesSampleRate...
-		TracesSampleRate: 1.0,
+		// Enable tracing by specifying either a TracesSampleRate...
+		TracesSampleRate: new(1.0),
 		// ... or a TracesSampler
 		TracesSampler: sentry.TracesSampler(func(ctx sentry.SamplingContext) float64 {
 			// Don't sample health checks.

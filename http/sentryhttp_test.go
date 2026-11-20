@@ -24,14 +24,12 @@ type contextKey struct{}
 func TestNestedMiddlewarePreservesActiveTransaction(t *testing.T) {
 	t.Parallel()
 
-	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
-		EnableTracing: true, TracesSampleRate: 1,
-	}))
-	_, outer := sentry.StartSpan(fixture.NewContext(context.Background()), "outer")
-	_, child := sentry.StartSpan(outer.Context(), "child")
+	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{TracesSampleRate: new(1.0)}))
+	outerCtx, outer := sentry.StartSpan(fixture.NewContext(context.Background()), "outer")
+	childCtx, child := sentry.StartSpan(outerCtx, "child")
 	key := contextKey{}
 	request := httptest.NewRequest(http.MethodGet, "http://example.test/nested", nil)
-	request = request.WithContext(context.WithValue(child.Context(), key, "preserved"))
+	request = request.WithContext(context.WithValue(childCtx, key, "preserved"))
 
 	handler := sentryhttp.New(sentryhttp.Options{}).Handle(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "preserved", r.Context().Value(key))
@@ -51,9 +49,7 @@ func TestNestedMiddlewarePreservesActiveTransaction(t *testing.T) {
 func TestIncomingBaggageUsesAllHeaderLines(t *testing.T) {
 	t.Parallel()
 
-	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{
-		EnableTracing: true, TracesSampleRate: 1,
-	}))
+	fixture := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{TracesSampleRate: new(1.0)}))
 	request := httptest.NewRequest(http.MethodGet, "http://example.test/baggage", nil)
 	request.Header.Set(sentry.SentryTraceHeader, "11111111111111111111111111111111-2222222222222222-1")
 	request.Header.Add(sentry.SentryBaggageHeader, "sentry-release=from-first-line")
@@ -319,8 +315,7 @@ func TestIntegration(t *testing.T) {
 	eventsCh := make(chan *sentry.Event, len(tests))
 	transactionsCh := make(chan *sentry.Transaction, len(tests))
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		DataCollection:   &sentry.DataCollection{},
 		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			eventsCh <- event

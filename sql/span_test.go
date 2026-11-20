@@ -21,7 +21,7 @@ func TestStartSpan_NoParentReturnsNil(t *testing.T) {
 func TestStartSpan_SpanData(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		ctx := f.NewContext(context.Background())
-		_, parent := sentry.StartSpan(ctx, "root")
+		ctx, parent := sentry.StartSpan(ctx, "root")
 		t.Cleanup(parent.Finish)
 
 		cfg := &config{
@@ -33,7 +33,7 @@ func TestStartSpan_SpanData(t *testing.T) {
 			socketAddress: "10.0.0.1",
 			socketPort:    5433,
 		}
-		span := startQuerySpan(parent.Context(), nil, cfg, opQuery, "SELECT 1")
+		span := startQuerySpan(ctx, nil, cfg, opQuery, "SELECT 1")
 		require.NotNil(t, span)
 
 		assert.Equal(t, "SELECT ?", span.Description)
@@ -53,15 +53,15 @@ func TestStartSpan_SpanData(t *testing.T) {
 func TestFinishSpan_StatusMapping(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		ctx := f.NewContext(context.Background())
-		_, parent := sentry.StartSpan(ctx, "root")
+		ctx, parent := sentry.StartSpan(ctx, "root")
 		t.Cleanup(parent.Finish)
 
-		okSpan := startQuerySpan(parent.Context(), nil, &config{system: SystemPostgreSQL}, opQuery, "SELECT 1")
+		okSpan := startQuerySpan(ctx, nil, &config{system: SystemPostgreSQL}, opQuery, "SELECT 1")
 		require.NotNil(t, okSpan, "startSpan must return a span when a parent is present")
 		finishSpan(okSpan, nil)
 		assert.Equal(t, sentry.SpanStatusOK, okSpan.Status)
 
-		errSpan := startQuerySpan(parent.Context(), nil, &config{system: SystemPostgreSQL}, opExec, "INSERT INTO t VALUES (1)")
+		errSpan := startQuerySpan(ctx, nil, &config{system: SystemPostgreSQL}, opExec, "INSERT INTO t VALUES (1)")
 		finishSpan(errSpan, errors.New("boom"))
 		assert.Equal(t, sentry.SpanStatusInternalError, errSpan.Status)
 	})
@@ -70,14 +70,14 @@ func TestFinishSpan_StatusMapping(t *testing.T) {
 func TestStartQuerySpan_UsesTransactionParent(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		ctx := f.NewContext(context.Background())
-		_, parent := sentry.StartSpan(ctx, "root")
+		ctx, parent := sentry.StartSpan(ctx, "root")
 		t.Cleanup(parent.Finish)
 
 		cfg := &config{system: SystemPostgreSQL}
 		conn := &sentryConn{cfg: cfg}
-		txSpan := startTxSpan(parent.Context(), cfg)
+		txCtx, txSpan := startTxSpan(ctx, cfg)
 		require.NotNil(t, txSpan)
-		conn.activeTx = newTx(nil, txSpan)
+		conn.activeTx = newTx(txCtx, nil, txSpan)
 
 		querySpan := startQuerySpan(context.Background(), conn, cfg, opQuery, "SELECT 42")
 		require.NotNil(t, querySpan)
@@ -99,32 +99,32 @@ func (testTx) Rollback() error { return nil }
 
 func TestBeginClearsActiveTxSpan(t *testing.T) {
 	conn := &sentryConn{conn: testConn{}, cfg: &config{system: SystemPostgreSQL}}
-	conn.activeTx = newTx(nil, &sentry.Span{})
+	conn.activeTx = newTx(context.Background(), nil, &sentry.Span{})
 
 	tx, err := conn.Begin()
 	require.NoError(t, err)
-	assert.Nil(t, conn.txSpanOrNil())
+	assert.Nil(t, conn.txContextOrNil())
 
 	require.NoError(t, tx.Commit())
-	assert.Nil(t, conn.txSpanOrNil())
+	assert.Nil(t, conn.txContextOrNil())
 }
 
 func TestSentryTxFinishClearsConnSpan(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		ctx := f.NewContext(context.Background())
-		_, parent := sentry.StartSpan(ctx, "root")
+		ctx, parent := sentry.StartSpan(ctx, "root")
 		t.Cleanup(parent.Finish)
 
 		cfg := &config{system: SystemPostgreSQL}
 		conn := &sentryConn{cfg: cfg}
-		span := startTxSpan(parent.Context(), cfg)
+		txCtx, span := startTxSpan(ctx, cfg)
 		require.NotNil(t, span)
 
-		tx := newTx(nil, span)
+		tx := newTx(txCtx, nil, span)
 		conn.activeTx = tx
 		tx.finish(nil, sentry.SpanStatusOK)
 
-		assert.Nil(t, conn.txSpanOrNil())
+		assert.Nil(t, conn.txContextOrNil())
 		assert.Equal(t, sentry.SpanStatusOK, span.Status)
 	})
 }

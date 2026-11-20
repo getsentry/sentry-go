@@ -84,8 +84,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 		{
 			input: func() *Span {
 				ctx := NewTestContext(ClientOptions{
-					EnableTracing:    true,
-					TracesSampleRate: 1.0,
+					TracesSampleRate: new(1.0),
 					Dsn:              "http://public@example.com/sentry/1",
 					Release:          "1.0.0",
 					Environment:      "test",
@@ -111,8 +110,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 		{
 			input: func() *Span {
 				ctx := NewTestContext(ClientOptions{
-					EnableTracing:    true,
-					TracesSampleRate: 0.0,
+					TracesSampleRate: new(0.0),
 					Dsn:              "http://public@example.com/sentry/1",
 					Release:          "1.0.0",
 				})
@@ -189,10 +187,10 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				Frozen: true,
 			},
 		},
-		"enabled static rate": {options: &ClientOptions{EnableTracing: true, TracesSampleRate: 0.25}, wantRate: "0.25"},
-		"tracing disabled":    {options: &ClientOptions{TracesSampleRate: 0.25}},
-		"custom sampler":      {options: &ClientOptions{EnableTracing: true, TracesSampleRate: 0.25, TracesSampler: func(SamplingContext) float64 { t.Error("scope-only DSC called a sampler"); return 1 }}},
-		"invalid static rate": {options: &ClientOptions{EnableTracing: true, TracesSampleRate: -1}},
+		"enabled static rate": {options: &ClientOptions{TracesSampleRate: new(1.0)}, wantRate: "1"},
+		"tracing disabled":    {options: &ClientOptions{}},
+		"custom sampler":      {options: &ClientOptions{TracesSampleRate: new(0.25), TracesSampler: func(SamplingContext) float64 { t.Error("scope-only DSC called a sampler"); return 1 }}},
+		"invalid static rate": {options: &ClientOptions{TracesSampleRate: new(-1.0)}},
 		"Nil client": {
 			scope: &Scope{
 				scopeData: scopeData{
@@ -239,7 +237,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 	t.Run("first export freezes DSC across clients and clones", func(t *testing.T) {
 		for _, boundary := range []string{"baggage", "event"} {
 			t.Run(boundary, func(t *testing.T) {
-				creator, _ := newCaptureTestClient(t, ClientOptions{EnableTracing: true, Release: "creator"})
+				creator, _ := newCaptureTestClient(t, ClientOptions{Release: "creator"})
 				ctx, scope := WithScope(ContextWithClient(context.Background(), creator))
 				if boundary == "baggage" {
 					_ = GetBaggage(ctx)
@@ -266,35 +264,24 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 
 	t.Run("frozen foreign DSC is rejected and copied", func(t *testing.T) {
 		for _, test := range []struct {
-			name             string
-			native, matching bool
+			name     string
+			matching bool
 		}{
 			{name: "scope foreign"},
 			{name: "scope matching", matching: true},
-			{name: "transaction foreign", native: true},
-			{name: "transaction matching", native: true, matching: true},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
+				client, transport := newCaptureTestClient(t, ClientOptions{TracesSampleRate: new(1.0)})
 				ctx, scope := WithScope(ContextWithClient(context.Background(), client))
 				propagation := scope.propagationContextSnapshot()
 				traceID := propagation.TraceID
-				var root *Span
-				if test.native {
-					_, root = StartSpan(ctx, "frozen")
-					ctx, traceID = root.Context(), root.TraceID
-				}
 				if !test.matching {
 					traceID = TraceID{9}
 				}
 				trace := strings.ToUpper(traceID.String())
 				dsc := DynamicSamplingContext{Frozen: true, Entries: map[string]string{traceIDContextKey: trace, "release": "upstream"}}
-				if root == nil {
-					propagation.DynamicSamplingContext = dsc
-					scope.SetPropagationContext(propagation)
-				} else {
-					root.SetDynamicSamplingContext(dsc)
-				}
+				propagation.DynamicSamplingContext = dsc
+				scope.SetPropagationContext(propagation)
 				dsc.Entries["release"] = "caller mutation"
 				want := DynamicSamplingContext{Frozen: true}
 				if test.matching {
@@ -302,10 +289,6 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				}
 				assertBaggageStringsEqual(t, GetBaggage(ctx), want.String())
 				require.NotEmpty(t, CaptureMessage(ctx, "frozen"))
-				if root != nil {
-					root.SetDynamicSamplingContext(DynamicSamplingContext{Entries: map[string]string{"release": "late"}})
-					root.Finish()
-				}
 				for _, envelope := range transport.Envelopes() {
 					if !maps.Equal(want.Entries, envelope.Header.Trace) {
 						t.Errorf("envelope trace = %v, want %v", envelope.Header.Trace, want.Entries)

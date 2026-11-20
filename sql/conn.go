@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
-
-	"github.com/getsentry/sentry-go"
 )
 
 // sentryConn wraps a driver.Conn.
@@ -124,7 +122,7 @@ func (c *sentryConn) Begin() (driver.Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	t := newTx(tx, nil)
+	t := newTx(context.Background(), tx, nil)
 	c.activeTx = t
 	return t, nil
 }
@@ -158,7 +156,8 @@ func (c *sentryConn) BeginTx(ctx context.Context, opts driver.TxOptions) (driver
 		}
 	}
 
-	t := newTx(tx, startTxSpan(ctx, c.cfg))
+	txCtx, span := startTxSpan(ctx, c.cfg)
+	t := newTx(txCtx, tx, span)
 	c.activeTx = t
 	return t, nil
 }
@@ -194,9 +193,9 @@ func (c *sentryConn) Raw() driver.Conn {
 	return c.conn
 }
 
-// txSpanOrNil returns the span of the transaction currently open on the connection.
-func (c *sentryConn) txSpanOrNil() *sentry.Span {
-	return c.activeTx.spanOrNil()
+// txContextOrNil returns the context of the transaction currently open on the connection.
+func (c *sentryConn) txContextOrNil() context.Context {
+	return c.activeTx.contextOrNil()
 }
 
 // namedValuesToValues converts []driver.NamedValue to []driver.Value for
