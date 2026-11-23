@@ -93,6 +93,11 @@ type basicWriter struct {
 }
 
 func (b *basicWriter) WriteHeader(code int) {
+	if code >= 100 && code <= 199 && code != http.StatusSwitchingProtocols {
+		b.ResponseWriter.WriteHeader(code)
+		return
+	}
+
 	if !b.wroteHeader {
 		b.code = code
 		b.wroteHeader = true

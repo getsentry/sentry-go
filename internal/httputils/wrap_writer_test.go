@@ -176,12 +176,16 @@ func TestHijackWriterHijack(t *testing.T) {
 }
 
 func TestBasicWriterWriteHeader(t *testing.T) {
-	rec := httptest.NewRecorder()
-	bw := &basicWriter{ResponseWriter: rec}
+	t.Parallel()
+	for _, status := range []int{http.StatusCreated, http.StatusSwitchingProtocols, http.StatusInternalServerError} {
+		rec := httptest.NewRecorder()
+		bw := &basicWriter{ResponseWriter: rec}
 
-	bw.WriteHeader(http.StatusCreated)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected status code %v, got %v", http.StatusCreated, rec.Code)
+		bw.WriteHeader(status)
+		bw.WriteHeader(http.StatusOK)
+		if bw.Status() != status || rec.Code != status {
+			t.Fatalf("expected first final status %v, got wrapper=%v, response=%v", status, bw.Status(), rec.Code)
+		}
 	}
 }
 
