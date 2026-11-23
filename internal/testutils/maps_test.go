@@ -1,6 +1,7 @@
 package testutils
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -91,9 +92,9 @@ func TestMergeMaps_DifferentTypes(t *testing.T) {
 	})
 
 	t.Run("map[string]interface{}", func(t *testing.T) {
-		m1 := map[string]interface{}{"a": 1, "b": "string"}
-		m2 := map[string]interface{}{"b": 42, "c": true}
-		want := map[string]interface{}{"a": 1, "b": 42, "c": true}
+		m1 := map[string]any{"a": 1, "b": "string"}
+		m2 := map[string]any{"b": 42, "c": true}
+		want := map[string]any{"a": 1, "b": 42, "c": true}
 
 		got := MergeMaps(m1, m2)
 		if diff := cmp.Diff(want, got); diff != "" {
@@ -107,13 +108,9 @@ func TestMergeMaps_PreservesOriginal(t *testing.T) {
 	m2 := map[string]string{"b": "3", "c": "4"}
 
 	original1 := make(map[string]string)
-	for k, v := range m1 {
-		original1[k] = v
-	}
+	maps.Copy(original1, m1)
 	original2 := make(map[string]string)
-	for k, v := range m2 {
-		original2[k] = v
-	}
+	maps.Copy(original2, m2)
 
 	_ = MergeMaps(m1, m2)
 

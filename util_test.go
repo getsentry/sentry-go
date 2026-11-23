@@ -19,16 +19,6 @@ func TestUUIDReturnsRandom32CharacterString(t *testing.T) {
 	assertNotEqual(t, u2, u3)
 }
 
-func TestFileExistsReturnsTrueForExistingFiles(t *testing.T) {
-	assertEqual(t, fileExists(("util.go")), true)
-	assertEqual(t, fileExists(("util_test.go")), true)
-}
-
-func TestFileExistsReturnsFalseForNonExistingFiles(t *testing.T) {
-	assertEqual(t, fileExists(("util_nope.go")), false)
-	assertEqual(t, fileExists(("util_nope_test.go")), false)
-}
-
 func TestDefaultReleaseSentryReleaseEnvvar(t *testing.T) {
 	releaseVersion := "1.2.3"
 	t.Setenv("SENTRY_RELEASE", releaseVersion)

@@ -40,7 +40,6 @@ func TestProcessorFlush_EnvelopeCarriesScopeAttachments(t *testing.T) {
 			return &protocol.SdkInfo{Name: "test-sdk", Version: "1.0.0"}
 		},
 		nil,
-		nil,
 	)
 
 	require.True(t, processor.Add(context.Background(), event), "add failed")

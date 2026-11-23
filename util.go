@@ -1,25 +1,19 @@
 package sentry
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/util"
-	exec "golang.org/x/sys/execabs"
 )
 
 func uuid() string {
 	return util.GenerateEventID()
-}
-
-func fileExists(fileName string) bool {
-	_, err := os.Stat(fileName)
-	return err == nil
 }
 
 // monotonicTimeSince replaces uses of time.Now() to take into account the
@@ -27,12 +21,6 @@ func fileExists(fileName string) bool {
 // unaffected by changes in the system wall clock.
 func monotonicTimeSince(start time.Time) (end time.Time) {
 	return start.Add(time.Since(start))
-}
-
-// nolint: unused
-func prettyPrint(data interface{}) {
-	dbg, _ := json.MarshalIndent(data, "", "  ")
-	fmt.Println(string(dbg))
 }
 
 // defaultRelease attempts to guess a default release for the currently running
@@ -49,6 +37,9 @@ func defaultRelease() (release string) {
 		"GAE_DEPLOYMENT_ID",
 		"GITHUB_SHA",             // GitHub Actions - https://help.github.com/en/actions
 		"COMMIT_REF",             // Netlify - https://docs.netlify.com/
+		"RENDER_GIT_COMMIT",      // Render - https://render.com/docs/environment-variables
+		"RAILWAY_GIT_COMMIT_SHA", // Railway - https://docs.railway.com/reference/variables
+		"FC_GIT_COMMIT_SHA",      // Flightcontrol - https://www.flightcontrol.dev/docs/guides/flightcontrol/environment-variables
 		"VERCEL_GIT_COMMIT_SHA",  // Vercel - https://vercel.com/
 		"ZEIT_GITHUB_COMMIT_SHA", // Zeit (now known as Vercel)
 		"ZEIT_GITLAB_COMMIT_SHA",

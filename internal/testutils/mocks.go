@@ -36,7 +36,7 @@ func (m *MockTelemetryTransport) FlushWithContext(_ context.Context) bool {
 	return true
 }
 
-func (m *MockTelemetryTransport) Configure(_ interface{}) error {
+func (m *MockTelemetryTransport) Configure(_ any) error {
 	return nil
 }
 

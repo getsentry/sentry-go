@@ -73,8 +73,7 @@ func TestDsn_Wrapper(t *testing.T) {
 		}
 
 		// Test that the error is the expected type
-		var dsnParseError *DsnParseError
-		if !errors.As(err, &dsnParseError) {
+		if _, ok := errors.AsType[*DsnParseError](err); !ok {
 			t.Errorf("Expected *DsnParseError, got %T", err)
 		}
 	})

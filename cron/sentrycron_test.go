@@ -103,10 +103,10 @@ func TestLocalName(t *testing.T) {
 		localtime string
 		want      string
 	}{
-		{"TZ name", ptr("Asia/Tokyo"), link, "Asia/Tokyo"},
-		{"TZ with colon", ptr(":Europe/Paris"), link, "Europe/Paris"},
-		{"empty TZ", ptr(""), link, "UTC"},
-		{"TZ path", ptr(link), "", "America/Toronto"},
+		{"TZ name", new("Asia/Tokyo"), link, "Asia/Tokyo"},
+		{"TZ with colon", new(":Europe/Paris"), link, "Europe/Paris"},
+		{"empty TZ", new(""), link, "UTC"},
+		{"TZ path", new(link), "", "America/Toronto"},
 		{"localtime link", nil, link, "America/Toronto"},
 		{"no localtime", nil, filepath.Join(dir, "missing"), ""},
 	}
@@ -123,5 +123,3 @@ func TestLocalName(t *testing.T) {
 		})
 	}
 }
-
-func ptr(s string) *string { return &s }

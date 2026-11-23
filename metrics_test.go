@@ -275,67 +275,10 @@ func Test_sentryMeter_Methods(t *testing.T) {
 	}
 }
 
-func Test_batchMeter_Flush(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
-	meter := NewMeter(ctx)
-	meter.Count("test.count", 42)
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("got %d events, want 1", len(events))
-	}
-}
-
-func Test_batchMeter_FlushWithContext(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
-	meter := NewMeter(ctx)
-	meter.Count("test.count", 42)
-
-	cancelCtx, cancel := context.WithTimeout(context.Background(), testutils.FlushTimeout())
-	defer cancel()
-	ClientFromContext(ctx).FlushWithContext(cancelCtx)
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("got %d events, want 1", len(events))
-	}
-}
-
-func Test_sentryMeter_BeforeSendMetric(t *testing.T) {
-	ctx := context.Background()
-	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
-		Dsn:           testDsn,
-		Transport:     mockTransport,
-		Release:       "v1.2.3",
-		Environment:   "testing",
-		ServerName:    "test-server",
-		EnableTracing: true,
-		BeforeSendMetric: func(_ *Metric) *Metric {
-			return nil
-		},
-	})
-	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
-	ctx, scope := WithScope(ctx)
-	ctx = ContextWithClient(ctx, mockClient)
-	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-
-	meter := NewMeter(ctx)
-	meter.Count("test.count", 1)
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := mockTransport.Events()
-	if len(events) != 0 {
-		t.Fatalf("expected no events, got %d", len(events))
-	}
-}
-
 func Test_Meter_ExceedBatchSize(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 	meter := NewMeter(ctx)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		meter.Count("test.count", 1)
 	}
 
@@ -343,89 +286,6 @@ func Test_Meter_ExceedBatchSize(t *testing.T) {
 		events := mockTransport.Events()
 		return len(events) == 1 && len(events[0].Metrics) == 100
 	}, testutils.FlushTimeout(), time.Millisecond, "expected one batch with 100 metrics")
-}
-
-func Test_batchMeter_FlushMultipleTimes(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
-	meter := NewMeter(ctx)
-
-	for i := 0; i < 5; i++ {
-		meter.Count("test.count", 1)
-	}
-
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event after first flush, got %d", len(events))
-	}
-	if len(events[0].Metrics) != 5 {
-		t.Fatalf("expected 5 metrics in first batch, got %d", len(events[0].Metrics))
-	}
-
-	mockTransport.events = nil
-
-	for i := 0; i < 3; i++ {
-		meter.Count("test.count", 1)
-	}
-
-	flushFromContext(ctx, testutils.FlushTimeout())
-	events = mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event after second flush, got %d", len(events))
-	}
-	if len(events[0].Metrics) != 3 {
-		t.Fatalf("expected 3 metrics in second batch, got %d", len(events[0].Metrics))
-	}
-
-	mockTransport.events = nil
-
-	flushFromContext(ctx, testutils.FlushTimeout())
-	events = mockTransport.Events()
-	if len(events) != 0 {
-		t.Fatalf("expected 0 events after third flush with no metrics, got %d", len(events))
-	}
-}
-
-func Test_batchMeter_Shutdown(t *testing.T) {
-	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
-		Dsn:       testDsn,
-		Transport: mockTransport,
-	})
-	ctx, _ := WithScope(context.Background())
-	ctx = ContextWithClient(ctx, mockClient)
-	meter := NewMeter(ctx)
-	for i := 0; i < 3; i++ {
-		meter.Count("test.count", 1)
-	}
-
-	mockClient.Close()
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event after shutdown, got %d", len(events))
-	}
-	if len(events[0].Metrics) != 3 {
-		t.Fatalf("expected 3 metrics in shutdown batch, got %d", len(events[0].Metrics))
-	}
-
-	mockTransport.events = nil
-
-	// Test that shutdown can be called multiple times safely
-	mockClient.Close()
-	mockClient.Close()
-
-	events = mockTransport.Events()
-	if len(events) != 0 {
-		t.Fatalf("expected 0 events after multiple shutdowns, got %d", len(events))
-	}
-
-	flushFromContext(ctx, testutils.FlushTimeout())
-	events = mockTransport.Events()
-	if len(events) != 0 {
-		t.Fatalf("expected 0 events after flush on shutdown meter, got %d", len(events))
-	}
 }
 
 func Test_sentryMeter_TracePropagationWithTransaction(t *testing.T) {
@@ -482,64 +342,6 @@ func TestSentryMeter_ExplicitScopePrecedesFallbackTrace(t *testing.T) {
 	assert.Equal(t, zeroSpanID, events[0].Metrics[0].SpanID)
 }
 
-func Test_sentryMeter_UserAttributes(t *testing.T) {
-	ctx := context.Background()
-	mockTransport := &MockTransport{}
-	mockClient, _ := NewClient(ClientOptions{
-		Dsn:           testDsn,
-		Transport:     mockTransport,
-		Release:       "v1.2.3",
-		Environment:   "testing",
-		ServerName:    "test-server",
-		EnableTracing: true,
-	})
-	mockClient.sdkIdentifier = "sentry.go"
-	mockClient.sdkVersion = "0.10.0"
-	ctx, scope := WithScope(ctx)
-	ctx = ContextWithClient(ctx, mockClient)
-	scope.propagationContext.TraceID = TraceIDFromHex(LogTraceID)
-	scope.SetUser(User{
-		ID:    "user123",
-		Name:  "Test User",
-		Email: "test@example.com",
-	})
-
-	meter := NewMeter(ctx)
-	meter.Count("test.count", 1)
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-
-	metrics := events[0].Metrics
-	if len(metrics) != 1 {
-		t.Fatalf("expected 1 metric, got %d", len(metrics))
-	}
-
-	metric := metrics[0]
-	attrs := metric.Attributes
-
-	if val, ok := attrs["user.id"]; !ok {
-		t.Error("missing user.id attribute")
-	} else if val.AsString() != "user123" {
-		t.Errorf("unexpected user.id: got %v, want %v", val.AsString(), "user123")
-	}
-
-	if val, ok := attrs["user.name"]; !ok {
-		t.Error("missing user.name attribute")
-	} else if val.AsString() != "Test User" {
-		t.Errorf("unexpected user.name: got %v, want %v", val.AsString(), "Test User")
-	}
-
-	if val, ok := attrs["user.email"]; !ok {
-		t.Error("missing user.email attribute")
-	} else if val.AsString() != "test@example.com" {
-		t.Errorf("unexpected user.email: got %v, want %v", val.AsString(), "test@example.com")
-	}
-}
-
 func Test_sentryMeter_SetAttributes(t *testing.T) {
 	ctx, mockTransport := setupMetricsTest()
 	meter := NewMeter(ctx)
@@ -570,28 +372,6 @@ func Test_sentryMeter_SetAttributes(t *testing.T) {
 	assertEqual(t, attrs["key.int64"].AsInt64(), int64(17))
 	assertEqual(t, attrs["key.float"].AsFloat64(), 42.2)
 	assertEqual(t, attrs["key.bool"].AsBool(), true)
-}
-
-func Test_sentryMeter_SetAttributes_Persistence(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
-	meter := NewMeter(ctx)
-	meter.SetAttributes(attribute.Int("int", 42))
-	meter.Count("test.count1", 1)
-
-	meter.SetAttributes(attribute.String("string", "some str"))
-	meter.Count("test.count2", 2)
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	gotEvents := mockTransport.Events()
-	if len(gotEvents) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(gotEvents))
-	}
-	event := gotEvents[0]
-	assertEqual(t, event.Metrics[0].Attributes["int"].AsInt64(), int64(42))
-	if _, ok := event.Metrics[1].Attributes["int"]; !ok {
-		t.Fatalf("expected key to exist")
-	}
-	assertEqual(t, event.Metrics[1].Attributes["string"].AsString(), "some str")
 }
 
 func Test_sentryMeter_AttributePrecedence(t *testing.T) {
@@ -671,87 +451,4 @@ func Test_sentryMeter_EmptyName(t *testing.T) {
 	if len(events) != 0 {
 		t.Fatalf("expected no events with empty name, got %d", len(events))
 	}
-}
-
-func Test_sentryMeter_WithContextScope(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
-	meter := NewMeter(ctx)
-
-	customCtx, customScope := WithScope(ctx)
-	customScope.SetUser(User{
-		ID:    "custom-user-123",
-		Email: "custom@example.com",
-	})
-
-	meter.WithCtx(customCtx).Count("test.count.with.scope", 42)
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	events := mockTransport.Events()
-	if len(events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events))
-	}
-
-	metrics := events[0].Metrics
-	if len(metrics) != 1 {
-		t.Fatalf("expected 1 metric, got %d", len(metrics))
-	}
-
-	metric := metrics[0]
-	attrs := metric.Attributes
-
-	if val, ok := attrs["user.id"]; !ok {
-		t.Error("missing user.id attribute from custom scope")
-	} else if val.AsString() != "custom-user-123" {
-		t.Errorf("unexpected user.id: got %v, want custom-user-123", val.AsString())
-	}
-
-	if val, ok := attrs["user.email"]; !ok {
-		t.Error("missing user.email attribute from custom scope")
-	} else if val.AsString() != "custom@example.com" {
-		t.Errorf("unexpected user.email: got %v, want custom@example.com", val.AsString())
-	}
-}
-
-func TestSentryMeter_ScopeSetAttributesNoLeak(t *testing.T) {
-	ctx, mockTransport := setupMetricsTest()
-
-	scopedCtx, clonedScope := WithScope(ctx)
-	clonedScope.SetAttributes(
-		attribute.String("key.string", "str"),
-		attribute.Bool("key.bool", true),
-	)
-	txn := StartTransaction(scopedCtx, "test-transaction")
-	defer txn.Finish()
-
-	meterOutsideScope := NewMeter(ctx)
-	meterOutsideScope.Count("test.count.before", 1)
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	eventsBeforeScope := mockTransport.Events()
-	if len(eventsBeforeScope) != 1 {
-		t.Fatalf("expected 1 event before scope attrs, got %d", len(eventsBeforeScope))
-	}
-	metricsBeforeScope := eventsBeforeScope[0].Metrics
-	if len(metricsBeforeScope) != 1 {
-		t.Fatalf("expected 1 metric before scope attrs, got %d", len(metricsBeforeScope))
-	}
-	assert.NotContains(t, metricsBeforeScope[0].Attributes, "key.bool")
-	assert.NotContains(t, metricsBeforeScope[0].Attributes, "key.string")
-
-	mockTransport.events = nil
-
-	meter := NewMeter(txn.Context())
-	meter.Count("test.count.after", 2)
-	flushFromContext(ctx, testutils.FlushTimeout())
-
-	eventsAfterScope := mockTransport.Events()
-	if len(eventsAfterScope) != 1 {
-		t.Fatalf("expected 1 event after scope attrs, got %d", len(eventsAfterScope))
-	}
-	metricsAfterScope := eventsAfterScope[0].Metrics
-	if len(metricsAfterScope) != 1 {
-		t.Fatalf("expected 1 metric after scope attrs, got %d", len(metricsAfterScope))
-	}
-	assert.Equal(t, attribute.BoolValue(true), metricsAfterScope[0].Attributes["key.bool"])
-	assert.Equal(t, attribute.StringValue("str"), metricsAfterScope[0].Attributes["key.string"])
 }

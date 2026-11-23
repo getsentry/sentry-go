@@ -24,7 +24,7 @@ func TestNewRingBuffer(t *testing.T) {
 		if buffer.Category() != ratelimit.CategoryError {
 			t.Errorf("Expected category error, got %s", buffer.Category())
 		}
-		if buffer.Priority() != ratelimit.PriorityCritical {
+		if buffer.Priority() != PriorityCritical {
 			t.Errorf("Expected priority critical, got %s", buffer.Priority())
 		}
 	})
@@ -240,10 +240,10 @@ func TestBufferConcurrency(t *testing.T) {
 
 	// Concurrent offers
 	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(goroutineID int) {
 			defer wg.Done()
-			for j := 0; j < itemsPerGoroutine; j++ {
+			for j := range itemsPerGoroutine {
 				item := &testItem{
 					id:   goroutineID*itemsPerGoroutine + j,
 					data: "concurrent",
@@ -266,7 +266,7 @@ func TestBufferConcurrency(t *testing.T) {
 	var pollMutex sync.Mutex
 
 	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
 			for {
@@ -292,12 +292,12 @@ func TestBufferConcurrency(t *testing.T) {
 func TestBufferDifferentCategories(t *testing.T) {
 	testCases := []struct {
 		category         ratelimit.Category
-		expectedPriority ratelimit.Priority
+		expectedPriority Priority
 	}{
-		{ratelimit.CategoryError, ratelimit.PriorityCritical},
-		{ratelimit.CategoryMonitor, ratelimit.PriorityHigh},
-		{ratelimit.CategoryLog, ratelimit.PriorityLow},
-		{ratelimit.CategoryTransaction, ratelimit.PriorityMedium},
+		{ratelimit.CategoryError, PriorityCritical},
+		{ratelimit.CategoryMonitor, PriorityHigh},
+		{ratelimit.CategoryLog, PriorityLow},
+		{ratelimit.CategoryTransaction, PriorityMedium},
 	}
 
 	for _, tc := range testCases {
@@ -329,7 +329,7 @@ func TestBufferStressTest(t *testing.T) {
 
 	// Start producers
 	wg.Add(numProducers)
-	for i := 0; i < numProducers; i++ {
+	for i := range numProducers {
 		go func(producerID int) {
 			defer wg.Done()
 			itemID := 0
@@ -351,8 +351,8 @@ func TestBufferStressTest(t *testing.T) {
 
 	// Start consumers
 	wg.Add(numConsumers)
-	var consumedCount int64
-	for i := 0; i < numConsumers; i++ {
+	var consumedCount atomic.Int64
+	for range numConsumers {
 		go func() {
 			defer wg.Done()
 			for {
@@ -364,13 +364,13 @@ func TestBufferStressTest(t *testing.T) {
 						if !ok {
 							break
 						}
-						atomic.AddInt64(&consumedCount, 1)
+						consumedCount.Add(1)
 					}
 					return
 				default:
 					_, ok := buffer.Poll()
 					if ok {
-						atomic.AddInt64(&consumedCount, 1)
+						consumedCount.Add(1)
 					}
 				}
 			}
@@ -383,13 +383,13 @@ func TestBufferStressTest(t *testing.T) {
 	wg.Wait()
 
 	t.Logf("Stress test results: offered=%d, dropped=%d, consumed=%d",
-		buffer.OfferedCount(), buffer.DroppedCount(), atomic.LoadInt64(&consumedCount))
+		buffer.OfferedCount(), buffer.DroppedCount(), consumedCount.Load())
 
 	// Basic sanity checks
 	if buffer.OfferedCount() <= 0 {
 		t.Error("Expected some items to be offered")
 	}
-	if atomic.LoadInt64(&consumedCount) <= 0 {
+	if consumedCount.Load() <= 0 {
 		t.Error("Expected some items to be consumed")
 	}
 }
@@ -528,7 +528,7 @@ func TestBufferPollBatch(t *testing.T) {
 	}
 
 	// Verify order and IDs
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if batch[i].id != i+1 {
 			t.Errorf("Expected batch[%d] to have id %d, got %d", i, i+1, batch[i].id)
 		}

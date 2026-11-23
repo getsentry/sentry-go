@@ -21,9 +21,9 @@ type RingBuffer[T any] struct {
 	capacity int
 
 	category       ratelimit.Category
-	priority       ratelimit.Priority
+	priority       Priority
 	overflowPolicy OverflowPolicy
-	recorder       report.ClientReportRecorder
+	recorder       *report.Aggregator
 
 	batchSize     int
 	timeout       time.Duration
@@ -36,7 +36,7 @@ type RingBuffer[T any] struct {
 	onDropped func(item T, reason string)
 }
 
-func NewRingBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration, recorder report.ClientReportRecorder) *RingBuffer[T] {
+func NewRingBuffer[T any](category ratelimit.Category, capacity int, overflowPolicy OverflowPolicy, batchSize int, timeout time.Duration, recorder *report.Aggregator) *RingBuffer[T] {
 	if capacity <= 0 {
 		capacity = defaultCapacity
 	}
@@ -49,15 +49,11 @@ func NewRingBuffer[T any](category ratelimit.Category, capacity int, overflowPol
 		timeout = 0
 	}
 
-	if recorder == nil {
-		recorder = report.NoopRecorder()
-	}
-
 	return &RingBuffer[T]{
 		items:          make([]T, capacity),
 		capacity:       capacity,
 		category:       category,
-		priority:       category.GetPriority(),
+		priority:       priorityOf(category),
 		overflowPolicy: overflowPolicy,
 		recorder:       recorder,
 		batchSize:      batchSize,
@@ -150,10 +146,7 @@ func (b *RingBuffer[T]) PollBatch(maxItems int) []T {
 		return nil
 	}
 
-	itemCount := maxItems
-	if itemCount > b.size {
-		itemCount = b.size
-	}
+	itemCount := min(maxItems, b.size)
 
 	result := make([]T, itemCount)
 	var zero T
@@ -224,7 +217,7 @@ func (b *RingBuffer[T]) Category() ratelimit.Category {
 	return b.category
 }
 
-func (b *RingBuffer[T]) Priority() ratelimit.Priority {
+func (b *RingBuffer[T]) Priority() Priority {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.priority
@@ -342,10 +335,7 @@ func (b *RingBuffer[T]) PollIfReady() []T {
 		return nil
 	}
 
-	itemCount := b.batchSize
-	if itemCount > b.size {
-		itemCount = b.size
-	}
+	itemCount := min(b.batchSize, b.size)
 
 	result := make([]T, itemCount)
 	var zero T
@@ -363,15 +353,15 @@ func (b *RingBuffer[T]) PollIfReady() []T {
 
 func (b *RingBuffer[T]) recordDroppedItem(item T) {
 	if ti, ok := any(item).(Item); ok {
-		b.recorder.RecordItem(report.ReasonBufferOverflow, ti)
+		ti.DiscardCounts().Record(b.recorder, report.ReasonBufferOverflow)
 	} else {
-		b.recorder.RecordOne(report.ReasonBufferOverflow, b.category)
+		b.recorder.Record(report.ReasonBufferOverflow, b.category, 1)
 	}
 }
 
 type BufferMetrics struct {
 	Category      ratelimit.Category `json:"category"`
-	Priority      ratelimit.Priority `json:"priority"`
+	Priority      Priority           `json:"priority"`
 	Capacity      int                `json:"capacity"`
 	Size          int                `json:"size"`
 	Utilization   float64            `json:"utilization"`

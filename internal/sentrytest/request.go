@@ -30,8 +30,7 @@ func CheckRequestIsolation(t *testing.T, request func() (context.Context, contex
 	}
 	var wg sync.WaitGroup
 	for range concurrentRequests {
-		wg.Add(1)
-		go func() { defer wg.Done(); run() }()
+		wg.Go(func() { ; run() })
 	}
 	wg.Wait()
 	close(results)

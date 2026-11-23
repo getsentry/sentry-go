@@ -38,9 +38,9 @@ type BucketedBuffer[T any] struct {
 	bucketCount int
 
 	category       ratelimit.Category
-	priority       ratelimit.Priority
+	priority       Priority
 	overflowPolicy OverflowPolicy
-	recorder       report.ClientReportRecorder
+	recorder       *report.Aggregator
 	batchSize      int
 	timeout        time.Duration
 	lastFlushTime  time.Time
@@ -58,7 +58,7 @@ func NewBucketedBuffer[T any](
 	overflowPolicy OverflowPolicy,
 	batchSize int,
 	timeout time.Duration,
-	recorder report.ClientReportRecorder,
+	recorder *report.Aggregator,
 ) *BucketedBuffer[T] {
 	if capacity <= 0 {
 		capacity = defaultBucketedCapacity
@@ -70,14 +70,7 @@ func NewBucketedBuffer[T any](
 		timeout = 0
 	}
 
-	if recorder == nil {
-		recorder = report.NoopRecorder()
-	}
-
-	bucketCapacity := capacity / 10
-	if bucketCapacity < 10 {
-		bucketCapacity = 10
-	}
+	bucketCapacity := max(capacity/10, 10)
 
 	return &BucketedBuffer[T]{
 		buckets:        make([]*Bucket[T], bucketCapacity),
@@ -85,7 +78,7 @@ func NewBucketedBuffer[T any](
 		itemCapacity:   capacity,
 		bucketCapacity: bucketCapacity,
 		category:       category,
-		priority:       category.GetPriority(),
+		priority:       priorityOf(category),
 		overflowPolicy: overflowPolicy,
 		recorder:       recorder,
 		batchSize:      batchSize,
@@ -240,10 +233,7 @@ func (b *BucketedBuffer[T]) PollBatch(maxItems int) []T {
 		if bucket == nil {
 			break
 		}
-		n := maxItems - len(res)
-		if n > len(bucket.items) {
-			n = len(bucket.items)
-		}
+		n := min(maxItems-len(res), len(bucket.items))
 		res = append(res, bucket.items[:n]...)
 		bucket.items = bucket.items[n:]
 		b.totalItems -= n
@@ -329,7 +319,7 @@ func (b *BucketedBuffer[T]) Category() ratelimit.Category {
 	defer b.mu.RUnlock()
 	return b.category
 }
-func (b *BucketedBuffer[T]) Priority() ratelimit.Priority {
+func (b *BucketedBuffer[T]) Priority() Priority {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.priority
@@ -413,8 +403,8 @@ func (b *BucketedBuffer[T]) MarkFlushed() {
 
 func (b *BucketedBuffer[T]) recordDroppedItem(item T) {
 	if ti, ok := any(item).(Item); ok {
-		b.recorder.RecordItem(report.ReasonBufferOverflow, ti)
+		ti.DiscardCounts().Record(b.recorder, report.ReasonBufferOverflow)
 	} else {
-		b.recorder.RecordOne(report.ReasonBufferOverflow, b.category)
+		b.recorder.Record(report.ReasonBufferOverflow, b.category, 1)
 	}
 }

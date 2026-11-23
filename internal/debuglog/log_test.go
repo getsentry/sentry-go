@@ -71,7 +71,7 @@ func TestConcurrentAccess(_ *testing.T) {
 	var wg sync.WaitGroup
 	iterations := 1000
 
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
@@ -79,20 +79,16 @@ func TestConcurrentAccess(_ *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < iterations; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range iterations {
+		wg.Go(func() {
 			_ = GetLogger()
-		}()
+		})
 	}
 
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 10 {
+		wg.Go(func() {
 			SetOutput(io.Discard)
-		}()
+		})
 	}
 
 	wg.Wait()

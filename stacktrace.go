@@ -147,7 +147,7 @@ func extractXErrorsPC(err error) []uintptr {
 	// of trying to account for all possible ways things can go wrong, some
 	// assumptions are made and if they are violated the code will panic. We
 	// recover from any panic and ignore it, returning nil.
-	//nolint: errcheck
+	//nolint:errcheck
 	defer func() { recover() }()
 
 	field := reflect.ValueOf(err).Elem().FieldByName("frame") // type Frame struct{ frames [3]uintptr }
@@ -167,16 +167,16 @@ type Frame struct {
 	Symbol   string `json:"symbol,omitempty"`
 	// Module is, despite the name, the Sentry protocol equivalent of a Go
 	// package's import path.
-	Module      string                 `json:"module,omitempty"`
-	Filename    string                 `json:"filename,omitempty"`
-	AbsPath     string                 `json:"abs_path,omitempty"`
-	Lineno      int                    `json:"lineno,omitempty"`
-	Colno       int                    `json:"colno,omitempty"`
-	PreContext  []string               `json:"pre_context,omitempty"`
-	ContextLine string                 `json:"context_line,omitempty"`
-	PostContext []string               `json:"post_context,omitempty"`
-	InApp       bool                   `json:"in_app"`
-	Vars        map[string]interface{} `json:"vars,omitempty"`
+	Module      string         `json:"module,omitempty"`
+	Filename    string         `json:"filename,omitempty"`
+	AbsPath     string         `json:"abs_path,omitempty"`
+	Lineno      int            `json:"lineno,omitempty"`
+	Colno       int            `json:"colno,omitempty"`
+	PreContext  []string       `json:"pre_context,omitempty"`
+	ContextLine string         `json:"context_line,omitempty"`
+	PostContext []string       `json:"post_context,omitempty"`
+	InApp       bool           `json:"in_app"`
+	Vars        map[string]any `json:"vars,omitempty"`
 	// Package and the below are not used for Go stack trace frames.  In
 	// other platforms it refers to a container where the Module can be
 	// found.  For example, a Java JAR, a .NET Assembly, or a native
@@ -289,8 +289,8 @@ func extractFrames(pcs []uintptr) []runtime.Frame {
 // This is helpful for skipping any wrapper code that was used to handle and recover
 // from the panic, so that we only keep the relevant frames.
 func trimPanicFrames(frames []runtime.Frame) []runtime.Frame {
-	for i := len(frames) - 1; i >= 0; i-- {
-		if frames[i].Function == "runtime.gopanic" {
+	for i, frame := range slices.Backward(frames) {
+		if frame.Function == "runtime.gopanic" {
 			return frames[:i]
 		}
 	}
@@ -355,14 +355,6 @@ func setInAppFrame(frame *Frame) {
 	}
 }
 
-func callerFunctionName() string {
-	pcs := make([]uintptr, 1)
-	runtime.Callers(2, pcs)
-	callersFrames := runtime.CallersFrames(pcs)
-	callerFrame, _ := callersFrames.Next()
-	return baseName(callerFrame.Function)
-}
-
 // packageName returns the package part of the symbol name, or the empty string
 // if there is none.
 // It replicates https://golang.org/pkg/debug/gosym/#Sym.PackageName, avoiding a
@@ -372,25 +364,12 @@ func packageName(name string) string {
 		return ""
 	}
 
-	pathend := strings.LastIndex(name, "/")
-	if pathend < 0 {
-		pathend = 0
-	}
+	pathend := max(strings.LastIndex(name, "/"), 0)
 
 	if i := strings.Index(name[pathend:], "."); i != -1 {
 		return name[:pathend+i]
 	}
 	return ""
-}
-
-// baseName returns the symbol name without the package or receiver name.
-// It replicates https://golang.org/pkg/debug/gosym/#Sym.BaseName, avoiding a
-// dependency on debug/gosym.
-func baseName(name string) string {
-	if i := strings.LastIndex(name, "."); i != -1 {
-		return name[i+1:]
-	}
-	return name
 }
 
 func isCompilerGeneratedSymbol(name string) bool {

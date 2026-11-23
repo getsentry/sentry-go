@@ -32,12 +32,12 @@ func rawToBool(r uint64) bool {
 
 func int64ToRaw(i int64) uint64 {
 	// Assumes original was a valid int64 (overflow not checked).
-	return uint64(i) // nolint: gosec
+	return uint64(i) //nolint:gosec
 }
 
 func rawToInt64(r uint64) int64 {
 	// Assumes original was a valid int64 (overflow not checked).
-	return int64(r) // nolint: gosec
+	return int64(r) //nolint:gosec
 }
 
 func float64ToRaw(f float64) uint64 {

@@ -12,7 +12,7 @@ func TestBuilder(t *testing.T) {
 		name      string
 		value     Builder
 		wantType  Type
-		wantValue interface{}
+		wantValue any
 	}{
 		{
 			name:      "Bool correctly returns a boolean builder",

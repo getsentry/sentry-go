@@ -24,8 +24,8 @@ func (p PropagationContext) clone() PropagationContext {
 	return p
 }
 
-func (p PropagationContext) Map() map[string]interface{} {
-	m := map[string]interface{}{
+func (p PropagationContext) Map() map[string]any {
+	m := map[string]any{
 		traceIDContextKey: p.TraceID,
 		spanIDContextKey:  p.SpanID,
 	}
@@ -40,13 +40,9 @@ func (p PropagationContext) Map() map[string]interface{} {
 func NewPropagationContext() PropagationContext {
 	p := PropagationContext{}
 
-	if _, err := rand.Read(p.TraceID[:]); err != nil {
-		panic(err)
-	}
+	rand.Read(p.TraceID[:])
 
-	if _, err := rand.Read(p.SpanID[:]); err != nil {
-		panic(err)
-	}
+	rand.Read(p.SpanID[:])
 
 	return p
 }

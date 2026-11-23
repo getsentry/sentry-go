@@ -21,7 +21,7 @@ import (
 type driverShape struct {
 	name     string
 	newDB    func(t *testing.T) *sql.DB
-	wantData map[string]interface{}
+	wantData map[string]any
 }
 
 func driverShapes(t *testing.T) []driverShape {
@@ -51,7 +51,7 @@ func driverShapes(t *testing.T) []driverShape {
 				t.Cleanup(func() { _ = db.Close() })
 				return db
 			},
-			wantData: map[string]interface{}{
+			wantData: map[string]any{
 				"db.system.name": "postgresql",
 				"db.driver.name": ctxName,
 				"db.namespace":   "appdb",
@@ -71,7 +71,7 @@ func driverShapes(t *testing.T) []driverShape {
 				t.Cleanup(func() { _ = db.Close() })
 				return db
 			},
-			wantData: map[string]interface{}{
+			wantData: map[string]any{
 				"db.system.name": "mysql",
 				"db.driver.name": legacyName,
 				"db.namespace":   "appdb",
@@ -89,7 +89,7 @@ func driverShapes(t *testing.T) []driverShape {
 				t.Cleanup(func() { _ = db.Close() })
 				return db
 			},
-			wantData: map[string]interface{}{
+			wantData: map[string]any{
 				"db.system.name": "sqlite",
 				"db.driver.name": minName,
 			},
@@ -189,9 +189,7 @@ func TestIntegration_TransactionSpansParentQueries(t *testing.T) {
 	}
 
 	for _, shape := range driverShapes(t) {
-		shape := shape
 		for _, tc := range tests {
-			tc := tc
 			t.Run(shape.name+"/"+tc.name, func(t *testing.T) {
 				sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 					db := shape.newDB(t)
@@ -269,7 +267,6 @@ func TestIntegration_TransactionExecObfuscatesPII(t *testing.T) {
 	const query = "INSERT INTO users (email, password) VALUES ('alice@example.com', 'super-secret')"
 
 	for _, shape := range driverShapes(t) {
-		shape := shape
 		t.Run(shape.name, func(t *testing.T) {
 			sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 				db := shape.newDB(t)

@@ -27,7 +27,7 @@ func TestValue(t *testing.T) {
 		name      string
 		value     Value
 		wantType  Type
-		wantValue interface{}
+		wantValue any
 	}{
 		{
 			name:      "BoolValue correctly returns a boolean",

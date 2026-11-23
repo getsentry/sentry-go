@@ -1,7 +1,7 @@
 package testutils
 
 import (
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/google/go-cmp/cmp"
@@ -50,6 +50,6 @@ func normalizeKeyValueString(s, separator string) string {
 		}
 		trimmed = append(trimmed, part)
 	}
-	sort.Strings(trimmed)
+	slices.Sort(trimmed)
 	return strings.Join(trimmed, separator)
 }

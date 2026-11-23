@@ -177,12 +177,12 @@ func convert(ctx *fiber.Ctx) *http.Request {
 	r.Header = make(http.Header)
 	r.Header.Add("Host", host)
 
-	ctx.Request().Header.VisitAll(func(key, value []byte) { // nolint: staticcheck // this is intentional to support older versions of fasthttp for fiber v2
+	ctx.Request().Header.VisitAll(func(key, value []byte) { //nolint:staticcheck // this is intentional to support older versions of fasthttp for fiber v2
 		r.Header.Add(string(key), string(value))
 	})
 
 	// Cookies
-	ctx.Request().Header.VisitAllCookie(func(key, value []byte) { // nolint: staticcheck // this is intentional to support older versions of fasthttp for fiber v2
+	ctx.Request().Header.VisitAllCookie(func(key, value []byte) { //nolint:staticcheck // this is intentional to support older versions of fasthttp for fiber v2
 		r.AddCookie(&http.Cookie{Name: string(key), Value: string(value)}) //nolint:gosec // G124: mirrors an inbound request cookie.
 	})
 

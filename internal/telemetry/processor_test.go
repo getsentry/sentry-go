@@ -29,6 +29,7 @@ func (b bwItem) GetEventID() string                           { return b.id }
 func (b bwItem) GetSdkInfo() *protocol.SdkInfo                { return &protocol.SdkInfo{Name: "t", Version: "1"} }
 func (b bwItem) GetDynamicSamplingContext() map[string]string { return nil }
 func (b bwItem) MakeSerializationSafe()                       {}
+func (b bwItem) DiscardCounts() DiscardCounts                 { return oneDiscard(ratelimit.CategoryError) }
 
 func TestBuffer_Add_MissingCategory(t *testing.T) {
 	var ctxErr error
@@ -40,7 +41,7 @@ func TestBuffer_Add_MissingCategory(t *testing.T) {
 	sdk := &protocol.SdkInfo{Name: "s", Version: "v"}
 	storage := map[ratelimit.Category]Buffer[Item]{}
 
-	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil, nil)
+	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil)
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 	if !b.Add(canceled, bwItem{id: "1"}) || transport.GetSendCount() != 1 {
@@ -62,7 +63,7 @@ func TestBuffer_AddAndFlush_Sends(t *testing.T) {
 	storage := map[ratelimit.Category]Buffer[Item]{
 		ratelimit.CategoryError: NewRingBuffer[Item](ratelimit.CategoryError, 10, OverflowPolicyDropOldest, 1, 0, nil),
 	}
-	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil, nil)
+	b := NewProcessor(storage, transport, dsn, func() *protocol.SdkInfo { return sdk }, nil)
 	if !b.Add(context.Background(), bwItem{id: "1"}) {
 		t.Fatal("add failed")
 	}

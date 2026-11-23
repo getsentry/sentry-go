@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
-	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/report"
 )
 
@@ -45,21 +44,21 @@ const (
 // that is sent to Sentry when the root span is finished.
 //
 // Spans must be started with either StartSpan or Span.StartChild.
-type Span struct { //nolint: maligned // prefer readability over optimal memory layout (see note below *)
-	TraceID      TraceID                `json:"trace_id"`
-	SpanID       SpanID                 `json:"span_id"`
-	ParentSpanID SpanID                 `json:"parent_span_id,omitzero"`
-	Name         string                 `json:"name,omitempty"`
-	Op           string                 `json:"op,omitempty"`
-	Description  string                 `json:"description,omitempty"`
-	Status       SpanStatus             `json:"status,omitempty"`
-	Tags         map[string]string      `json:"tags,omitempty"`
-	StartTime    time.Time              `json:"start_timestamp,omitzero"`
-	EndTime      time.Time              `json:"timestamp,omitzero"`
-	Data         map[string]interface{} `json:"data,omitempty"`
-	Sampled      Sampled                `json:"-"`
-	Source       TransactionSource      `json:"-"`
-	Origin       SpanOrigin             `json:"origin,omitempty"`
+type Span struct {
+	TraceID      TraceID           `json:"trace_id"`
+	SpanID       SpanID            `json:"span_id"`
+	ParentSpanID SpanID            `json:"parent_span_id,omitzero"`
+	Name         string            `json:"name,omitempty"`
+	Op           string            `json:"op,omitempty"`
+	Description  string            `json:"description,omitempty"`
+	Status       SpanStatus        `json:"status,omitempty"`
+	Tags         map[string]string `json:"tags,omitempty"`
+	StartTime    time.Time         `json:"start_timestamp,omitzero"`
+	EndTime      time.Time         `json:"timestamp,omitzero"`
+	Data         map[string]any    `json:"data,omitempty"`
+	Sampled      Sampled           `json:"-"`
+	Source       TransactionSource `json:"-"`
+	Origin       SpanOrigin        `json:"origin,omitempty"`
 
 	// mu protects concurrent writes to map fields
 	mu sync.RWMutex
@@ -101,15 +100,6 @@ type TraceParentContext struct {
 	Sampled      Sampled
 }
 
-// (*) Note on maligned:
-//
-// We prefer readability over optimal memory layout. If we ever decide to
-// reorder fields, we can use a tool:
-//
-// go run honnef.co/go/tools/cmd/structlayout -json . Span | go run honnef.co/go/tools/cmd/structlayout-optimize
-//
-// Other structs would deserve reordering as well, for example Event.
-
 // TODO: make Span.Tags and Span.Data opaque types (struct{unexported []slice}).
 // An opaque type allows us to add methods and make it more convenient to use
 // than maps, because maps require careful nil checks to use properly or rely on
@@ -141,10 +131,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		parent: parent,
 	}
 
-	_, err := rand.Read(span.SpanID[:])
-	if err != nil {
-		panic(err)
-	}
+	rand.Read(span.SpanID[:])
 
 	if hasParent {
 		span.TraceID = parent.TraceID
@@ -185,10 +172,7 @@ func StartSpan(ctx context.Context, operation string, options ...SpanOption) *Sp
 		// [3b]: https://github.com/golang/go/issues/11871#issuecomment-126357889
 		// [4a]: https://en.wikipedia.org/wiki/Universally_unique_identifier#Collisions
 		// [4b]: https://www.wolframalpha.com/input/?i=sqrt%282*2%5E64*ln%281%2F%281-0.5%29%29%29
-		_, err := rand.Read(span.TraceID[:])
-		if err != nil {
-			panic(err)
-		}
+		rand.Read(span.TraceID[:])
 		if scope := ScopeFromContext(ctx); scope != nil && scope != GlobalScope() {
 			// Only a trace continued from upstream is joined; otherwise the root is the head.
 			if propagation := scope.propagationContextSnapshot(); propagation.ParentSpanID != zeroSpanID {
@@ -308,7 +292,7 @@ func (s *Span) SetTag(name, value string) {
 // SetData sets a data on the span. It is recommended to use SetData instead of
 // accessing the data map directly as SetData takes care of initializing the map
 // when necessary.
-func (s *Span) SetData(name string, value interface{}) {
+func (s *Span) SetData(name string, value any) {
 	if value == nil {
 		return
 	}
@@ -317,7 +301,7 @@ func (s *Span) SetData(name string, value interface{}) {
 	defer s.mu.Unlock()
 
 	if s.Data == nil {
-		s.Data = make(map[string]interface{})
+		s.Data = make(map[string]any)
 	}
 	s.Data[name] = value
 }
@@ -523,8 +507,7 @@ func (s *Span) doFinish() {
 
 	if !s.Sampled.Bool() {
 		children := s.recorder.children()
-		client.reportRecorder.RecordOne(report.ReasonSampleRate, ratelimit.CategoryTransaction)
-		client.reportRecorder.Record(report.ReasonSampleRate, ratelimit.CategorySpan, int64(len(children)+1))
+		transactionDiscardCounts(uint64(len(children))).Record(client.reports, report.ReasonSampleRate)
 		return
 	}
 	event := s.toEvent()
@@ -638,7 +621,7 @@ func (s *Span) sample(client *Client) Sampled {
 			return SampledFalse
 		}
 
-		if rng.Float64() < tracesSamplerSampleRate {
+		if sample(tracesSamplerSampleRate) {
 			return SampledTrue
 		}
 		debuglog.Printf("Dropping transaction: TracesSampler returned rate: %f", tracesSamplerSampleRate)
@@ -671,7 +654,7 @@ func (s *Span) sample(client *Client) Sampled {
 		return SampledFalse
 	}
 
-	if rng.Float64() < sampleRate {
+	if sample(sampleRate) {
 		return SampledTrue
 	}
 
@@ -944,17 +927,17 @@ func (ss SpanStatus) MarshalJSON() ([]byte, error) {
 // A TraceContext carries information about an ongoing trace and is meant to be
 // stored in Event.Contexts (as *TraceContext).
 type TraceContext struct {
-	TraceID      TraceID                `json:"trace_id"`
-	SpanID       SpanID                 `json:"span_id"`
-	ParentSpanID SpanID                 `json:"parent_span_id,omitzero"`
-	Op           string                 `json:"op,omitempty"`
-	Description  string                 `json:"description,omitempty"`
-	Status       SpanStatus             `json:"status,omitempty"`
-	Data         map[string]interface{} `json:"data,omitempty"`
+	TraceID      TraceID        `json:"trace_id"`
+	SpanID       SpanID         `json:"span_id"`
+	ParentSpanID SpanID         `json:"parent_span_id,omitzero"`
+	Op           string         `json:"op,omitempty"`
+	Description  string         `json:"description,omitempty"`
+	Status       SpanStatus     `json:"status,omitempty"`
+	Data         map[string]any `json:"data,omitempty"`
 }
 
-func (tc TraceContext) Map() map[string]interface{} {
-	m := map[string]interface{}{
+func (tc TraceContext) Map() map[string]any {
+	m := map[string]any{
 		traceIDContextKey: tc.TraceID,
 		spanIDContextKey:  tc.SpanID,
 	}

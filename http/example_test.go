@@ -1,4 +1,4 @@
-// nolint // Don't lint example code.
+//nolint:all // Don't lint example code.
 package sentryhttp_test
 
 import (

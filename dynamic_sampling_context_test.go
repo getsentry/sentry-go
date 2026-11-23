@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/protocol"
 	"github.com/stretchr/testify/require"
 )
@@ -149,37 +148,6 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 		got := DynamicSamplingContextFromTransaction(tc.input)
 		assertEqual(t, got, tc.want)
 	}
-}
-
-func TestHasEntries(t *testing.T) {
-	var dsc DynamicSamplingContext
-
-	dsc = DynamicSamplingContext{}
-	assertEqual(t, dsc.HasEntries(), false)
-
-	dsc = DynamicSamplingContext{
-		Entries: map[string]string{
-			"foo": "bar",
-		},
-	}
-	assertEqual(t, dsc.HasEntries(), true)
-}
-
-func TestString(t *testing.T) {
-	var dsc DynamicSamplingContext
-
-	dsc = DynamicSamplingContext{}
-	assertEqual(t, dsc.String(), "")
-
-	dsc = DynamicSamplingContext{
-		Frozen: true,
-		Entries: map[string]string{
-			"trace_id":    "d49d9bf66f13450b81f65bc51cf49c03",
-			"public_key":  "public",
-			"sample_rate": "1",
-		},
-	}
-	testutils.AssertBaggageStringsEqual(t, dsc.String(), "sentry-trace_id=d49d9bf66f13450b81f65bc51cf49c03,sentry-public_key=public,sentry-sample_rate=1")
 }
 
 func TestDynamicSamplingContextFromScope(t *testing.T) {

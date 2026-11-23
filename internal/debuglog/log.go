@@ -20,16 +20,16 @@ func GetLogger() *log.Logger {
 }
 
 // Printf calls Printf on the underlying logger.
-func Printf(format string, args ...interface{}) {
+func Printf(format string, args ...any) {
 	logger.Printf(format, args...)
 }
 
 // Println calls Println on the underlying logger.
-func Println(args ...interface{}) {
+func Println(args ...any) {
 	logger.Println(args...)
 }
 
 // Print calls Print on the underlying logger.
-func Print(args ...interface{}) {
+func Print(args ...any) {
 	logger.Print(args...)
 }

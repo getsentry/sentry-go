@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -68,7 +69,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
-						Data: map[string]interface{}{
+						Data: map[string]any{
 							"http.request.method":       http.MethodGet,
 							"http.response.status_code": http.StatusOK,
 						},
@@ -100,7 +101,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "url"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
-						Data: map[string]interface{}{
+						Data: map[string]any{
 							"http.request.method":       http.MethodGet,
 							"http.response.status_code": http.StatusNotFound,
 						},
@@ -157,7 +158,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
-						Data: map[string]interface{}{
+						Data: map[string]any{
 							"http.request.method":       http.MethodPost,
 							"http.response.status_code": http.StatusOK,
 						},
@@ -202,7 +203,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
-						Data: map[string]interface{}{
+						Data: map[string]any{
 							"http.request.method":       http.MethodGet,
 							"http.response.status_code": http.StatusOK,
 						},
@@ -256,7 +257,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
-						Data: map[string]interface{}{
+						Data: map[string]any{
 							"http.request.method":       http.MethodPost,
 							"http.response.status_code": http.StatusOK,
 						},
@@ -308,7 +309,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
-						Data: map[string]interface{}{
+						Data: map[string]any{
 							"http.request.method":       http.MethodPost,
 							"http.response.status_code": http.StatusOK,
 						},
@@ -340,7 +341,7 @@ func TestIntegration(t *testing.T) {
 				TransactionInfo: &sentry.TransactionInfo{Source: "route"},
 				Contexts: map[string]sentry.Context{
 					"trace": sentry.TraceContext{
-						Data: map[string]interface{}{
+						Data: map[string]any{
 							"http.request.method":       http.MethodGet,
 							"http.response.status_code": http.StatusBadRequest,
 						},
@@ -483,12 +484,7 @@ func TestIntegration(t *testing.T) {
 		),
 		cmpopts.IgnoreMapEntries(func(k string, _ any) bool {
 			ignoredCtxEntries := []string{"span_id", "trace_id", "device", "os", "runtime"}
-			for _, e := range ignoredCtxEntries {
-				if k == e {
-					return true
-				}
-			}
-			return false
+			return slices.Contains(ignoredCtxEntries, k)
 		}),
 	}
 	if diff := cmp.Diff(wantTrans, gott, optstrans); diff != "" {

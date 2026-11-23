@@ -77,7 +77,7 @@ func stringifyArray(arr zapcore.ArrayMarshaler) (string, error) {
 }
 
 // isSafeToCall checks that the field.Interface doesn't hold a nil pointer.
-func isSafeToCall(v interface{}) bool {
+func isSafeToCall(v any) bool {
 	if v == nil {
 		return false
 	}

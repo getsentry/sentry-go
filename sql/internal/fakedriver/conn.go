@@ -51,7 +51,6 @@ func (c *legacyConn) Prepare(query string) (driver.Stmt, error) {
 func (c *legacyConn) Close() error              { return nil }
 func (c *legacyConn) Begin() (driver.Tx, error) { return fakeTx{}, nil }
 
-//nolint:staticcheck // intentional legacy driver.Execer implementation.
 func (c *legacyConn) Exec(_ string, _ []driver.Value) (driver.Result, error) {
 	if c.drv.fail != nil {
 		return nil, c.drv.fail
@@ -59,7 +58,6 @@ func (c *legacyConn) Exec(_ string, _ []driver.Value) (driver.Result, error) {
 	return fakeResult{}, nil
 }
 
-//nolint:staticcheck // intentional legacy driver.Queryer implementation.
 func (c *legacyConn) Query(_ string, _ []driver.Value) (driver.Rows, error) {
 	if c.drv.fail != nil {
 		return nil, c.drv.fail

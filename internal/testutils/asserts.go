@@ -9,7 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func AssertEqual(t *testing.T, got, want interface{}, userMessage ...interface{}) {
+func AssertEqual(t *testing.T, got, want any, userMessage ...any) {
 	t.Helper()
 
 	// Ideally, we would switch to cmp.Diff. However, in a general case, cmp.Diff
@@ -21,7 +21,7 @@ func AssertEqual(t *testing.T, got, want interface{}, userMessage ...interface{}
 	}
 }
 
-func AssertNotEqual(t *testing.T, got, want interface{}, userMessage ...interface{}) {
+func AssertNotEqual(t *testing.T, got, want any, userMessage ...any) {
 	t.Helper()
 
 	if reflect.DeepEqual(got, want) {
@@ -29,7 +29,7 @@ func AssertNotEqual(t *testing.T, got, want interface{}, userMessage ...interfac
 	}
 }
 
-func AssertTrue(t *testing.T, condition bool, userMessage ...interface{}) {
+func AssertTrue(t *testing.T, condition bool, userMessage ...any) {
 	t.Helper()
 
 	if !condition {
@@ -37,7 +37,7 @@ func AssertTrue(t *testing.T, condition bool, userMessage ...interface{}) {
 	}
 }
 
-func AssertFalse(t *testing.T, condition bool, userMessage ...interface{}) {
+func AssertFalse(t *testing.T, condition bool, userMessage ...any) {
 	t.Helper()
 
 	if condition {
@@ -45,7 +45,7 @@ func AssertFalse(t *testing.T, condition bool, userMessage ...interface{}) {
 	}
 }
 
-func logFailedAssertion(t *testing.T, summary string, userMessage ...interface{}) {
+func logFailedAssertion(t *testing.T, summary string, userMessage ...any) {
 	t.Helper()
 	text := summary
 
@@ -62,7 +62,7 @@ func logFailedAssertion(t *testing.T, summary string, userMessage ...interface{}
 	t.Error(text)
 }
 
-func formatUnequalValues(got, want interface{}) string {
+func formatUnequalValues(got, want any) string {
 	var a, b string
 
 	if reflect.TypeOf(got) != reflect.TypeOf(want) {

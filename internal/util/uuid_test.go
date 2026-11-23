@@ -8,7 +8,7 @@ import (
 func TestGenerateEventID_FormatVersionVariant(t *testing.T) {
 	const n = 100
 	seen := make(map[string]struct{}, n)
-	for i := 0; i < n; i++ {
+	for range n {
 		id := GenerateEventID()
 		if len(id) != 32 {
 			t.Fatalf("length = %d, want 32", len(id))

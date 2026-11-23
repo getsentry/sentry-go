@@ -20,10 +20,9 @@ func NewProcessor(
 	transport Transport,
 	dsn *protocol.Dsn,
 	sdkInfo func() *protocol.SdkInfo,
-	recorder report.ClientReportRecorder,
-	provider report.ClientReportProvider,
+	reports *report.Aggregator,
 ) *Processor {
-	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, recorder, provider)
+	scheduler := NewScheduler(buffers, transport, dsn, sdkInfo, reports)
 	scheduler.Start()
 
 	return &Processor{
@@ -46,7 +45,7 @@ func (b *Processor) Add(ctx context.Context, item Item) bool {
 	}
 	convertible, ok := item.(EnvelopeConvertible)
 	if !ok {
-		b.scheduler.recorder.RecordItem(report.ReasonInternalError, item)
+		item.DiscardCounts().Record(b.scheduler.reports, report.ReasonInternalError)
 		return false
 	}
 	if ctx == nil {

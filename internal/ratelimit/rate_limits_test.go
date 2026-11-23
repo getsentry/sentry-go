@@ -76,7 +76,6 @@ func TestParseXSentryRateLimits(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(fmt.Sprintf("%q", tt.input), func(t *testing.T) {
 			got, want := parseXSentryRateLimits(tt.input, now), tt.wantLimits
 			if diff := cmp.Diff(want, got); diff != "" {
@@ -115,7 +114,6 @@ func TestParseXSRLRetryAfterValidInput(t *testing.T) {
 		{"NaN", Deadline(now)},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(fmt.Sprintf("%q", tt.input), func(t *testing.T) {
 			d, err := parseXSRLRetryAfter(tt.input, now)
 			if err != nil {
@@ -140,7 +138,6 @@ func TestParseXSRLRetryAfterInvalidInput(t *testing.T) {
 		{"6 0"},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.input, func(t *testing.T) {
 			_, err := parseXSRLRetryAfter(tt.input, now)
 			if err == nil {

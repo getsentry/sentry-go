@@ -95,7 +95,7 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 				event := &Event{sdkMetaData: SDKMetaData{dsc: test.eventDSC}}
 				var native *Span
 				if test.nativeSpanID != zeroSpanID {
-					native = &Span{TraceID: traceID, SpanID: test.nativeSpanID, Op: "db.query", Description: "read users", Status: SpanStatusOK, Data: map[string]interface{}{"query": "users"}}
+					native = &Span{TraceID: traceID, SpanID: test.nativeSpanID, Op: "db.query", Description: "read users", Status: SpanStatusOK, Data: map[string]any{"query": "users"}}
 					ctx = context.WithValue(ctx, spanContextKey{}, native)
 				}
 				switch test.source {

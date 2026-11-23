@@ -2,16 +2,24 @@ package telemetry
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/protocol"
 )
 
+func oneDiscard(category ratelimit.Category) DiscardCounts {
+	var counts DiscardCounts
+	counts[slices.Index(ratelimit.CountCategories[:], category)] = 1
+	return counts
+}
+
 type dummyLog struct{ body string }
 
 func (dummyLog) GetCategory() ratelimit.Category { return ratelimit.CategoryLog }
 func (dummyLog) MakeSerializationSafe()          {}
+func (dummyLog) DiscardCounts() DiscardCounts    { return oneDiscard(ratelimit.CategoryLog) }
 
 type dummyMetric struct {
 	Name  string `json:"name"`
@@ -21,6 +29,9 @@ type dummyMetric struct {
 
 func (dummyMetric) GetCategory() ratelimit.Category { return ratelimit.CategoryTraceMetric }
 func (dummyMetric) MakeSerializationSafe()          {}
+func (dummyMetric) DiscardCounts() DiscardCounts {
+	return oneDiscard(ratelimit.CategoryTraceMetric)
+}
 
 type failingMetric struct {
 	Name  string        `json:"name"`
@@ -29,6 +40,9 @@ type failingMetric struct {
 
 func (failingMetric) GetCategory() ratelimit.Category { return ratelimit.CategoryTraceMetric }
 func (failingMetric) MakeSerializationSafe()          {}
+func (failingMetric) DiscardCounts() DiscardCounts {
+	return oneDiscard(ratelimit.CategoryTraceMetric)
+}
 
 func TestItemContainer_ToEnvelopeItem_And_Getters(t *testing.T) {
 	tests := []struct {
