@@ -44,7 +44,7 @@ func (failingMetric) DiscardCounts() DiscardCounts {
 	return oneDiscard(ratelimit.CategoryTraceMetric)
 }
 
-func TestItemContainer_ToEnvelopeItem_And_Getters(t *testing.T) {
+func TestItemContainer_ToEnvelopeItem(t *testing.T) {
 	tests := []struct {
 		name      string
 		category  ratelimit.Category
@@ -93,19 +93,6 @@ func TestItemContainer_ToEnvelopeItem_And_Getters(t *testing.T) {
 			}
 			if len(payload.Items) != tt.wantItems {
 				t.Fatalf("expected %d items, got %d", tt.wantItems, len(payload.Items))
-			}
-
-			if container.GetCategory() != tt.category {
-				t.Fatal("category mismatch")
-			}
-			if container.GetEventID() != "" {
-				t.Fatal("event id should be empty")
-			}
-			if container.GetSdkInfo() != nil {
-				t.Fatal("sdk info should be nil")
-			}
-			if container.GetDynamicSamplingContext() != nil {
-				t.Fatal("dsc should be nil")
 			}
 		})
 	}

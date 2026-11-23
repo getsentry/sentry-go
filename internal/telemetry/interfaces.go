@@ -23,20 +23,8 @@ type Item interface {
 
 // EnvelopeConvertible represents items that can convert themselves to envelopes.
 type EnvelopeConvertible interface {
-	// GetCategory returns the rate limit category for this item.
-	GetCategory() ratelimit.Category
-
-	// GetEventID returns the event ID for this item.
-	GetEventID() string
-
-	// GetSdkInfo returns SDK information for the envelope header.
-	GetSdkInfo() *protocol.SdkInfo
-
-	// GetDynamicSamplingContext returns trace context for the envelope header.
-	GetDynamicSamplingContext() map[string]string
-
-	// ToEnvelope converts the item to a Sentry envelope using the provided header.
-	ToEnvelope(*protocol.EnvelopeHeader) (*protocol.Envelope, error)
+	// ToEnvelope builds the item's envelope, setting the header fields the item knows.
+	ToEnvelope() (*protocol.Envelope, error)
 
 	// DiscardCounts returns client report counts for a dropped item.
 	DiscardCounts() DiscardCounts

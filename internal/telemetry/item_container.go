@@ -69,12 +69,12 @@ func (b ItemContainer) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	return b.newEnvelopeItem(itemCount, payload)
 }
 
-func (b ItemContainer) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+func (b ItemContainer) ToEnvelope() (*protocol.Envelope, error) {
 	item, err := b.ToEnvelopeItem()
 	if err != nil {
 		return nil, err
 	}
-	return protocol.NewEnvelope(header, item), nil
+	return protocol.NewEnvelope(&protocol.EnvelopeHeader{}, item), nil
 }
 
 // DiscardCounts returns client report counts for a dropped batch, summed over its items.
@@ -85,8 +85,3 @@ func (b ItemContainer) DiscardCounts() DiscardCounts {
 	}
 	return counts
 }
-
-func (b ItemContainer) GetCategory() ratelimit.Category            { return b.category }
-func (ItemContainer) GetEventID() string                           { return "" }
-func (ItemContainer) GetSdkInfo() *protocol.SdkInfo                { return nil }
-func (ItemContainer) GetDynamicSamplingContext() map[string]string { return nil }
