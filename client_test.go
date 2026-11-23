@@ -55,6 +55,60 @@ func TestNewClientRejectsMalformedDSN(t *testing.T) {
 	assert.Nil(t, client)
 }
 
+func TestNewClientEnvironmentVariables(t *testing.T) {
+	type got struct {
+		Debug            bool
+		SampleRate       float64
+		EnableTracing    bool
+		TracesSampleRate float64
+	}
+	for _, test := range []struct {
+		name    string
+		env     map[string]string
+		options ClientOptions
+		want    got
+	}{
+		{name: "unset", want: got{SampleRate: 1}},
+		{
+			name: "set",
+			env:  map[string]string{"SENTRY_DEBUG": "true", "SENTRY_SAMPLE_RATE": "0", "SENTRY_TRACES_SAMPLE_RATE": " 0.5 "},
+			want: got{Debug: true, SampleRate: 0, EnableTracing: true, TracesSampleRate: 0.5},
+		},
+		{
+			name:    "options win",
+			env:     map[string]string{"SENTRY_DEBUG": "false", "SENTRY_SAMPLE_RATE": "0.5", "SENTRY_TRACES_SAMPLE_RATE": "0.5"},
+			options: ClientOptions{Debug: true, SampleRate: 0.2, EnableTracing: true, TracesSampleRate: 1},
+			want:    got{Debug: true, SampleRate: 0.2, EnableTracing: true, TracesSampleRate: 1},
+		},
+		{
+			name:    "traces sampler wins",
+			env:     map[string]string{"SENTRY_TRACES_SAMPLE_RATE": "0.5"},
+			options: ClientOptions{TracesSampler: func(SamplingContext) float64 { return 1 }},
+			want:    got{SampleRate: 1},
+		},
+		{
+			name: "invalid",
+			env:  map[string]string{"SENTRY_DEBUG": "maybe", "SENTRY_SAMPLE_RATE": "1.5", "SENTRY_TRACES_SAMPLE_RATE": "NaN"},
+			want: got{SampleRate: 1},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for k, v := range test.env {
+				t.Setenv(k, v)
+			}
+			test.options.DebugWriter = io.Discard
+			client, err := NewClient(test.options)
+			require.NoError(t, err)
+			defer client.Close()
+
+			o := client.Options()
+			if diff := cmp.Diff(test.want, got{o.Debug, o.SampleRate, o.EnableTracing, o.TracesSampleRate}); diff != "" {
+				t.Errorf("options mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
 func TestNoopClient(t *testing.T) {
 	first := NewNoopClient()
 	second := NewNoopClient()
