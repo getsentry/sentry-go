@@ -26,41 +26,40 @@ type uint64LogEntry interface {
 
 func slogAttrToLogEntry(logEntry sentry.LogEntry, group string, a slog.Attr) sentry.LogEntry {
 	key := group + a.Key
-	switch a.Value.Kind() {
+	val := a.Value.Resolve()
+	switch val.Kind() {
 	case slog.KindAny:
-		return logEntry.String(key, fmt.Sprintf("%+v", a.Value.Any()))
+		return logEntry.String(key, fmt.Sprintf("%+v", val.Any()))
 	case slog.KindBool:
-		return logEntry.Bool(key, a.Value.Bool())
+		return logEntry.Bool(key, val.Bool())
 	case slog.KindDuration:
-		return logEntry.String(key, a.Value.Duration().String())
+		return logEntry.String(key, val.Duration().String())
 	case slog.KindFloat64:
-		return logEntry.Float64(key, a.Value.Float64())
+		return logEntry.Float64(key, val.Float64())
 	case slog.KindInt64:
-		return logEntry.Int64(key, a.Value.Int64())
+		return logEntry.Int64(key, val.Int64())
 	case slog.KindString:
-		return logEntry.String(key, a.Value.String())
+		return logEntry.String(key, val.String())
 	case slog.KindTime:
-		return logEntry.String(key, a.Value.Time().Format(time.RFC3339))
+		return logEntry.String(key, val.Time().Format(time.RFC3339))
 	case slog.KindUint64:
 		if e, ok := logEntry.(uint64LogEntry); ok {
-			return e.Uint64(key, a.Value.Uint64())
+			return e.Uint64(key, val.Uint64())
 		}
 		debuglog.Println("Internal error: log entry does not implement unsigned int conversion")
 		return logEntry
-	case slog.KindLogValuer:
-		return logEntry.String(key, a.Value.LogValuer().LogValue().String())
 	case slog.KindGroup:
 		// Handle nested group attributes
 		groupPrefix := key
 		if groupPrefix != "" {
 			groupPrefix += "."
 		}
-		for _, subAttr := range a.Value.Group() {
+		for _, subAttr := range val.Group() {
 			logEntry = slogAttrToLogEntry(logEntry, groupPrefix, subAttr)
 		}
 		return logEntry
 	}
 
-	debuglog.Printf("Invalid type: dropping attribute with key: %v and value: %v", a.Key, a.Value)
+	debuglog.Printf("Invalid type: dropping attribute with key: %v and value: %v", a.Key, val)
 	return logEntry
 }
