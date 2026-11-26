@@ -1,9 +1,11 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
 	"github.com/getsentry/sentry-go/internal/ratelimit"
@@ -116,4 +118,11 @@ func DoSendRequest(client *http.Client, request *http.Request, identifier string
 		StatusCode: response.StatusCode,
 		Limits:     limits,
 	}, nil
+}
+
+// FlushWithTimeout flushes f, waiting for at most timeout.
+func FlushWithTimeout(f interface{ Flush(context.Context) bool }, timeout time.Duration) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return f.Flush(ctx)
 }

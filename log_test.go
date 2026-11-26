@@ -31,7 +31,7 @@ func (s *countingStringer) String() string {
 
 // flushFromContext flushes the client from the given context.
 func flushFromContext(ctx context.Context, timeout time.Duration) {
-	ClientFromContext(ctx).Flush(timeout)
+	testutils.FlushWithTimeout(ClientFromContext(ctx), timeout)
 }
 
 func TestDisabledLoggerDoesNotFormatValues(t *testing.T) {

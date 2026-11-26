@@ -51,9 +51,9 @@ func (b *Processor) Add(ctx context.Context, item Item) bool {
 	return b.scheduler.sendItem(context.WithoutCancel(ctx), convertible, false)
 }
 
-// FlushWithContext flushes with a custom context for cancellation.
-func (b *Processor) FlushWithContext(ctx context.Context) bool {
-	return b.scheduler.FlushWithContext(ctx)
+// Flush flushes with a custom context for cancellation.
+func (b *Processor) Flush(ctx context.Context) bool {
+	return b.scheduler.Flush(ctx)
 }
 
 // Close stops the buffer, flushes remaining data, and releases resources.

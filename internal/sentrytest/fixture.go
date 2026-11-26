@@ -172,7 +172,7 @@ func (f *Fixture) Flush() {
 	if f.useSynctest {
 		synctest.Wait()
 	}
-	if ok := f.Client.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(f.Client, testutils.FlushTimeout()); !ok {
 		f.T.Error("Fixture: client flush timed out")
 	}
 }

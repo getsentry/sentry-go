@@ -1,6 +1,7 @@
 package sentrygin_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -392,7 +393,7 @@ func TestIntegration(t *testing.T) {
 		}
 	}
 
-	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(eventsCh)

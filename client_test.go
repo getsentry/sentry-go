@@ -91,8 +91,7 @@ func TestNoopClient(t *testing.T) {
 		})
 	}
 
-	assert.False(t, first.Flush(time.Second))
-	assert.False(t, first.FlushWithContext(context.Background()))
+	assert.False(t, first.Flush(context.Background()))
 	assert.NotPanics(t, first.Close)
 }
 
@@ -1629,7 +1628,7 @@ func TestClientSetsUpTransport(t *testing.T) {
 				NewMeter(ctx).Count("batched.metric", 1)
 				synctest.Wait()
 				require.EqualValues(t, 1, requests.Load(), "partial batches stay buffered with every transport")
-				require.True(t, client.Flush(testutils.FlushTimeout()))
+				require.True(t, testutils.FlushWithTimeout(client, testutils.FlushTimeout()))
 				require.EqualValues(t, 3, requests.Load())
 			})
 		})
@@ -1672,7 +1671,7 @@ func TestTelemetryEnvelopeCarriesIntegrations(t *testing.T) {
 	t.Cleanup(func() { client.Close() })
 
 	client.CaptureMessage(context.Background(), "ping")
-	require.True(t, client.Flush(testutils.FlushTimeout()), "flush timed out")
+	require.True(t, testutils.FlushWithTimeout(client, testutils.FlushTimeout()), "flush timed out")
 
 	select {
 	case <-requestReceived:
@@ -1770,8 +1769,8 @@ func (e *multiClientEnv) resetTransports() {
 }
 
 func (e *multiClientEnv) flushAll() {
-	e.client1.Flush(5 * time.Second)
-	e.client2.Flush(5 * time.Second)
+	testutils.FlushWithTimeout(e.client1, 5*time.Second)
+	testutils.FlushWithTimeout(e.client2, 5*time.Second)
 }
 
 func eventTraceID(t *testing.T, ev *Event) TraceID {

@@ -28,7 +28,7 @@ func (t *devNullTransport) SendEnvelope(_ context.Context, _ *protocol.Envelope)
 	return nil
 }
 
-func (t *devNullTransport) FlushWithContext(ctx context.Context) bool {
+func (t *devNullTransport) Flush(ctx context.Context) bool {
 	return true
 }
 

@@ -116,7 +116,7 @@ func TestLogHookAddTags(t *testing.T) {
 		Message: "something",
 	}))
 
-	hook.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(hook, testutils.FlushTimeout())
 
 	got := f.Transport.LogBatches()
 	assert.Equal(t, 1, len(got))
@@ -194,7 +194,7 @@ func TestLogHookFireWithDifferentDataTypes(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	hook.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(hook, testutils.FlushTimeout())
 
 	got := f.Transport.LogBatches()
 	assert.Equal(t, 1, len(got))

@@ -179,7 +179,7 @@ func TestZapFieldToLogEntry_EdgeCases(t *testing.T) {
 		logger.Info("test uint64 overflow",
 			zap.Uint64("max_uint64", maxValue),
 		)
-		sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout())
+		testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout())
 
 		events := mockTransport.LogBatches()
 		require.Equal(t, 1, len(events))

@@ -44,13 +44,19 @@ func main() {
 		logrus.FatalLevel,
 		logrus.PanicLevel,
 	})
-	defer logHook.Flush(5 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		logHook.Flush(ctx)
+	}()
 	logger.AddHook(logHook)
 
 	// Flushes before calling os.Exit(1) when using logger.Fatal
 	// (else all defers are not called, and Sentry does not have time to send the log)
 	logrus.RegisterExitHandler(func() {
-		logHook.Flush(5 * time.Second)
+		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		logHook.Flush(flushCtx)
+		cancel()
 	})
 
 	// Log a InfoLevel entry STDERR which is sent as a log to Sentry

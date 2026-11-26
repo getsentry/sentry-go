@@ -27,7 +27,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("sentry.Init: %s", err)
 	}
-	defer sentry.Flush(2 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	// Create a connection to the gRPC server with Sentry interceptors
 	conn, err := grpc.NewClient(

@@ -123,37 +123,20 @@ func Recover(ctx context.Context, recovered any, options ...CaptureOption) Event
 	return ClientFromContext(ctx).capturePanic(ctx, recovered, options...)
 }
 
-// Flush waits until the underlying Transport sends any buffered events to the
-// Sentry server, blocking for at most the given timeout. It returns false if
-// capture is disabled or the timeout was reached. In the latter case, some
-// events may not have been sent.
-//
-// Flush should be called before terminating the program to avoid
-// unintentionally dropping events.
-//
-// Do not call Flush indiscriminately after every call to CaptureEvent,
-// CaptureError or CaptureMessage. Instead, to have the SDK send events over
-// the network synchronously, configure it to use the HTTPSyncTransport in the
-// call to Init.
-func Flush(timeout time.Duration) bool {
-	return ClientFromContext(context.Background()).Flush(timeout)
-}
-
-// FlushWithContext waits until the underlying Transport sends any buffered events
+// Flush waits until the underlying Transport sends any buffered events
 // to the Sentry server, blocking for at most the duration specified by the
 // context. It returns false if capture is disabled or the context is canceled
 // before the events are sent. In the latter case, some events may not be
 // delivered.
 //
-// FlushWithContext should be called before terminating the program to ensure no
+// Flush should be called before terminating the program to ensure no
 // events are unintentionally dropped.
 //
-// Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
+// Avoid calling Flush indiscriminately after each call to CaptureEvent,
 // CaptureError, or CaptureMessage. To send events synchronously over the network,
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
-
-func FlushWithContext(ctx context.Context) bool {
-	return ClientFromContext(ctx).FlushWithContext(ctx)
+func Flush(ctx context.Context) bool {
+	return ClientFromContext(ctx).Flush(ctx)
 }
 
 // LastEventID returns the last event ID captured in ctx's scope, or an empty
