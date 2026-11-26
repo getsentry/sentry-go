@@ -710,19 +710,26 @@ func (trace activeTrace) withScope(propagation PropagationContext) activeTrace {
 	return trace
 }
 
+// resolveTrace returns the trace telemetry belongs to. The span ID is set
+// only when a span is active.
 func resolveTrace(scope *Scope, client *Client, ctxs ...context.Context) (TraceID, SpanID) {
+	trace := resolveActiveTrace(scope, client, ctxs...)
+	if trace.propagation {
+		return trace.traceID, zeroSpanID
+	}
+	return trace.traceID, trace.spanID
+}
+
+func resolveActiveTrace(scope *Scope, client *Client, ctxs ...context.Context) activeTrace {
 	trace := activeTraceFromContexts(client, ctxs...)
 	if trace.traceID == zeroTraceID && trace.span == nil {
 		if scope == nil {
 			// Neither a span nor a scope carries a trace, so start one.
-			return NewPropagationContext().TraceID, zeroSpanID
+			return trace.withScope(NewPropagationContext())
 		}
 		scope.mu.RLock()
 		trace = trace.withScope(scope.propagationContext)
 		scope.mu.RUnlock()
 	}
-	if trace.propagation {
-		return trace.traceID, zeroSpanID
-	}
-	return trace.traceID, trace.spanID
+	return trace
 }
