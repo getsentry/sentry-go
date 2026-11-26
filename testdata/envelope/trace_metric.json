@@ -1,0 +1,63 @@
+{
+  "header": {
+    "dsn": "https://whatever@sentry.io/1337",
+    "sdk": {
+      "integrations": [
+        "GlobalTags",
+        "IgnoreErrors",
+        "IgnoreTransactions"
+      ],
+      "name": "sentry.go",
+      "packages": [
+        {
+          "name": "sentry-go"
+        }
+      ]
+    }
+  },
+  "items": [
+    {
+      "header": {
+        "content_type": "application/vnd.sentry.items.trace-metric+json",
+        "item_count": 1,
+        "type": "trace_metric"
+      },
+      "payload": {
+        "items": [
+          {
+            "attributes": {
+              "key": {
+                "type": "string",
+                "value": "value"
+              },
+              "sentry.environment": {
+                "type": "string",
+                "value": "test"
+              },
+              "sentry.release": {
+                "type": "string",
+                "value": "app@1.0.0"
+              },
+              "sentry.sdk.name": {
+                "type": "string",
+                "value": "sentry.go"
+              },
+              "sentry.server.address": {
+                "type": "string",
+                "value": "golden"
+              },
+              "user.id": {
+                "type": "string",
+                "value": "42"
+              }
+            },
+            "name": "orders",
+            "type": "counter",
+            "unit": "order",
+            "value": 1
+          }
+        ]
+      }
+    }
+  ]
+}

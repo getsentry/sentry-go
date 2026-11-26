@@ -14,6 +14,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/testutils"
+	"github.com/getsentry/sentry-go/protocol"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -184,6 +185,11 @@ func (f *Fixture) NewContext(parent context.Context) context.Context {
 	}
 	ctx, _ := sentry.WithScope(parent)
 	return sentry.ContextWithClient(ctx, f.Client)
+}
+
+// Envelopes returns the envelopes handed to the transport so far.
+func (f *Fixture) Envelopes() []*protocol.Envelope {
+	return f.Transport.Envelopes()
 }
 
 // Events returns all captured events, including transactions.
