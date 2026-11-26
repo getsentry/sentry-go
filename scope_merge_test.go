@@ -119,7 +119,7 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 				scope.SetPropagationContext(PropagationContext{TraceID: dscTraceID, SpanID: spanID, DynamicSamplingContext: dsc})
 				client, transport := newCaptureTestClient(t, ClientOptions{})
 				ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
-				event := &Event{sdkMetaData: SDKMetaData{dsc: test.eventDSC}}
+				event := &Event{sdkMetaData: sdkMetaData{dsc: test.eventDSC}}
 				var native *Span
 				if test.nativeSpanID != zeroSpanID {
 					native = &Span{TraceID: traceID, SpanID: test.nativeSpanID, Op: "db.query", Description: "read users", Status: SpanStatusOK, Data: map[string]any{"query": "users"}}
@@ -257,9 +257,6 @@ func TestCaptureBreadcrumbOrderAndLimit(t *testing.T) {
 
 func TestCaptureRunsProcessorsFromGenericToSpecific(t *testing.T) {
 	global := cleanGlobalScope(t)
-	previousProcessors := globalEventProcessors
-	globalEventProcessors = nil
-	t.Cleanup(func() { globalEventProcessors = previousProcessors })
 	var order []string
 	processor := func(name string, want Level) EventProcessor {
 		return func(event *Event, _ *EventHint) *Event {
@@ -284,10 +281,9 @@ func TestCaptureRunsProcessorsFromGenericToSpecific(t *testing.T) {
 		BeforeSend:     processor("before send", LevelFatal),
 	})
 	client.AddEventProcessor(processor("client", LevelFatal))
-	AddGlobalEventProcessor(processor("global processor", LevelFatal))
 
 	require.NotNil(t, CaptureEvent(ContextWithClient(ctx, client), NewEvent(), WithLevel(LevelDebug)))
-	require.Equal(t, []string{"global scope", "current scope", "client", "global processor", "before send"}, order)
+	require.Equal(t, []string{"global scope", "current scope", "client", "before send"}, order)
 	require.Equal(t, LevelFatal, requireSingleEvent(t, transport).Level)
 	require.Equal(t, Context{"value": "scope"}, data)
 }

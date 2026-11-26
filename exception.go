@@ -78,7 +78,7 @@ func convertErrorDFS(err error, exceptions *[]Exception, parentID *int, source s
 	exception := Exception{
 		Value:      err.Error(),
 		Type:       reflect.TypeOf(err).String(),
-		Stacktrace: ExtractStacktrace(err),
+		Stacktrace: extractStacktrace(err),
 	}
 
 	currentID := len(*exceptions)

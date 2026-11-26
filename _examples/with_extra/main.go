@@ -17,10 +17,10 @@ func prettyPrint(v any) string {
 type devNullTransport struct{}
 
 func (t *devNullTransport) Configure(options sentry.ClientOptions) {
-	dsn, _ := sentry.NewDsn(options.Dsn)
+	dsn, _ := protocol.NewDsn(options.Dsn)
 	fmt.Println()
 	fmt.Println("Envelope Endpoint:", dsn.GetAPIURL())
-	fmt.Println("Headers:", dsn.RequestHeaders())
+	fmt.Println("Headers:", dsn.RequestHeaders(sentry.SDKVersion))
 	fmt.Println()
 }
 func (t *devNullTransport) SendEnvelope(_ context.Context, _ *protocol.Envelope) error {

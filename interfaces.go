@@ -283,12 +283,6 @@ type Mechanism struct {
 	Data             map[string]any `json:"data,omitempty"`
 }
 
-// SetUnhandled indicates that the exception is an unhandled exception, i.e.
-// from a panic.
-func (m *Mechanism) SetUnhandled() {
-	m.Handled = new(false)
-}
-
 // Exception specifies an error that occurred.
 type Exception struct {
 	Type       string      `json:"type,omitempty"`  // used as the main issue title
@@ -299,9 +293,9 @@ type Exception struct {
 	Mechanism  *Mechanism  `json:"mechanism,omitempty"`
 }
 
-// SDKMetaData is a struct to stash data which is needed at some point in the SDK's event processing pipeline
-// but which shouldn't get send to Sentry.
-type SDKMetaData struct {
+// sdkMetaData is data the SDK needs while processing an event that is not
+// sent to Sentry.
+type sdkMetaData struct {
 	dsc DynamicSamplingContext
 }
 
@@ -372,7 +366,7 @@ type Event struct {
 
 	// The fields below are not part of the final JSON payload.
 
-	sdkMetaData SDKMetaData
+	sdkMetaData sdkMetaData
 }
 
 // SetException appends the unwrapped errors to the event's exception list.
@@ -505,7 +499,6 @@ type Thread struct {
 // EventHint contains information that can be associated with an Event.
 type EventHint struct {
 	Data               any
-	EventID            string
 	OriginalException  error
 	RecoveredException any
 	Context            context.Context

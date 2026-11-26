@@ -378,17 +378,6 @@ func (scope *Scope) AddEventProcessor(processor EventProcessor) {
 	scope.eventProcessors = append(scope.eventProcessors, processor)
 }
 
-// ApplyToEvent takes the data from the current scope and attaches it to the event.
-func (scope *Scope) ApplyToEvent(event *Event, hint *EventHint, client *Client) *Event {
-	client = normalizeClient(client)
-	var ctx context.Context
-	if hint != nil {
-		ctx = hint.Context
-	}
-	processors := scope.applyToEvent(ctx, event, client, client.options.MaxBreadcrumbs)
-	return client.runEventProcessors(event, hint, processors)
-}
-
 // applyToEvent applies the effective scope to event and returns the scope
 // processors so they can run after the scope lock is released.
 func (scope *Scope) applyToEvent(
