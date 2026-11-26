@@ -814,7 +814,7 @@ func (client *Client) capture(ctx context.Context, event *Event, opts captureOpt
 
 // captureTransaction sends tx with dsc as the trace header of its envelope.
 func (client *Client) captureTransaction(ctx context.Context, tx *Transaction, dsc map[string]string) {
-	applyScopesToTransaction(tx, client, ScopeFromContext(ctx))
+	request := applyScopesToTransaction(tx, client, ScopeFromContext(ctx))
 
 	tx.EventID = EventID(uuid())
 	tx.ServerName = cmp.Or(client.options.ServerName, hostname)
@@ -834,7 +834,7 @@ func (client *Client) captureTransaction(ctx context.Context, tx *Transaction, d
 
 	if client.options.BeforeSendTransaction != nil {
 		counts, spansBefore := tx.discardCounts(), len(tx.Spans)
-		tx = client.options.BeforeSendTransaction(tx, &EventHint{Context: ctx})
+		tx = client.options.BeforeSendTransaction(tx, &EventHint{Context: ctx, Request: request})
 		if tx == nil {
 			debuglog.Println("Transaction dropped due to BeforeSendTransaction callback.")
 			counts.Record(client.reports, report.ReasonBeforeSend)
@@ -852,7 +852,7 @@ func (client *Client) captureTransaction(ctx context.Context, tx *Transaction, d
 }
 
 func (client *Client) prepareEvent(ctx context.Context, event *Event, scope *Scope, opts captureOptions) *Event {
-	globalScopeProcessors, scopeProcessors := applyScopesToEvent(ctx, event, client, scope, client.options.MaxBreadcrumbs)
+	globalScopeProcessors, scopeProcessors := applyScopesToEvent(ctx, event, client, scope, opts.hint, client.options.MaxBreadcrumbs)
 	if event.Level == "" {
 		event.Level = opts.defaultLevel
 	}

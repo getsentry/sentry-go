@@ -112,11 +112,9 @@ app.Listen(":3000")
 sentry.Init(sentry.ClientOptions{
 	Dsn: "your-public-dsn",
 	BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-		if hint.Context != nil {
-			if ctx, ok := hint.Context.Value(sentry.RequestContextKey).(*fiber.Ctx); ok {
-				// You have access to the original Context if it panicked
-				fmt.Println(ctx.Hostname())
-			}
+		if hint.Request != nil {
+			// You have access to the request
+			fmt.Println(hint.Request.Host)
 		}
 		return event
 	},
