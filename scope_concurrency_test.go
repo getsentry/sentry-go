@@ -45,7 +45,7 @@ func touchScope(ctx context.Context, scope *sentry.Scope, x int) {
 	scope.SetRequest(httptest.NewRequest("GET", "/foo", nil))
 	scope.SetPropagationContext(sentry.NewPropagationContext())
 
-	sentry.CaptureException(ctx, fmt.Errorf("error %d", x))
+	sentry.CaptureError(ctx, fmt.Errorf("error %d", x))
 
 	scope.ClearBreadcrumbs()
 	scope.Clone()

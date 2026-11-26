@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -45,7 +46,7 @@ func TestNewClientAllowsEmptyDSN(t *testing.T) {
 		t.Fatal("client with an empty DSN should remain enabled")
 	}
 
-	client.CaptureException(context.Background(), errors.New("custom error"))
+	client.CaptureError(context.Background(), errors.New("custom error"))
 	assertEqual(t, transport.lastEvent.Exception[0].Value, "custom error")
 }
 
@@ -74,7 +75,7 @@ func TestNoopClient(t *testing.T) {
 		capture func() EventID
 	}{
 		{"message", func() EventID { return first.CaptureMessage(context.Background(), "message") }},
-		{"exception", func() EventID { return first.CaptureException(context.Background(), errors.New("exception")) }},
+		{"exception", func() EventID { return first.CaptureError(context.Background(), errors.New("exception")) }},
 		{"event", func() EventID { return first.CaptureEvent(context.Background(), &Event{Message: "event"}) }},
 		{"nil event", func() EventID { return CaptureEvent(ContextWithClient(context.Background(), first), nil) }},
 		{"check-in", func() EventID {
@@ -357,7 +358,7 @@ func TestCaptureMessagePreservesActiveSpanTraceContext(t *testing.T) {
 func TestCaptureEmptyInputSendsNothing(t *testing.T) {
 	for name, capture := range map[string]func(context.Context) EventID{
 		"empty message": func(ctx context.Context) EventID { return CaptureMessage(ctx, "") },
-		"nil error":     func(ctx context.Context) EventID { return CaptureException(ctx, nil) },
+		"nil error":     func(ctx context.Context) EventID { return CaptureError(ctx, nil) },
 		"nil event":     func(ctx context.Context) EventID { return CaptureEvent(ctx, nil) },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -410,7 +411,7 @@ type captureExceptionTest struct {
 	want []Exception
 }
 
-func TestCaptureException(t *testing.T) {
+func TestCaptureError(t *testing.T) {
 	basicTests := []captureExceptionTest{
 		{
 			name: "SimpleError",
@@ -598,7 +599,7 @@ func TestCaptureException(t *testing.T) {
 		for _, tt := range grp.tests {
 			t.Run(grp.name+"/"+tt.name, func(t *testing.T) {
 				client, _, transport := setupClientTest()
-				CaptureException(ContextWithClient(context.Background(), client), tt.err)
+				CaptureError(ContextWithClient(context.Background(), client), tt.err)
 				if transport.lastEvent == nil {
 					t.Fatal("missing event")
 				}
@@ -675,7 +676,7 @@ func TestCaptureLevelPrecedence(t *testing.T) {
 			name:       "capture helper default below scope",
 			scopeLevel: LevelWarning,
 			capture: func(ctx context.Context, client *Client) {
-				client.CaptureException(ctx, errors.New("boom"))
+				client.CaptureError(ctx, errors.New("boom"))
 			},
 			want: LevelWarning,
 		},
@@ -698,7 +699,7 @@ func TestCaptureLevelPrecedence(t *testing.T) {
 		{
 			name: "capture helper default reaches scope processors",
 			capture: func(ctx context.Context, client *Client) {
-				client.CaptureException(ctx, errors.New("boom"))
+				client.CaptureError(ctx, errors.New("boom"))
 			},
 			want: LevelError,
 		},
@@ -738,7 +739,14 @@ func TestCaptureUpdatesLastEventID(t *testing.T) {
 			wantChange: true,
 		},
 		{
-			name: "exception",
+			name: "error",
+			capture: func(ctx context.Context, client *Client) EventID {
+				return client.CaptureError(ctx, errors.New("next"))
+			},
+			wantChange: true,
+		},
+		{
+			name: "deprecated exception",
 			capture: func(ctx context.Context, client *Client) EventID {
 				return client.CaptureException(ctx, errors.New("next"))
 			},
@@ -971,7 +979,7 @@ func TestBeforeSendCanDropEvent(t *testing.T) {
 func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	client, scope, transport := setupClientTest()
 	client.options.BeforeSend = func(event *Event, hint *EventHint) *Event {
-		if ex, ok := hint.OriginalException.(customComplexError); ok {
+		if ex, ok := hint.OriginalError.(customComplexError); ok {
 			event.Message = event.Exception[0].Value + " " + ex.AnswerToLife()
 		}
 		return event
@@ -979,7 +987,7 @@ func TestBeforeSendGetAccessToEventHint(t *testing.T) {
 	ex := customComplexError{Message: "Foo"}
 
 	ctx := ContextWithClient(ContextWithScope(context.Background(), scope), client)
-	CaptureException(ctx, ex, WithEventHint(&EventHint{OriginalException: ex}))
+	CaptureError(ctx, ex)
 
 	assertEqual(t, transport.lastEvent.Message, "customComplexError: Foo 42")
 }
@@ -1469,6 +1477,9 @@ func TestRecover(t *testing.T) {
 				called = true
 				if hint.Context != captureCtx {
 					t.Fatal("unexpected context value")
+				}
+				if !reflect.DeepEqual(hint.RecoveredPanic, tt.v) {
+					t.Errorf("hint.RecoveredPanic = %v, want %v", hint.RecoveredPanic, tt.v)
 				}
 				return event
 			})

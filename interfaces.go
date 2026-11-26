@@ -493,12 +493,12 @@ type Thread struct {
 
 // EventHint contains information that can be associated with an Event.
 type EventHint struct {
-	Data               any
-	OriginalException  error
-	RecoveredException any
-	Context            context.Context
-	Request            *http.Request
-	Response           *http.Response
+	Data           any
+	OriginalError  error
+	RecoveredPanic any
+	Context        context.Context
+	Request        *http.Request
+	Response       *http.Response
 }
 
 type Log struct {

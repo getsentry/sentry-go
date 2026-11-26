@@ -160,7 +160,7 @@ func run() error {
 
 		if err != nil {
 			log.Printf("[%q] %s", r.URL.Path, err)
-			sentry.CaptureException(ctx, err)
+			sentry.CaptureError(ctx, err)
 			code := http.StatusInternalServerError
 			http.Error(w, http.StatusText(code), code)
 			return

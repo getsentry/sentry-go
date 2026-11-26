@@ -27,7 +27,7 @@ import (
 )
 
 func sendSignals(ctx context.Context, identifier string, logger sentry.Logger, meter sentry.Meter) {
-	sentry.CaptureException(ctx, errors.New(identifier+" manual error"))
+	sentry.CaptureError(ctx, errors.New(identifier+" manual error"))
 	logger.Info().WithCtx(ctx).Emit(identifier + " linked log")
 	meter.WithCtx(ctx).Count(identifier+".linked.metric", 1)
 	panic(identifier + " panic")

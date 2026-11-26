@@ -20,7 +20,7 @@ func Example() {
 		// trace are applied to the event.
 		_, err := http.Get("example.com")
 		if err != nil {
-			sentry.CaptureException(r.Context(), err)
+			sentry.CaptureError(r.Context(), err)
 		}
 	})
 
