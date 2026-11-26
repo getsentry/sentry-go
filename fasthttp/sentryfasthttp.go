@@ -128,7 +128,7 @@ func (h *Handler) Handle(handler fasthttp.RequestHandler) fasthttp.RequestHandle
 func (h *Handler) recoverWithSentry(requestCtx context.Context, cancel context.CancelFunc) {
 	if err := recover(); err != nil {
 		eventID := sentry.Recover(requestCtx, err)
-		if eventID != nil && h.waitForDelivery {
+		if eventID != "" && h.waitForDelivery {
 			sentry.ClientFromContext(requestCtx).Flush(h.timeout)
 		}
 		if h.repanic {

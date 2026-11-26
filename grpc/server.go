@@ -46,7 +46,7 @@ func recoverWithSentry(ctx context.Context, o ServerOptions, onRecover func()) {
 			onRecover()
 		}
 
-		if eventID != nil && o.WaitForDelivery {
+		if eventID != "" && o.WaitForDelivery {
 			sentry.ClientFromContext(ctx).Flush(o.Timeout)
 		}
 

@@ -53,7 +53,7 @@ func TestClientReports_CustomTransport(t *testing.T) {
 			defer client.Close()
 			ctx, _ := WithScope(context.Background())
 			client.CaptureMessage(ctx, "drop")
-			require.NotNil(t, client.CaptureMessage(ctx, "send"))
+			require.NotEmpty(t, client.CaptureMessage(ctx, "send"))
 			client.Flush(testutils.FlushTimeout())
 			pending := client.reports.TakeReport()
 			if tt.disabled {
