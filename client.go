@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -92,19 +93,22 @@ type ClientOptions struct {
 	// disabled.
 	Dsn string
 	// In debug mode, diagnostic information is written to DebugWriter, which
-	// defaults to stderr.
+	// defaults to stderr. Defaults to the SENTRY_DEBUG environment variable.
 	Debug bool
 	// Configures whether SDK should generate and attach stacktraces to pure
 	// capture message calls.
 	AttachStacktrace bool
 	// The sample rate for event submission in the range [0.0, 1.0]. By default,
 	// all events are sent. Thus, as a historical special case, the sample rate
-	// 0.0 is treated as if it was 1.0. To drop all events, set the DSN to the
+	// 0.0 is treated as unset: it falls back to the SENTRY_SAMPLE_RATE
+	// environment variable, else 1.0. To drop all events, set the DSN to the
 	// empty string.
 	SampleRate float64
 	// Enable performance tracing.
 	EnableTracing bool
-	// The sample rate for sampling traces in the range [0.0, 1.0].
+	// The sample rate for sampling traces in the range [0.0, 1.0]. When it is
+	// 0.0 and TracesSampler is nil, the SENTRY_TRACES_SAMPLE_RATE environment
+	// variable sets it and enables tracing.
 	TracesSampleRate float64
 	// Used to customize the sampling of traces, overrides TracesSampleRate.
 	TracesSampler TracesSampler
@@ -283,26 +287,8 @@ type Client struct {
 // Init and use the package-level capture functions. Server applications should
 // pass an isolated request context to those functions.
 func NewClient(options ClientOptions) (*Client, error) {
-	// The default error event sample rate for all SDKs is 1.0 (send all).
-	//
-	// In Go, the zero value (default) for float64 is 0.0, which means that
-	// constructing a client with NewClient(ClientOptions{}), or, equivalently,
-	// initializing the SDK with Init(ClientOptions{}) without an explicit
-	// SampleRate would drop all events.
-	//
-	// To retain the desired default behavior, we exceptionally flip SampleRate
-	// from 0.0 to 1.0 here. Setting the sample rate to 0.0 is not very useful
-	// anyway, and the same end result can be achieved in many other ways like
-	// not initializing the SDK, setting the DSN to the empty string or using an
-	// event processor that always returns nil.
-	//
-	// An alternative API could be such that default options don't need to be
-	// the same as Go's zero values, for example using the Functional Options
-	// pattern. That would either require a breaking change if we want to reuse
-	// the obvious NewClient name, or a new function as an alternative
-	// constructor.
-	if options.SampleRate == 0.0 {
-		options.SampleRate = 1.0
+	if !options.Debug {
+		options.Debug, _ = strconv.ParseBool(os.Getenv("SENTRY_DEBUG"))
 	}
 
 	if options.Debug {
@@ -323,6 +309,38 @@ func NewClient(options ClientOptions) (*Client, error) {
 
 	if options.Environment == "" {
 		options.Environment = os.Getenv("SENTRY_ENVIRONMENT")
+	}
+
+	// The default error event sample rate for all SDKs is 1.0 (send all).
+	//
+	// In Go, the zero value (default) for float64 is 0.0, which means that
+	// constructing a client with NewClient(ClientOptions{}), or, equivalently,
+	// initializing the SDK with Init(ClientOptions{}) without an explicit
+	// SampleRate would drop all events.
+	//
+	// To retain the desired default behavior, we exceptionally flip SampleRate
+	// from 0.0 to 1.0 here. Setting the sample rate to 0.0 is not very useful
+	// anyway, and the same end result can be achieved in many other ways like
+	// not initializing the SDK, setting the DSN to the empty string or using an
+	// event processor that always returns nil.
+	//
+	// An alternative API could be such that default options don't need to be
+	// the same as Go's zero values, for example using the Functional Options
+	// pattern. That would either require a breaking change if we want to reuse
+	// the obvious NewClient name, or a new function as an alternative
+	// constructor.
+	if options.SampleRate == 0.0 {
+		options.SampleRate = 1.0
+		if rate := sampleRateFromEnv("SENTRY_SAMPLE_RATE"); rate != nil {
+			options.SampleRate = *rate
+		}
+	}
+
+	if options.TracesSampleRate == 0.0 && options.TracesSampler == nil {
+		if rate := sampleRateFromEnv("SENTRY_TRACES_SAMPLE_RATE"); rate != nil {
+			options.TracesSampleRate = *rate
+			options.EnableTracing = true
+		}
 	}
 
 	if options.MaxErrorDepth == 0 {

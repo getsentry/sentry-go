@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,21 @@ func uuid() string {
 // unaffected by changes in the system wall clock.
 func monotonicTimeSince(start time.Time) (end time.Time) {
 	return start.Add(time.Since(start))
+}
+
+// sampleRateFromEnv returns the sample rate in the environment variable key, or
+// nil when it is unset or not a number in [0.0, 1.0].
+func sampleRateFromEnv(key string) *float64 {
+	value, ok := os.LookupEnv(key)
+	if !ok {
+		return nil
+	}
+	rate, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil || !(rate >= 0 && rate <= 1) {
+		debuglog.Printf("Ignoring %s=%q: want a number in [0.0, 1.0]", key, value)
+		return nil
+	}
+	return &rate
 }
 
 // defaultRelease attempts to guess a default release for the currently running
