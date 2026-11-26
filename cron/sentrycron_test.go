@@ -1,6 +1,7 @@
 package sentrycron
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -70,7 +71,7 @@ func TestAddFunc(t *testing.T) {
 	f := sentrytest.NewFixture(t, sentrytest.WithGlobal())
 
 	c := cron.New(cron.WithLocation(time.UTC))
-	id, err := AddFunc(c, "0 3 * * *", "nightly", func() error { return errors.New("failed") }, nil)
+	id, err := AddFunc(c, "0 3 * * *", "nightly", func(context.Context) error { return errors.New("failed") }, nil)
 	require.NoError(t, err)
 	c.Entry(id).Job.Run()
 

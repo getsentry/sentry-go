@@ -117,7 +117,7 @@ func TestStartSpan(t *testing.T) {
 	}
 	span := StartSpan(ctx, op,
 		WithTransactionName(transaction),
-		func(s *Span) {
+		spanOptionFunc(func(s *Span) {
 			s.Description = description
 			s.Status = status
 			s.ParentSpanID = parentSpanID
@@ -125,7 +125,7 @@ func TestStartSpan(t *testing.T) {
 			s.StartTime = startTime
 			s.EndTime = endTime
 			s.Data = data
-		},
+		}),
 	)
 	span.Finish()
 
@@ -186,7 +186,7 @@ func TestStartTransaction(t *testing.T) {
 	}
 	transaction := StartTransaction(ctx,
 		transactionName,
-		func(s *Span) {
+		spanOptionFunc(func(s *Span) {
 			s.Description = description
 			s.Status = status
 			s.Sampled = sampled
@@ -194,7 +194,7 @@ func TestStartTransaction(t *testing.T) {
 			s.EndTime = endTime
 			s.Data = data
 			s.SetContext("otel", Context{"k": "v"})
-		},
+		}),
 	)
 	transaction.Finish()
 
@@ -477,7 +477,7 @@ func TestContinueFromHeaders(t *testing.T) {
 			var scope *Scope
 			s.ctx, scope = WithScope(context.Background())
 			spanOption := ContinueFromHeaders(tt.traceStr, tt.baggageStr)
-			spanOption(s)
+			spanOption.applySpan(s)
 			require.Equal(t, scope.propagationContextSnapshot().TraceID, s.TraceID)
 			if tt.wantSpan.TraceID == zeroTraceID {
 				require.NotEqual(t, zeroTraceID, s.TraceID)

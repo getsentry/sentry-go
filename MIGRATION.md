@@ -160,6 +160,7 @@ type Transport interface {
 | `hub.BindClient(client)` | `ctx = sentry.ContextWithClient(ctx, client)` |
 | `LastEventID()` or `hub.LastEventID()` | `LastEventID(ctx)` |
 | `hub.Flush(timeout)` or `hub.FlushWithContext(ctx)` | `ClientFromContext(ctx).Flush(timeout)` or `FlushWithContext(ctx)` |
+| `scope.AddBreadcrumb(breadcrumb, limit)` | `scope.AddBreadcrumb(breadcrumb, options...)`; it now applies `BeforeBreadcrumb` and `MaxBreadcrumbs` of the client set by `Init` |
 
 </details>
 
@@ -173,7 +174,7 @@ type Transport interface {
 | `hub.CaptureEventWithHint(event, hint)` | `CaptureEvent(ctx, event, sentry.WithEventHint(hint))` |
 | `client.CaptureException(err, hint, scope)` and the other client capture methods | `client.CaptureException(ctx, err, sentry.WithEventHint(hint))`, with `ContextWithScope(ctx, scope)` |
 | Breadcrumb hint argument | `AddBreadcrumb(ctx, breadcrumb, sentry.WithBreadcrumbHint(hint))` |
-| `WithMonitor(slug, config, fn)` and `hub.WithMonitor` | `WithMonitor(ctx, slug, config, fn)` |
+| `WithMonitor(slug, config, fn)` and `hub.WithMonitor` | `WithMonitor(ctx, slug, config, fn)`, where `fn` is `func(ctx context.Context) error` and receives the job's scope; `sentrycron.AddFunc` takes the same callback |
 | `Recover()` and `RecoverWithContext(ctx)` | `defer sentry.Recover(ctx, nil)` |
 | `EventModifier`, `client.EventFromMessage`, `EventFromException`, `EventFromCheckIn` | Capture methods, scope setters, and `BeforeSend` or event processors |
 | `Event.CheckIn` and `Event.MonitorConfig` | Removed; a check-in is no longer an event. Event processors don't receive check-ins and scope attachments aren't sent with them |
@@ -183,6 +184,8 @@ type Transport interface {
 | `AddGlobalEventProcessor(processor)` | `GlobalScope().AddEventProcessor(processor)` |
 | `EventHint.EventID` | Removed. The SDK never read it, so setting it had no effect; set `Event.EventID` to choose an ID |
 | `NewFrame`, `ExtractStacktrace`, `Mechanism.SetUnhandled`, `Scope.ApplyToEvent`, `SDKMetaData` | Removed. They were steps of the SDK's own capture path that nothing outside the package called. Use `NewStacktrace()`, `Event.SetException`, and the `Mechanism.Handled` field |
+| `*BreadcrumbHint` in `BeforeBreadcrumb` | `BreadcrumbHint` by value, as it is already a map |
+| A `func(*Span)` passed as a `SpanOption` | `SpanOption` is sealed; use the `With...` and `ContinueFrom...` constructors and set other span fields after `StartSpan` |
 
 </details>
 

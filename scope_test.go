@@ -175,7 +175,7 @@ func TestCopyToEventReleasesReadLockAfterPanic(t *testing.T) {
 func TestAddBreadcrumbDefaultLimit(t *testing.T) {
 	scope := NewScope()
 	for range 101 {
-		scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"}, defaultMaxBreadcrumbs)
+		scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "test"})
 	}
 
 	if len(scope.breadcrumbs) != 100 {
@@ -183,10 +183,50 @@ func TestAddBreadcrumbDefaultLimit(t *testing.T) {
 	}
 }
 
+func TestAddBreadcrumbDisabled(t *testing.T) {
+	client, err := NewClient(ClientOptions{MaxBreadcrumbs: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := NewScope()
+	scope.addBreadcrumb(client, &Breadcrumb{Message: "test"}, nil)
+
+	if len(scope.breadcrumbs) != 0 {
+		t.Errorf("got %d breadcrumbs, want 0", len(scope.breadcrumbs))
+	}
+}
+
+func TestAddBreadcrumbUsesGlobalClientOptions(t *testing.T) {
+	client, err := NewClient(ClientOptions{
+		MaxBreadcrumbs: 1,
+		BeforeBreadcrumb: func(breadcrumb *Breadcrumb, _ BreadcrumbHint) *Breadcrumb {
+			if breadcrumb.Message == "drop" {
+				return nil
+			}
+			return breadcrumb
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousClient := globalClientSnapshot()
+	setGlobalClient(client)
+	t.Cleanup(func() { setGlobalClient(previousClient) })
+
+	scope := NewScope()
+	for _, message := range []string{"first", "last", "drop"} {
+		scope.AddBreadcrumb(&Breadcrumb{Message: message})
+	}
+
+	if diff := cmp.Diff([]string{"last"}, breadcrumbMessages(scope.breadcrumbs)); diff != "" {
+		t.Errorf("breadcrumbs mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestAddBreadcrumbAddsTimestamp(t *testing.T) {
 	scope := NewScope()
 	before := time.Now()
-	scope.AddBreadcrumb(&Breadcrumb{Message: "test"}, defaultMaxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Message: "test"})
 	after := time.Now()
 	ts := scope.breadcrumbs[0].Timestamp
 
@@ -249,7 +289,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	scope.SetAttributes(attribute.String("foo", "baz"))
 	scope.SetLevel(LevelFatal)
 	scope.SetFingerprint([]string{"bar"})
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"}, defaultMaxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "bar"})
 	scope.AddAttachment(&Attachment{Filename: "bar.txt", Payload: []byte("bar")})
 	scope.SetUser(User{ID: "bar"})
 	r1 := httptest.NewRequest("GET", "/bar", nil)
@@ -266,7 +306,7 @@ func TestScopeChildOverrideInheritance(t *testing.T) {
 	clone.SetAttributes(attribute.String("foo", "bar"))
 	clone.SetLevel(LevelDebug)
 	clone.SetFingerprint([]string{"foo"})
-	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, defaultMaxBreadcrumbs)
+	clone.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"})
 	clone.AddAttachment(&Attachment{Filename: "foo.txt", Payload: []byte("foo")})
 	clone.SetUser(User{ID: "foo"})
 	r2 := httptest.NewRequest("GET", "/foo", nil)
@@ -338,7 +378,7 @@ func TestClearAndReconfigure(t *testing.T) {
 	scope.SetAttributes(attribute.String("foo", "bar"))
 	scope.SetLevel(LevelDebug)
 	scope.SetFingerprint([]string{"foo"})
-	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"}, defaultMaxBreadcrumbs)
+	scope.AddBreadcrumb(&Breadcrumb{Timestamp: testNow, Message: "foo"})
 	scope.AddAttachment(&Attachment{Filename: "foo.txt", Payload: []byte("foo")})
 	scope.SetUser(User{ID: "foo"})
 	r := httptest.NewRequest("GET", "/foo", nil)

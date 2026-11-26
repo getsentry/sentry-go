@@ -59,7 +59,7 @@ func TestWithMonitor(t *testing.T) {
 			t.Parallel()
 			sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 				calls := 0
-				err := sentry.WithMonitor(f.Context, "my-job", tt.monitorConfig, func() error {
+				err := sentry.WithMonitor(f.Context, "my-job", tt.monitorConfig, func(context.Context) error {
 					calls++
 					time.Sleep(3 * time.Second)
 					return tt.fnErr
@@ -94,7 +94,7 @@ func TestWithMonitorPanic(t *testing.T) {
 	t.Parallel()
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		assert.PanicsWithValue(t, "boom", func() {
-			_ = sentry.WithMonitor(f.Context, "my-job", nil, func() error {
+			_ = sentry.WithMonitor(f.Context, "my-job", nil, func(context.Context) error {
 				time.Sleep(time.Second)
 				panic("boom")
 			})
@@ -114,7 +114,7 @@ func TestWithMonitorTrace(t *testing.T) {
 	sentrytest.Run(t, func(t *testing.T, f *sentrytest.Fixture) {
 		ctx := sentry.ContextWithClient(context.Background(), f.Client)
 		for range 2 {
-			_ = sentry.WithMonitor(ctx, "my-job", nil, func() error { return nil })
+			_ = sentry.WithMonitor(ctx, "my-job", nil, func(context.Context) error { return nil })
 		}
 
 		events := checkInEvents(t, f)
