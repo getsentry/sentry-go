@@ -21,8 +21,8 @@ func runTask(monitorSlug string, duration time.Duration, shouldFail bool) {
 			MaxRuntime:    2,
 			CheckInMargin: 1,
 		},
-	); id != nil {
-		checkinID = *id
+	); id != "" {
+		checkinID = id
 	} else {
 		fmt.Printf("Task[monitor_slug=%s] was not accepted by Sentry\n", monitorSlug)
 	}

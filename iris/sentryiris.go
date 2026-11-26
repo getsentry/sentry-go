@@ -96,7 +96,7 @@ func (h *handler) recoverWithSentry(r *http.Request) {
 	if err := recover(); err != nil {
 		ctx := r.Context()
 		eventID := sentry.Recover(ctx, err)
-		if eventID != nil && h.waitForDelivery {
+		if eventID != "" && h.waitForDelivery {
 			sentry.ClientFromContext(ctx).Flush(h.timeout)
 		}
 		if h.repanic {

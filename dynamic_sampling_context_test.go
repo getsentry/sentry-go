@@ -244,7 +244,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				if boundary == "baggage" {
 					_ = GetBaggage(ctx)
 				} else {
-					require.NotNil(t, CaptureMessage(ctx, "first"))
+					require.NotEmpty(t, CaptureMessage(ctx, "first"))
 				}
 				want := scope.propagationContextSnapshot().DynamicSamplingContext
 				require.True(t, want.IsFrozen())
@@ -254,7 +254,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				for _, selected := range []*Scope{scope, scope.Clone()} {
 					captureCtx := ContextWithClient(ContextWithScope(context.Background(), selected), replacement)
 					assertBaggageStringsEqual(t, want.String(), GetBaggage(captureCtx))
-					require.NotNil(t, CaptureMessage(captureCtx, "later"))
+					require.NotEmpty(t, CaptureMessage(captureCtx, "later"))
 				}
 				require.Len(t, transport.Events(), 2)
 				for _, event := range transport.Events() {
@@ -301,7 +301,7 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 					want.Entries = map[string]string{traceIDContextKey: trace, "release": "upstream"}
 				}
 				assertBaggageStringsEqual(t, GetBaggage(ctx), want.String())
-				require.NotNil(t, CaptureMessage(ctx, "frozen"))
+				require.NotEmpty(t, CaptureMessage(ctx, "frozen"))
 				if root != nil {
 					root.SetDynamicSamplingContext(DynamicSamplingContext{Entries: map[string]string{"release": "late"}})
 					root.Finish()

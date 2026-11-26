@@ -187,6 +187,7 @@ type Transport interface {
 | `*BreadcrumbHint` in `BeforeBreadcrumb` | `BreadcrumbHint` by value, as it is already a map |
 | A `func(*Span)` passed as a `SpanOption` | `SpanOption` is sealed; use the `With...` and `ContinueFrom...` constructors and set other span fields after `StartSpan` |
 | `hint.Context.Value(sentry.RequestContextKey)` in `BeforeSend` or `BeforeSendTransaction` | `hint.Request`, set on every capture whose scope has a request. For FastHTTP and Fiber it is the converted `*http.Request` |
+| `Capture*` and `Recover` returning `*EventID` | They return `EventID`; it is empty when nothing was captured |
 
 </details>
 

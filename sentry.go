@@ -40,19 +40,19 @@ func AddBreadcrumb(ctx context.Context, breadcrumb *Breadcrumb, options ...Bread
 
 // CaptureMessage captures an arbitrary message using the scope and client
 // carried by ctx.
-func CaptureMessage(ctx context.Context, message string, options ...CaptureOption) *EventID {
+func CaptureMessage(ctx context.Context, message string, options ...CaptureOption) EventID {
 	return ClientFromContext(ctx).CaptureMessage(ctx, message, options...)
 }
 
 // CaptureException captures an error using the scope and client carried by
 // ctx.
-func CaptureException(ctx context.Context, exception error, options ...CaptureOption) *EventID {
+func CaptureException(ctx context.Context, exception error, options ...CaptureOption) EventID {
 	return ClientFromContext(ctx).CaptureException(ctx, exception, options...)
 }
 
 // CaptureCheckIn captures a (cron) monitor check-in using the scope and client
 // carried by ctx.
-func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) *EventID {
+func CaptureCheckIn(ctx context.Context, checkIn *CheckIn, monitorConfig *MonitorConfig) EventID {
 	return ClientFromContext(ctx).CaptureCheckIn(ctx, checkIn, monitorConfig)
 }
 
@@ -78,12 +78,10 @@ func WithMonitor(ctx context.Context, monitorSlug string, monitorConfig *Monitor
 	status := CheckInStatusError
 	defer func() {
 		checkIn := &CheckIn{
+			ID:          checkInID,
 			MonitorSlug: monitorSlug,
 			Status:      status,
 			Duration:    time.Since(start),
-		}
-		if checkInID != nil {
-			checkIn.ID = *checkInID
 		}
 		CaptureCheckIn(ctx, checkIn, nil)
 	}()
@@ -99,20 +97,20 @@ func WithMonitor(ctx context.Context, monitorSlug string, monitorConfig *Monitor
 //
 // The event must already be assembled. Typically code would instead use
 // the utility methods like CaptureException. The return value is the
-// event ID. In case Sentry is disabled or event was dropped, the return value will be nil.
-func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) *EventID {
+// event ID. In case Sentry is disabled or event was dropped, the return value is empty.
+func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) EventID {
 	return ClientFromContext(ctx).CaptureEvent(ctx, event, options...)
 }
 
 // Recover captures a recovered panic value using the scope and client carried
 // by ctx. When recovered is nil, Recover invokes Go's built-in recover and must
 // itself be deferred.
-func Recover(ctx context.Context, recovered any, options ...CaptureOption) *EventID {
+func Recover(ctx context.Context, recovered any, options ...CaptureOption) EventID {
 	if recovered == nil {
 		recovered = recover()
 	}
 	if recovered == nil {
-		return nil
+		return ""
 	}
 	return ClientFromContext(ctx).capturePanic(ctx, recovered, options...)
 }

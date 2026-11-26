@@ -122,7 +122,7 @@ func TestScopeSettersOnCapturedEvent(t *testing.T) {
 			test.setup(scope)
 			client, transport := newCaptureTestClient(t, ClientOptions{})
 			ctx := ContextWithScope(ContextWithClient(context.Background(), client), scope)
-			require.NotNil(t, CaptureEvent(ctx, NewEvent()))
+			require.NotEmpty(t, CaptureEvent(ctx, NewEvent()))
 			got := requireSingleEvent(t, transport)
 
 			delete(got.Contexts, "trace")
