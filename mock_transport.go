@@ -116,7 +116,8 @@ func (t *MockTransport) Events() []*Event {
 }
 
 // Transactions returns captured transactions decoded from the wire format.
-// Values in context and data maps have JSON types, not their original Go types.
+// The trace context is decoded into Trace. Values in context and data maps
+// have JSON types, not their original Go types.
 func (t *MockTransport) Transactions() []*Transaction {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -165,29 +166,44 @@ func decodeMockEvent(item *protocol.EnvelopeItem) *Event {
 func decodeMockTransaction(item *protocol.EnvelopeItem) *Transaction {
 	payload := mockDecode[struct {
 		Transaction
-		Spans []struct {
-			Span
-			TraceID      string `json:"trace_id"`
-			SpanID       string `json:"span_id"`
-			ParentSpanID string `json:"parent_span_id"`
-			Status       string `json:"status"`
-		} `json:"spans"`
+		Spans []mockSpan `json:"spans"`
 	}](item.Payload)
 	tx := &payload.Transaction
 	for i := range payload.Spans {
-		span := &payload.Spans[i]
-		decodeMockID(span.TraceID, span.Span.TraceID[:])
-		decodeMockID(span.SpanID, span.Span.SpanID[:])
-		decodeMockID(span.ParentSpanID, span.Span.ParentSpanID[:])
-		for status, name := range spanStatuses {
-			if name == span.Status {
-				span.Span.Status = SpanStatus(status)
-				break
-			}
+		tx.Spans = append(tx.Spans, payload.Spans[i].decode())
+	}
+	if trace, ok := tx.Contexts[traceContextKey]; ok {
+		raw, _ := json.Marshal(trace)
+		root := mockDecode[*mockSpan](raw).decode()
+		tx.Trace = TraceContext{
+			TraceID: root.TraceID, SpanID: root.SpanID, ParentSpanID: root.ParentSpanID,
+			Op: root.Op, Description: root.Description, Status: root.Status, Data: root.Data, Origin: root.Origin,
 		}
-		tx.Spans = append(tx.Spans, &span.Span)
+		delete(tx.Contexts, traceContextKey)
 	}
 	return tx
+}
+
+// mockSpan decodes a span or a trace context, whose IDs and status are strings on the wire.
+type mockSpan struct {
+	Span
+	TraceID      string `json:"trace_id"`
+	SpanID       string `json:"span_id"`
+	ParentSpanID string `json:"parent_span_id"`
+	Status       string `json:"status"`
+}
+
+func (s *mockSpan) decode() *Span {
+	decodeMockID(s.TraceID, s.Span.TraceID[:])
+	decodeMockID(s.SpanID, s.Span.SpanID[:])
+	decodeMockID(s.ParentSpanID, s.Span.ParentSpanID[:])
+	for status, name := range spanStatuses {
+		if name == s.Status {
+			s.Span.Status = SpanStatus(status)
+			break
+		}
+	}
+	return &s.Span
 }
 
 func decodeMockLogs(item *protocol.EnvelopeItem) []Log {
