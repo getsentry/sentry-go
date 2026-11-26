@@ -66,9 +66,6 @@ func TestBuffer_AddAndFlush_Sends(t *testing.T) {
 	if ok := testutils.FlushWithTimeout(b, testutils.FlushTimeout()); !ok {
 		t.Fatal("flush returned false")
 	}
-	if ok := b.FlushWithContext(context.Background()); !ok {
-		t.Fatal("flush returned false")
-	}
 	b.Close(testutils.FlushTimeout())
 	if transport.GetSendCount() == 0 {
 		t.Fatal("expected at least one send")

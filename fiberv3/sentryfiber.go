@@ -13,6 +13,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/util"
 )
 
 const (
@@ -133,7 +134,7 @@ func (h *handler) recoverWithSentry(requestCtx context.Context) {
 	if err := recover(); err != nil {
 		eventID := sentry.Recover(requestCtx, err)
 		if eventID != "" && h.waitForDelivery {
-			sentry.ClientFromContext(requestCtx).Flush(h.timeout)
+			util.FlushWithTimeout(sentry.ClientFromContext(requestCtx), h.timeout)
 		}
 		if h.repanic {
 			panic(err)

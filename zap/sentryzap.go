@@ -10,6 +10,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/attribute"
 	"github.com/getsentry/sentry-go/internal/contextkey"
+	"github.com/getsentry/sentry-go/internal/util"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -183,7 +184,7 @@ func (c *SentryCore) Sync() error {
 			client = explicit
 		}
 	}
-	if ok := client.Flush(c.option.FlushTimeout); !ok {
+	if ok := util.FlushWithTimeout(client, c.option.FlushTimeout); !ok {
 		return fmt.Errorf("failed to flush client: %v", client)
 	}
 	return nil

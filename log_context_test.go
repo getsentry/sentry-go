@@ -18,7 +18,7 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer Flush(testutils.FlushTimeout())
+	defer testutils.FlushWithTimeout(ClientFromContext(context.Background()), testutils.FlushTimeout())
 
 	ctx1, _ := WithScope(context.Background())
 	span1 := StartTransaction(ctx1, "request-1")
@@ -39,7 +39,7 @@ func TestSentryLogger_ShouldLinkToCorrectSpan(t *testing.T) {
 	logger.Info().WithCtx(ctx2).Emit("Explicit override to request-2")
 	span2.Finish()
 
-	Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(ClientFromContext(context.Background()), testutils.FlushTimeout())
 	events := transport.LogBatches()
 	var logs []struct {
 		message string

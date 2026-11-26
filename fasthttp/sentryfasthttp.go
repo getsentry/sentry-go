@@ -10,6 +10,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/valyala/fasthttp"
 )
 
@@ -129,7 +130,7 @@ func (h *Handler) recoverWithSentry(requestCtx context.Context, cancel context.C
 	if err := recover(); err != nil {
 		eventID := sentry.Recover(requestCtx, err)
 		if eventID != "" && h.waitForDelivery {
-			sentry.ClientFromContext(requestCtx).Flush(h.timeout)
+			util.FlushWithTimeout(sentry.ClientFromContext(requestCtx), h.timeout)
 		}
 		if h.repanic {
 			cancel()

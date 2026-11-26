@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/getsentry/sentry-go/internal/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -47,7 +48,7 @@ func recoverWithSentry(ctx context.Context, o ServerOptions, onRecover func()) {
 		}
 
 		if eventID != "" && o.WaitForDelivery {
-			sentry.ClientFromContext(ctx).Flush(o.Timeout)
+			util.FlushWithTimeout(sentry.ClientFromContext(ctx), o.Timeout)
 		}
 
 		if o.Repanic {

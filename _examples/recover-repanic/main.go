@@ -41,7 +41,11 @@ func main() {
 	}
 	// Flush buffered events before the program terminates.
 	// Set the timeout to the maximum duration the program can afford to wait.
-	defer sentry.Flush(2 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	nWorkers := 8
 	var wg sync.WaitGroup
@@ -116,7 +120,9 @@ func RecoverRepanic(f func()) {
 			// late. Set the timeout to an appropriate value depending on your
 			// program. The value is the maximum time to wait before giving up
 			// and dropping the event.
-			sentry.Flush(2 * time.Second)
+			flushCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			sentry.Flush(flushCtx)
+			cancel()
 			// Note that if multiple goroutines panic, possibly only the first
 			// one to call Flush will succeed in sending the event. If you want
 			// to capture multiple panics and still crash the program

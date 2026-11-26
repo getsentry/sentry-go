@@ -107,7 +107,7 @@ func requireUnaryClientBaggagePropagation(
 
 	require.NoError(t, err)
 	transaction.Finish()
-	sentry.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
 
@@ -150,7 +150,7 @@ func TestUnaryClientInterceptor(t *testing.T) {
 			err := interceptor(ctx, "/test.TestService/Method", struct{}{}, struct{}{}, nil, tc.invoker)
 			tc.assertErr(t, err)
 			transaction.Finish()
-			sentry.Flush(testutils.FlushTimeout())
+			testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 
 			assert.Equal(t, int(tc.wantCode), spanStatusCode(t, transport))
 		})
@@ -183,7 +183,7 @@ func TestUnaryClientInterceptor_ReplacesExistingTraceHeaders(t *testing.T) {
 
 	require.NoError(t, err)
 	transaction.Finish()
-	sentry.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
 
@@ -339,7 +339,7 @@ func TestStreamClientInterceptor(t *testing.T) {
 			}
 
 			transaction.Finish()
-			sentry.Flush(testutils.FlushTimeout())
+			testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 			assert.Equal(t, int(tc.wantCode), spanStatusCode(t, transport))
 		})
 	}
@@ -359,7 +359,7 @@ func TestStreamClientInterceptor_FinishesNonServerStreamingResponseOnFirstRecv(t
 	require.NoError(t, stream.RecvMsg(nil))
 
 	transaction.Finish()
-	sentry.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
 
@@ -382,7 +382,7 @@ func TestStreamClientInterceptor_CloseSendWaitsForRecvMsg(t *testing.T) {
 
 	require.NoError(t, stream.RecvMsg(nil))
 	transaction.Finish()
-	sentry.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 	assert.Equal(t, int(codes.OK), spanStatusCode(t, transport))
 }
 
@@ -411,7 +411,7 @@ func TestStreamClientInterceptor_SendMsgEOFWaitsForRecvMsgStatus(t *testing.T) {
 	assert.Equal(t, codes.Unavailable, status.Code(err))
 
 	transaction.Finish()
-	sentry.Flush(testutils.FlushTimeout())
+	testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout())
 	assert.Equal(t, int(codes.Unavailable), spanStatusCode(t, transport))
 }
 

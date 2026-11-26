@@ -8,6 +8,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/util"
 	"github.com/labstack/echo/v5"
 )
 
@@ -129,7 +130,7 @@ func (h *handler) recoverWithSentry(r *http.Request) {
 		ctx := r.Context()
 		eventID := sentry.Recover(ctx, err)
 		if eventID != "" && h.waitForDelivery {
-			sentry.ClientFromContext(ctx).Flush(h.timeout)
+			util.FlushWithTimeout(sentry.ClientFromContext(ctx), h.timeout)
 		}
 		if h.repanic {
 			panic(err)

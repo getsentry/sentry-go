@@ -1,6 +1,7 @@
 package sentryiris_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -395,7 +396,7 @@ func TestIntegration(t *testing.T) {
 		res.Status(tt.WantStatus)
 	}
 
-	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 	close(eventsCh)
@@ -485,7 +486,7 @@ func TestRequestContextState(t *testing.T) {
 
 	res.Status(http.StatusOK)
 
-	if ok := sentry.Flush(testutils.FlushTimeout()); !ok {
+	if ok := testutils.FlushWithTimeout(sentry.ClientFromContext(context.Background()), testutils.FlushTimeout()); !ok {
 		t.Fatal("sentry.Flush timed out")
 	}
 }

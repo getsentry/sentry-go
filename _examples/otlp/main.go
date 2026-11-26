@@ -38,7 +38,11 @@ func main() {
 	}); err != nil {
 		log.Fatalf("sentry.Init: %v", err)
 	}
-	defer sentry.Flush(2 * time.Second)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		sentry.Flush(ctx)
+	}()
 
 	ctx := context.Background()
 	// Direct-to-Sentry setup:

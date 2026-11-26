@@ -54,7 +54,7 @@ func TestClientReports_CustomTransport(t *testing.T) {
 			ctx, _ := WithScope(context.Background())
 			client.CaptureMessage(ctx, "drop")
 			require.NotEmpty(t, client.CaptureMessage(ctx, "send"))
-			client.Flush(testutils.FlushTimeout())
+			testutils.FlushWithTimeout(client, testutils.FlushTimeout())
 			pending := client.reports.TakeReport()
 			if tt.disabled {
 				require.Nil(t, pending)
@@ -82,7 +82,7 @@ func TestClientReports_TrimmedSpans(t *testing.T) {
 	require.NoError(t, err)
 	defer client.Close()
 	client.captureTransaction(context.Background(), &Transaction{Spans: []*Span{{}, {}, {}}}, nil)
-	require.True(t, client.Flush(testutils.FlushTimeout()))
+	require.True(t, testutils.FlushWithTimeout(client, testutils.FlushTimeout()))
 
 	var got report.ClientReport
 	for _, envelope := range transport.Envelopes() {
@@ -186,7 +186,7 @@ func TestClientReports_Integration(t *testing.T) {
 			if !tt.reportOnly {
 				c.CaptureMessage(ctx, "hi")
 			}
-			require.True(t, c.Flush(testutils.FlushTimeout()))
+			require.True(t, testutils.FlushWithTimeout(c, testutils.FlushTimeout()))
 
 			if tt.disabled {
 				mu.Lock()

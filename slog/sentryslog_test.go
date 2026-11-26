@@ -207,7 +207,7 @@ func TestSentryHandlerAttrToSentryAttr(t *testing.T) {
 			}.NewSentryHandler(ctx)
 			logger := slog.New(handler)
 			logger.InfoContext(ctx, "test message", tt.attr...)
-			require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+			require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))
 
 			gotEvents := mockTransport.LogBatches()
 			require.Len(t, gotEvents, 1)
@@ -238,7 +238,7 @@ func TestSentryHandlerAttrFromContext(t *testing.T) {
 	logger := slog.New(handler)
 
 	logger.InfoContext(ctx, "test message")
-	require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+	require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))
 
 	gotEvents := mockTransport.LogBatches()
 	require.Len(t, gotEvents, 1)
@@ -256,7 +256,7 @@ func TestSentryHandlerPreservesConfiguredActiveSpan(t *testing.T) {
 	handler := Option{LogLevel: []slog.Level{slog.LevelInfo}}.NewSentryHandler(span.Context())
 	logger := slog.New(handler)
 	logger.Info("configured span log")
-	require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+	require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))
 
 	events := mockTransport.LogBatches()
 	require.Len(t, events, 1)
@@ -285,7 +285,7 @@ func TestSentryHandlerWithAttrsAndGroup(t *testing.T) {
 	nestedLogger.InfoContext(ctx, "test with nested groups and attrs", "direct_attr", "direct_value")
 	baseLogger.InfoContext(ctx, "should not have attrs and groups")
 
-	require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+	require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))
 
 	gotEvents := mockTransport.LogBatches()
 	require.Len(t, gotEvents, 1)
@@ -335,7 +335,7 @@ func TestSentryHandlerLogLevels(t *testing.T) {
 			logger := slog.New(handler)
 
 			tt.logFunc(ctx, logger, tt.message)
-			require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+			require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))
 
 			gotEvents := mockTransport.LogBatches()
 			require.Len(t, gotEvents, 1)
@@ -362,7 +362,7 @@ func TestSentryHandlerReplaceAttr(t *testing.T) {
 
 	logger := slog.New(handler)
 	logger.InfoContext(ctx, "replace test", "foo", "bar", "num", 123)
-	require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+	require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))
 
 	gotEvents := mockTransport.LogBatches()
 	require.Len(t, gotEvents, 1)
@@ -391,7 +391,7 @@ func TestSentryHandlerReplaceAttrKeepsGroupedHandlerAttrs(t *testing.T) {
 	logger := slog.New(handler).With(slog.Group("request", slog.String("user", "alice")))
 	logger.InfoContext(ctx, "first")
 	logger.InfoContext(ctx, "second")
-	require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+	require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))
 
 	var logs []sentry.Log
 	for _, event := range mockTransport.LogBatches() {
@@ -417,7 +417,7 @@ func TestSentryHandlerConcurrentGroupedAttrs(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+	require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))
 
 	for _, event := range mockTransport.LogBatches() {
 		for _, entry := range event.Logs {
@@ -435,7 +435,7 @@ func TestSentryHandlerAddSource(t *testing.T) {
 
 	logger := slog.New(handler)
 	logger.InfoContext(ctx, "test with source")
-	require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+	require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))
 
 	gotEvents := mockTransport.LogBatches()
 	require.Len(t, gotEvents, 1)
@@ -471,7 +471,7 @@ func TestSentryHandlerCustomLogLevels(t *testing.T) {
 			logger := slog.New(handler)
 
 			logger.LogAttrs(ctx, tt.customLevel, "test message with custom level", slog.String("level_name", tt.name))
-			require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+			require.True(t, testutils.FlushWithTimeout(sentry.ClientFromContext(ctx), testutils.FlushTimeout()))
 
 			gotEvents := mockTransport.LogBatches()
 			require.Len(t, gotEvents, 1)

@@ -138,7 +138,7 @@ fixes. To create a custom transport, import `github.com/getsentry/sentry-go/prot
 type Transport interface {
 	Configure(options sentry.ClientOptions)
 	SendEnvelope(ctx context.Context, envelope *protocol.Envelope) error
-	FlushWithContext(ctx context.Context) bool
+	Flush(ctx context.Context) bool
 	Close()
 }
 ```
@@ -159,7 +159,8 @@ type Transport interface {
 | `hub.Client()` | `ClientFromContext(ctx)` |
 | `hub.BindClient(client)` | `ctx = sentry.ContextWithClient(ctx, client)` |
 | `LastEventID()` or `hub.LastEventID()` | `LastEventID(ctx)` |
-| `hub.Flush(timeout)` or `hub.FlushWithContext(ctx)` | `ClientFromContext(ctx).Flush(timeout)` or `FlushWithContext(ctx)` |
+| `hub.Flush(timeout)` or `hub.FlushWithContext(ctx)` | `ClientFromContext(ctx).Flush(ctx)` |
+| `Flush(timeout)` and `FlushWithContext(ctx)`, on the package and on `Client` | `Flush(ctx)`; set the timeout with `context.WithTimeout` |
 | `scope.AddBreadcrumb(breadcrumb, limit)` | `scope.AddBreadcrumb(breadcrumb, options...)`; it now applies `BeforeBreadcrumb` and `MaxBreadcrumbs` of the client set by `Init` |
 
 </details>
@@ -250,6 +251,7 @@ type Transport interface {
 | `Event.Logs` and `Event.Metrics` | Removed; logs and metrics are no longer events |
 | `GetCategory` and `MakeSerializationSafe` on `Log` and `Metric` | Removed; they were SDK internals |
 | `Logger.Fatal()` exiting the process, `Logger.Panic()`, `Logger.LFatal()` | `Fatal()` only sets the level; `Panic` and `LFatal` are removed. Call `os.Exit` or `panic` yourself after `sentry.Flush` |
+| `Hook.Flush(timeout)` and `Hook.FlushWithContext(ctx)` in `sentrylogrus` | `Hook.Flush(ctx)` |
 
 </details>
 
@@ -270,7 +272,7 @@ type Transport interface {
 | Before | v1 |
 | --- | --- |
 | `Transport.SendEvent(*sentry.Event)` / built-in `SendEventWithContext` | `Transport.SendEnvelope(context.Context, *protocol.Envelope) error` |
-| `Transport.Flush(timeout)` | Removed; use `FlushWithContext(ctx)` |
+| `Transport.Flush(timeout)` and `Transport.FlushWithContext(ctx)` | `Transport.Flush(ctx)` |
 | `HTTPTransport.BufferSize` counts events | `HTTPTransport.BufferSize` counts envelopes |
 | `ClientOptions.DisableTelemetryBuffer` | Removed; telemetry is always buffered, including with custom transports |
 | `NoopTransport`, `NewNoopTransport`, and the `Client.Transport` field | Removed. The transport of a client cannot be replaced after creation, so the field was read-only in practice; use `NewNoopClient()` to disable sending |

@@ -264,7 +264,7 @@ func TestTelemetrySchedulerFlushWaitsForInFlightBatch(t *testing.T) {
 				defer cancel()
 				flushed := make(chan bool, 2)
 				for range cap(flushed) {
-					go func() { flushed <- scheduler.FlushWithContext(ctx) }()
+					go func() { flushed <- scheduler.Flush(ctx) }()
 				}
 				synctest.Wait()
 				require.Empty(t, flushed, "Flush returned before the batch reached the transport")
@@ -289,7 +289,7 @@ func TestTelemetrySchedulerFlushAlreadyCanceled(t *testing.T) {
 	scheduler := NewScheduler(nil, transport, &protocol.Dsn{}, nil, nil)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	require.False(t, scheduler.FlushWithContext(ctx))
+	require.False(t, scheduler.Flush(ctx))
 	require.True(t, testutils.FlushWithTimeout(scheduler, testutils.FlushTimeout()))
 }
 
