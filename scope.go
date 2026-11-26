@@ -426,6 +426,7 @@ func applyScopesToEvent(
 	event *Event,
 	client *Client,
 	scope *Scope,
+	hint *EventHint,
 	maxBreadcrumbs int,
 ) (globalProcessors, scopeProcessors []EventProcessor) {
 	global := GlobalScope()
@@ -448,6 +449,9 @@ func applyScopesToEvent(
 		snapshot.request, snapshot.requestBody = globalSnapshot.request, globalSnapshot.requestBody
 	}
 	event.Request = mergeRequest(client, snapshot.request, snapshot.requestBody, event.Request)
+	if hint.Request == nil {
+		hint.Request = snapshot.request
+	}
 
 	_, explicitTrace := event.Contexts[traceContextKey]
 	applyTraceToEvent(ctx, event, client, scope, snapshot.propagationContext, explicitTrace)
@@ -544,7 +548,7 @@ func applyTraceToEvent(ctx context.Context, event *Event, client *Client, scope 
 
 // applyScopesToTransaction merges the context scope and the global scope into tx,
 // from more specific to less specific.
-func applyScopesToTransaction(tx *Transaction, client *Client, scope *Scope) {
+func applyScopesToTransaction(tx *Transaction, client *Client, scope *Scope) *http.Request {
 	var snapshot scopeData
 	global := GlobalScope()
 	if scope != nil && scope != global {
@@ -555,6 +559,7 @@ func applyScopesToTransaction(tx *Transaction, client *Client, scope *Scope) {
 		snapshot.request, snapshot.requestBody = globalSnapshot.request, globalSnapshot.requestBody
 	}
 	tx.Request = mergeRequest(client, snapshot.request, snapshot.requestBody, tx.Request)
+	return snapshot.request
 }
 
 func (scope *Scope) copyToTransaction(tx *Transaction) scopeData {

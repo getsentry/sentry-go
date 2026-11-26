@@ -124,14 +124,13 @@ func (h *handler) handle(ctx fiber.Ctx) error {
 
 	scope.SetRequest(r)
 	scope.SetRequestBody(bytes.Clone(ctx.Body()))
-	defer h.recoverWithSentry(requestCtx, ctx)
+	defer h.recoverWithSentry(requestCtx)
 
 	return ctx.Next()
 }
 
-func (h *handler) recoverWithSentry(requestCtx context.Context, ctx fiber.Ctx) {
+func (h *handler) recoverWithSentry(requestCtx context.Context) {
 	if err := recover(); err != nil {
-		requestCtx = context.WithValue(requestCtx, sentry.RequestContextKey, ctx)
 		eventID := sentry.Recover(requestCtx, err)
 		if eventID != nil && h.waitForDelivery {
 			sentry.ClientFromContext(requestCtx).Flush(h.timeout)

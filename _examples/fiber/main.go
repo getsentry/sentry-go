@@ -6,18 +6,15 @@ import (
 	"github.com/getsentry/sentry-go"
 	sentryfiber "github.com/getsentry/sentry-go/fiber"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/utils"
 )
 
 func main() {
 	_ = sentry.Init(sentry.ClientOptions{
 		Dsn: "",
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			if hint.Context != nil {
-				if ctx, ok := hint.Context.Value(sentry.RequestContextKey).(*fiber.Ctx); ok {
-					// You have access to the original Context if it panicked
-					fmt.Println(utils.CopyString(ctx.Hostname()))
-				}
+			if hint.Request != nil {
+				// You have access to the request
+				fmt.Println(hint.Request.Host)
 			}
 			fmt.Println(event)
 			return event
