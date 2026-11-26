@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: write   # this job only; needed to publish the risk label and the summary comment
+      pull-requests: write   # this job only; needed to publish the risk label
     steps:
       # This job must never check out or run code from the pull request.
       - uses: getsentry/github-workflows/pr-classifiers@edc87d6f133ac6204e22dee5123167a5eff3ed79
@@ -32,4 +32,3 @@ jobs:
           app-client-id: ${{ vars.CLASSIFIERS_APP_CLIENT_ID }}
           app-private-key: ${{ secrets.CLASSIFIERS_APP_KEY }}
           ai-gateway-api-key: ${{ secrets.AI_GATEWAY_API_KEY }}
-          publish-comment: true
