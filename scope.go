@@ -43,6 +43,9 @@ type scopeData struct {
 	request     *http.Request
 	// requestBody holds a reference to the original request.Body.
 	requestBody requestBody
+	// requestIsLocalhost is computed once in SetRequest for the
+	// sentry.is_localhost attribute.
+	requestIsLocalhost bool
 
 	propagationContext PropagationContext
 }
@@ -141,6 +144,7 @@ func (scope *Scope) SetRequest(r *http.Request) {
 	defer scope.mu.Unlock()
 
 	scope.request = r
+	scope.requestIsLocalhost = r != nil && isLocalhostRequest(r)
 
 	if r == nil {
 		return
@@ -355,6 +359,7 @@ func (scope *Scope) Clone() *Scope {
 	clone.level = scope.level
 	clone.request = scope.request
 	clone.requestBody = scope.requestBody
+	clone.requestIsLocalhost = scope.requestIsLocalhost
 	clone.eventProcessors = scope.eventProcessors[:len(scope.eventProcessors):len(scope.eventProcessors)]
 	clone.propagationContext = scope.propagationContext.clone()
 	return clone
@@ -657,6 +662,9 @@ func mergeScopeAttributes(
 		scope.mu.RLock()
 		if !scope.user.IsEmpty() {
 			user = scope.user
+		}
+		if scope.request != nil {
+			attrs["sentry.is_localhost"] = attribute.BoolValue(scope.requestIsLocalhost)
 		}
 		maps.Copy(attrs, scope.attributes)
 		scope.mu.RUnlock()
