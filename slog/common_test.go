@@ -166,6 +166,39 @@ func TestReplaceAttrs(t *testing.T) {
 			slog.Bool("bool", true), slog.Group("group1", slog.Group("group2", slog.String("string", "foobar"))),
 		),
 	)
+
+	// Scalar LogValuer without ReplaceAttr
+	is.Equal(
+		[]slog.Attr{slog.Int64("answer", 42)},
+		replaceAttrs(
+			nil,
+			nil,
+			slog.Any("answer", scalarLogValuer{42}),
+		),
+	)
+
+	// Scalar LogValuer with ReplaceAttr sees resolved KindInt64
+	is.Equal(
+		[]slog.Attr{slog.Int64("answer", 84)},
+		replaceAttrs(
+			func(_ []string, a slog.Attr) slog.Attr {
+				if a.Value.Kind() == slog.KindInt64 {
+					return slog.Int64(a.Key, a.Value.Int64()*2)
+				}
+				return a
+			},
+			nil,
+			slog.Any("answer", scalarLogValuer{42}),
+		),
+	)
+}
+
+type scalarLogValuer struct {
+	n int64
+}
+
+func (v scalarLogValuer) LogValue() slog.Value {
+	return slog.Int64Value(v.n)
 }
 
 func TestAttrsToMap(t *testing.T) {

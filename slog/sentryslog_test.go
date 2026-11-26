@@ -485,3 +485,41 @@ func TestSentryHandlerCustomLogLevels(t *testing.T) {
 		})
 	}
 }
+
+type chainedLogValuer struct {
+	inner slog.LogValuer
+}
+
+func (c chainedLogValuer) LogValue() slog.Value {
+	return slog.AnyValue(c.inner)
+}
+
+func TestSentryHandlerLogValuer(t *testing.T) {
+	ctx, mockTransport := newMockTransport(t)
+	handler := Option{
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == "count" && a.Value.Kind() == slog.KindInt64 {
+				return slog.Int64(a.Key, a.Value.Int64()+1)
+			}
+			return a
+		},
+	}.NewSentryHandler(ctx)
+
+	var nilValuer *scalarLogValuer
+	logger := slog.New(handler)
+	logger.InfoContext(ctx, "log valuer",
+		slog.Any("count", scalarLogValuer{n: 41}),
+		slog.Any("nested", chainedLogValuer{inner: testLogValuer{name: "alice"}}),
+		slog.Any("nil_ptr", nilValuer),
+	)
+	require.True(t, sentry.ClientFromContext(ctx).Flush(testutils.FlushTimeout()))
+
+	gotEvents := mockTransport.Events()
+	require.Len(t, gotEvents, 1)
+	require.Len(t, gotEvents[0].Logs, 1)
+
+	attrs := gotEvents[0].Logs[0].Attributes
+	assert.Equal(t, int64(42), attrs["count"].AsInterface())
+	assert.Equal(t, "alice", attrs["nested.name"].AsInterface())
+	assert.Contains(t, attrs["nil_ptr"].AsInterface(), "LogValue panicked")
+}
