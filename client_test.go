@@ -1613,10 +1613,6 @@ func TestClientSetsUpTransport(t *testing.T) {
 						<-release
 						return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
 					})},
-					HTTPTransport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
-						t.Error("HTTPClient must take precedence over HTTPTransport")
-						return nil, errors.New("unexpected request")
-					}),
 				})
 				require.NoError(t, err)
 				defer func() { unblock(); client.Close() }()

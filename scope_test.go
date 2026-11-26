@@ -423,7 +423,7 @@ func TestApplyToEventUsingEmptyEvent(t *testing.T) {
 }
 
 func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
-	currentClient, err := NewClient(ClientOptions{Dsn: "https://key@sentry.io/1", SendDefaultPII: true})
+	currentClient, err := NewClient(ClientOptions{Dsn: "https://key@sentry.io/1", DataCollection: &DataCollection{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -444,7 +444,7 @@ func TestApplyToEventUsesClientPIISettingsForRequest(t *testing.T) {
 	requestClient, err := NewClient(ClientOptions{
 		Dsn: "https://key@sentry.io/1",
 		DataCollection: &DataCollection{
-			UserInfo: Set(false),
+			UserInfo: new(false),
 		},
 	})
 	if err != nil {

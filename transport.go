@@ -3,11 +3,9 @@ package sentry
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
@@ -50,33 +48,6 @@ type Transport interface {
 	FlushWithContext(ctx context.Context) bool
 	// Close releases transport resources.
 	Close()
-}
-
-func getProxyConfig(httpProxy, httpsProxy string) func(*http.Request) (*url.URL, error) {
-	if len(httpsProxy) > 0 {
-		return func(*http.Request) (*url.URL, error) {
-			return url.Parse(httpsProxy)
-		}
-	}
-
-	if len(httpProxy) > 0 {
-		return func(*http.Request) (*url.URL, error) {
-			return url.Parse(httpProxy)
-		}
-	}
-
-	return http.ProxyFromEnvironment
-}
-
-func getTLSConfig(options ClientOptions) *tls.Config {
-	if options.CaCerts != nil {
-		return &tls.Config{
-			RootCAs:    options.CaCerts,
-			MinVersion: tls.VersionTLS12,
-		}
-	}
-
-	return nil
 }
 
 func getSentryRequestFromEnvelope(ctx context.Context, dsn *protocol.Dsn, envelope *protocol.Envelope) (r *http.Request, err error) {
@@ -168,10 +139,9 @@ func validEnvelope(envelope *protocol.Envelope) bool {
 
 // httpSender holds the delivery state shared by HTTPSyncTransport and HTTPTransport.
 type httpSender struct {
-	dsn       *protocol.Dsn
-	client    *http.Client
-	transport http.RoundTripper
-	recorder  *report.Aggregator
+	dsn      *protocol.Dsn
+	client   *http.Client
+	recorder *report.Aggregator
 
 	mu     sync.RWMutex
 	limits ratelimit.Map
@@ -184,20 +154,15 @@ func newHTTPSender(dsn *protocol.Dsn, options ClientOptions, timeout time.Durati
 		recorder: options.recorder,
 	}
 
-	if options.HTTPTransport != nil {
-		sender.transport = options.HTTPTransport
-	} else {
-		sender.transport = &http.Transport{
-			Proxy:           getProxyConfig(options.HTTPProxy, options.HTTPSProxy),
-			TLSClientConfig: getTLSConfig(options),
-		}
-	}
-
 	if options.HTTPClient != nil {
 		sender.client = options.HTTPClient
 	} else {
+		transport := options.httpTransport
+		if transport == nil {
+			transport = &http.Transport{Proxy: http.ProxyFromEnvironment}
+		}
 		sender.client = &http.Client{
-			Transport: sender.transport,
+			Transport: transport,
 			Timeout:   timeout,
 		}
 	}
