@@ -1,4 +1,4 @@
-package sentry
+package traceutils
 
 import (
 	"fmt"
@@ -37,7 +37,7 @@ func MergeBaggage(existingHeader, sentryHeader string) (string, error) {
 		parts = append(parts, s)
 	}
 	for _, member := range existingBaggage.Members() {
-		if strings.HasPrefix(member.Key(), sentryPrefix) {
+		if strings.HasPrefix(member.Key(), "sentry-") {
 			continue
 		}
 		parts = append(parts, member.String())
