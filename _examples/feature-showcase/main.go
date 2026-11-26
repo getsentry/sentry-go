@@ -62,7 +62,7 @@ func configureGlobalScope() {
 func withScope() {
 	ctx, scope := sentry.WithScope(context.Background())
 	scope.SetLevel(sentry.LevelFatal)
-	sentry.CaptureException(ctx, errors.New("say what again. SAY WHAT again"))
+	sentry.CaptureError(ctx, errors.New("say what again. SAY WHAT again"))
 }
 
 func addBreadcrumbs() {
@@ -112,7 +112,7 @@ func (e CustomComplexError) GimmeMoreData() string {
 }
 
 func eventHint() {
-	sentry.CaptureException(context.Background(), CustomComplexError{Message: "Captured", AnswerToLife: 42})
+	sentry.CaptureError(context.Background(), CustomComplexError{Message: "Captured", AnswerToLife: 42})
 }
 
 func main() {
@@ -121,7 +121,7 @@ func main() {
 		Dsn:          "https://hello@example.com/1337",
 		IgnoreErrors: []string{"^(?i)drop me"},
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			if ex, ok := hint.OriginalException.(CustomComplexError); ok {
+			if ex, ok := hint.OriginalError.(CustomComplexError); ok {
 				event.Message = event.Message + " - " + ex.GimmeMoreData()
 			}
 

@@ -71,7 +71,7 @@ Timeout         time.Duration
 
 ## Usage
 
-`sentryiris` attaches a request-specific `*sentry.Scope` and transaction to the request context. Pass `ctx.Request().Context()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureException` so request data, custom scope data, and trace information are applied to the event.
+`sentryiris` attaches a request-specific `*sentry.Scope` and transaction to the request context. Pass `ctx.Request().Context()` to capture functions such as `sentry.CaptureMessage` and `sentry.CaptureError` so request data, custom scope data, and trace information are applied to the event.
 Use `sentry.ScopeFromContext(ctx.Request().Context())` when you need to add data that should be available to captures made during the request.
 
 **Keep in mind that the request scope won't be available in middleware attached before `sentryiris`!**

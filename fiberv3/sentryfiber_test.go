@@ -66,7 +66,7 @@ func TestIntegration(t *testing.T) {
 			if err := requestCtx.Err(); err != nil {
 				t.Errorf("request context in error handler: %v", err)
 			}
-			sentry.CaptureException(requestCtx, e)
+			sentry.CaptureError(requestCtx, e)
 			return nil
 		},
 	})

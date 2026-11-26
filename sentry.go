@@ -44,10 +44,18 @@ func CaptureMessage(ctx context.Context, message string, options ...CaptureOptio
 	return ClientFromContext(ctx).CaptureMessage(ctx, message, options...)
 }
 
+// CaptureError captures an error using the scope and client carried by
+// ctx.
+func CaptureError(ctx context.Context, err error, options ...CaptureOption) EventID {
+	return ClientFromContext(ctx).CaptureError(ctx, err, options...)
+}
+
 // CaptureException captures an error using the scope and client carried by
 // ctx.
+//
+// Deprecated: Use [CaptureError].
 func CaptureException(ctx context.Context, exception error, options ...CaptureOption) EventID {
-	return ClientFromContext(ctx).CaptureException(ctx, exception, options...)
+	return CaptureError(ctx, exception, options...)
 }
 
 // CaptureCheckIn captures a (cron) monitor check-in using the scope and client
@@ -96,7 +104,7 @@ func WithMonitor(ctx context.Context, monitorSlug string, monitorConfig *Monitor
 // CaptureEvent captures an event using the scope and client carried by ctx.
 //
 // The event must already be assembled. Typically code would instead use
-// the utility methods like CaptureException. The return value is the
+// the utility methods like CaptureError. The return value is the
 // event ID. In case Sentry is disabled or event was dropped, the return value is empty.
 func CaptureEvent(ctx context.Context, event *Event, options ...CaptureOption) EventID {
 	return ClientFromContext(ctx).CaptureEvent(ctx, event, options...)
@@ -124,7 +132,7 @@ func Recover(ctx context.Context, recovered any, options ...CaptureOption) Event
 // unintentionally dropping events.
 //
 // Do not call Flush indiscriminately after every call to CaptureEvent,
-// CaptureException or CaptureMessage. Instead, to have the SDK send events over
+// CaptureError or CaptureMessage. Instead, to have the SDK send events over
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func Flush(timeout time.Duration) bool {
@@ -141,7 +149,7 @@ func Flush(timeout time.Duration) bool {
 // events are unintentionally dropped.
 //
 // Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
-// CaptureException, or CaptureMessage. To send events synchronously over the network,
+// CaptureError, or CaptureMessage. To send events synchronously over the network,
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
 
 func FlushWithContext(ctx context.Context) bool {

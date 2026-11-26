@@ -23,7 +23,7 @@ func enhanceSentryEvent(handler fasthttp.RequestHandler) fasthttp.RequestHandler
 
 		err := expensiveThing(requestCtx)
 		if err != nil {
-			sentry.CaptureException(requestCtx, err)
+			sentry.CaptureError(requestCtx, err)
 		}
 
 		handler(ctx)

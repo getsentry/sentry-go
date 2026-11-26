@@ -52,7 +52,7 @@ func main() {
 
 	resp, err := http.Get(os.Args[1])
 	if err != nil {
-		sentry.CaptureException(context.Background(), err)
+		sentry.CaptureError(context.Background(), err)
 		log.Printf("reported to Sentry: %s", err)
 		return
 	}

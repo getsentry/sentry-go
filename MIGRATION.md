@@ -31,7 +31,7 @@ func processJob(ctx context.Context, job Job) {
 	scope.SetTag("job", job.Name)
 	sentry.AddBreadcrumb(ctx, &sentry.Breadcrumb{Message: "job started"})
 	if err := job.Run(ctx); err != nil {
-		sentry.CaptureException(ctx, err)
+		sentry.CaptureError(ctx, err)
 	}
 }
 ```
@@ -45,7 +45,7 @@ and [Go Concurrency Patterns: Context](https://go.dev/blog/context).
 
 ### Capturing events
 
-`CaptureException`, `CaptureMessage`, `CaptureEvent`, `CaptureCheckIn`, `AddBreadcrumb`,
+`CaptureError`, `CaptureMessage`, `CaptureEvent`, `CaptureCheckIn`, `AddBreadcrumb`,
 and `WithMonitor` now take `context.Context` as their first argument. Hints, which
 used to be required arguments or separate methods such as `CaptureEventWithHint`,
 are now optional trailing options. Use `WithEventHint` and `WithLevel` for a single
@@ -53,7 +53,7 @@ capture, and `WithBreadcrumbHint` for a single breadcrumb:
 
 ```go
 sentry.CaptureMessage(ctx, "Payment delayed", sentry.WithLevel(sentry.LevelWarning))
-client.CaptureException(ctx, err, sentry.WithEventHint(hint))
+client.CaptureError(ctx, err, sentry.WithEventHint(hint))
 ```
 
 ### Integrations
@@ -66,18 +66,18 @@ integration, and use it like any other context:
 func handler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sentry.ScopeFromContext(ctx).SetTag("page", "checkout")
-	sentry.CaptureException(ctx, err)
+	sentry.CaptureError(ctx, err)
 }
 
 // Gin
 func handler(c *gin.Context) {
 	ctx := sentrygin.GetContext(c)
-	sentry.CaptureException(ctx, err)
+	sentry.CaptureError(ctx, err)
 }
 
 // gRPC
 func (s *server) GetUser(ctx context.Context, req *pb.GetUserRequest) (*pb.User, error) {
-	sentry.CaptureException(ctx, err)
+	sentry.CaptureError(ctx, err)
 }
 ```
 
@@ -94,7 +94,7 @@ span from:
 ```go
 span := sentry.StartSpan(ctx, "payment.authorize")
 defer span.Finish()
-sentry.CaptureException(span.Context(), err)
+sentry.CaptureError(span.Context(), err)
 ```
 
 The integrations continue incoming traces for you. Without an integration, start the
@@ -169,10 +169,11 @@ type Transport interface {
 
 | Before | v1 |
 | --- | --- |
-| `CaptureException`, `CaptureMessage`, `CaptureEvent`, `CaptureCheckIn`, `AddBreadcrumb` | The same functions with `ctx` as the first argument |
+| `CaptureMessage`, `CaptureEvent`, `CaptureCheckIn`, `AddBreadcrumb` | The same functions with `ctx` as the first argument |
+| `CaptureException(err)` | `CaptureError(ctx, err)`; `CaptureException(ctx, err)` still works and is deprecated |
 | Hub capture methods, such as `hub.CaptureException(err)` | The package-level functions with `ctx` |
 | `hub.CaptureEventWithHint(event, hint)` | `CaptureEvent(ctx, event, sentry.WithEventHint(hint))` |
-| `client.CaptureException(err, hint, scope)` and the other client capture methods | `client.CaptureException(ctx, err, sentry.WithEventHint(hint))`, with `ContextWithScope(ctx, scope)` |
+| `client.CaptureException(err, hint, scope)` and the other client capture methods | `client.CaptureError(ctx, err, sentry.WithEventHint(hint))`, with `ContextWithScope(ctx, scope)` |
 | Breadcrumb hint argument | `AddBreadcrumb(ctx, breadcrumb, sentry.WithBreadcrumbHint(hint))` |
 | `WithMonitor(slug, config, fn)` and `hub.WithMonitor` | `WithMonitor(ctx, slug, config, fn)`, where `fn` is `func(ctx context.Context) error` and receives the job's scope; `sentrycron.AddFunc` takes the same callback |
 | `Recover()` and `RecoverWithContext(ctx)` | `defer sentry.Recover(ctx, nil)` |
@@ -188,6 +189,7 @@ type Transport interface {
 | A `func(*Span)` passed as a `SpanOption` | `SpanOption` is sealed; use the `With...` and `ContinueFrom...` constructors and set other span fields after `StartSpan` |
 | `hint.Context.Value(sentry.RequestContextKey)` in `BeforeSend` or `BeforeSendTransaction` | `hint.Request`, set on every capture whose scope has a request. For FastHTTP and Fiber it is the converted `*http.Request` |
 | `Capture*` and `Recover` returning `*EventID` | They return `EventID`; it is empty when nothing was captured |
+| `EventHint.OriginalException` and `EventHint.RecoveredException` | `EventHint.OriginalError` and `EventHint.RecoveredPanic`, to match `CaptureError`. A struct field cannot be aliased, so there are no deprecated names |
 
 </details>
 

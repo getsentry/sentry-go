@@ -529,21 +529,28 @@ func (client *Client) CaptureMessage(ctx context.Context, message string, option
 	return client.capture(ctx, client.eventFromMessage(message), opts)
 }
 
-// CaptureException captures an error using the scope carried by ctx.
-func (client *Client) CaptureException(ctx context.Context, exception error, options ...CaptureOption) EventID {
+// CaptureError captures an error using the scope carried by ctx.
+func (client *Client) CaptureError(ctx context.Context, err error, options ...CaptureOption) EventID {
 	if !client.IsEnabled() {
 		return ""
 	}
-	if exception == nil {
-		debuglog.Println("CaptureException called with nil error, nothing captured.")
+	if err == nil {
+		debuglog.Println("CaptureError called with nil error, nothing captured.")
 		return ""
 	}
 	opts := resolveCaptureOptions(ctx, options...)
-	if opts.hint.OriginalException == nil {
-		opts.hint.OriginalException = exception
+	if opts.hint.OriginalError == nil {
+		opts.hint.OriginalError = err
 	}
 	opts.defaultLevel = LevelError
-	return client.capture(ctx, client.eventFromException(exception), opts)
+	return client.capture(ctx, client.eventFromException(err), opts)
+}
+
+// CaptureException captures an error using the scope carried by ctx.
+//
+// Deprecated: Use [Client.CaptureError].
+func (client *Client) CaptureException(ctx context.Context, exception error, options ...CaptureOption) EventID {
+	return client.CaptureError(ctx, exception, options...)
 }
 
 // CaptureCheckIn captures a check-in using the scope carried by ctx.
@@ -647,8 +654,8 @@ func (client *Client) capturePanic(ctx context.Context, recovered any, options .
 	}
 
 	opts := resolveCaptureOptions(ctx, options...)
-	if opts.hint.RecoveredException == nil {
-		opts.hint.RecoveredException = recovered
+	if opts.hint.RecoveredPanic == nil {
+		opts.hint.RecoveredPanic = recovered
 	}
 
 	var event *Event
@@ -673,7 +680,7 @@ func (client *Client) capturePanic(ctx context.Context, recovered any, options .
 // unintentionally dropping events.
 //
 // Do not call Flush indiscriminately after every call to CaptureEvent,
-// CaptureException or CaptureMessage. Instead, to have the SDK send events over
+// CaptureError or CaptureMessage. Instead, to have the SDK send events over
 // the network synchronously, configure it to use the HTTPSyncTransport in the
 // call to Init.
 func (client *Client) Flush(timeout time.Duration) bool {
@@ -695,7 +702,7 @@ func (client *Client) Flush(timeout time.Duration) bool {
 // events are unintentionally dropped.
 //
 // Avoid calling FlushWithContext indiscriminately after each call to CaptureEvent,
-// CaptureException, or CaptureMessage. To send events synchronously over the network,
+// CaptureError, or CaptureMessage. To send events synchronously over the network,
 // configure the SDK to use HTTPSyncTransport during initialization with Init.
 func (client *Client) FlushWithContext(ctx context.Context) bool {
 	if !client.IsEnabled() {
