@@ -35,12 +35,13 @@ func replaceAttrs(fn replaceAttrFn, groups []string, attrs ...slog.Attr) []slog.
 		attr := attrs[i]
 		value := attr.Value.Resolve()
 		attr.Value = value
-		if value.Kind() == slog.KindGroup {
+		switch {
+		case value.Kind() == slog.KindGroup:
 			groupAttrs := slices.Clone(value.Group())
 			attrs[i].Value = slog.GroupValue(replaceAttrs(fn, append(groups, attr.Key), groupAttrs...)...)
-		} else if fn != nil {
+		case fn != nil:
 			attrs[i] = fn(groups, attr)
-		} else {
+		default:
 			attrs[i] = attr
 		}
 	}
