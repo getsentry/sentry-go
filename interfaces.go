@@ -472,12 +472,13 @@ func (e *Event) ToEnvelopeItem() (item *protocol.EnvelopeItem, err error) {
 }
 
 // ToEnvelope converts the Event to a Sentry envelope.
-func (e *Event) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+func (e *Event) ToEnvelope() (*protocol.Envelope, error) {
 	item, err := e.ToEnvelopeItem()
 	if err != nil {
 		return nil, err
 	}
 
+	header := &protocol.EnvelopeHeader{EventID: e.GetEventID(), Sdk: e.GetSdkInfo(), Trace: e.GetDynamicSamplingContext()}
 	envelope := protocol.NewEnvelope(header, item)
 	for _, attachment := range e.Attachments {
 		attachmentItem := protocol.NewAttachmentItem(attachment.Filename, attachment.ContentType, attachment.Payload)

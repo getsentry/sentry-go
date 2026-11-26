@@ -35,12 +35,12 @@ func (t *testTelemetryItem) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 	}, nil
 }
 
-func (t *testTelemetryItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+func (t *testTelemetryItem) ToEnvelope() (*protocol.Envelope, error) {
 	item, err := t.ToEnvelopeItem()
 	if err != nil {
 		return nil, err
 	}
-	return protocol.NewEnvelope(header, item), nil
+	return protocol.NewEnvelope(&protocol.EnvelopeHeader{}, item), nil
 }
 
 func (t *testTelemetryItem) GetCategory() ratelimit.Category {
@@ -48,21 +48,6 @@ func (t *testTelemetryItem) GetCategory() ratelimit.Category {
 		return t.category
 	}
 	return ratelimit.CategoryError
-}
-
-func (t *testTelemetryItem) GetEventID() string {
-	return t.data
-}
-
-func (t *testTelemetryItem) GetSdkInfo() *protocol.SdkInfo {
-	return &protocol.SdkInfo{
-		Name:    "test",
-		Version: "1.0.0",
-	}
-}
-
-func (t *testTelemetryItem) GetDynamicSamplingContext() map[string]string {
-	return nil
 }
 
 func (t *testTelemetryItem) MakeSerializationSafe() {}
@@ -78,7 +63,7 @@ type failingTransactionTelemetryItem struct {
 	spanCount uint64
 }
 
-func (f *failingTransactionTelemetryItem) ToEnvelope(_ *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+func (f *failingTransactionTelemetryItem) ToEnvelope() (*protocol.Envelope, error) {
 	return nil, errors.New("boom")
 }
 
@@ -469,8 +454,8 @@ func TestTelemetrySchedulerClientReportDelivery(t *testing.T) {
 
 type transactionTelemetryItem struct{ testTelemetryItem }
 
-func (t *transactionTelemetryItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
-	return protocol.NewEnvelope(header, protocol.NewTransactionItem([]byte(`{}`))), nil
+func (t *transactionTelemetryItem) ToEnvelope() (*protocol.Envelope, error) {
+	return protocol.NewEnvelope(&protocol.EnvelopeHeader{}, protocol.NewTransactionItem([]byte(`{}`))), nil
 }
 
 func (t *transactionTelemetryItem) DiscardCounts() DiscardCounts { return transactionCounts(3) }

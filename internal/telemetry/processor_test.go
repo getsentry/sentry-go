@@ -17,19 +17,16 @@ func (b bwItem) ToEnvelopeItem() (*protocol.EnvelopeItem, error) {
 		Payload: []byte(`{"message":"ok"}`),
 	}, nil
 }
-func (b bwItem) ToEnvelope(header *protocol.EnvelopeHeader) (*protocol.Envelope, error) {
+func (b bwItem) ToEnvelope() (*protocol.Envelope, error) {
 	item, err := b.ToEnvelopeItem()
 	if err != nil {
 		return nil, err
 	}
-	return protocol.NewEnvelope(header, item), nil
+	return protocol.NewEnvelope(&protocol.EnvelopeHeader{}, item), nil
 }
-func (b bwItem) GetCategory() ratelimit.Category              { return ratelimit.CategoryError }
-func (b bwItem) GetEventID() string                           { return b.id }
-func (b bwItem) GetSdkInfo() *protocol.SdkInfo                { return &protocol.SdkInfo{Name: "t", Version: "1"} }
-func (b bwItem) GetDynamicSamplingContext() map[string]string { return nil }
-func (b bwItem) MakeSerializationSafe()                       {}
-func (b bwItem) DiscardCounts() DiscardCounts                 { return oneDiscard(ratelimit.CategoryError) }
+func (b bwItem) GetCategory() ratelimit.Category { return ratelimit.CategoryError }
+func (b bwItem) MakeSerializationSafe()          {}
+func (b bwItem) DiscardCounts() DiscardCounts    { return oneDiscard(ratelimit.CategoryError) }
 
 func TestBuffer_Add_MissingCategory(t *testing.T) {
 	var ctxErr error
