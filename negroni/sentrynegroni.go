@@ -59,16 +59,16 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request, next http.Ha
 		sentry.WithSpanOrigin(sentry.SpanOriginNegroni),
 	}
 
-	transaction := sentry.StartTransaction(
-		ctx,
-		traceutils.GetHTTPSpanName(r),
-		options...,
-	)
+	var transaction *sentry.Span
 
 	rw := httputils.NewWrapResponseWriter(w, r.ProtoMajor)
 
 	if created {
-		ctx = transaction.Context()
+		ctx, transaction = sentry.StartSpan(
+			ctx,
+			traceutils.GetHTTPSpanName(r),
+			options...,
+		)
 		transaction.SetData("http.request.method", r.Method)
 		defer func() {
 			status := rw.Status()

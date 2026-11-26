@@ -11,7 +11,7 @@ import (
 )
 
 func Test_spanRecorder_record(t *testing.T) {
-	testRootSpan := StartSpan(context.Background(), "test", WithTransactionName("test transaction"))
+	testRootSpanCtx, _ := StartSpan(context.Background(), "test transaction", WithOpName("test"))
 
 	for _, tt := range []struct {
 		name           string
@@ -43,7 +43,7 @@ func Test_spanRecorder_record(t *testing.T) {
 			})
 
 			for i := 0; i < tt.toRecordSpans; i++ {
-				child := testRootSpan.StartChild(fmt.Sprintf("test %d", i))
+				_, child := StartSpan(testRootSpanCtx, fmt.Sprintf("test %d", i))
 				spanRecorder.record(child)
 			}
 

@@ -46,8 +46,8 @@ func startSpan(ctx context.Context, cfg *config, parent *sentry.Span, op, descri
 		return nil
 	}
 
-	span := parent.StartChild(op,
-		sentry.WithDescription(description),
+	_, span := sentry.StartSpan(parent.Context(), description,
+		sentry.WithOpName(op),
 		sentry.WithSpanOrigin(SpanOrigin),
 	)
 	setSQLData(ctx, span, cfg)

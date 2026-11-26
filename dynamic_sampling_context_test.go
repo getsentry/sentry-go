@@ -90,7 +90,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 					Release:          "1.0.0",
 					Environment:      "test",
 				})
-				txn := StartTransaction(ctx, "name", WithTransactionSource(SourceCustom))
+				_, txn := StartSpan(ctx, "name", WithTransactionSource(SourceCustom))
 				txn.TraceID = TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")
 				return txn
 			}(),
@@ -116,7 +116,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 					Dsn:              "http://public@example.com/sentry/1",
 					Release:          "1.0.0",
 				})
-				txn := StartTransaction(ctx, "name", WithTransactionSource(SourceURL))
+				_, txn := StartSpan(ctx, "name", WithTransactionSource(SourceURL))
 				txn.TraceID = TraceIDFromHex("d49d9bf66f13450b81f65bc51cf49c03")
 				return txn
 			}(),
@@ -135,7 +135,7 @@ func TestDynamicSamplingContextFromTransaction(t *testing.T) {
 		{
 			input: func() *Span {
 				ctx := context.Background()
-				tx := StartTransaction(ctx, "op")
+				_, tx := StartSpan(ctx, "op")
 				return tx
 			}(),
 			want: DynamicSamplingContext{
@@ -266,35 +266,24 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 
 	t.Run("frozen foreign DSC is rejected and copied", func(t *testing.T) {
 		for _, test := range []struct {
-			name             string
-			native, matching bool
+			name     string
+			matching bool
 		}{
 			{name: "scope foreign"},
 			{name: "scope matching", matching: true},
-			{name: "transaction foreign", native: true},
-			{name: "transaction matching", native: true, matching: true},
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				client, transport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1})
 				ctx, scope := WithScope(ContextWithClient(context.Background(), client))
 				propagation := scope.propagationContextSnapshot()
 				traceID := propagation.TraceID
-				var root *Span
-				if test.native {
-					root = StartTransaction(ctx, "frozen")
-					ctx, traceID = root.Context(), root.TraceID
-				}
 				if !test.matching {
 					traceID = TraceID{9}
 				}
 				trace := strings.ToUpper(traceID.String())
 				dsc := DynamicSamplingContext{Frozen: true, Entries: map[string]string{traceIDContextKey: trace, "release": "upstream"}}
-				if root == nil {
-					propagation.DynamicSamplingContext = dsc
-					scope.SetPropagationContext(propagation)
-				} else {
-					root.SetDynamicSamplingContext(dsc)
-				}
+				propagation.DynamicSamplingContext = dsc
+				scope.SetPropagationContext(propagation)
 				dsc.Entries["release"] = "caller mutation"
 				want := DynamicSamplingContext{Frozen: true}
 				if test.matching {
@@ -302,10 +291,6 @@ func TestDynamicSamplingContextFromScope(t *testing.T) {
 				}
 				assertBaggageStringsEqual(t, GetBaggage(ctx), want.String())
 				require.NotEmpty(t, CaptureMessage(ctx, "frozen"))
-				if root != nil {
-					root.SetDynamicSamplingContext(DynamicSamplingContext{Entries: map[string]string{"release": "late"}})
-					root.Finish()
-				}
 				for _, envelope := range transport.Envelopes() {
 					if !maps.Equal(want.Entries, envelope.Header.Trace) {
 						t.Errorf("envelope trace = %v, want %v", envelope.Header.Trace, want.Entries)

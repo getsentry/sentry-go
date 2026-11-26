@@ -497,8 +497,8 @@ func TestSentryCore_IntegrationWithSugaredLogger(t *testing.T) {
 func TestSentryCore_ContextField(t *testing.T) {
 	ctx, _ := newMockTransport()
 
-	span := sentry.StartSpan(ctx, "test.operation")
-	newCtx := span.Context()
+	spanCtx, span := sentry.StartSpan(ctx, "test.operation")
+	newCtx := spanCtx
 	defer span.Finish()
 
 	core := NewSentryCore(ctx, Option{
@@ -515,8 +515,8 @@ func TestSentryCore_ContextField(t *testing.T) {
 
 func TestSentryCore_ContextFieldWithOtherFields(t *testing.T) {
 	ctx, _ := newMockTransport()
-	span := sentry.StartSpan(ctx, "test.operation")
-	newCtx := span.Context()
+	spanCtx, span := sentry.StartSpan(ctx, "test.operation")
+	newCtx := spanCtx
 	defer span.Finish()
 
 	core := NewSentryCore(ctx, Option{
@@ -540,14 +540,14 @@ func TestSentryCore_ContextFieldPerCall(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 
 	requestCtx, _ := sentry.WithScope(ctx)
-	span := sentry.StartTransaction(requestCtx, "test-transaction")
+	spanCtx, span := sentry.StartSpan(requestCtx, "test-transaction")
 	defer span.Finish()
 
 	logger := zap.New(NewSentryCore(ctx, Option{
 		Level:        []zapcore.Level{zapcore.InfoLevel},
 		FlushTimeout: testutils.FlushTimeout(),
 	}))
-	logger.Info("linked", Context(span.Context()), zap.String("key", "value"))
+	logger.Info("linked", Context(spanCtx), zap.String("key", "value"))
 	logger.Info("not linked")
 	require.NoError(t, logger.Sync())
 
@@ -570,8 +570,8 @@ func TestSentryCore_ContextFieldPerCall(t *testing.T) {
 func TestSentryCore_ContextFieldInLogger(t *testing.T) {
 	ctx, mockTransport := newMockTransport()
 
-	span := sentry.StartTransaction(ctx, "test-transaction")
-	txnCtx := span.Context()
+	spanCtx, span := sentry.StartSpan(ctx, "test-transaction")
+	txnCtx := spanCtx
 	defer span.Finish()
 
 	logger := zap.New(NewSentryCore(context.Background(), Option{

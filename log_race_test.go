@@ -241,10 +241,9 @@ func testConcurrentLogWithSpanOperations(_ *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := range loggingIterations / 20 {
-				transaction := StartTransaction(ctx, fmt.Sprintf("log-transaction-%d", id))
-				span := transaction.StartChild(fmt.Sprintf("log-span-%d", id))
+				transactionCtx, transaction := StartSpan(ctx, fmt.Sprintf("log-transaction-%d", id))
+				spanCtx, span := StartSpan(transactionCtx, fmt.Sprintf("log-span-%d", id))
 
-				spanCtx := span.Context()
 				logger := NewLogger(spanCtx)
 
 				var localWg sync.WaitGroup

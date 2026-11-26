@@ -42,7 +42,7 @@ func main() {
 		sentry.CaptureMessage(captureCtx, "User provided unwanted query string, but we recovered just fine")
 
 		expensiveThing := func(ctx context.Context) {
-			span := sentry.StartSpan(ctx, "expensive_thing")
+			_, span := sentry.StartSpan(ctx, "expensive_thing")
 			defer span.Finish()
 
 			// do resource intensive thing

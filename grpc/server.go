@@ -73,17 +73,16 @@ func startServerTransaction(ctx context.Context, fullMethod string) (context.Con
 
 	setScopeMetadata(scope, client, name, md)
 
-	transaction := sentry.StartTransaction(
-		ctx,
-		name,
-		sentry.ContinueFromHeaders(sentryTraceHeader, sentryBaggageHeader),
-		sentry.WithOpName(defaultServerOperationName),
-		sentry.WithDescription(name),
-		sentry.WithTransactionSource(sentry.SourceRoute),
-		sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
-	)
+	var transaction *sentry.Span
 	if owned {
-		ctx = transaction.Context()
+		ctx, transaction = sentry.StartSpan(
+			ctx,
+			name,
+			sentry.ContinueFromHeaders(sentryTraceHeader, sentryBaggageHeader),
+			sentry.WithOpName(defaultServerOperationName),
+			sentry.WithTransactionSource(sentry.SourceRoute),
+			sentry.WithSpanOrigin(sentry.SpanOriginGrpc),
+		)
 		if service != "" {
 			transaction.SetData("rpc.service", service)
 		}

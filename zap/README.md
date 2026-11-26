@@ -153,11 +153,10 @@ The Sentry core respects the context passed during initialization. If you have S
 ctx := context.Background()
 
 // Start a transaction
-span := sentry.StartSpan(ctx, "operation.name")
+ctx, span := sentry.StartSpan(ctx, "operation.name")
 defer span.Finish()
 
 // Create logger with the span's context
-ctx = span.Context()
 sentryCore := sentryzap.NewSentryCore(ctx, sentryzap.Option{})
 logger := zap.New(sentryCore)
 
@@ -175,18 +174,18 @@ sentryCore := sentryzap.NewSentryCore(context.Background(), sentryzap.Option{})
 logger := zap.New(sentryCore)
 
 // Start a transaction
-span := sentry.StartTransaction(ctx, "operation.name")
+ctx, span := sentry.StartSpan(ctx, "operation.name")
 defer span.Finish()
 
 // Create a logger scoped to this transaction
-scopedLogger := logger.With(sentryzap.Context(span.Context()))
+scopedLogger := logger.With(sentryzap.Context(ctx))
 
 // These logs will be associated with the transaction
 scopedLogger.Info("Processing started")
 scopedLogger.Info("Processing completed")
 
 // Or pass the context to a single log call
-logger.Info("Processing step", sentryzap.Context(span.Context()))
+logger.Info("Processing step", sentryzap.Context(ctx))
 ```
 
 ## Notes

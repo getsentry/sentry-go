@@ -337,13 +337,13 @@ func TestCaptureMessagePreservesActiveSpanTraceContext(t *testing.T) {
 			} else {
 				ctx = ContextWithScope(ctx, NewScope())
 			}
-			transaction := StartTransaction(ctx, "request", WithOpName("http.server"))
+			transactionCtx, transaction := StartSpan(ctx, "request", WithOpName("http.server"))
 			transaction.SetData("http.request.method", http.MethodGet)
 			capture := CaptureMessage
 			if test.directClient {
 				capture = client.CaptureMessage
 			}
-			require.NotEmpty(t, capture(transaction.Context(), "message"))
+			require.NotEmpty(t, capture(transactionCtx, "message"))
 			require.Equal(t, Context{
 				traceIDContextKey: transaction.TraceID.String(),
 				spanIDContextKey:  transaction.SpanID.String(),
@@ -1007,7 +1007,7 @@ func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
 		},
 	})
 
-	transaction := StartTransaction(ctx,
+	_, transaction := StartSpan(ctx,
 		"Foo",
 	)
 	transaction.Finish()
@@ -1042,7 +1042,7 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 	ScopeFromContext(ctx).AddEventProcessor(processor)
 	ScopeFromContext(ctx).SetRequest(request)
 
-	transaction := StartTransaction(ctx,
+	_, transaction := StartSpan(ctx,
 		"Foo",
 	)
 	transaction.Finish()
@@ -1151,7 +1151,7 @@ func TestIgnoreTransactions(t *testing.T) {
 				IgnoreTransactions: tt.ignoreTransactions,
 			})
 
-			transaction := StartTransaction(ctx,
+			_, transaction := StartSpan(ctx,
 				tt.transaction,
 			)
 			transaction.Finish()
@@ -1182,7 +1182,7 @@ func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
 		Transport:        transport,
 	})
 
-	transaction := StartTransaction(ctx, "test")
+	_, transaction := StartSpan(ctx, "test")
 	// Transaction has no http.response.status_code
 	transaction.Finish()
 
@@ -1288,8 +1288,8 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 				TraceIgnoreStatusCodes: tt.ignoreStatusCodes,
 			})
 
-			transaction := StartTransaction(ctx, "test")
-			child := transaction.StartChild("child")
+			transactionCtx, transaction := StartSpan(ctx, "test")
+			_, child := StartSpan(transactionCtx, "child")
 			child.Finish()
 			firstExportAfterFinish := name == "404 in ignore range" || name == "Single status code as single-element slice"
 			var baggage string
@@ -1313,8 +1313,8 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 			}
 			if firstExportAfterFinish {
 				require.Equal(t, SampledFalse, transaction.Sampled)
-				require.NotEmpty(t, CaptureMessage(transaction.Context(), "after finish"))
-				dsc, err := DynamicSamplingContextFromHeader([]byte(GetBaggage(transaction.Context())))
+				require.NotEmpty(t, CaptureMessage(transactionCtx, "after finish"))
+				dsc, err := DynamicSamplingContextFromHeader([]byte(GetBaggage(transactionCtx)))
 				require.NoError(t, err)
 				require.Equal(t, "true", dsc.Entries["sampled"])
 				require.Equal(t, "1", dsc.Entries["sample_rate"])
@@ -1905,14 +1905,14 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		creator, creatorTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "creator"})
 		override, overrideTransport := newCaptureTestClient(t, ClientOptions{EnableTracing: true, TracesSampleRate: 1, Release: "override"})
 		ctx, _ := WithScope(ContextWithClient(context.Background(), creator))
-		root := StartTransaction(ctx, "root")
-		child := StartSpan(ContextWithClient(root.Context(), override), "child")
+		rootCtx, root := StartSpan(ctx, "root")
+		childCtx, child := StartSpan(ContextWithClient(rootCtx, override), "child")
 		var wg sync.WaitGroup
 		headers := make(chan string, 16)
 		for range 16 {
 			wg.Go(func() {
 				headers <- child.ToBaggage()
-				CaptureMessage(child.Context(), "capture")
+				CaptureMessage(childCtx, "capture")
 			})
 		}
 		wg.Wait()
@@ -1948,7 +1948,7 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		first, second := &MockTransport{}, &MockTransport{}
 		initClient("first", first)
 		ctx := ContextWithScope(context.Background(), NewScope())
-		root := StartTransaction(ctx, "unbound")
+		_, root := StartSpan(ctx, "unbound")
 		frozen := root.ToBaggage()
 		require.Contains(t, frozen, "sentry-release=first")
 		frozenDSC, err := DynamicSamplingContextFromHeader([]byte(frozen))

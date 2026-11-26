@@ -113,9 +113,7 @@ func TestIntegration_EmitsQueryAndExecSpans(t *testing.T) {
 				db := shape.newDB(t)
 
 				ctx := f.NewContext(context.Background())
-				parent := sentry.StartSpan(ctx, "root",
-					sentry.WithTransactionName("root"))
-				ctx = parent.Context()
+				ctx, parent := sentry.StartSpan(ctx, "root")
 
 				_, err := db.ExecContext(ctx, "INSERT INTO t VALUES (1)")
 				require.NoError(t, err)
@@ -185,9 +183,7 @@ func TestIntegration_TransactionSpansParentQueries(t *testing.T) {
 					db := shape.newDB(t)
 
 					ctx := f.NewContext(context.Background())
-					parent := sentry.StartSpan(ctx, "root",
-						sentry.WithTransactionName("root"))
-					ctx = parent.Context()
+					ctx, parent := sentry.StartSpan(ctx, "root")
 
 					tx, err := db.BeginTx(ctx, nil)
 					require.NoError(t, err)
@@ -262,10 +258,9 @@ func TestIntegration_TransactionExecObfuscatesPII(t *testing.T) {
 				db := shape.newDB(t)
 
 				ctx := f.NewContext(context.Background())
-				parent := sentry.StartSpan(ctx, "root",
-					sentry.WithTransactionName("root"))
+				ctx, parent := sentry.StartSpan(ctx, "root")
 
-				tx, err := db.BeginTx(parent.Context(), nil)
+				tx, err := db.BeginTx(ctx, nil)
 				require.NoError(t, err)
 
 				_, err = tx.ExecContext(context.Background(), query)
@@ -307,9 +302,7 @@ func TestIntegration_ErrSkipDoesNotDuplicateSpans(t *testing.T) {
 		t.Cleanup(func() { _ = db.Close() })
 
 		ctx := f.NewContext(context.Background())
-		parent := sentry.StartSpan(ctx, "root",
-			sentry.WithTransactionName("root"))
-		ctx = parent.Context()
+		ctx, parent := sentry.StartSpan(ctx, "root")
 
 		_, err = db.ExecContext(ctx, "INSERT INTO t VALUES (1)")
 		require.NoError(t, err)
@@ -393,9 +386,7 @@ func TestIntegration_ErrorStatusPropagates(t *testing.T) {
 				t.Cleanup(func() { _ = db.Close() })
 
 				ctx := f.NewContext(context.Background())
-				parent := sentry.StartSpan(ctx, "root",
-					sentry.WithTransactionName("root"))
-				ctx = parent.Context()
+				ctx, parent := sentry.StartSpan(ctx, "root")
 
 				_, err = db.ExecContext(ctx, "INSERT INTO t VALUES (1)")
 				require.True(t, errors.Is(err, fakedriver.ErrDriver),

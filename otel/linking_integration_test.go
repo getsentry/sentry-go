@@ -19,9 +19,9 @@ func TestExternalSamplingPropagation(t *testing.T) {
 		ids := traceID.String() + "-" + spanID.String()
 		for _, native := range []bool{false, true} {
 			if native {
-				root := sentry.StartTransaction(ctx, "native")
+				rootCtx, root := sentry.StartSpan(ctx, "native")
 				defer root.Finish()
-				ctx = root.Context()
+				ctx = rootCtx
 			}
 			for _, test := range []struct {
 				name   string
