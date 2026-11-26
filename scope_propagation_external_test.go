@@ -18,7 +18,7 @@ func TestBaggageBeforeClientBinding(t *testing.T) {
 		baggage  string
 	}{
 		{name: "local trace"},
-		{name: "incoming DSC", incoming: true, baggage: "sentry-trace_id=11111111111111111111111111111111,sentry-public_key=upstream,sentry-release=upstream"},
+		{name: "incoming DSC", incoming: true, baggage: "sentry-trace_id=11111111111111111111111111111111,sentry-public_key=upstream,sentry-release=upstream,sentry-sample_rand=0.5"},
 		{name: "incoming frozen empty DSC", incoming: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {

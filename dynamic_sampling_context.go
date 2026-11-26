@@ -1,6 +1,8 @@
 package sentry
 
 import (
+	"encoding/binary"
+	"math"
 	"strconv"
 	"strings"
 
@@ -8,8 +10,61 @@ import (
 )
 
 const (
-	sentryPrefix = "sentry-"
+	sentryPrefix  = "sentry-"
+	sampleRandKey = "sample_rand"
 )
+
+// sampleRandScale is the number of values a sample_rand can take: it has six
+// decimal places.
+const sampleRandScale = 1_000_000
+
+// deriveSampleRand returns a value in [lo, hi) millionths, taken from the 56
+// trace ID bits that W3C Trace Context defines as random.
+func deriveSampleRand(traceID TraceID, lo, hi uint64) float64 {
+	random := binary.BigEndian.Uint64(traceID[8:]) & (1<<56 - 1)
+	return float64(lo+random%(hi-lo)) / sampleRandScale
+}
+
+func formatSampleRand(sampleRand float64) string {
+	return strconv.FormatFloat(sampleRand, 'f', 6, 64)
+}
+
+// sampleRand returns the random value every SDK in the trace compares its
+// sample rate against: the propagated one, or one derived from the trace ID.
+func sampleRand(traceID TraceID, dsc DynamicSamplingContext) float64 {
+	if propagated, ok := propagatedSampleRand(dsc); ok {
+		return propagated
+	}
+	return deriveSampleRand(traceID, 0, sampleRandScale)
+}
+
+func propagatedSampleRand(dsc DynamicSamplingContext) (float64, bool) {
+	sampleRand, err := strconv.ParseFloat(dsc.Entries[sampleRandKey], 64)
+	return sampleRand, err == nil && sampleRand >= 0 && sampleRand < 1
+}
+
+// backfillSampleRand gives an incoming DSC without a valid sample_rand one that
+// agrees with the incoming sampling decision and sample rate.
+func backfillSampleRand(trace TraceParentContext, dsc DynamicSamplingContext) {
+	if _, ok := propagatedSampleRand(dsc); ok {
+		return
+	}
+	lo, hi := uint64(0), uint64(sampleRandScale)
+	if rate, err := strconv.ParseFloat(dsc.Entries["sample_rate"], 64); err == nil && rate >= 0 && rate <= 1 {
+		// below counts the values smaller than rate.
+		below := uint64(math.Round(rate * sampleRandScale))
+		if float64(below)/sampleRandScale < rate {
+			below++
+		}
+		switch {
+		case trace.Sampled == SampledTrue && below > 0:
+			hi = below
+		case trace.Sampled == SampledFalse && below < sampleRandScale:
+			lo = below
+		}
+	}
+	dsc.Entries[sampleRandKey] = formatSampleRand(deriveSampleRand(trace.TraceID, lo, hi))
+}
 
 // DynamicSamplingContext holds information about the current event that can be used to make dynamic sampling decisions.
 type DynamicSamplingContext struct {
@@ -58,7 +113,8 @@ func dynamicSamplingContextFromTransaction(span *Span, client *Client) DynamicSa
 	if traceID := span.TraceID.String(); traceID != "" {
 		entries[traceIDContextKey] = traceID
 	}
-	if client.options.tracingEnabled() && span.sampleRate >= 0 {
+	entries[sampleRandKey] = formatSampleRand(deriveSampleRand(span.TraceID, 0, sampleRandScale))
+	if client.options.tracingEnabled() && span.sampleRate >= 0 && span.sampleRate <= 1 {
 		entries["sample_rate"] = strconv.FormatFloat(span.sampleRate, 'f', -1, 64)
 	}
 
@@ -141,6 +197,7 @@ func dynamicSamplingContextFromPropagationContext(
 	if traceID := propagationContext.TraceID.String(); traceID != "" {
 		entries[traceIDContextKey] = traceID
 	}
+	entries[sampleRandKey] = formatSampleRand(deriveSampleRand(propagationContext.TraceID, 0, sampleRandScale))
 	if rate := client.options.TracesSampleRate; rate != nil && client.options.TracesSampler == nil && *rate >= 0 && *rate <= 1 {
 		entries["sample_rate"] = strconv.FormatFloat(*rate, 'f', -1, 64)
 	}
