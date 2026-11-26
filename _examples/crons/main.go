@@ -58,7 +58,7 @@ func runMonitoredTask(monitorSlug string, duration time.Duration) {
 		Schedule:      sentry.CrontabSchedule("* * * * *"),
 		MaxRuntime:    2,
 		CheckInMargin: 1,
-	}, func() error {
+	}, func(context.Context) error {
 		time.Sleep(duration)
 		return nil
 	})

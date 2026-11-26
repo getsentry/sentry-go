@@ -73,9 +73,35 @@ func newScopeData(propagationContext PropagationContext) scopeData {
 	}
 }
 
-// AddBreadcrumb adds new breadcrumb to the current scope
-// and optionally throws the old one if limit is reached.
-func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
+// AddBreadcrumb adds breadcrumb to the scope, applying the BeforeBreadcrumb
+// and MaxBreadcrumbs options of the client set by Init.
+func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, options ...BreadcrumbOption) {
+	scope.addBreadcrumb(normalizeClient(globalClientSnapshot()), breadcrumb, options)
+}
+
+func (scope *Scope) addBreadcrumb(client *Client, breadcrumb *Breadcrumb, options []BreadcrumbOption) {
+	limit := client.options.MaxBreadcrumbs
+	switch {
+	case limit < 0:
+		return
+	case limit == 0:
+		limit = defaultMaxBreadcrumbs
+	}
+	if client.options.BeforeBreadcrumb != nil {
+		resolved := breadcrumbOptions{}
+		for _, option := range options {
+			if option != nil {
+				option(&resolved)
+			}
+		}
+		if resolved.hint == nil {
+			resolved.hint = BreadcrumbHint{}
+		}
+		if breadcrumb = client.options.BeforeBreadcrumb(breadcrumb, resolved.hint); breadcrumb == nil {
+			debuglog.Println("breadcrumb dropped due to BeforeBreadcrumb callback.")
+			return
+		}
+	}
 	if breadcrumb.Timestamp.IsZero() {
 		breadcrumb.Timestamp = time.Now()
 	}
@@ -85,7 +111,7 @@ func (scope *Scope) AddBreadcrumb(breadcrumb *Breadcrumb, limit int) {
 
 	scope.breadcrumbs = append(scope.breadcrumbs, breadcrumb)
 	if len(scope.breadcrumbs) > limit {
-		scope.breadcrumbs = scope.breadcrumbs[1 : limit+1]
+		scope.breadcrumbs = scope.breadcrumbs[len(scope.breadcrumbs)-limit:]
 	}
 }
 

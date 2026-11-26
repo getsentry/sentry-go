@@ -29,7 +29,7 @@ func TestEnvelopes(t *testing.T) {
 		scope.SetUser(sentry.User{ID: "42", Data: map[string]string{"plan": "pro"}})
 		scope.SetFingerprint([]string{"fingerprint"})
 		scope.SetContext("custom", sentry.Context{"key": "value", "nested": map[string]any{"n": 1}})
-		scope.AddBreadcrumb(&sentry.Breadcrumb{Category: "auth", Message: "logged in", Data: map[string]any{"method": "sso"}}, 10)
+		scope.AddBreadcrumb(&sentry.Breadcrumb{Category: "auth", Message: "logged in", Data: map[string]any{"method": "sso"}})
 		scope.AddAttachment(&sentry.Attachment{Filename: "log.txt", ContentType: "text/plain", Payload: []byte("attached")})
 		request := httptest.NewRequest("GET", "http://example.com/orders/7?page=2", nil)
 		request.Header.Set("User-Agent", "golden")

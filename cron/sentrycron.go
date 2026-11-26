@@ -23,7 +23,7 @@ import (
 // The monitor uses the cron's time zone. When that is time.Local, the IANA name
 // comes from $TZ or /etc/localtime. If no IANA name can be found, only
 // check-ins are sent and the monitor's schedule must be set in Sentry.
-func AddFunc(c *cron.Cron, spec, slug string, fn func() error, config *sentry.MonitorConfig) (cron.EntryID, error) {
+func AddFunc(c *cron.Cron, spec, slug string, fn func(ctx context.Context) error, config *sentry.MonitorConfig) (cron.EntryID, error) {
 	monitorConfig := newMonitorConfig(spec, c.Location(), config)
 	return c.AddFunc(spec, func() {
 		_ = sentry.WithMonitor(context.Background(), slug, monitorConfig, fn)

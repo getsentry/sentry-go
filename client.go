@@ -141,7 +141,7 @@ type ClientOptions struct {
 	// Use it to mutate the transaction or return nil to discard the transaction.
 	BeforeSendTransaction func(transaction *Transaction, hint *EventHint) *Transaction
 	// Before breadcrumb add callback.
-	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
+	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint BreadcrumbHint) *Breadcrumb
 	// BeforeSendMetric is called before metric events are sent to Sentry.
 	// You can use it to mutate the metric or return nil to discard it. Do not modify the metric after returning it.
 	BeforeSendMetric func(metric *Metric) *Metric
