@@ -18,8 +18,10 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go/internal/debuglog"
+	"github.com/getsentry/sentry-go/internal/ratelimit"
 	"github.com/getsentry/sentry-go/internal/testutils"
 	"github.com/getsentry/sentry-go/protocol"
+	"github.com/getsentry/sentry-go/report"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	pkgErrors "github.com/pkg/errors"
@@ -766,7 +768,8 @@ func TestCaptureUpdatesLastEventID(t *testing.T) {
 		{
 			name: "transaction",
 			capture: func(ctx context.Context, client *Client) *EventID {
-				return client.CaptureEvent(ctx, &Event{Type: transactionType})
+				client.captureTransaction(ctx, &Transaction{}, nil)
+				return nil
 			},
 		},
 		{
@@ -999,8 +1002,8 @@ func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
 			t.Error("beforeSend should not be called")
 			return event
 		},
-		BeforeSendTransaction: func(event *Event, _ *EventHint) *Event {
-			assertEqual(t, event.Transaction, "Foo")
+		BeforeSendTransaction: func(tx *Transaction, _ *EventHint) *Transaction {
+			assertEqual(t, tx.Name, "Foo")
 			return nil
 		},
 	})
@@ -1010,8 +1013,8 @@ func TestBeforeSendTransactionCanDropTransaction(t *testing.T) {
 	)
 	transaction.Finish()
 
-	if transport.lastEvent != nil {
-		t.Error("expected event to be dropped")
+	if len(transport.Transactions()) != 0 {
+		t.Error("expected transaction to be dropped")
 	}
 }
 
@@ -1025,22 +1028,28 @@ func TestBeforeSendTransactionIsCalled(t *testing.T) {
 			t.Error("beforeSend should not be called")
 			return event
 		},
-		BeforeSendTransaction: func(event *Event, _ *EventHint) *Event {
-			assertEqual(t, event.Transaction, "Foo")
-			event.Transaction = "Bar"
-			return event
+		BeforeSendTransaction: func(tx *Transaction, _ *EventHint) *Transaction {
+			assertEqual(t, tx.Name, "Foo")
+			return &Transaction{Name: "Bar", Contexts: tx.Contexts}
 		},
 	})
+	processor := func(event *Event, _ *EventHint) *Event {
+		t.Error("event processors should not be called")
+		return event
+	}
+	ClientFromContext(ctx).AddEventProcessor(processor)
+	ScopeFromContext(ctx).AddEventProcessor(processor)
 
 	transaction := StartTransaction(ctx,
 		"Foo",
 	)
 	transaction.Finish()
 
-	lastEvent := transport.lastEvent
-	assertEqual(t, lastEvent.Transaction, "Bar")
+	sent := transport.Transactions()[0]
+	assertEqual(t, sent.Name, "Bar")
 	// Make sure it's the same span
-	assertEqual(t, lastEvent.Contexts["trace"]["span_id"], transaction.SpanID.String())
+	assertEqual(t, sent.Contexts["trace"]["span_id"], transaction.SpanID.String())
+	assertEqual(t, transport.Envelopes()[0].Header.Trace["trace_id"], transaction.TraceID.String())
 }
 
 func TestIgnoreErrors(t *testing.T) {
@@ -1145,9 +1154,19 @@ func TestIgnoreTransactions(t *testing.T) {
 			)
 			transaction.Finish()
 
-			dropped := transport.lastEvent == nil
+			dropped := len(transport.Transactions()) == 0
 			if tt.expectDrop != dropped {
 				t.Errorf("expected event to be dropped")
+			}
+			var wantOutcomes map[outcomeKey]uint64
+			if tt.expectDrop {
+				wantOutcomes = map[outcomeKey]uint64{
+					{Reason: report.ReasonEventProcessor, Category: ratelimit.CategoryTransaction}: 1,
+					{Reason: report.ReasonEventProcessor, Category: ratelimit.CategorySpan}:        1,
+				}
+			}
+			if diff := cmp.Diff(wantOutcomes, takeOutcomes(ClientFromContext(ctx).reports), cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("client report mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
@@ -1165,7 +1184,7 @@ func TestTraceIgnoreStatusCode_EmptyCode(t *testing.T) {
 	// Transaction has no http.response.status_code
 	transaction.Finish()
 
-	dropped := transport.lastEvent == nil
+	dropped := len(transport.Transactions()) == 0
 	assertEqual(t, dropped, false, "expected transaction to not be dropped")
 }
 
@@ -1282,7 +1301,7 @@ func TestTraceIgnoreStatusCodes(t *testing.T) {
 				assertBaggageStringsEqual(t, baggage, transaction.ToBaggage())
 			}
 
-			dropped := transport.lastEvent == nil
+			dropped := len(transport.Transactions()) == 0
 			if tt.expectDrop != dropped {
 				if tt.expectDrop {
 					t.Errorf("expected transaction with status code %d to be dropped", tt.statusCode)
@@ -1910,9 +1929,8 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		}
 		child.Finish()
 		root.Finish()
-		require.Len(t, creatorTransport.Events(), 1)
-		require.Equal(t, transactionType, creatorTransport.Events()[0].Type)
-		require.Equal(t, want.Entries, creatorTransport.Events()[0].sdkMetaData.dsc.Entries)
+		require.Len(t, creatorTransport.Transactions(), 1)
+		require.Equal(t, want.Entries, creatorTransport.Envelopes()[0].Header.Trace)
 	})
 	t.Run("unbound transaction follows later Init with frozen DSC", func(t *testing.T) {
 		previousClient := globalClientSnapshot()
@@ -1936,10 +1954,8 @@ func TestClient_MultiClientSetup(t *testing.T) {
 		require.NoError(t, err)
 		initClient("second", second)
 		root.Finish()
-		assert.Empty(t, first.Events())
-		events := second.Events()
-		require.Len(t, events, 1)
-		assert.Equal(t, transactionType, events[0].Type)
-		assert.Equal(t, frozenDSC.Entries, events[0].sdkMetaData.dsc.Entries)
+		assert.Empty(t, first.Envelopes())
+		require.Len(t, second.Transactions(), 1)
+		assert.Equal(t, frozenDSC.Entries, second.Envelopes()[0].Header.Trace)
 	})
 }

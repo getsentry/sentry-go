@@ -554,7 +554,7 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 		}{
 			{"event", testEnvelope(protocol.EnvelopeItemTypeEvent), telemetry.Discard{Counts: (&Event{}).discardCounts()},
 				map[outcomeKey]uint64{backoff(ratelimit.CategoryError): 1}},
-			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), telemetry.Discard{Counts: (&Event{Type: transactionType}).discardCounts()},
+			{"transaction", testEnvelope(protocol.EnvelopeItemTypeTransaction), telemetry.Discard{Counts: (&Transaction{}).discardCounts()},
 				map[outcomeKey]uint64{backoff(ratelimit.CategoryTransaction): 1, backoff(ratelimit.CategorySpan): 1}},
 			{"trace metric", protocol.NewEnvelope(&protocol.EnvelopeHeader{}, protocol.NewTraceMetricItem(3, []byte(`{"items":[]}`))), telemetry.Discard{Counts: metrics.DiscardCounts()},
 				map[outcomeKey]uint64{backoff(ratelimit.CategoryTraceMetric): 3, backoff(ratelimit.CategoryTraceMetricByte): 3}},

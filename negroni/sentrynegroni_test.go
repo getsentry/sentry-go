@@ -33,7 +33,7 @@ func TestIntegration(t *testing.T) {
 
 		WantStatus      int
 		WantEvent       *sentry.Event
-		WantTransaction *sentry.Event
+		WantTransaction *sentry.Transaction
 	}{
 		{
 			Path: "/panic",
@@ -54,10 +54,8 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Type:        "transaction",
-				Transaction: "GET /panic",
+			WantTransaction: &sentry.Transaction{
+				Name: "GET /panic",
 				Request: &sentry.Request{
 					URL:    "/panic",
 					Method: "GET",
@@ -108,10 +106,8 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Transaction: "POST /post",
-				Type:        "transaction",
+			WantTransaction: &sentry.Transaction{
+				Name: "POST /post",
 				Request: &sentry.Request{
 					URL:    "/post",
 					Method: "POST",
@@ -154,10 +150,8 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Transaction: "GET /get",
-				Type:        "transaction",
+			WantTransaction: &sentry.Transaction{
+				Name: "GET /get",
 				Request: &sentry.Request{
 					URL:    "/get",
 					Method: "GET",
@@ -206,10 +200,8 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Transaction: "POST /post/large",
-				Type:        "transaction",
+			WantTransaction: &sentry.Transaction{
+				Name: "POST /post/large",
 				Request: &sentry.Request{
 					URL:    "/post/large",
 					Method: "POST",
@@ -257,10 +249,8 @@ func TestIntegration(t *testing.T) {
 					},
 				},
 			},
-			WantTransaction: &sentry.Event{
-				Level:       sentry.LevelInfo,
-				Transaction: "POST /post/body-ignored",
-				Type:        "transaction",
+			WantTransaction: &sentry.Transaction{
+				Name: "POST /post/body-ignored",
 				Request: &sentry.Request{
 					URL:    "/post/body-ignored",
 					Method: "POST",
@@ -287,7 +277,7 @@ func TestIntegration(t *testing.T) {
 	}
 
 	eventsCh := make(chan *sentry.Event, len(tests))
-	transactionsCh := make(chan *sentry.Event, len(tests))
+	transactionsCh := make(chan *sentry.Transaction, len(tests))
 	err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
 		TracesSampleRate: 1.0,
@@ -296,7 +286,7 @@ func TestIntegration(t *testing.T) {
 			eventsCh <- event
 			return event
 		},
-		BeforeSendTransaction: func(tx *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+		BeforeSendTransaction: func(tx *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			transactionsCh <- tx
 			return tx
 		},
@@ -326,7 +316,7 @@ func TestIntegration(t *testing.T) {
 	c.Timeout = time.Second
 
 	var want []*sentry.Event
-	var wantTrans []*sentry.Event
+	var wantTrans []*sentry.Transaction
 	var wantCodes []sentry.SpanStatus
 
 	for _, tt := range tests {
@@ -383,7 +373,7 @@ func TestIntegration(t *testing.T) {
 	}
 
 	close(transactionsCh)
-	var gott []*sentry.Event
+	var gott []*sentry.Transaction
 	var statusCodes []sentry.SpanStatus
 	for e := range transactionsCh {
 		gott = append(gott, e)
@@ -392,10 +382,10 @@ func TestIntegration(t *testing.T) {
 
 	optstrans := cmp.Options{
 		cmpopts.IgnoreFields(
-			sentry.Event{},
-			"EventID", "Platform", "Modules",
-			"Release", "Sdk", "ServerName", "Timestamp",
-			"sdkMetaData", "StartTime", "Spans",
+			sentry.Transaction{},
+			"EventID", "Platform",
+			"Release", "Sdk", "ServerName", "EndTime",
+			"StartTime", "Spans",
 		),
 		cmpopts.IgnoreFields(
 			sentry.Request{},

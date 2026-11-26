@@ -60,6 +60,24 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 		t.Error(diff)
 	}
 
+	t.Run("transaction", func(t *testing.T) {
+		client, transport := newCaptureTestClient(t, ClientOptions{})
+		client.captureTransaction(ContextWithClient(ctx, client), &Transaction{
+			Tags:     map[string]string{"event": "event", "shared": "event"},
+			Contexts: map[string]Context{"shared": {"source": "event"}},
+		}, nil)
+		want := &Transaction{
+			Tags:     map[string]string{"global": "global", "current": "current", "event": "event", "shared": "event"},
+			Contexts: map[string]Context{"shared": {"source": "event"}},
+			User:     User{ID: "current"},
+		}
+		if diff := cmp.Diff(want, transport.Transactions()[0],
+			cmpopts.IgnoreFields(Transaction{}, "EventID", "Sdk", "Platform", "Release", "ServerName"),
+		); diff != "" {
+			t.Error(diff)
+		}
+	})
+
 	t.Run("scope DSC follows matching trace and event DSC", func(t *testing.T) {
 		traceID, spanID := TraceID{0xab}, SpanID{2}
 		for _, test := range []struct {
@@ -149,12 +167,8 @@ func TestCaptureMergesScopeSnapshotAndEvent(t *testing.T) {
 				require.NotNil(t, CaptureMessage(ctx, "scope trace"))
 				require.Equal(t, custom, requireSingleEvent(t, transport).Contexts[traceContextKey])
 				explicit := Context{traceIDContextKey: TraceID{4}.String(), spanIDContextKey: SpanID{4}.String()}
-				for _, eventType := range []string{"", transactionType} {
-					require.NotNil(t, CaptureEvent(ctx, &Event{Type: eventType, Contexts: map[string]Context{traceContextKey: explicit}}))
-				}
-				for _, event := range transport.Events()[1:] {
-					require.Equal(t, explicit, event.Contexts[traceContextKey])
-				}
+				require.NotNil(t, CaptureEvent(ctx, &Event{Contexts: map[string]Context{traceContextKey: explicit}}))
+				require.Equal(t, explicit, transport.Events()[1].Contexts[traceContextKey])
 			})
 		}
 	})
