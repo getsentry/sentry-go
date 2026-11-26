@@ -365,8 +365,7 @@ func TestIntegration(t *testing.T) {
 	eventsCh := make(chan *sentry.Event, len(tests))
 	transactionsCh := make(chan *sentry.Transaction, len(tests))
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		DataCollection:   &sentry.DataCollection{},
 		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
 			eventsCh <- event
@@ -478,8 +477,7 @@ func TestIntegration(t *testing.T) {
 func TestTransactionNameWithCacheHit(t *testing.T) {
 	transactions := make(chan *sentry.Transaction, 2)
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		BeforeSendTransaction: func(tx *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			transactions <- tx
 			return tx
@@ -519,8 +517,7 @@ func TestTransactionNameWithCacheHit(t *testing.T) {
 
 func TestHandlers(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -628,8 +625,7 @@ func TestRequestIsolation(t *testing.T) {
 // when tracing is enabled.
 func TestMalformedURLNoPanic(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -125,7 +125,7 @@ func TestUnaryServerInterceptor_ContinuesIncomingTrace(t *testing.T) {
 	require.Len(t, transactions, 1)
 	assert.Equal(t, traceID, transactions[0].Trace.TraceID.String())
 	t.Run("reuses an active child without finishing its root", func(t *testing.T) {
-		f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{EnableTracing: true, TracesSampleRate: 1}))
+		f := sentrytest.NewFixture(t, sentrytest.WithClientOptions(sentry.ClientOptions{TracesSampleRate: new(1.0)}))
 		outerCtx, outer := sentry.StartSpan(f.NewContext(context.Background()), "gateway")
 		childCtx, child := sentry.StartSpan(outerCtx, "gateway.grpc")
 		type key struct{}
@@ -229,8 +229,7 @@ func TestUnaryServerInterceptor_Panic(t *testing.T) {
 					eventsCh <- e
 					return e
 				},
-				EnableTracing:    true,
-				TracesSampleRate: 1.0,
+				TracesSampleRate: new(1.0),
 			}))
 
 			interceptor := sentrygrpc.UnaryServerInterceptor(tc.options)
@@ -364,8 +363,7 @@ func TestStreamServerInterceptor_Panic(t *testing.T) {
 					eventsCh <- e
 					return e
 				},
-				EnableTracing:    true,
-				TracesSampleRate: 1.0,
+				TracesSampleRate: new(1.0),
 			}))
 
 			interceptor := sentrygrpc.StreamServerInterceptor(tc.options)

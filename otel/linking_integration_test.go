@@ -38,8 +38,7 @@ func TestExternalSamplingPropagation(t *testing.T) {
 				assert.Equal(t, "00-"+ids+test.w3c, sentry.GetTraceparentW3C(linked), "native=%t sampled=%s", native, test.name)
 			}
 		}
-	}, sentrytest.WithClientOptions(sentry.ClientOptions{
-		EnableTracing: true, TracesSampleRate: 1,
+	}, sentrytest.WithClientOptions(sentry.ClientOptions{TracesSampleRate: new(1.0),
 		Integrations: func(in []sentry.Integration) []sentry.Integration {
 			return append(in, sentryotel.NewOtelIntegration())
 		},

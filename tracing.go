@@ -436,7 +436,7 @@ func (s *Span) doFinish() {
 	}
 
 	client := ClientFromContext(s.ctx)
-	if !client.IsEnabled() || !client.options.EnableTracing {
+	if !client.IsEnabled() || !client.options.tracingEnabled() {
 		return
 	}
 	if s.shouldIgnoreStatusCode(client) {
@@ -508,8 +508,8 @@ func (s *Span) sample(client *Client) Sampled {
 	}
 	// https://develop.sentry.dev/sdk/performance/#sampling
 	// #1 tracing is not enabled.
-	if !clientOptions.EnableTracing {
-		debuglog.Printf("Dropping transaction: EnableTracing is set to %t", clientOptions.EnableTracing)
+	if !clientOptions.tracingEnabled() {
+		debuglog.Printf("Dropping transaction: tracing is disabled")
 		return s.Sampled
 	}
 
@@ -577,7 +577,7 @@ func (s *Span) sample(client *Client) Sampled {
 	}
 
 	// #5 use TracesSampleRate from ClientOptions.
-	sampleRate := clientOptions.TracesSampleRate
+	sampleRate := *clientOptions.TracesSampleRate
 	s.sampleRate = sampleRate
 	s.applyLocalSampleRate()
 	if sampleRate < 0.0 || sampleRate > 1.0 {

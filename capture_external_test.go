@@ -72,8 +72,7 @@ func TestEnvelopes(t *testing.T) {
 		Release:          "app@1.0.0",
 		Environment:      "test",
 		ServerName:       "golden",
-		EnableTracing:    true,
-		TracesSampleRate: 1,
+		TracesSampleRate: new(1.0),
 		// The device, runtime and module lists differ per machine.
 		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
 			return slices.DeleteFunc(integrations, func(integration sentry.Integration) bool {

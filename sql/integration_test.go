@@ -99,8 +99,7 @@ func driverShapes(t *testing.T) []driverShape {
 
 func tracingOpts() sentrytest.Option {
 	return sentrytest.WithClientOptions(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 	})
 }
 

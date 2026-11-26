@@ -329,8 +329,7 @@ func TestIntegration(t *testing.T) {
 	transactionsCh := make(chan *sentry.Transaction, len(tests))
 
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:          true,
-		TracesSampleRate:       1.0,
+		TracesSampleRate:       new(1.0),
 		DataCollection:         &sentry.DataCollection{},
 		TraceIgnoreStatusCodes: make([][]int, 0), // don't ignore any status codes
 		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
@@ -464,8 +463,7 @@ func TestIntegration(t *testing.T) {
 
 func TestRequestContextState(t *testing.T) {
 	err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -518,8 +516,7 @@ func TestRequestContextState(t *testing.T) {
 func TestUnwrapResponseError(t *testing.T) {
 	ch := make(chan *sentry.Transaction, 1)
 	if err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		BeforeSendTransaction: func(e *sentry.Transaction, _ *sentry.EventHint) *sentry.Transaction {
 			ch <- e
 			return e

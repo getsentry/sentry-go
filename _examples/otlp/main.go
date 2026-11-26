@@ -30,8 +30,7 @@ func main() {
 	dsn := os.Getenv("SENTRY_DSN")
 	if err := sentry.Init(sentry.ClientOptions{
 		Dsn:              dsn,
-		EnableTracing:    true,
-		TracesSampleRate: 1.0,
+		TracesSampleRate: new(1.0),
 		Integrations: func(integrations []sentry.Integration) []sentry.Integration {
 			return append(integrations, sentryotel.NewOtelIntegration())
 		},

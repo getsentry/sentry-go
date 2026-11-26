@@ -347,14 +347,14 @@ func freezeDynamicSamplingContext(propagationContext *PropagationContext, client
 	}
 	applyStaticSamplingDecision(propagationContext, client)
 	dsc := dynamicSamplingContextFromPropagationContext(*propagationContext, client)
-	if client.options.EnableTracing && propagationContext.Sampled == SampledFalse {
+	if client.options.tracingEnabled() && propagationContext.Sampled == SampledFalse {
 		dsc.Entries["sampled"] = "false"
 	}
 	propagationContext.DynamicSamplingContext = dsc
 }
 
 func applyStaticSamplingDecision(propagationContext *PropagationContext, client *Client) {
-	if client.options.EnableTracing && client.options.TracesSampler == nil && client.options.TracesSampleRate == 0 {
+	if rate := client.options.TracesSampleRate; client.options.TracesSampler == nil && rate != nil && *rate == 0 {
 		if propagationContext.Sampled == SampledUndefined {
 			propagationContext.Sampled = SampledFalse
 		}
