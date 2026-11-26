@@ -146,7 +146,7 @@ type ClientOptions struct {
 	// You can use it to mutate the event or return nil to discard it.
 	BeforeSend func(event *Event, hint *EventHint) *Event
 	// BeforeSendLong is called before log events are sent to Sentry.
-	// You can use it to mutate the log event or return nil to discard it.
+	// You can use it to mutate the log event or return nil to discard it. Do not modify the log after returning it.
 	BeforeSendLog func(event *Log) *Log
 	// BeforeSendTransaction is called before transaction events are sent to Sentry.
 	// Use it to mutate the transaction or return nil to discard the transaction.
@@ -154,7 +154,7 @@ type ClientOptions struct {
 	// Before breadcrumb add callback.
 	BeforeBreadcrumb func(breadcrumb *Breadcrumb, hint *BreadcrumbHint) *Breadcrumb
 	// BeforeSendMetric is called before metric events are sent to Sentry.
-	// You can use it to mutate the metric or return nil to discard it.
+	// You can use it to mutate the metric or return nil to discard it. Do not modify the metric after returning it.
 	BeforeSendMetric func(metric *Metric) *Metric
 	// Integrations to be installed on the current Client, receives default
 	// integrations.
@@ -630,7 +630,7 @@ func (client *Client) captureLog(ctx context.Context, log *Log) bool {
 	}
 
 	if client.options.BeforeSendLog != nil {
-		counts := log.DiscardCounts()
+		counts := log.discardCounts()
 		log = client.options.BeforeSendLog(log)
 		if log == nil {
 			debuglog.Println("Log dropped due to BeforeSendLog callback.")
@@ -639,7 +639,7 @@ func (client *Client) captureLog(ctx context.Context, log *Log) bool {
 		}
 	}
 
-	if !client.IsEnabled() || !client.telemetryProcessor.Add(ctx, log) {
+	if !client.IsEnabled() || !client.telemetryProcessor.Add(ctx, logItem{log}) {
 		debuglog.Print("Dropping log: telemetry buffer full or category missing")
 		// Note: processor tracks client report
 		return false
@@ -654,7 +654,7 @@ func (client *Client) captureMetric(ctx context.Context, metric *Metric) bool {
 	}
 
 	if client.options.BeforeSendMetric != nil {
-		counts := metric.DiscardCounts()
+		counts := metric.discardCounts()
 		metric = client.options.BeforeSendMetric(metric)
 		if metric == nil {
 			debuglog.Println("Metric dropped due to BeforeSendMetric callback.")
@@ -663,7 +663,7 @@ func (client *Client) captureMetric(ctx context.Context, metric *Metric) bool {
 		}
 	}
 
-	if !client.IsEnabled() || !client.telemetryProcessor.Add(ctx, metric) {
+	if !client.IsEnabled() || !client.telemetryProcessor.Add(ctx, metricItem{metric}) {
 		debuglog.Printf("Dropping metric: telemetry buffer full or category missing")
 		// Note: processor tracks client report
 		return false
