@@ -1,0 +1,35 @@
+# getsentry/sentry-go c85a1c37851dd427e3acd8eaf0a51df6e2cad2ee
+
+rubric = "sdk"
+
+# Every Go file ships as part of a module (root module plus one go.mod per integration).
+[[area]]
+paths = ["*.go", "*/**"]
+families = ["server"]
+
+# Root module github.com/getsentry/sentry-go: every integration module requires it.
+# go.mod carries the minimum Go version and the dependencies every customer inherits; go.sum pins them.
+# http/ and httpclient/ live in the root module but are integrations, so they are not shared core.
+[[area]]
+paths = ["*.go", "go.mod", "go.sum", "attribute/**", "protocol/**", "report/**", "internal/**"]
+families = ["server"]
+shared_core = true
+
+[[kind]]
+paths = ["_examples/**"]
+kind = "samples"
+
+# _test.go files are never compiled into consumers. The other .go files in internal/testutils
+# and internal/sentrytest are ordinary packages a shipped package could import, so they stay
+# under the internal/** area.
+[[kind]]
+paths = ["**/*_test.go", "testdata/**", "crosstest/**"]
+kind = "tests"
+
+[[kind]]
+paths = ["go.work", "scripts/**"]
+kind = "build-release"
+
+[[kind]]
+paths = [".golangci.yml", ".codecov.yml", "agents.toml"]
+kind = "dev-tooling"
