@@ -2,7 +2,6 @@ package sentry
 
 import (
 	"context"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -216,11 +215,10 @@ func TestHTTPTransport_SendEnvelope(t *testing.T) {
 		recorder := report.NewAggregator()
 		transport := &HTTPTransport{
 			httpSender: &httpSender{
-				limits:    make(ratelimit.Map),
-				dsn:       dsn,
-				transport: &http.Transport{},
-				client:    &http.Client{Timeout: defaultTimeout},
-				recorder:  recorder,
+				limits:   make(ratelimit.Map),
+				dsn:      dsn,
+				client:   &http.Client{Timeout: defaultTimeout},
+				recorder: recorder,
 			},
 			BufferSize: 2,
 			Timeout:    defaultTimeout,
@@ -594,7 +592,7 @@ func TestHTTPSyncTransport_SendEnvelope(t *testing.T) {
 			recorder := report.NewAggregator()
 			transport := NewHTTPSyncTransport()
 			transport.Configure(ClientOptions{
-				Dsn: "https://key@sentry.io/123", recorder: recorder, HTTPTransport: tt.roundTrip,
+				Dsn: "https://key@sentry.io/123", recorder: recorder, HTTPClient: &http.Client{Transport: tt.roundTrip},
 			})
 
 			// The transport records losses of accepted envelopes itself.
@@ -671,16 +669,16 @@ func TestKeepAlive(t *testing.T) {
 			if tt.async {
 				asyncTransport := NewHTTPTransport()
 				asyncTransport.Configure(ClientOptions{
-					Dsn:           dsn,
-					HTTPTransport: rt,
+					Dsn:        dsn,
+					HTTPClient: &http.Client{Transport: rt},
 				})
 				defer asyncTransport.Close()
 				transport = asyncTransport
 			} else {
 				transport = NewHTTPSyncTransport()
 				transport.Configure(ClientOptions{
-					Dsn:           dsn,
-					HTTPTransport: rt,
+					Dsn:        dsn,
+					HTTPClient: &http.Client{Transport: rt},
 				})
 			}
 
@@ -772,93 +770,6 @@ func TestTransportConfiguration(t *testing.T) {
 		async    bool
 		validate func(*testing.T, any)
 	}{
-		{
-			name: "HTTPProxy",
-			options: ClientOptions{
-				Dsn:       "https://key@sentry.io/123",
-				HTTPProxy: "http://proxy:8080",
-			},
-			async: true,
-			validate: func(t *testing.T, tr any) {
-				transport := tr.(*HTTPTransport)
-				httpTransport, ok := transport.transport.(*http.Transport)
-				if !ok {
-					t.Fatal("expected *http.Transport")
-				}
-				if httpTransport.Proxy == nil {
-					t.Fatal("expected proxy function")
-				}
-
-				req, _ := http.NewRequest("GET", "https://example.com", nil)
-				proxyURL, err := httpTransport.Proxy(req)
-				if err != nil {
-					t.Fatalf("Proxy function error: %v", err)
-				}
-				if proxyURL == nil || proxyURL.String() != "http://proxy:8080" {
-					t.Errorf("expected proxy URL 'http://proxy:8080', got %v", proxyURL)
-				}
-			},
-		},
-		{
-			name: "HTTPSProxy",
-			options: ClientOptions{
-				Dsn:        "https://key@sentry.io/123",
-				HTTPSProxy: "https://secure-proxy:8443",
-			},
-			async: true,
-			validate: func(t *testing.T, tr any) {
-				transport := tr.(*HTTPTransport)
-				httpTransport, ok := transport.transport.(*http.Transport)
-				if !ok {
-					t.Fatal("expected *http.Transport")
-				}
-
-				req, _ := http.NewRequest("GET", "https://example.com", nil)
-				proxyURL, err := httpTransport.Proxy(req)
-				if err != nil {
-					t.Fatalf("Proxy function error: %v", err)
-				}
-				if proxyURL == nil || proxyURL.String() != "https://secure-proxy:8443" {
-					t.Errorf("expected proxy URL 'https://secure-proxy:8443', got %v", proxyURL)
-				}
-			},
-		},
-		{
-			name: "CustomHTTPTransport",
-			options: ClientOptions{
-				Dsn:           "https://key@sentry.io/123",
-				HTTPTransport: &http.Transport{},
-				HTTPProxy:     "http://proxy:8080",
-			},
-			async: true,
-			validate: func(t *testing.T, tr any) {
-				transport := tr.(*HTTPTransport)
-				if transport.transport.(*http.Transport).Proxy != nil {
-					t.Error("custom transport should not have proxy from options")
-				}
-			},
-		},
-		{
-			name: "CaCerts",
-			options: ClientOptions{
-				Dsn:     "https://key@sentry.io/123",
-				CaCerts: x509.NewCertPool(),
-			},
-			async: false,
-			validate: func(t *testing.T, tr any) {
-				transport := tr.(*HTTPSyncTransport)
-				httpTransport, ok := transport.transport.(*http.Transport)
-				if !ok {
-					t.Fatal("expected *http.Transport")
-				}
-				if httpTransport.TLSClientConfig == nil {
-					t.Fatal("expected TLS config")
-				}
-				if httpTransport.TLSClientConfig.RootCAs == nil {
-					t.Error("expected custom certificate pool")
-				}
-			},
-		},
 		{
 			name: "HTTPTransport defaults",
 			options: ClientOptions{

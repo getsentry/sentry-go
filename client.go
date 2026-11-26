@@ -3,7 +3,6 @@ package sentry
 import (
 	"cmp"
 	"context"
-	"crypto/x509"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -119,13 +118,6 @@ type ClientOptions struct {
 	// List of regexp strings that will be used to match against a transaction's
 	// name.  If a match is found, then the transaction  will be dropped.
 	IgnoreTransactions []string
-	// Deprecated: Use DataCollection for granular control over what data the
-	// SDK collects. When DataCollection is configured, SendDefaultPII is
-	// ignored.
-	//
-	// If this flag is enabled, certain personally identifiable information (PII) is added by active integrations.
-	// By default, no such data is sent.
-	SendDefaultPII bool
 	// DataCollection configures what data the SDK collects automatically. All fields are optional. By default
 	// the SDK collects rich context for debugging while scrubbing sensitive values.
 	//
@@ -190,23 +182,9 @@ type ClientOptions struct {
 	// See https://develop.sentry.dev/sdk/envelopes/#size-limits for size limits
 	// applied during event ingestion. Events that exceed these limits might get dropped.
 	MaxSpans int
-	// An optional pointer to http.Client that will be used with a default
-	// HTTPTransport. Using your own client will make HTTPTransport, HTTPProxy,
-	// HTTPSProxy and CaCerts options ignored.
+	// HTTPClient is the client the built-in transports send with. The default
+	// client reads its proxy from the environment.
 	HTTPClient *http.Client
-	// An optional pointer to http.Transport that will be used with a default
-	// HTTPTransport. Using your own transport will make HTTPProxy, HTTPSProxy
-	// and CaCerts options ignored.
-	HTTPTransport http.RoundTripper
-	// An optional HTTP proxy to use.
-	// This will default to the HTTP_PROXY environment variable.
-	HTTPProxy string
-	// An optional HTTPS proxy to use.
-	// This will default to the HTTPS_PROXY environment variable.
-	// HTTPS_PROXY takes precedence over HTTP_PROXY for https requests.
-	HTTPSProxy string
-	// An optional set of SSL certificates to use.
-	CaCerts *x509.CertPool
 	// MaxErrorDepth is the maximum number of errors reported in a chain of errors.
 	// This protects the SDK from an arbitrarily long chain of wrapped errors.
 	//
@@ -240,6 +218,8 @@ type ClientOptions struct {
 
 	// recorder carries the client's loss accounting into the built-in transports.
 	recorder *report.Aggregator
+	// httpTransport is set by SENTRYGODEBUG to dump or trace requests.
+	httpTransport http.RoundTripper
 	// syncDelivery is set by synchronous transports during Configure, which
 	// wrappers forward, so wrapped transports are detected too.
 	syncDelivery *bool
@@ -326,7 +306,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		options.TraceIgnoreStatusCodes = [][]int{{404}}
 	}
 
-	resolvedDataCollection := snapshotDataCollection(options.DataCollection, options.SendDefaultPII)
+	resolvedDataCollection := snapshotDataCollection(options.DataCollection)
 	options.DataCollection = cloneDataCollection(&resolvedDataCollection)
 
 	// SENTRYGODEBUG is a comma-separated list of key=value pairs (similar
@@ -342,7 +322,7 @@ func NewClient(options ClientOptions) (*Client, error) {
 		return slices.Contains(dbg, opt+"=1")
 	}
 	if dbgOpt("httpdump") || dbgOpt("httptrace") {
-		options.HTTPTransport = &debug.Transport{
+		options.httpTransport = &debug.Transport{
 			RoundTripper: http.DefaultTransport,
 			Output:       os.Stderr,
 			Dump:         dbgOpt("httpdump"),

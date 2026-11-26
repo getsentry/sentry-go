@@ -246,7 +246,7 @@ func newRequest(r *http.Request, client *Client) *Request {
 	headers = dc.FilterRequestHeaders(headers)
 
 	var env map[string]string
-	if dc.UserInfo.Value {
+	if dc.UserInfo != nil && *dc.UserInfo {
 		if addr, port, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 			env = map[string]string{"REMOTE_ADDR": addr, "REMOTE_PORT": port}
 		}

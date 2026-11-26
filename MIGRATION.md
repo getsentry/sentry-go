@@ -250,6 +250,17 @@ type Transport interface {
 </details>
 
 <details>
+<summary>Options</summary>
+
+| Before | v1 |
+| --- | --- |
+| `DataCollection{UserInfo: sentry.Set(false)}` | `DataCollection{UserInfo: new(false)}`; `Option` and `Set` are removed |
+| `ClientOptions.SendDefaultPII: true` | `DataCollection: &sentry.DataCollection{}`; leaving `DataCollection` unset collects no user-identifying data |
+| `ClientOptions.HTTPTransport`, `HTTPProxy`, `HTTPSProxy`, and `CaCerts` | Removed; set `ClientOptions.HTTPClient`. The default client still reads `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` |
+
+</details>
+
+<details>
 <summary>Transports</summary>
 
 | Before | v1 |
